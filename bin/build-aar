@@ -1,0 +1,23 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+set -e
+
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+# Setup NDK toolchain path
+. "$NDK_ENV"
+
+PATH="${PATH}:$NDK_PATH" "${0}.py" \
+    --build-dir="${OUTPUT_DIR}" \
+    --webrtc-src-dir="${WEBRTC_SRC_DIR}" \
+    --gradle-dir="${ANDROID_GRADLE_DIR}" \
+    --publish-version="${PROJECT_VERSION}" \
+    "$@"

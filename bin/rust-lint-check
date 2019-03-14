@@ -1,0 +1,44 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+set -e
+
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+MANIFEST="${RINGRTC_SRC_DIR}/rust/Cargo.toml"
+
+OUTPUT_DIR="${OUTPUT_DIR}/rust-lint"
+
+# Remove some of the build products, so that the lint is generated
+# every time.
+rm -rf ${OUTPUT_DIR}/debug/build/ringrtc-* ${OUTPUT_DIR}/*/debug/build/ringrtc-*
+
+case $WEBRTC_PLATFORM in
+    android)
+        TARGET=aarch64-linux-android
+        # Setup NDK toolchain path
+        . "$NDK_ENV"
+        EXE_PATH="$NDK_PATH"
+        ;;
+    ios)
+        TARGET=aarch64-apple-ios
+        ;;
+    *)
+        echo "ERROR: Unknown platform: $WEBRTC_PLATFORM"
+        exit 1
+esac
+
+echo "Entering directory \`$(dirname $MANIFEST)'"
+
+PATH="${PATH}:$EXE_PATH" cargo clippy \
+    --target $TARGET \
+    --target-dir "$OUTPUT_DIR" \
+    --manifest-path "$MANIFEST" \
+    -- -D warnings

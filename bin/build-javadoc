@@ -1,0 +1,33 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+set -e
+
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+SOURCEPATH="${ANDROID_SRC_DIR}/api"
+CLASSPATH="${OUTPUT_DIR}/release/libs/libwebrtc.jar"
+
+ANDROID_SDK="${WEBRTC_SRC_DIR}/third_party/android_sdk/public/platforms/android-28"
+ANDROID_SDK_SUPPORT="${WEBRTC_SRC_DIR}/third_party/android_tools/sdk/extras/android/support/annotations"
+ANDROIDX="${WEBRTC_SRC_DIR}/third_party/androidx/lib"
+
+for d in "$ANDROID_DEPS_DIR" "$ANDROID_SDK" "$ANDROIDX" "$ANDROID_SDK_SUPPORT" ; do
+    for f in $(find "$d" -type f -name '*.jar') ; do
+        CLASSPATH="${CLASSPATH}:$f"
+    done
+done
+
+OUTPUT_DIR="${OUTPUT_DIR}/javadoc"
+rm -rf $OUTPUT_DIR
+mkdir $OUTPUT_DIR
+
+# Treat all warns as errors
+javadoc -quiet -Xdoclint:all -d "$OUTPUT_DIR" -sourcepath "$SOURCEPATH" -classpath "$CLASSPATH" org.signal.ringrtc

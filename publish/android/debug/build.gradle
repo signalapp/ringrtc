@@ -1,0 +1,99 @@
+apply plugin: 'com.android.library'
+apply plugin: 'maven'
+apply plugin: 'signing'
+
+archivesBaseName = "ringrtc-android-debug"
+version          = version_number
+group            = group_info
+
+android {
+
+    compileSdkVersion 24
+    buildToolsVersion "24.0.2"
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = debug_jni_lib_dirs
+        }
+    }
+
+    defaultConfig {
+        consumerProguardFiles proguard_file
+    }
+
+    libraryVariants.all { variant ->
+        variant.outputs.each { output ->
+            def outputFile = output.outputFile
+            if (outputFile != null && outputFile.name.endsWith('.aar')) {
+                def fileName = "${archivesBaseName}-${version}.aar"
+                output.outputFile = new File(debug_output_dir, fileName)
+            }
+        }
+    }
+}
+
+dependencies {
+    for (String dir : debug_jni_lib_dirs) {
+        compile fileTree(dir: dir, include: ['*.jar'])
+    }
+    testCompile 'junit:junit:4.12'
+}
+
+signing {
+    required { has("release") && gradle.taskGraph.hasTask("uploadArchives") }
+    sign configurations.archives
+}
+
+uploadArchives {
+    configuration = configurations.archives
+    repositories.mavenDeployer {
+        beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+        repository(url: releaseRepoUrl) {
+            authentication(userName: releaseRepoUsername, password: releaseRepoPassword)
+        }
+
+        pom.project {
+            name 'ringrtc-android'
+            packaging 'aar'
+            description 'RingRTC for Android'
+            url 'https://github.com/signalapp/ringrtc/'
+
+	    scm {
+	      url 'https://github.com/signalapp/ringrtc/'
+	      connection 'scm:git:git@github.com:signalapp/ringrtc.git'
+	      developerConnection 'scm:git:git@github.com:signalapp/ringrtc.git'
+	    }
+
+            licenses {
+                license {
+                    name 'GPL-3.0-only'
+                    url 'https://www.gnu.org/licenses/gpl-3.0.txt'
+                    distribution 'repo'
+                }
+            }
+
+            developers {
+                developer {
+                    name 'Curt Brune'
+                    organizationUrl 'https://www.signal.org/'
+                }
+                developer {
+                    name 'Jim Gustafson'
+                    organizationUrl 'https://www.signal.org/'
+                }
+            }
+        }
+    }
+}
+
+task installArchives(type: Upload) {
+    description "Installs the artifacts to the local Maven repository."
+    configuration = configurations['archives']
+    repositories {
+        mavenDeployer {
+            repository url: "file://${System.properties['user.home']}/.m2/repository"
+        }
+    }
+}
+

@@ -1,0 +1,25 @@
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+  import("//webrtc.gni")
+
+  group("ringrtc") {
+    public_deps = [
+      "android",
+      "rust",
+    ]
+  }
+}
+
+if (is_ios) {
+  group("ringrtc") {
+    # @note The RingRTC build is done outside of gn/ninja...
+  }
+}

@@ -1,0 +1,24 @@
+//
+// Copyright (C) 2019 Signal Messenger, LLC.
+// All rights reserved.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+//
+
+apply plugin: 'java'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+
+    compile 'org.whispersystems:signal-service-android:2.13.6'
+
+}
+
+task getDeps(type: Copy) {
+  from sourceSets.main.runtimeClasspath
+  println "Using JAR cache dir: " + jarCacheDir
+  into jarCacheDir
+}

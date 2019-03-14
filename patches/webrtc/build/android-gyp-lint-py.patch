@@ -1,0 +1,19 @@
+Allow android/gyp/lint.py to work with out of tree Java sources
+
+The program did not handle the case where the java source resides
+outside of the main webrtc/src directory.
+
+diff --git a/android/gyp/lint.py b/android/gyp/lint.py
+index 852f91efcd40..f48c5b414c53 100755
+--- a/android/gyp/lint.py
++++ b/android/gyp/lint.py
+@@ -146,7 +146,8 @@ def _OnStaleMd5(lint_path, config_path, processed_config_path,
+         src_dir = _NewTempSubdir('SRC_ROOT')
+         src_dirs.append(src_dir)
+         cmd.extend(['--sources', _RebasePath(src_dir)])
+-      os.symlink(os.path.abspath(src), PathInDir(src_dir, src))
++      if os.path.abspath(src) != PathInDir(src_dir, src):
++        os.symlink(os.path.abspath(src), PathInDir(src_dir, src))
+ 
+     if srcjars:
+       srcjar_paths = build_utils.ParseGnList(srcjars)

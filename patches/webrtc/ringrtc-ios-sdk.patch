@@ -1,0 +1,119 @@
+Modify sdk/objc to support RingRTC requirements
+
+The Objective-C++ interfaces and code are modified to support the
+CallConnection classes being defined for RingRTC support. The primary
+need is to add an alternative initialization of the RTCPeerConnection
+object, which is the main WebRTC interface for iOS.
+
+A new initialization method is provided to allow a custom observer to
+be used. In our case, this observer is coming from the Rust RingRTC
+code.
+
+The result is that the Rust code implements the observer around the low
+level WebRTC object, which is actually instantiated from the iOS side
+via Objective-C/C++. The application-level CallConnection object wraps
+it all up in a way that is still compatible with most normal WebRTC
+operations and objects.
+
+diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.h b/sdk/objc/api/peerconnection/RTCPeerConnection.h
+index c641fdd545..1f5e2286b8 100644
+--- a/sdk/objc/api/peerconnection/RTCPeerConnection.h
++++ b/sdk/objc/api/peerconnection/RTCPeerConnection.h
+@@ -183,7 +183,23 @@ RTC_OBJC_EXPORT
+  */
+ @property(nonatomic, readonly) NSArray<RTCRtpTransceiver *> *transceivers;
+ 
+-- (instancetype)init NS_UNAVAILABLE;
++- (instancetype)init NS_DESIGNATED_INITIALIZER;
++
++/** Initialize using an existing instance with a custom observer.
++ */
++- (void *)initializeWithCustomObserver:(void *)customObserver
++                               factory:(RTCPeerConnectionFactory *)factory
++                         configuration:(RTCConfiguration *)configuration
++                           constraints:(RTCMediaConstraints *)constraints;
++
++/** Given a native WebRTC stream, create an objc sdk RTCMediaStream.
++ */
++- (RTCMediaStream *)createStreamFromNative:(void *)nativeStream;
++
++/** Free resources for a RTCMediaStream that was allocated with
++ *  createStreamFromNative().
++ */
++- (void)releaseStream:(RTCMediaStream *)stream;
+ 
+ /** Sets the PeerConnection's global configuration to |configuration|.
+  *  Any changes to STUN/TURN servers or ICE candidate policy will affect the
+diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.mm b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
+index 8d1ac46d06..f16e33cadc 100644
+--- a/sdk/objc/api/peerconnection/RTCPeerConnection.mm
++++ b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
+@@ -268,6 +268,12 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
+ @synthesize delegate = _delegate;
+ @synthesize factory = _factory;
+ 
++- (instancetype)init {
++  // Designated initializer doesn't do much, we intend to set state
++  // later.
++  return [super init];
++}
++
+ - (instancetype)initWithFactory:(RTCPeerConnectionFactory *)factory
+                   configuration:(RTCConfiguration *)configuration
+                     constraints:(RTCMediaConstraints *)constraints
+@@ -298,6 +304,55 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
+   return self;
+ }
+ 
++- (void *)initializeWithCustomObserver:(void *)customObserver
++                               factory:(RTCPeerConnectionFactory *)factory
++                         configuration:(RTCConfiguration *)configuration
++                           constraints:(RTCMediaConstraints *)constraints {
++  NSParameterAssert(factory);
++  std::unique_ptr<webrtc::PeerConnectionInterface::RTCConfiguration> config(
++      [configuration createNativeConfiguration]);
++  if (!config) {
++    return nil;
++  }
++
++  _nativeConstraints = constraints.nativeConstraints;
++  CopyConstraintsIntoRtcConfiguration(_nativeConstraints.get(),
++                                      config.get());
++
++  webrtc::PeerConnectionObserver *observer = (webrtc::PeerConnectionObserver *)customObserver;
++
++  _peerConnection =
++    factory.nativeFactory->CreatePeerConnection(*config,
++                                                nullptr,
++                                                nullptr,
++                                                observer);
++  if (!_peerConnection) {
++    return nil;
++  }
++
++  _factory = factory;
++  _localStreams = [[NSMutableArray alloc] init];
++
++  // We don't use the delegate from here.
++  _delegate = nil;
++
++  // This is the bonafide WebRTC PeerConnection!
++  return _peerConnection;
++}
++
++- (RTCMediaStream *)createStreamFromNative:(void *)nativeStream {
++  // @note Modelled on the PeerConnectionDelegateAdapter::OnAddStream
++  // function above in this file.
++
++  webrtc::MediaStreamInterface *stream = (webrtc::MediaStreamInterface *)nativeStream;
++
++  return [[RTCMediaStream alloc] initWithFactory:_factory nativeMediaStream:stream];
++}
++
++- (void)releaseStream:(RTCMediaStream *)stream {
++  // @todo
++}
++
+ - (NSArray<RTCMediaStream *> *)localStreams {
+   return [_localStreams copy];
+ }

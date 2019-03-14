@@ -1,0 +1,35 @@
+Opus: enable CBR and disable VBR
+
+diff --git a/opus/src/src/opus_encoder.c b/opus/src/src/opus_encoder.c
+index 2149c20b4190..72cfec4e39db 100644
+--- a/opus/src/src/opus_encoder.c
++++ b/opus/src/src/opus_encoder.c
+@@ -224,7 +224,7 @@ int opus_encoder_init(OpusEncoder* st, opus_int32 Fs, int channels, int applicat
+     st->silk_mode.complexity                = 9;
+     st->silk_mode.useInBandFEC              = 0;
+     st->silk_mode.useDTX                    = 0;
+-    st->silk_mode.useCBR                    = 0;
++    st->silk_mode.useCBR                    = 1;
+     st->silk_mode.reducedDependency         = 0;
+ 
+     /* Create CELT encoder */
+@@ -235,7 +235,7 @@ int opus_encoder_init(OpusEncoder* st, opus_int32 Fs, int channels, int applicat
+     celt_encoder_ctl(celt_enc, CELT_SET_SIGNALLING(0));
+     celt_encoder_ctl(celt_enc, OPUS_SET_COMPLEXITY(st->silk_mode.complexity));
+ 
+-    st->use_vbr = 1;
++    st->use_vbr = 0;
+     /* Makes constrained VBR the default (safer for real-time use) */
+     st->vbr_constraint = 1;
+     st->user_bitrate_bps = OPUS_AUTO;
+@@ -2481,8 +2481,8 @@ int opus_encoder_ctl(OpusEncoder *st, int request, ...)
+             {
+                goto bad_arg;
+             }
+-            st->use_vbr = value;
+-            st->silk_mode.useCBR = 1-value;
++            st->use_vbr = 0;
++            st->silk_mode.useCBR = 1;
+         }
+         break;
+         case OPUS_GET_VBR_REQUEST:

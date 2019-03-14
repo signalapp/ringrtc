@@ -1,0 +1,11 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+OUTPUT_DIR=/tmp/ringrtc-protobuf
+cargo run --bin protobuf-gen --features protobuf_gen_deps --target-dir=$OUTPUT_DIR

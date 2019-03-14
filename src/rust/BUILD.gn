@@ -1,0 +1,151 @@
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+  import("//webrtc.gni")
+
+  group("rust") {
+    deps = [
+      ":libringrtc"
+    ]
+  }
+
+  libname = "libringrtc.so"
+
+  if (target_cpu == "arm") {
+    cargo_target = "arm-linux-androideabi"
+  } else if (target_cpu == "arm64") {
+    cargo_target = "aarch64-linux-android"
+  } else if (target_cpu == "x86") {
+    cargo_target = "i686-linux-android"
+  } else if (target_cpu == "x64") {
+    cargo_target = "x86_64-linux-android"
+  }
+  assert(defined(cargo_target), "Unsupported target_cpu for cargo: $target_cpu")
+
+  if (is_debug) {
+    cargo_output_dir = "${target_gen_dir}/${cargo_target}/debug"
+  } else {
+    cargo_output_dir = "${target_gen_dir}/${cargo_target}/release"
+  }
+
+  unstripped_lib = "$root_out_dir/lib.unstripped/${libname}"
+  stripped_lib = "$root_out_dir/${libname}"
+
+  rust_sources = [
+    "cargo.py",
+    "Cargo.toml",
+    "Cargo.lock",
+    "cbindgen.toml",
+    "src/android/api/jni_call_connection_factory.rs",
+    "src/android/api/jni_call_connection.rs",
+    "src/android/call_connection_factory.rs",
+    "src/android/call_connection_observer.rs",
+    "src/android/call_connection.rs",
+    "src/android/error.rs",
+    "src/android/jni_util.rs",
+    "src/android/logging.rs",
+    "src/android/webrtc_java_media_stream.rs",
+    "src/android/webrtc_peer_connection_factory.rs",
+    "src/common/mod.rs",
+    "src/core/call_connection_factory.rs",
+    "src/core/call_connection_observer.rs",
+    "src/core/call_connection.rs",
+    "src/core/call_fsm.rs",
+    "src/core/util.rs",
+    "src/error/mod.rs",
+    "src/lib.rs",
+    "src/webrtc/data_channel_observer.rs",
+    "src/webrtc/data_channel.rs",
+    "src/webrtc/ice_candidate.rs",
+    "src/webrtc/peer_connection.rs",
+    "src/webrtc/peer_connection_observer.rs",
+    "src/webrtc/sdp_observer.rs",
+  ]
+
+  # Lint the Rust code using "cargo clippy"
+  action("libringrtc_lint") {
+    sources = rust_sources
+
+    stamp_file = "${cargo_output_dir}/clippy"
+
+    args = [
+      "${stamp_file}",
+      "--target=${cargo_target}",
+      "--target-dir=" + rebase_path(target_gen_dir),
+      "--manifest-path=" + rebase_path("Cargo.toml"),
+    ]
+
+    if (!is_debug) {
+      args += [ "--release" ]
+    }
+
+    outputs = [ "${stamp_file}" ]
+    script = "clippy.py"
+
+    deps = [
+      "../rffi:libringrtc_rffi",
+    ]
+  }
+
+  action("libringrtc_cargo") {
+    sources = rust_sources
+
+    args = [ "rustc",
+             "--target=${cargo_target}",
+             "--target-dir=" + rebase_path(target_gen_dir),
+             "--manifest-path=" + rebase_path("Cargo.toml"),
+           ]
+    # add  "--verbose" here (and below) to increase rustc verbosity
+
+    if (!is_debug) {
+      args += [ "--release" ]
+    }
+
+    args += [ "--",
+              "-C", "link-arg=-fuse-ld=gold",
+              "-C", "link-arg=-Wl,--dynamic-linker,/system/bin/linker",
+              "-L", "native=" + rebase_path(root_build_dir),
+              "-l", "dylib=ringrtc_rffi",
+            ]
+    # add  "--verbose" here (and above) to increase rustc verbosity
+
+    outputs = [ "${cargo_output_dir}/${libname}" ]
+    script = "cargo.py"
+
+    deps = [
+      ":libringrtc_lint",
+    ]
+
+  }
+
+  copy("libringrtc_unstripped") {
+    sources = [ "${cargo_output_dir}/${libname}" ]
+    outputs = [ "$unstripped_lib" ]
+
+    deps = [ ":libringrtc_cargo" ]
+
+  }
+
+  action("libringrtc") {
+    sources = [ "$unstripped_lib" ]
+    outputs = [ "$stripped_lib" ]
+
+    strip = rebase_path("//buildtools/third_party/eu-strip/bin/eu-strip", root_build_dir)
+    args = [ "--command=${strip}",
+             "--input=" + rebase_path(unstripped_lib),
+             "--output=" + rebase_path(stripped_lib),
+           ]
+
+    script = "strip.py"
+
+    deps = [ ":libringrtc_unstripped" ]
+
+  }
+}

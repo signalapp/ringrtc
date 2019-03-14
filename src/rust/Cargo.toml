@@ -1,0 +1,46 @@
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+[package]
+name = "ringrtc"
+version = "0.1.0"
+authors = ["Curt Brune <curt@signal.org>", "Jim Gustafson <jim@signal.org>"]
+edition = "2018"
+description = "A Rust interface for WebRTC"
+license = "GPL-3.0-only"
+build = false
+
+[lib]
+crate_type = ["cdylib", "staticlib"]
+
+[dependencies]
+log = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
+failure = "0.1"
+libc = "0.2"
+futures = "0.1"
+prost = "0.5"
+bytes = "0.4.12"
+prost-build = { version = "0.5", optional = true }
+
+[dependencies.tokio]
+version = "=0.1.22"
+default-features = false
+features = ["rt-full"]
+
+[features]
+protobuf_gen_deps = ["prost-build"]
+
+[[bin]]
+name = "protobuf-gen"
+path = "protobuf/protobuf_gen.rs"
+required-features = ["protobuf_gen_deps"] 
+
+[target.'cfg(target_os="android")'.dependencies]
+jni = { version = "0.13.0", default-features = false }
+
+[patch.crates-io]
+mio = { git = "ssh://git@github.com:/signalapp/mio.git", branch = "v0.6.19br" }

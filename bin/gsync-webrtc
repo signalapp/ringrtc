@@ -1,0 +1,39 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+set -e
+
+WEBRTC_REVISION="$1"
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+# Create gclient config file, based on platform
+mkdir -p "$WEBRTC_DIR"
+TARGET_GCLIENT="${WEBRTC_DIR}/.gclient"
+cp "${CONFIG_DIR}/webrtc.gclient.common" "$TARGET_GCLIENT"
+case "$WEBRTC_PLATFORM" in
+    android|ios)
+        cat "${CONFIG_DIR}/webrtc.gclient.${WEBRTC_PLATFORM}" >> "$TARGET_GCLIENT"
+esac
+
+[ -d "$RINGRTC_SRC_DIR" ]  || {
+    echo "ERROR: Unable to find RINGRTC_SRC directory: $RINGRTC_SRC_DIR"
+    exit 1
+}
+
+echo "Syncing WebRTC revision : $WEBRTC_REVISION"
+
+cd "$WEBRTC_DIR"
+gclient sync --jobs 16 -v --with_branch_heads \
+        --revision=src@"$WEBRTC_REVISION"
+
+mkdir -p src/ringrtc
+echo "ringrtc_src = \"${RINGRTC_SRC_DIR}\"" >  "${RINGRTC_WEBRTC_SRC_DIR}/ringrtc-src-dir.gni"
+
+cd -

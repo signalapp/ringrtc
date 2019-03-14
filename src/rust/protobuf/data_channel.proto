@@ -1,0 +1,36 @@
+/*
+ *
+ *  Copyright (C) 2019 Signal Messenger, LLC.
+ *  All rights reserved.
+ *
+ *  SPDX-License-Identifier: GPL-3.0-only
+ *
+ */
+
+syntax = "proto2";
+
+// Protocol Buffers for the messages sent over the WebRTC data
+// channel.
+
+package data_channel;
+
+message Connected {
+  optional uint64 id = 1;
+}
+
+message Hangup {
+  optional uint64 id = 1;
+}
+
+message VideoStreamingStatus {
+  optional uint64 id      = 1;
+  optional bool   enabled = 2;
+}
+
+message Data {
+
+  optional Connected            connected            = 1;
+  optional Hangup               hangup               = 2;
+  optional VideoStreamingStatus videoStreamingStatus = 3;
+
+}

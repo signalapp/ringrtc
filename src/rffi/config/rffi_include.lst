@@ -1,0 +1,13 @@
+#  Copyright (C) 2019 Signal Messenger, LLC.
+#  All rights reserved.
+#
+#  SPDX-License-Identifier: GPL-3.0-only
+
+# Linker script that exports the Rust FFI symbols.
+
+{
+  global:
+    Rust_*;
+  local:
+    *;
+};

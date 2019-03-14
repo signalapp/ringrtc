@@ -1,0 +1,4 @@
+out/
+cscope.*
+
+.DS_Store

@@ -1,0 +1,39 @@
+An attempt to keep the ringrtc code out of the main WebRTC tree, yet
+still leverage the WebRTC gn/ninja build system.
+
+Step 1 -- Add a generic //ringrtc/BUILD.gn file that depends on an out
+of tree BUILD.gn file using an absolute path.
+
+This file includes a <never-checked-in> generated file,
+ringrtc-root-dir.gni, that contains the absolute path of the actual
+ringrtc source code.  The ringrtc-root-dir.gni file is generated at
+the time the work space is created.
+
+Step 2 -- Update the top level //BUILD.gn file to depend on the minimal
+//ringrtc/BUILD.gn file.
+
+diff --git a/BUILD.gn b/BUILD.gn
+index 4acda15c98..9b91bfa4b8 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -407,6 +407,7 @@ if (!build_with_chromium) {
+       "pc:peerconnection",
+       "pc:rtc_pc",
+       "pc:rtc_pc_base",
++      "ringrtc",
+       "rtc_base",
+       "sdk",
+       "video",
+diff --git a/ringrtc/BUILD.gn b/ringrtc/BUILD.gn
+new file mode 100644
+index 0000000000..46ab0fc153
+--- /dev/null
++++ b/ringrtc/BUILD.gn
+@@ -0,0 +1,7 @@
++import("ringrtc-src-dir.gni")
++
++group("ringrtc") {
++  public_deps = [
++    "${ringrtc_src}:ringrtc",
++  ]
++}

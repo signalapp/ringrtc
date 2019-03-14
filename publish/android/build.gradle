@@ -1,0 +1,45 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:2.2.0'
+    }
+}
+
+allprojects {
+    repositories {
+        jcenter()
+    }
+}
+
+subprojects {
+
+    ext.version_number       = project.hasProperty("ringrtcVersion") ? ringrtcVersion : "0.0.1-SNAPSHOT"
+    ext.group_info           = "org.signal"
+
+    ext.debug_jni_lib_dirs   = project.hasProperty("debugRingrtcLibDirs") ? Eval.me(debugRingrtcLibDirs) : []
+    ext.debug_output_dir     = project.hasProperty("debugOutputDir") ? debugOutputDir : "/tmp"
+    ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDirs") ? Eval.me(releaseRingrtcLibDirs) : []
+    ext.release_output_dir   = project.hasProperty("releaseOutputDir") ? releaseOutputDir : "/tmp"
+    ext.releaseRepoUrl       = project.hasProperty("sonatypeRepo") ? sonatypeRepo
+        : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+    ext.releaseRepoUsername  = project.hasProperty("signalSonatypeUsername") ? signalSonatypeUsername : ""
+    ext.releaseRepoPassword  = project.hasProperty("signalSonatypePassword") ? signalSonatypePassword : ""
+
+    ext.proguard_file = rootDir.getAbsolutePath() + '/proguard-rules.pro'
+
+    if (JavaVersion.current().isJava8Compatible()) {
+        allprojects {
+            tasks.withType(Javadoc) {
+                options.addStringOption('Xdoclint:none', '-quiet')
+            }
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

@@ -1,0 +1,79 @@
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+# C++ source files common to both Android and iOS
+common_sources = [
+  "src/data_channel.cc",
+  "src/data_channel_observer.cc",
+  "src/peer_connection_interface.cc",
+  "src/peer_connection_observer.cc",
+  "src/ref_count.cc",
+  "src/sdp_observer.cc",
+]
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+  import("//webrtc.gni")
+
+  config("ringrtc_rffi_config") {
+    include_dirs = [ ".." ]
+    defines = [ "ENABLE_RINGRTC" ]
+    ldflags = [ "-Wl,--version-script=" +
+                rebase_path("config/rffi_include.lst",
+                            root_build_dir) ]
+  }
+
+  rtc_shared_library("libringrtc_rffi") {
+
+    visibility = [ "../rust:libringrtc_lint" ]
+
+    android_sdk = "//sdk/android"
+    # jni_onload.cc -- taken from webrtc/sdk/android/BUILD.gn.
+    sources = [
+      "${android_sdk}/src/jni/jni_onload.cc",
+      "src/android/java_media_stream.cc",
+      "src/android/jni_peer_connection_interface.cc",
+    ] + common_sources
+
+    # suppressed_config and hide_all_but_jni taken from
+    # webrtc/sdk/android/BUILD.gn.
+    suppressed_configs += [ "//build/config/android:hide_all_but_jni_onload" ]
+    configs += [ "//build/config/android:hide_all_but_jni" ]
+
+    configs += [ ":ringrtc_rffi_config" ]
+
+    # deps -- taken from webrtc/sdk/android/BUILD.gn.
+    deps = [
+      "${android_sdk}:libjingle_peerconnection_jni",
+      "${android_sdk}:libjingle_peerconnection_metrics_default_jni",
+      "//pc:libjingle_peerconnection",
+      "//rtc_base:rtc_base",
+    ]
+    output_extension = "so"
+  }
+}
+
+if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+  import("//build/config/ios/rules.gni")
+  import("//webrtc.gni")
+
+  config("ringrtc_rffi_config") {
+    include_dirs = [ ".." ]
+    defines = [ "ENABLE_RINGRTC" ]
+  }
+
+  rtc_static_library("libringrtc_rffi") {
+
+    visibility = [ "//sdk/*:*" ]
+
+    sources = common_sources
+
+    configs += [ ":ringrtc_rffi_config" ]
+  }
+}

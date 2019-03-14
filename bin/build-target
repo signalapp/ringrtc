@@ -1,0 +1,73 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+set -e
+
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+WEBRTC_SRC_DIR="${WEBRTC_DIR}/src"
+
+# Form for TARGET is <OS>-<CPU_ARCH>
+if [ -n "$1" ] ; then
+    TARGET="$1"
+    shift
+else
+    echo "ERROR: no build target specified"
+    exit 1
+fi
+
+TARGET_OS="${TARGET%-*}"
+TARGET_CPU="${TARGET#*-}"
+
+case $TARGET_OS in
+    android)
+        ;;
+    *)
+        echo "ERROR: unsupported OS: $TARGET_OS"
+        echo "Supported OS: android"
+        exit 1
+esac
+
+case $TARGET_CPU in
+    arm|x86)
+        ;;
+    *)
+        echo "ERROR: unsupported CPU: $TARGET_CPU"
+        echo "Supported CPU: arm, x86"
+        exit 1
+esac
+
+# The output directory is relative to $SRC_DIR
+GN_OUT_DIR="out/${TARGET_OS}-${TARGET_CPU}"
+
+GN_DEBUG=yes
+if [ "$GN_DEBUG" = "yes" ] ; then
+    GN_DEBUG_ARGS="is_debug=true symbol_level=2"
+    GN_OUT_DIR="${GN_OUT_DIR}/debug"
+else
+    GN_DEBUG_ARGS="is_debug=false"
+    GN_OUT_DIR="${GN_OUT_DIR}/release"
+fi
+
+GN_ARGS="
+target_os=\"$TARGET_OS\"
+target_cpu=\"$TARGET_CPU\"
+rtc_include_tests=false
+rtc_build_examples=false
+$GN_DEBUG_ARGS"
+
+[ -d "$WEBRTC_SRC_DIR" ] || {
+    echo "ERROR: Cannot find source directory: $WEBRTC_SRC_DIR"
+    exit 1
+}
+
+cd "$WEBRTC_SRC_DIR"
+gn gen "$GN_OUT_DIR" --args="$GN_ARGS"
+ninja -C "$GN_OUT_DIR" "$@" ringrtc

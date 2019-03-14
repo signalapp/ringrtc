@@ -1,0 +1,32 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+set -e
+
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+echo "Fetching Android dependencies..."
+
+cd "$ANDROID_CONFIG_DIR"
+rm -rf "${ANDROID_DEPS_DIR}"
+./gradlew -PjarCacheDir="${ANDROID_DEPS_DIR}" getDeps
+
+# expand aar files
+AAR_FILES=$(ls ${ANDROID_DEPS_DIR}/*.aar || true)
+for aar in $AAR_FILES ; do
+    DIR="${aar%.aar}"
+    mkdir -p $DIR
+    cd $DIR
+    jar xf $aar
+done
+
+JAR_LIST="${RINGRTC_WEBRTC_SRC_DIR}/jar.list"
+rm -f "$JAR_LIST"
+find "${ANDROID_DEPS_DIR}" -type f -name '*.jar' > "$JAR_LIST"
