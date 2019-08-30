@@ -1,0 +1,187 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2019 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+# Be sure of the following pre-requisites in your environment (MacOS & Xcode):
+#
+# $ xcode-select --install
+# $ rustup target add aarch64-apple-ios armv7-apple-ios armv7s-apple-ios x86_64-apple-ios i386-apple-ios
+# $ cargo install cargo-lipo
+# $ cargo install cbindgen
+#
+# The goal of this script is to do the following:
+# 1) Build WebRTC using existing (but modified) scripts for iOS,
+#    resulting in WebRTC.framework.
+# 2) Build the RingRTC Rust library and associated header file.
+#    This is libringrtc.a and ringrtc.h.
+# 3) Build the SignalRingRTC.framework which is based on libringrtc.
+#
+# iOS applications will need to include both WebRTC.framework and
+# SignalRingRTC.framework. Each framework also includes a text file
+# which includes the build environment (as per iOS build standards).
+#
+# From the ringrtc directory:
+
+set -e
+
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+usage()
+{
+    echo 'usage: build-ios [-d] [-w, -r, -x]
+    where:
+        -d is for debug builds (default is release)
+        -w builds WebRTC.framework only
+        -r builds libringrtc.a/h only
+        -x builds SignalRingRTC.framework with xcode only
+        
+        Only one w, r, or x option should be used at a time.
+				If no options are specified, everything is built with
+				release configuration.'
+}
+
+# The default build (out of git) is release. However, we don't keep
+# both types at the same time. It is either debug OR release.
+
+BUILD_WHAT=all
+BUILD_TYPE=release
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -d )            BUILD_TYPE=debug
+                        ;;
+        -w )            BUILD_WHAT=webrtc
+                        ;;
+        -r )            BUILD_WHAT=ringrtc
+                        ;;
+        -x )            BUILD_WHAT=xcode
+                        ;;
+        -h | --help )   usage
+                        exit
+                        ;;
+        * )             usage
+                        exit 1
+    esac
+    shift
+done
+
+# The WebRTC part of the build resulting in WebRTC.framework.
+if [ "${BUILD_WHAT}" == "all" ] || [ "${BUILD_WHAT}" == "webrtc" ]
+then
+	echo "Building the WebRTC.framework..."
+	
+	cd ${OUTPUT_DIR}/webrtc/src
+	./tools_webrtc/ios/build_ios_libs.py -o out/${BUILD_TYPE} --build_config ${BUILD_TYPE} 
+	
+	cd ${PROJECT_DIR}
+	
+	# Copy WebRTC.framework up.
+	cp -r -f ${OUTPUT_DIR}/webrtc/src/out/${BUILD_TYPE}/WebRTC.framework ${OUTPUT_DIR}
+
+	# Copy WebRTC.dSYM up for local debugging.
+	cp -r -f ${OUTPUT_DIR}/webrtc/src/out/${BUILD_TYPE}/WebRTC.dSYM ${OUTPUT_DIR}/WebRTC.framework.dSYM
+
+	"${BIN_DIR}/print_build_env.py" \
+			--webrtc-version="${WEBRTC_VERSION}" \
+			--ringrtc-version="${PROJECT_VERSION}" > ${OUTPUT_DIR}/WebRTC.framework/build_env.txt
+fi
+
+# The RingRTC part of the build resulting in a library built from Rust.
+if [ "${BUILD_WHAT}" == "all" ] || [ "${BUILD_WHAT}" == "ringrtc" ]
+then
+	# @todo It would be nice if cargo lipo could output to a different
+	# directory for an out-of-source build...
+	
+	echo "Creating universal binary in ${OUTPUT_DIR}/libringrtc..."
+	cd ${RINGRTC_SRC_DIR}/rust
+	
+	# @todo Figure out if we need to support the simulator or not, and then bring
+	# in appropriate x86/i386 support...
+	
+	if [ "${BUILD_TYPE}" == "debug" ]
+	then
+	  cargo lipo --targets aarch64-apple-ios,armv7-apple-ios,armv7s-apple-ios,x86_64-apple-ios
+	else
+	  cargo lipo --release --targets aarch64-apple-ios,armv7-apple-ios,armv7s-apple-ios,x86_64-apple-ios
+	fi
+	
+	mkdir -p ${OUTPUT_DIR}/libringrtc
+	cp -f ${RINGRTC_SRC_DIR}/rust/target/universal/${BUILD_TYPE}/libringrtc.a ${OUTPUT_DIR}/libringrtc/libringrtc.a
+	
+	# Create the modulemap:
+	echo 'framework module SignalRingRTC {
+			umbrella header "SignalRingRTC.h"
+			export *
+			module * { export * }
+			explicit module SignalRingRTC_Private {
+					header "ringrtc.h"
+					link "ringrtc"
+					export *
+			}
+	}' >${OUTPUT_DIR}/libringrtc/RingRTC.modulemap
+
+	echo "Creating header file in ${OUTPUT_DIR}/libringrtc..."
+	cbindgen ${RINGRTC_SRC_DIR}/rust/src/lib.rs --config ${RINGRTC_SRC_DIR}/rust/cbindgen.toml -o ${OUTPUT_DIR}/libringrtc/ringrtc.h
+
+  cd ${PROJECT_DIR}
+fi
+
+# The Xcode part of the build resulting in SignalRingRTC.framework.
+if [ "${BUILD_WHAT}" == "all" ] || [ "${BUILD_WHAT}" == "xcode" ]
+then
+	echo "Building the SignalRingRTC.framework..."
+
+	# We need to use cocoapods to install dependencies (SignalCoreKit).
+	pod install --project-directory=./src/ios/SignalRingRTC/ --deployment
+	
+	if [ "${BUILD_TYPE}" == "debug" ]
+	then
+    xcodebuild -workspace ${RINGRTC_SRC_DIR}/ios/SignalRingRTC/SignalRingRTC.xcworkspace -scheme SignalRingRTC -configuration Debug -sdk iphoneos ONLY_ACTIVE_ARCH=NO OBJROOT=$(PWD)/out/build SYMROOT=$(PWD)/out/build clean build
+    xcodebuild -workspace ${RINGRTC_SRC_DIR}/ios/SignalRingRTC/SignalRingRTC.xcworkspace -scheme SignalRingRTC -configuration Debug -sdk iphonesimulator ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO OBJROOT=$(PWD)/out/build SYMROOT=$(PWD)/out/build build
+
+    UNIVERSAL_DIR=${OUTPUT_DIR}/build/Debug-universal
+    mkdir -p ${UNIVERSAL_DIR}
+
+    cp -r -f "${OUTPUT_DIR}/build/Debug-iphoneos/SignalRingRTC.framework" "${UNIVERSAL_DIR}"
+		cp -r -f "${OUTPUT_DIR}/build/Debug-iphonesimulator/SignalRingRTC.framework/Modules/SignalRingRTC.swiftmodule/." "${UNIVERSAL_DIR}/SignalRingRTC.framework/Modules/SignalRingRTC.swiftmodule"
+
+		lipo -create -output "${UNIVERSAL_DIR}/SignalRingRTC.framework/SignalRingRTC" "${OUTPUT_DIR}/build/Debug-iphonesimulator/SignalRingRTC.framework/SignalRingRTC" "${OUTPUT_DIR}/build/Debug-iphoneos/SignalRingRTC.framework/SignalRingRTC"
+
+		# Copy SignalRingRTC.framework up.
+		cp -r -f ${UNIVERSAL_DIR}/SignalRingRTC.framework ${OUTPUT_DIR}
+
+		# Copy SignalRingRTC.dSYM up for local debugging.
+		cp -r -f ${OUTPUT_DIR}/build/Debug-iphoneos/SignalRingRTC.framework.dSYM ${OUTPUT_DIR}
+	else
+    xcodebuild -workspace ${RINGRTC_SRC_DIR}/ios/SignalRingRTC/SignalRingRTC.xcworkspace -scheme SignalRingRTC -configuration Release -sdk iphoneos ONLY_ACTIVE_ARCH=NO OBJROOT=$(PWD)/out/build SYMROOT=$(PWD)/out/build clean build
+    xcodebuild -workspace ${RINGRTC_SRC_DIR}/ios/SignalRingRTC/SignalRingRTC.xcworkspace -scheme SignalRingRTC -configuration Release -sdk iphonesimulator ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO OBJROOT=$(PWD)/out/build SYMROOT=$(PWD)/out/build build
+
+    UNIVERSAL_DIR=${OUTPUT_DIR}/build/Release-universal
+    mkdir -p ${UNIVERSAL_DIR}
+
+    cp -r -f "${OUTPUT_DIR}/build/Release-iphoneos/SignalRingRTC.framework" "${UNIVERSAL_DIR}"
+		cp -r -f "${OUTPUT_DIR}/build/Release-iphonesimulator/SignalRingRTC.framework/Modules/SignalRingRTC.swiftmodule/." "${UNIVERSAL_DIR}/SignalRingRTC.framework/Modules/SignalRingRTC.swiftmodule"
+
+		lipo -create -output "${UNIVERSAL_DIR}/SignalRingRTC.framework/SignalRingRTC" "${OUTPUT_DIR}/build/Release-iphonesimulator/SignalRingRTC.framework/SignalRingRTC" "${OUTPUT_DIR}/build/Release-iphoneos/SignalRingRTC.framework/SignalRingRTC"
+
+		# Copy SignalRingRTC.framework up.
+		cp -r -f ${UNIVERSAL_DIR}/SignalRingRTC.framework ${OUTPUT_DIR}
+
+		# Copy SignalRingRTC.dSYM up for local debugging.
+		cp -r -f ${OUTPUT_DIR}/build/Release-iphoneos/SignalRingRTC.framework.dSYM ${OUTPUT_DIR}
+	fi
+
+	"${BIN_DIR}/print_build_env.py" \
+			--webrtc-version="${WEBRTC_VERSION}" \
+			--ringrtc-version="${PROJECT_VERSION}" > ${OUTPUT_DIR}/SignalRingRTC.framework/build_env.txt
+fi
+
+cd ${PROJECT_DIR}
+
+echo "Done with the iOS build for RingRTC!"

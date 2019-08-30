@@ -1,0 +1,14 @@
+platform :ios, '9.0'
+
+use_frameworks!
+
+target 'SignalRingRTC' do
+
+  pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', testspecs: ["Tests"]
+
+  target 'SignalRingRTCTests' do
+    inherit! :search_paths
+
+  end
+
+end

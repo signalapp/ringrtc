@@ -57,6 +57,24 @@ mod android {
     mod webrtc_peer_connection_factory;
 }
 
+#[cfg(target_os="ios")]
+/// iOS specific implementation.
+mod ios {
+    mod api {
+        mod objc_call_connection;
+        mod objc_call_connection_factory;
+        mod objc_call_connection_global;
+    }
+    mod call_connection;
+    mod call_connection_factory;
+    mod call_connection_observer;
+    mod error;
+    mod ios_util;
+    mod logging;
+    mod webrtc_app_media_stream;
+    mod webrtc_app_peer_connection;
+}
+
 /// Foreign Function Interface (FFI) to WebRTC C++ library.
 mod webrtc {
     pub mod data_channel;

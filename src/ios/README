@@ -1,1 +1,3 @@
-Obj-C interface to RingRTC
+# iOS Interface to RingRTC
+
+SignalRingRTC is an Xcode project which builds a framework to be used by Signal-iOS. The project can be opened directly with Xcode, but is meant to be built from the command line, resulting in SignalRingRTC.framework.

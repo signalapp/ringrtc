@@ -1,0 +1,38 @@
+PODS:
+  - CocoaLumberjack (3.5.3):
+    - CocoaLumberjack/Core (= 3.5.3)
+  - CocoaLumberjack/Core (3.5.3)
+  - GRKOpenSSLFramework (1.0.2.16)
+  - SignalCoreKit (1.0.0):
+    - CocoaLumberjack
+    - GRKOpenSSLFramework
+  - SignalCoreKit/Tests (1.0.0):
+    - CocoaLumberjack
+    - GRKOpenSSLFramework
+
+DEPENDENCIES:
+  - SignalCoreKit (from `https://github.com/signalapp/SignalCoreKit.git`)
+  - SignalCoreKit/Tests (from `https://github.com/signalapp/SignalCoreKit.git`)
+
+SPEC REPOS:
+  https://github.com/cocoapods/specs.git:
+    - CocoaLumberjack
+    - GRKOpenSSLFramework
+
+EXTERNAL SOURCES:
+  SignalCoreKit:
+    :git: https://github.com/signalapp/SignalCoreKit.git
+
+CHECKOUT OPTIONS:
+  SignalCoreKit:
+    :commit: 4330f7d0ef0f06628b3bb1e961d947638cfd098f
+    :git: https://github.com/signalapp/SignalCoreKit.git
+
+SPEC CHECKSUMS:
+  CocoaLumberjack: 2f44e60eb91c176d471fdba43b9e3eae6a721947
+  GRKOpenSSLFramework: 35944e317e6336b2944ad70b059d84db6b2d8532
+  SignalCoreKit: c2d8132cdedb95d35eb2f8ae7eac0957695d0a8b
+
+PODFILE CHECKSUM: e86753f8712b4afa30b8ac56b48105e0d650a9a8
+
+COCOAPODS: 1.7.5
