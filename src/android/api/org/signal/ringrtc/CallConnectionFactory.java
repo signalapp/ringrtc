@@ -56,16 +56,12 @@ public class CallConnectionFactory {
   @Nullable private   PeerConnectionFactory peerConnectionFactory;
 
   static {
-    String release = Build.VERSION.RELEASE;
-    int sdkVersion = Build.VERSION.SDK_INT;
-
-    Log.i(TAG, "Android SDK: " + sdkVersion + " (" + release +")");
-    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT_WATCH) {
+    if (Build.VERSION.SDK_INT < 21) {
       Log.i(TAG, "Preloading ringrtc_rffi library for SDK: " + Build.VERSION.SDK_INT);
       System.loadLibrary("ringrtc_rffi");
     }
 
-    Log.i(TAG, "Loading ringrtc library");
+    Log.d(TAG, "Loading ringrtc library");
     System.loadLibrary("ringrtc");
   }
 
