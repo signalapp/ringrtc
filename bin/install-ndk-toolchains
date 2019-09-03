@@ -27,11 +27,13 @@ NDK_HOME="${WEBRTC_DIR}/src/third_party/android_ndk"
 }
 
 # what NDK API version do we want?  21 is the minimum to support arm64
-# and x86_64.  Keep this in sync with WebRTC's src/.gn file (around line 70):
-#   android32_ndk_api_level = 16
+# and x86_64.  Keep this in sync with WebRTC's src/.gn file (around
+# line 70) and Signal-Android-Private API minimums:
+#
+#   android32_ndk_api_level = 19
 #   android64_ndk_api_level = 21
 
-NDK_32=16
+NDK_32=19
 NDK_64=21
 
 # what architectures to install?
