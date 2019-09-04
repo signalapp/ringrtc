@@ -31,6 +31,7 @@
 //! - LocalIceCandidate
 //! - IceConnected
 //! - IceConnectionFailed
+//! - IceConnectionDisconnected
 //! - OnAddStream
 //! - OnDataChannel
 //! - RemoteConnected
@@ -113,6 +114,8 @@ where
     IceConnected,
     /// Local ICE connection failed, from WebRTC observer.
     IceConnectionFailed,
+    /// Local ICE connection disconnected, from WebRTC observer.
+    IceConnectionDisconnected,
     /// Send the client application an error message.
     ClientError(failure::Error),
     /// Receive local media stream from WebRTC observer.
@@ -133,25 +136,26 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            CallEvent::SendOffer => "SendOffer".to_string(),
-            CallEvent::AcceptAnswer(answer)  => format!("AcceptAnswer, answer: {}", answer),
-            CallEvent::AcceptOffer(offer)  => format!("AcceptOffer, offer: {}", offer),
-            CallEvent::AnswerCall => "AnswerCall".to_string(),
-            CallEvent::RemoteHangup(id)  => format!("RemoteHangup, call_id: {}", id),
-            CallEvent::RemoteConnected(id)  => format!("RemoteConnected, call_id: {}", id),
-            CallEvent::RemoteVideoStatus(id, enabled)  => format!("RemoteVideoStatus, call_id: {}, enabled: {}", id, enabled),
-            CallEvent::RemoteIceCandidate(_)  => "RemoteIceCandidate".to_string(),
-            CallEvent::LocalHangup  => "LocalHangup".to_string(),
-            CallEvent::LocalVideoStatus(enabled)  => format!("LocalVideoStatus, enabled: {}", enabled),
-            CallEvent::LocalIceCandidate(_)  => "LocalIceCandidate".to_string(),
-            CallEvent::IceConnected  => "IceConnected".to_string(),
-            CallEvent::IceConnectionFailed  => "IceConnectionFailed".to_string(),
-            CallEvent::ClientError(e)  => format!("ClientError: {}", e),
-            CallEvent::CallTimeout(id)  => format!("CallTimeout, call_id: {}", id),
-            CallEvent::OnAddStream(stream)  => format!("OnAddStream, stream: {:}", stream),
-            CallEvent::OnDataChannel(dc)  => format!("OnDataChannel, dc: {:?}", dc),
-            CallEvent::SendBusy(_, id)  => format!("SendBusy, call_id: {}", id),
-            CallEvent::EndCall  => "EndCall".to_string(),
+            CallEvent::SendOffer                      => "SendOffer".to_string(),
+            CallEvent::AcceptAnswer(answer)           => format!("AcceptAnswer, answer: {}", answer),
+            CallEvent::AcceptOffer(offer)             => format!("AcceptOffer, offer: {}", offer),
+            CallEvent::AnswerCall                     => "AnswerCall".to_string(),
+            CallEvent::RemoteHangup(id)               => format!("RemoteHangup, call_id: {}", id),
+            CallEvent::RemoteConnected(id)            => format!("RemoteConnected, call_id: {}", id),
+            CallEvent::RemoteVideoStatus(id, enabled) => format!("RemoteVideoStatus, call_id: {}, enabled: {}", id, enabled),
+            CallEvent::RemoteIceCandidate(_)          => "RemoteIceCandidate".to_string(),
+            CallEvent::LocalHangup                    => "LocalHangup".to_string(),
+            CallEvent::LocalVideoStatus(enabled)      => format!("LocalVideoStatus, enabled: {}", enabled),
+            CallEvent::LocalIceCandidate(_)           => "LocalIceCandidate".to_string(),
+            CallEvent::IceConnected                   => "IceConnected".to_string(),
+            CallEvent::IceConnectionFailed            => "IceConnectionFailed".to_string(),
+            CallEvent::IceConnectionDisconnected      => "IceConnectionDisconnected".to_string(),
+            CallEvent::ClientError(e)                 => format!("ClientError: {}", e),
+            CallEvent::CallTimeout(id)                => format!("CallTimeout, call_id: {}", id),
+            CallEvent::OnAddStream(stream)            => format!("OnAddStream, stream: {:}", stream),
+            CallEvent::OnDataChannel(dc)              => format!("OnDataChannel, dc: {:?}", dc),
+            CallEvent::SendBusy(_, id)                => format!("SendBusy, call_id: {}", id),
+            CallEvent::EndCall                        => "EndCall".to_string(),
         };
         write!(f, "({})", display)
     }
@@ -178,7 +182,7 @@ where
 /// immediately on its own thread.
 ///
 /// For "lengthy" reactions, typically involving network access, the
-/// FSM dispatches the work to a "network" thread. 
+/// FSM dispatches the work to a "network" thread.
 ///
 /// For notification events targeted for the client application, the
 /// FSM dispatches the work to a "notify" thread.
@@ -330,9 +334,9 @@ where
         // Handle these events even while terminating, as the remote
         // side needs to be informed.
         match event {
-            CallEvent::LocalHangup => return self.handle_local_hangup(cc_handle, state),
+            CallEvent::LocalHangup             => return self.handle_local_hangup(cc_handle, state),
             CallEvent::SendBusy(recipient, id) => return self.handle_send_busy(cc_handle, state, recipient, id),
-            CallEvent::EndCall => return self.handle_end_call(cc_handle),
+            CallEvent::EndCall                 => return self.handle_end_call(cc_handle),
             _ => {},
         }
 
@@ -344,25 +348,26 @@ where
         }
 
         match event {
-            CallEvent::SendOffer => self.handle_send_offer(cc_handle, state),
-            CallEvent::AcceptAnswer(answer) => self.handle_accept_answer(cc_handle, state, answer),
-            CallEvent::AcceptOffer(offer) => self.handle_accept_offer(cc_handle, state, offer),
-            CallEvent::AnswerCall => self.handle_answer_call(cc_handle, state),
-            CallEvent::RemoteHangup(id) => self.handle_remote_hangup(cc_handle, state, id),
-            CallEvent::RemoteConnected(id) => self.handle_remote_connected(cc_handle, state, id),
+            CallEvent::SendOffer                      => self.handle_send_offer(cc_handle, state),
+            CallEvent::AcceptAnswer(answer)           => self.handle_accept_answer(cc_handle, state, answer),
+            CallEvent::AcceptOffer(offer)             => self.handle_accept_offer(cc_handle, state, offer),
+            CallEvent::AnswerCall                     => self.handle_answer_call(cc_handle, state),
+            CallEvent::RemoteHangup(id)               => self.handle_remote_hangup(cc_handle, state, id),
+            CallEvent::RemoteConnected(id)            => self.handle_remote_connected(cc_handle, state, id),
             CallEvent::RemoteVideoStatus(id, enabled) => self.handle_remote_video_status(cc_handle, state, id, enabled),
-            CallEvent::RemoteIceCandidate(candidate) => self.handle_remote_ice_candidate(cc_handle, state, candidate),
-            CallEvent::LocalVideoStatus(enabled) => self.handle_local_video_status(cc_handle, state, enabled),
-            CallEvent::LocalIceCandidate(candidate) => self.handle_local_ice_candidate(cc_handle, state, candidate),
-            CallEvent::IceConnected => self.handle_ice_connected(cc_handle, state),
-            CallEvent::IceConnectionFailed => self.handle_ice_connection_failed(cc_handle, state),
-            CallEvent::ClientError(error) => self.handle_client_error(cc_handle, error),
-            CallEvent::CallTimeout(id) => self.handle_call_timeout(cc_handle, state, id),
-            CallEvent::OnAddStream(stream) => self.handle_on_add_stream(cc_handle, state, stream),
-            CallEvent::OnDataChannel(dc)  => self.handle_on_data_channel(cc_handle, state, dc),
-            CallEvent::LocalHangup => Ok(()),
-            CallEvent::SendBusy(_recipient, _id) => Ok(()),
-            CallEvent::EndCall => Ok(()),
+            CallEvent::RemoteIceCandidate(candidate)  => self.handle_remote_ice_candidate(cc_handle, state, candidate),
+            CallEvent::LocalVideoStatus(enabled)      => self.handle_local_video_status(cc_handle, state, enabled),
+            CallEvent::LocalIceCandidate(candidate)   => self.handle_local_ice_candidate(cc_handle, state, candidate),
+            CallEvent::IceConnected                   => self.handle_ice_connected(cc_handle, state),
+            CallEvent::IceConnectionFailed            => self.handle_ice_connection_failed(cc_handle, state),
+            CallEvent::IceConnectionDisconnected      => self.handle_ice_connection_disconnected(cc_handle, state),
+            CallEvent::ClientError(error)             => self.handle_client_error(cc_handle, error),
+            CallEvent::CallTimeout(id)                => self.handle_call_timeout(cc_handle, state, id),
+            CallEvent::OnAddStream(stream)            => self.handle_on_add_stream(cc_handle, state, stream),
+            CallEvent::OnDataChannel(dc)              => self.handle_on_data_channel(cc_handle, state, dc),
+            CallEvent::LocalHangup                    => Ok(()),
+            CallEvent::SendBusy(_recipient, _id)      => Ok(()),
+            CallEvent::EndCall                        => Ok(()),
         }
     }
 
@@ -732,14 +737,32 @@ where
 
         match state {
             CallState::IceConnecting(_) |
-            CallState::IceConnected
+            CallState::IceConnected     |
+            CallState::CallConnected
                 => {
                     cc_handle.set_state(CallState::IceDisconnected)?;
                     // For callee -- the call was disconnected while answering/local_ringing
                     // For caller -- the recipient was unreachable
-                    self.notify_client(cc_handle, ClientEvent::CallDisconnected);
+                    self.notify_client(cc_handle, ClientEvent::ConnectionFailed);
                 },
             _ => self.unexpected_state(state, "IceConnectionFailed"),
+        };
+        Ok(())
+    }
+
+    fn handle_ice_connection_disconnected(&mut self,
+                                          cc_handle: CallConnectionHandle<T>,
+                                          state:     CallState) -> Result<()> {
+
+        match state {
+            CallState::IceConnecting(_) |
+            CallState::IceConnected     |
+            CallState::CallConnected
+                => {
+                    cc_handle.set_state(CallState::IceConnecting(true))?;
+                    self.notify_client(cc_handle, ClientEvent::CallReconnecting);
+                },
+            _ => self.unexpected_state(state, "IceConnectionDisconnected"),
         };
         Ok(())
     }

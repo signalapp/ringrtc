@@ -474,10 +474,12 @@ public class CallConnection extends PeerConnection {
     REMOTE_VIDEO_DISABLE,
     /** The remote peer indicates it is terminating the call */
     REMOTE_HANGUP,
-    /** The remote peer denied the call */
-    CALL_DISCONNECTED,
+    /** The call failed to connect during the call setup phase */
+    CONNECTION_FAILED,
     /** Unable to establish the call within a resonable amount of time */
-    CALL_TIMEOUT;
+    CALL_TIMEOUT,
+    /** The call dropped while connected and is now reconnecting */
+    CALL_RECONNECTING;
 
     @CalledByNative
     static CallEvent fromNativeIndex(int nativeIndex) {

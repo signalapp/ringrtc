@@ -84,4 +84,3 @@ Rust_createSetSessionDescriptionObserver(const rust_object                      
 
 } // namespace rffi
 } // namespace webrtc
-  

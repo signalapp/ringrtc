@@ -423,6 +423,13 @@ where
         self.send_event(CallEvent::IceConnectionFailed)
     }
 
+    /// Inject an `IceConnectionDisconnected` event into the FSM.
+    ///
+    /// `Called By:` WebRTC `PeerConnectionObserver` call back thread.
+    pub fn inject_ice_connection_disconnected(&mut self) -> Result<()> {
+        self.send_event(CallEvent::IceConnectionDisconnected)
+    }
+
     /// Inject a `ClientError` event into the FSM.
     ///
     /// This is used to send an error notification to the client

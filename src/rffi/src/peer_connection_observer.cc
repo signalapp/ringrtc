@@ -132,4 +132,3 @@ Rust_createPeerConnectionObserver(const rust_object call_connection,
 
 } // namespace rffi
 } // namespace webrtc
-  

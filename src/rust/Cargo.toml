@@ -37,7 +37,7 @@ protobuf_gen_deps = ["prost-build"]
 [[bin]]
 name = "protobuf-gen"
 path = "protobuf/protobuf_gen.rs"
-required-features = ["protobuf_gen_deps"] 
+required-features = ["protobuf_gen_deps"]
 
 [target.'cfg(target_os="android")'.dependencies]
 jni = { version = "0.13.0", default-features = false }

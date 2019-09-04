@@ -39,12 +39,16 @@ pub enum ClientEvent {
     RemoteHangup,
     /// The "call disconnected" event.
     ///
-    /// During call setup, the call was disconnected.
-    CallDisconnected,
+    /// The call failed to connect during the call setup phase.
+    ConnectionFailed,
     /// The "call timeout" event.
     ///
     /// The call took too long to setup before connecting.
     CallTimeout,
+    /// The "call reconnecting" event.
+    ///
+    /// The call dropped while connected and is now reconnecting.
+    CallReconnecting,
 }
 
 impl Clone for ClientEvent {

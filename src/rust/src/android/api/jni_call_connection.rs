@@ -202,4 +202,3 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeSendBusy(env: 
         },
     }
 }
-

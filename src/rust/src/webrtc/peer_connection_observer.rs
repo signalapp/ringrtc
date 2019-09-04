@@ -135,6 +135,10 @@ where
                 cc_handle.inject_ice_connection_failed()
                     .unwrap_or_else(|e| error!("Problems adding ice_connection_failed to fsm: {}", e));
             },
+            IceConnectionDisconnected => {
+                cc_handle.inject_ice_connection_disconnected()
+                    .unwrap_or_else(|e| error!("Problems adding ice_connection_disconnected to fsm: {}", e));
+            },
             _ => {},
         }
     }
