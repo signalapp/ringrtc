@@ -35,9 +35,12 @@ Install rustup, the rust management system:
 
     curl https://sh.rustup.rs -sSf | sh
 
+Install additional rustup components:
+
+    rustup component add clippy
+
 Install additional components via `cargo`:
 
-    cargo install clippy
     cargo install cargo-lipo
     cargo install cbindgen
 
@@ -75,41 +78,15 @@ You can then add the Signal repo to sync with upstream changes:
 
     git remote add upstream https://github.com/signalapp/ringrtc.git
 
-## Workspace Preparation
-
-This step will ensure that the workspace is configured for building RingRTC on a specific platform. Run the command:
-
-    ./bin/prepare-workspace <platform>
-
-where `<platform>` can be one of:
-- android
-- ios
-
-This does the following:
-
-1. Checks out the WebRTC branch specified in [config/version.sh](config/version.sh). This step takes a long time to download all the WebRTC source components and requires several gigabytes of disk space.
-1. Applies custom patches from the [patches](patches) directory to the WebRTC source.
-1. Installs additional platform specific details, such as the NDK toolchains for Android.
-
-For example:
-
-#### Android
-
-    ./bin/prepare-workspace android
-
-#### iOS
-
-    ./bin/prepare-workspace ios
-
 ## Building
 
 ### Android
 
 To build an AAR suitable for including in an Android project, run:
 
-    ./bin/build-aar
+    make android
     
-This will produce release and debug builds for all architectures. For a debug only build, add `--debug` to the command. For more options see the output of `--help`.
+This will produce release and debug builds for all architectures.
 
 When the build is complete, the AAR file is available here:
 
@@ -119,9 +96,9 @@ When the build is complete, the AAR file is available here:
 
 To build frameworks suitable for including in an Xcode project, run:
 
-    ./bin/build-ios
+    make ios
     
-This will produce release builds for all architectures. For a debug only build, add `-d` to the command. For more options see the output of `--help`.
+This will produce release and debug builds for all architectures.
 
 When the build is complete, the frameworks will be available here:
 

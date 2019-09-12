@@ -47,3 +47,5 @@ $BIN_DIR/apply-patches
 
 # Platform specific setup
 prepare_workspace_platform
+
+echo "WEBRTC_PLATFORM=$WEBRTC_PLATFORM" > "${OUTPUT_DIR}/${WEBRTC_PLATFORM}.env"

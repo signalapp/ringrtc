@@ -121,6 +121,9 @@ def ParseArgs():
     parser.add_argument('-u', '--unstripped',
                         action='store_true',
                         help='Store the unstripped libraries in the .aar. Default is false')
+    parser.add_argument('-c', '--compile-only',
+                        action='store_true',
+                        help='Only compile the code, do not build the .aar. Default is false')
 
     return parser.parse_args()
 
@@ -191,12 +194,15 @@ def GetABI(arch):
         raise Exception('Unknown architecture: ' + arch)
 
 def CreateLibs(dry_run, build_dir, archs, output, debug_build, unstripped,
-               extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs):
+               extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs,
+               compile_only):
 
     for arch in archs:
         BuildArch(dry_run, build_dir, arch, debug_build, extra_gn_args,
                   extra_gn_flags, extra_ninja_flags, jobs)
 
+    if compile_only is True:
+        return
 
     output_dir = os.path.join(GetOutputDir(build_dir, debug_build),
                               'libs')
@@ -237,6 +243,7 @@ def RunGradle(dry_run, args):
 def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
               sonatype_repo, sonatype_user, sonatype_password,
               signing_keyid, signing_password, signing_secret_keyring,
+              compile_only,
               install_local, install_dir, build_dir, archs,
               output, debug_build, release_build, unstripped,
               extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs):
@@ -296,7 +303,11 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
                 "-PreleaseOutputDir={}".format(output_dir),
             ]
         CreateLibs(dry_run, build_dir, archs, output, build_debug, unstripped,
-                   extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs)
+                   extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs,
+                   compile_only)
+
+    if compile_only is True:
+        return
 
     gradle_args.append('assemble')
 
@@ -376,6 +387,7 @@ def main():
     CreateAar(args.dry_run, args.extra_gradle_args, args.publish_version, args.gradle_dir,
               args.upload_sonatype_repo, args.upload_sonatype_user, args.upload_sonatype_password,
               args.signing_keyid, args.signing_password, args.signing_secret_keyring,
+              args.compile_only,
               args.install_local, args.install_dir,
               build_dir, args.arch, args.output,
               args.debug_build, args.release_build, args.unstripped, args.extra_gn_args,
