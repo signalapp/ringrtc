@@ -14,9 +14,9 @@ use std::sync::{
 
 use std::ffi::c_void;
 
-use crate::ios::call_connection::iOSCallConnection;
-use crate::ios::call_connection_observer::iOSCallConnectionObserver;
+use crate::ios::call_connection_observer::IOSCallConnectionObserver;
 use crate::ios::error::iOSError;
+use crate::ios::ios_platform::IOSPlatform;
 use crate::ios::webrtc_app_peer_connection::appCreatePeerConnection;
 use crate::ios::ios_util::*;
 use crate::common::{
@@ -28,7 +28,9 @@ use crate::common::{
 use crate::core::call_connection_factory::CallConnectionFactory;
 use crate::core::util::{
     CppObject,
-    ArcPtr,
+    ptr_as_arc_mutex,
+    ptr_as_arc_ptr,
+    ptr_as_box,
 };
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
@@ -38,24 +40,23 @@ use crate::webrtc::peer_connection::{
     RffiPeerConnectionInterface,
 };
 
-#[allow(non_camel_case_types)]
-type iOSCallConnectionFactory = CallConnectionFactory<iOSCallConnection>;
+/// Public type for iOS CallConnectionFactory.
+pub type IOSCallConnectionFactory = CallConnectionFactory<IOSPlatform>;
 
-/// Creates a new iOSCallConnectionFactory object.
-pub fn native_create_call_connection_factory(app_call_connection_factory: jlong) -> Result<jlong> {
-    // @todo Is CppObject correctly compatible with jlong/i64/*mut c_void?
-    let cc_factory = iOSCallConnectionFactory::new(app_call_connection_factory as CppObject)?;
+/// Creates a new IOSCallConnectionFactory object.
+pub fn native_create_call_connection_factory(app_call_connection_factory: *mut AppPeerConnectionFactory) -> Result<*mut c_void> {
+    let cc_factory = IOSCallConnectionFactory::new(app_call_connection_factory as CppObject)?;
     // Wrap factory in Arc<Mutex<>> to pass amongst threads
     let cc_factory = Arc::new(Mutex::new(cc_factory));
     let ptr = Arc::into_raw(cc_factory);
-    Ok(ptr as jlong)
+    Ok(ptr as *mut c_void)
 }
 
-/// Frees a new iOSCallConnectionFactory object.
-pub fn native_free_factory(factory: jlong) -> Result<()> {
-    // Convert integer back into Arc, then Arc will free things up as
+/// Frees a IOSCallConnectionFactory object.
+pub fn native_free_factory(factory: *mut IOSCallConnectionFactory) -> Result<()> {
+    // Convert pointer back into Arc, then Arc will free things up as
     // it goes out of scope.
-    let call_connection_factory: Arc<Mutex<iOSCallConnectionFactory>> = get_arc_from_jlong(factory)?;
+    let call_connection_factory = unsafe { ptr_as_arc_mutex(factory)? };
     if let Ok(mut cc_factory) = call_connection_factory.lock() {
         cc_factory.close()?;
     }
@@ -75,14 +76,14 @@ pub fn native_free_factory(factory: jlong) -> Result<()> {
 /// * `rtc_constraints` - raw pointer to RTCMediaConstraints
 ///
 #[allow(clippy::too_many_arguments)]
-pub fn native_create_call_connection(native_factory: jlong,
-                                app_call_connection: jlong,
+pub fn native_create_call_connection(native_factory: *mut IOSCallConnectionFactory,
+                                app_call_connection: *mut AppCallConnection,
                                         call_config: IOSCallConfig,
-                                    native_observer: jlong,
-                                         rtc_config: jlong,
-                                    rtc_constraints: jlong) -> Result<jlong> {
+                                    native_observer: *mut IOSCallConnectionObserver,
+                                         rtc_config: *mut c_void,
+                                    rtc_constraints: *mut c_void) -> Result<*mut c_void> {
 
-    let call_connection_factory: ArcPtr<Mutex<iOSCallConnectionFactory>> = get_arc_ptr_from_jlong(native_factory)?;
+    let call_connection_factory = unsafe { ptr_as_arc_ptr(native_factory)? };
     let mut cc_factory = match call_connection_factory.get_arc().lock() {
         Ok(v) => v,
         Err(_) => return Err(RingRtcError::MutexPoisoned("Call Connection Factory".to_string()).into()),
@@ -103,26 +104,25 @@ pub fn native_create_call_connection(native_factory: jlong,
         CallDirection::InComing
     };
 
-    let call_connection = iOSCallConnection::new(call_id, direction, recipient);
-    let call_connection_handle = cc_factory.create_call_connection_handle(call_connection)?;
-    info!("call_connection object: debug {:?}", call_connection_handle);
+    let platform = IOSPlatform::new(recipient);
+    let call_connection = cc_factory.create_call_connection(call_id, direction, platform)?;
+    info!("call_connection: {:?}", call_connection);
 
-    let data_channel_cc_handle = call_connection_handle.clone();
+    let data_channel_cc = call_connection.clone();
 
-    let cc_handle = Box::new(call_connection_handle);
-    let cc_ptr = Box::into_raw(cc_handle);
+    let cc_box = Box::new(call_connection);
+    let cc_ptr = Box::into_raw(cc_box);
 
     let pc_observer = PeerConnectionObserver::new(cc_ptr)?;
-    info!("pc_observer: {:?}", pc_observer);
 
     // construct iOS OwnedPeerConnection object
     let webrtc_owned_pc = unsafe {
         appCreatePeerConnection(
             cc_factory.get_native_peer_connection_factory() as *mut c_void,
             app_call_connection as *mut c_void,
-            rtc_config as *mut c_void,
-            rtc_constraints as *mut c_void,
-            pc_observer.get_rffi_interface() as *mut c_void)
+            rtc_config,
+            rtc_constraints,
+            pc_observer.rffi_interface() as *mut c_void)
     };
     info!("webrtc_owned_pc: {:?}", webrtc_owned_pc);
 
@@ -141,25 +141,28 @@ pub fn native_create_call_connection(native_factory: jlong,
     let pc_interface = PeerConnection::new(rffi_pc_interface);
 
     // Convert the native observer integer back into an Boxed object
-    let cc_observer: Box<iOSCallConnectionObserver> = get_object_from_jlong(native_observer)?;
+    let cc_observer = unsafe { ptr_as_box(native_observer)? };
 
     // Convert the raw CallConnection pointer back into a Boxed object
-    let cc_handle = unsafe { Box::from_raw(cc_ptr) };
+    let cc_box = unsafe { Box::from_raw(cc_ptr) };
 
-    if let Ok(mut cc) = cc_handle.lock() {
-        if let CallDirection::OutGoing = direction {
-            // Create data channel observer and data channel
-            let dc_observer = DataChannelObserver::new(data_channel_cc_handle)?;
-            let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-            data_channel.register_observer(dc_observer.get_rffi_interface())?;
-            cc.set_data_channel(data_channel);
-            cc.set_data_channel_observer(dc_observer);
-        }
-        cc.update_pc(pc_interface, cc_observer)?;
-    } else {
-        error!("Initial mutex is poisoned");
-        return Err(RingRtcError::MutexPoisoned("CallConnectionHandle in CallConnectionFactory".to_string()).into());
+    if let CallDirection::OutGoing = direction {
+        // Create data channel observer and data channel
+        let dc_observer = DataChannelObserver::new(data_channel_cc)?;
+        let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
+        data_channel.register_observer(dc_observer.rffi_interface())?;
+        cc_box.set_data_channel(data_channel)?;
+        cc_box.set_data_channel_observer(dc_observer)?;
     }
 
-    Ok(Box::into_raw(cc_handle) as jlong)
+    if let Ok(mut platform) = cc_box.platform() {
+        platform.set_cc_observer(cc_observer);
+    } else {
+        return Err(RingRtcError::MutexPoisoned("CallConnection.platform".to_string()).into());
+    }
+    cc_box.set_pc_interface(pc_interface)?;
+
+    info!("call_connection: {:?}", cc_box);
+
+    Ok(Box::into_raw(cc_box) as *mut c_void)
 }

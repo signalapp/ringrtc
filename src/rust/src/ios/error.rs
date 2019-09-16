@@ -17,8 +17,8 @@ pub enum iOSError {
     InitializeLogging,
     #[fail(display = "Creating RTCPeerConnection in App failed")]
     CreateAppPeerConnection,
-    #[fail(display = "Creating RTCMediaStream in App failed")]
-    CreateAppMediaStream,
+    #[fail(display = "Creating RTCMediaStream in iOS failed")]
+    CreateIOSMediaStream,
 
     // iOS Misc error codes
     #[fail(display = "Extracting native PeerConnectionInterface failed")]

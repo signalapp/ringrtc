@@ -8,7 +8,6 @@
 //! Utility helpers for JNI access
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use jni::JNIEnv;
 use jni::objects::{
@@ -18,17 +17,9 @@ use jni::objects::{
     JClass,
     GlobalRef,
 };
-use jni::sys::jlong;
 
 use crate::android::error::AndroidError;
 use crate::common::Result;
-use crate::core::util::{
-    get_arc_from_ptr,
-    get_arc_ptr_from_ptr,
-    get_object_ref_from_ptr,
-    get_object_from_ptr,
-    ArcPtr,
-};
 
 /// Wrapper around JNIEnv::call_method() with logging.
 pub fn jni_call_method<'a>(
@@ -114,26 +105,6 @@ pub fn jni_new_linked_list<'a>(env: &'a JNIEnv) -> Result<JList<'a, 'a>> {
                               LINKED_LIST_CLASS_SIG,
                               &[])?;
     Ok(env.get_list(list)?)
-}
-
-/// Returns a Arc<T> from a jlong
-pub fn get_arc_from_jlong<T>(object: jlong) -> Result<Arc<T>> {
-    get_arc_from_ptr(object as *mut T)
-}
-
-/// Returns a ArcPtr<T> from a jlong
-pub fn get_arc_ptr_from_jlong<T>(object: jlong) -> Result<ArcPtr<T>> {
-    get_arc_ptr_from_ptr(object as *mut T)
-}
-
-/// Returns a &T from a jlong
-pub fn get_object_ref_from_jlong<T>(object: jlong) -> Result<&'static mut T> {
-    get_object_ref_from_ptr(object as *mut T)
-}
-
-/// Returns a Box<T> from a jlong
-pub fn get_object_from_jlong<T>(object: jlong) -> Result<Box<T>> {
-    get_object_from_ptr(object as *mut T)
 }
 
 /// A cache of Java class objects

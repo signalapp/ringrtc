@@ -12,7 +12,6 @@ use std::ffi::c_void;
 use libc::size_t;
 
 use crate::ios::ios_util::*;
-use crate::ios::call_connection::iOSClientStream;
 use crate::common::{
     CallId,
     Result,
@@ -26,12 +25,19 @@ use crate::core::call_connection_observer::{
 #[repr(C)]
 #[allow(non_snake_case)]
 /// iOS CallConnectionObserver
+///
+/// Wrapper around a Swift object.
 pub struct IOSObserver {
+    /// Raw Swift object pointer.
     pub object: *mut c_void,
+    /// Swift object clean up method.
     pub destroy: extern fn(object: *mut c_void),
-    pub onCallEvent: extern fn(object: *mut c_void, callId: i64, callEvent: i32),
-    pub onCallError: extern fn(object: *mut c_void, callId: i64, errorString: IOSByteSlice),
-    pub onAddStream: extern fn(object: *mut c_void, callId: i64, stream: *mut c_void),
+    /// Swift call event callback method.
+    pub onCallEvent: extern fn(object: *mut c_void, callId: u64, callEvent: i32),
+    /// Swift call error callback method.
+    pub onCallError: extern fn(object: *mut c_void, callId: u64, errorString: IOSByteSlice),
+    /// Swift add stream callback method.
+    pub onAddStream: extern fn(object: *mut c_void, callId: u64, stream: *mut c_void),
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.
@@ -48,15 +54,17 @@ impl Drop for IOSObserver {
     }
 }
 
-#[allow(non_camel_case_types)]
-pub struct iOSCallConnectionObserver {
+/// iOS CallConnectionObserver
+pub struct IOSCallConnectionObserver {
+    /// Swift object wrapper.
     app_observer: IOSObserver,
+    /// call identifier.
     call_id: CallId
 }
 
-impl iOSCallConnectionObserver {
+impl IOSCallConnectionObserver {
 
-    /// Creates a new iOSCallConnectionObserver
+    /// Creates a new IOSCallConnectionObserver
     pub fn new(app_observer: IOSObserver, call_id: CallId) -> Self {
         Self {
             app_observer,
@@ -92,16 +100,16 @@ impl iOSCallConnectionObserver {
     }
 
     /// Send an onAddStream message to the client application.
-    fn on_add_stream(&self, stream: jlong) -> Result<()> {
-        (self.app_observer.onAddStream)(self.app_observer.object, self.call_id, stream as *mut c_void);
+    fn on_add_stream(&self, stream: *mut c_void) -> Result<()> {
+        (self.app_observer.onAddStream)(self.app_observer.object, self.call_id, stream);
 
         Ok(())
     }
 }
 
-impl CallConnectionObserver for iOSCallConnectionObserver {
+impl CallConnectionObserver for IOSCallConnectionObserver {
 
-    type ClientStream = iOSClientStream;
+    type AppMediaStream = *mut c_void;
 
     fn notify_event(&self, event: ClientEvent) {
         info!("notify_event: {}", event);
@@ -115,9 +123,9 @@ impl CallConnectionObserver for iOSCallConnectionObserver {
             .unwrap_or_else(|e| error!("error() failed: {}", e));
     }
 
-    fn notify_on_add_stream(&self, stream: Self::ClientStream) {
+    fn notify_on_add_stream(&self, stream: Self::AppMediaStream) {
         info!("notify_on_add_stream()");
-        self.on_add_stream(stream as jlong)
+        self.on_add_stream(stream)
             .unwrap_or_else(|e| error!("on_add_stream() failed: {}", e));
     }
 

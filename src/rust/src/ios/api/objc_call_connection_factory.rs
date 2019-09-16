@@ -14,12 +14,14 @@ use std::ptr;
 use std::ffi::c_void;
 
 use crate::ios::call_connection_factory;
+use crate::ios::call_connection_factory::IOSCallConnectionFactory;
+use crate::ios::call_connection_observer::IOSCallConnectionObserver;
 use crate::ios::ios_util::*;
 
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern fn ringRtcCreateCallConnectionFactory(appCallConnectionFactory: *mut c_void) -> *mut c_void {
-    match call_connection_factory::native_create_call_connection_factory(appCallConnectionFactory as jlong) {
+    match call_connection_factory::native_create_call_connection_factory(appCallConnectionFactory as *mut AppPeerConnectionFactory) {
         Ok(v) => {
             v as *mut c_void
         },
@@ -33,7 +35,7 @@ pub extern fn ringRtcCreateCallConnectionFactory(appCallConnectionFactory: *mut 
 #[allow(non_snake_case)]
 pub extern fn ringRtcFreeFactory(factory: *mut c_void) -> *mut c_void
 {
-    match call_connection_factory::native_free_factory(factory as jlong) {
+    match call_connection_factory::native_free_factory(factory as *mut IOSCallConnectionFactory) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             factory
@@ -52,12 +54,12 @@ pub extern fn ringRtcCreateCallConnection(callConnectionFactory: *mut c_void,
                                          callConnectionObserver: *mut c_void,
                                                       rtcConfig: *mut c_void,
                                                  rtcConstraints: *mut c_void) -> *mut c_void {
-    match call_connection_factory::native_create_call_connection(callConnectionFactory as jlong,
-                                                                 appCallConnection as jlong,
+    match call_connection_factory::native_create_call_connection(callConnectionFactory as *mut IOSCallConnectionFactory,
+                                                                 appCallConnection as *mut AppCallConnection,
                                                                  callConfig,
-                                                                 callConnectionObserver as jlong,
-                                                                 rtcConfig as jlong,
-                                                                 rtcConstraints as jlong) {
+                                                                 callConnectionObserver as *mut IOSCallConnectionObserver,
+                                                                 rtcConfig,
+                                                                 rtcConstraints) {
         Ok(v) => {
             v as *mut c_void
         },

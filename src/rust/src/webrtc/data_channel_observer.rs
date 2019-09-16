@@ -7,6 +7,7 @@
 
 //! WebRTC Data Channel Observer Interface.
 
+use std::mem;
 use std::slice;
 
 use bytes::Bytes;
@@ -15,16 +16,17 @@ use prost::Message;
 
 use crate::common::{
     Result,
+    CallDirection,
     CallId,
 };
 use crate::core::call_connection::{
-    CallConnectionInterface,
-    CallConnectionHandle,
+    CallConnection,
+    CallPlatform,
 };
 use crate::core::util::{
     RustObject,
     CppObject,
-    get_object_ref_from_ptr,
+    ptr_as_mut,
 };
 use crate::error::RingRtcError;
 use crate::protobuf::data_channel::Data;
@@ -37,80 +39,92 @@ use crate::protobuf::data_channel::Data;
 #[allow(non_snake_case)]
 struct DataChannelObserverCallbacks<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
-    onStateChange: extern fn(*mut CallConnectionHandle<T>),
-    onBufferedAmountChange: extern fn (*mut CallConnectionHandle<T>, u64),
-    onMessage: extern fn (*mut CallConnectionHandle<T>, *const u8, size_t, bool),
+    onStateChange: extern fn(*mut CallConnection<T>),
+    onBufferedAmountChange: extern fn (*mut CallConnection<T>, u64),
+    onMessage: extern fn (*mut CallConnection<T>, *const u8, size_t, bool),
 }
 
 /// DataChannelObserver OnStateChange() callback.
 #[allow(non_snake_case)]
-extern fn dc_observer_OnStateChange<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn dc_observer_OnStateChange<T>(_call_connection: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("dc_observer_OnStateChange()");
 }
 
 /// DataChannelObserver OnBufferedAmountChange() callback.
 #[allow(non_snake_case)]
-extern fn dc_observer_OnBufferedAmountChange<T>(_call_connection: *mut CallConnectionHandle<T>, previous_amount: u64)
+extern fn dc_observer_OnBufferedAmountChange<T>(_call_connection: *mut CallConnection<T>, previous_amount: u64)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("dc_observer_OnBufferedAmountChange(): previous_amount: {}", previous_amount);
 }
 
 /// DataChannelObserver OnMessage() callback.
 #[allow(non_snake_case)]
-extern fn dc_observer_OnMessage<T>(call_connection: *mut CallConnectionHandle<T>, buffer: *const u8, length: size_t, binary: bool)
+extern fn dc_observer_OnMessage<T>(call_connection: *mut CallConnection<T>, buffer: *const u8, length: size_t, binary: bool)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
-    info!("dc_observer_OnMessage(): length: {}, binary: {}", length, binary);
     if buffer.is_null() {
         warn!("rx protobuf is null");
         return;
     }
+
+    if length > (mem::size_of::<Data>() * 2) {
+        warn!("rx protobuf is excessively large: {}", length);
+        return;
+    }
+
     if length == 0 {
         warn!("rx protobuf has zero length");
         return;
     }
 
+    info!("dc_observer_OnMessage(): length: {}, binary: {}", length, binary);
+
     let slice = unsafe { slice::from_raw_parts(buffer, length as usize) };
     let bytes = Bytes::from_static(slice);
     let message = match Data::decode(bytes) {
         Ok(v) => v,
-        Err(_) => {
-            warn!("unable to parse rx protobuf");
+        Err(e) => {
+            warn!("unable to parse rx protobuf: {}", e);
             return;
         },
     };
 
-    info!("Found data channel message: {:?}", message);
+    info!("Received data channel message: {:?}", message);
 
-    let cc_handle = match get_object_ref_from_ptr(call_connection) {
+    let cc = match unsafe { ptr_as_mut(call_connection) } {
         Ok(v) => v,
         Err(e) => {
-            warn!("unable to translate call_connection ptr: {}", e);
+            warn!("unable to translate cc ptr: {}", e);
             return;
         },
     };
 
-    // The data channel message could contain multiple message types
     if let Some(connected) = message.connected {
-        cc_handle.inject_remote_connected(connected.id() as CallId)
-            .unwrap_or_else(|e| warn!("unable to inject remote connected event: {}", e));
-    }
-    if let Some(hangup) = message.hangup {
-        cc_handle.inject_remote_hangup(hangup.id() as CallId)
+        if let CallDirection::OutGoing = cc.direction() {
+            cc.inject_remote_connected(connected.id() as CallId)
+                .unwrap_or_else(|e| warn!("unable to inject remote connected event: {}", e));
+        } else {
+            warn!("Unexpected incoming call connected message: {:?}", connected);
+            cc.inject_client_error(RingRtcError::DataChannelProtocol("Received 'Connected' for inbound call".to_string()).into())
+                .unwrap_or_else(|e| warn!("unable to inject client error: {}", e));
+        }
+    } else if let Some(hangup) = message.hangup {
+        cc.inject_remote_hangup(hangup.id() as CallId)
             .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));
-    }
-    if let Some(video_status) = message.video_streaming_status {
-        cc_handle.inject_remote_video_status(video_status.id() as CallId,
+    } else if let Some(video_status) = message.video_streaming_status {
+        cc.inject_remote_video_status(video_status.id() as CallId,
                                              video_status.enabled())
             .unwrap_or_else(|e| warn!("unable to inject remote video status event: {}", e));
+    } else {
+        info!("Unhandled data channel message: {:?}", message);
     }
 
 }
@@ -123,40 +137,49 @@ pub struct RffiDataChannelObserverInterface { _private: [u8; 0] }
 #[derive(Debug)]
 pub struct DataChannelObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     /// Pointer to C++ webrtc::rffi::DataChannelObserverRffi
     rffi_dc_observer:    *const RffiDataChannelObserverInterface,
-    /// Pointer to Rust CallConnectionHandle object
-    call_connection_ptr: *mut CallConnectionHandle<T>,
+    /// Pointer to Rust CallConnection object
+    call_connection_ptr: *mut CallConnection<T>,
 }
+
+unsafe impl<T> Send for DataChannelObserver<T>
+where
+    T: CallPlatform,
+{}
+unsafe impl<T> Sync for DataChannelObserver<T>
+where
+    T: CallPlatform,
+{}
 
 impl<T> Drop for DataChannelObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     fn drop(&mut self) {
         if !self.call_connection_ptr.is_null() {
             debug!("DataChannelObserver(): drop");
             // Convert the raw CallConnection pointer back into a
             // Boxed object and let it go out of scope.
-            let _cc_handle = unsafe { Box::from_raw(self.call_connection_ptr) };
+            let _call_connection = unsafe { Box::from_raw(self.call_connection_ptr) };
         }
     }
 }
 
 impl<T> DataChannelObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     /// Create a new Rust DataChannelObserver object.
     ///
     /// Creates a new WebRTC C++ DataChannelObserver object,
     /// registering the observer callbacks to this module, and wraps
     /// the result in a Rust DataChannelObserver object.
-    pub fn new(cc_handle: CallConnectionHandle<T>) -> Result<Self>
+    pub fn new(call_connection: CallConnection<T>) -> Result<Self>
     {
-        let call_connection_ptr = cc_handle.create_call_connection_ptr();
+        let call_connection_ptr = call_connection.create_call_connection_ptr();
         debug!("create_dc_observer_interface(): call_connection_ptr: {:p}", call_connection_ptr);
         let dc_observer_callbacks = DataChannelObserverCallbacks::<T> {
             onStateChange: dc_observer_OnStateChange::<T>,
@@ -182,7 +205,7 @@ where
     }
 
     /// Return the internal WebRTC C++ DataChannelObserver pointer.
-    pub fn get_rffi_interface(&self) -> *const RffiDataChannelObserverInterface {
+    pub fn rffi_interface(&self) -> *const RffiDataChannelObserverInterface {
         self.rffi_dc_observer
     }
 

@@ -45,8 +45,12 @@ pub enum RingRtcError {
     ConvertSdpAnswer,
     #[fail(display = "Unable to convert sdp offer string to SessionDescriptionInterface object")]
     ConvertSdpOffer,
+
+    // DataChannel error codes
     #[fail(display = "Unable to send data channel message")]
     DataChannelSend,
+    #[fail(display = "Data channel protocol error: {}", _0)]
+    DataChannelProtocol(String),
 
     // Misc error codes
     #[fail(display = "Event stream polling failed")]

@@ -13,7 +13,7 @@ use std::fmt;
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
 /// Unique call identification number.
-pub type CallId = i64;
+pub type CallId = u64;
 
 /// Tracks the state of the call.
 #[derive(Clone, Copy, Debug)]

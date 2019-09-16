@@ -43,4 +43,4 @@ required-features = ["protobuf_gen_deps"]
 jni = { version = "0.13.0", default-features = false }
 
 [patch.crates-io]
-mio = { git = "ssh://git@github.com:/signalapp/mio.git", branch = "v0.6.19br" }
+mio = { git = "https://github.com/signalapp/mio.git", branch = "v0.6.19br" }

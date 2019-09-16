@@ -10,6 +10,7 @@
 use std::ffi::{
     CStr,
     CString,
+    c_void,
 };
 use std::fmt;
 use std::os::raw::c_char;
@@ -23,9 +24,8 @@ use std::sync::{
 use crate::common::Result;
 use crate::core::util::{
     RustObject,
-    CppObject,
     FutureResult,
-    get_object_from_cpp,
+    ptr_as_ref,
 };
 use crate::error::RingRtcError;
 
@@ -61,7 +61,7 @@ impl SessionDescriptionInterface {
     }
 
     /// Return the internal WebRTC C++ SessionDescriptionInterface pointer.
-    pub fn get_rffi_interface(&self) -> *const RffiSessionDescriptionInterface {
+    pub fn rffi_interface(&self) -> *const RffiSessionDescriptionInterface {
         self.sd_interface
     }
 
@@ -176,11 +176,13 @@ impl CreateSessionDescriptionObserver {
         }
     }
 
+    /// Set the RFFI observer object.
     pub fn set_rffi_observer(&mut self, observer: *const RffiCreateSessionDescriptionObserver) {
         self.rffi_csd_observer = observer
     }
 
-    pub fn get_rffi_observer(&self) -> *const RffiCreateSessionDescriptionObserver {
+    /// Return the RFFI observer object.
+    pub fn rffi_observer(&self) -> *const RffiCreateSessionDescriptionObserver {
         self.rffi_csd_observer
     }
 
@@ -189,34 +191,35 @@ impl CreateSessionDescriptionObserver {
 /// CreateSessionDescription observer OnSuccess() callback.
 #[no_mangle]
 #[allow(non_snake_case)]
-extern fn csd_observer_OnSuccess(csd_observer: RustObject,
+extern fn csd_observer_OnSuccess(csd_observer: *mut CreateSessionDescriptionObserver,
                                  desc: *const RffiSessionDescriptionInterface) {
     info!("csd_observer_OnSuccess()");
-    if let Ok(v) = get_object_from_cpp(csd_observer) {
-        let csd_observer: & CreateSessionDescriptionObserver = v;
-        csd_observer.on_create_success(desc);
-    }
+    match unsafe { ptr_as_ref(csd_observer) } {
+        Ok(v) => v.on_create_success(desc),
+        Err(e) => error!("csd_observer_OnSuccess(): {}", e),
+    };
 }
 
 /// CreateSessionDescription observer OnFailure() callback.
 #[no_mangle]
 #[allow(non_snake_case)]
-extern fn csd_observer_OnFailure(csd_observer: RustObject,
+extern fn csd_observer_OnFailure(csd_observer: *mut CreateSessionDescriptionObserver,
                                  err_message: *const c_char, err_type: i32) {
     let err_string: String = unsafe { CStr::from_ptr(err_message).to_string_lossy().into_owned() };
     error!("csd_observer_OnFailure(): {}, type: {}", err_string, err_type);
-    if let Ok(v) = get_object_from_cpp(csd_observer) {
-        let csd_observer: & CreateSessionDescriptionObserver = v;
-        csd_observer.on_create_failure(err_string, err_type);
-    }
+
+    match unsafe { ptr_as_ref(csd_observer) } {
+        Ok(v) => v.on_create_failure(err_string, err_type),
+        Err(e) => error!("csd_observer_OnFailure(): {}", e),
+    };
 }
 
 /// CreateSessionDescription observer callback function pointers.
 #[repr(C)]
 #[allow(non_snake_case)]
 struct CreateSessionDescriptionObserverCallbacks {
-    onSuccess: extern fn(csd_observer: RustObject, desc: *const RffiSessionDescriptionInterface),
-    onFailure: extern fn (csd_observer: RustObject, error_message: *const c_char, error_type: i32),
+    onSuccess: extern fn(csd_observer: *mut CreateSessionDescriptionObserver, desc: *const RffiSessionDescriptionInterface),
+    onFailure: extern fn (csd_observer: *mut CreateSessionDescriptionObserver, error_message: *const c_char, error_type: i32),
 }
 
 const CSD_OBSERVER_CBS: CreateSessionDescriptionObserverCallbacks = CreateSessionDescriptionObserverCallbacks {
@@ -235,7 +238,7 @@ pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
     let csd_observer_ptr = Box::into_raw(csd_observer);
     let rffi_csd_observer = unsafe {
         Rust_createCreateSessionDescriptionObserver(csd_observer_ptr as RustObject,
-                                                    CSD_OBSERVER_CBS_PTR)
+                                                    CSD_OBSERVER_CBS_PTR as *const c_void)
     };
     let mut csd_observer = unsafe { Box::from_raw(csd_observer_ptr) };
 
@@ -315,11 +318,13 @@ impl SetSessionDescriptionObserver {
         }
     }
 
+    /// Set the RFFI observer object.
     pub fn set_rffi_observer(&mut self, observer: *const RffiSetSessionDescriptionObserver) {
         self.rffi_ssd_observer = observer
     }
 
-    pub fn get_rffi_observer(&self) -> *const RffiSetSessionDescriptionObserver {
+    /// Return the RFFI observer object.
+    pub fn rffi_observer(&self) -> *const RffiSetSessionDescriptionObserver {
         self.rffi_ssd_observer
     }
 
@@ -328,33 +333,34 @@ impl SetSessionDescriptionObserver {
 /// SetSessionDescription observer OnSuccess() callback.
 #[no_mangle]
 #[allow(non_snake_case)]
-extern fn ssd_observer_OnSuccess(ssd_observer: RustObject) {
+extern fn ssd_observer_OnSuccess(ssd_observer: *mut SetSessionDescriptionObserver) {
     info!("ssd_observer_OnSuccess()");
-    if let Ok(v) = get_object_from_cpp(ssd_observer) {
-        let ssd_observer: & SetSessionDescriptionObserver = v;
-        ssd_observer.on_set_success();
-    }
+    match unsafe { ptr_as_ref(ssd_observer) } {
+        Ok(v) => v.on_set_success(),
+        Err(e) => error!("ssd_observer_OnSuccess(): {}", e),
+    };
 }
 
 /// SetSessionDescription observer OnFailure() callback.
 #[no_mangle]
 #[allow(non_snake_case)]
-extern fn ssd_observer_OnFailure(ssd_observer: RustObject,
+extern fn ssd_observer_OnFailure(ssd_observer: *mut SetSessionDescriptionObserver,
                                  err_message: *const c_char, err_type: i32) {
     let err_string: String = unsafe { CStr::from_ptr(err_message).to_string_lossy().into_owned() };
     error!("ssd_observer_OnFailure(): {}, type: {}", err_string, err_type);
-    if let Ok(v) = get_object_from_cpp(ssd_observer) {
-        let ssd_observer: & SetSessionDescriptionObserver = v;
-        ssd_observer.on_set_failure(err_string, err_type);
-    }
+
+    match unsafe { ptr_as_ref(ssd_observer) } {
+        Ok(v) => v.on_set_failure(err_string, err_type),
+        Err(e) => error!("ssd_observer_OnFailure(): {}", e),
+    };
 }
 
 /// SetSessionDescription observer callback function pointers.
 #[repr(C)]
 #[allow(non_snake_case)]
 struct SetSessionDescriptionObserverCallbacks {
-    onSuccess: extern fn(ssd_observer: RustObject),
-    onFailure: extern fn (ssd_observer: RustObject, error_message: *const c_char, error_type: i32),
+    onSuccess: extern fn(ssd_observer: *mut SetSessionDescriptionObserver),
+    onFailure: extern fn (ssd_observer: *mut SetSessionDescriptionObserver, error_message: *const c_char, error_type: i32),
 }
 
 const SSD_OBSERVER_CBS: SetSessionDescriptionObserverCallbacks = SetSessionDescriptionObserverCallbacks {
@@ -373,8 +379,8 @@ pub fn create_ssd_observer() -> Box<SetSessionDescriptionObserver> {
     let ssd_observer = Box::new(SetSessionDescriptionObserver::new());
     let ssd_observer_ptr = Box::into_raw(ssd_observer);
     let rffi_ssd_observer = unsafe {
-        Rust_createSetSessionDescriptionObserver(ssd_observer_ptr as CppObject,
-                                                 SSD_OBSERVER_CBS_PTR)
+        Rust_createSetSessionDescriptionObserver(ssd_observer_ptr as RustObject,
+                                                 SSD_OBSERVER_CBS_PTR as *const c_void)
     };
     let mut ssd_observer = unsafe { Box::from_raw(ssd_observer_ptr) };
 
@@ -384,11 +390,11 @@ pub fn create_ssd_observer() -> Box<SetSessionDescriptionObserver> {
 
 extern {
     fn Rust_createSetSessionDescriptionObserver(ssd_observer:    RustObject,
-                                                ssd_observer_cb: *const SetSessionDescriptionObserverCallbacks)
+                                                ssd_observer_cb: *const c_void)
                                                 -> *const RffiSetSessionDescriptionObserver;
 
     fn Rust_createCreateSessionDescriptionObserver(csd_observer:     RustObject,
-                                                   csd_observer_cb: *const CreateSessionDescriptionObserverCallbacks)
+                                                   csd_observer_cb: *const c_void)
                                                    -> *const RffiCreateSessionDescriptionObserver;
 
     fn Rust_getOfferDescription(offer: *const RffiSessionDescriptionInterface)

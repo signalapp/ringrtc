@@ -16,13 +16,13 @@ use crate::common::{
     DATA_CHANNEL_NAME,
 };
 use crate::core::call_connection::{
-    CallConnectionInterface,
-    CallConnectionHandle,
+    CallConnection,
+    CallPlatform,
 };
 use crate::core::util::{
     RustObject,
     CppObject,
-    get_object_ref_from_ptr,
+    ptr_as_mut,
 };
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
@@ -86,157 +86,175 @@ enum IceConnectionState {
 
 /// PeerConnectionObserver OnIceCandidate() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnIceCandidate<T>(call_connection: *mut CallConnectionHandle<T>, candidate: *const CppIceCandidate)
+extern fn pc_observer_OnIceCandidate<T>(cc_ptr: *mut CallConnection<T>, candidate: *const CppIceCandidate)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
-    let ice_candidate = IceCandidate::from(unsafe {&*candidate});
-    debug!("pc_observer_OnIceCandidate(): {:?}", ice_candidate);
+    if !candidate.is_null() {
+        let ice_candidate = IceCandidate::from(unsafe {&*candidate});
+        debug!("pc_observer_OnIceCandidate(): {:?}", ice_candidate);
 
-    if let Ok(cc_handle) = get_object_ref_from_ptr(call_connection) {
-        cc_handle.inject_local_ice_candidate(ice_candidate)
-            .unwrap_or_else(|e| error!("Problems adding ice canddiate to fsm: {}", e));
+        let object = unsafe { ptr_as_mut(cc_ptr) };
+        if let Ok(cc) = object {
+            cc.inject_local_ice_candidate(ice_candidate)
+                .unwrap_or_else(|e| error!("Problems adding ice canddiate to fsm: {}", e));
+        } else {
+            warn!("pc_observer_OnIceCandidate(): ptr_as_mut() failed.");
+        }
+    } else {
+        warn!("Ignoring null IceCandidate pointer");
     }
 }
 
 /// PeerConnectionObserver OnIceCandidateRemoved() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnIceCandidatesRemoved<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnIceCandidatesRemoved<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnIceCandidatesRemoved()");
 }
 
 /// PeerConnectionObserver OnSignalingChange() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnSignalingChange<T>(_call_connection: *mut CallConnectionHandle<T>, new_state: SignalingState)
+extern fn pc_observer_OnSignalingChange<T>(_cc_ptr: *mut CallConnection<T>, new_state: SignalingState)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnSignalingChange(): new_state: {:?}", new_state);
 }
 
 /// PeerConnectionObserver OnIceConnectionChange() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnIceConnectionChange<T>(call_connection: *mut CallConnectionHandle<T>, new_state: IceConnectionState)
+extern fn pc_observer_OnIceConnectionChange<T>(cc_ptr: *mut CallConnection<T>, new_state: IceConnectionState)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     debug!("pc_observer_OnIceConnectionChange(): new_state: {:?}", new_state);
-    if let Ok(cc_handle) = get_object_ref_from_ptr(call_connection) {
+    let object = unsafe { ptr_as_mut(cc_ptr) };
+    if let Ok(cc) = object {
         use IceConnectionState::*;
         match new_state {
             IceConnectionCompleted | IceConnectionConnected => {
-                cc_handle.inject_ice_connected()
+                cc.inject_ice_connected()
                     .unwrap_or_else(|e| error!("Problems adding ice_connected to fsm: {}", e));
             },
             IceConnectionFailed => {
-                cc_handle.inject_ice_connection_failed()
+                cc.inject_ice_connection_failed()
                     .unwrap_or_else(|e| error!("Problems adding ice_connection_failed to fsm: {}", e));
             },
             IceConnectionDisconnected => {
-                cc_handle.inject_ice_connection_disconnected()
+                cc.inject_ice_connection_disconnected()
                     .unwrap_or_else(|e| error!("Problems adding ice_connection_disconnected to fsm: {}", e));
             },
             _ => {},
         }
+    } else {
+        warn!("pc_observer_OnIceConnectionChange(): ptr_as_mut() failed.");
     }
 }
 
 /// PeerConnectionObserver OnConnectionChange() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnConnectionChange<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnConnectionChange<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnConnectionChange()");
 }
 
 /// PeerConnectionObserver OnIceConnectionReceivingChange() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnIceConnectionReceivingChange<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnIceConnectionReceivingChange<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnIceConnectionReceivingChange()");
 }
 
 /// PeerConnectionObserver OnIceGatherChange() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnIceGatheringChange<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnIceGatheringChange<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnIceGatheringChange()");
 }
 
 /// PeerConnectionObserver OnAddStream() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnAddStream<T>(call_connection: *mut CallConnectionHandle<T>,
+extern fn pc_observer_OnAddStream<T>(cc_ptr: *mut CallConnection<T>,
                                        native_stream: *const RffiMediaStreamInterface)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     debug!("pc_observer_OnAddStream() -- {:p}", native_stream);
     let stream = MediaStream::new(native_stream);
 
-    if let Ok(cc_handle) = get_object_ref_from_ptr(call_connection) {
-        cc_handle.inject_on_add_stream(stream)
+    let object = unsafe { ptr_as_mut(cc_ptr) };
+    if let Ok(cc) = object {
+        cc.inject_on_add_stream(stream)
             .unwrap_or_else(|e| error!("Problems adding on_add_stream event to fsm: {}", e));
+    } else {
+        warn!("pc_observer_OnAddStream(): ptr_as_mut() failed.");
     }
 }
 
 /// PeerConnectionObserver OnRemoveStream() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnRemoveStream<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnRemoveStream<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnRemoveStream()");
 }
 
 /// PeerConnectionObserver OnDataChannel() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnDataChannel<T>(call_connection:   *mut CallConnectionHandle<T>,
+extern fn pc_observer_OnDataChannel<T>(cc_ptr:   *mut CallConnection<T>,
                                        rffi_dc_interface: *const RffiDataChannelInterface)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     debug!("pc_observer_OnDataChannel()");
     let data_channel = DataChannel::new(rffi_dc_interface);
     let label = data_channel.get_label();
     if label == DATA_CHANNEL_NAME {
-        if let Ok(cc_handle) = get_object_ref_from_ptr(call_connection) {
-            cc_handle.inject_on_data_channel(data_channel)
+        let object = unsafe { ptr_as_mut(cc_ptr) };
+        if let Ok(cc) = object {
+            cc.inject_on_data_channel(data_channel)
                 .unwrap_or_else(|e| error!("Problems adding on_data_channel event to fsm: {}", e));
+        } else {
+            warn!("pc_observer_OnDataChannel(): ptr_as_mut() failed.");
         }
+    } else {
+        warn!("pc_observer_OnDataChannel(): unexpected data channel label: {}", label);
     }
 }
 
 /// PeerConnectionObserver OnRenegotiationNeeded() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnRenegotiationNeeded<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnRenegotiationNeeded<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnRenegotiationNeeded()");
 }
 
 /// PeerConnectionObserver OnAddTrack() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnAddTrack<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnAddTrack<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnAddTrack()");
 }
 
 /// PeerConnectionObserver OnTrack() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnTrack<T>(_call_connection: *mut CallConnectionHandle<T>)
+extern fn pc_observer_OnTrack<T>(_cc_ptr: *mut CallConnection<T>)
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     info!("pc_observer_OnTrack()");
 }
@@ -249,21 +267,21 @@ where
 #[allow(non_snake_case)]
 pub struct PeerConnectionObserverCallbacks<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
-    onIceCandidate: extern fn(*mut CallConnectionHandle<T>, *const CppIceCandidate),
-    onIceCandidatesRemoved: extern fn (*mut CallConnectionHandle<T>),
-    onSignalingChange: extern fn (*mut CallConnectionHandle<T>, SignalingState),
-    onIceConnectionChange: extern fn (*mut CallConnectionHandle<T>, IceConnectionState),
-    onConnectionChange: extern fn (*mut CallConnectionHandle<T>),
-    onIceConnectionReceivingChange: extern fn (*mut CallConnectionHandle<T>),
-    onIceGatheringChange: extern fn (*mut CallConnectionHandle<T>),
-    onAddStream: extern fn (*mut CallConnectionHandle<T>, *const RffiMediaStreamInterface),
-    onRemoveStream: extern fn (*mut CallConnectionHandle<T>),
-    onDataChannel: extern fn (*mut CallConnectionHandle<T>, *const RffiDataChannelInterface),
-    onRenegotiationNeeded: extern fn (*mut CallConnectionHandle<T>),
-    onAddTrack: extern fn (*mut CallConnectionHandle<T>),
-    onTrack: extern fn (*mut CallConnectionHandle<T>),
+    onIceCandidate: extern fn(*mut CallConnection<T>, *const CppIceCandidate),
+    onIceCandidatesRemoved: extern fn (*mut CallConnection<T>),
+    onSignalingChange: extern fn (*mut CallConnection<T>, SignalingState),
+    onIceConnectionChange: extern fn (*mut CallConnection<T>, IceConnectionState),
+    onConnectionChange: extern fn (*mut CallConnection<T>),
+    onIceConnectionReceivingChange: extern fn (*mut CallConnection<T>),
+    onIceGatheringChange: extern fn (*mut CallConnection<T>),
+    onAddStream: extern fn (*mut CallConnection<T>, *const RffiMediaStreamInterface),
+    onRemoveStream: extern fn (*mut CallConnection<T>),
+    onDataChannel: extern fn (*mut CallConnection<T>, *const RffiDataChannelInterface),
+    onRenegotiationNeeded: extern fn (*mut CallConnection<T>),
+    onAddTrack: extern fn (*mut CallConnection<T>),
+    onTrack: extern fn (*mut CallConnection<T>),
 }
 
 /// Incomplete type for C++ PeerConnectionObserver.
@@ -273,7 +291,7 @@ pub struct RffiPeerConnectionObserverInterface { _private: [u8; 0] }
 /// Rust wrapper around WebRTC C++ PeerConnectionObserver object.
 pub struct PeerConnectionObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     /// Pointer to C++ webrtc::rffi::PeerConnectionObserverRffi.
     rffi_pc_observer: *const RffiPeerConnectionObserverInterface,
@@ -282,7 +300,7 @@ where
 
 impl<T> fmt::Display for PeerConnectionObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "pc_observer: {:p}", self.rffi_pc_observer)
@@ -291,7 +309,7 @@ where
 
 impl<T> fmt::Debug for PeerConnectionObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
@@ -300,7 +318,7 @@ where
 
 impl<T> Default for PeerConnectionObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
     fn default() -> Self {
         Self {
@@ -312,7 +330,7 @@ where
 
 impl<T> PeerConnectionObserver<T>
 where
-    T: CallConnectionInterface,
+    T: CallPlatform,
 {
 
     /// Create a new Rust PeerConnectionObserver object.
@@ -320,9 +338,9 @@ where
     /// Creates a new WebRTC C++ PeerConnectionObserver object,
     /// registering the observer callbacks to this module, and wraps
     /// the result in a Rust PeerConnectionObserver object.
-    pub fn new(call_connection_ptr: *mut CallConnectionHandle<T>) -> Result<Self>
+    pub fn new(cc_ptr: *mut CallConnection<T>) -> Result<Self>
     {
-        debug!("create_pc_observer(): call_connection_ptr: {:p}", call_connection_ptr);
+        debug!("create_pc_observer(): cc_ptr: {:p}", cc_ptr);
         let pc_observer_callbacks = PeerConnectionObserverCallbacks::<T> {
             onIceCandidate: pc_observer_OnIceCandidate::<T>,
             onIceCandidatesRemoved: pc_observer_OnIceCandidatesRemoved::<T>,
@@ -340,7 +358,7 @@ where
         };
         let pc_observer_callbacks_ptr: *const PeerConnectionObserverCallbacks<T> = &pc_observer_callbacks;
         let rffi_pc_observer = unsafe {
-            Rust_createPeerConnectionObserver(call_connection_ptr as RustObject,
+            Rust_createPeerConnectionObserver(cc_ptr as RustObject,
                                               pc_observer_callbacks_ptr as CppObject)
         };
 
@@ -358,14 +376,14 @@ where
     }
 
     /// Return the internal WebRTC C++ PeerConnectionObserver pointer.
-    pub fn get_rffi_interface(&self) -> *const RffiPeerConnectionObserverInterface {
+    pub fn rffi_interface(&self) -> *const RffiPeerConnectionObserverInterface {
         self.rffi_pc_observer
     }
 
 }
 
 extern {
-    fn Rust_createPeerConnectionObserver(call_connection: RustObject,
+    fn Rust_createPeerConnectionObserver(cc_ptr:          RustObject,
                                          pc_observer_cb:  CppObject)
                                          -> *const RffiPeerConnectionObserverInterface;
 }

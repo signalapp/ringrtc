@@ -37,7 +37,7 @@ ios: $(IOS_TARGETS)
 
 out/ios.env:
 	$(Q) echo "Preparing iOS workspace"
-	$(Q) echo ./bin/prepare-workspace ios
+	$(Q) ./bin/prepare-workspace ios
 
 ios/%: TYPE = $*
 ios/%: out/ios.env

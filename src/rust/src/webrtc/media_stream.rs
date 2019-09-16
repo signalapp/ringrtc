@@ -70,7 +70,7 @@ impl MediaStream
     }
 
     /// Return inner C++ MediaStreamInterface pointer.
-    pub fn get_rffi_interface(&self) -> *const RffiMediaStreamInterface {
+    pub fn rffi_interface(&self) -> *const RffiMediaStreamInterface {
         self.rffi_ms_interface
     }
 

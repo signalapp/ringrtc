@@ -17,14 +17,15 @@ use libc::size_t;
 
 use std::ffi::c_void;
 
-use crate::ios::call_connection;
-use crate::ios::ios_util::*;
 use crate::ios::call_connection_observer::IOSObserver;
+use crate::ios::ios_platform;
+use crate::ios::ios_platform::IOSCallConnection;
+use crate::ios::ios_util::AppCallConnection;
 
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern fn ringRtcClose(callConnection: *mut c_void) -> *mut c_void {
-    match call_connection::native_close_call_connection(callConnection as jlong) {
+    match ios_platform::native_close_call_connection(callConnection as *mut IOSCallConnection) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callConnection
@@ -38,8 +39,8 @@ pub extern fn ringRtcClose(callConnection: *mut c_void) -> *mut c_void {
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern fn ringRtcCreateCallConnectionObserver(observer: IOSObserver,
-                                                    callId: i64) -> *mut c_void {
-    match call_connection::native_create_call_connection_observer(observer, callId) {
+                                                    callId: u64) -> *mut c_void {
+    match ios_platform::native_create_call_connection_observer(observer, callId) {
         Ok(v) => {
             v as *mut c_void
         },
@@ -53,8 +54,8 @@ pub extern fn ringRtcCreateCallConnectionObserver(observer: IOSObserver,
 #[allow(non_snake_case)]
 pub extern fn ringRtcSendOffer(callConnection: *mut c_void,
                             appCallConnection: *mut c_void) -> *mut c_void {
-    match call_connection::native_send_offer(callConnection as jlong,
-                                             appCallConnection as jlong) {
+    match ios_platform::native_send_offer(callConnection as *mut IOSCallConnection,
+                                          appCallConnection as *mut AppCallConnection) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callConnection
@@ -74,11 +75,11 @@ pub extern fn ringRtcReceivedAnswer(callConnection: *mut c_void,
     let answer_bytes = unsafe {
         slice::from_raw_parts(bytes, len as usize)
     };
-    
+
     match str::from_utf8(answer_bytes) {
         Ok(session_desc) => {
-            match call_connection::native_handle_offer_answer(callConnection as jlong,
-                                                              session_desc) {
+            match ios_platform::native_handle_answer(callConnection as *mut IOSCallConnection,
+                                                        session_desc) {
                 Ok(_v) => {
                     // Return the object reference back as indication of success.
                     callConnection
@@ -104,12 +105,12 @@ pub extern fn ringRtcReceivedOffer(callConnection: *mut c_void,
     let offer_bytes = unsafe {
         slice::from_raw_parts(bytes, len as usize)
     };
-    
+
     match str::from_utf8(offer_bytes) {
         Ok(session_desc) => {
-            match call_connection::native_accept_offer(callConnection as jlong,
-                                                       appCallConnection as jlong,
-                                                       session_desc) {
+            match ios_platform::native_handle_offer(callConnection as *mut IOSCallConnection,
+                                                    appCallConnection as *mut AppCallConnection,
+                                                    session_desc) {
                 Ok(_v) => {
                     // Return the object reference back as indication of success.
                     callConnection
@@ -128,7 +129,7 @@ pub extern fn ringRtcReceivedOffer(callConnection: *mut c_void,
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern fn ringRtcHangup(callConnection: *mut c_void) -> *mut c_void {
-    match call_connection::native_hang_up(callConnection as jlong) {
+    match ios_platform::native_hang_up(callConnection as *mut IOSCallConnection) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callConnection
@@ -142,7 +143,7 @@ pub extern fn ringRtcHangup(callConnection: *mut c_void) -> *mut c_void {
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern fn ringRtcAccept(callConnection: *mut c_void) -> *mut c_void {
-    match call_connection::native_answer_call(callConnection as jlong) {
+    match ios_platform::native_accept_call(callConnection as *mut IOSCallConnection) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callConnection
@@ -157,7 +158,7 @@ pub extern fn ringRtcAccept(callConnection: *mut c_void) -> *mut c_void {
 #[allow(non_snake_case)]
 pub extern fn ringRtcSendVideoStatus(callConnection: *mut c_void,
                                             enabled: bool) -> *mut c_void {
-    match call_connection::native_send_video_status(callConnection as jlong,
+    match ios_platform::native_send_video_status(callConnection as *mut IOSCallConnection,
                                                     enabled) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
@@ -213,7 +214,7 @@ pub extern fn ringRtcReceivedIceCandidate(callConnection: *mut c_void,
         return ptr::null_mut();
     }
 
-    match call_connection::native_add_ice_candidate(callConnection as jlong,
+    match ios_platform::native_add_ice_candidate(callConnection as *mut IOSCallConnection,
                                                     sdp_mid_string,
                                                     lineIndex,
                                                     sdp_string) {
@@ -230,14 +231,9 @@ pub extern fn ringRtcReceivedIceCandidate(callConnection: *mut c_void,
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern fn ringRtcSendBusy(callConnection: *mut c_void,
-                                      callId: i64) -> *mut c_void {
-    match call_connection::native_send_busy(callConnection as jlong, callId) {
-        Ok(_v) => {
-            // Return the object reference back as indication of success.
-            callConnection
-        },
-        Err(_e) => {
-            ptr::null_mut()
-        },
-    }
+                                     _callId: u64) -> *mut c_void {
+    // TODO -- remove this call all together
+
+    // Return the object reference back as indication of success.
+    callConnection
 }

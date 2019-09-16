@@ -38,4 +38,4 @@ PATH="${PATH}:$EXE_PATH" cargo doc \
     --target-dir "$OUTPUT_DIR" \
     --manifest-path "$MANIFEST"
 
-echo "Docs ready in: ${TARGET_DIR}/doc/ringrtc"
+echo "Docs ready in: ${OUTPUT_DIR}/${TARGET}/doc/ringrtc"

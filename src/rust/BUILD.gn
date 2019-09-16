@@ -47,7 +47,7 @@ if (is_android) {
     "src/android/api/jni_call_connection.rs",
     "src/android/call_connection_factory.rs",
     "src/android/call_connection_observer.rs",
-    "src/android/call_connection.rs",
+    "src/android/android_platform.rs",
     "src/android/error.rs",
     "src/android/jni_util.rs",
     "src/android/logging.rs",

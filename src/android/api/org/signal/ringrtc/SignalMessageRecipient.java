@@ -54,7 +54,4 @@ public interface SignalMessageRecipient {
   void sendHangupMessage(Context context, long callId)
     throws UnregisteredUserException, UntrustedIdentityException, IOException;
 
-  void sendBusyMessage(Context context, long callId)
-    throws UnregisteredUserException, UntrustedIdentityException, IOException;
-
 }

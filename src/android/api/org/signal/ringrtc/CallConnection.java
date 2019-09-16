@@ -90,7 +90,7 @@ public class CallConnection extends PeerConnection {
     this.callId               = factory.callId;
     this.recipient            = factory.recipient;
     this.context              = factory.callConnectionFactory.context;
-    Log.i(TAG, "create: callId: " + callId);
+    Log.i(TAG, "create: callId: 0x" + Long.toHexString(callId));
   }
 
   static long createNativeCallConnectionObserver(Observer               observer,
@@ -233,24 +233,6 @@ public class CallConnection extends PeerConnection {
 
   /**
    *
-   * Informs the remote peer that the client is currently busy with another call
-   *
-   * @param recipient remote peer attempting to create a call
-   * @param inCallId  incoming callId
-   *
-   * @throws CallException   internal native library failure
-   *
-   */
-  public void sendBusy(SignalMessageRecipient recipient, Long inCallId)
-    throws CallException
-  {
-    Log.i(TAG, "CallConnection::sendBusy(): callId: " + inCallId);
-    checkCallConnectionExists();
-    nativeSendBusy(nativeCallConnection, recipient, inCallId);
-  }
-
-  /**
-   *
    * Adds an IceCandidate from the remote peer to the CallConnection
    *
    * @param candidate  incoming IceCandidate from remote peer
@@ -309,7 +291,7 @@ public class CallConnection extends PeerConnection {
 
     Exception exception = null;
 
-    Log.i(TAG, "CallConnection::sendSignalServiceOffer(): callId: " + callId);
+    Log.i(TAG, "CallConnection::sendSignalServiceOffer(): callId: 0x" + Long.toHexString(callId));
     try {
       recipient.sendOfferMessage(this.context, callId, description);
     } catch (UnregisteredUserException e) {
@@ -349,7 +331,7 @@ public class CallConnection extends PeerConnection {
 
     Exception exception = null;
 
-    Log.i(TAG, "CallConnection::sendSignalServiceAnswer(): callId: " + callId);
+    Log.i(TAG, "CallConnection::sendSignalServiceAnswer(): callId: 0x" + Long.toHexString(callId));
     try {
       recipient.sendAnswerMessage(this.context, callId, description);
     } catch (UnregisteredUserException e) {
@@ -422,37 +404,11 @@ public class CallConnection extends PeerConnection {
   @CalledByNative
   void sendSignalServiceHangup(SignalMessageRecipient recipient, long callId)
   {
-    Log.i(TAG, "CallConnection::sendSignalServiceHangup(): callId: " + callId);
+    Log.i(TAG, "CallConnection::sendSignalServiceHangup(): callId: 0x" + Long.toHexString(callId));
     try {
       recipient.sendHangupMessage(this.context, callId);
     } catch (Exception e) {
       // Nothing we can do about it while hanging up...
-      Log.w(TAG, e);
-    }
-  }
-
-  /**
-   *
-   * Send hang-up message to a remote recipient
-   *
-   * This method is called by native code.
-   *
-   * @param recipient   represents the recipient (remote peer) of a call
-   * @param callId      unique 64-bit number indentifying the call
-   *
-   * @return Exception  any exceptions that happen while sending
-   *
-   * Any exception that happens is captured and returned to native
-   * code as a result.  A null exception is an indication of success.
-   */
-  @CalledByNative
-  void sendSignalServiceBusy(SignalMessageRecipient recipient, long callId)
-  {
-    Log.i(TAG, "CallConnection::sendSignalServiceBusy(): callId: " + callId);
-    try {
-      recipient.sendBusyMessage(this.context, callId);
-    } catch (Exception e) {
-      // Nothing we can do about it while sending busy...
       Log.w(TAG, e);
     }
   }
@@ -643,10 +599,6 @@ public class CallConnection extends PeerConnection {
 
   private native
     boolean nativeAddIceCandidate(long nativeCallConnection, String sdpMid, int sdpMLineIndex, String iceCandidateSdp)
-    throws CallException;
-
-  private native
-    void nativeSendBusy(long nativeCallConnection, SignalMessageRecipient recipient, long callId)
     throws CallException;
 
 }

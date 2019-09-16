@@ -26,7 +26,9 @@ use jni::sys::{
 };
 
 use crate::android::error;
-use crate::android::call_connection;
+use crate::android::android_platform;
+use crate::android::android_platform::AndroidCallConnection;
+use crate::common::CallId;
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -34,7 +36,7 @@ pub unsafe extern
 fn Java_org_signal_ringrtc_CallConnection_nativeGetNativePeerConnection(env:             JNIEnv,
                                                                         _class:          JClass,
                                                                         call_connection: jlong) -> jlong {
-    match call_connection::native_get_native_peer_connection(call_connection) {
+    match android_platform::native_get_native_peer_connection(call_connection as *mut AndroidCallConnection) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -48,7 +50,7 @@ fn Java_org_signal_ringrtc_CallConnection_nativeGetNativePeerConnection(env:    
 pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeClose(env:             JNIEnv,
                                                                         _object:         JObject,
                                                                         call_connection: jlong) {
-    match call_connection::native_close_call_connection(call_connection) {
+    match android_platform::native_close_call_connection(call_connection as *mut AndroidCallConnection) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -62,7 +64,9 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeSendOffer(env:
                                                                             jcall_connection:JObject,
                                                                             call_connection: jlong) {
 
-    match call_connection::native_send_offer(&env, jcall_connection, call_connection) {
+    match android_platform::native_send_offer(&env,
+                                              jcall_connection,
+                                              call_connection as *mut AndroidCallConnection) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -77,7 +81,10 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeCreateCallConn
                                                                                                observer:  JObject,
                                                                                                call_id:   jlong,
                                                                                                recipient: JObject) -> jlong {
-    match call_connection::native_create_call_connection_observer(&env, observer, call_id, recipient) {
+    match android_platform::native_create_call_connection_observer(&env,
+                                                                   observer,
+                                                                   call_id as CallId,
+                                                                   recipient) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -91,7 +98,7 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeCreateCallConn
 pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeValidateResponseState(env:             JNIEnv,
                                                                                         _object:         JObject,
                                                                                         call_connection: jlong) -> jboolean {
-    match call_connection::native_validate_response_state(call_connection) {
+    match android_platform::native_validate_response_state(call_connection as *mut AndroidCallConnection) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -106,7 +113,9 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeHandleOfferAns
                                                                                     _object:         JObject,
                                                                                     call_connection: jlong,
                                                                                     session_desc:    JString) {
-    match call_connection::native_handle_offer_answer(&env, call_connection, session_desc) {
+    match android_platform::native_handle_answer(&env,
+                                                 call_connection as *mut AndroidCallConnection,
+                                                 session_desc) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e)
@@ -120,7 +129,10 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeAcceptOffer(en
                                                                               jcall_connection:JObject,
                                                                               call_connection: jlong,
                                                                               offer:           JString) {
-    match call_connection::native_accept_offer(&env, jcall_connection, call_connection, offer) {
+    match android_platform::native_handle_offer(&env,
+                                                jcall_connection,
+                                                call_connection as *mut AndroidCallConnection,
+                                                offer) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -133,7 +145,7 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeAcceptOffer(en
 pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeHangUp(env:             JNIEnv,
                                                                          _object:         JObject,
                                                                          call_connection: jlong) {
-    match call_connection::native_hang_up(call_connection) {
+    match android_platform::native_hang_up(call_connection as *mut AndroidCallConnection) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -146,7 +158,7 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeHangUp(env:   
 pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeAnswerCall(env:             JNIEnv,
                                                                              _object:         JObject,
                                                                              call_connection: jlong) {
-    match call_connection::native_answer_call(call_connection) {
+    match android_platform::native_accept_call(call_connection as *mut AndroidCallConnection) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -160,7 +172,8 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeSendVideoStatu
                                                                                   _object:         JObject,
                                                                                   call_connection: jlong,
                                                                                   enabled:         jboolean) {
-    match call_connection::native_send_video_status(call_connection, enabled == JNI_TRUE) {
+    match android_platform::native_send_video_status(call_connection as *mut AndroidCallConnection,
+                                                     enabled == JNI_TRUE) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -177,28 +190,15 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeAddIceCandidat
                                                                                   sdp_mline_index: jint,
                                                                                   sdp:             JString) {
 
-    match call_connection::native_add_ice_candidate(&env, call_connection,
-                                                    sdp_mid, sdp_mline_index, sdp) {
+    match android_platform::native_add_ice_candidate(&env,
+                                                     call_connection as *mut AndroidCallConnection,
+                                                     sdp_mid,
+                                                     sdp_mline_index,
+                                                     sdp) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
         },
     }
 
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeSendBusy(env:             JNIEnv,
-                                                                           _object:         JObject,
-                                                                           call_connection: jlong,
-                                                                           recipient:       JObject,
-                                                                           call_id:         jlong) {
-    match call_connection::native_send_busy(&env, call_connection,
-                                            recipient, call_id) {
-        Ok(v) => v,
-        Err(e) => {
-            error::throw_error(&env, e);
-        },
-    }
 }

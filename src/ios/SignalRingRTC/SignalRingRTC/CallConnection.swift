@@ -419,7 +419,7 @@ public protocol CallConnectionDelegate: class {
             throw CallConnectionError.ringRtcNotInitialized
         }
 
-        let retPtr = ringRtcSendBusy(self.ringRtcCallConnection, Int64(bitPattern: callId))
+        let retPtr = ringRtcSendBusy(self.ringRtcCallConnection, callId)
         guard retPtr != nil else {
             throw CallConnectionError.ringRtcFailure(description: "ringRtcSendBusy failed")
         }
@@ -427,7 +427,7 @@ public protocol CallConnectionDelegate: class {
 
     // MARK: Recipient (Signaling) Handlers
 
-    internal func onSendOffer(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64, offer: String) {
+    internal func onSendOffer(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64, offer: String) {
         Logger.debug("onSendOffer")
 
         DispatchQueue.main.async {
@@ -436,11 +436,11 @@ public protocol CallConnectionDelegate: class {
             let strongSelf = self
             guard let strongDelegate = strongSelf.callConnectionDelegate else { return }
 
-            strongDelegate.callConnection(strongSelf, shouldSendOffer: offer, callId: UInt64(bitPattern: callId))
+            strongDelegate.callConnection(strongSelf, shouldSendOffer: offer, callId: callId)
         }
     }
 
-    internal func onSendAnswer(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64, answer: String) {
+    internal func onSendAnswer(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64, answer: String) {
         Logger.debug("onSendAnswer")
 
         DispatchQueue.main.async {
@@ -449,11 +449,11 @@ public protocol CallConnectionDelegate: class {
             let strongSelf = self
             guard let strongDelegate = strongSelf.callConnectionDelegate else { return }
 
-            strongDelegate.callConnection(strongSelf, shouldSendAnswer: answer, callId: UInt64(bitPattern: callId))
+            strongDelegate.callConnection(strongSelf, shouldSendAnswer: answer, callId: callId)
         }
     }
 
-    internal func onSendIceCandidates(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64, candidates: [RTCIceCandidate]) {
+    internal func onSendIceCandidates(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64, candidates: [RTCIceCandidate]) {
         Logger.debug("onSendIceCandidates")
 
         DispatchQueue.main.async {
@@ -462,11 +462,11 @@ public protocol CallConnectionDelegate: class {
             let strongSelf = self
             guard let strongDelegate = strongSelf.callConnectionDelegate else { return }
 
-            strongDelegate.callConnection(strongSelf, shouldSendIceCandidates: candidates, callId: UInt64(bitPattern: callId))
+            strongDelegate.callConnection(strongSelf, shouldSendIceCandidates: candidates, callId: callId)
         }
     }
 
-    internal func onSendHangup(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64) {
+    internal func onSendHangup(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64) {
         Logger.debug("onSendHangup")
 
         DispatchQueue.main.async {
@@ -475,13 +475,13 @@ public protocol CallConnectionDelegate: class {
             let strongSelf = self
             guard let strongDelegate = strongSelf.callConnectionDelegate else { return }
 
-            strongDelegate.callConnection(strongSelf, shouldSendHangup: UInt64(bitPattern: callId))
+            strongDelegate.callConnection(strongSelf, shouldSendHangup: callId)
         }
     }
 
     // MARK: Observer Handlers
 
-    internal func onCallEvent(_ callConnectionObserver: CallConnectionObserver, callId: Int64, callEvent: CallEvent) {
+    internal func onCallEvent(_ callConnectionObserver: CallConnectionObserver, callId: UInt64, callEvent: CallEvent) {
         Logger.debug("onCallEvent")
 
         DispatchQueue.main.async {
@@ -490,11 +490,11 @@ public protocol CallConnectionDelegate: class {
             let strongSelf = self
             guard let strongDelegate = strongSelf.callConnectionDelegate else { return }
 
-            strongDelegate.callConnection(strongSelf, onCallEvent: callEvent, callId: UInt64(bitPattern: callId))
+            strongDelegate.callConnection(strongSelf, onCallEvent: callEvent, callId: callId)
         }
     }
 
-    internal func onCallError(_ callConnectionObserver: CallConnectionObserver, callId: Int64, errorString: String) {
+    internal func onCallError(_ callConnectionObserver: CallConnectionObserver, callId: UInt64, errorString: String) {
         Logger.debug("onCallError")
 
         DispatchQueue.main.async {
@@ -503,11 +503,11 @@ public protocol CallConnectionDelegate: class {
             let strongSelf = self
             guard let strongDelegate = strongSelf.callConnectionDelegate else { return }
 
-            strongDelegate.callConnection(strongSelf, onCallError: errorString, callId: UInt64(bitPattern: callId))
+            strongDelegate.callConnection(strongSelf, onCallError: errorString, callId: callId)
         }
     }
 
-    internal func onAddStream(_ callConnectionObserver: CallConnectionObserver, callId: Int64, stream: RTCMediaStream) {
+    internal func onAddStream(_ callConnectionObserver: CallConnectionObserver, callId: UInt64, stream: RTCMediaStream) {
         Logger.debug("onAddStream")
 
         DispatchQueue.main.async {
@@ -523,7 +523,7 @@ public protocol CallConnectionDelegate: class {
 
             let remoteVideoTrack = stream.videoTracks[0]
 
-            strongDelegate.callConnection(strongSelf, onAddRemoteVideoTrack: remoteVideoTrack, callId: UInt64(bitPattern: callId))
+            strongDelegate.callConnection(strongSelf, onAddRemoteVideoTrack: remoteVideoTrack, callId: callId)
         }
     }
 

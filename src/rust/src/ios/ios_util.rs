@@ -7,24 +7,17 @@
 
 //! Utility helpers for iOS Application (Swift) access.
 
-use std::sync::Arc;
 use std::ffi::c_void;
 
 use libc::size_t;
 
-use crate::common::Result;
-use crate::core::util::{
-    get_arc_from_ptr,
-    get_arc_ptr_from_ptr,
-    get_object_ref_from_ptr,
-    get_object_from_ptr,
-    ArcPtr,
-};
+/// Incomplete type for application's Swift/Objective-C peer connection factory object.
+#[repr(C)]
+pub struct AppPeerConnectionFactory { _private: [u8; 0] }
 
-/// For convenience, define jlong as a native i64 type for easier
-/// compatibility with JNI implementation.
-#[allow(non_camel_case_types)]
-pub type jlong = i64;
+/// Incomplete type for application's Swift/Objective-C call connection object.
+#[repr(C)]
+pub struct AppCallConnection { _private: [u8; 0] }
 
 /// Structure for passing buffers (such as strings) to Swift.
 #[repr(C)]
@@ -43,7 +36,7 @@ pub struct IOSIceCandidate {
     // @note serverUrl is not supported.
 }
 
-// Structure for passing multiple Ice Candidates to Swift.
+/// Structure for passing multiple Ice Candidates to Swift.
 #[repr(C)]
 #[allow(non_snake_case)]
 pub struct IOSIceCandidateArray {
@@ -57,11 +50,11 @@ pub struct IOSIceCandidateArray {
 pub struct IOSRecipient {
     pub object: *mut c_void,
     pub destroy: extern fn(object: *mut c_void),
-    pub onSendOffer: extern fn(object: *mut c_void, callId: i64, offer: IOSByteSlice),
-    pub onSendAnswer: extern fn(object: *mut c_void, callId: i64, answer: IOSByteSlice),
-    pub onSendIceCandidates: extern fn(object: *mut c_void, callId: i64, iceCandidate: *const IOSIceCandidateArray),
-    pub onSendHangup: extern fn(object: *mut c_void, callId: i64),
-    pub onSendBusy: extern fn(object: *mut c_void, callId: i64),
+    pub onSendOffer: extern fn(object: *mut c_void, callId: u64, offer: IOSByteSlice),
+    pub onSendAnswer: extern fn(object: *mut c_void, callId: u64, answer: IOSByteSlice),
+    pub onSendIceCandidates: extern fn(object: *mut c_void, callId: u64, iceCandidate: *const IOSIceCandidateArray),
+    pub onSendHangup: extern fn(object: *mut c_void, callId: u64),
+    pub onSendBusy: extern fn(object: *mut c_void, callId: u64),
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.
@@ -82,27 +75,7 @@ impl Drop for IOSRecipient {
 #[repr(C)]
 #[allow(non_snake_case)]
 pub struct IOSCallConfig {
-    pub callId: i64,
+    pub callId: u64,
     pub outBound: bool,
     pub recipient: IOSRecipient,
-}
-
-/// Returns a Arc<T> from a jlong.
-pub fn get_arc_from_jlong<T>(object: jlong) -> Result<Arc<T>> {
-    get_arc_from_ptr(object as *mut T)
-}
-
-/// Returns a ArcPtr<T> from a jlong.
-pub fn get_arc_ptr_from_jlong<T>(object: jlong) -> Result<ArcPtr<T>> {
-    get_arc_ptr_from_ptr(object as *mut T)
-}
-
-/// Returns a &T from a jlong.
-pub fn get_object_ref_from_jlong<T>(object: jlong) -> Result<&'static mut T> {
-    get_object_ref_from_ptr(object as *mut T)
-}
-
-/// Returns a Box<T> from a jlong.
-pub fn get_object_from_jlong<T>(object: jlong) -> Result<Box<T>> {
-    get_object_from_ptr(object as *mut T)
 }

@@ -30,6 +30,9 @@ pub struct JavaMediaStream {
     rffi_jms_interface: *const RffiJavaMediaStream,
 }
 
+unsafe impl Sync for JavaMediaStream {}
+unsafe impl Send for JavaMediaStream {}
+
 impl fmt::Debug for JavaMediaStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "jave_media_stream: {:p}", self.rffi_jms_interface)

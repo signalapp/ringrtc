@@ -19,12 +19,17 @@ use jni::sys::jlong;
 
 use crate::android::error;
 use crate::android::call_connection_factory;
+use crate::android::call_connection_factory::{
+    AndroidCallConnectionFactory,
+    AppPeerConnectionFactory,
+};
+use crate::android::call_connection_observer::AndroidCallConnectionObserver;
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern fn Java_org_signal_ringrtc_CallConnectionFactory_nativeInitialize(env:    JNIEnv,
-                                                                                    _class: JClass) {
-    if let Err(e) = call_connection_factory::native_initialize() {
+pub unsafe extern fn Java_org_signal_ringrtc_CallConnectionFactory_ringrtcInitialize(env:    JNIEnv,
+                                                                                     _class: JClass) {
+    if let Err(e) = call_connection_factory::initialize() {
         error::throw_error(&env, e);
     }
 
@@ -33,10 +38,10 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnectionFactory_nativeInitial
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern fn
-    Java_org_signal_ringrtc_CallConnectionFactory_nativeCreateCallConnectionFactory(env:    JNIEnv,
-                                                                                    _class: JClass,
-                                                                                    peer_connection_factory: jlong) -> jlong {
-    match call_connection_factory::native_create_call_connection_factory(peer_connection_factory) {
+    Java_org_signal_ringrtc_CallConnectionFactory_ringrtcCreateCallConnectionFactory(env:    JNIEnv,
+                                                                                     _class: JClass,
+                                                                                     native_pc_factory: jlong) -> jlong {
+    match call_connection_factory::create_call_connection_factory(native_pc_factory as *mut AppPeerConnectionFactory) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -48,11 +53,11 @@ pub unsafe extern fn
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern fn
-    Java_org_signal_ringrtc_CallConnectionFactory_nativeFreeFactory(env:     JNIEnv,
-                                                                    _class:  JClass,
-                                                                    factory: jlong)
+    Java_org_signal_ringrtc_CallConnectionFactory_ringrtcFreeFactory(env:     JNIEnv,
+                                                                     _class:  JClass,
+                                                                     factory: jlong)
 {
-    match call_connection_factory::native_free_factory(factory) {
+    match call_connection_factory::free_factory(factory as *mut AndroidCallConnectionFactory) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -63,18 +68,22 @@ pub unsafe extern fn
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern
-fn Java_org_signal_ringrtc_CallConnectionFactory_nativeCreateCallConnection(env:               JNIEnv,
-                                                                            class:             JClass,
-                                                                            native_factory:    jlong,
-                                                                            call_config:       JObject,
-                                                                            native_observer:   jlong,
-                                                                            rtc_config:        JObject,
-                                                                            media_constraints: JObject,
-                                                                            ssl_cert_verifier: JObject) -> jlong {
-    match call_connection_factory::native_create_call_connection(&env, class, native_factory,
-                                                                 call_config, native_observer,
-                                                                 rtc_config, media_constraints,
-                                                                 ssl_cert_verifier) {
+fn Java_org_signal_ringrtc_CallConnectionFactory_ringrtcCreateCallConnection(env:               JNIEnv,
+                                                                             class:             JClass,
+                                                                             native_factory:    jlong,
+                                                                             call_config:       JObject,
+                                                                             native_observer:   jlong,
+                                                                             rtc_config:        JObject,
+                                                                             media_constraints: JObject,
+                                                                             ssl_cert_verifier: JObject) -> jlong {
+    match call_connection_factory::create_call_connection(&env,
+                                                          class,
+                                                          native_factory as *mut AndroidCallConnectionFactory,
+                                                          call_config,
+                                                          native_observer as *mut AndroidCallConnectionObserver,
+                                                          rtc_config,
+                                                          media_constraints,
+                                                          ssl_cert_verifier) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);

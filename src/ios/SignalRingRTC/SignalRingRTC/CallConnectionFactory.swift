@@ -66,7 +66,7 @@ import SignalCoreKit
 
         // Create a RingRTC observer, passing down ownership of the application
         // observer.
-        guard let ringRtcObserver = ringRtcCreateCallConnectionObserver(observer.getWrapper(), Int64(bitPattern: callId)) else {
+        guard let ringRtcObserver = ringRtcCreateCallConnectionObserver(observer.getWrapper(), callId) else {
             // @todo Confirm cleanup of observer and callConnection. It is automatic?
 
             throw CallConnectionError.ringRtcCreateFailure(description: "ringRtcCreateCallConnectionObserver() returned failure")
@@ -96,7 +96,7 @@ import SignalCoreKit
 
         // Create a call configuration to pass to RingRTC.
         let callConfig = IOSCallConfig(
-            callId: Int64(bitPattern: callId),
+            callId: callId,
             outBound: isOutgoing,
             recipient: recipient.getWrapper()
         )

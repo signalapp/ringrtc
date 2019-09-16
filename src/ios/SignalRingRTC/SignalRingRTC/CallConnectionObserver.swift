@@ -52,9 +52,9 @@ public enum CallEvent: Int32 {
 }
 
 protocol CallConnectionObserverDelegate: class {
-    func onCallEvent(_ callConnectionObserver: CallConnectionObserver, callId: Int64, callEvent: CallEvent)
-    func onCallError(_ callConnectionObserver: CallConnectionObserver, callId: Int64, errorString: String)
-    func onAddStream(_ callConnectionObserver: CallConnectionObserver, callId: Int64, stream: RTCMediaStream)
+    func onCallEvent(_ callConnectionObserver: CallConnectionObserver, callId: UInt64, callEvent: CallEvent)
+    func onCallError(_ callConnectionObserver: CallConnectionObserver, callId: UInt64, errorString: String)
+    func onAddStream(_ callConnectionObserver: CallConnectionObserver, callId: UInt64, stream: RTCMediaStream)
 }
 
 class CallConnectionObserver {
@@ -94,7 +94,7 @@ class CallConnectionObserver {
 
     // MARK: Delegate Handlers
 
-    func onCallEvent(callId: Int64, callEvent: Int32) {
+    func onCallEvent(callId: UInt64, callEvent: Int32) {
         guard let delegate = self.delegate else {
             return
         }
@@ -106,7 +106,7 @@ class CallConnectionObserver {
         }
     }
 
-    func onCallError(callId: Int64, errorString: String) {
+    func onCallError(callId: UInt64, errorString: String) {
         guard let delegate = self.delegate else {
             return
         }
@@ -114,7 +114,7 @@ class CallConnectionObserver {
         delegate.onCallError(self, callId: callId, errorString: errorString)
     }
 
-    func onAddStream(callId: Int64, stream: RTCMediaStream) {
+    func onAddStream(callId: UInt64, stream: RTCMediaStream) {
         guard let delegate = self.delegate else {
             return
         }
@@ -134,7 +134,7 @@ func callConnectionObserverDestroy(object: UnsafeMutableRawPointer?) {
     // so deinit should be called implicitly.
 }
 
-func callConnectionObserverOnCallEvent(object: UnsafeMutableRawPointer?, callId: Int64, callEvent: Int32) {
+func callConnectionObserverOnCallEvent(object: UnsafeMutableRawPointer?, callId: UInt64, callEvent: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -144,7 +144,7 @@ func callConnectionObserverOnCallEvent(object: UnsafeMutableRawPointer?, callId:
     obj.onCallEvent(callId: callId, callEvent: callEvent)
 }
 
-func callConnectionObserverOnCallError(object: UnsafeMutableRawPointer?, callId: Int64, errorString: IOSByteSlice) {
+func callConnectionObserverOnCallError(object: UnsafeMutableRawPointer?, callId: UInt64, errorString: IOSByteSlice) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -159,7 +159,7 @@ func callConnectionObserverOnCallError(object: UnsafeMutableRawPointer?, callId:
     obj.onCallError(callId: callId, errorString: string)
 }
 
-func callConnectionObserverOnAddStream(object: UnsafeMutableRawPointer?, callId: Int64, stream: UnsafeMutableRawPointer?) {
+func callConnectionObserverOnAddStream(object: UnsafeMutableRawPointer?, callId: UInt64, stream: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return

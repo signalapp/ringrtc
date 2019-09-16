@@ -7,10 +7,10 @@ import WebRTC
 import SignalCoreKit
 
 protocol CallConnectionRecipientDelegate: class {
-    func onSendOffer(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64, offer: String)
-    func onSendAnswer(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64, answer: String)
-    func onSendIceCandidates(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64, candidates: [RTCIceCandidate])
-    func onSendHangup(_ callConnectionRecipient: CallConnectionRecipient, callId: Int64)
+    func onSendOffer(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64, offer: String)
+    func onSendAnswer(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64, answer: String)
+    func onSendIceCandidates(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64, candidates: [RTCIceCandidate])
+    func onSendHangup(_ callConnectionRecipient: CallConnectionRecipient, callId: UInt64)
 }
 
 class CallConnectionRecipient {
@@ -54,7 +54,7 @@ class CallConnectionRecipient {
 
     // MARK: Delegate Handlers
 
-    func onSendOffer(callId: Int64, offer: String) {
+    func onSendOffer(callId: UInt64, offer: String) {
         guard let delegate = self.delegate else {
             return
         }
@@ -62,7 +62,7 @@ class CallConnectionRecipient {
         delegate.onSendOffer(self, callId: callId, offer: offer)
     }
 
-    func onSendAnswer(callId: Int64, answer: String) {
+    func onSendAnswer(callId: UInt64, answer: String) {
         guard let delegate = self.delegate else {
             return
         }
@@ -70,7 +70,7 @@ class CallConnectionRecipient {
         delegate.onSendAnswer(self, callId: callId, answer: answer)
     }
 
-    func onSendIceCandidates(callId: Int64, candidates: [RTCIceCandidate]) {
+    func onSendIceCandidates(callId: UInt64, candidates: [RTCIceCandidate]) {
         guard let delegate = self.delegate else {
             return
         }
@@ -78,7 +78,7 @@ class CallConnectionRecipient {
         delegate.onSendIceCandidates(self, callId: callId, candidates: candidates)
     }
 
-    func onSendHangup(callId: Int64) {
+    func onSendHangup(callId: UInt64) {
         guard let delegate = self.delegate else {
             return
         }
@@ -98,7 +98,7 @@ func callConnectionRecipientDestroy(object: UnsafeMutableRawPointer?) {
     // so deinit should be called implicitly.
 }
 
-func callConnectionRecipientOnSendOffer(object: UnsafeMutableRawPointer?, callId: Int64, offer: IOSByteSlice) {
+func callConnectionRecipientOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, offer: IOSByteSlice) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -113,7 +113,7 @@ func callConnectionRecipientOnSendOffer(object: UnsafeMutableRawPointer?, callId
     obj.onSendOffer(callId: callId, offer: string)
 }
 
-func callConnectionRecipientOnSendAnswer(object: UnsafeMutableRawPointer?, callId: Int64, answer: IOSByteSlice) {
+func callConnectionRecipientOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, answer: IOSByteSlice) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -128,7 +128,7 @@ func callConnectionRecipientOnSendAnswer(object: UnsafeMutableRawPointer?, callI
     obj.onSendAnswer(callId: callId, answer: string)
 }
 
-func callConnectionRecipientOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: Int64, candidates: UnsafePointer<IOSIceCandidateArray>?) {
+func callConnectionRecipientOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: UInt64, candidates: UnsafePointer<IOSIceCandidateArray>?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -171,7 +171,7 @@ func callConnectionRecipientOnSendIceCandidates(object: UnsafeMutableRawPointer?
     obj.onSendIceCandidates(callId: callId, candidates: finalIceCandidates)
 }
 
-func callConnectionRecipientOnSendHangup(object: UnsafeMutableRawPointer?, callId: Int64) {
+func callConnectionRecipientOnSendHangup(object: UnsafeMutableRawPointer?, callId: UInt64) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -181,6 +181,6 @@ func callConnectionRecipientOnSendHangup(object: UnsafeMutableRawPointer?, callI
     obj.onSendHangup(callId: callId)
 }
 
-func callConnectionRecipientOnSendBusy(object: UnsafeMutableRawPointer?, callId: Int64) {
+func callConnectionRecipientOnSendBusy(object: UnsafeMutableRawPointer?, callId: UInt64) {
     // "SendBusy" is not supported on iOS.
 }

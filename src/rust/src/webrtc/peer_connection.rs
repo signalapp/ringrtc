@@ -55,6 +55,9 @@ impl fmt::Debug for PeerConnection
     }
 }
 
+unsafe impl Send for PeerConnection {}
+unsafe impl Sync for PeerConnection {}
+
 impl PeerConnection
 {
     /// Create a new Rust PeerConnection object from a WebRTC C++
@@ -86,7 +89,7 @@ impl PeerConnection
 
     /// Rust wrapper around C++ webrtc::CreateSessionDescription(kOffer).
     pub fn create_offer(&self, csd_observer: &CreateSessionDescriptionObserver) {
-        unsafe { Rust_createOffer(self.rffi_pc_interface, csd_observer.get_rffi_observer()) }
+        unsafe { Rust_createOffer(self.rffi_pc_interface, csd_observer.rffi_observer()) }
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::SetLocalDescription().
@@ -94,13 +97,13 @@ impl PeerConnection
                                  ssd_observer: &SetSessionDescriptionObserver,
                                  desc: &SessionDescriptionInterface) {
         unsafe { Rust_setLocalDescription(self.rffi_pc_interface,
-                                          ssd_observer.get_rffi_observer(),
-                                          desc.get_rffi_interface()) }
+                                          ssd_observer.rffi_observer(),
+                                          desc.rffi_interface()) }
     }
 
     /// Rust wrapper around C++ webrtc::CreateSessionDescription(kAnswer).
     pub fn create_answer(&self, csd_observer: &CreateSessionDescriptionObserver) {
-        unsafe { Rust_createAnswer(self.rffi_pc_interface, csd_observer.get_rffi_observer()) };
+        unsafe { Rust_createAnswer(self.rffi_pc_interface, csd_observer.rffi_observer()) };
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::SetRemoteDescription().
@@ -108,8 +111,8 @@ impl PeerConnection
                                   ssd_observer: &SetSessionDescriptionObserver,
                                   desc: &SessionDescriptionInterface) {
         unsafe { Rust_setRemoteDescription(self.rffi_pc_interface,
-                                           ssd_observer.get_rffi_observer(),
-                                           desc.get_rffi_interface()) };
+                                           ssd_observer.rffi_observer(),
+                                           desc.rffi_interface()) };
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::AddIceCandidate().

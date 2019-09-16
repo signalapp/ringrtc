@@ -70,7 +70,7 @@ impl fmt::Display for ClientEvent {
 pub trait CallConnectionObserver : Sync + Send + 'static {
 
     /// A platform specific type for holding a MediaStream
-    type ClientStream;
+    type AppMediaStream;
 
     /// Notify the client application about an event
     fn notify_event(&self, event: ClientEvent);
@@ -79,5 +79,5 @@ pub trait CallConnectionObserver : Sync + Send + 'static {
     fn notify_error(&self, error: failure::Error);
 
     /// Notify the client application about an available MediaStream
-    fn notify_on_add_stream(&self, stream: Self::ClientStream);
+    fn notify_on_add_stream(&self, stream: Self::AppMediaStream);
 }

@@ -47,7 +47,7 @@ mod android {
         mod jni_call_connection;
         mod jni_call_connection_factory;
     }
-    mod call_connection;
+    mod android_platform;
     mod call_connection_factory;
     mod call_connection_observer;
     mod error;
@@ -65,13 +65,13 @@ mod ios {
         mod objc_call_connection_factory;
         mod objc_call_connection_global;
     }
-    mod call_connection;
     mod call_connection_factory;
     mod call_connection_observer;
     mod error;
+    mod ios_platform;
     mod ios_util;
     mod logging;
-    mod webrtc_app_media_stream;
+    mod webrtc_ios_media_stream;
     mod webrtc_app_peer_connection;
 }
 

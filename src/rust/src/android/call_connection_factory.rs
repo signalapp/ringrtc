@@ -22,7 +22,7 @@ use jni::objects::{
 use jni::sys::jlong;
 use log::Level;
 
-use crate::android::call_connection::AndroidCallConnection;
+use crate::android::android_platform::AndroidPlatform;
 use crate::android::call_connection_observer::AndroidCallConnectionObserver;
 use crate::android::error::AndroidError;
 use crate::android::webrtc_peer_connection_factory::*;
@@ -37,7 +37,9 @@ use crate::common::{
 use crate::core::call_connection_factory::CallConnectionFactory;
 use crate::core::util::{
     CppObject,
-    ArcPtr,
+    ptr_as_arc_mutex,
+    ptr_as_arc_ptr,
+    ptr_as_box,
 };
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
@@ -47,12 +49,17 @@ use crate::webrtc::peer_connection::{
     RffiPeerConnectionInterface,
 };
 
-type AndroidCallConnectionFactory = CallConnectionFactory<AndroidCallConnection>;
+/// Incomplete type for application's native C++ peer connection factory object.
+#[repr(C)]
+pub struct AppPeerConnectionFactory { _private: [u8; 0] }
+
+/// Public type for Android CallConnectionFactory.
+pub type AndroidCallConnectionFactory = CallConnectionFactory<AndroidPlatform>;
 
 /// Library initialization routine.
 ///
 /// Sets up the logging infrastructure.
-pub fn native_initialize() -> Result<()> {
+pub fn initialize() -> Result<()> {
 
     init_logging(Level::Debug)?;
 
@@ -61,9 +68,9 @@ pub fn native_initialize() -> Result<()> {
 }
 
 /// Creates a new AndroidCallConnectionFactory object.
-pub fn native_create_call_connection_factory(peer_connection_factory: jlong) -> Result<jlong> {
+pub fn create_call_connection_factory(native_factory: *mut AppPeerConnectionFactory) -> Result<jlong> {
 
-    let cc_factory = AndroidCallConnectionFactory::new(peer_connection_factory as CppObject)?;
+    let cc_factory = AndroidCallConnectionFactory::new(native_factory as CppObject)?;
     // Wrap factory in Arc<Mutex<>> to pass amongst threads
     let cc_factory = Arc::new(Mutex::new(cc_factory));
     let ptr = Arc::into_raw(cc_factory);
@@ -71,10 +78,10 @@ pub fn native_create_call_connection_factory(peer_connection_factory: jlong) -> 
 }
 
 /// Frees a new AndroidCallConnectionFactory object.
-pub fn native_free_factory(factory: jlong) -> Result<()> {
+pub fn free_factory(factory: *mut AndroidCallConnectionFactory) -> Result<()> {
     // Convert integer back into Arc, then Arc will free things up as
     // it goes out of scope.
-    let call_connection_factory: Arc<Mutex<AndroidCallConnectionFactory>> = get_arc_from_jlong(factory)?;
+    let call_connection_factory = unsafe { ptr_as_arc_mutex(factory)? };
     if let Ok(mut cc_factory) = call_connection_factory.lock() {
         cc_factory.close()?;
     }
@@ -203,16 +210,16 @@ fn create_java_ice_servers<'a>(env: &'a JNIEnv,
 /// * `ssl_cert_verifier` - org.webrtc.SSLCertificateVerifier
 ///
 #[allow(clippy::too_many_arguments)]
-pub fn native_create_call_connection(env:               &JNIEnv,
-                                     class:             JClass,
-                                     native_factory:    jlong,
-                                     call_config:       JObject,
-                                     native_observer:   jlong,
-                                     rtc_config:        JObject,
-                                     media_constraints: JObject,
-                                     ssl_cert_verifier: JObject) -> Result<jlong> {
+pub fn create_call_connection(env:               &JNIEnv,
+                              class:             JClass,
+                              native_factory:    *mut AndroidCallConnectionFactory,
+                              call_config:       JObject,
+                              native_observer:   *mut AndroidCallConnectionObserver,
+                              rtc_config:        JObject,
+                              media_constraints: JObject,
+                              ssl_cert_verifier: JObject) -> Result<jlong> {
 
-    let call_connection_factory: ArcPtr<Mutex<AndroidCallConnectionFactory>> = get_arc_ptr_from_jlong(native_factory)?;
+    let call_connection_factory = unsafe { ptr_as_arc_ptr(native_factory)? };
     let mut cc_factory = match call_connection_factory.get_arc().lock() {
         Ok(v) => v,
         Err(_) => return Err(RingRtcError::MutexPoisoned("Call Connection Factory".to_string()).into()),
@@ -223,7 +230,7 @@ pub fn native_create_call_connection(env:               &JNIEnv,
     const CALL_ID_SIG: &str = "J";
     let call_id: CallId = jni_get_field(env, call_config,
                                         CALL_ID_FIELD,
-                                        CALL_ID_SIG)?.j()?;
+                                        CALL_ID_SIG)?.j()? as CallId;
 
     // Get recipient from configuration
     const RECIPIENT_FIELD: &str = "recipient";
@@ -246,17 +253,16 @@ pub fn native_create_call_connection(env:               &JNIEnv,
         CallDirection::InComing
     };
 
-    let call_connection = AndroidCallConnection::new(call_id, direction, jrecipient);
-    let call_connection_handle = cc_factory.create_call_connection_handle(call_connection)?;
-    info!("call_connection object: debug {:?}", call_connection_handle);
+    let platform = AndroidPlatform::new(env.get_java_vm()?, jrecipient);
+    let call_connection = cc_factory.create_call_connection(call_id, direction, platform)?;
+    info!("call_connection: {:?}", call_connection);
 
-    let data_channel_cc_handle = call_connection_handle.clone();
+    let data_channel_cc = call_connection.clone();
 
-    let cc_handle = Box::new(call_connection_handle);
-    let cc_ptr = Box::into_raw(cc_handle);
+    let cc_box = Box::new(call_connection);
+    let cc_ptr = Box::into_raw(cc_box);
 
     let pc_observer = PeerConnectionObserver::new(cc_ptr)?;
-    info!("pc_observer: {:?}", pc_observer);
 
     // fetch ICE servers
     let ice_servers = fetch_ice_servers(env, call_config)?;
@@ -270,7 +276,7 @@ pub fn native_create_call_connection(env:               &JNIEnv,
     let jni_owned_pc = unsafe {
         Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection(
             env.clone(), class, cc_factory.get_native_peer_connection_factory() as jlong,
-            rtc_config, media_constraints, pc_observer.get_rffi_interface() as jlong, ssl_cert_verifier)
+            rtc_config, media_constraints, pc_observer.rffi_interface() as jlong, ssl_cert_verifier)
     };
     info!("jni_owned_pc: {}", jni_owned_pc);
 
@@ -288,27 +294,30 @@ pub fn native_create_call_connection(env:               &JNIEnv,
     let pc_interface = PeerConnection::new(rffi_pc_interface);
 
     // Convert the native observer integer back into an Boxed object
-    let cc_observer: Box<AndroidCallConnectionObserver> = get_object_from_jlong(native_observer)?;
+    let cc_observer = unsafe { ptr_as_box(native_observer)? };
 
     // Convert the raw CallConnection pointer back into a Boxed object
-    let cc_handle = unsafe { Box::from_raw(cc_ptr) };
+    let cc_box = unsafe { Box::from_raw(cc_ptr) };
 
-    if let Ok(mut cc) = cc_handle.lock() {
-        if let CallDirection::OutGoing = direction {
-            // Create data channel observer and data channel
-            let dc_observer = DataChannelObserver::new(data_channel_cc_handle)?;
-            let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-            data_channel.register_observer(dc_observer.get_rffi_interface())?;
-            cc.set_data_channel(data_channel);
-            cc.set_data_channel_observer(dc_observer);
-        }
-        cc.update_pc(env, jni_owned_pc, pc_interface, cc_observer)?;
-    } else {
-        error!("Initial mutex is poisoned");
-        return Err(RingRtcError::MutexPoisoned("CallConnectionHandle in CallConnectionFactory".to_string()).into());
+    if let CallDirection::OutGoing = direction {
+        // Create data channel observer and data channel
+        let dc_observer = DataChannelObserver::new(data_channel_cc)?;
+        let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
+        data_channel.register_observer(dc_observer.rffi_interface())?;
+        cc_box.set_data_channel(data_channel)?;
+        cc_box.set_data_channel_observer(dc_observer)?;
     }
 
-    Ok(Box::into_raw(cc_handle) as jlong)
+    if let Ok(mut platform) = cc_box.platform() {
+        platform.update(jni_owned_pc, cc_observer)?;
+    } else {
+        return Err(RingRtcError::MutexPoisoned("CallConnection.platform".to_string()).into());
+    }
+    cc_box.set_pc_interface(pc_interface)?;
+
+    info!("call_connection: {:?}", cc_box);
+
+    Ok(Box::into_raw(cc_box) as jlong)
 }
 
 

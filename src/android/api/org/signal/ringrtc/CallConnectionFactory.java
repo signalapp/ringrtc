@@ -80,7 +80,7 @@ public class CallConnectionFactory {
       PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(applicationContext)
                                        .setNativeLibraryLoader(new NoOpLoader())
                                        .createInitializationOptions());
-      nativeInitialize();
+      ringrtcInitialize();
       CallConnectionFactory.isInitialized = true;
       Log.i(TAG, "CallConnectionFactory.initialize() returned");
     } catch (UnsatisfiedLinkError e) {
@@ -141,7 +141,8 @@ public class CallConnectionFactory {
                                                                             encoderFactory,
                                                                             decoderFactory);
 
-    long nativeCallConnectionFactory = nativeCreateCallConnectionFactory(callConnectionFactory.peerConnectionFactory.getNativeOwnedFactoryAndThreads());
+    long nativeFactory = callConnectionFactory.peerConnectionFactory.getNativeOwnedFactoryAndThreads();
+    long nativeCallConnectionFactory = ringrtcCreateCallConnectionFactory(nativeFactory);
 
     if (nativeCallConnectionFactory != 0) {
       callConnectionFactory.nativeCallConnectionFactory = nativeCallConnectionFactory;
@@ -166,7 +167,7 @@ public class CallConnectionFactory {
     this.peerConnectionFactory = null;
 
     Log.i(TAG, "CallConnectionFactory.dispose(): calling nativeFreeFactory()");
-    nativeFreeFactory(this.nativeCallConnectionFactory);
+    ringrtcFreeFactory(this.nativeCallConnectionFactory);
     this.nativeCallConnectionFactory = 0;
 
   }
@@ -189,12 +190,12 @@ public class CallConnectionFactory {
     if (nativeObserver == 0) {
       return null;
     }
-    long nativeCallConnection = nativeCreateCallConnection(this.nativeCallConnectionFactory,
-                                                           callConfiguration,
-                                                           nativeObserver,
-                                                           rtcConfig,
-                                                           constraints,
-                                                           sslCertificateVerifier);
+    long nativeCallConnection = ringrtcCreateCallConnection(this.nativeCallConnectionFactory,
+                                                            callConfiguration,
+                                                            nativeObserver,
+                                                            rtcConfig,
+                                                            constraints,
+                                                            sslCertificateVerifier);
     if (nativeCallConnection == 0) {
       Log.w(TAG, "Unable to create native CallConnection()");
       return null;
@@ -327,19 +328,19 @@ public class CallConnectionFactory {
   /* Native methods below here */
 
   private static native
-    void nativeInitialize() throws CallException;
+    void ringrtcInitialize() throws CallException;
 
   private static native
-    long nativeCreateCallConnectionFactory(long nativePeerConnectionFactory);
+    long ringrtcCreateCallConnectionFactory(long nativePeerConnectionFactory);
 
   private static native
-    void nativeFreeFactory(long factory);
+    void ringrtcFreeFactory(long factory);
 
   private static native
-    long nativeCreateCallConnection(long nativeFactory, CallConnection.Configuration callConfiguration,
-                                    long nativeObserver, PeerConnection.RTCConfiguration rtcConfig,
-                                    MediaConstraints constraints,
-                                    SSLCertificateVerifier sslCertificateVerifier)
+    long ringrtcCreateCallConnection(long nativeFactory, CallConnection.Configuration callConfiguration,
+                                     long nativeObserver, PeerConnection.RTCConfiguration rtcConfig,
+                                     MediaConstraints constraints,
+                                     SSLCertificateVerifier sslCertificateVerifier)
     throws IOException, CallException;
 
 }

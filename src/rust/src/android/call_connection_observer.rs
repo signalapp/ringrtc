@@ -17,8 +17,9 @@ use jni::objects::{
     JValue,
 };
 
+use jni::sys::jlong;
+
 use crate::android::jni_util::*;
-use crate::android::call_connection::AndroidClientStream;
 use crate::android::error::AndroidError;
 use crate::common::{
     CallId,
@@ -111,9 +112,10 @@ impl AndroidCallConnectionObserver {
         };
 
         // 2. invoke observer.onCallEvent(recipient, call_id, event)
+        let call_id_jlong = self.call_id as jlong;
         let method = format!("on{}", class);
         let method_signature = format!("(Lorg/signal/ringrtc/SignalMessageRecipient;JL{};)V", class_path);
-        let args = [ self.jrecipient.as_obj().into(), self.call_id.into(), jitem.into() ];
+        let args = [ self.jrecipient.as_obj().into(), call_id_jlong.into(), jitem.into() ];
         let _ = jni_call_method(&env,
                                 self.jcc_observer.as_obj(),
                                 &method,
@@ -148,9 +150,10 @@ impl AndroidCallConnectionObserver {
     /// Invoke observer.onCallError(recipient, call_id, exception)
     fn send_exception(&self, env: & JNIEnv, error: JObject) -> Result<()> {
 
+        let call_id_jlong = self.call_id as jlong;
         let method: &str = "onCallError";
         let method_signature: &str = "(Lorg/signal/ringrtc/SignalMessageRecipient;JLjava/lang/Exception;)V";
-        let args = [ self.jrecipient.as_obj().into(), self.call_id.into(), error.into() ];
+        let args = [ self.jrecipient.as_obj().into(), call_id_jlong.into(), error.into() ];
         jni_call_method(&env, self.jcc_observer.as_obj(),
                         &method, &method_signature,
                         &args)?;
@@ -194,9 +197,10 @@ impl AndroidCallConnectionObserver {
         let env = self.get_java_env()?;
 
         // invoke observer.onAddStream(recipient, call_id, stream)
+        let call_id_jlong = self.call_id as jlong;
         let method: &str = "onAddStream";
         let method_signature: &str = "(Lorg/signal/ringrtc/SignalMessageRecipient;JLorg/webrtc/MediaStream;)V";
-        let args = [ self.jrecipient.as_obj().into(), self.call_id.into(), stream.as_obj().into() ];
+        let args = [ self.jrecipient.as_obj().into(), call_id_jlong.into(), stream.as_obj().into() ];
         let _ = jni_call_method(&env, self.jcc_observer.as_obj(),
                                 &method, &method_signature,
                                 &args)?;
@@ -206,7 +210,7 @@ impl AndroidCallConnectionObserver {
 
 impl CallConnectionObserver for AndroidCallConnectionObserver {
 
-    type ClientStream = AndroidClientStream;
+    type AppMediaStream = GlobalRef;
 
     fn notify_event(&self, event: ClientEvent) {
         info!("notify_event: {}", event);
@@ -220,7 +224,7 @@ impl CallConnectionObserver for AndroidCallConnectionObserver {
             .unwrap_or_else(|e| error!("error() failed: {}", e));
     }
 
-    fn notify_on_add_stream(&self, stream: Self::ClientStream) {
+    fn notify_on_add_stream(&self, stream: Self::AppMediaStream) {
         info!("notify_on_add_stream()");
         self.on_add_stream(stream as GlobalRef)
             .unwrap_or_else(|e| error!("on_add_stream() failed: {}", e));
