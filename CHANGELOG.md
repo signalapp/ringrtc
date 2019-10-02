@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2
+
+- iOS Support
+
+- Update WebRTC to m77
+
 ## v0.1.1
 
 - Initial Release
