@@ -12,12 +12,15 @@ set -e
 BIN_DIR="$(realpath -e $(dirname $0))"
 . "${BIN_DIR}/env.sh"
 
-# Setup NDK toolchain path
-. "$NDK_ENV"
+if [ "$1" != "--clean" ] ; then
+    # Setup NDK toolchain path
+    . "$NDK_ENV"
+    export PATH="${PATH}:$NDK_PATH"
+fi
 
-PATH="${PATH}:$NDK_PATH" "${0}.py" \
-    --build-dir="${OUTPUT_DIR}" \
-    --webrtc-src-dir="${WEBRTC_SRC_DIR}" \
-    --gradle-dir="${ANDROID_GRADLE_DIR}" \
+"${0}.py"                                  \
+    --build-dir="${OUTPUT_DIR}"            \
+    --webrtc-src-dir="${WEBRTC_SRC_DIR}"   \
+    --gradle-dir="${ANDROID_GRADLE_DIR}"   \
     --publish-version="${PROJECT_VERSION}" \
     "$@"

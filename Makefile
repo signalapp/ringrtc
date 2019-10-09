@@ -18,8 +18,14 @@ ANDROID_TARGETS := $(foreach t, $(BUILD_TYPES),     \
 IOS_TARGETS := ios/release
 
 help:
-	$(Q) echo "Please choose one of the following targets: android, ios"
-	$(Q) exit 1
+	$(Q) echo "The following build targets are supported:"
+	$(Q) echo "  ios     -- download WebRTC and build iOS platform products."
+	$(Q) echo "  android -- download WebRTC and build Android platform products."
+	$(Q) echo
+	$(Q) echo "The following clean targets are supported:"
+	$(Q) echo "  clean     -- remove all platform build products."
+	$(Q) echo "  distclean -- remove everything, including downloaded WebRTC dependencies."
+	$(Q) echo
 
 android: $(ANDROID_TARGETS)
 	$(Q) ./bin/build-aar -j$(JOBS)
@@ -48,3 +54,14 @@ ios/%: out/ios.env
 		echo "iOS: Release build" ; \
 		./bin/build-ios ; \
 	fi
+
+PHONY += clean
+clean:
+	$(Q) ./bin/build-aar --clean
+	$(Q) ./bin/build-ios --clean
+
+PHONY += distclean
+distclean:
+	$(Q) rm -rf ./out
+
+.PHONY: $(PHONY)

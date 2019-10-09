@@ -124,6 +124,9 @@ def ParseArgs():
     parser.add_argument('-c', '--compile-only',
                         action='store_true',
                         help='Only compile the code, do not build the .aar. Default is false')
+    parser.add_argument('--clean',
+                        action='store_true',
+                        help='Remove all the build products. Default is false')
 
     return parser.parse_args()
 
@@ -139,13 +142,16 @@ def RunNinja(dry_run, args):
     if dry_run is False:
         subprocess.check_call(cmd)
 
+def GetArchBuildRoot(build_dir, arch):
+    return os.path.join(build_dir, 'android-{}'.format(arch))
+
 def GetArchBuildDir(build_dir, arch, debug_build):
     if debug_build is True:
         build_type = 'debug'
     else:
         build_type = 'release'
 
-    return os.path.join(build_dir, 'android-{}'.format(arch), '{}'.format(build_type))
+    return os.path.join(GetArchBuildRoot(build_dir, arch), '{}'.format(build_type))
 
 def GetOutputDir(build_dir, debug_build):
     if debug_build is True:
@@ -154,6 +160,9 @@ def GetOutputDir(build_dir, debug_build):
         build_type = 'release'
 
     return os.path.join(build_dir, '{}'.format(build_type))
+
+def GetGradleBuildDir(build_dir):
+    return os.path.join(build_dir, 'gradle')
 
 def BuildArch(dry_run, build_dir, arch, debug_build, extra_gn_args,
               extra_gn_flags, extra_ninja_flags, jobs):
@@ -258,7 +267,7 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
         if release_build:
             build_types = build_types + ['release']
 
-    gradle_build_dir = os.path.join(build_dir, 'gradle')
+    gradle_build_dir = GetGradleBuildDir(build_dir)
     shutil.rmtree(gradle_build_dir, ignore_errors=True)
     gradle_args = [
         '-PringrtcVersion={}'.format(version),
@@ -340,6 +349,11 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
                 os.makedirs(os.path.dirname(dest_dir), exist_ok=True)
                 shutil.copytree(output_dir, dest_dir)
 
+def clean_dir(directory, dry_run):
+    logging.info('Removing: {}'.format(directory))
+    if dry_run is False:
+        shutil.rmtree(directory, ignore_errors=True)
+
 def main():
 
     args = ParseArgs()
@@ -365,6 +379,15 @@ def main():
 
     gradle_dir = os.path.abspath(args.gradle_dir)
     logging.debug('Using gradle directory: {}'.format(gradle_dir))
+
+    if args.clean is True:
+        for arch in DEFAULT_ARCHS:
+            rm_dir = GetArchBuildRoot(build_dir, arch)
+            clean_dir(GetArchBuildRoot(build_dir, arch), args.dry_run)
+        clean_dir(GetGradleBuildDir(build_dir), args.dry_run)
+        for dir in ('debug', 'release', 'javadoc', 'rustdoc', 'rust-lint'):
+            clean_dir(os.path.join(build_dir, dir), args.dry_run)
+        return 0
 
     os.chdir(os.path.abspath(args.webrtc_src_dir))
 
