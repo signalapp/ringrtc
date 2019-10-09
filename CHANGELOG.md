@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.3
+
+- Add IceReconnectingState
+
 ## v0.1.2
 
 - iOS Support
