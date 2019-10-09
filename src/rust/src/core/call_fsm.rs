@@ -70,6 +70,7 @@ use crate::common::{
     CallDirection,
     CallId,
     CallState,
+    ReconnectingState,
 };
 use crate::core::call_connection_factory::EventStream;
 use crate::core::call_connection::{
@@ -324,7 +325,7 @@ where
         match event {
             CallEvent::LocalHangup             => return self.handle_local_hangup(cc, state),
             CallEvent::EndCall                 => return self.handle_end_call(cc),
-            _ => {},
+            _                                  => {},
         }
 
         // If in the process of terminating the call, drop all other
@@ -483,11 +484,12 @@ where
             return Ok(());
         }
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected     |
+            CallState::IceConnecting(_)   |
+            CallState::IceReconnecting(_) |
+            CallState::IceConnected       |
             CallState::CallConnected
                 => self.notify_client(cc, ClientEvent::RemoteHangup),
-            _ => self.unexpected_state(state, "RemoteHangup"),
+            _   => self.unexpected_state(state, "RemoteHangup"),
         };
         Ok(())
     }
@@ -504,10 +506,10 @@ where
         match state {
             CallState::IceConnecting(_) |
             CallState::IceConnected
-            => {
-                cc.set_state(CallState::CallConnected)?;
-                self.notify_client(cc, ClientEvent::RemoteConnected);
-            },
+                => {
+                    cc.set_state(CallState::CallConnected)?;
+                    self.notify_client(cc, ClientEvent::RemoteConnected);
+                },
             _ => self.unexpected_state(state, "RemoteConnected"),
         }
         Ok(())
@@ -525,8 +527,9 @@ where
         }
 
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected     |
+            CallState::IceConnecting(_)   |
+            CallState::IceReconnecting(_) |
+            CallState::IceConnected       |
             CallState::CallConnected
                 => {
                     if enabled {
@@ -555,6 +558,7 @@ where
         match state {
             CallState::IceConnecting(false) => {},
             CallState::IceConnecting(true) |
+            CallState::IceReconnecting(_)  |
             CallState::IceConnected        |
             CallState::CallConnected
                 => {
@@ -571,7 +575,8 @@ where
                           state:     CallState) -> Result<()> {
 
         match state {
-            CallState::IceConnecting(_) |
+            CallState::IceConnecting(_)   |
+            CallState::IceReconnecting(_) |
             CallState::IceConnected
                 => {
                     // notify the peer via a data channel message.
@@ -621,8 +626,9 @@ where
                                  enabled:   bool) -> Result<()> {
 
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected     |
+            CallState::IceConnecting(_)   |
+            CallState::IceReconnecting(_) |
+            CallState::IceConnected       |
             CallState::CallConnected
                 => {
                     // notify the peer via a data channel message.
@@ -659,8 +665,9 @@ where
         cc.buffer_local_ice_candidate(candidate)?;
 
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected     |
+            CallState::IceConnecting(_)   |
+            CallState::IceReconnecting(_) |
+            CallState::IceConnected       |
             CallState::CallConnected
                 => {
                 // send signal message to the other side with the ICE
@@ -689,12 +696,29 @@ where
                             cc: CallConnection<T>,
                             state:     CallState) -> Result<()> {
 
-        if let CallState::IceConnecting(_) = state {
-            cc.set_state(CallState::IceConnected)?;
-            let notify_handle = cc.clone();
-            if let CallDirection::OutGoing = cc.direction() {
-                self.notify_client(notify_handle, ClientEvent::Ringing);
-            }
+        use ReconnectingState::*;
+
+        match state {
+            CallState::IceConnecting(_)                 |
+            CallState::IceReconnecting(BeforeConnected)
+                => {
+                    cc.set_state(CallState::IceConnected)?;
+                    // When ICE connects for the first time (or
+                    // reconnects before the call was completely
+                    // connected), notify only the *caller* about the
+                    // ringing event.
+                    if let CallDirection::OutGoing = cc.direction() {
+                        self.notify_client(cc.clone(), ClientEvent::Ringing);
+                    }
+                },
+            CallState::IceReconnecting(AfterConnected)
+                => {
+                    // Previously, ICE disconnected after the call was
+                    // connected.  Return to that state now.
+                    cc.set_state(CallState::CallConnected)?;
+                    self.notify_client(cc.clone(), ClientEvent::Ringing);
+                },
+            _ => (),
         }
         Ok(())
     }
@@ -704,8 +728,9 @@ where
                                     state:     CallState) -> Result<()> {
 
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected     |
+            CallState::IceConnecting(_)   |
+            CallState::IceReconnecting(_) |
+            CallState::IceConnected       |
             CallState::CallConnected
                 => {
                     cc.set_state(CallState::IceDisconnected)?;
@@ -722,12 +747,22 @@ where
                                           cc: CallConnection<T>,
                                           state:     CallState) -> Result<()> {
 
+        use ReconnectingState::*;
+
         match state {
             CallState::IceConnecting(_) |
-            CallState::IceConnected     |
+            CallState::IceConnected
+                => {
+                    // Record that ICE disconnected *before* the call
+                    // was connected.
+                    cc.set_state(CallState::IceReconnecting(BeforeConnected))?;
+                    self.notify_client(cc, ClientEvent::CallReconnecting);
+                },
             CallState::CallConnected
                 => {
-                    cc.set_state(CallState::IceConnecting(true))?;
+                    // Record that ICE disconnected *after* the call
+                    // was connected.
+                    cc.set_state(CallState::IceReconnecting(AfterConnected))?;
                     self.notify_client(cc, ClientEvent::CallReconnecting);
                 },
             _ => self.unexpected_state(state, "IceConnectionDisconnected"),
@@ -766,7 +801,7 @@ where
         }
         match state {
             CallState::CallConnected => {}, // Ok
-            _ => self.notify_client(cc, ClientEvent::CallTimeout),
+            _                        => self.notify_client(cc, ClientEvent::CallTimeout),
         };
         Ok(())
     }
@@ -777,8 +812,9 @@ where
                             stream:    MediaStream) -> Result<()> {
 
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected     |
+            CallState::IceConnecting(_)   |
+            CallState::IceReconnecting(_) |
+            CallState::IceConnected       |
             CallState::CallConnected
                 => {
                     let mut error_handle = cc.clone();

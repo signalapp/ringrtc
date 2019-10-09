@@ -29,6 +29,8 @@ pub enum CallState {
     IceConnected,
     /// ICE has disconnected.
     IceDisconnected,
+    /// ICE is reconnecting after an ICE disconnect event.
+    IceReconnecting(ReconnectingState),
     /// The callee has accepted the call and the call is connected.
     CallConnected,
     /// The call is in the process of shutting down.
@@ -39,6 +41,15 @@ impl fmt::Display for CallState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
+}
+
+/// Tracks the state of the call when ICE was disconnected.
+#[derive(Clone, Copy, Debug)]
+pub enum ReconnectingState {
+    /// ICE disconnected after the call was connected
+    AfterConnected,
+    /// ICE disconnected before the call was connected
+    BeforeConnected,
 }
 
 /// The call direction.
