@@ -39,10 +39,12 @@ if (is_android) {
   stripped_lib = "$root_out_dir/${libname}"
 
   rust_sources = [
-    "cargo.py",
     "Cargo.toml",
     "Cargo.lock",
     "cbindgen.toml",
+    "scripts/cargo.py",
+    "scripts/clippy.py",
+    "scripts/strip.py",
     "src/android/api/jni_call_connection_factory.rs",
     "src/android/api/jni_call_connection.rs",
     "src/android/call_connection_factory.rs",
@@ -87,7 +89,7 @@ if (is_android) {
     }
 
     outputs = [ "${stamp_file}" ]
-    script = "clippy.py"
+    script = "scripts/clippy.py"
 
     deps = [
       "../rffi:libringrtc_rffi",
@@ -117,7 +119,7 @@ if (is_android) {
     # add  "--verbose" here (and above) to increase rustc verbosity
 
     outputs = [ "${cargo_output_dir}/${libname}" ]
-    script = "cargo.py"
+    script = "scripts/cargo.py"
 
     deps = [
       ":libringrtc_lint",
@@ -143,7 +145,7 @@ if (is_android) {
              "--output=" + rebase_path(stripped_lib),
            ]
 
-    script = "strip.py"
+    script = "scripts/strip.py"
 
     deps = [ ":libringrtc_unstripped" ]
 

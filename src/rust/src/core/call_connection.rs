@@ -534,7 +534,6 @@ where
         let webrtc = self.webrtc.lock()?;
 
         webrtc.data_channel()?.send_connected(self.call_id)?;
-        self.set_state(CallState::CallConnected)?;
         Ok(())
     }
 
@@ -561,7 +560,7 @@ where
 
         info!("on_data_channel()");
         let dc_observer = DataChannelObserver::new(call_connection)?;
-        data_channel.register_observer(dc_observer.rffi_interface())?;
+        unsafe { data_channel.register_observer(dc_observer.rffi_interface())? } ;
         self.set_data_channel(data_channel)?;
         self.set_data_channel_observer(dc_observer)?;
         Ok(())
@@ -629,7 +628,7 @@ where
 
         if let Some(data_channel) = webrtc.data_channel.take().as_mut() {
             if let Some(dc_observer) = webrtc.data_channel_observer.take().as_mut() {
-                data_channel.unregister_observer(dc_observer.rffi_interface());
+                unsafe { data_channel.unregister_observer(dc_observer.rffi_interface()) } ;
             }
             data_channel.dispose();
         }
@@ -848,6 +847,53 @@ where
     pub fn inject_on_data_channel(&mut self, data_channel: DataChannel) -> Result<()> {
         let event = CallEvent::OnDataChannel(data_channel);
         self.inject_event(event)
+    }
+
+    #[allow(clippy::mutex_atomic)]
+    /// Inject a synchronizing event into the FSM.
+    ///
+    /// Blocks the caller while the event flushes through the FSM.
+    ///
+    /// Note: Events ahead of this event in the FSM pipeline can
+    /// generate additional error events, which will be queued behind
+    /// this synchronizing event.
+    #[cfg(feature = "sim")]
+    fn inject_synchronize(&mut self) -> Result<()> {
+        let sync  = Arc::new((Mutex::new(false), Condvar::new()));
+        let event = CallEvent::Synchronize(sync.clone());
+
+        self.inject_event(event)?;
+
+        info!("synchronize(): waiting for synchronize complete...");
+        let &(ref mutex, ref condvar) = &*sync;
+        if let Ok(mut sync_complete) = mutex.lock() {
+            while !*sync_complete {
+                sync_complete = condvar.wait(sync_complete).
+                    map_err(|_| { RingRtcError::MutexPoisoned("CallConnection Synchronize Condition Variable".to_string()) })?;
+            }
+        } else {
+            return Err(RingRtcError::MutexPoisoned("CallConnection Synchronize Condition Variable".to_string()).into());
+        }
+        info!("synchronize(): complete");
+        Ok(())
+    }
+
+    /// Synchronize the caller with the FSM event queue.
+    ///
+    /// Blocks the caller while the FSM event queue is flushed.
+    ///
+    /// `Called By:` Test infrastructure
+    #[cfg(feature = "sim")]
+    pub fn synchronize(&mut self) -> Result<()> {
+
+        // The first sync flushes out any pending events.  This
+        // event(s) could fail, which would enqueues another event to
+        // the FSM, *behind* the sync event.
+        self.inject_synchronize()?;
+
+        // The second sync flushes out any error event(s) that might
+        // have happened during the first sync.
+        self.inject_synchronize()
     }
 
 }

@@ -150,7 +150,7 @@ pub fn native_create_call_connection(native_factory: *mut IOSCallConnectionFacto
         // Create data channel observer and data channel
         let dc_observer = DataChannelObserver::new(data_channel_cc)?;
         let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-        data_channel.register_observer(dc_observer.rffi_interface())?;
+        unsafe { data_channel.register_observer(dc_observer.rffi_interface())? } ;
         cc_box.set_data_channel(data_channel)?;
         cc_box.set_data_channel_observer(dc_observer)?;
     }

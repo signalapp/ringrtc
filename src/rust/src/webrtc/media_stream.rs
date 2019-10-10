@@ -12,7 +12,12 @@ use std::marker::Send;
 use std::ptr;
 
 use crate::core::util::CppObject;
-use crate::webrtc::ref_count;
+
+#[cfg(not(feature = "sim"))]
+use crate::webrtc::ffi::ref_count;
+
+#[cfg(feature = "sim")]
+use crate::webrtc::sim::ref_count;
 
 /// Incomplete type for WebRTC C++ MediaStreamInterface.
 #[repr(C)]

@@ -109,7 +109,7 @@ ar = "$ar"
 EOF
 
     cat <<EOF >> $NDK_ENV
-NDK_PATH="\${NDK_PATH}:$(realpath -e ${ARCH_INSTALL_DIR}/bin)"
+NDK_PATH="\${NDK_PATH:+\${NDK_PATH}:}$(realpath -e ${ARCH_INSTALL_DIR}/bin)"
 EOF
 
 done
