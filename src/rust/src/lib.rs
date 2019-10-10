@@ -22,11 +22,14 @@ extern crate futures;
 #[macro_use]
 extern crate log;
 
-mod common;
+#[cfg(feature = "sim")]
+extern crate simplelog;
+
+pub mod common;
 mod error;
 
 /// Core, platform independent functionality.
-mod core {
+pub mod core {
     pub mod call_connection;
     pub mod call_connection_factory;
     pub mod call_connection_observer;
@@ -76,23 +79,38 @@ mod ios {
 }
 
 /// Foreign Function Interface (FFI) to WebRTC C++ library.
-mod webrtc {
+pub mod webrtc {
     pub mod data_channel;
     pub mod data_channel_observer;
     pub mod ice_candidate;
     pub mod media_stream;
     pub mod peer_connection;
     pub mod peer_connection_observer;
-    pub mod ref_count;
     pub mod sdp_observer;
+    #[cfg(not(feature = "sim"))]
+    mod ffi {
+        pub mod data_channel;
+        pub mod data_channel_observer;
+        pub mod peer_connection;
+        pub mod peer_connection_observer;
+        pub mod ref_count;
+        pub mod sdp_observer;
+    }
+    #[cfg(feature = "sim")]
+    mod sim {
+        pub mod data_channel;
+        pub mod data_channel_observer;
+        pub mod peer_connection;
+        pub mod peer_connection_observer;
+        pub mod ref_count;
+        pub mod sdp_observer;
+    }
 }
 
-
-#[cfg(test)]
-#[allow(non_snake_case)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+#[cfg(feature = "sim")]
+pub mod sim {
+    pub mod call_connection_factory;
+    pub mod call_connection_observer;
+    pub mod error;
+    pub mod sim_platform;
 }

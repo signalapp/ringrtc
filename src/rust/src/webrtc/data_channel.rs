@@ -18,7 +18,6 @@ use std::os::raw::{
 use std::ptr;
 
 use bytes::BytesMut;
-use libc::size_t;
 use prost::Message;
 
 use crate::common::{
@@ -37,8 +36,19 @@ use crate::webrtc::data_channel_observer::{
     RffiDataChannelObserverInterface,
 };
 
+#[cfg(not(feature = "sim"))]
+use crate::webrtc::ffi::{
+    data_channel as dc,
+    ref_count,
+};
+
+#[cfg(feature = "sim")]
+use crate::webrtc::sim::{
+    data_channel as dc,
+    ref_count,
+};
+
 use crate::webrtc::peer_connection::RffiDataChannelInterface;
-use crate::webrtc::ref_count;
 
 /// Rust friendly version of WebRTC DataChannelInit.
 ///
@@ -139,7 +149,8 @@ impl DataChannel
     }
 
     /// Register a DataChannelObserver to this DataChannel.
-    pub fn register_observer(&self, dc_observer:  *const RffiDataChannelObserverInterface) -> Result<()>
+    pub unsafe fn register_observer(&self,
+                                    dc_observer: *const RffiDataChannelObserverInterface) -> Result<()>
     {
         debug!("register_data_channel_observer():");
         if dc_observer.is_null() {
@@ -147,24 +158,25 @@ impl DataChannel
                                                  "dc_observer".to_string()).into());
         }
 
-        unsafe { Rust_registerDataChannelObserver(self.dc_interface, dc_observer) };
+        dc::Rust_registerDataChannelObserver(self.dc_interface, dc_observer);
 
         Ok(())
     }
 
     /// Unregister a DataChannelObserver from this DataChannel.
-    pub fn unregister_observer(&self, dc_observer:  *const RffiDataChannelObserverInterface) {
+    pub unsafe fn unregister_observer(&self,
+                                      dc_observer: *const RffiDataChannelObserverInterface) {
         debug!("unregister_data_channel_observer():");
         if dc_observer.is_null() {
             error!("Attempting to unregister a NULL data channel observer");
         } else {
-            unsafe { Rust_unregisterDataChannelObserver(self.dc_interface, dc_observer) };
+            dc::Rust_unregisterDataChannelObserver(self.dc_interface, dc_observer);
         }
     }
 
     /// Return the label of this DataChannel object.
     pub fn get_label(&self) -> String {
-        let string_ptr = unsafe { Rust_dataChannelGetLabel(self.dc_interface) };
+        let string_ptr = unsafe { dc::Rust_dataChannelGetLabel(self.dc_interface) };
         if string_ptr.is_null() {
             String::from("UNKNOWN")
         } else {
@@ -183,7 +195,7 @@ impl DataChannel
         let buffer: *const u8 = bytes.as_ptr();
 
         let result = unsafe {
-            Rust_dataChannelSend(self.dc_interface, buffer, bytes.len(), false)
+            dc::Rust_dataChannelSend(self.dc_interface, buffer, bytes.len(), false)
         };
 
         if result {
@@ -229,17 +241,4 @@ impl DataChannel
         self.send_data(&data)
     }
 
-}
-
-extern {
-    fn Rust_dataChannelSend(dc_interface: *const RffiDataChannelInterface,
-                            buffer: *const u8, len: size_t, binary: bool) -> bool;
-
-    fn Rust_registerDataChannelObserver(dc_interface: *const RffiDataChannelInterface,
-                                        dc_observer:  *const RffiDataChannelObserverInterface);
-
-    fn Rust_unregisterDataChannelObserver(dc_interface: *const RffiDataChannelInterface,
-                                          dc_observer:  *const RffiDataChannelObserverInterface);
-
-    fn Rust_dataChannelGetLabel(dc_interface: *const RffiDataChannelInterface) -> *const c_char;
 }

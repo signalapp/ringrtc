@@ -183,8 +183,8 @@ where
 
 /// PeerConnectionObserver OnAddStream() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnAddStream<T>(cc_ptr: *mut CallConnection<T>,
-                                       native_stream: *const RffiMediaStreamInterface)
+extern fn pc_observer_OnAddStream<T>(cc_ptr:        *mut   CallConnection<T>,
+                                     native_stream: *const RffiMediaStreamInterface)
 where
     T: CallPlatform,
 {
@@ -211,7 +211,7 @@ where
 
 /// PeerConnectionObserver OnDataChannel() callback.
 #[allow(non_snake_case)]
-extern fn pc_observer_OnDataChannel<T>(cc_ptr:   *mut CallConnection<T>,
+extern fn pc_observer_OnDataChannel<T>(cc_ptr:            *mut   CallConnection<T>,
                                        rffi_dc_interface: *const RffiDataChannelInterface)
 where
     T: CallPlatform,
@@ -284,9 +284,15 @@ where
     onTrack: extern fn (*mut CallConnection<T>),
 }
 
-/// Incomplete type for C++ PeerConnectionObserver.
-#[repr(C)]
-pub struct RffiPeerConnectionObserverInterface { _private: [u8; 0] }
+#[cfg(not(feature = "sim"))]
+use crate::webrtc::ffi::peer_connection_observer as pc_observer;
+#[cfg(not(feature = "sim"))]
+pub use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserverInterface;
+
+#[cfg(feature = "sim")]
+use crate::webrtc::sim::peer_connection_observer as pc_observer;
+#[cfg(feature = "sim")]
+pub use crate::webrtc::sim::peer_connection_observer::RffiPeerConnectionObserverInterface;
 
 /// Rust wrapper around WebRTC C++ PeerConnectionObserver object.
 pub struct PeerConnectionObserver<T>
@@ -358,8 +364,8 @@ where
         };
         let pc_observer_callbacks_ptr: *const PeerConnectionObserverCallbacks<T> = &pc_observer_callbacks;
         let rffi_pc_observer = unsafe {
-            Rust_createPeerConnectionObserver(cc_ptr as RustObject,
-                                              pc_observer_callbacks_ptr as CppObject)
+            pc_observer::Rust_createPeerConnectionObserver(cc_ptr as RustObject,
+                                                           pc_observer_callbacks_ptr as CppObject)
         };
 
         if rffi_pc_observer.is_null() {
@@ -380,10 +386,4 @@ where
         self.rffi_pc_observer
     }
 
-}
-
-extern {
-    fn Rust_createPeerConnectionObserver(cc_ptr:          RustObject,
-                                         pc_observer_cb:  CppObject)
-                                         -> *const RffiPeerConnectionObserverInterface;
 }

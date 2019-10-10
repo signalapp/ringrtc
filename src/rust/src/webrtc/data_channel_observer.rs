@@ -129,9 +129,15 @@ where
 
 }
 
-/// Incomplete type for C++ DataChannelObserver.
-#[repr(C)]
-pub struct RffiDataChannelObserverInterface { _private: [u8; 0] }
+#[cfg(not(feature = "sim"))]
+use crate::webrtc::ffi::data_channel_observer as dc_observer;
+#[cfg(not(feature = "sim"))]
+pub use crate::webrtc::ffi::data_channel_observer::RffiDataChannelObserverInterface;
+
+#[cfg(feature = "sim")]
+use crate::webrtc::sim::data_channel_observer as dc_observer;
+#[cfg(feature = "sim")]
+pub use crate::webrtc::sim::data_channel_observer::RffiDataChannelObserverInterface;
 
 /// Rust wrapper around a WebRTC C++ DataChannelObserver object.
 #[derive(Debug)]
@@ -188,8 +194,8 @@ where
         };
         let dc_observer_callbacks_ptr: *const DataChannelObserverCallbacks<T> = &dc_observer_callbacks;
         let rffi_dc_observer = unsafe {
-            Rust_createDataChannelObserver(call_connection_ptr       as RustObject,
-                                           dc_observer_callbacks_ptr as CppObject)
+            dc_observer::Rust_createDataChannelObserver(call_connection_ptr       as RustObject,
+                                                        dc_observer_callbacks_ptr as CppObject)
         };
 
         if rffi_dc_observer.is_null() {
@@ -209,10 +215,4 @@ where
         self.rffi_dc_observer
     }
 
-}
-
-extern {
-    fn Rust_createDataChannelObserver(call_connection: RustObject,
-                                      dc_observer_cb:  CppObject)
-                                      -> *const RffiDataChannelObserverInterface;
 }

@@ -1,7 +1,6 @@
 To generate protobufs run make-protos
 
-  $ ./make-protos
-  signal:~/src/ringrtc/src/rust$ ./make-protos
+  signal:~/src/ringrtc/src/rust$ ./scripts/make-protos
      Compiling proc-macro2 v0.4.27
      Compiling unicode-xid v0.1.0
      ...

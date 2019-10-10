@@ -29,10 +29,15 @@ use crate::core::util::{
 };
 use crate::error::RingRtcError;
 
-/// Incomplete type for SessionDescriptionInterface, used by
-/// CreateSessionDescriptionObserver callbacks.
-#[repr(C)]
-pub struct RffiSessionDescriptionInterface { _private: [u8; 0] }
+#[cfg(not(feature = "sim"))]
+use crate::webrtc::ffi::sdp_observer as sdp;
+#[cfg(not(feature = "sim"))]
+pub use crate::webrtc::ffi::sdp_observer::RffiSessionDescriptionInterface;
+
+#[cfg(feature = "sim")]
+use crate::webrtc::sim::sdp_observer as sdp;
+#[cfg(feature = "sim")]
+pub use crate::webrtc::sim::sdp_observer::RffiSessionDescriptionInterface;
 
 /// Rust wrapper around WebRTC C++ SessionDescriptionInterface.
 pub struct SessionDescriptionInterface {
@@ -68,7 +73,7 @@ impl SessionDescriptionInterface {
     /// Return a string representation of this SessionDescriptionInterface.
     pub fn get_description(&self) -> Result<String> {
 
-        let string_ptr = unsafe { Rust_getOfferDescription(self.sd_interface) };
+        let string_ptr = unsafe { sdp::Rust_getOfferDescription(self.sd_interface) };
         if string_ptr.is_null() {
             Err(RingRtcError::GetOfferDescription.into())
         } else {
@@ -82,7 +87,7 @@ impl SessionDescriptionInterface {
     pub fn create_sdp_answer(session_desc: String) -> Result<Self> {
         let sdp = CString::new(session_desc)?;
         let answer = unsafe {
-            Rust_createSessionDescriptionAnswer(sdp.as_ptr())
+            sdp::Rust_createSessionDescriptionAnswer(sdp.as_ptr())
         };
         if answer.is_null() {
             return Err(RingRtcError::ConvertSdpAnswer.into());
@@ -94,7 +99,7 @@ impl SessionDescriptionInterface {
     pub fn create_sdp_offer(session_desc: String) -> Result<Self> {
         let sdp = CString::new(session_desc)?;
         let offer = unsafe {
-            Rust_createSessionDescriptionOffer(sdp.as_ptr())
+            sdp::Rust_createSessionDescriptionOffer(sdp.as_ptr())
         };
         if offer.is_null() {
             return Err(RingRtcError::ConvertSdpOffer.into());
@@ -104,9 +109,11 @@ impl SessionDescriptionInterface {
 
 }
 
-/// Incomplete type for C++ webrtc::rffi::CreateSessionDescriptionObserverRffi
-#[repr(C)]
-pub struct RffiCreateSessionDescriptionObserver { _private: [u8; 0] }
+#[cfg(not(feature = "sim"))]
+pub use crate::webrtc::ffi::sdp_observer::RffiCreateSessionDescriptionObserver;
+
+#[cfg(feature = "sim")]
+pub use crate::webrtc::sim::sdp_observer::RffiCreateSessionDescriptionObserver;
 
 /// Observer object for creating a session description.
 #[derive(Debug)]
@@ -217,9 +224,9 @@ extern fn csd_observer_OnFailure(csd_observer: *mut CreateSessionDescriptionObse
 /// CreateSessionDescription observer callback function pointers.
 #[repr(C)]
 #[allow(non_snake_case)]
-struct CreateSessionDescriptionObserverCallbacks {
-    onSuccess: extern fn(csd_observer: *mut CreateSessionDescriptionObserver, desc: *const RffiSessionDescriptionInterface),
-    onFailure: extern fn (csd_observer: *mut CreateSessionDescriptionObserver, error_message: *const c_char, error_type: i32),
+pub struct CreateSessionDescriptionObserverCallbacks {
+    pub onSuccess: extern fn(csd_observer: *mut CreateSessionDescriptionObserver, desc: *const RffiSessionDescriptionInterface),
+    pub onFailure: extern fn (csd_observer: *mut CreateSessionDescriptionObserver, error_message: *const c_char, error_type: i32),
 }
 
 const CSD_OBSERVER_CBS: CreateSessionDescriptionObserverCallbacks = CreateSessionDescriptionObserverCallbacks {
@@ -237,8 +244,8 @@ pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
     let csd_observer = Box::new(CreateSessionDescriptionObserver::new());
     let csd_observer_ptr = Box::into_raw(csd_observer);
     let rffi_csd_observer = unsafe {
-        Rust_createCreateSessionDescriptionObserver(csd_observer_ptr as RustObject,
-                                                    CSD_OBSERVER_CBS_PTR as *const c_void)
+        sdp::Rust_createCreateSessionDescriptionObserver(csd_observer_ptr as RustObject,
+                                                         CSD_OBSERVER_CBS_PTR as *const c_void)
     };
     let mut csd_observer = unsafe { Box::from_raw(csd_observer_ptr) };
 
@@ -246,9 +253,11 @@ pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
     csd_observer
 }
 
-/// Incomplete type for C++ CreateSessionDescriptionObserverRffi
-#[repr(C)]
-pub struct RffiSetSessionDescriptionObserver { _private: [u8; 0] }
+#[cfg(not(feature = "sim"))]
+pub use crate::webrtc::ffi::sdp_observer::RffiSetSessionDescriptionObserver;
+
+#[cfg(feature = "sim")]
+pub use crate::webrtc::sim::sdp_observer::RffiSetSessionDescriptionObserver;
 
 /// Observer object for setting a session description.
 #[derive(Debug)]
@@ -358,9 +367,9 @@ extern fn ssd_observer_OnFailure(ssd_observer: *mut SetSessionDescriptionObserve
 /// SetSessionDescription observer callback function pointers.
 #[repr(C)]
 #[allow(non_snake_case)]
-struct SetSessionDescriptionObserverCallbacks {
-    onSuccess: extern fn(ssd_observer: *mut SetSessionDescriptionObserver),
-    onFailure: extern fn (ssd_observer: *mut SetSessionDescriptionObserver, error_message: *const c_char, error_type: i32),
+pub struct SetSessionDescriptionObserverCallbacks {
+    pub onSuccess: extern fn(ssd_observer: *mut SetSessionDescriptionObserver),
+    pub onFailure: extern fn (ssd_observer: *mut SetSessionDescriptionObserver, error_message: *const c_char, error_type: i32),
 }
 
 const SSD_OBSERVER_CBS: SetSessionDescriptionObserverCallbacks = SetSessionDescriptionObserverCallbacks {
@@ -379,30 +388,11 @@ pub fn create_ssd_observer() -> Box<SetSessionDescriptionObserver> {
     let ssd_observer = Box::new(SetSessionDescriptionObserver::new());
     let ssd_observer_ptr = Box::into_raw(ssd_observer);
     let rffi_ssd_observer = unsafe {
-        Rust_createSetSessionDescriptionObserver(ssd_observer_ptr as RustObject,
-                                                 SSD_OBSERVER_CBS_PTR as *const c_void)
+        sdp::Rust_createSetSessionDescriptionObserver(ssd_observer_ptr as RustObject,
+                                                      SSD_OBSERVER_CBS_PTR as *const c_void)
     };
     let mut ssd_observer = unsafe { Box::from_raw(ssd_observer_ptr) };
 
     ssd_observer.set_rffi_observer(rffi_ssd_observer as *const RffiSetSessionDescriptionObserver);
     ssd_observer
-}
-
-extern {
-    fn Rust_createSetSessionDescriptionObserver(ssd_observer:    RustObject,
-                                                ssd_observer_cb: *const c_void)
-                                                -> *const RffiSetSessionDescriptionObserver;
-
-    fn Rust_createCreateSessionDescriptionObserver(csd_observer:     RustObject,
-                                                   csd_observer_cb: *const c_void)
-                                                   -> *const RffiCreateSessionDescriptionObserver;
-
-    fn Rust_getOfferDescription(offer: *const RffiSessionDescriptionInterface)
-                                -> *const c_char;
-
-    fn Rust_createSessionDescriptionAnswer(description: *const c_char)
-                                           ->  *const RffiSessionDescriptionInterface;
-
-    fn Rust_createSessionDescriptionOffer(description: *const c_char)
-                                          ->  *const RffiSessionDescriptionInterface;
 }

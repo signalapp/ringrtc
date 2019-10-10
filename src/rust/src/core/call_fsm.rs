@@ -52,7 +52,12 @@
 extern crate tokio;
 
 use std::fmt;
-use std::sync::mpsc;
+use std::sync::{
+    mpsc,
+    Arc,
+    Condvar,
+    Mutex,
+};
 use std::thread;
 use std::time::Duration;
 
@@ -122,6 +127,8 @@ pub enum CallEvent
     CallTimeout(CallId),
     /// Receive new available data channel from WebRTC observer (callee).
     OnDataChannel(DataChannel),
+    /// Synchronize the FSM.
+    Synchronize(Arc<(Mutex<bool>, Condvar)>),
     /// Shutdown the call.
     EndCall,
 }
@@ -147,6 +154,7 @@ impl fmt::Display for CallEvent {
             CallEvent::CallTimeout(id)                => format!("CallTimeout, call_id: 0x{:x}", id),
             CallEvent::OnAddStream(stream)            => format!("OnAddStream, stream: {:}", stream),
             CallEvent::OnDataChannel(dc)              => format!("OnDataChannel, dc: {:?}", dc),
+            CallEvent::Synchronize(_)                 => "Synchronize".to_string(),
             CallEvent::EndCall                        => "EndCall".to_string(),
         };
         write!(f, "({})", display)
@@ -315,7 +323,7 @@ where
 
     /// Top level event dispatch.
     fn handle_event(&mut self,
-                    cc: CallConnection<T>,
+                    cc:        CallConnection<T>,
                     state:     CallState,
                     event:     CallEvent) -> Result<()> {
 
@@ -324,6 +332,7 @@ where
         match event {
             CallEvent::LocalHangup             => return self.handle_local_hangup(cc, state),
             CallEvent::EndCall                 => return self.handle_end_call(cc),
+            CallEvent::Synchronize(sync)       => return self.handle_synchronize(sync),
             _                                  => {},
         }
 
@@ -353,12 +362,13 @@ where
             CallEvent::OnAddStream(stream)            => self.handle_on_add_stream(cc, state, stream),
             CallEvent::OnDataChannel(dc)              => self.handle_on_data_channel(cc, state, dc),
             CallEvent::LocalHangup                    => Ok(()),
+            CallEvent::Synchronize(_)                 => Ok(()),
             CallEvent::EndCall                        => Ok(()),
         }
     }
 
     fn handle_send_offer(&mut self,
-                         cc: CallConnection<T>,
+                         cc:        CallConnection<T>,
                          state:     CallState) -> Result<()> {
 
         if let CallState::Idle = state {
@@ -388,7 +398,7 @@ where
     }
 
     fn handle_answer(&mut self,
-                     cc: CallConnection<T>,
+                     cc:        CallConnection<T>,
                      state:     CallState,
                      answer:    String) -> Result<()> {
 
@@ -422,7 +432,7 @@ where
     }
 
     fn handle_offer(&mut self,
-                    cc: CallConnection<T>,
+                    cc:        CallConnection<T>,
                     state:     CallState,
                     offer:     String) -> Result<()> {
 
@@ -474,7 +484,7 @@ where
     }
 
     fn handle_remote_hangup(&mut self,
-                            cc: CallConnection<T>,
+                            cc:        CallConnection<T>,
                             state:     CallState,
                             call_id:   CallId) -> Result<()> {
 
@@ -494,7 +504,7 @@ where
     }
 
     fn handle_remote_connected(&mut self,
-                               cc: CallConnection<T>,
+                               cc:        CallConnection<T>,
                                state:     CallState,
                                call_id:   CallId) -> Result<()> {
 
@@ -515,7 +525,7 @@ where
     }
 
     fn handle_remote_video_status(&mut self,
-                                  cc: CallConnection<T>,
+                                  cc:        CallConnection<T>,
                                   state:     CallState,
                                   call_id:   CallId,
                                   enabled:   bool) -> Result<()> {
@@ -543,7 +553,7 @@ where
     }
 
     fn handle_remote_ice_candidate(&mut self,
-                                   cc: CallConnection<T>,
+                                   cc:        CallConnection<T>,
                                    state:     CallState,
                                    candidate: IceCandidate) -> Result<()> {
 
@@ -570,7 +580,7 @@ where
     }
 
     fn handle_accept_call(&mut self,
-                          cc: CallConnection<T>,
+                          cc:        CallConnection<T>,
                           state:     CallState) -> Result<()> {
 
         match state {
@@ -585,7 +595,8 @@ where
                                                     if cc.terminating()? {
                                                         return Ok(())
                                                     }
-                                                    cc.send_connected()
+                                                    cc.send_connected()?;
+                                                    cc.set_state(CallState::CallConnected)
                                                 })
                         .map_err(move |err| {
                             error!("Sending Connected failed: {}", err);
@@ -600,7 +611,7 @@ where
     }
 
     fn handle_local_hangup(&mut self,
-                           cc: CallConnection<T>,
+                           cc:        CallConnection<T>,
                            state:     CallState) -> Result<()> {
 
         match state {
@@ -618,7 +629,7 @@ where
     }
 
     fn handle_local_video_status(&mut self,
-                                 cc: CallConnection<T>,
+                                 cc:        CallConnection<T>,
                                  state:     CallState,
                                  enabled:   bool) -> Result<()> {
 
@@ -648,7 +659,7 @@ where
     }
 
     fn handle_local_ice_candidate(&mut self,
-                                  cc: CallConnection<T>,
+                                  cc:        CallConnection<T>,
                                   state:     CallState,
                                   candidate: IceCandidate) -> Result<()> {
 
@@ -688,7 +699,7 @@ where
     }
 
     fn handle_ice_connected(&mut self,
-                            cc: CallConnection<T>,
+                            cc:        CallConnection<T>,
                             state:     CallState) -> Result<()> {
 
         match state {
@@ -717,7 +728,7 @@ where
     }
 
     fn handle_ice_connection_failed(&mut self,
-                                    cc: CallConnection<T>,
+                                    cc:        CallConnection<T>,
                                     state:     CallState) -> Result<()> {
 
         match state {
@@ -726,7 +737,7 @@ where
             CallState::IceConnected     |
             CallState::CallConnected
                 => {
-                    cc.set_state(CallState::IceDisconnected)?;
+                    cc.set_state(CallState::IceConnectionFailed)?;
                     // For callee -- the call was disconnected while answering/local_ringing
                     // For caller -- the recipient was unreachable
                     self.notify_client(cc, ClientEvent::ConnectionFailed);
@@ -737,7 +748,7 @@ where
     }
 
     fn handle_ice_connection_disconnected(&mut self,
-                                          cc: CallConnection<T>,
+                                          cc:        CallConnection<T>,
                                           state:     CallState) -> Result<()> {
 
         match state {
@@ -762,7 +773,7 @@ where
     }
 
     fn handle_client_error(&mut self,
-                           cc: CallConnection<T>,
+                           cc:        CallConnection<T>,
                            error:     failure::Error) -> Result<()> {
 
         let notify_error_future = lazy(move ||
@@ -782,7 +793,7 @@ where
     }
 
     fn handle_call_timeout(&mut self,
-                           cc: CallConnection<T>,
+                           cc:        CallConnection<T>,
                            state:     CallState,
                            call_id:   CallId) -> Result<()> {
 
@@ -798,7 +809,7 @@ where
     }
 
     fn handle_on_add_stream(&mut self,
-                            cc: CallConnection<T>,
+                            cc:        CallConnection<T>,
                             state:     CallState,
                             stream:    MediaStream) -> Result<()> {
 
@@ -846,6 +857,27 @@ where
             _ => self.unexpected_state(state, "OnDataChannel"),
         }
         Ok(())
+    }
+
+    fn handle_synchronize(&mut self,
+                          sync: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
+
+        if let Some(network_runtime) = &mut self.network_runtime {
+            CallStateMachine::<T>::sync_thread("network", network_runtime)?;
+        }
+        if let Some(notify_runtime) = &mut self.notify_runtime {
+            CallStateMachine::<T>::sync_thread("notify", notify_runtime)?;
+        }
+
+        let &(ref mutex, ref condvar) = &*sync;
+        if let Ok(mut sync_complete) = mutex.lock() {
+            *sync_complete = true;
+            condvar.notify_one();
+            Ok(())
+        } else {
+            Err(RingRtcError::MutexPoisoned("CallConnection Synchronize Condition Variable".to_string()).into())
+        }
+
     }
 
     fn handle_end_call(&mut self, mut cc: CallConnection<T>) -> Result<()> {

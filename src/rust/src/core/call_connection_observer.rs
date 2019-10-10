@@ -15,7 +15,7 @@ use std::fmt;
 /// client application.
 ///
 #[repr(i32)]
-#[derive(Copy, Debug)]
+#[derive(Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ClientEvent {
     /// The "ringing" event.
     ///

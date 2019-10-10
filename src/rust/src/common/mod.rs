@@ -16,7 +16,7 @@ pub type Result<T> = std::result::Result<T, failure::Error>;
 pub type CallId = u64;
 
 /// Tracks the state of the call.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CallState {
     /// No call in progress.
     Idle,
@@ -27,8 +27,8 @@ pub enum CallState {
     IceConnecting(bool),
     /// ICE is connected.
     IceConnected,
-    /// ICE has disconnected.
-    IceDisconnected,
+    /// ICE failed to connect.
+    IceConnectionFailed,
     /// ICE is reconnecting after an ICE disconnect event.
     IceReconnecting,
     /// The callee has accepted the call and the call is connected.
