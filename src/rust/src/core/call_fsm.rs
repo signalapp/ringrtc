@@ -606,11 +606,9 @@ where
         match state {
             CallState::Idle => self.unexpected_state(state, "LocalHangup"),
             _               => {
-                let mut error_handle = cc.clone();
                 let hang_up_future   = lazy(move || cc.send_hang_up())
                     .map_err(move |err| {
                         error!("Sending Hang Up failed: {}", err);
-                        let _ = error_handle.inject_client_error(err);
                     });
                 debug!("handle_local_hangup(): spawning network task");
                 self.network_spawn(hang_up_future);
@@ -631,7 +629,6 @@ where
             CallState::CallConnected
                 => {
                     // notify the peer via a data channel message.
-                    let mut error_handle          = cc.clone();
                     let local_video_status_future = lazy(move ||
                                                          {
                                                              if cc.terminating()? {
@@ -641,7 +638,6 @@ where
                                                          })
                         .map_err(move |err| {
                             error!("Sending local video status failed: {}", err);
-                            let _ = error_handle.inject_client_error(err);
                         });
                     debug!("handle_local_video_status(): spawning network task");
                     self.network_spawn(local_video_status_future);
