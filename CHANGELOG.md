@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.4
+
+- Update Makefile targets for 'clean' and 'distclean'
+
+- Simplify the IceReconnecting logic
+
+- Remove non-critical DataChannel error callbacks
+
 ## v0.1.3
 
 - Add IceReconnectingState
