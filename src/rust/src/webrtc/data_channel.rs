@@ -195,7 +195,7 @@ impl DataChannel
         let buffer: *const u8 = bytes.as_ptr();
 
         let result = unsafe {
-            dc::Rust_dataChannelSend(self.dc_interface, buffer, bytes.len(), false)
+            dc::Rust_dataChannelSend(self.dc_interface, buffer, bytes.len(), true)
         };
 
         if result {
