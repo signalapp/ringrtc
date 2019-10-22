@@ -28,6 +28,7 @@ use crate::common::{
 use crate::core::call_connection_factory::EventPump;
 use crate::core::call_connection_observer::ClientEvent;
 use crate::core::call_fsm::CallEvent;
+use crate::core::util::redact_string;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
@@ -422,6 +423,8 @@ where
         let offer = self.create_offer()?;
         self.set_local_description(&offer)?;
 
+        info!("TX SDP offer:\n{}", redact_string(&offer.get_description()?));
+
         let platform = self.platform.lock()?;
         platform.app_send_offer(self.call_id, offer)
     }
@@ -443,6 +446,8 @@ where
         let answer = self.create_answer()?;
         self.set_local_description(&answer)?;
 
+        info!("TX SDP answer:\n{}", redact_string(&answer.get_description()?));
+
         let platform = self.platform.lock()?;
         platform.app_send_answer(self.call_id, answer)
 
@@ -450,7 +455,8 @@ where
 
     /// Buffer local ICE candidates.
     pub fn buffer_local_ice_candidate(&self, candidate: IceCandidate) -> Result<()> {
-        info!("local_ice_candidate: {:?}", candidate);
+
+        info!("Local ICE candidate: {}", candidate);
 
         let mut ice_candidates = self.pending_outbound_ice_candidates.lock()?;
         ice_candidates.push(candidate);
@@ -459,7 +465,8 @@ where
 
     /// Buffer remote ICE candidates.
     pub fn buffer_remote_ice_candidate(&self, candidate: IceCandidate) -> Result<()> {
-        info!("remote_ice_candidate: {:?}", candidate);
+
+        info!("Remote ICE candidate: {}", candidate);
 
         let mut ice_candidates = self.pending_inbound_ice_candidates.lock()?;
         ice_candidates.push(candidate);
@@ -686,6 +693,7 @@ where
     ///
     /// * `answer` - String containing the remote SDP answer.
     pub fn inject_handle_answer(&mut self, answer: String) -> Result<()> {
+        info!("RX SDP answer:\n{}", redact_string(&answer));
         let event = CallEvent::HandleAnswer(answer);
         self.inject_event(event)
     }
@@ -698,6 +706,7 @@ where
     ///
     /// * `offer` - String containing the remote SDP offer.
     pub fn inject_handle_offer(&mut self, offer: String) -> Result<()> {
+        info!("RX SDP offer:\n{}", redact_string(&offer));
         let event = CallEvent::HandleOffer(offer);
         self.inject_event(event)
     }

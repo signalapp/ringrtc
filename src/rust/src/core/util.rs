@@ -15,6 +15,11 @@ use std::sync::{
     Condvar,
 };
 
+#[cfg(any(not(debug_assertions), test))]
+use lazy_static::lazy_static;
+#[cfg(any(not(debug_assertions), test))]
+use regex::Regex;
+
 use crate::common::Result;
 use crate::error::RingRtcError;
 
@@ -118,11 +123,14 @@ pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
     Ok(object)
 }
 
-/// Scrubs off sensitive information from the SDP string for public
-/// logging purposes.
-#[cfg(not(debug_assertions))]
-pub fn sanitize_sdp(sdp: &str) -> String {
-    let mut lines = sdp.lines().collect::<Vec<&str>>();
+#[cfg(all(debug_assertions, not(test)))]
+fn redact_ice_password(text: &str) -> String {
+    text.to_string()
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn redact_ice_password(text: &str) -> String {
+    let mut lines = text.lines().collect::<Vec<&str>>();
 
     for line in lines.iter_mut() {
         // Redact entire line as needed to mask Ice Password.
@@ -134,7 +142,227 @@ pub fn sanitize_sdp(sdp: &str) -> String {
     lines.join("\n")
 }
 
-#[cfg(debug_assertions)]
-pub fn sanitize_sdp(sdp: &str) -> String {
-    sdp.to_string()
+// Credit to the bulk of this RE to @syzdek on github.
+//
+// This RE should match:
+//
+// - IPv6 addresses
+// - zero compressed IPv6 addresses (section 2.2 of rfc5952)
+// - link-local IPv6 addresses with zone index (section 11 of rfc4007)
+// - IPv4-Embedded IPv6 Address (section 2 of rfc6052)
+// - IPv4-mapped IPv6 addresses (section 2.1 of rfc2765)
+// - IPv4-translated addresses (section 2.1 of rfc2765)
+//
+// To make the above easier to understand, the following "pseudo" code replicates the RE:
+//
+// IPV4SEG  = (25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])
+// IPV4ADDR = (IPV4SEG\.){3,3}IPV4SEG
+// IPV6SEG  = [0-9a-fA-F]{1,4}
+// IPV6ADDR = (
+//            fe80:(:IPV6SEG){0,4}%[0-9a-zA-Z]{1,}|  # fe80::7:8%eth0     fe80::7:8%1  (link-local IPv6 addresses with zone index)
+//            (::)?(IPV6SEG:){1,4}:IPV4ADDR          # 2001:db8:3:4::192.0.2.33  64:ff9b::192.0.2.33 (IPv4-Embedded IPv6 Address)
+//            (IPV6SEG:){7,7}IPV6SEG|                # 1:2:3:4:5:6:7:8
+//            (IPV6SEG:){1,1}(:IPV6SEG){1,6}|        # 1::3:4:5:6:7:8     1::3:4:5:6:7:8   1::8
+//            (IPV6SEG:){1,2}(:IPV6SEG){1,5}|        # 1::4:5:6:7:8       1:2::4:5:6:7:8   1:2::8
+//            (IPV6SEG:){1,3}(:IPV6SEG){1,4}|        # 1::5:6:7:8         1:2:3::5:6:7:8   1:2:3::8
+//            (IPV6SEG:){1,4}(:IPV6SEG){1,3}|        # 1::6:7:8           1:2:3:4::6:7:8   1:2:3:4::8
+//            (IPV6SEG:){1,5}(:IPV6SEG){1,2}|        # 1::7:8             1:2:3:4:5::7:8   1:2:3:4:5::8
+//            (IPV6SEG:){1,6}:IPV6SEG|               # 1::8               1:2:3:4:5:6::8   1:2:3:4:5:6::8
+//            (IPV6SEG:){1,7}:|                      # 1::                                 1:2:3:4:5:6:7::
+//            ::(ffff(:0{1,4}){0,1}:){0,1}IPV4ADDR|  # ::255.255.255.255  ::ffff:255.255.255.255  ::ffff:0:255.255.255.255 (IPv4-mapped IPv6 addresses and IPv4-translated addresses)
+//            :((:IPV6SEG){1,7}|:)|                  # ::2:3:4:5:6:7:8    ::2:3:4:5:6:7:8  ::8       ::
+//            )
+
+#[cfg(all(debug_assertions, not(test)))]
+fn redact_ipv6(text: &str) -> String {
+    text.to_string()
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn redact_ipv6(text: &str) -> String {
+    lazy_static! {
+        static ref RE: Option<Regex> = {
+            let re_exps = [
+                "[Ff][Ee]80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}",
+                "(::)?([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])",
+                "([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}",
+                "([0-9a-fA-F]{1,4}:){1,1}(:[0-9a-fA-F]{1,4}){1,6}",
+                "([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}",
+                "([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}",
+                "([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}",
+                "([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}",
+                "([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}",
+                "([0-9a-fA-F]{1,4}:){1,7}:",
+                "::([fF]{4}(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])",
+                ":((:[0-9a-fA-F]{1,4}){1,7}|:)",
+            ];
+            let re = re_exps.join("|");
+            match Regex::new(&re) {
+                Ok(v) => Some(v),
+                Err(_) => None,
+            }
+        };
+    }
+
+    match &*RE {
+        Some(v) => v.replace_all(text, "[REDACTED]").to_string(),
+        None    => "[REDACTED]".to_string(),
+    }
+}
+
+#[cfg(all(debug_assertions, not(test)))]
+fn redact_ipv4(text: &str) -> String {
+    text.to_string()
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn redact_ipv4(text: &str) -> String {
+    lazy_static! {
+        static ref RE: Option<Regex> = {
+            let re = "(((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))\\.){3,3}((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))";
+            match Regex::new(&re) {
+                Ok(v) => Some(v),
+                Err(_) => None,
+            }
+        };
+    }
+
+    match &*RE {
+        Some(v) => v.replace_all(text, "[REDACTED]").to_string(),
+        None    => "[REDACTED]".to_string(),
+    }
+}
+
+/// Scrubs off sensitive information from the string for public
+/// logging purposes, including:
+/// - ICE passwords
+/// - IPv4 and IPv6 addresses
+pub fn redact_string(text: &str) -> String {
+    let mut string = redact_ice_password(text);
+    string = redact_ipv6(&string);
+    redact_ipv4(&string)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_ipv6() {
+        let addrs = [
+            "fe80::2d8:61ff:fe57:83f6",
+            "Fe80::2d8:61ff:fe57:83f6",
+            "fE80::2d8:61ff:fe57:83f6",
+            "1::7:8",
+            "1:2:3:4:5::7:8",
+            "1:2:3:4:5::8",
+            "1::8",
+            "1:2:3:4:5:6::8",
+            "1:2:3:4:5:6::8",
+            "2021:0db8:85a3:0000:0000:8a2e:0370:7334",
+            "2301:db8:85a3::8a2e:370:7334",
+            "4601:746:9600:dec1:2d8:61ff:fe57:83f6",
+            "fe80::2d8:61ff:fe57:83f6",
+            "::1",
+            "::0",
+            "::",
+            "::ffff:0:192.0.2.128",
+            "::ffff:192.0.2.128",
+            "1::",
+            "1:2:3:4:5:6:7::",
+            "1::8",               "1:2:3:4:5:6::8",   "1:2:3:4:5:6::8",
+            "1::7:8",             "1:2:3:4:5::7:8",   "1:2:3:4:5::8",
+            "1::6:7:8",           "1:2:3:4::6:7:8",   "1:2:3:4::8",
+            "1::5:6:7:8",         "1:2:3::5:6:7:8",   "1:2:3::8",
+            "1::4:5:6:7:8",       "1:2::4:5:6:7:8",   "1:2::8",
+            "1::3:4:5:6:7:8",     "1::3:4:5:6:7:8",   "1::8",
+            "::2:3:4:5:6:7:8",    "::2:3:4:5:6:7:8",  "::8",
+            "fe80::7:8%eth0",     "fe80::7:8%1",
+            "::255.255.255.255",  "::ffff:255.255.255.255",
+            "2001:db8:3:4::192.0.2.33",  "64:ff9b::192.0.2.33",
+        ];
+
+        let prefix = [
+            "",
+            "text",
+            "text ",
+            "<",
+            "@",
+        ];
+
+        let suffix = [
+            "",
+            " text",
+            ">",
+            "@",
+        ];
+
+        for a in addrs.iter() {
+            for p in prefix.iter() {
+                for s in suffix.iter() {
+                    let addr = format!("{}{}{}", p, a, s);
+                    let scrubbed = redact_ipv6(&addr);
+                    assert_eq!((&addr, scrubbed), (&addr, format!("{}[REDACTED]{}", p, s)));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn check_ipv4() {
+        let addrs = [
+            "0.0.0.0",
+            "000.000.000.000",
+            "000.000.000.00",
+            "000.000.000.0",
+            "000.000.00.000",
+            "000.000.0.000",
+            "000.00.000.000",
+            "000.0.000.000",
+            "00.000.000.000",
+            "0.000.000.000",
+            "255.255.255.255",
+            "248.255.255.245",
+            "228.255.255.225",
+            "12.01.0.0",
+            "192.008.022.1",
+            "192.000.002.1",
+            "242.068.0.1",
+            "092.168.122.1",
+            "002.168.122.1",
+            "2.168.122.1",
+            "92.168.122.1",
+            "242.068.0.1",
+            "092.168.2.1",
+            "002.8.122.2",
+            "2.168.122.9",
+            "92.168.122.250",
+        ];
+
+        let prefix = [
+            "",
+            "text",
+            "text ",
+            "<",
+            "@",
+        ];
+
+        let suffix = [
+            "",
+            " text",
+            ">",
+            "@",
+        ];
+
+        for a in addrs.iter() {
+            for p in prefix.iter() {
+                for s in suffix.iter() {
+                    let addr = format!("{}{}{}", p, a, s);
+                    let scrubbed = redact_ipv4(&addr);
+                    assert_eq!((&addr, scrubbed), (&addr, format!("{}[REDACTED]{}", p, s)));
+                }
+            }
+        }
+    }
+
 }

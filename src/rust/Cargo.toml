@@ -18,16 +18,19 @@ build = false
 crate_type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-log = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
-failure = "0.1"
-libc = "0.2"
-futures = "0.1"
-prost = "0.5"
-bytes = "0.4.12"
+bytes       = { version = "0.4.12" }
+failure     = { version = "0.1"    }
+futures     = { version = "0.1"    }
+lazy_static = { version = "1"      }
+libc        = { version = "0.2"    }
+log         = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
+prost       = { version = "0.5"    }
+regex       = { version = "1"      }
+
+# Optional, needed to build protobufs
 prost-build = { version = "0.5",    optional = true }
 
 # Optional, needed by the 'sim' feature
-lazy_static = { version = "1",      optional = true }
 simplelog   = { version = "^0.7.3", optional = true, default-features = false }
 rand        = { version = "0.7",    optional = true, features = [] }
 rand_chacha = { version = "0.2.1",  optional = true }
@@ -40,7 +43,7 @@ features = ["rt-full"]
 [features]
 default = []
 protobuf_gen_deps = ["prost-build"]
-sim = ["simplelog", "rand", "rand_chacha", "lazy_static" ]
+sim = ["simplelog", "rand", "rand_chacha"]
 
 [[bin]]
 name = "protobuf-gen"
