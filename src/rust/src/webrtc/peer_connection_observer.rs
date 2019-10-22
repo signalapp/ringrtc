@@ -92,9 +92,7 @@ where
 {
     if !candidate.is_null() {
         let ice_candidate = IceCandidate::from(unsafe {&*candidate});
-        debug!("pc_observer_OnIceCandidate(): {:?}", ice_candidate);
-
-        let object = unsafe { ptr_as_mut(cc_ptr) };
+        let object        = unsafe { ptr_as_mut(cc_ptr) };
         if let Ok(cc) = object {
             cc.inject_local_ice_candidate(ice_candidate)
                 .unwrap_or_else(|e| error!("Problems adding ice canddiate to fsm: {}", e));

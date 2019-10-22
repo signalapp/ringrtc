@@ -34,7 +34,6 @@ use crate::core::call_connection_observer::{
 use crate::core::util::{
     ptr_as_box,
     ptr_as_mut,
-    sanitize_sdp,
 };
 use crate::error::RingRtcError;
 use crate::webrtc::ice_candidate::IceCandidate;
@@ -96,7 +95,7 @@ impl CallPlatform for IOSPlatform {
                       offer:     SessionDescriptionInterface) -> Result<()> {
 
         let description = offer.get_description()?;
-        info!("app_send_offer():\n{}", sanitize_sdp(&description));
+        info!("app_send_offer():");
 
         let string_slice = IOSByteSlice{
             bytes: description.as_ptr(),
@@ -115,7 +114,7 @@ impl CallPlatform for IOSPlatform {
                        answer:    SessionDescriptionInterface) -> Result<()> {
 
         let description = answer.get_description()?;
-        info!("app_send_answer(): {}", sanitize_sdp(&description));
+        info!("app_send_answer():");
 
         let string_slice = IOSByteSlice{
             bytes: description.as_ptr(),

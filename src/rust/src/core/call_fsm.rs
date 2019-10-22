@@ -82,7 +82,6 @@ use crate::core::call_connection::{
     CallPlatform,
 };
 use crate::core::call_connection_observer::ClientEvent;
-use crate::core::util::sanitize_sdp;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_candidate::IceCandidate;
@@ -137,8 +136,8 @@ impl fmt::Display for CallEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
             CallEvent::SendOffer                      => "SendOffer".to_string(),
-            CallEvent::HandleAnswer(answer)           => format!("HandleAnswer, answer: {}", sanitize_sdp(answer)),
-            CallEvent::HandleOffer(offer)             => format!("HandleOffer, offer: {}", sanitize_sdp(offer)),
+            CallEvent::HandleAnswer(_)                => "HandleAnsewr".to_string(),
+            CallEvent::HandleOffer(_)                 => "HandleOffer".to_string(),
             CallEvent::AcceptCall                     => "AcceptCall".to_string(),
             CallEvent::RemoteHangup(id)               => format!("RemoteHangup, call_id: 0x{:x}", id),
             CallEvent::RemoteConnected(id)            => format!("RemoteConnected, call_id: 0x{:x}", id),
@@ -218,7 +217,7 @@ where
             match try_ready!(self.event_stream.poll().map_err(|_| { RingRtcError::FsmStreamPoll })) {
                 Some((cc, event)) => {
                     let state = cc.state()?;
-                    info!("CallStateMachine: rx state: {}, event: {}", state, event);
+                    info!("state: {}, event: {}", state, event);
                     if let Err(e) = self.handle_event(cc, state, event) {
                         error!("Handling event failed: {:?}", e);
                     }

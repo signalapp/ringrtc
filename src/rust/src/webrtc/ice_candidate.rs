@@ -8,7 +8,10 @@
 //! WebRTC ICE Candidate Interface.
 
 use std::ffi::CStr;
+use std::fmt;
 use std::os::raw::c_char;
+
+use crate::core::util::redact_string;
 
 /// Ice Candidate structure passed between Rust and C++.
 #[repr(C)]
@@ -20,11 +23,27 @@ pub struct CppIceCandidate {
 }
 
 /// Ice Candiate structure passed around within Rust only.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct IceCandidate {
     pub sdp_mid:         String,
     pub sdp_mline_index: i32,
     pub sdp:             String,
+}
+
+impl fmt::Display for IceCandidate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let text = format!("spd_mid: {}, spd_mline: {}, sdp: {}",
+                           self.sdp_mid,
+                           self.sdp_mline_index,
+                           self.sdp);
+        write!(f, "{}", redact_string(&text))
+    }
+}
+
+impl fmt::Debug for IceCandidate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl IceCandidate {

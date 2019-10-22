@@ -53,7 +53,6 @@ use crate::core::util::{
     ptr_as_box,
     ptr_as_mut,
     ptr_as_ref,
-    sanitize_sdp,
 };
 use crate::error::RingRtcError;
 use crate::webrtc::ice_candidate::IceCandidate;
@@ -339,7 +338,7 @@ fn jni_send_offer<'a>(env: &'a  JNIEnv,
               offer:            SessionDescriptionInterface) -> Result<JObject<'a>> {
 
     let description = offer.get_description()?;
-    info!("jni_send_offer():\n{}", sanitize_sdp(&description));
+    info!("jni_send_offer():");
 
     let call_id_jlong = call_id as jlong;
 
@@ -416,7 +415,7 @@ fn jni_send_answer<'a>(env:              &'a JNIEnv,
                        offer:            SessionDescriptionInterface) -> Result<JObject<'a>> {
 
     let description = offer.get_description()?;
-    info!("jni_send_answer():\n{}", sanitize_sdp(&description));
+    info!("jni_send_answer():");
 
     let call_id_jlong = call_id as jlong;
 
