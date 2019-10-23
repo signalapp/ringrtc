@@ -9,7 +9,7 @@
 
 # Specify WebRTC upstream version.  This corresponds to the
 # "branch-heads" git branch of the webrtc repository.
-WEBRTC_VERSION="m77"
+WEBRTC_VERSION="m78"
 
 RINGRTC_MAJOR_VERSION=0
 RINGRTC_MINOR_VERSION=1

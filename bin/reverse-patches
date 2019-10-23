@@ -34,10 +34,11 @@ for series in $(find "$PATCH_DIR" -type f -name series) ; do
     REPO_DIR="${SRC_ROOT}$DIR"
     cd "$REPO_DIR"
     git checkout master
-    stg branch --delete --force $PATCH_BRANCH
-    git checkout $PATCH_TAG
-    git tag -d $PATCH_TAG
-    # git clean -dfx
+    # it's OK if the following clean-ups fail if a previous
+    # apply-patches had failed part way.
+    stg branch --delete --force $PATCH_BRANCH || true
+    git checkout $PATCH_TAG || true
+    git tag -d $PATCH_TAG || true
 
 done
 
