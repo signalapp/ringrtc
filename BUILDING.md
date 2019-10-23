@@ -60,7 +60,11 @@ Install rust target support via `rustup`:
 
     xcode-select --install
     brew install coreutils
-    sudo gem install cocoapods
+
+After the initial checkout (described below), you will need to install Bundle dependencies at least once:
+
+    cd src/ios
+    bundle install
 
 ## Initial Checkout
 

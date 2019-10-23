@@ -158,8 +158,8 @@ then
   echo "Building the SignalRingRTC.framework..."
 
   # We need to use cocoapods to install dependencies (SignalCoreKit).
-  pod install --project-directory=./src/ios/SignalRingRTC/ --deployment
-  
+  bundle exec --gemfile=src/ios/Gemfile pod install --project-directory=./src/ios/SignalRingRTC/ --deployment
+
   if [ "${BUILD_TYPE}" == "debug" ]
   then
     xcodebuild -workspace ${RINGRTC_SRC_DIR}/ios/SignalRingRTC/SignalRingRTC.xcworkspace -scheme SignalRingRTC -configuration Debug -sdk iphoneos ONLY_ACTIVE_ARCH=NO OBJROOT=$(PWD)/out/build SYMROOT=$(PWD)/out/build clean build

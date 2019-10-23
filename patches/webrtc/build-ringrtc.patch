@@ -13,10 +13,10 @@ Step 2 -- Update the top level //BUILD.gn file to depend on the minimal
 //ringrtc/BUILD.gn file.
 
 diff --git a/BUILD.gn b/BUILD.gn
-index 4acda15c98..9b91bfa4b8 100644
+index 95d02f77ae..4a72a1a972 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -407,6 +407,7 @@ if (!build_with_chromium) {
+@@ -415,6 +415,7 @@ if (!build_with_chromium) {
        "pc:peerconnection",
        "pc:rtc_pc",
        "pc:rtc_pc_base",

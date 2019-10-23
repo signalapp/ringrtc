@@ -16,10 +16,10 @@ it all up in a way that is still compatible with most normal WebRTC
 operations and objects.
 
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.h b/sdk/objc/api/peerconnection/RTCPeerConnection.h
-index c641fdd545..1f5e2286b8 100644
+index 6956555ce3..910251ba37 100644
 --- a/sdk/objc/api/peerconnection/RTCPeerConnection.h
 +++ b/sdk/objc/api/peerconnection/RTCPeerConnection.h
-@@ -183,7 +183,23 @@ RTC_OBJC_EXPORT
+@@ -188,7 +188,23 @@ RTC_OBJC_EXPORT
   */
  @property(nonatomic, readonly) NSArray<RTCRtpTransceiver *> *transceivers;
  
@@ -45,10 +45,10 @@ index c641fdd545..1f5e2286b8 100644
  /** Sets the PeerConnection's global configuration to |configuration|.
   *  Any changes to STUN/TURN servers or ICE candidate policy will affect the
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.mm b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
-index 8d1ac46d06..f16e33cadc 100644
+index 659e1f379e..4ffa44de1e 100644
 --- a/sdk/objc/api/peerconnection/RTCPeerConnection.mm
 +++ b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
-@@ -268,6 +268,12 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
+@@ -279,6 +279,12 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
  @synthesize delegate = _delegate;
  @synthesize factory = _factory;
  
@@ -61,7 +61,7 @@ index 8d1ac46d06..f16e33cadc 100644
  - (instancetype)initWithFactory:(RTCPeerConnectionFactory *)factory
                    configuration:(RTCConfiguration *)configuration
                      constraints:(RTCMediaConstraints *)constraints
-@@ -298,6 +304,55 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
+@@ -309,6 +315,55 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
    return self;
  }
  

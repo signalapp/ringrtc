@@ -1,5 +1,4 @@
-# This series applies on GIT commit 39eac882d91c5902656bac177d7bf5a642da2d78
+# This series applies on GIT commit 50461559e519c3f84c21a109c712a612feefeaeb
 build-ringrtc.patch
-webrtc-m75-ios9.patch
 build-ringrtc-ios.patch
 ringrtc-ios-sdk.patch

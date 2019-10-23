@@ -10,7 +10,7 @@ This ends up being a static library linked in with the resulting
 WebRTC.framework.
 
 diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index 784101eb91..6fb763659a 100644
+index 8303d8af46..52b6132a68 100644
 --- a/sdk/BUILD.gn
 +++ b/sdk/BUILD.gn
 @@ -10,6 +10,7 @@ import("../webrtc.gni")
@@ -21,7 +21,7 @@ index 784101eb91..6fb763659a 100644
  }
  if (is_mac) {
    import("//build/config/mac/rules.gni")
-@@ -1325,6 +1326,7 @@ if (is_ios || is_mac) {
+@@ -1339,6 +1340,7 @@ if (is_ios || is_mac) {
            ":videocodec_objc",
            ":videotoolbox_objc",
            "../rtc_base:rtc_base_approved",
