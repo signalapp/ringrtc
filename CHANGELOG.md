@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.5
+
+- Update WebRTC to m78
+
+- Add integration tests
+
+- Build system fixes and clean up
+
 ## v0.1.4
 
 - Update Makefile targets for 'clean' and 'distclean'
