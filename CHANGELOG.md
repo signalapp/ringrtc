@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.6
+
+- Android: Use an application supplied logging object
+
 ## v0.1.5
 
 - Update WebRTC to m78
