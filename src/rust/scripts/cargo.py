@@ -28,7 +28,7 @@ except ImportError as e:
 #
 def main():
 
-    work_dir = os.path.dirname(sys.argv[0])
+    work_dir = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), '..'))
     sys.stderr.write("cargo: Entering directory `" + work_dir + "'\n")
     os.chdir(work_dir)
     cmd = [ "cargo" ] + sys.argv[1:]

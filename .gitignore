@@ -2,3 +2,4 @@ out/
 cscope.*
 .DS_Store
 .dir-locals.el
+.cargo
