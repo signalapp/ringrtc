@@ -102,6 +102,8 @@ pub enum AndroidError {
     // Android JNI error codes
     #[fail(display = "JNI: class lookup failed.  Class: {}", _0)]
     JniClassLookup(String),
+    #[fail(display = "JNI: static method lookup failed.  Class: {}, Method: {}, Sig: {}", _0, _1, _2)]
+    JniStaticMethodLookup(String, String, String),
     #[fail(display = "JNI: calling method failed.  Method: {}, Sig: {}", _0, _1)]
     JniCallMethod(String, String),
     #[fail(display = "JNI: calling static method failed.  Class: {}, Method: {}, Sig: {}", _0, _1, _2)]

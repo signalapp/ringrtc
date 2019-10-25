@@ -7,10 +7,14 @@
 
 //! Setup Android logging object
 
-use std::ffi::CString;
-use std::os::raw::{
-    c_int,
-    c_char,
+use jni::{
+    JNIEnv,
+    JavaVM,
+};
+use jni::objects::{
+    JClass,
+    JObject,
+    GlobalRef,
 };
 
 use log::{
@@ -20,29 +24,29 @@ use log::{
     Record,
 };
 
+use crate::android::error::AndroidError;
 use crate::common::Result;
-
-/// NDK logging facility priority numbers
-///
-/// See source code :
-/// webrtc/src/third_party/android_ndk/sysroot/usr/include/android/log.h
-#[repr(C)]
-#[allow(non_camel_case_types)]
-enum AndroidLogPriority {
-    _ANDROID_LOG_UNKNOWN = 0, // unused here
-    _ANDROID_LOG_DEFAULT,     // unused here
-     ANDROID_LOG_VERBOSE,
-     ANDROID_LOG_DEBUG,
-     ANDROID_LOG_INFO,
-     ANDROID_LOG_WARN,
-     ANDROID_LOG_ERROR,
-    _ANDROID_LOG_FATAL,       // unused here
-    _ANDROID_LOG_SILENT,      // unused here
-}
 
 /// Log object for interfacing with existing Android logger.
 struct AndroidLogger {
-    level: Level,
+    level:  Level,
+    jvm:    JavaVM,
+    logger: GlobalRef,
+}
+
+// Method name and signature required of Java logger class
+// void log(int level, String tag, String message)
+const LOGGER_CLASS:  &str = "org/signal/ringrtc/Log";
+const LOGGER_METHOD: &str = "log";
+const LOGGER_SIG:    &str = "(ILjava/lang/String;Ljava/lang/String;)V";
+
+impl AndroidLogger {
+    fn get_java_env(&self) -> Result <JNIEnv> {
+        match self.jvm.get_env() {
+            Ok(v)   => Ok(v),
+            Err(_e) => Ok(self.jvm.attach_current_thread_as_daemon()?),
+        }
+    }
 }
 
 impl Log for AndroidLogger {
@@ -54,32 +58,35 @@ impl Log for AndroidLogger {
     fn log(&self, record: &Record) {
 
         if self.enabled(record.metadata()) {
+            // Use the `JavaVM` interface to attach a `JNIEnv` to the current thread.
+            let env = match self.get_java_env() {
+                Ok(v) => v,
+                Err(_) => return,
+            };
 
-            let tag = match record.module_path() {
+            let path = match record.module_path() {
                 Some(v) => v,
-                None => "Unknown Rust module",
+                None    => "Unknown Rust module",
             };
 
-            let ctag = match CString::new(tag) {
-                Ok(v) => v,
+            let tag = match env.new_string(path) {
+                Ok(v)  => JObject::from(v),
                 Err(_) => return,
             };
 
-            let msg = match CString::new(format!("{}", record.args())) {
-                Ok(v) => v,
+            let msg = match env.new_string(format!("{}", record.args())) {
+                Ok(v) => JObject::from(v),
                 Err(_) => return,
             };
 
-            let level = match record.level() {
-                Level::Error => AndroidLogPriority::ANDROID_LOG_ERROR,
-                Level::Warn  => AndroidLogPriority::ANDROID_LOG_WARN,
-                Level::Info  => AndroidLogPriority::ANDROID_LOG_INFO,
-                Level::Debug => AndroidLogPriority::ANDROID_LOG_DEBUG,
-                Level::Trace => AndroidLogPriority::ANDROID_LOG_VERBOSE,
-            };
+            let level = record.level() as i32;
+            let values = [level.into(), tag.into(), msg.into()];
 
             // Ignore the result here, can't do anything about it anyway.
-            let _ = unsafe { __android_log_write(level as i32, ctag.as_ptr(), msg.as_ptr()) };
+            let _ = env.call_static_method(JClass::from(self.logger.as_obj()),
+                                           LOGGER_METHOD,
+                                           LOGGER_SIG,
+                                           &values);
         }
     }
 
@@ -87,18 +94,34 @@ impl Log for AndroidLogger {
     }
 }
 
-pub fn init_logging(level: Level) -> Result<()> {
+pub fn init_logging(env: &JNIEnv, level: Level) -> Result<()> {
+
+    // Check if the Logger class contains a good logger method and signature
+    if env.get_static_method_id(LOGGER_CLASS, LOGGER_METHOD, LOGGER_SIG).is_err() {
+        return Err(AndroidError::JniStaticMethodLookup(String::from(LOGGER_CLASS),
+                                                       String::from(LOGGER_METHOD),
+                                                       String::from(LOGGER_SIG)).into());
+    }
+
+    // JNI cannot lookup classes by name from threads other than the
+    // main thread, so stash a global ref to the class now, while
+    // we're on the main thread.
+    let logger_class = env.find_class(LOGGER_CLASS)?;
+    let logger       = env.new_global_ref(JObject::from(logger_class))?;
+
+    // `JNIEnv` cannot be sent across thread boundaries. To be able to use JNI
+    // functions in other threads, we must first obtain the `JavaVM` interface
+    // which, unlike `JNIEnv` is `Send`.
+    let jvm = env.get_java_vm()?;
 
     let logger = AndroidLogger {
         level,
+        jvm,
+        logger,
     };
 
     log::set_boxed_logger(Box::new(logger))?;
     log::set_max_level(level.to_level_filter());
 
     Ok(())
-}
-
-extern {
-    fn __android_log_write(prio: c_int, tag: *const c_char, text: *const c_char) -> c_int;
 }

@@ -29,7 +29,7 @@ use crate::android::call_connection_observer::AndroidCallConnectionObserver;
 #[allow(non_snake_case)]
 pub unsafe extern fn Java_org_signal_ringrtc_CallConnectionFactory_ringrtcInitialize(env:    JNIEnv,
                                                                                      _class: JClass) {
-    if let Err(e) = call_connection_factory::initialize() {
+    if let Err(e) = call_connection_factory::initialize(&env) {
         error::throw_error(&env, e);
     }
 

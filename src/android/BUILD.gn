@@ -35,6 +35,7 @@ if (is_android) {
       "api/org/signal/ringrtc/CallConnection.java",
       "api/org/signal/ringrtc/CalledByNative.java",
       "api/org/signal/ringrtc/CallException.java",
+      "api/org/signal/ringrtc/Log.java",
       "api/org/signal/ringrtc/SignalMessageRecipient.java",
       "api/org/signal/ringrtc/Testing.java",
     ]

@@ -59,9 +59,9 @@ pub type AndroidCallConnectionFactory = CallConnectionFactory<AndroidPlatform>;
 /// Library initialization routine.
 ///
 /// Sets up the logging infrastructure.
-pub fn initialize() -> Result<()> {
+pub fn initialize(env: &JNIEnv) -> Result<()> {
 
-    init_logging(Level::Debug)?;
+    init_logging(&env, Level::Debug)?;
 
     Ok(())
 
@@ -69,6 +69,8 @@ pub fn initialize() -> Result<()> {
 
 /// Creates a new AndroidCallConnectionFactory object.
 pub fn create_call_connection_factory(native_factory: *mut AppPeerConnectionFactory) -> Result<jlong> {
+
+    log::set_max_level(Level::Debug.to_level_filter());
 
     let cc_factory = AndroidCallConnectionFactory::new(native_factory as CppObject)?;
     // Wrap factory in Arc<Mutex<>> to pass amongst threads
@@ -85,6 +87,12 @@ pub fn free_factory(factory: *mut AndroidCallConnectionFactory) -> Result<()> {
     if let Ok(mut cc_factory) = call_connection_factory.lock() {
         cc_factory.close()?;
     }
+
+    // dial down the log verbosity, as the jni-rs module uses debug!()
+    // calls during shutdown, which causes an infinite loop in the
+    // logging code.
+    log::set_max_level(Level::Info.to_level_filter());
+
     Ok(())
 }
 

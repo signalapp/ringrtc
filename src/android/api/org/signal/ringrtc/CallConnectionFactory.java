@@ -12,7 +12,6 @@ package org.signal.ringrtc;
 import android.content.Context;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.util.Log;
 import android.os.Build;
 
 import java.io.IOException;
@@ -72,10 +71,12 @@ public class CallConnectionFactory {
    * <p>This method is called once from an application's initialization code.
    *
    * @param applicationContext  The global application context
+   * @param logger              An instance of the package specific logger class
    */
-  public static void initialize(Context applicationContext) {
+  public static void initialize(Context applicationContext, Log.Logger logger) {
 
     try {
+      Log.initialize(logger);
       Log.i(TAG, "Calling CallConnectionFactory.initialize()");
       PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(applicationContext)
                                        .setNativeLibraryLoader(new NoOpLoader())
