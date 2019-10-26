@@ -70,8 +70,6 @@ pub fn initialize(env: &JNIEnv) -> Result<()> {
 /// Creates a new AndroidCallConnectionFactory object.
 pub fn create_call_connection_factory(native_factory: *mut AppPeerConnectionFactory) -> Result<jlong> {
 
-    log::set_max_level(Level::Debug.to_level_filter());
-
     let cc_factory = AndroidCallConnectionFactory::new(native_factory as CppObject)?;
     // Wrap factory in Arc<Mutex<>> to pass amongst threads
     let cc_factory = Arc::new(Mutex::new(cc_factory));
@@ -79,19 +77,15 @@ pub fn create_call_connection_factory(native_factory: *mut AppPeerConnectionFact
     Ok(ptr as jlong)
 }
 
-/// Frees a new AndroidCallConnectionFactory object.
+/// Frees an AndroidCallConnectionFactory object.
 pub fn free_factory(factory: *mut AndroidCallConnectionFactory) -> Result<()> {
+
     // Convert integer back into Arc, then Arc will free things up as
     // it goes out of scope.
     let call_connection_factory = unsafe { ptr_as_arc_mutex(factory)? };
     if let Ok(mut cc_factory) = call_connection_factory.lock() {
         cc_factory.close()?;
     }
-
-    // dial down the log verbosity, as the jni-rs module uses debug!()
-    // calls during shutdown, which causes an infinite loop in the
-    // logging code.
-    log::set_max_level(Level::Info.to_level_filter());
 
     Ok(())
 }

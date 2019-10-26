@@ -7,14 +7,19 @@
 
 //! Setup Android logging object
 
-use jni::{
-    JNIEnv,
-    JavaVM,
+use std::sync::{
+    mpsc::channel,
+    mpsc::Receiver,
+    mpsc::Sender,
+    Arc,
+    Mutex,
 };
+use std::thread;
+
+use jni::JNIEnv;
 use jni::objects::{
     JClass,
     JObject,
-    GlobalRef,
 };
 
 use log::{
@@ -27,11 +32,12 @@ use log::{
 use crate::android::error::AndroidError;
 use crate::common::Result;
 
+type LogMessage = (i32, String, String);
+
 /// Log object for interfacing with existing Android logger.
 struct AndroidLogger {
     level:  Level,
-    jvm:    JavaVM,
-    logger: GlobalRef,
+    tx:     Arc<Mutex<Sender<LogMessage>>>,
 }
 
 // Method name and signature required of Java logger class
@@ -39,15 +45,6 @@ struct AndroidLogger {
 const LOGGER_CLASS:  &str = "org/signal/ringrtc/Log";
 const LOGGER_METHOD: &str = "log";
 const LOGGER_SIG:    &str = "(ILjava/lang/String;Ljava/lang/String;)V";
-
-impl AndroidLogger {
-    fn get_java_env(&self) -> Result <JNIEnv> {
-        match self.jvm.get_env() {
-            Ok(v)   => Ok(v),
-            Err(_e) => Ok(self.jvm.attach_current_thread_as_daemon()?),
-        }
-    }
-}
 
 impl Log for AndroidLogger {
 
@@ -58,35 +55,21 @@ impl Log for AndroidLogger {
     fn log(&self, record: &Record) {
 
         if self.enabled(record.metadata()) {
-            // Use the `JavaVM` interface to attach a `JNIEnv` to the current thread.
-            let env = match self.get_java_env() {
-                Ok(v) => v,
-                Err(_) => return,
-            };
-
-            let path = match record.module_path() {
-                Some(v) => v,
-                None    => "Unknown Rust module",
-            };
-
-            let tag = match env.new_string(path) {
-                Ok(v)  => JObject::from(v),
-                Err(_) => return,
-            };
-
-            let msg = match env.new_string(format!("{}", record.args())) {
-                Ok(v) => JObject::from(v),
-                Err(_) => return,
-            };
-
-            let level = record.level() as i32;
-            let values = [level.into(), tag.into(), msg.into()];
-
-            // Ignore the result here, can't do anything about it anyway.
-            let _ = env.call_static_method(JClass::from(self.logger.as_obj()),
-                                           LOGGER_METHOD,
-                                           LOGGER_SIG,
-                                           &values);
+            // Ignore the result here, can't do anything about it
+            // anyway.
+            if let Ok(tx) = self.tx.lock() {
+                let path = match record.module_path() {
+                    Some(v) => v,
+                    None    => "unknown",
+                };
+                let log_msg = (record.level() as i32,
+                               #[cfg(debug_assertions)]
+                               format!("{}:{:?}", path, thread::current().id()),
+                               #[cfg(not(debug_assertions))]
+                               path.to_owned(),
+                               format!("{}", record.args()));
+                let _ = tx.send(log_msg);
+            }
         }
     }
 
@@ -114,10 +97,46 @@ pub fn init_logging(env: &JNIEnv, level: Level) -> Result<()> {
     // which, unlike `JNIEnv` is `Send`.
     let jvm = env.get_java_vm()?;
 
+    // Create a logging thread that remains attached to the JVM for
+    // the life of the application.
+    let (tx, rx) : (Sender<LogMessage>, Receiver<LogMessage>) = channel();
+    let _ = thread::Builder::new().
+        name("ringrtc-logger".into()).spawn(move || {
+            if let Ok(env) = jvm.attach_current_thread_as_daemon() {
+                while let Ok((level, module_path, args)) = rx.recv() {
+                    // As we are permanently attached to the JVM,
+                    // there is no opportunity to automatically clean
+                    // up local references.  To clean up as we go,
+                    // allocate the local references within a "local
+                    // frame", which cleans up the local references
+                    // allocated within the scope of the frame.
+                    let _ = env.with_local_frame(5, || {
+                        let tag = match env.new_string(module_path) {
+                            Ok(v)  => JObject::from(v),
+                            Err(_) => return Ok(JObject::null()),
+                        };
+
+                        let msg = match env.new_string(args) {
+                            Ok(v) => JObject::from(v),
+                            Err(_) => return Ok(JObject::null()),
+                        };
+
+                        let values = [level.into(), tag.into(), msg.into()];
+
+                        // Ignore the result here, can't do anything about it anyway.
+                        let _ = env.call_static_method(JClass::from(logger.as_obj()),
+                                                       LOGGER_METHOD,
+                                                       LOGGER_SIG,
+                                                       &values);
+                        Ok(JObject::null())
+                    });
+                }
+            }
+        });
+
     let logger = AndroidLogger {
         level,
-        jvm,
-        logger,
+        tx: Arc::new(Mutex::new(tx)),
     };
 
     log::set_boxed_logger(Box::new(logger))?;
