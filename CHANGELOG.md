@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.8
+
+- Improve logging on Android
+
+- Patch WebRTC M78 for AudioRecord regression
+
+## v0.1.7
+
+- Add integration tests
+
+- Build system fixes and clean up
+
 ## v0.1.6
 
 - Android: Use an application supplied logging object
