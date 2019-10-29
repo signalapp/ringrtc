@@ -1,0 +1,39 @@
+Android-M78: fix AudioRecord regression from commit 24b945d60526f8074d0db1329ba20e9b49602794
+
+The following upstream commit created a regression in the M78 release:
+
+  commit 24b945d60526f8074d0db1329ba20e9b49602794
+  Author: henrika <henrika@webrtc.org>
+  Date:   Wed Sep 4 14:37:28 2019 +0200
+
+      Add support of AudioRecord.Builder in the ADM for Android
+
+This leads to crashes for call receivers who have microphone
+permissions disabled.
+
+This commit fixes the regression:
+
+commit 69f8c42d2c95279da6f169fcb6b9f80282fd9f83
+Author: henrika <henrika@webrtc.org>
+Date:   Thu Sep 12 13:07:59 2019 +0200
+
+    [RELAND] Add support of AudioRecord.Builder in the ADM for Android
+
+This patch applies the delta between to the patches, discussed here:
+
+https://webrtc-review.googlesource.com/c/src/+/152664/3/sdk/android/src/java/org/webrtc/audio/WebRtcAudioRecord.java#266
+https://webrtc.googlesource.com/src.git/+/69f8c42d2c95279da6f169fcb6b9f80282fd9f83%5E%21/#F0
+
+diff --git a/sdk/android/src/java/org/webrtc/audio/WebRtcAudioRecord.java b/sdk/android/src/java/org/webrtc/audio/WebRtcAudioRecord.java
+index 19c8f2e6c34a..a0ac941540e8 100644
+--- a/sdk/android/src/java/org/webrtc/audio/WebRtcAudioRecord.java
++++ b/sdk/android/src/java/org/webrtc/audio/WebRtcAudioRecord.java
+@@ -247,7 +247,7 @@ class WebRtcAudioRecord {
+         audioRecord = createAudioRecordOnLowerThanM(
+             audioSource, sampleRate, channelConfig, audioFormat, bufferSizeInBytes);
+       }
+-    } catch (IllegalArgumentException e) {
++    } catch (IllegalArgumentException | UnsupportedOperationException e) {
+       reportWebRtcAudioRecordInitError("AudioRecord build error: " + e.getMessage());
+       releaseAudioResources();
+       return -1;

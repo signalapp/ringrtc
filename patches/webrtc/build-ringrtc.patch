@@ -13,7 +13,7 @@ Step 2 -- Update the top level //BUILD.gn file to depend on the minimal
 //ringrtc/BUILD.gn file.
 
 diff --git a/BUILD.gn b/BUILD.gn
-index 95d02f77ae..4a72a1a972 100644
+index 9207a1d69046..ef192a3dc672 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -415,6 +415,7 @@ if (!build_with_chromium) {
@@ -26,7 +26,7 @@ index 95d02f77ae..4a72a1a972 100644
        "video",
 diff --git a/ringrtc/BUILD.gn b/ringrtc/BUILD.gn
 new file mode 100644
-index 0000000000..46ab0fc153
+index 000000000000..46ab0fc153a7
 --- /dev/null
 +++ b/ringrtc/BUILD.gn
 @@ -0,0 +1,7 @@
