@@ -337,9 +337,13 @@ where
 
         // If in the process of terminating the call, drop all other
         // events.
-        if let CallState::Terminating = state {
-            debug!("handle_event(): dropping event {} while terminating", event);
-            return Ok(());
+        match state {
+            CallState::Terminating | CallState::Closed
+                => {
+                    debug!("handle_event(): dropping event {} while terminating", event);
+                    return Ok(());
+                },
+            _   => (),
         }
 
         match event {
@@ -849,7 +853,8 @@ where
                 => {
                     let dc_observer_handle = cc.clone();
                     let notify_handle = cc.clone();
-                    assert_eq!(CallDirection::InComing, cc.direction());
+                    debug_assert_eq!(CallDirection::InComing, cc.direction(),
+                                     "onDataChannel should only happen for incoming calls");
                     cc.on_data_channel(data_channel, dc_observer_handle)?;
                     self.notify_client(notify_handle, ClientEvent::Ringing);
                 },

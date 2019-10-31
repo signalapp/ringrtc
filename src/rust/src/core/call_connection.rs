@@ -640,6 +640,8 @@ where
             data_channel.dispose();
         }
 
+        self.set_state(CallState::Closed)?;
+
         Ok(())
 
     }

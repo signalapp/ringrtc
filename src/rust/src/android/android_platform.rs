@@ -321,13 +321,24 @@ pub fn native_get_native_peer_connection(call_connection: *mut AndroidCallConnec
     }
 }
 
-/// Close the CallConnection.
+/// Close the CallConnection and quiesce related threads.
 pub fn native_close_call_connection(call_connection: *mut AndroidCallConnection) -> Result<()> {
 
-    // Convert the pointer back into a box and allow it to go out of
+    let cc = unsafe { ptr_as_mut(call_connection)? };
+    cc.close()
+}
+
+/// Dispose of the CallConnection allocated on the heap.
+pub fn native_dispose_call_connection(call_connection: *mut AndroidCallConnection) -> Result<()> {
+
+    // Convert the pointer back into a box, allowing it to go out of
     // scope.
-    let mut cc_box = unsafe { ptr_as_box(call_connection)? };
-    cc_box.close()
+    let cc_box = unsafe { ptr_as_box(call_connection)? };
+
+    debug_assert_eq!(CallState::Closed, cc_box.state()?,
+                     "Must call close() before calling dispose()!");
+
+    Ok(())
 }
 
 /// Send the SDP offer via JNI.

@@ -60,6 +60,19 @@ pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeClose(env:    
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeDispose(env:             JNIEnv,
+                                                                          _object:         JObject,
+                                                                          call_connection: jlong) {
+    match android_platform::native_dispose_call_connection(call_connection as *mut AndroidCallConnection) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        },
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern fn Java_org_signal_ringrtc_CallConnection_nativeSendOffer(env:             JNIEnv,
                                                                             jcall_connection:JObject,
                                                                             call_connection: jlong) {
