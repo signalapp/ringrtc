@@ -114,12 +114,15 @@ public class CallConnection extends PeerConnection {
 
     Log.i(TAG, "CallConnection.dispose(): closing native call connection");
     nativeClose(nativeCallConnection);
-    nativeCallConnection = 0;
 
     Log.i(TAG, "CallConnection.dispose(): calling super.close()");
     super.close();
     Log.i(TAG, "CallConnection.dispose(): calling super.dispose()");
     super.dispose();
+
+    Log.i(TAG, "CallConnection.dispose(): disposing native call connection");
+    nativeDispose(nativeCallConnection);
+    nativeCallConnection = 0;
 
   }
 
@@ -568,6 +571,9 @@ public class CallConnection extends PeerConnection {
 
   private native
     void nativeClose(long nativeCallConnection);
+
+  private native
+    void nativeDispose(long nativeCallConnection);
 
   private native void nativeSendOffer(long nativeCallConnection)
     throws CallException;

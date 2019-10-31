@@ -7,6 +7,7 @@
 
 //! Android CallConnectionFactory Interface.
 
+use std::panic;
 use std::sync::{
     Arc,
     Mutex,
@@ -62,6 +63,12 @@ pub type AndroidCallConnectionFactory = CallConnectionFactory<AndroidPlatform>;
 pub fn initialize(env: &JNIEnv) -> Result<()> {
 
     init_logging(&env, Level::Debug)?;
+
+    // Set a custom panic handler that uses the logger instead of
+    // stderr, which is of no use on Android.
+    panic::set_hook(Box::new(|panic_info| {
+        error!("Critical error: {}", panic_info);
+    }));
 
     Ok(())
 

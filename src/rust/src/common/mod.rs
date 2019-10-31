@@ -35,6 +35,8 @@ pub enum CallState {
     CallConnected,
     /// The call is in the process of shutting down.
     Terminating,
+    /// The call is completely closed.
+    Closed,
 }
 
 impl fmt::Display for CallState {
