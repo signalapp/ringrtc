@@ -21,6 +21,7 @@ use crate::ios::webrtc_ios_media_stream::IOSMediaStream;
 use crate::common::{
     Result,
     CallId,
+    CallState,
 };
 use crate::core::call_connection::{
     AppMediaStreamTrait,
@@ -268,12 +269,30 @@ impl IOSPlatform {
 
 }
 
-/// Close the CallConnection.
+/// Close the CallConnection and quiesce related threads.
 pub fn native_close_call_connection(call_connection: *mut IOSCallConnection) -> Result<()> {
-    // We want to drop the handle when it goes out of scope here, as this
-    // is the destructor, so convert the pointer back into a box.
-    let mut cc_box = unsafe { ptr_as_box(call_connection)? };
-    cc_box.close()
+
+
+    let cc = unsafe { ptr_as_mut(call_connection)? };
+    cc.close()
+
+//    // We want to drop the handle when it goes out of scope here, as this
+//    // is the destructor, so convert the pointer back into a box.
+//    let mut cc_box = unsafe { ptr_as_box(call_connection)? };
+//    cc_box.close()
+}
+
+/// Dispose of the CallConnection allocated on the heap.
+pub fn native_dispose_call_connection(call_connection: *mut IOSCallConnection) -> Result<()> {
+
+    // Convert the pointer back into a box, allowing it to go out of
+    // scope.
+    let cc_box = unsafe { ptr_as_box(call_connection)? };
+
+    debug_assert_eq!(CallState::Closed, cc_box.state()?,
+                     "Must call close() before calling dispose()!");
+
+    Ok(())
 }
 
 /// Inject a SendOffer event to the FSM.

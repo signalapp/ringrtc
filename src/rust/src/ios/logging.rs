@@ -8,8 +8,8 @@
 //! Setup iOS logging object.
 
 use std::ptr;
-
 use std::ffi::c_void;
+use std::env;
 
 use libc::size_t;
 
@@ -115,7 +115,9 @@ pub fn init_logging(log_object: IOSLogger) -> Result<()> {
     }
 
     log::set_max_level(LevelFilter::Trace);
-    
+
+    env::set_var("RUST_BACKTRACE", "1");
+
     debug!("RingRTC logging system initialized!");
 
     Ok(())

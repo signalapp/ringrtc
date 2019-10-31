@@ -38,6 +38,20 @@ pub extern fn ringRtcClose(callConnection: *mut c_void) -> *mut c_void {
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub extern fn ringRtcDispose(callConnection: *mut c_void) -> *mut c_void {
+    match ios_platform::native_dispose_call_connection(callConnection as *mut IOSCallConnection) {
+        Ok(_v) => {
+            // Return the object reference back as indication of success.
+            callConnection
+        },
+        Err(_e) => {
+            ptr::null_mut()
+        },
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub extern fn ringRtcCreateCallConnectionObserver(observer: IOSObserver,
                                                     callId: u64) -> *mut c_void {
     match ios_platform::native_create_call_connection_observer(observer, callId) {

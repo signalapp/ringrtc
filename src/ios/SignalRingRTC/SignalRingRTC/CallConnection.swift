@@ -184,11 +184,10 @@ public protocol CallConnectionDelegate: class {
         // no delegate methods are called after terminate() returns.
         callConnectionDelegate = nil
 
-        let retPtr = ringRtcClose(self.ringRtcCallConnection)
+        var retPtr = ringRtcClose(self.ringRtcCallConnection)
         if retPtr == nil {
             owsFailDebug("ringRtcClose() failed")
         }
-        self.ringRtcCallConnection = nil
 
         super.close()
 
@@ -198,6 +197,13 @@ public protocol CallConnectionDelegate: class {
         self.videoTrack = nil
         self.videoCaptureController = nil
 
+        retPtr = ringRtcDispose(self.ringRtcCallConnection)
+        if retPtr == nil {
+            owsFailDebug("ringRtcDispose() failed")
+        }
+
+        self.ringRtcCallConnection = nil
+        
         Logger.debug("done")
     }
 
