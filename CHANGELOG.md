@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.7.1
+
+- Fix race condition in call termination
+
 ## v0.1.7
 
 - Add integration tests
