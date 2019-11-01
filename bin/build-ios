@@ -32,6 +32,9 @@ set -e
 BIN_DIR="$(realpath -e $(dirname $0))"
 . "${BIN_DIR}/env.sh"
 
+# Verify the build environment is sane.
+check_build_env
+
 usage()
 {
     echo 'usage: build-ios [-d|-c] [-w, -r, -x]

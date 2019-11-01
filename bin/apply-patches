@@ -45,3 +45,7 @@ for series in $(find "$PATCH_DIR" -type f -name series) ; do
     echo -e "%(description)s\n" > .git/patchexport.tmpl
 
 done
+
+# Store the state of the patch directory for later
+cd "$PROJECT_DIR"
+create_directory_hash "$PATCH_DIR" "$PATCH_HASH"
