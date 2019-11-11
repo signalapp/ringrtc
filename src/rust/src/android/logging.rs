@@ -25,6 +25,7 @@ use jni::objects::{
 use log::{
     Log,
     Level,
+    LevelFilter,
     Metadata,
     Record,
 };
@@ -32,7 +33,7 @@ use log::{
 use crate::android::error::AndroidError;
 use crate::common::Result;
 
-type LogMessage = (i32, String, String);
+type LogMessage = (i32, String, String, Sender<()>);
 
 /// Log object for interfacing with existing Android logger.
 struct AndroidLogger {
@@ -62,13 +63,17 @@ impl Log for AndroidLogger {
                     Some(v) => v,
                     None    => "unknown",
                 };
+                let (sync_tx, sync_rx) = channel();
                 let log_msg = (record.level() as i32,
                                #[cfg(debug_assertions)]
                                format!("{}:{:?}", path, thread::current().id()),
                                #[cfg(not(debug_assertions))]
                                path.to_owned(),
-                               format!("{}", record.args()));
+                               format!("{}", record.args()),
+                               sync_tx);
                 let _ = tx.send(log_msg);
+                // wait for logger thread to write out
+                let _ = sync_rx.recv();
             }
         }
     }
@@ -102,8 +107,11 @@ pub fn init_logging(env: &JNIEnv, level: Level) -> Result<()> {
     let (tx, rx) : (Sender<LogMessage>, Receiver<LogMessage>) = channel();
     let _ = thread::Builder::new().
         name("ringrtc-logger".into()).spawn(move || {
+            // disable logging as we attch to the JVM
+            log::set_max_level(LevelFilter::Off);
             if let Ok(env) = jvm.attach_current_thread_as_daemon() {
-                while let Ok((level, module_path, args)) = rx.recv() {
+                log::set_max_level(level.to_level_filter());
+                while let Ok((level, module_path, args, sync_tx)) = rx.recv() {
                     // As we are permanently attached to the JVM,
                     // there is no opportunity to automatically clean
                     // up local references.  To clean up as we go,
@@ -130,6 +138,8 @@ pub fn init_logging(env: &JNIEnv, level: Level) -> Result<()> {
                                                        &values);
                         Ok(JObject::null())
                     });
+                    // notify loggee, log operation is complete
+                    let _ = sync_tx.send(());
                 }
             }
         });
