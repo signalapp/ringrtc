@@ -32,6 +32,8 @@ pub type CppObject = *const c_void;
 /// Opaque pointer type for an object of Rust origin.
 pub type RustObject = *const c_void;
 
+/// # Safety
+///
 /// Dereferences raw *mut T into an Arc<Mutex<T>>.
 pub unsafe fn ptr_as_arc_mutex<T>(ptr: *mut T) -> Result<Arc<Mutex<T>>> {
     if ptr.is_null() {
@@ -81,6 +83,8 @@ impl<T> Drop for ArcPtr<T> {
     }
 }
 
+/// # Safety
+///
 /// Dereferences raw *mut T into an ArcPtr<T>.
 pub unsafe fn ptr_as_arc_ptr<T>(ptr: *mut T) -> Result<ArcPtr<T>> {
     if ptr.is_null() {
@@ -90,6 +94,8 @@ pub unsafe fn ptr_as_arc_ptr<T>(ptr: *mut T) -> Result<ArcPtr<T>> {
     Ok(ArcPtr::<T>::new(ptr))
 }
 
+/// # Safety
+///
 /// Casts a raw *mut T into a &T.
 pub unsafe fn ptr_as_ref<T>(ptr: *mut T) -> Result<&'static T> {
     if ptr.is_null() {
@@ -101,6 +107,8 @@ pub unsafe fn ptr_as_ref<T>(ptr: *mut T) -> Result<&'static T> {
     Ok(object)
 }
 
+/// # Safety
+///
 /// Casts a raw *mut T into a &mut T.
 pub unsafe fn ptr_as_mut<T>(ptr: *mut T) -> Result<&'static mut T> {
     if ptr.is_null() {
@@ -112,6 +120,8 @@ pub unsafe fn ptr_as_mut<T>(ptr: *mut T) -> Result<&'static mut T> {
     Ok(object)
 }
 
+/// # Safety
+///
 /// Dereferences raw *mut T into a Box<T>.
 pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
     if ptr.is_null() {

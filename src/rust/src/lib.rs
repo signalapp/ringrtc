@@ -46,6 +46,7 @@ mod protobuf {
 /// Android specific implementation.
 mod android {
     extern crate jni;
+    #[allow(clippy::missing_safety_doc)]
     mod api {
         mod jni_call_connection;
         mod jni_call_connection_factory;
