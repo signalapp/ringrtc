@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.0
+
+- Improve logging on Android
+
+- Build system improvements
+
 ## v0.1.9
 
 - Make termination a two-phase close and dispose operation
