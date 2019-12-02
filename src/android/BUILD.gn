@@ -31,6 +31,7 @@ if (is_android) {
 
   rtc_android_library("ringrtc_java") {
     java_files = [
+      "api/org/signal/ringrtc/BuildInfo.java",
       "api/org/signal/ringrtc/CallConnectionFactory.java",
       "api/org/signal/ringrtc/CallConnection.java",
       "api/org/signal/ringrtc/CalledByNative.java",
@@ -38,6 +39,7 @@ if (is_android) {
       "api/org/signal/ringrtc/Log.java",
       "api/org/signal/ringrtc/SignalMessageRecipient.java",
       "api/org/signal/ringrtc/Testing.java",
+      "api/org/signal/ringrtc/WebRtcLogger.java",
     ]
 
     _libwebrtc_jar_dir = get_label_info("${android_sdk}:libwebrtc", "dir")

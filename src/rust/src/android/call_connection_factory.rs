@@ -20,7 +20,10 @@ use jni::objects::{
     JString,
     JList,
 };
-use jni::sys::jlong;
+use jni::sys::{
+    jlong,
+    jobject,
+};
 use log::Level;
 
 use crate::android::android_platform::AndroidPlatform;
@@ -56,6 +59,26 @@ pub struct AppPeerConnectionFactory { _private: [u8; 0] }
 
 /// Public type for Android CallConnectionFactory.
 pub type AndroidCallConnectionFactory = CallConnectionFactory<AndroidPlatform>;
+
+/// CMI request for build time information
+pub fn get_build_info(env: &JNIEnv) -> Result<(jobject)> {
+
+    #[cfg(debug_assertions)]
+    let debug = true;
+    #[cfg(not(debug_assertions))]
+    let debug = false;
+
+    const BUILD_INFO_CLASS: &str = "org/signal/ringrtc/BuildInfo";
+    const BUILD_INFO_SIG:   &str = "(Z)V";
+    let args = [ debug.into() ];
+
+    let result = jni_new_object(&env,
+                                BUILD_INFO_CLASS,
+                                BUILD_INFO_SIG,
+                                &args)?.into_inner();
+
+    Ok(result)
+}
 
 /// Library initialization routine.
 ///

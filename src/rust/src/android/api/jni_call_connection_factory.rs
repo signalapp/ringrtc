@@ -15,7 +15,10 @@ use jni::objects::{
     JObject,
     JClass,
 };
-use jni::sys::jlong;
+use jni::sys::{
+    jlong,
+    jobject,
+};
 
 use crate::android::error;
 use crate::android::call_connection_factory;
@@ -24,6 +27,20 @@ use crate::android::call_connection_factory::{
     AppPeerConnectionFactory,
 };
 use crate::android::call_connection_observer::AndroidCallConnectionObserver;
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern fn Java_org_signal_ringrtc_CallConnectionFactory_ringrtcGetBuildInfo(env:    JNIEnv,
+                                                                                       _class: JClass) -> jobject {
+    match call_connection_factory::get_build_info(&env) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+            0 as jobject
+        },
+    }
+
+}
 
 #[no_mangle]
 #[allow(non_snake_case)]

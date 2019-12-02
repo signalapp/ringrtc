@@ -22,6 +22,8 @@ import java.util.Set;
 
 import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
+import org.webrtc.Logging;
+import org.webrtc.Logging.Severity;
 import org.webrtc.MediaConstraints;
 import org.webrtc.MediaStream;
 import org.webrtc.NativeLibraryLoader;
@@ -77,10 +79,18 @@ public class CallConnectionFactory {
 
     try {
       Log.initialize(logger);
-      Log.i(TAG, "Calling CallConnectionFactory.initialize()");
-      PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(applicationContext)
-                                       .setNativeLibraryLoader(new NoOpLoader())
-                                       .createInitializationOptions());
+
+      PeerConnectionFactory.InitializationOptions.Builder builder = PeerConnectionFactory.InitializationOptions.builder(applicationContext)
+        .setNativeLibraryLoader(new NoOpLoader());
+
+      BuildInfo buildInfo = ringrtcGetBuildInfo();
+      if (buildInfo.debug) {
+        // Log WebRtc internals via application Logger.
+        builder.setInjectableLogger(new WebRtcLogger(), Severity.LS_INFO);
+      }
+      Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build)");
+
+      PeerConnectionFactory.initialize(builder.createInitializationOptions());
       ringrtcInitialize();
       CallConnectionFactory.isInitialized = true;
       Log.i(TAG, "CallConnectionFactory.initialize() returned");
@@ -327,6 +337,10 @@ public class CallConnectionFactory {
   }
 
   /* Native methods below here */
+
+  private static native
+    BuildInfo ringrtcGetBuildInfo()
+    throws CallException;
 
   private static native
     void ringrtcInitialize() throws CallException;

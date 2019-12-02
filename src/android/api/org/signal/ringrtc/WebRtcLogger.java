@@ -1,0 +1,41 @@
+/*
+ *
+ *  Copyright (C) 2019 Signal Messenger, LLC.
+ *  All rights reserved.
+ *
+ *  SPDX-License-Identifier: GPL-3.0-only
+ *
+ */
+
+package org.signal.ringrtc;
+
+import org.webrtc.Loggable;
+import org.webrtc.Logging;
+import org.webrtc.Logging.Severity;
+
+public final class WebRtcLogger implements org.webrtc.Loggable {
+
+  private static final String TAG = Log.class.getSimpleName();
+
+  @Override
+  public void onLogMessage(String message, Severity severity, String tag) {
+
+    switch(severity) {
+    case LS_NONE:
+      // eat it
+      break;
+    case LS_ERROR:
+      Log.e(tag, message); break;
+    case LS_WARNING:
+      Log.w(tag, message); break;
+    case LS_INFO:
+      Log.i(tag, message); break;
+    case LS_VERBOSE:
+      Log.d(tag, message); break;
+    default:
+      Log.w(TAG, "Unknown log level: " + tag + ", " + message);
+    }
+
+  }
+
+}
