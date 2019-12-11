@@ -14,6 +14,10 @@ level WebRTC object, which is actually instantiated from the iOS side
 via Objective-C/C++. The application-level CallConnection object wraps
 it all up in a way that is still compatible with most normal WebRTC
 operations and objects.
+---
+ sdk/objc/api/peerconnection/RTCPeerConnection.h  |   18 +++++++
+ sdk/objc/api/peerconnection/RTCPeerConnection.mm |   55 ++++++++++++++++++++++
+ 2 files changed, 72 insertions(+), 1 deletion(-)
 
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.h b/sdk/objc/api/peerconnection/RTCPeerConnection.h
 index 012295c24151..ef9baae7eb5f 100644
@@ -45,7 +49,7 @@ index 012295c24151..ef9baae7eb5f 100644
  /** Sets the PeerConnection's global configuration to |configuration|.
   *  Any changes to STUN/TURN servers or ICE candidate policy will affect the
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.mm b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
-index f3e91c4dbc28..a0c9f2f01304 100644
+index 32a8a4baea64..f2e4f38fe5a4 100644
 --- a/sdk/objc/api/peerconnection/RTCPeerConnection.mm
 +++ b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
 @@ -302,6 +302,12 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(

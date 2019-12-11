@@ -1,5 +1,4 @@
-# This series applies on GIT commit 838b7acb6f9979ea2e2edf422d611a7bac555721
+# This series applies on GIT commit 758e9aa5de234cbb9c59e9222ee8a071f0bcec86
 build-ringrtc.patch
 build-ringrtc-ios.patch
 ringrtc-ios-sdk.patch
-android-m78-fix-audiorecord-regression.patch

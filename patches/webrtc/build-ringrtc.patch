@@ -1,5 +1,7 @@
-An attempt to keep the ringrtc code out of the main WebRTC tree, yet
-still leverage the WebRTC gn/ninja build system.
+Keep the ringrtc code out of the main WebRTC tree
+
+This is an attempt to keep the ringrtc code out of the main WebRTC
+tree, yet still leverage the WebRTC gn/ninja build system.
 
 Step 1 -- Add a generic //ringrtc/BUILD.gn file that depends on an out
 of tree BUILD.gn file using an absolute path.
@@ -11,12 +13,17 @@ the time the work space is created.
 
 Step 2 -- Update the top level //BUILD.gn file to depend on the minimal
 //ringrtc/BUILD.gn file.
+---
+ BUILD.gn         |    1 +
+ ringrtc/BUILD.gn |    7 +++++++
+ 2 files changed, 8 insertions(+)
+ create mode 100644 ringrtc/BUILD.gn
 
 diff --git a/BUILD.gn b/BUILD.gn
-index 9207a1d69046..ef192a3dc672 100644
+index 31cf726ee4ae..9b02e1cafecd 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -415,6 +415,7 @@ if (!build_with_chromium) {
+@@ -420,6 +420,7 @@ if (!build_with_chromium) {
        "pc:peerconnection",
        "pc:rtc_pc",
        "pc:rtc_pc_base",

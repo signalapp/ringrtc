@@ -8,9 +8,12 @@ dependencies:
 src/rffi/BUILD.gn
 This ends up being a static library linked in with the resulting
 WebRTC.framework.
+---
+ sdk/BUILD.gn |    2 ++
+ 1 file changed, 2 insertions(+)
 
 diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index 11582296d638..8cda5e0d6bc7 100644
+index 2c8a114c27ca..a22bf70524b6 100644
 --- a/sdk/BUILD.gn
 +++ b/sdk/BUILD.gn
 @@ -10,6 +10,7 @@ import("../webrtc.gni")
@@ -21,7 +24,7 @@ index 11582296d638..8cda5e0d6bc7 100644
  }
  if (is_mac) {
    import("//build/config/mac/rules.gni")
-@@ -1340,6 +1341,7 @@ if (is_ios || is_mac) {
+@@ -1347,6 +1348,7 @@ if (is_ios || is_mac) {
            ":videocodec_objc",
            ":videotoolbox_objc",
            "../rtc_base:rtc_base_approved",
