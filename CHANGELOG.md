@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0
+
+- Update WebRTC to m79
+
+- Android: Improve WebRTC debug logging
+
 ## v0.2.0
 
 - Improve logging on Android
