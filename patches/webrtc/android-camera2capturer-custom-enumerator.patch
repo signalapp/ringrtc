@@ -1,0 +1,27 @@
+Allow application to specify which cameras to use when switching cameras
+
+Add a new constructor to org.webrtc.Camera2Capturer that takes a
+CameraEnumerator.  This allows an application to use a custom
+enumerator that specifies which cameras to consider when switching
+cameras.
+---
+ sdk/android/api/org/webrtc/Camera2Capturer.java |    6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/sdk/android/api/org/webrtc/Camera2Capturer.java b/sdk/android/api/org/webrtc/Camera2Capturer.java
+index baf1e96b6bdc..c04a3a5d89ca 100644
+--- a/sdk/android/api/org/webrtc/Camera2Capturer.java
++++ b/sdk/android/api/org/webrtc/Camera2Capturer.java
+@@ -21,7 +21,11 @@ public class Camera2Capturer extends CameraCapturer {
+   @Nullable private final CameraManager cameraManager;
+ 
+   public Camera2Capturer(Context context, String cameraName, CameraEventsHandler eventsHandler) {
+-    super(cameraName, eventsHandler, new Camera2Enumerator(context));
++    this(context, cameraName, eventsHandler, new Camera2Enumerator(context));
++  }
++
++  public Camera2Capturer(Context context, String cameraName, CameraEventsHandler eventsHandler, CameraEnumerator cameraEnumerator) {
++    super(cameraName, eventsHandler, cameraEnumerator);
+ 
+     this.context = context;
+     cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);

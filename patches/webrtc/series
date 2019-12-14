@@ -1,4 +1,5 @@
-# This series applies on GIT commit 758e9aa5de234cbb9c59e9222ee8a071f0bcec86
+# This series applies on GIT commit d2e0c8c4c694a8dfd4b5392c022f4996fc4790d1
 build-ringrtc.patch
 build-ringrtc-ios.patch
 ringrtc-ios-sdk.patch
+android-camera2capturer-custom-enumerator.patch
