@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.1
+
+- Android: Filter list of cameras when switching cameras
+
 ## v0.3.0
 
 - Update WebRTC to m79
