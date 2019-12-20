@@ -7,34 +7,31 @@
 
 //! Setup iOS logging object.
 
-use std::ptr;
-use std::ffi::c_void;
 use std::env;
+use std::ffi::c_void;
+use std::ptr;
 
 use libc::size_t;
 
-use log::{
-    Log,
-    LevelFilter,
-    Metadata,
-    Record,
-};
+use log::{LevelFilter, Log, Metadata, Record};
 
+use crate::common::Result;
 use crate::ios::error::iOSError;
 use crate::ios::ios_util::*;
-use crate::common::Result;
 
 /// Log object for interfacing with swift.
 #[repr(C)]
 pub struct IOSLogger {
     pub object: *mut c_void,
-    pub destroy: extern fn(object: *mut c_void),
-    pub log: extern fn(object: *mut c_void,
-                      message: IOSByteSlice,
-                         file: IOSByteSlice,
-                     function: IOSByteSlice,
-                         line: i32,
-                        level: i8),
+    pub destroy: extern "C" fn(object: *mut c_void),
+    pub log: extern "C" fn(
+        object: *mut c_void,
+        message: IOSByteSlice,
+        file: IOSByteSlice,
+        function: IOSByteSlice,
+        line: i32,
+        level: i8,
+    ),
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.
@@ -53,7 +50,6 @@ impl Drop for IOSLogger {
 
 /// Implement the Log trait for our IOSLogger.
 impl Log for IOSLogger {
-
     // This logger is always enabled as filtering is controlled by the
     // application level logger.
     fn enabled(&self, _metadata: &Metadata) -> bool {
@@ -61,7 +57,6 @@ impl Log for IOSLogger {
     }
 
     fn log(&self, record: &Record) {
-
         if self.enabled(record.metadata()) {
             let message_string = format!("{}", record.args());
             let message_byte_slice = IOSByteSlice {
@@ -70,18 +65,14 @@ impl Log for IOSLogger {
             };
 
             let file_byte_slice = match record.file() {
-                Some(v) => {
-                    IOSByteSlice {
-                        bytes: v.as_ptr(),
-                        len: v.len() as size_t,
-                    }
+                Some(v) => IOSByteSlice {
+                    bytes: v.as_ptr(),
+                    len: v.len() as size_t,
                 },
-                None => {
-                    IOSByteSlice {
-                        bytes: ptr::null_mut(),
-                        len: 0 as size_t,
-                    }
-                }
+                None => IOSByteSlice {
+                    bytes: ptr::null_mut(),
+                    len: 0 as size_t,
+                },
             };
 
             let function_byte_slice = IOSByteSlice {
@@ -93,17 +84,18 @@ impl Log for IOSLogger {
             // message.
             // @note We assume lifetime is that byte_slice will be
             // copied or consumed by the time the function returns.
-            (self.log)(self.object,
-                       message_byte_slice,
-                       file_byte_slice,
-                       function_byte_slice,
-                       record.line().unwrap() as i32,
-                       record.level() as i8);
+            (self.log)(
+                self.object,
+                message_byte_slice,
+                file_byte_slice,
+                function_byte_slice,
+                record.line().unwrap() as i32,
+                record.level() as i8,
+            );
         }
     }
 
-    fn flush(&self) {
-    }
+    fn flush(&self) {}
 }
 
 /// Initialize the global logging system. Rust will take ownership of

@@ -9,11 +9,7 @@
 
 use std::ffi::c_void;
 use std::mem;
-use std::sync::{
-    Arc,
-    Mutex,
-    Condvar,
-};
+use std::sync::{Arc, Condvar, Mutex};
 
 #[cfg(any(not(debug_assertions), test))]
 use lazy_static::lazy_static;
@@ -37,8 +33,11 @@ pub type RustObject = *const c_void;
 /// Dereferences raw *mut T into an Arc<Mutex<T>>.
 pub unsafe fn ptr_as_arc_mutex<T>(ptr: *mut T) -> Result<Arc<Mutex<T>>> {
     if ptr.is_null() {
-        return Err(RingRtcError::NullPointer("ptr_as_arc_mutex<T>()".to_string(),
-                                             "ptr".to_string()).into());
+        return Err(RingRtcError::NullPointer(
+            "ptr_as_arc_mutex<T>()".to_string(),
+            "ptr".to_string(),
+        )
+        .into());
     }
     let arc = Arc::from_raw(ptr as *mut Mutex<T>);
     Ok(arc)
@@ -70,7 +69,6 @@ impl<T> ArcPtr<T> {
             None => panic!("Empty ArcPtr"),
         }
     }
-
 }
 
 impl<T> Drop for ArcPtr<T> {
@@ -88,8 +86,11 @@ impl<T> Drop for ArcPtr<T> {
 /// Dereferences raw *mut T into an ArcPtr<T>.
 pub unsafe fn ptr_as_arc_ptr<T>(ptr: *mut T) -> Result<ArcPtr<T>> {
     if ptr.is_null() {
-        return Err(RingRtcError::NullPointer("ptr_as_arc_ptr<T>()".to_string(),
-                                             "ptr".to_string()).into());
+        return Err(RingRtcError::NullPointer(
+            "ptr_as_arc_ptr<T>()".to_string(),
+            "ptr".to_string(),
+        )
+        .into());
     }
     Ok(ArcPtr::<T>::new(ptr))
 }
@@ -99,11 +100,12 @@ pub unsafe fn ptr_as_arc_ptr<T>(ptr: *mut T) -> Result<ArcPtr<T>> {
 /// Casts a raw *mut T into a &T.
 pub unsafe fn ptr_as_ref<T>(ptr: *mut T) -> Result<&'static T> {
     if ptr.is_null() {
-        return Err(RingRtcError::NullPointer("ptr_as_ref<T>()".to_string(),
-                                             "ptr".to_string()).into());
+        return Err(
+            RingRtcError::NullPointer("ptr_as_ref<T>()".to_string(), "ptr".to_string()).into(),
+        );
     }
 
-    let object = & *ptr;
+    let object = &*ptr;
     Ok(object)
 }
 
@@ -112,8 +114,9 @@ pub unsafe fn ptr_as_ref<T>(ptr: *mut T) -> Result<&'static T> {
 /// Casts a raw *mut T into a &mut T.
 pub unsafe fn ptr_as_mut<T>(ptr: *mut T) -> Result<&'static mut T> {
     if ptr.is_null() {
-        return Err(RingRtcError::NullPointer("ptr_as_mut<T>()".to_string(),
-                                             "ptr".to_string()).into());
+        return Err(
+            RingRtcError::NullPointer("ptr_as_mut<T>()".to_string(), "ptr".to_string()).into(),
+        );
     }
 
     let object = &mut *ptr;
@@ -125,8 +128,9 @@ pub unsafe fn ptr_as_mut<T>(ptr: *mut T) -> Result<&'static mut T> {
 /// Dereferences raw *mut T into a Box<T>.
 pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
     if ptr.is_null() {
-        return Err(RingRtcError::NullPointer("ptr_as_box<T>()".to_string(),
-                                             "ptr".to_string()).into());
+        return Err(
+            RingRtcError::NullPointer("ptr_as_box<T>()".to_string(), "ptr".to_string()).into(),
+        );
     }
 
     let object = Box::from_raw(ptr);
@@ -216,7 +220,7 @@ fn redact_ipv6(text: &str) -> String {
 
     match &*RE {
         Some(v) => v.replace_all(text, "[REDACTED]").to_string(),
-        None    => "[REDACTED]".to_string(),
+        None => "[REDACTED]".to_string(),
     }
 }
 
@@ -239,7 +243,7 @@ fn redact_ipv4(text: &str) -> String {
 
     match &*RE {
         Some(v) => v.replace_all(text, "[REDACTED]").to_string(),
-        None    => "[REDACTED]".to_string(),
+        None => "[REDACTED]".to_string(),
     }
 }
 
@@ -280,32 +284,38 @@ mod tests {
             "::ffff:192.0.2.128",
             "1::",
             "1:2:3:4:5:6:7::",
-            "1::8",               "1:2:3:4:5:6::8",   "1:2:3:4:5:6::8",
-            "1::7:8",             "1:2:3:4:5::7:8",   "1:2:3:4:5::8",
-            "1::6:7:8",           "1:2:3:4::6:7:8",   "1:2:3:4::8",
-            "1::5:6:7:8",         "1:2:3::5:6:7:8",   "1:2:3::8",
-            "1::4:5:6:7:8",       "1:2::4:5:6:7:8",   "1:2::8",
-            "1::3:4:5:6:7:8",     "1::3:4:5:6:7:8",   "1::8",
-            "::2:3:4:5:6:7:8",    "::2:3:4:5:6:7:8",  "::8",
-            "fe80::7:8%eth0",     "fe80::7:8%1",
-            "::255.255.255.255",  "::ffff:255.255.255.255",
-            "2001:db8:3:4::192.0.2.33",  "64:ff9b::192.0.2.33",
+            "1::8",
+            "1:2:3:4:5:6::8",
+            "1:2:3:4:5:6::8",
+            "1::7:8",
+            "1:2:3:4:5::7:8",
+            "1:2:3:4:5::8",
+            "1::6:7:8",
+            "1:2:3:4::6:7:8",
+            "1:2:3:4::8",
+            "1::5:6:7:8",
+            "1:2:3::5:6:7:8",
+            "1:2:3::8",
+            "1::4:5:6:7:8",
+            "1:2::4:5:6:7:8",
+            "1:2::8",
+            "1::3:4:5:6:7:8",
+            "1::3:4:5:6:7:8",
+            "1::8",
+            "::2:3:4:5:6:7:8",
+            "::2:3:4:5:6:7:8",
+            "::8",
+            "fe80::7:8%eth0",
+            "fe80::7:8%1",
+            "::255.255.255.255",
+            "::ffff:255.255.255.255",
+            "2001:db8:3:4::192.0.2.33",
+            "64:ff9b::192.0.2.33",
         ];
 
-        let prefix = [
-            "",
-            "text",
-            "text ",
-            "<",
-            "@",
-        ];
+        let prefix = ["", "text", "text ", "<", "@"];
 
-        let suffix = [
-            "",
-            " text",
-            ">",
-            "@",
-        ];
+        let suffix = ["", " text", ">", "@"];
 
         for a in addrs.iter() {
             for p in prefix.iter() {
@@ -349,20 +359,9 @@ mod tests {
             "92.168.122.250",
         ];
 
-        let prefix = [
-            "",
-            "text",
-            "text ",
-            "<",
-            "@",
-        ];
+        let prefix = ["", "text", "text ", "<", "@"];
 
-        let suffix = [
-            "",
-            " text",
-            ">",
-            "@",
-        ];
+        let suffix = ["", " text", ">", "@"];
 
         for a in addrs.iter() {
             for p in prefix.iter() {
@@ -374,5 +373,4 @@ mod tests {
             }
         }
     }
-
 }

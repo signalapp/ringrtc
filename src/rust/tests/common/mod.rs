@@ -10,45 +10,29 @@
 // Requires the 'sim' feature
 
 use std::env;
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
 use log::LevelFilter;
-use rand::{
-    Rng,
-    SeedableRng,
-};
-use rand::distributions::{
-    Distribution,
-    Standard,
-};
+use rand::distributions::{Distribution, Standard};
+use rand::{Rng, SeedableRng};
 
 use rand_chacha::ChaCha20Rng;
-use simplelog::{
-    Config,
-    SimpleLogger,
-};
+use simplelog::{Config, SimpleLogger};
 
-use ringrtc::common::{
-    CallDirection,
-    CallId,
-};
+use ringrtc::common::{CallDirection, CallId};
 
 use ringrtc::core::call_connection_observer::ClientEvent;
 
 use ringrtc::sim::call_connection_factory;
-use ringrtc::sim::call_connection_factory::{
-    CallConfig,
-    SimCallConnectionFactory,
-};
+use ringrtc::sim::call_connection_factory::{CallConfig, SimCallConnectionFactory};
 use ringrtc::sim::call_connection_observer::SimCallConnectionObserver;
 use ringrtc::sim::sim_platform::SimCallConnection;
 
 macro_rules! error_line {
-    () => { concat!(module_path!(), ":", line!()) };
+    () => {
+        concat!(module_path!(), ":", line!())
+    };
 }
 
 pub struct Prng {
@@ -80,7 +64,6 @@ impl Prng {
 
 lazy_static! {
     pub static ref PRNG: Prng = {
-
         let rand_seed = match env::var("RANDOM_SEED") {
             Ok(v) => v.parse().unwrap(),
             Err(_) => 0,
@@ -88,7 +71,6 @@ lazy_static! {
 
         println!("\n*** Using random seed: {}", rand_seed);
         Prng::new(rand_seed)
-
     };
 }
 
@@ -104,8 +86,8 @@ pub fn test_init() {
 }
 
 pub struct TestContext {
-    cc_factory:  SimCallConnectionFactory,
-    cc:          Box<SimCallConnection>,
+    cc_factory: SimCallConnectionFactory,
+    cc: Box<SimCallConnection>,
     cc_observer: Arc<Mutex<SimCallConnectionObserver>>,
 }
 
@@ -122,7 +104,6 @@ impl Drop for TestContext {
 }
 
 impl TestContext {
-
     pub fn client_error_count(&self) -> usize {
         let cc_observer = self.cc_observer.lock().unwrap();
         cc_observer.get_error_count()
@@ -176,12 +157,13 @@ impl TestContext {
         let platform = cc.platform().unwrap();
         platform.hangups_sent()
     }
-
 }
 
 pub fn create_context(call_id: CallId, direction: CallDirection) -> TestContext {
-
-    info!("create_cc_ext(): call_id: {}, direction: {}", call_id, direction);
+    info!(
+        "create_cc_ext(): call_id: {}, direction: {}",
+        call_id, direction
+    );
 
     let call_config = CallConfig {
         call_id,
@@ -190,13 +172,20 @@ pub fn create_context(call_id: CallId, direction: CallDirection) -> TestContext 
     };
 
     info!("test: creating observer");
-    let cc_observer = Arc::new(Mutex::new(SimCallConnectionObserver::new(call_config.call_id)));
+    let cc_observer = Arc::new(Mutex::new(SimCallConnectionObserver::new(
+        call_config.call_id,
+    )));
 
     info!("test: creating ccf");
     let cc_factory = call_connection_factory::create_call_connection_factory().unwrap();
 
     info!("test: creating cc");
-    let cc = call_connection_factory::create_call_connection(&cc_factory, call_config, cc_observer.clone()).unwrap();
+    let cc = call_connection_factory::create_call_connection(
+        &cc_factory,
+        call_config,
+        cc_observer.clone(),
+    )
+    .unwrap();
 
     TestContext {
         cc_factory,

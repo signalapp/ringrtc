@@ -10,7 +10,6 @@
 /// Simulation specific error codes.
 #[derive(Fail, Debug)]
 pub enum SimError {
-
     #[fail(display = "Simulation: testing error code: {}", _0)]
     TestError(String),
     #[fail(display = "Simulation: Intentional: Send offer failed")]
@@ -21,5 +20,4 @@ pub enum SimError {
     SendIceCandidateError,
     #[fail(display = "Simulation: Intentional: Send hangup failed")]
     SendHangupError,
-
 }

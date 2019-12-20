@@ -11,15 +11,9 @@ use std::ffi::c_void;
 
 use libc::size_t;
 
+use crate::common::{CallId, Result};
+use crate::core::call_connection_observer::{CallConnectionObserver, ClientEvent};
 use crate::ios::ios_util::*;
-use crate::common::{
-    CallId,
-    Result,
-};
-use crate::core::call_connection_observer::{
-    ClientEvent,
-    CallConnectionObserver,
-};
 
 /// Observer object for interfacing with Swift.
 #[repr(C)]
@@ -31,13 +25,13 @@ pub struct IOSObserver {
     /// Raw Swift object pointer.
     pub object: *mut c_void,
     /// Swift object clean up method.
-    pub destroy: extern fn(object: *mut c_void),
+    pub destroy: extern "C" fn(object: *mut c_void),
     /// Swift call event callback method.
-    pub onCallEvent: extern fn(object: *mut c_void, callId: u64, callEvent: i32),
+    pub onCallEvent: extern "C" fn(object: *mut c_void, callId: u64, callEvent: i32),
     /// Swift call error callback method.
-    pub onCallError: extern fn(object: *mut c_void, callId: u64, errorString: IOSByteSlice),
+    pub onCallError: extern "C" fn(object: *mut c_void, callId: u64, errorString: IOSByteSlice),
     /// Swift add stream callback method.
-    pub onAddStream: extern fn(object: *mut c_void, callId: u64, stream: *mut c_void),
+    pub onAddStream: extern "C" fn(object: *mut c_void, callId: u64, stream: *mut c_void),
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.
@@ -59,11 +53,10 @@ pub struct IOSCallConnectionObserver {
     /// Swift object wrapper.
     app_observer: IOSObserver,
     /// call identifier.
-    call_id: CallId
+    call_id: CallId,
 }
 
 impl IOSCallConnectionObserver {
-
     /// Creates a new IOSCallConnectionObserver
     pub fn new(app_observer: IOSObserver, call_id: CallId) -> Self {
         Self {
@@ -108,7 +101,6 @@ impl IOSCallConnectionObserver {
 }
 
 impl CallConnectionObserver for IOSCallConnectionObserver {
-
     type AppMediaStream = *mut c_void;
 
     fn notify_event(&self, event: ClientEvent) {
@@ -128,5 +120,4 @@ impl CallConnectionObserver for IOSCallConnectionObserver {
         self.on_add_stream(stream)
             .unwrap_or_else(|e| error!("on_add_stream() failed: {}", e));
     }
-
 }

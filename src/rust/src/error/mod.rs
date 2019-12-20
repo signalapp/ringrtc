@@ -27,13 +27,25 @@ pub enum RingRtcError {
     CreateDataChannelObserver,
 
     // WebRTC / C++ session description error codes
-    #[fail(display = "CreateSessionDescriptionObserver failure. error msg: {}, type: {}", _0, _1)]
+    #[fail(
+        display = "CreateSessionDescriptionObserver failure. error msg: {}, type: {}",
+        _0, _1
+    )]
     CreateSessionDescriptionObserver(String, i32),
-    #[fail(display = "CreateSessionDescriptionObserver get result failure. error msg: {}", _0)]
+    #[fail(
+        display = "CreateSessionDescriptionObserver get result failure. error msg: {}",
+        _0
+    )]
     CreateSessionDescriptionObserverResult(String),
-    #[fail(display = "SetSessionDescriptionObserver failure. error msg: {}, type: {}", _0, _1)]
+    #[fail(
+        display = "SetSessionDescriptionObserver failure. error msg: {}, type: {}",
+        _0, _1
+    )]
     SetSessionDescriptionObserver(String, i32),
-    #[fail(display = "SetSessionDescriptionObserver get result failure. error msg: {}", _0)]
+    #[fail(
+        display = "SetSessionDescriptionObserver get result failure. error msg: {}",
+        _0
+    )]
     SetSessionDescriptionObserverResult(String),
     #[fail(display = "AddIceCandidate failure")]
     AddIceCandidate,
@@ -55,5 +67,4 @@ pub enum RingRtcError {
     // Misc error codes
     #[fail(display = "Event stream polling failed")]
     FsmStreamPoll,
-
 }

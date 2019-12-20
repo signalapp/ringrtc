@@ -20,7 +20,7 @@ pub fn release_ref(ref_counted_pointer: CppObject) {
     unsafe { Rust_releaseRef(ref_counted_pointer) };
 }
 
-extern {
+extern "C" {
 
     fn Rust_addRef(ref_counted_pointer: CppObject);
 

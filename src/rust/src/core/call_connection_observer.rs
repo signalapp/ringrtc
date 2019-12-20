@@ -67,8 +67,7 @@ impl fmt::Display for ClientEvent {
 ///
 /// A platform implements this interface to send events and errors to
 /// the client application.
-pub trait CallConnectionObserver : Sync + Send + 'static {
-
+pub trait CallConnectionObserver: Sync + Send + 'static {
     /// A platform specific type for holding a MediaStream
     type AppMediaStream;
 

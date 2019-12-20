@@ -7,18 +7,17 @@
 
 //! WebRTC FFI Peer Connection Observer Interface.
 
-use crate::core::util::{
-    RustObject,
-    CppObject,
-};
+use crate::core::util::{CppObject, RustObject};
 
 /// Incomplete type for C++ PeerConnectionObserver.
 #[repr(C)]
-pub struct RffiPeerConnectionObserverInterface { _private: [u8; 0] }
+pub struct RffiPeerConnectionObserverInterface {
+    _private: [u8; 0],
+}
 
-
-extern {
-    pub fn Rust_createPeerConnectionObserver(cc_ptr:          RustObject,
-                                             pc_observer_cb:  CppObject)
-                                             -> *const RffiPeerConnectionObserverInterface;
+extern "C" {
+    pub fn Rust_createPeerConnectionObserver(
+        cc_ptr: RustObject,
+        pc_observer_cb: CppObject,
+    ) -> *const RffiPeerConnectionObserverInterface;
 }

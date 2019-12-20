@@ -14,33 +14,17 @@ extern crate tokio;
 
 use std::fmt;
 use std::thread;
-use std::time::{
-    Duration,
-    Instant,
-};
+use std::time::{Duration, Instant};
 
+use futures::sync::mpsc::{Receiver, Sender};
 use futures::Future;
-use futures::sync::mpsc::{
-    Receiver,
-    Sender,
-};
 use tokio::runtime;
 use tokio::timer::Delay;
 
-use crate::common::{
-    CallDirection,
-    CallId,
-    Result,
-};
+use crate::common::{CallDirection, CallId, Result};
 
-use crate::core::call_fsm::{
-    CallEvent,
-    CallStateMachine,
-};
-use crate::core::call_connection::{
-    CallConnection,
-    CallPlatform,
-};
+use crate::core::call_connection::{CallConnection, CallPlatform};
+use crate::core::call_fsm::{CallEvent, CallStateMachine};
 use crate::core::util::CppObject;
 
 /// A mpsc::Sender for injecting CallEvents into the
@@ -48,19 +32,13 @@ use crate::core::util::CppObject;
 ///
 /// The event pump injects the tuple (CallConnection, CallEvent)
 /// into the FSM.
-pub type EventPump<T> = Sender<(
-    CallConnection<T>,
-    CallEvent
-)>;
+pub type EventPump<T> = Sender<(CallConnection<T>, CallEvent)>;
 
 /// A mpsc::Receiver for receiving CallEvents in the
 /// [CallStateMachine](../call_fsm/struct.CallStateMachine.html)
 ///
 /// The event stream is the tuple (CallConnection, CallEvent).
-pub type EventStream<T> = Receiver<(
-    CallConnection<T>,
-    CallEvent
-)>;
+pub type EventStream<T> = Receiver<(CallConnection<T>, CallEvent)>;
 
 /// A factory object for creating a
 /// [CallConnection](../call_connection/struct.CallConnection.html)
@@ -92,8 +70,12 @@ where
     T: CallPlatform,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "(tid: {:?}, native_peer_connection_factory: 0x{:p})",
-               thread::current().id(), self.native_peer_connection_factory)
+        write!(
+            f,
+            "(tid: {:?}, native_peer_connection_factory: 0x{:p})",
+            thread::current().id(),
+            self.native_peer_connection_factory
+        )
     }
 }
 
@@ -136,7 +118,7 @@ where
                 runtime::Builder::new()
                     .core_threads(1)
                     .name_prefix("timeout-")
-                    .build()?
+                    .build()?,
             ),
             native_peer_connection_factory,
             event_pump: sender,
@@ -153,14 +135,14 @@ where
     /// # Arguments
     ///
     /// * `platform` - A platform specific CallPlatform object
-    pub fn create_call_connection(&mut self,
-                                  call_id:   CallId,
-                                  direction: CallDirection,
-                                  platform:  T) -> Result<CallConnection<T>> {
-        let call_connection = CallConnection::new(self.event_pump.clone(),
-                                                  call_id,
-                                                  direction,
-                                                  platform);
+    pub fn create_call_connection(
+        &mut self,
+        call_id: CallId,
+        direction: CallDirection,
+        platform: T,
+    ) -> Result<CallConnection<T>> {
+        let call_connection =
+            CallConnection::new(self.event_pump.clone(), call_id, direction, platform);
 
         let mut cc_clone = call_connection.clone();
 
@@ -168,7 +150,8 @@ where
         let call_timeout_future = Delay::new(when)
             .map_err(|e| error!("Call timeout Delay failed: {:?}", e))
             .and_then(move |_| {
-                cc_clone.inject_call_timeout(call_id)
+                cc_clone
+                    .inject_call_timeout(call_id)
                     .map_err(|e| error!("Inject call timeout failed: {:?}", e))
             });
 
@@ -189,11 +172,12 @@ where
     pub fn close(&mut self) -> Result<()> {
         info!("stopping timeout thread");
         if let Some(timeout_runtime) = self.timeout_runtime.take() {
-            let _ = timeout_runtime.shutdown_now().wait()
+            let _ = timeout_runtime
+                .shutdown_now()
+                .wait()
                 .map_err(|_| warn!("Problems shutting down the timeout runtime"));
         }
         info!("stopping timeout thread: complete");
         Ok(())
     }
-
 }

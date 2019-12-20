@@ -16,10 +16,7 @@ extern crate rand;
 
 use std::ptr;
 
-use ringrtc::common::{
-    CallDirection,
-    CallState,
-};
+use ringrtc::common::{CallDirection, CallState};
 
 use ringrtc::core::call_connection_observer::ClientEvent;
 
@@ -31,12 +28,7 @@ use ringrtc::webrtc::media_stream::MediaStream;
 
 #[macro_use]
 mod common;
-use common::{
-    test_init,
-    create_context,
-    PRNG,
-    TestContext,
-};
+use common::{create_context, test_init, TestContext, PRNG};
 
 #[test]
 // Name this test so that it runs first in cargo's (PackageID,
@@ -54,7 +46,6 @@ fn _test_init() {
 
 #[test]
 fn create_ccf() {
-
     test_init();
 
     for _i in 0..6 {
@@ -83,7 +74,6 @@ fn create_ccf() {
 // Now in the IceConnecting state.
 
 fn start_outbound_call() -> TestContext {
-
     let call_id = PRNG.gen::<u64>();
     let direction = CallDirection::OutGoing;
 
@@ -104,10 +94,14 @@ fn start_outbound_call() -> TestContext {
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.offers_sent(), 1);
 
-    cc.inject_handle_answer("REMOTE SDP ANSWER".to_string()).expect(error_line!());
+    cc.inject_handle_answer("REMOTE SDP ANSWER".to_string())
+        .expect(error_line!());
     cc.synchronize().expect(error_line!());
 
-    assert_eq!(cc.state().expect(error_line!()), CallState::IceConnecting(true));
+    assert_eq!(
+        cc.state().expect(error_line!()),
+        CallState::IceConnecting(true)
+    );
     assert_eq!(context.client_error_count(), 0);
 
     context
@@ -124,7 +118,6 @@ fn start_outbound_call() -> TestContext {
 // Now in the CallConnected state.
 
 fn connect_outbound_call() -> TestContext {
-
     let context = start_outbound_call();
     let mut cc = context.cc();
 
@@ -138,7 +131,8 @@ fn connect_outbound_call() -> TestContext {
     assert_eq!(context.event_count(ClientEvent::Ringing), 1);
 
     info!("test: injecting call connected");
-    cc.inject_remote_connected(cc.call_id()).expect(error_line!());
+    cc.inject_remote_connected(cc.call_id())
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
@@ -156,7 +150,6 @@ fn connect_outbound_call() -> TestContext {
 // Now in the IceConnecting state.
 
 fn start_inbound_call() -> TestContext {
-
     let call_id = PRNG.gen::<u64>();
     let direction = CallDirection::InComing;
 
@@ -168,11 +161,15 @@ fn start_inbound_call() -> TestContext {
 
     assert_eq!(cc.state().expect(error_line!()), CallState::Idle);
 
-    cc.inject_handle_offer("REMOTE SDP OFFER".to_string()).expect(error_line!());
+    cc.inject_handle_offer("REMOTE SDP OFFER".to_string())
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
-    assert_eq!(cc.state().expect(error_line!()), CallState::IceConnecting(true));
+    assert_eq!(
+        cc.state().expect(error_line!()),
+        CallState::IceConnecting(true)
+    );
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.answers_sent(), 1);
 
@@ -189,7 +186,6 @@ fn start_inbound_call() -> TestContext {
 // Now in the CallConnected state.
 
 fn connect_inbound_call() -> TestContext {
-
     let context = start_inbound_call();
     let mut cc = context.cc();
 
@@ -206,7 +202,8 @@ fn connect_inbound_call() -> TestContext {
 
     // synthesize an onDataChannel event
     let data_channel = DataChannel::new(ptr::null());
-    cc.inject_on_data_channel(data_channel).expect(error_line!());
+    cc.inject_on_data_channel(data_channel)
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
@@ -228,7 +225,6 @@ fn connect_inbound_call() -> TestContext {
 
 #[test]
 fn outbound_send_offer() {
-
     test_init();
 
     let call_id = PRNG.gen::<u64>();
@@ -244,12 +240,10 @@ fn outbound_send_offer() {
     assert_eq!(cc.state().expect(error_line!()), CallState::SendingOffer);
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.offers_sent(), 1);
-
 }
 
 #[test]
 fn outbound_receive_answer() {
-
     test_init();
 
     let _ = start_outbound_call();
@@ -257,7 +251,6 @@ fn outbound_receive_answer() {
 
 #[test]
 fn outbound_local_hang_up() {
-
     test_init();
 
     let context = start_outbound_call();
@@ -274,12 +267,10 @@ fn outbound_local_hang_up() {
     assert_eq!(context.hangups_sent(), 1);
 
     // TODO - verify that the data_channel sent a hangup message
-
 }
 
 #[test]
 fn outbound_ice_failed() {
-
     test_init();
 
     let context = start_outbound_call();
@@ -290,15 +281,16 @@ fn outbound_ice_failed() {
 
     cc.synchronize().expect(error_line!());
 
-    assert_eq!(cc.state().expect(error_line!()), CallState::IceConnectionFailed);
+    assert_eq!(
+        cc.state().expect(error_line!()),
+        CallState::IceConnectionFailed
+    );
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.event_count(ClientEvent::ConnectionFailed), 1);
-
 }
 
 #[test]
 fn outbound_ice_connected() {
-
     test_init();
 
     let context = start_outbound_call();
@@ -316,7 +308,6 @@ fn outbound_ice_connected() {
 
 #[test]
 fn outbound_ice_disconnected_before_call_connected() {
-
     test_init();
 
     let context = start_outbound_call();
@@ -332,19 +323,22 @@ fn outbound_ice_disconnected_before_call_connected() {
     assert_eq!(context.event_count(ClientEvent::Ringing), 1);
 
     info!("test: injecting ice disconnected");
-    cc.inject_ice_connection_disconnected().expect(error_line!());
+    cc.inject_ice_connection_disconnected()
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
     // When ICE disconnects before the call is connected, the system
     // should return to the IceConnecting state.
-    assert_eq!(cc.state().expect(error_line!()), CallState::IceConnecting(true));
+    assert_eq!(
+        cc.state().expect(error_line!()),
+        CallState::IceConnecting(true)
+    );
     assert_eq!(context.client_error_count(), 0);
 }
 
 #[test]
 fn outbound_call_connected() {
-
     test_init();
 
     let _ = connect_outbound_call();
@@ -352,7 +346,6 @@ fn outbound_call_connected() {
 
 #[test]
 fn outbound_call_connected_with_stale_call_id() {
-
     test_init();
 
     let context = start_outbound_call();
@@ -368,7 +361,8 @@ fn outbound_call_connected_with_stale_call_id() {
     assert_eq!(context.event_count(ClientEvent::Ringing), 1);
 
     info!("test: injecting stale call connected");
-    cc.inject_remote_connected(cc.call_id() + 1).expect(error_line!());
+    cc.inject_remote_connected(cc.call_id() + 1)
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
@@ -379,7 +373,6 @@ fn outbound_call_connected_with_stale_call_id() {
 
 #[test]
 fn outbound_call_connected_ice_failed() {
-
     test_init();
 
     let context = connect_outbound_call();
@@ -390,14 +383,16 @@ fn outbound_call_connected_ice_failed() {
 
     cc.synchronize().expect(error_line!());
 
-    assert_eq!(cc.state().expect(error_line!()), CallState::IceConnectionFailed);
+    assert_eq!(
+        cc.state().expect(error_line!()),
+        CallState::IceConnectionFailed
+    );
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.event_count(ClientEvent::ConnectionFailed), 1);
 }
 
 #[test]
 fn outbound_call_connected_local_hangup() {
-
     test_init();
 
     let context = connect_outbound_call();
@@ -414,19 +409,18 @@ fn outbound_call_connected_local_hangup() {
     assert_eq!(context.hangups_sent(), 1);
 
     // TODO - verify that the data_channel sent a hangup message
-
 }
 
 #[test]
 fn outbound_ice_disconnected_after_call_connected_and_reconnect() {
-
     test_init();
 
     let context = connect_outbound_call();
     let mut cc = context.cc();
 
     info!("test: injecting ice disconnected");
-    cc.inject_ice_connection_disconnected().expect(error_line!());
+    cc.inject_ice_connection_disconnected()
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
@@ -448,19 +442,18 @@ fn outbound_ice_disconnected_after_call_connected_and_reconnect() {
     // Ringing event count should be two: 1 from the initial ICE
     // connected state and another from the reconnection.
     assert_eq!(context.event_count(ClientEvent::Ringing), 2);
-
 }
 
 #[test]
 fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
-
     test_init();
 
     let context = connect_outbound_call();
     let mut cc = context.cc();
 
     info!("test: injecting ice disconnected");
-    cc.inject_ice_connection_disconnected().expect(error_line!());
+    cc.inject_ice_connection_disconnected()
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
@@ -481,12 +474,10 @@ fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
     // Should only be one Ringing event in this case
     assert_eq!(context.event_count(ClientEvent::Ringing), 1);
     assert_eq!(context.hangups_sent(), 1);
-
 }
 
 #[test]
 fn inbound_ice_connecting() {
-
     test_init();
 
     let _ = start_inbound_call();
@@ -494,7 +485,6 @@ fn inbound_ice_connecting() {
 
 #[test]
 fn inbound_call_connected() {
-
     test_init();
 
     let _ = connect_inbound_call();
@@ -505,12 +495,12 @@ fn inject_client_error() {
     let context = connect_outbound_call();
     let mut cc = context.cc();
 
-    cc.inject_client_error(SimError::TestError("fake_error".to_string()).into()).expect(error_line!());
+    cc.inject_client_error(SimError::TestError("fake_error".to_string()).into())
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
     assert_eq!(context.client_error_count(), 1);
-
 }
 
 #[test]
@@ -530,13 +520,13 @@ fn inject_local_ice_candidate() {
     let mut cc = context.cc();
 
     let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
-    cc.inject_local_ice_candidate(ice_candidate).expect(error_line!());
+    cc.inject_local_ice_candidate(ice_candidate)
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.ice_candidates_sent(), 1);
-
 }
 
 #[test]
@@ -545,7 +535,8 @@ fn inject_remote_ice_candidate() {
     let mut cc = context.cc();
 
     let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
-    cc.inject_remote_ice_candidate(ice_candidate).expect(error_line!());
+    cc.inject_remote_ice_candidate(ice_candidate)
+        .expect(error_line!());
 
     assert_eq!(context.client_error_count(), 0);
 
@@ -576,21 +567,26 @@ fn inject_remote_video_status() {
     for _i in 0..10 {
         let enable = PRNG.gen::<bool>();
 
-        cc.inject_remote_video_status(cc.call_id(), enable).expect(error_line!());
+        cc.inject_remote_video_status(cc.call_id(), enable)
+            .expect(error_line!());
         cc.synchronize().expect(error_line!());
 
         if enable {
             enable_count += 1;
         } else {
-            disable_count +=1;
+            disable_count += 1;
         }
 
         assert_eq!(context.client_error_count(), 0);
-        assert_eq!(context.event_count(ClientEvent::RemoteVideoEnable), enable_count);
-        assert_eq!(context.event_count(ClientEvent::RemoteVideoDisable), disable_count);
-
+        assert_eq!(
+            context.event_count(ClientEvent::RemoteVideoEnable),
+            enable_count
+        );
+        assert_eq!(
+            context.event_count(ClientEvent::RemoteVideoDisable),
+            disable_count
+        );
     }
-
 }
 
 #[test]
@@ -604,7 +600,6 @@ fn inject_call_timeout_before_connect() {
 
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.event_count(ClientEvent::CallTimeout), 1);
-
 }
 
 #[test]
@@ -619,7 +614,6 @@ fn inject_call_timeout_after_connect() {
     // The call is already connected, so the timeout is ignored.
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.event_count(ClientEvent::CallTimeout), 0);
-
 }
 
 #[test]
@@ -634,12 +628,10 @@ fn inject_on_add_stream() {
 
     assert_eq!(context.client_error_count(), 0);
     assert_eq!(context.stream_count(), 1);
-
 }
 
 #[test]
 fn outbound_send_offer_with_error() {
-
     test_init();
 
     let call_id = PRNG.gen::<u64>();
@@ -658,12 +650,10 @@ fn outbound_send_offer_with_error() {
     assert_eq!(cc.state().expect(error_line!()), CallState::SendingOffer);
     assert_eq!(context.client_error_count(), 1);
     assert_eq!(context.offers_sent(), 0);
-
 }
 
 #[test]
 fn start_inbound_call_with_error() {
-
     let call_id = PRNG.gen::<u64>();
     let direction = CallDirection::InComing;
 
@@ -678,19 +668,21 @@ fn start_inbound_call_with_error() {
     // cause the sending of the answer to fail.
     context.should_fail(true);
 
-    cc.inject_handle_offer("REMOTE SDP OFFER".to_string()).expect(error_line!());
+    cc.inject_handle_offer("REMOTE SDP OFFER".to_string())
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
-    assert_eq!(cc.state().expect(error_line!()), CallState::IceConnecting(false));
+    assert_eq!(
+        cc.state().expect(error_line!()),
+        CallState::IceConnecting(false)
+    );
     assert_eq!(context.client_error_count(), 1);
     assert_eq!(context.answers_sent(), 0);
-
 }
 
 #[test]
 fn outbound_call_connected_local_hangup_with_error() {
-
     test_init();
 
     let context = connect_outbound_call();
@@ -711,7 +703,6 @@ fn outbound_call_connected_local_hangup_with_error() {
     assert_eq!(context.client_error_count(), 0);
 
     assert_eq!(context.hangups_sent(), 0);
-
 }
 
 #[test]
@@ -723,7 +714,8 @@ fn inject_local_ice_candidate_with_error() {
     context.should_fail(true);
 
     let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
-    cc.inject_local_ice_candidate(ice_candidate).expect(error_line!());
+    cc.inject_local_ice_candidate(ice_candidate)
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
@@ -741,7 +733,8 @@ fn inject_local_ice_candidate_with_error() {
 
     // Send another ICE candidate
     let ice_candidate = IceCandidate::new("fake_spd_mid2".to_string(), 0, "fake_spd2".to_string());
-    cc.inject_local_ice_candidate(ice_candidate).expect(error_line!());
+    cc.inject_local_ice_candidate(ice_candidate)
+        .expect(error_line!());
 
     cc.synchronize().expect(error_line!());
 
@@ -750,5 +743,4 @@ fn inject_local_ice_candidate_with_error() {
 
     // We should see that both ICE candidates were sent
     assert_eq!(context.ice_candidates_sent(), 2);
-
 }

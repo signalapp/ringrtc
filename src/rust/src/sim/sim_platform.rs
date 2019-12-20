@@ -8,28 +8,12 @@
 //! Simulation CallPlatform Interface.
 
 use std::fmt;
-use std::sync::{
-    Arc,
-    Mutex,
-};
-use std::sync::atomic::{
-    AtomicUsize,
-    Ordering,
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
-use crate::common::{
-    CallId,
-    Result,
-};
-use crate::core::call_connection::{
-    CallConnection,
-    CallPlatform,
-    AppMediaStreamTrait,
-};
-use crate::core::call_connection_observer::{
-    CallConnectionObserver,
-    ClientEvent,
-};
+use crate::common::{CallId, Result};
+use crate::core::call_connection::{AppMediaStreamTrait, CallConnection, CallPlatform};
+use crate::core::call_connection_observer::{CallConnectionObserver, ClientEvent};
 use crate::sim::call_connection_observer::SimCallConnectionObserver;
 use crate::sim::error::SimError;
 use crate::webrtc::ice_candidate::IceCandidate;
@@ -46,19 +30,19 @@ pub type SimCallConnection = CallConnection<SimPlatform>;
 /// Simulation implementation of core::CallPlatform.
 pub struct SimPlatform {
     /// Recipient
-    recipient:   String,
+    recipient: String,
     /// CallConnectionObserver object.
     cc_observer: Arc<Mutex<SimCallConnectionObserver>>,
     /// True if the CallPlatform functions should fail
-    should_fail:         bool,
+    should_fail: bool,
     /// Number of offers sent
-    offers_sent:         AtomicUsize,
+    offers_sent: AtomicUsize,
     /// Number of answers sent
-    answers_sent:        AtomicUsize,
+    answers_sent: AtomicUsize,
     /// Number of ICE candidates sent
     ice_candidates_sent: AtomicUsize,
     /// Number of hang ups sent
-    hangups_sent:        AtomicUsize,
+    hangups_sent: AtomicUsize,
 }
 
 impl fmt::Display for SimPlatform {
@@ -80,17 +64,15 @@ impl Drop for SimPlatform {
 }
 
 impl CallPlatform for SimPlatform {
-
     type AppMediaStream = SimMediaStream;
 
-    fn app_send_offer(&self,
-                      call_id:   CallId,
-                      offer:     SessionDescriptionInterface) -> Result<()> {
-
-        info!("app_send_offer(): call_id: {:?}, offer:{:?}, desc:{}",
-              call_id,
-              offer,
-              offer.get_description().unwrap());
+    fn app_send_offer(&self, call_id: CallId, offer: SessionDescriptionInterface) -> Result<()> {
+        info!(
+            "app_send_offer(): call_id: {:?}, offer:{:?}, desc:{}",
+            call_id,
+            offer,
+            offer.get_description().unwrap()
+        );
 
         if self.should_fail {
             Err(SimError::SendOfferError.into())
@@ -100,11 +82,11 @@ impl CallPlatform for SimPlatform {
         }
     }
 
-    fn app_send_answer(&self,
-                       call_id:   CallId,
-                       answer:    SessionDescriptionInterface) -> Result<()> {
-
-        info!("app_send_answer(): call_id: {:?}, offer:{:?}", call_id, answer);
+    fn app_send_answer(&self, call_id: CallId, answer: SessionDescriptionInterface) -> Result<()> {
+        info!(
+            "app_send_answer(): call_id: {:?}, offer:{:?}",
+            call_id, answer
+        );
 
         if self.should_fail {
             Err(SimError::SendAnswerError.into())
@@ -114,26 +96,27 @@ impl CallPlatform for SimPlatform {
         }
     }
 
-    fn app_send_ice_updates(&self,
-                            call_id:    CallId,
-                            candidates: &[IceCandidate]) -> Result<()> {
-
+    fn app_send_ice_updates(&self, call_id: CallId, candidates: &[IceCandidate]) -> Result<()> {
         if candidates.is_empty() {
             return Ok(());
         }
 
-        info!("app_send_ice_updates(): call_id: {:?}, candidates:{:?}", call_id, candidates);
+        info!(
+            "app_send_ice_updates(): call_id: {:?}, candidates:{:?}",
+            call_id, candidates
+        );
 
         if self.should_fail {
             Err(SimError::SendIceCandidateError.into())
         } else {
-            let _ = self.ice_candidates_sent.fetch_add(candidates.len(), Ordering::AcqRel);
+            let _ = self
+                .ice_candidates_sent
+                .fetch_add(candidates.len(), Ordering::AcqRel);
             Ok(())
         }
     }
 
     fn app_send_hangup(&self, call_id: CallId) -> Result<()> {
-
         info!("app_send_hangup(): call_id: {:?}", call_id);
 
         if self.should_fail {
@@ -173,18 +156,16 @@ impl CallPlatform for SimPlatform {
 }
 
 impl SimPlatform {
-
     /// Create a new SimPlatform object.
     pub fn new(recipient: String, cc_observer: Arc<Mutex<SimCallConnectionObserver>>) -> Self {
-
         Self {
             recipient,
             cc_observer,
-            should_fail:         false,
-            offers_sent:         AtomicUsize::new(0),
-            answers_sent:        AtomicUsize::new(0),
+            should_fail: false,
+            offers_sent: AtomicUsize::new(0),
+            answers_sent: AtomicUsize::new(0),
             ice_candidates_sent: AtomicUsize::new(0),
-            hangups_sent:        AtomicUsize::new(0),
+            hangups_sent: AtomicUsize::new(0),
         }
     }
 
@@ -207,5 +188,4 @@ impl SimPlatform {
     pub fn hangups_sent(&self) -> usize {
         self.hangups_sent.load(Ordering::Acquire)
     }
-
 }

@@ -7,36 +7,19 @@
 
 //! iOS CallPlatform Interface.
 
-use std::fmt;
 use std::ffi::c_void;
+use std::fmt;
 
 use libc::size_t;
 
-use crate::ios::call_connection_observer::{
-    IOSCallConnectionObserver,
-    IOSObserver,
-};
+use crate::common::{CallId, CallState, Result};
+use crate::core::call_connection::{AppMediaStreamTrait, CallConnection, CallPlatform};
+use crate::core::call_connection_observer::{CallConnectionObserver, ClientEvent};
+use crate::core::util::{ptr_as_box, ptr_as_mut};
+use crate::error::RingRtcError;
+use crate::ios::call_connection_observer::{IOSCallConnectionObserver, IOSObserver};
 use crate::ios::ios_util::*;
 use crate::ios::webrtc_ios_media_stream::IOSMediaStream;
-use crate::common::{
-    Result,
-    CallId,
-    CallState,
-};
-use crate::core::call_connection::{
-    AppMediaStreamTrait,
-    CallConnection,
-    CallPlatform,
-};
-use crate::core::call_connection_observer::{
-    CallConnectionObserver,
-    ClientEvent,
-};
-use crate::core::util::{
-    ptr_as_box,
-    ptr_as_mut,
-};
-use crate::error::RingRtcError;
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media_stream::MediaStream;
 use crate::webrtc::sdp_observer::SessionDescriptionInterface;
@@ -66,7 +49,7 @@ impl fmt::Display for IOSPlatform {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let app_call_connection = match self.app_call_connection {
             Some(v) => format!("{:p}", v),
-            None    => "None".to_string(),
+            None => "None".to_string(),
         };
         write!(f, "app_call_connection: {}", app_call_connection)
     }
@@ -87,18 +70,14 @@ impl Drop for IOSPlatform {
 }
 
 impl CallPlatform for IOSPlatform {
-
     type AppMediaStream = IOSMediaStream;
 
     // Send an offer as the caller.
-    fn app_send_offer(&self,
-                      call_id:   CallId,
-                      offer:     SessionDescriptionInterface) -> Result<()> {
-
+    fn app_send_offer(&self, call_id: CallId, offer: SessionDescriptionInterface) -> Result<()> {
         let description = offer.get_description()?;
         info!("app_send_offer():");
 
-        let string_slice = IOSByteSlice{
+        let string_slice = IOSByteSlice {
             bytes: description.as_ptr(),
             len: description.len() as size_t,
         };
@@ -110,14 +89,11 @@ impl CallPlatform for IOSPlatform {
         Ok(())
     }
 
-    fn app_send_answer(&self,
-                       call_id:   CallId,
-                       answer:    SessionDescriptionInterface) -> Result<()> {
-
+    fn app_send_answer(&self, call_id: CallId, answer: SessionDescriptionInterface) -> Result<()> {
         let description = answer.get_description()?;
         info!("app_send_answer():");
 
-        let string_slice = IOSByteSlice{
+        let string_slice = IOSByteSlice {
             bytes: description.as_ptr(),
             len: description.len() as size_t,
         };
@@ -129,10 +105,7 @@ impl CallPlatform for IOSPlatform {
         Ok(())
     }
 
-    fn app_send_ice_updates(&self,
-                            call_id:    CallId,
-                            candidates: &[IceCandidate]) -> Result<()> {
-
+    fn app_send_ice_updates(&self, call_id: CallId, candidates: &[IceCandidate]) -> Result<()> {
         if candidates.is_empty() {
             return Ok(());
         }
@@ -142,7 +115,6 @@ impl CallPlatform for IOSPlatform {
         let mut v: Vec<IOSIceCandidate> = Vec::new();
 
         for candidate in candidates {
-
             let sdp_mid_slice = IOSByteSlice {
                 bytes: candidate.sdp_mid.as_ptr(),
                 len: candidate.sdp_mid.len() as size_t,
@@ -166,7 +138,7 @@ impl CallPlatform for IOSPlatform {
 
         let ice_candidates = Box::new(IOSIceCandidateArray {
             candidates: Box::into_raw(v.into_boxed_slice()) as *const IOSIceCandidate,
-            count: v_len
+            count: v_len,
         });
 
         // We pass pointers to the strings up and the handler is expected
@@ -189,7 +161,6 @@ impl CallPlatform for IOSPlatform {
     }
 
     fn app_send_hangup(&self, call_id: CallId) -> Result<()> {
-
         info!("app_send_hangup():");
 
         (self.recipient.onSendHangup)(self.recipient.object, call_id);
@@ -233,14 +204,11 @@ impl CallPlatform for IOSPlatform {
 
         Ok(())
     }
-
 }
 
 impl IOSPlatform {
-
     /// Create a new IOSPlatform object.
     pub fn new(recipient: IOSRecipient) -> Self {
-
         Self {
             app_call_connection: None,
             recipient,
@@ -262,43 +230,46 @@ impl IOSPlatform {
     fn get_app_call_connection(&self) -> Result<*mut AppCallConnection> {
         match self.app_call_connection.as_ref() {
             Some(v) => Ok(*v),
-            None => Err(RingRtcError::OptionValueNotSet("get_app_call_connection()".to_string(),
-                                                        "app_call_connection".to_string()).into()),
+            None => Err(RingRtcError::OptionValueNotSet(
+                "get_app_call_connection()".to_string(),
+                "app_call_connection".to_string(),
+            )
+            .into()),
         }
     }
-
 }
 
 /// Close the CallConnection and quiesce related threads.
 pub fn native_close_call_connection(call_connection: *mut IOSCallConnection) -> Result<()> {
-
-
     let cc = unsafe { ptr_as_mut(call_connection)? };
     cc.close()
 
-//    // We want to drop the handle when it goes out of scope here, as this
-//    // is the destructor, so convert the pointer back into a box.
-//    let mut cc_box = unsafe { ptr_as_box(call_connection)? };
-//    cc_box.close()
+    //    // We want to drop the handle when it goes out of scope here, as this
+    //    // is the destructor, so convert the pointer back into a box.
+    //    let mut cc_box = unsafe { ptr_as_box(call_connection)? };
+    //    cc_box.close()
 }
 
 /// Dispose of the CallConnection allocated on the heap.
 pub fn native_dispose_call_connection(call_connection: *mut IOSCallConnection) -> Result<()> {
-
     // Convert the pointer back into a box, allowing it to go out of
     // scope.
     let cc_box = unsafe { ptr_as_box(call_connection)? };
 
-    debug_assert_eq!(CallState::Closed, cc_box.state()?,
-                     "Must call close() before calling dispose()!");
+    debug_assert_eq!(
+        CallState::Closed,
+        cc_box.state()?,
+        "Must call close() before calling dispose()!"
+    );
 
     Ok(())
 }
 
 /// Inject a SendOffer event to the FSM.
-pub fn native_send_offer(call_connection: *mut IOSCallConnection,
-                     app_call_connection: *mut AppCallConnection) -> Result<()> {
-
+pub fn native_send_offer(
+    call_connection: *mut IOSCallConnection,
+    app_call_connection: *mut AppCallConnection,
+) -> Result<()> {
     let cc = unsafe { ptr_as_mut(call_connection)? };
 
     if let Ok(mut platform) = cc.platform() {
@@ -309,8 +280,10 @@ pub fn native_send_offer(call_connection: *mut IOSCallConnection,
 }
 
 /// Create a Rust CallConnectionObserver.
-pub fn native_create_call_connection_observer(app_observer: IOSObserver,
-                                                   call_id: CallId) -> Result<*mut c_void> {
+pub fn native_create_call_connection_observer(
+    app_observer: IOSObserver,
+    call_id: CallId,
+) -> Result<*mut c_void> {
     let cc_observer = IOSCallConnectionObserver::new(app_observer, call_id);
 
     let cc_observer_box = Box::new(cc_observer);
@@ -318,17 +291,18 @@ pub fn native_create_call_connection_observer(app_observer: IOSObserver,
 }
 
 /// Inject an HandleAnswer event into the FSM.
-pub fn native_handle_answer(call_connection: *mut IOSCallConnection,
-                            answer: &str) -> Result<()> {
+pub fn native_handle_answer(call_connection: *mut IOSCallConnection, answer: &str) -> Result<()> {
     let cc = unsafe { ptr_as_mut(call_connection)? };
 
     cc.inject_handle_answer(answer.to_string())
 }
 
 /// Inject a HandleOffer event into the FSM.
-pub fn native_handle_offer(call_connection: *mut IOSCallConnection,
-                       app_call_connection: *mut AppCallConnection,
-                                     offer: &str) -> Result<()> {
+pub fn native_handle_offer(
+    call_connection: *mut IOSCallConnection,
+    app_call_connection: *mut AppCallConnection,
+    offer: &str,
+) -> Result<()> {
     let cc = unsafe { ptr_as_mut(call_connection)? };
 
     if let Ok(mut platform) = cc.platform() {
@@ -353,24 +327,24 @@ pub fn native_accept_call(call_connection: *mut IOSCallConnection) -> Result<()>
 }
 
 /// Inject a LocalVideoStatus event into the FSM.
-pub fn native_send_video_status(call_connection: *mut IOSCallConnection,
-                                        enabled: bool) -> Result<()> {
+pub fn native_send_video_status(
+    call_connection: *mut IOSCallConnection,
+    enabled: bool,
+) -> Result<()> {
     let cc = unsafe { ptr_as_mut(call_connection)? };
     cc.inject_local_video_status(enabled)
 }
 
 /// Inject a RemoteIceCandidate event into the FSM.
-pub fn native_add_ice_candidate(call_connection:  *mut IOSCallConnection,
-                                        sdp_mid:  &str,
-                                sdp_mline_index:  i32,
-                                            sdp:  &str) -> Result<()> {
+pub fn native_add_ice_candidate(
+    call_connection: *mut IOSCallConnection,
+    sdp_mid: &str,
+    sdp_mline_index: i32,
+    sdp: &str,
+) -> Result<()> {
     let cc = unsafe { ptr_as_mut(call_connection)? };
 
-    let ice_candidate = IceCandidate::new(
-        sdp_mid.to_string(),
-        sdp_mline_index,
-        sdp.to_string(),
-    );
+    let ice_candidate = IceCandidate::new(sdp_mid.to_string(), sdp_mline_index, sdp.to_string());
 
     cc.inject_remote_ice_candidate(ice_candidate)
 }

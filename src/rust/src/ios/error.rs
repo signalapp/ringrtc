@@ -11,7 +11,6 @@
 #[allow(non_camel_case_types)]
 #[derive(Fail, Debug)]
 pub enum iOSError {
-
     // iOS error codes
     #[fail(display = "Couldn't allocate memory for logging object")]
     InitializeLogging,
@@ -23,5 +22,4 @@ pub enum iOSError {
     // iOS Misc error codes
     #[fail(display = "Extracting native PeerConnectionInterface failed")]
     ExtractNativePeerConnectionInterface,
-
 }

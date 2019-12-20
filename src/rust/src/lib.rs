@@ -42,7 +42,7 @@ mod protobuf {
     pub mod data_channel;
 }
 
-#[cfg(target_os="android")]
+#[cfg(target_os = "android")]
 /// Android specific implementation.
 mod android {
     extern crate jni;
@@ -61,7 +61,7 @@ mod android {
     mod webrtc_peer_connection_factory;
 }
 
-#[cfg(target_os="ios")]
+#[cfg(target_os = "ios")]
 /// iOS specific implementation.
 mod ios {
     mod api {
@@ -75,8 +75,8 @@ mod ios {
     mod ios_platform;
     mod ios_util;
     mod logging;
-    mod webrtc_ios_media_stream;
     mod webrtc_app_peer_connection;
+    mod webrtc_ios_media_stream;
 }
 
 /// Foreign Function Interface (FFI) to WebRTC C++ library.

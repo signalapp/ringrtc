@@ -10,20 +10,19 @@
 use std::fmt;
 use std::ptr;
 
-use jni::JNIEnv;
 use jni::objects::GlobalRef;
 use jni::sys::jobject;
+use jni::JNIEnv;
 
 use crate::android::error::AndroidError;
 use crate::common::Result;
-use crate::webrtc::media_stream::{
-    MediaStream,
-    RffiMediaStreamInterface,
-};
+use crate::webrtc::media_stream::{MediaStream, RffiMediaStreamInterface};
 
 /// Incomplete type for C++ JavaMediaStream.
 #[repr(C)]
-pub struct RffiJavaMediaStream { _private: [u8; 0] }
+pub struct RffiJavaMediaStream {
+    _private: [u8; 0],
+}
 
 /// Rust wrapper around webrtc::jni::JavaMediaStream object.
 pub struct JavaMediaStream {
@@ -54,15 +53,12 @@ impl JavaMediaStream {
         let rffi_jms_interface = unsafe {
             // The JavaMediaStream constructor takes ownership of the
             // raw MediaStreamInterface pointer.
-            Rust_createJavaMediaStream(stream.own_rffi_interface()) };
+            Rust_createJavaMediaStream(stream.own_rffi_interface())
+        };
         if rffi_jms_interface.is_null() {
             return Err(AndroidError::CreateJavaMediaStream.into());
         }
-        Ok(
-            Self {
-                rffi_jms_interface,
-            }
-        )
+        Ok(Self { rffi_jms_interface })
     }
 
     /// Return a JNI GlobalRef to the JavaMediaStream object
@@ -72,15 +68,14 @@ impl JavaMediaStream {
             Ok(env.new_global_ref(jobject.into())?)
         }
     }
-
 }
 
-extern {
-    fn Rust_createJavaMediaStream(media_stream_interface: *const RffiMediaStreamInterface)
-                                  -> *const RffiJavaMediaStream;
+extern "C" {
+    fn Rust_createJavaMediaStream(
+        media_stream_interface: *const RffiMediaStreamInterface,
+    ) -> *const RffiJavaMediaStream;
 
     fn Rust_freeJavaMediaStream(rffi_jms_interface: *const RffiJavaMediaStream);
 
-    fn Rust_getObjectJavaMediaStream(rffi_jms_interface: *const RffiJavaMediaStream)
-        -> jobject;
+    fn Rust_getObjectJavaMediaStream(rffi_jms_interface: *const RffiJavaMediaStream) -> jobject;
 }

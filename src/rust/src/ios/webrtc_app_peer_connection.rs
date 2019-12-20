@@ -14,9 +14,11 @@ extern "C" {
     /// Create a 'native' WebRTC via iOS Application Call Connection,
     /// passing in a custom observer implemented by RingRTC.
     #[allow(non_snake_case)]
-    pub fn appCreatePeerConnection(appFactory: *mut c_void,
-                            appCallConnection: *mut c_void,
-                                    rtcConfig: *mut c_void,
-                               rtcConstraints: *mut c_void,
-                               customObserver: *mut c_void) -> *mut c_void;
+    pub fn appCreatePeerConnection(
+        appFactory: *mut c_void,
+        appCallConnection: *mut c_void,
+        rtcConfig: *mut c_void,
+        rtcConstraints: *mut c_void,
+        customObserver: *mut c_void,
+    ) -> *mut c_void;
 }

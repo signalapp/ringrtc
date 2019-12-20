@@ -13,11 +13,15 @@ use libc::size_t;
 
 /// Incomplete type for application's Swift/Objective-C peer connection factory object.
 #[repr(C)]
-pub struct AppPeerConnectionFactory { _private: [u8; 0] }
+pub struct AppPeerConnectionFactory {
+    _private: [u8; 0],
+}
 
 /// Incomplete type for application's Swift/Objective-C call connection object.
 #[repr(C)]
-pub struct AppCallConnection { _private: [u8; 0] }
+pub struct AppCallConnection {
+    _private: [u8; 0],
+}
 
 /// Structure for passing buffers (such as strings) to Swift.
 #[repr(C)]
@@ -49,12 +53,13 @@ pub struct IOSIceCandidateArray {
 #[allow(non_snake_case)]
 pub struct IOSRecipient {
     pub object: *mut c_void,
-    pub destroy: extern fn(object: *mut c_void),
-    pub onSendOffer: extern fn(object: *mut c_void, callId: u64, offer: IOSByteSlice),
-    pub onSendAnswer: extern fn(object: *mut c_void, callId: u64, answer: IOSByteSlice),
-    pub onSendIceCandidates: extern fn(object: *mut c_void, callId: u64, iceCandidate: *const IOSIceCandidateArray),
-    pub onSendHangup: extern fn(object: *mut c_void, callId: u64),
-    pub onSendBusy: extern fn(object: *mut c_void, callId: u64),
+    pub destroy: extern "C" fn(object: *mut c_void),
+    pub onSendOffer: extern "C" fn(object: *mut c_void, callId: u64, offer: IOSByteSlice),
+    pub onSendAnswer: extern "C" fn(object: *mut c_void, callId: u64, answer: IOSByteSlice),
+    pub onSendIceCandidates:
+        extern "C" fn(object: *mut c_void, callId: u64, iceCandidate: *const IOSIceCandidateArray),
+    pub onSendHangup: extern "C" fn(object: *mut c_void, callId: u64),
+    pub onSendBusy: extern "C" fn(object: *mut c_void, callId: u64),
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.

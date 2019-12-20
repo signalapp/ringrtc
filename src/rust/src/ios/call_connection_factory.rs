@@ -7,44 +7,30 @@
 
 //! iOS CallConnectionFactory Interface.
 
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::{Arc, Mutex};
 
 use std::ffi::c_void;
 
+use crate::common::{CallDirection, CallId, Result, DATA_CHANNEL_NAME};
+use crate::core::call_connection_factory::CallConnectionFactory;
+use crate::core::util::{ptr_as_arc_mutex, ptr_as_arc_ptr, ptr_as_box, CppObject};
+use crate::error::RingRtcError;
 use crate::ios::call_connection_observer::IOSCallConnectionObserver;
 use crate::ios::error::iOSError;
 use crate::ios::ios_platform::IOSPlatform;
-use crate::ios::webrtc_app_peer_connection::appCreatePeerConnection;
 use crate::ios::ios_util::*;
-use crate::common::{
-    Result,
-    CallId,
-    CallDirection,
-    DATA_CHANNEL_NAME,
-};
-use crate::core::call_connection_factory::CallConnectionFactory;
-use crate::core::util::{
-    CppObject,
-    ptr_as_arc_mutex,
-    ptr_as_arc_ptr,
-    ptr_as_box,
-};
-use crate::error::RingRtcError;
+use crate::ios::webrtc_app_peer_connection::appCreatePeerConnection;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
+use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnectionInterface};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
-use crate::webrtc::peer_connection::{
-    PeerConnection,
-    RffiPeerConnectionInterface,
-};
 
 /// Public type for iOS CallConnectionFactory.
 pub type IOSCallConnectionFactory = CallConnectionFactory<IOSPlatform>;
 
 /// Creates a new IOSCallConnectionFactory object.
-pub fn native_create_call_connection_factory(app_call_connection_factory: *mut AppPeerConnectionFactory) -> Result<*mut c_void> {
+pub fn native_create_call_connection_factory(
+    app_call_connection_factory: *mut AppPeerConnectionFactory,
+) -> Result<*mut c_void> {
     let cc_factory = IOSCallConnectionFactory::new(app_call_connection_factory as CppObject)?;
     // Wrap factory in Arc<Mutex<>> to pass amongst threads
     let cc_factory = Arc::new(Mutex::new(cc_factory));
@@ -76,17 +62,20 @@ pub fn native_free_factory(factory: *mut IOSCallConnectionFactory) -> Result<()>
 /// * `rtc_constraints` - raw pointer to RTCMediaConstraints
 ///
 #[allow(clippy::too_many_arguments)]
-pub fn native_create_call_connection(native_factory: *mut IOSCallConnectionFactory,
-                                app_call_connection: *mut AppCallConnection,
-                                        call_config: IOSCallConfig,
-                                    native_observer: *mut IOSCallConnectionObserver,
-                                         rtc_config: *mut c_void,
-                                    rtc_constraints: *mut c_void) -> Result<*mut c_void> {
-
+pub fn native_create_call_connection(
+    native_factory: *mut IOSCallConnectionFactory,
+    app_call_connection: *mut AppCallConnection,
+    call_config: IOSCallConfig,
+    native_observer: *mut IOSCallConnectionObserver,
+    rtc_config: *mut c_void,
+    rtc_constraints: *mut c_void,
+) -> Result<*mut c_void> {
     let call_connection_factory = unsafe { ptr_as_arc_ptr(native_factory)? };
     let mut cc_factory = match call_connection_factory.get_arc().lock() {
         Ok(v) => v,
-        Err(_) => return Err(RingRtcError::MutexPoisoned("Call Connection Factory".to_string()).into()),
+        Err(_) => {
+            return Err(RingRtcError::MutexPoisoned("Call Connection Factory".to_string()).into())
+        }
     };
 
     // Get callId from configuration
@@ -122,7 +111,8 @@ pub fn native_create_call_connection(native_factory: *mut IOSCallConnectionFacto
             app_call_connection as *mut c_void,
             rtc_config,
             rtc_constraints,
-            pc_observer.rffi_interface() as *mut c_void)
+            pc_observer.rffi_interface() as *mut c_void,
+        )
     };
     info!("webrtc_owned_pc: {:?}", webrtc_owned_pc);
 
@@ -150,7 +140,7 @@ pub fn native_create_call_connection(native_factory: *mut IOSCallConnectionFacto
         // Create data channel observer and data channel
         let dc_observer = DataChannelObserver::new(data_channel_cc)?;
         let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-        unsafe { data_channel.register_observer(dc_observer.rffi_interface())? } ;
+        unsafe { data_channel.register_observer(dc_observer.rffi_interface())? };
         cc_box.set_data_channel(data_channel)?;
         cc_box.set_data_channel_observer(dc_observer)?;
     }

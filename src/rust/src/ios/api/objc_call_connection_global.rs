@@ -13,25 +13,20 @@ use std::ptr;
 
 use std::ffi::c_void;
 
-use crate::ios::logging::{
-    IOSLogger,
-    init_logging,
-};
+use crate::ios::logging::{init_logging, IOSLogger};
 
 #[no_mangle]
 #[allow(non_snake_case)]
 /// Library initialization routine.
 ///
 /// Sets up the logging infrastructure.
-pub extern fn ringRtcInitialize(logObject: IOSLogger) -> *mut c_void {
+pub extern "C" fn ringRtcInitialize(logObject: IOSLogger) -> *mut c_void {
     // Directly initialize the logging singleton.
     match init_logging(logObject) {
         Ok(_v) => {
             // Return non-null pointer to indicate success.
             1 as *mut c_void
-        },
-        Err(_e) => {
-            ptr::null_mut()
-        },
+        }
+        Err(_e) => ptr::null_mut(),
     }
 }
