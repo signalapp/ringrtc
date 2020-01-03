@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.2
+
+- iOS: Fix iOS 13 issue with camera capture
+
 ## v0.3.1
 
 - Android: Filter list of cameras when switching cameras
