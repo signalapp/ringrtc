@@ -556,6 +556,7 @@ class VideoCaptureController {
     private weak var settingsDelegate: VideoCaptureSettingsDelegate?
     private let serialQueue = DispatchQueue(label: "org.signal.videoCaptureController")
     private var isUsingFrontCamera: Bool = true
+    private var isCapturing: Bool = false
 
     public var captureSession: AVCaptureSession {
         return capturer.captureSession
@@ -582,7 +583,13 @@ class VideoCaptureController {
                 return
             }
 
+            // Don't call stopCapture unless we're actively capturing.
+            // Calling this when we're not capturing will result in
+            // a crash on iOS 13 when built with the iOS 13 SDK.
+            guard strongSelf.isCapturing else { return }
+
             strongSelf.capturer.stopCapture()
+            strongSelf.isCapturing = false
         }
     }
 
@@ -619,6 +626,7 @@ class VideoCaptureController {
 
         let fps = self.framesPerSecond(format: format)
         capturer.startCapture(with: device, format: format, fps: fps)
+        isCapturing = true
     }
 
     private func device(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
