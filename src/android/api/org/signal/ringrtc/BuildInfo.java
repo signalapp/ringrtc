@@ -9,8 +9,6 @@
 
 package org.signal.ringrtc;
 
-import android.support.annotation.NonNull;
-
 public final class BuildInfo {
 
   private static final String TAG = Log.class.getSimpleName();

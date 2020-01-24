@@ -15,19 +15,15 @@ import android.support.annotation.Nullable;
 import android.os.Build;
 
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
 
 import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
-import org.webrtc.Logging;
 import org.webrtc.Logging.Severity;
 import org.webrtc.MediaConstraints;
 import org.webrtc.MediaStream;
 import org.webrtc.NativeLibraryLoader;
-import org.webrtc.NativePeerConnectionFactory;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.SSLCertificateVerifier;

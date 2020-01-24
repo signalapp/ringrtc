@@ -19,16 +19,11 @@ import java.util.List;
 import org.webrtc.IceCandidate;
 import org.webrtc.MediaStream;
 import org.webrtc.NativePeerConnectionFactory;
-import org.webrtc.PeerConnectionFactory;
 import org.webrtc.PeerConnection;
 
 import org.whispersystems.signalservice.api.SignalServiceAccountManager;
 import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
-import org.whispersystems.signalservice.api.messages.calls.AnswerMessage;
 import org.whispersystems.signalservice.api.messages.calls.IceUpdateMessage;
-import org.whispersystems.signalservice.api.messages.calls.OfferMessage;
-import org.whispersystems.signalservice.api.messages.calls.SignalServiceCallMessage;
-import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserException;
 
 /**

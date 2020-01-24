@@ -9,8 +9,6 @@
 
 package org.signal.ringrtc;
 
-import org.webrtc.Loggable;
-import org.webrtc.Logging;
 import org.webrtc.Logging.Severity;
 
 public final class WebRtcLogger implements org.webrtc.Loggable {
