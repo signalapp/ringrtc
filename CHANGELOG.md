@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.3
+
+- Update WebRTC to 3987
+
+- Update Rust dependencies
+
+- iOS: build system improvements
+
 ## v0.3.2
 
 - iOS: Fix iOS 13 issue with camera capture
