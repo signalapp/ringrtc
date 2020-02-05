@@ -59,10 +59,7 @@ void PeerConnectionObserverRffi::OnIceConnectionChange(
 
 void PeerConnectionObserverRffi::OnConnectionChange(
     PeerConnectionInterface::PeerConnectionState new_state) {
-  RTC_LOG(LS_INFO) << "OnConnectionChange()";
-
-  /* This callback is ignored for now */
-  // pc_observer_cbs_.onConnectionChange(call_connection_);
+  pc_observer_cbs_.onConnectionChange(call_connection_, new_state);
 }
 
 void PeerConnectionObserverRffi::OnIceConnectionReceivingChange(bool receiving) {
@@ -74,10 +71,7 @@ void PeerConnectionObserverRffi::OnIceConnectionReceivingChange(bool receiving) 
 
 void PeerConnectionObserverRffi::OnIceGatheringChange(
     PeerConnectionInterface::IceGatheringState new_state) {
-  RTC_LOG(LS_INFO) << "OnIceGatheringChange()";
-
-  /* This callback is ignored for now */
-  // pc_observer_cbs_.onIceGatheringChange(call_connection_);
+  pc_observer_cbs_.onIceGatheringChange(call_connection_, new_state);
 }
 
 void PeerConnectionObserverRffi::OnAddStream(

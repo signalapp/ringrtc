@@ -3,21 +3,24 @@
 buildscript {
     repositories {
         jcenter()
+        google()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.2.0'
+        classpath 'com.android.tools.build:gradle:3.5.1'
     }
 }
 
 allprojects {
     repositories {
         jcenter()
+        google()
     }
 }
 
 subprojects {
 
     ext.version_number       = project.hasProperty("ringrtcVersion") ? ringrtcVersion : "0.0.1-SNAPSHOT"
+    ext.isReleaseVersion     = ext.version_number.indexOf("-") == -1;
     ext.group_info           = "org.signal"
 
     ext.debug_jni_lib_dirs   = project.hasProperty("debugRingrtcLibDirs") ? Eval.me(debugRingrtcLibDirs) : []

@@ -1,85 +1,160 @@
 //
-// Copyright (C) 2019 Signal Messenger, LLC.
+// Copyright (C) 2019, 2020 Signal Messenger, LLC.
 // All rights reserved.
 //
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! Android CallPlatform Interface.
+//! Android Platform Interface.
 
 use std::fmt;
+use std::sync::Arc;
 
-use jni::{
-    JNIEnv,
-    JavaVM,
-};
-use jni::objects::{
-    JObject,
-    JClass,
-    JString,
-    JList,
-    GlobalRef,
-};
-use jni::sys::{
-    jlong,
-    jboolean,
-    jint,
-    JNI_FALSE,
-    JNI_TRUE,
-};
+use jni::objects::{GlobalRef, JObject, JValue};
+use jni::sys::{jint, jlong};
+use jni::{JNIEnv, JavaVM};
 
-use crate::android::call_connection_observer::AndroidCallConnectionObserver;
-use crate::android::error::{
-    AndroidError,
-    ServiceError,
-};
+// use crate::android::call_connection_observer::AndroidCallConnectionObserver;
+use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::webrtc_java_media_stream::JavaMediaStream;
-use crate::common::{
-    Result,
-    CallId,
-    CallState,
-};
-use crate::core::call_connection::{
-    CallConnection,
-    CallPlatform,
-    AppMediaStreamTrait,
-};
-use crate::core::call_connection_observer::{
-    CallConnectionObserver,
-    ClientEvent,
-};
-use crate::core::util::{
-    ptr_as_box,
-    ptr_as_mut,
-    ptr_as_ref,
-};
-use crate::error::RingRtcError;
+use crate::common::{ApplicationEvent, CallDirection, CallId, ConnectionId, DeviceId, Result};
+use crate::core::call::Call;
+use crate::core::connection::Connection;
+use crate::core::platform::{Platform, PlatformItem};
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media_stream::MediaStream;
-use crate::webrtc::sdp_observer::SessionDescriptionInterface;
 
-/// Concrete type for Android AppMediaStream objects.
+const RINGRTC_PACKAGE: &str = "org/signal/ringrtc";
+const CALL_MANAGER_CLASS: &str = "CallManager";
+const ICE_CANDIDATE_CLASS: &str = "org/webrtc/IceCandidate";
+
+/// Android implmentation for platform::Platform::AppMediaStream
 pub type AndroidMediaStream = JavaMediaStream;
-impl AppMediaStreamTrait for AndroidMediaStream {}
+impl PlatformItem for AndroidMediaStream {}
 
-/// Public type for Android CallConnection object.
-pub type AndroidCallConnection = CallConnection<AndroidPlatform>;
+/// Android implmentation for platform::Platform::AppRemotePeer
+pub type AndroidGlobalRef = GlobalRef;
+impl PlatformItem for AndroidGlobalRef {}
 
-/// Android implementation of core::CallPlatform.
+/// Android implmentation for platform::Platform::AppCallContext
+struct JavaCallContext {
+    /// Java JVM object.
+    platform:         AndroidPlatform,
+    /// Java CallContext object.
+    jni_call_context: GlobalRef,
+}
+
+impl Drop for JavaCallContext {
+    fn drop(&mut self) {
+        info!("JavaCallContext::drop()");
+
+        // call into CMI to close CallContext object
+        if let Ok(env) = self.platform.java_env() {
+            let jni_call_manager = self.platform.jni_call_manager.as_obj();
+            let jni_call_context = self.jni_call_context.as_obj();
+
+            const CLOSE_CALL_METHOD: &str = "closeCall";
+            const CLOSE_CALL_SIG: &str = "(Lorg/signal/ringrtc/CallManager$CallContext;)V";
+            let args = [jni_call_context.into()];
+            let _ = jni_call_method(
+                &env,
+                jni_call_manager,
+                CLOSE_CALL_METHOD,
+                CLOSE_CALL_SIG,
+                &args,
+            );
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AndroidCallContext {
+    inner: Arc<JavaCallContext>,
+}
+
+unsafe impl Sync for AndroidCallContext {}
+unsafe impl Send for AndroidCallContext {}
+impl PlatformItem for AndroidCallContext {}
+
+impl AndroidCallContext {
+    pub fn new(platform: AndroidPlatform, jni_call_context: GlobalRef) -> Self {
+        Self {
+            inner: Arc::new(JavaCallContext {
+                platform,
+                jni_call_context,
+            }),
+        }
+    }
+
+    pub fn to_jni(&self) -> GlobalRef {
+        self.inner.jni_call_context.clone()
+    }
+}
+
+/// Android implmentation for platform::Platform::AppConnection
+struct JavaConnection {
+    /// Java JVM object.
+    platform:       AndroidPlatform,
+    /// Java Connection object.
+    jni_connection: GlobalRef,
+}
+
+impl Drop for JavaConnection {
+    fn drop(&mut self) {
+        info!("JavaConnection::drop()");
+
+        // call into CMI to close Connection object
+        if let Ok(env) = self.platform.java_env() {
+            let jni_call_manager = self.platform.jni_call_manager.as_obj();
+            let jni_connection = self.jni_connection.as_obj();
+
+            const CLOSE_CONNECTION_METHOD: &str = "closeConnection";
+            const CLOSE_CONNECTION_SIG: &str = "(Lorg/signal/ringrtc/Connection;)V";
+            let args = [jni_connection.into()];
+            let _ = jni_call_method(
+                &env,
+                jni_call_manager,
+                CLOSE_CONNECTION_METHOD,
+                CLOSE_CONNECTION_SIG,
+                &args,
+            );
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AndroidConnection {
+    inner: Arc<JavaConnection>,
+}
+
+unsafe impl Sync for AndroidConnection {}
+unsafe impl Send for AndroidConnection {}
+impl PlatformItem for AndroidConnection {}
+
+impl AndroidConnection {
+    fn new(platform: AndroidPlatform, jni_connection: GlobalRef) -> Self {
+        Self {
+            inner: Arc::new(JavaConnection {
+                platform,
+                jni_connection,
+            }),
+        }
+    }
+
+    pub fn to_jni(&self) -> GlobalRef {
+        self.inner.jni_connection.clone()
+    }
+}
+
+/// Android implementation of platform::Platform.
 pub struct AndroidPlatform {
     /// Java JVM object.
-    jvm:                      JavaVM,
-    /// Java org.signal.ringrtc.SignalMessageRecipient object.
-    recipient:                GlobalRef,
-    /// Raw pointer to C++ webrtc::jni::OwnedPeerConnection object.
-    jni_owned_pc:             Option<jlong>,
-    /// Java org.signal.ringrtc.CallConnection object.
-    jcall_connection:         Option<GlobalRef>,
-    /// Cached org.whispersystems.signalservice.api.messages.calls.IceUpdateMessage class.
-    ice_update_message_class: Option<GlobalRef>,
-    /// CallConnectionObserver object.
-    cc_observer:              Option<Box<AndroidCallConnectionObserver>>,
+    jvm:              JavaVM,
+    /// Java org.signal.ringrtc.CallManager object.
+    jni_call_manager: GlobalRef,
+    /// Cache of Java classes needed at runtime
+    class_cache:      ClassCache,
 }
 
 unsafe impl Sync for AndroidPlatform {}
@@ -87,11 +162,7 @@ unsafe impl Send for AndroidPlatform {}
 
 impl fmt::Display for AndroidPlatform {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let jni_owned_pc = match self.jni_owned_pc {
-            Some(v) => format!("0x{:x}", v),
-            None    => "None".to_string(),
-        };
-        write!(f, "jni_owned_pc: {}", jni_owned_pc)
+        write!(f, "AndroidPlatform")
     }
 }
 
@@ -106,445 +177,494 @@ impl Drop for AndroidPlatform {
         info!("Dropping AndroidPlatform");
         // ensure this thread is attached to the JVM as our GlobalRefs
         // go out of scope
-        let _ = self.get_java_env();
+        let _ = self.java_env();
     }
 }
 
-impl CallPlatform for AndroidPlatform {
-
+impl Platform for AndroidPlatform {
     type AppMediaStream = AndroidMediaStream;
+    type AppRemotePeer = AndroidGlobalRef;
+    type AppConnection = AndroidConnection;
+    type AppCallContext = AndroidCallContext;
 
-    fn app_send_offer(&self,
-                      call_id:   CallId,
-                      offer:     SessionDescriptionInterface) -> Result<()> {
+    fn create_connection(
+        &mut self,
+        call: &Call<Self>,
+        remote_device: DeviceId,
+    ) -> Result<Connection<Self>> {
+        let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
-        let env = self.get_java_env()?;
-        let jcall_connection = self.get_jcall_connection()?;
+        info!("create_connection(): {}", connection_id);
 
-        // send offer via signal
-        let result = jni_send_offer(&env, jcall_connection, self.recipient.as_obj(), call_id, offer)?;
-        self.handle_client_result(&env, result, "SendOffer")
-    }
+        let connection = Connection::new(call.clone(), remote_device)?;
 
-    fn app_send_answer(&self,
-                       call_id:   CallId,
-                       answer:    SessionDescriptionInterface) -> Result<()> {
+        let connection_ptr = connection.get_connection_ptr()?;
+        let call_id_jlong = u64::from(call.call_id()) as jlong;
+        let jni_remote_device = remote_device as jint;
 
-        let env = self.get_java_env()?;
-        let jcall_connection = self.get_jcall_connection()?;
+        // call into CMI to create webrtc PeerConnection
+        let env = self.java_env()?;
+        let android_call_context = call.call_context()?;
+        let jni_call_context = android_call_context.to_jni();
+        let jni_call_manager = self.jni_call_manager.as_obj();
 
-        // send answer via signal
-        let result = jni_send_answer(&env, jcall_connection, self.recipient.as_obj(), call_id, answer)?;
-        self.handle_client_result(&env, result, "AcceptOffer")
+        const CREATE_CONNECTION_METHOD: &str = "createConnection";
+        const CREATE_CONNECTION_SIG: &str =
+            "(JJILorg/signal/ringrtc/CallManager$CallContext;)Lorg/signal/ringrtc/Connection;";
+        let args = [
+            (connection_ptr as jlong).into(),
+            call_id_jlong.into(),
+            jni_remote_device.into(),
+            jni_call_context.as_obj().into(),
+        ];
+        let result = jni_call_method(
+            &env,
+            jni_call_manager,
+            CREATE_CONNECTION_METHOD,
+            CREATE_CONNECTION_SIG,
+            &args,
+        )?;
 
-    }
-
-    fn app_send_ice_updates(&self,
-                            call_id:    CallId,
-                            candidates: &[IceCandidate]) -> Result<()> {
-
-        if candidates.is_empty() {
-            return Ok(());
+        let jni_connection = result.l()?;
+        if (*jni_connection).is_null() {
+            return Err(AndroidError::CreateJniConnection.into());
         }
+        let jni_connection = env.new_global_ref(jni_connection)?;
+        let platform = self.try_clone()?;
+        let android_connection = AndroidConnection::new(platform, jni_connection);
+        connection.set_app_connection(android_connection)?;
 
-        let env = self.get_java_env()?;
-        let jcall_connection = self.get_jcall_connection()?;
+        Ok(connection)
+    }
 
-        // convert ice_candidates slice into Java list of
-        // org/whispersystems/signalservice/api/messages/calls/IceUpdateMessage
-        // objects.
-        let ice_update_list = jni_new_linked_list(&env)?;
+    fn on_start_call(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        call_id: CallId,
+        direction: CallDirection,
+    ) -> Result<()> {
+        info!(
+            "on_start_call(): call_id: {}, direction: {}",
+            call_id, direction
+        );
 
-        let call_id_jlong = call_id as jlong;
+        let env = self.java_env()?;
+        let jni_remote = remote_peer.as_obj();
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let call_id_jlong = u64::from(call_id) as jlong;
+        let is_outgoing = match direction {
+            CallDirection::OutGoing => true,
+            CallDirection::InComing => false,
+        };
 
-        for candidate in candidates {
-            const ICE_UPDATE_MESSAGE_SIG: &str = "(JLjava/lang/String;ILjava/lang/String;)V";
+        const START_CALL_METHOD: &str = "onStartCall";
+        const START_CALL_SIG: &str = "(Lorg/signal/ringrtc/Remote;JZ)V";
 
+        let args = [jni_remote.into(), call_id_jlong.into(), is_outgoing.into()];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            START_CALL_METHOD,
+            START_CALL_SIG,
+            &args,
+        )?;
+        Ok(())
+    }
+
+    fn on_event(&self, remote_peer: &Self::AppRemotePeer, event: ApplicationEvent) -> Result<()> {
+        info!("on_event(): {}", event);
+
+        let env = self.java_env()?;
+        let jni_remote = remote_peer.as_obj();
+
+        // convert rust enum into Java enum
+        let class = "CallEvent";
+        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
+        let class_object = self.class_cache.get_class(&class_path)?;
+
+        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
+        let method_signature = format!("(I)L{};", class_path);
+        let args = [JValue::from(event as i32)];
+        let jni_enum = match env.call_static_method(
+            class_object,
+            ENUM_FROM_NATIVE_INDEX_METHOD,
+            &method_signature,
+            &args,
+        ) {
+            Ok(v) => v.l()?,
+            Err(_) => {
+                return Err(AndroidError::JniCallStaticMethod(
+                    class_path,
+                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
+                    method_signature.to_string(),
+                )
+                .into())
+            }
+        };
+
+        const ON_EVENT_METHOD: &str = "onEvent";
+        const ON_EVENT_SIG: &str =
+            "(Lorg/signal/ringrtc/Remote;Lorg/signal/ringrtc/CallManager$CallEvent;)V";
+
+        let args = [jni_remote.into(), jni_enum.into()];
+
+        let _ = jni_call_method(
+            &env,
+            self.jni_call_manager.as_obj(),
+            ON_EVENT_METHOD,
+            ON_EVENT_SIG,
+            &args,
+        )?;
+        Ok(())
+    }
+
+    fn on_send_offer(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        connection_id: ConnectionId,
+        broadcast: bool,
+        description: &str,
+    ) -> Result<()> {
+        info!(
+            "on_send_offer(): id: {}, broadcast: {}",
+            connection_id, broadcast
+        );
+
+        let env = self.java_env()?;
+        let jni_remote = remote_peer.as_obj();
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
+        let remote_device = connection_id.remote_device() as jint;
+
+        const SEND_OFFER_MESSAGE_METHOD: &str = "onSendOffer";
+        const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;)V";
+
+        let args = [
+            call_id_jlong.into(),
+            jni_remote.into(),
+            remote_device.into(),
+            broadcast.into(),
+            JObject::from(env.new_string(description)?).into(),
+        ];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            SEND_OFFER_MESSAGE_METHOD,
+            SEND_OFFER_MESSAGE_SIG,
+            &args,
+        )?;
+        Ok(())
+    }
+
+    fn on_send_answer(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        connection_id: ConnectionId,
+        broadcast: bool,
+        description: &str,
+    ) -> Result<()> {
+        info!(
+            "on_send_answer(): id: {}, broadcast: {}",
+            connection_id, broadcast
+        );
+
+        let env = self.java_env()?;
+        let jni_remote = remote_peer.as_obj();
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
+        let remote_device = connection_id.remote_device() as jint;
+
+        const SEND_ANSWER_MESSAGE_METHOD: &str = "onSendAnswer";
+        const SEND_ANSWER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;)V";
+
+        let args = [
+            call_id_jlong.into(),
+            jni_remote.into(),
+            remote_device.into(),
+            broadcast.into(),
+            JObject::from(env.new_string(description)?).into(),
+        ];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            SEND_ANSWER_MESSAGE_METHOD,
+            SEND_ANSWER_MESSAGE_SIG,
+            &args,
+        )?;
+        Ok(())
+    }
+
+    fn on_send_ice_candidates(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        connection_id: ConnectionId,
+        broadcast: bool,
+        ice_candidates: &[IceCandidate],
+    ) -> Result<()> {
+        info!(
+            "on_send_ice_candidates(): id: {}, broadcast: {}",
+            connection_id, broadcast
+        );
+
+        let env = self.java_env()?;
+        let jni_remote = remote_peer.as_obj();
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
+        let remote_device = connection_id.remote_device() as jint;
+
+        // create Java List<org.webrtc.IceCandidate>
+        let ice_candidate_class = self.class_cache.get_class(ICE_CANDIDATE_CLASS)?;
+        let ice_candidate_list = jni_new_linked_list(&env)?;
+
+        for candidate in ice_candidates {
+            const ICE_CANDIDATE_CTOR_SIG: &str = "(Ljava/lang/String;ILjava/lang/String;)V";
             let sdp_mid = env.new_string(&candidate.sdp_mid)?;
             let sdp = env.new_string(&candidate.sdp)?;
-            let args = [ call_id_jlong.into(),
-                         JObject::from(sdp_mid).into(),
-                         candidate.sdp_mline_index.into(),
-                         JObject::from(sdp).into(),
+            let args = [
+                JObject::from(sdp_mid).into(),
+                candidate.sdp_mline_index.into(),
+                JObject::from(sdp).into(),
             ];
-            let ice_update_message_obj = env.new_object(self.get_ice_update_message_class()?,
-                                                        ICE_UPDATE_MESSAGE_SIG,
-                                                        &args)?;
-                ice_update_list.add(ice_update_message_obj)?;
+            let ice_update_message_obj =
+                env.new_object(ice_candidate_class, ICE_CANDIDATE_CTOR_SIG, &args)?;
+            ice_candidate_list.add(ice_update_message_obj)?;
         }
 
-        // send ice updates via signal
-        let client_result = jni_send_ice_updates(&env, jcall_connection, self.recipient.as_obj(), ice_update_list)?;
-        self.handle_client_result(&env, client_result, "IceUpdates")
+        const ON_SEND_ICE_CANDIDATES_METHOD: &str = "onSendIceCandidates";
+        const ON_SEND_ICE_CANDIDATES_SIG: &str =
+            "(JLorg/signal/ringrtc/Remote;IZLjava/util/List;)V";
+
+        let args = [
+            call_id_jlong.into(),
+            jni_remote.into(),
+            remote_device.into(),
+            broadcast.into(),
+            JObject::from(ice_candidate_list).into(),
+        ];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            ON_SEND_ICE_CANDIDATES_METHOD,
+            ON_SEND_ICE_CANDIDATES_SIG,
+            &args,
+        )?;
+        Ok(())
     }
 
-    fn app_send_hangup(&self, call_id: CallId) -> Result<()> {
+    fn on_send_hangup(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        connection_id: ConnectionId,
+        broadcast: bool,
+    ) -> Result<()> {
+        info!(
+            "on_send_hangup(): id: {}, broadcast: {}",
+            connection_id, broadcast
+        );
 
-        let env = self.get_java_env()?;
-        let jcall_connection = self.get_jcall_connection()?;
+        let env = self.java_env()?;
+        let jni_remote = remote_peer.as_obj();
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
+        let remote_device = connection_id.remote_device() as jint;
 
-        // send hangup via signal
-        jni_send_hangup(&env, jcall_connection, self.recipient.as_obj(), call_id)
+        const SEND_HANGUP_MESSAGE_METHOD: &str = "onSendHangup";
+        const SEND_HANGUP_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZ)V";
+
+        let args = [
+            call_id_jlong.into(),
+            jni_remote.into(),
+            remote_device.into(),
+            broadcast.into(),
+        ];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            SEND_HANGUP_MESSAGE_METHOD,
+            SEND_HANGUP_MESSAGE_SIG,
+            &args,
+        )?;
+        Ok(())
     }
 
-    fn create_media_stream(&self, stream: MediaStream) -> Result<Self::AppMediaStream> {
+    fn on_send_busy(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        connection_id: ConnectionId,
+        broadcast: bool,
+    ) -> Result<()> {
+        info!(
+            "on_send_busy(): id: {}, broadcast: {}",
+            connection_id, broadcast
+        );
+
+        let env = self.java_env()?;
+        let jni_remote = remote_peer.as_obj();
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
+        let remote_device = connection_id.remote_device() as jint;
+
+        const SEND_BUSY_MESSAGE_METHOD: &str = "onSendBusy";
+        const SEND_BUSY_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZ)V";
+
+        let args = [
+            call_id_jlong.into(),
+            jni_remote.into(),
+            remote_device.into(),
+            broadcast.into(),
+        ];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            SEND_BUSY_MESSAGE_METHOD,
+            SEND_BUSY_MESSAGE_SIG,
+            &args,
+        )?;
+        Ok(())
+    }
+
+    fn create_media_stream(
+        &self,
+        _connection: &Connection<Self>,
+        stream: MediaStream,
+    ) -> Result<Self::AppMediaStream> {
         JavaMediaStream::new(stream)
     }
 
-    fn notify_client(&self, event: ClientEvent) -> Result<()> {
-        if let Some(observer) = &self.cc_observer {
-            info!("android:notify_client(): event: {}", event);
-            observer.notify_event(event);
-        }
+    fn on_connect_media(
+        &self,
+        _remote_peer: &Self::AppRemotePeer,
+        app_call_context: &Self::AppCallContext,
+        media_stream: &Self::AppMediaStream,
+    ) -> Result<()> {
+        info!("on_connect_media():");
+
+        let env = self.java_env()?;
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let jni_call_context = app_call_context.to_jni();
+        let jni_media_stream = media_stream.global_ref(&env)?;
+
+        const CONNECT_MEDIA_METHOD: &str = "onConnectMedia";
+        const CONNECT_MEDIA_SIG: &str =
+            "(Lorg/signal/ringrtc/CallManager$CallContext;Lorg/webrtc/MediaStream;)V";
+
+        let args = [
+            jni_call_context.as_obj().into(),
+            jni_media_stream.as_obj().into(),
+        ];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            CONNECT_MEDIA_METHOD,
+            CONNECT_MEDIA_SIG,
+            &args,
+        )?;
         Ok(())
     }
 
-    fn notify_error(&self, error: failure::Error) -> Result<()> {
-        if let Some(observer) = &self.cc_observer {
-            observer.notify_error(error);
-        }
+    fn on_close_media(&self, app_call_context: &Self::AppCallContext) -> Result<()> {
+        info!("on_close_media():");
+
+        let env = self.java_env()?;
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let jni_call_context = app_call_context.to_jni();
+
+        const CLOSE_MEDIA_METHOD: &str = "onCloseMedia";
+        const CLOSE_MEDIA_SIG: &str = "(Lorg/signal/ringrtc/CallManager$CallContext;)V";
+
+        let args = [jni_call_context.as_obj().into()];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            CLOSE_MEDIA_METHOD,
+            CLOSE_MEDIA_SIG,
+            &args,
+        )?;
         Ok(())
     }
 
-    /// Notify the client application about an avilable MediaStream.
-    fn notify_on_add_stream(&self, stream: &Self::AppMediaStream) -> Result<()> {
-        let java_media_stream = stream as &JavaMediaStream;
-        let java_media_stream_ref = java_media_stream.get_global_ref(&self.get_java_env()?)?;
-        if let Some(observer) = &self.cc_observer {
-            observer.notify_on_add_stream(java_media_stream_ref);
-        }
+    fn compare_remotes(
+        &self,
+        remote_peer1: &Self::AppRemotePeer,
+        remote_peer2: &Self::AppRemotePeer,
+    ) -> Result<bool> {
+        info!("remotes_equal():");
+
+        let env = self.java_env()?;
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let jni_remote1 = remote_peer1.as_obj();
+        let jni_remote2 = remote_peer2.as_obj();
+
+        const COMPARE_REMOTES_METHOD: &str = "compareRemotes";
+        const COMPARE_REMOTES_SIG: &str =
+            "(Lorg/signal/ringrtc/Remote;Lorg/signal/ringrtc/Remote;)Z";
+
+        let args = [jni_remote1.into(), jni_remote2.into()];
+        let result = jni_call_method(
+            &env,
+            jni_call_manager,
+            COMPARE_REMOTES_METHOD,
+            COMPARE_REMOTES_SIG,
+            &args,
+        )?
+        .z()?;
+        Ok(result)
+    }
+
+    fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()> {
+        info!("on_call_concluded():");
+
+        let env = self.java_env()?;
+        let jni_call_manager = self.jni_call_manager.as_obj();
+        let jni_remote_peer = remote_peer.as_obj();
+
+        const CALL_CONCLUDED_METHOD: &str = "onCallConcluded";
+        const CALL_CONCLUDED_SIG: &str = "(Lorg/signal/ringrtc/Remote;)V";
+
+        let args = [jni_remote_peer.into()];
+        let _ = jni_call_method(
+            &env,
+            jni_call_manager,
+            CALL_CONCLUDED_METHOD,
+            CALL_CONCLUDED_SIG,
+            &args,
+        )?;
         Ok(())
     }
 }
 
 impl AndroidPlatform {
-
     /// Create a new AndroidPlatform object.
-    pub fn new(jvm: JavaVM, recipient: GlobalRef) -> Self {
-
-        Self {
-            jvm,
-            recipient,
-            jni_owned_pc:             None,
-            jcall_connection:         None,
-            ice_update_message_class: None,
-            cc_observer:              None,
+    pub fn new(env: &JNIEnv, jni_call_manager: GlobalRef) -> Result<Self> {
+        let mut class_cache = ClassCache::new();
+        for class in &[
+            "org/signal/ringrtc/CallManager$CallEvent",
+            ICE_CANDIDATE_CLASS,
+        ] {
+            class_cache.add_class(env, class)?;
         }
-    }
 
-    /// Update a number of AndroidPlatform fields.
-    ///
-    /// Initializing an AndroidPlatform object is a multi-step
-    /// process.  This step initializes the object using the input
-    /// parameters.
-    pub fn update(&mut self,
-                  jni_owned_pc: jlong,
-                  cc_observer:  Box<AndroidCallConnectionObserver>) -> Result<()> {
-
-        self.jni_owned_pc = Some(jni_owned_pc);
-        self.cc_observer = Some(cc_observer);
-
-        let env = self.get_java_env()?;
-
-        const ICE_UPDATE_MESSAGE_CLASS: &str = "org/whispersystems/signalservice/api/messages/calls/IceUpdateMessage";
-        let ice_update_message_class = match env.find_class(ICE_UPDATE_MESSAGE_CLASS) {
-            Ok(v) => v,
-            Err(_) => return Err(AndroidError::JniClassLookup(String::from(ICE_UPDATE_MESSAGE_CLASS)).into()),
-        };
-        self.ice_update_message_class = Some(env.new_global_ref(JObject::from(ice_update_message_class))?);
-
-        Ok(())
+        Ok(Self {
+            jvm: env.get_java_vm()?,
+            jni_call_manager,
+            class_cache,
+        })
     }
 
     /// Return the Java JNIEnv.
-    fn get_java_env(&self) -> Result <JNIEnv> {
-
+    fn java_env(&self) -> Result<JNIEnv> {
         match self.jvm.get_env() {
             Ok(v) => Ok(v),
             Err(_e) => Ok(self.jvm.attach_current_thread_as_daemon()?),
         }
     }
 
-    /// Set the org.signal.ringrtc.CallConnection object this Rust
-    /// object belongs to.
-    fn set_jcall_connection(&mut self, jcall_connection: GlobalRef) {
-        self.jcall_connection = Some(jcall_connection);
+    pub fn try_clone(&self) -> Result<Self> {
+        let env = self.java_env()?;
+        Ok(Self {
+            jvm:              env.get_java_vm()?,
+            jni_call_manager: self.jni_call_manager.clone(),
+            class_cache:      self.class_cache.clone(),
+        })
     }
-
-    /// Return the org.signal.ringrtc.CallConnection object.
-    fn get_jcall_connection(&self) -> Result<JObject> {
-        match self.jcall_connection.as_ref() {
-            Some(v) => Ok(v.as_obj()),
-            None => Err(RingRtcError::OptionValueNotSet("get_jcall_connection()".to_string(),
-                                                        "jcall_connection".to_string()).into()),
-        }
-    }
-
-    /// Returned the cached
-    /// org.whispersystems.signalservice.api.messages.calls.IceUpdateMessage
-    /// class.
-    fn get_ice_update_message_class(&self) -> Result<JClass> {
-
-        match self.ice_update_message_class.as_ref() {
-            Some(v) => Ok(JClass::from(v.as_obj())),
-            None => Err(RingRtcError::OptionValueNotSet("get_ice_update_message_class()".to_string(),
-                                                        "ice_update_message_class".to_string()).into()),
-        }
-    }
-
-    /// If the result represents an exception, convert the exception
-    /// to a GlobalRef.
-    fn handle_client_result(&self, env: &JNIEnv, result: JObject, msg: &str) -> Result<()> {
-
-        let original = result;
-        let inner = result.into_inner();
-        if !inner.is_null() {
-            let global_ref = env.new_global_ref(original)?;
-            let service_error = ServiceError::new(global_ref, String::from(msg));
-            return Err(AndroidError::JniServiceFailure(service_error).into());
-        }
-        Ok(())
-    }
-
-}
-
-/// Return the raw webrtc::PeerConnectionInterface pointer.
-pub fn native_get_native_peer_connection(call_connection: *mut AndroidCallConnection) -> Result<jlong> {
-
-    let cc = unsafe { ptr_as_ref(call_connection)? };
-    let platform = cc.platform()?;
-    if let Some(jni_owned_pc) = platform.jni_owned_pc.as_ref() {
-        Ok(*jni_owned_pc)
-    } else {
-        Err(RingRtcError::OptionValueNotSet("native_get_native_peer_connection".to_string(),
-                                            "jni_owned_pc".to_string()).into())
-    }
-}
-
-/// Close the CallConnection and quiesce related threads.
-pub fn native_close_call_connection(call_connection: *mut AndroidCallConnection) -> Result<()> {
-
-    let cc = unsafe { ptr_as_mut(call_connection)? };
-    cc.close()
-}
-
-/// Dispose of the CallConnection allocated on the heap.
-pub fn native_dispose_call_connection(call_connection: *mut AndroidCallConnection) -> Result<()> {
-
-    // Convert the pointer back into a box, allowing it to go out of
-    // scope.
-    let cc_box = unsafe { ptr_as_box(call_connection)? };
-
-    debug_assert_eq!(CallState::Closed, cc_box.state()?,
-                     "Must call close() before calling dispose()!");
-
-    Ok(())
-}
-
-/// Send the SDP offer via JNI.
-fn jni_send_offer<'a>(env: &'a  JNIEnv,
-              jcall_connection: JObject,
-              recipient:        JObject,
-              call_id:          CallId,
-              offer:            SessionDescriptionInterface) -> Result<JObject<'a>> {
-
-    let description = offer.get_description()?;
-    info!("jni_send_offer():");
-
-    let call_id_jlong = call_id as jlong;
-
-    const SEND_OFFER_MESSAGE_METHOD: &str = "sendSignalServiceOffer";
-    const SEND_OFFER_MESSAGE_SIG: &str = "(Lorg/signal/ringrtc/SignalMessageRecipient;JLjava/lang/String;)Ljava/lang/Exception;";
-    let args = [ recipient.into(), call_id_jlong.into(), JObject::from(env.new_string(description)?).into() ];
-    let result = jni_call_method(env, jcall_connection,
-                                 SEND_OFFER_MESSAGE_METHOD,
-                                 SEND_OFFER_MESSAGE_SIG,
-                                 &args)?.l()?;
-
-    info!("jni_send_offer(): complete");
-
-    Ok(result)
-}
-
-/// Inject a SendOffer event to the FSM.
-pub fn native_send_offer(env:              &JNIEnv,
-                         jcall_connection: JObject,
-                         call_connection:  *mut AndroidCallConnection) -> Result<()> {
-
-    let cc = unsafe { ptr_as_mut(call_connection)? };
-
-    let jcall_connection_global_ref = env.new_global_ref(jcall_connection)?;
-
-    if let Ok(mut platform) = cc.platform() {
-        platform.set_jcall_connection(jcall_connection_global_ref);
-    }
-
-    cc.inject_send_offer()
-}
-
-/// Create a Rust CallConnectionObserver.
-pub fn native_create_call_connection_observer(env:       &JNIEnv,
-                                              observer:  JObject,
-                                              call_id:   CallId,
-                                              recipient: JObject) -> Result<jlong> {
-    let jcc_observer = env.new_global_ref(observer)?;
-    let jrecipient = env.new_global_ref(recipient)?;
-    let cc_observer = AndroidCallConnectionObserver::new(env, jcc_observer, call_id, jrecipient)?;
-    let cc_observer_box = Box::new(cc_observer);
-    Ok(Box::into_raw(cc_observer_box) as jlong)
-}
-
-/// Verify the incoming SDP answer occurs while in the proper state.
-pub fn native_validate_response_state(call_connection: *mut AndroidCallConnection) -> Result<jboolean> {
-
-    let cc = unsafe { ptr_as_ref(call_connection)? };
-
-    if let CallState::SendingOffer = cc.state()? {
-        Ok(JNI_TRUE)
-    } else {
-        Ok(JNI_FALSE)
-    }
-
-}
-
-/// Inject a HandleAnswer event into the FSM.
-pub fn native_handle_answer(env:             &JNIEnv,
-                            call_connection: *mut AndroidCallConnection,
-                            session_desc:    JString) -> Result<()> {
-
-    let cc = unsafe { ptr_as_mut(call_connection)? };
-
-    cc.inject_handle_answer(env.get_string(session_desc)?.into())
-
-}
-
-/// Send an SDP answer via JNI.
-fn jni_send_answer<'a>(env:              &'a JNIEnv,
-                       jcall_connection: JObject,
-                       recipient:        JObject,
-                       call_id:          CallId,
-                       offer:            SessionDescriptionInterface) -> Result<JObject<'a>> {
-
-    let description = offer.get_description()?;
-    info!("jni_send_answer():");
-
-    let call_id_jlong = call_id as jlong;
-
-    const SEND_ANSWER_MESSAGE_METHOD: &str = "sendSignalServiceAnswer";
-    const SEND_ANSWER_MESSAGE_SIG: &str = "(Lorg/signal/ringrtc/SignalMessageRecipient;JLjava/lang/String;)Ljava/lang/Exception;";
-    let args = [ recipient.into(), call_id_jlong.into(), JObject::from(env.new_string(description)?).into() ];
-    let result = jni_call_method(env, jcall_connection,
-                                 SEND_ANSWER_MESSAGE_METHOD,
-                                 SEND_ANSWER_MESSAGE_SIG,
-                                 &args)?.l()?;
-
-    info!("jni_send_answer(): complete");
-
-    Ok(result)
-}
-
-/// Inject a HandleOffer event into the FSM.
-pub fn native_handle_offer(env:              &JNIEnv,
-                           jcall_connection: JObject,
-                           call_connection:  *mut AndroidCallConnection,
-                           offer:            JString) -> Result<()> {
-
-    let cc = unsafe { ptr_as_mut(call_connection)? };
-
-    let jcall_connection_global_ref = env.new_global_ref(jcall_connection)?;
-
-    if let Ok(mut platform) = cc.platform() {
-        platform.set_jcall_connection(jcall_connection_global_ref);
-    }
-
-    cc.inject_handle_offer(env.get_string(offer)?.into())
-}
-
-/// Send an ICE update to the remote peer via JNI.
-fn jni_send_ice_updates<'a>(env:              &'a JNIEnv,
-                            jcall_connection: JObject,
-                            recipient:        JObject,
-                            ice_update_list:  JList) -> Result<JObject<'a>> {
-
-    info!("jni_send_ice_updates():");
-
-    const SEND_ICE_UPDATE_MESSAGE_METHOD: &str = "sendSignalServiceIceUpdates";
-    const SEND_ICE_UPDATE_MESSAGE_SIG: &str = "(Lorg/signal/ringrtc/SignalMessageRecipient;Ljava/util/List;)Ljava/lang/Exception;";
-    let args = [
-        recipient.into(),
-        JObject::from(ice_update_list).into(),
-    ];
-    let result = jni_call_method(env, jcall_connection,
-                                 SEND_ICE_UPDATE_MESSAGE_METHOD,
-                                 SEND_ICE_UPDATE_MESSAGE_SIG,
-                                 &args)?.l()?;
-
-    info!("jni_send_ice_updates(): complete");
-
-    Ok(result)
-}
-
-/// Send a HangUp message to the remote peer via JNI.
-fn jni_send_hangup(env:         &JNIEnv,
-              jcall_connection: JObject,
-              recipient:        JObject,
-              call_id:          CallId) -> Result<()> {
-
-    info!("jni_send_hangup():");
-
-    let call_id_jlong = call_id as jlong;
-
-    const SEND_HANGUP_MESSAGE_METHOD: &str = "sendSignalServiceHangup";
-    const SEND_HANGUP_MESSAGE_SIG: &str = "(Lorg/signal/ringrtc/SignalMessageRecipient;J)V";
-    let args = [ recipient.into(), call_id_jlong.into() ];
-    let _ = jni_call_method(env, jcall_connection,
-                            SEND_HANGUP_MESSAGE_METHOD,
-                            SEND_HANGUP_MESSAGE_SIG,
-                            &args)?;
-
-    info!("jni_send_hangup(): complete");
-
-    Ok(())
-}
-
-/// Inject a HangUp event into the FSM.
-pub fn native_hang_up(call_connection: *mut AndroidCallConnection) -> Result<()> {
-
-    let cc = unsafe { ptr_as_mut(call_connection)? };
-    cc.inject_hang_up()
-
-}
-
-/// Inject an AcceptCall event into the FSM.
-pub fn native_accept_call(call_connection: *mut AndroidCallConnection) -> Result<()> {
-
-    let cc = unsafe { ptr_as_mut(call_connection)? };
-    cc.inject_accept_call()
-
-}
-
-/// Inject a LocalVideoStatus event into the FSM.
-pub fn native_send_video_status(call_connection: *mut AndroidCallConnection, enabled: bool) -> Result<()> {
-
-    let cc: &mut AndroidCallConnection = unsafe { ptr_as_mut(call_connection)? };
-    cc.inject_local_video_status(enabled)
-
-}
-
-/// Inject a RemoteIceCandidate event into the FSM.
-pub fn native_add_ice_candidate(env:             &JNIEnv,
-                                call_connection: *mut AndroidCallConnection,
-                                sdp_mid:         JString,
-                                sdp_mline_index: jint,
-                                sdp:             JString) -> Result<()> {
-
-    let cc = unsafe { ptr_as_mut(call_connection)? };
-
-    let ice_candidate = IceCandidate::new(
-        env.get_string(sdp_mid)?.into(),
-        sdp_mline_index as i32,
-        env.get_string(sdp)?.into(),
-    );
-
-    cc.inject_remote_ice_candidate(ice_candidate)
 }

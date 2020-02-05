@@ -1,0 +1,1557 @@
+//
+// Copyright (C) 2019, 2020 Signal Messenger, LLC.
+// All rights reserved.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+//
+
+//! The main Call Manager object defitions.
+
+use std::collections::{HashMap, VecDeque};
+use std::fmt;
+use std::stringify;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::thread;
+use std::time::{Duration, SystemTime};
+
+use futures::future::lazy;
+use futures::Future;
+use tokio::runtime;
+
+use crate::common::{
+    ApplicationEvent,
+    CallDirection,
+    CallId,
+    CallState,
+    ConnectionId,
+    DeviceId,
+    Result,
+};
+use crate::core::call::Call;
+use crate::core::call_mutex::CallMutex;
+use crate::core::connection::Connection;
+use crate::core::platform::Platform;
+use crate::error::RingRtcError;
+
+use crate::webrtc::ice_candidate::IceCandidate;
+use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::sdp_observer::SessionDescriptionInterface;
+
+const TIME_OUT_PERIOD: u64 = 120;
+
+/// Spawns a task on the worker runtime thread to handle an API
+/// request with error handling.
+///
+/// If the future fails:
+/// - log the failure
+/// - conclude the call with EndedInternalFailure
+///
+macro_rules! handle_active_call_api {
+    (
+        $s:ident,
+        $f:expr
+            $( , $a:expr)*
+    ) => {{
+        info!("API:{}():", stringify!($f));
+        let mut call_manager = $s.clone();
+        let mut cm_error = $s.clone();
+        let future = lazy(move || $f(&mut call_manager $( , $a)*)).map_err(move |err| {
+            error!("Future {} failed: {}", stringify!($f), err);
+            let _ = cm_error.internal_api_error( err);
+        });
+        $s.worker_spawn(future)
+    }};
+}
+
+macro_rules! check_active_call {
+    (
+        $s:ident,
+        $f:expr
+    ) => {
+        match $s.active_call() {
+            Ok(v) => {
+                info!("{}(): call_id: {}", $f, v.call_id());
+                v
+            }
+            _ => {
+                info!("{}(): ignoring for inactive call", $f);
+                return Ok(());
+            }
+        }
+    };
+}
+
+/// Spawns a task on the worker runtime thread to handle an API
+/// request with no error handling.
+///
+/// If the future fails:
+/// - log the failure
+///
+macro_rules! handle_api {
+    (
+        $s:ident,
+        $f:expr
+            $( , $a:expr)*
+    ) => {{
+        let mut call_manager = $s.clone();
+        info!("API:{}():", stringify!($f));
+        let future = lazy(move || $f(&mut call_manager $( , $a)*)).map_err(move |err| {
+            error!("Future {} failed: {}", stringify!($f), err);
+        });
+        $s.worker_spawn(future)
+    }};
+}
+
+/// The different kinds of messages that can be added to the message_queue.
+#[derive(Debug, PartialEq)]
+pub enum SignalingMessageType {
+    None,
+    Offer,
+    Answer,
+    Ice,
+    Hangup,
+    Busy,
+}
+
+/// A structure to hold messages in the message_queue, identified by their CallId.
+pub struct SignalingMessageItem<T>
+where
+    T: Platform,
+{
+    /// The CallId of the Call that the message belongs to.
+    call_id:         CallId,
+    /// The type of message the item corresponds to.
+    message_type:    SignalingMessageType,
+    /// The closure to be called which will send the message.
+    message_closure: Box<dyn Fn(&CallManager<T>) -> Result<()> + Send>,
+}
+
+/// A structure implementing a message queue used to control the
+/// timing of sending Signaling messages. This helps ensure that
+/// messages are sent with the same cadence that they can actually
+/// be placed on-the-wire.
+pub struct SignalingMessageQueue<T>
+where
+    T: Platform,
+{
+    /// The message queue.
+    queue:                  VecDeque<SignalingMessageItem<T>>,
+    /// The type of the last message sent from the message queue.
+    last_sent_message_type: SignalingMessageType,
+    /// Whether or not a message is still being handled by the
+    /// application (true if a message is currently in the process
+    /// of being sent). We will only send one at a time to the
+    /// application.
+    messages_in_flight:     bool,
+}
+
+impl<T> SignalingMessageQueue<T>
+where
+    T: Platform,
+{
+    /// Create a new SignalingMessageQueue.
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            queue:                  VecDeque::new(),
+            last_sent_message_type: SignalingMessageType::None,
+            messages_in_flight:     false,
+        })
+    }
+}
+
+pub struct CallManager<T>
+where
+    T: Platform,
+{
+    /// Interface to platform specific methods.
+    platform:       Arc<CallMutex<T>>,
+    /// Map of all calls, indexed by CallId.
+    call_map:       Arc<CallMutex<HashMap<CallId, Call<T>>>>,
+    /// CallId of the active call.
+    active_call_id: Arc<CallMutex<Option<CallId>>>,
+    /// Tokio runtime for back ground task execution.
+    worker_runtime: Arc<CallMutex<Option<runtime::Runtime>>>,
+    /// Signaling message queue.
+    message_queue:  Arc<CallMutex<SignalingMessageQueue<T>>>,
+}
+
+impl<T> fmt::Display for CallManager<T>
+where
+    T: Platform,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let platform = match self.platform.lock() {
+            Ok(v) => format!("{}", v),
+            Err(_) => "unavailable".to_string(),
+        };
+        let active_call_id = match self.active_call_id.lock() {
+            Ok(v) => format!("{:?}", v),
+            Err(_) => "unavailable".to_string(),
+        };
+        write!(
+            f,
+            "thread: {:?}, platform: ({}), active_call_id: ({})",
+            thread::current().id(),
+            platform,
+            active_call_id
+        )
+    }
+}
+
+impl<T> fmt::Debug for CallManager<T>
+where
+    T: Platform,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl<T> Drop for CallManager<T>
+where
+    T: Platform,
+{
+    fn drop(&mut self) {
+        if self.ref_count() == 1 {
+            info!("CallManager: Dropping last reference.");
+        } else {
+            debug!("Dropping CallManager: ref_count: {}", self.ref_count());
+        }
+    }
+}
+
+impl<T> Clone for CallManager<T>
+where
+    T: Platform,
+{
+    fn clone(&self) -> Self {
+        Self {
+            platform:       Arc::clone(&self.platform),
+            call_map:       Arc::clone(&self.call_map),
+            active_call_id: Arc::clone(&self.active_call_id),
+            worker_runtime: Arc::clone(&self.worker_runtime),
+            message_queue:  Arc::clone(&self.message_queue),
+        }
+    }
+}
+
+impl<T> CallManager<T>
+where
+    T: Platform,
+{
+    ////////////////////////////////////////////////////////////////////////
+    // Public API (outside of this module) functions start here. These
+    // functions are called by the application and need to be either
+    // a) fast or b) asynchronous.
+    ////////////////////////////////////////////////////////////////////////
+
+    /// Create a new CallManager.
+    pub fn new(platform: T) -> Result<Self> {
+        Ok(Self {
+            platform:       Arc::new(CallMutex::new(platform, "platform")),
+            call_map:       Arc::new(CallMutex::new(HashMap::new(), "hash_map")),
+            active_call_id: Arc::new(CallMutex::new(None, "active_call_id")),
+            worker_runtime: Arc::new(CallMutex::new(
+                Some(
+                    runtime::Builder::new()
+                        .core_threads(1)
+                        .name_prefix("worker-")
+                        .build()?,
+                ),
+                "worker_runtime",
+            )),
+            message_queue:  Arc::new(CallMutex::new(
+                SignalingMessageQueue::new()?,
+                "message_queue",
+            )),
+        })
+    }
+
+    /// Create an outgoing call.
+    pub fn call(&mut self, remote_peer: <T as Platform>::AppRemotePeer) -> Result<()> {
+        info!("API:call():");
+
+        let mut call_manager = self.clone();
+        let mut cm_error = self.clone();
+        let remote_peer_error = remote_peer.clone();
+        let future = lazy(move || call_manager.handle_call(remote_peer)).map_err(move |err| {
+            error!("Handle call failed: {}", err);
+            cm_error.internal_create_api_error(&remote_peer_error, err);
+        });
+        self.worker_spawn(future)
+    }
+
+    /// Accept an incoming call.
+    pub fn accept_call(&mut self, call_id: CallId) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_accept_call, call_id)
+    }
+
+    /// Drop the active call.
+    pub fn drop_call(&mut self, call_id: CallId) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_drop_call, call_id)
+    }
+
+    /// Proceed with the outgoing call.
+    pub fn proceed(
+        &mut self,
+        call_id: CallId,
+        app_call_context: <T as Platform>::AppCallContext,
+        remote_devices: Vec<DeviceId>,
+    ) -> Result<()> {
+        handle_active_call_api!(
+            self,
+            CallManager::handle_proceed,
+            call_id,
+            app_call_context,
+            remote_devices
+        )
+    }
+
+    /// OK for the library to continue to send signaling messages.
+    pub fn message_sent(&mut self, call_id: CallId) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_message_sent, call_id)
+    }
+
+    /// The previous message send failed. Handle, but continue to send signaling messages.
+    pub fn message_send_failure(&mut self, call_id: CallId) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_message_send_failure, call_id)
+    }
+
+    /// Local hangup of the active call.
+    pub fn hangup(&mut self) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_hangup)
+    }
+
+    /// Received SDP offer from application.
+    pub fn received_offer(
+        &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
+        connection_id: ConnectionId,
+        offer: String,
+        timestamp: u64,
+    ) -> Result<()> {
+        info!("API:received_offer():");
+
+        let mut call_manager = self.clone();
+        let mut cm_error = self.clone();
+        let remote_peer_error = remote_peer.clone();
+        let future = lazy(move || {
+            call_manager.handle_received_offer(remote_peer, connection_id, offer, timestamp)
+        })
+        .map_err(move |err| {
+            error!("Handle received offer failed: {}", err);
+            cm_error.internal_create_api_error(&remote_peer_error, err);
+        });
+        self.worker_spawn(future)
+    }
+
+    /// Received SDP answer from application.
+    pub fn received_answer(&mut self, connection_id: ConnectionId, answer: String) -> Result<()> {
+        handle_active_call_api!(
+            self,
+            CallManager::handle_received_answer,
+            connection_id,
+            answer
+        )
+    }
+
+    /// Received ICE candidates from application.
+    pub fn received_ice_candidates(
+        &mut self,
+        connection_id: ConnectionId,
+        ice_candidates: &[IceCandidate],
+    ) -> Result<()> {
+        let ice_vec: Vec<IceCandidate> = ice_candidates.into();
+        handle_active_call_api!(
+            self,
+            CallManager::handle_received_ice_candidates,
+            connection_id,
+            ice_vec
+        )
+    }
+
+    /// Received hangup message from application.
+    pub fn received_hangup(&mut self, connection_id: ConnectionId) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_received_hangup, connection_id)
+    }
+
+    /// Received busy message from application.
+    pub fn received_busy(&mut self, connection_id: ConnectionId) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_received_busy, connection_id)
+    }
+
+    /// Request to reset the Call Manager.
+    ///
+    /// Conclude all calls and clear active callId.  Do not notify the
+    /// application at the conclusion.
+    pub fn reset(&mut self) -> Result<()> {
+        handle_api!(self, CallManager::handle_reset)
+    }
+
+    /// Close down the Call Manager.
+    ///
+    /// Close down the call manager and all the calls it is currently managing.
+    ///
+    /// This is a blocking call.
+    #[allow(clippy::mutex_atomic)]
+    pub fn close(&mut self) -> Result<()> {
+        info!("close():");
+
+        if self.worker_runtime.lock()?.is_some() {
+            // Clear out any outstanding calls
+            let _ = self.reset();
+
+            self.sync_runtime()?;
+
+            // close the runtime
+            let _ = self.close_runtime();
+            info!("close(): complete");
+        } else {
+            info!("close(): already closed.");
+        }
+
+        Ok(())
+    }
+
+    /// Returns the active Call
+    pub fn active_call(&self) -> Result<Call<T>> {
+        let active_call_id = self.active_call_id.lock()?;
+        match *active_call_id {
+            Some(call_id) => {
+                let call_map = self.call_map.lock()?;
+                match call_map.get(&call_id) {
+                    Some(call) => Ok(call.clone()),
+                    None => Err(RingRtcError::CallIdNotFound(call_id).into()),
+                }
+            }
+            None => Err(RingRtcError::NoActiveCall.into()),
+        }
+    }
+
+    /// Return active connection ID
+    pub fn active_connection_id(&self) -> Result<ConnectionId> {
+        info!("active_connection_id():");
+        let active_call = self.active_call()?;
+        let active_device_id = active_call.active_device_id()?;
+        Ok(ConnectionId::new(active_call.call_id(), active_device_id))
+    }
+
+    /// Return active connection object.
+    pub fn active_connection(&self) -> Result<Connection<T>> {
+        info!("active_connection():");
+        let active_call = self.active_call()?;
+        active_call.active_connection()
+    }
+
+    /// Checks if a call is active.
+    pub fn call_active(&self) -> Result<bool> {
+        Ok(self.active_call_id.lock()?.is_some())
+    }
+
+    /// Check if call_id refers to the active call.
+    pub fn call_is_active(&self, call_id: CallId) -> Result<bool> {
+        let active_call_id = self.active_call_id.lock()?;
+        match *active_call_id {
+            Some(v) => Ok(v == call_id),
+            None => Ok(false),
+        }
+    }
+
+    /// Return the platform, under a locked mutex.
+    pub fn platform(&self) -> Result<MutexGuard<'_, T>> {
+        self.platform.lock()
+    }
+
+    /// Synchronize the call manager and all call FSMs.
+    ///
+    /// Blocks the caller while the call manager and call FSM event
+    /// queues are flushed.
+    ///
+    /// `Called By:` Test infrastructure
+    #[cfg(feature = "sim")]
+    pub fn synchronize(&mut self) -> Result<()> {
+        info!("synchronize():");
+
+        self.sync_runtime()?;
+
+        // sync twice, as simulated error injection can put more
+        // events on the FSMs.
+        for i in 0..2 {
+            info!("synchronize(): pass: {}", i);
+            let mut map_clone = self.call_map.lock()?.clone();
+            for (_, call) in map_clone.iter_mut() {
+                info!("synchronize(): syncing call: {}", call.call_id());
+                call.synchronize()?;
+            }
+
+            self.sync_runtime()?;
+        }
+
+        info!("synchronize(): complete");
+        Ok(())
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    // Private internal functions start here
+    ////////////////////////////////////////////////////////////////////////
+
+    /// Return the strong reference count on the platform.
+    fn ref_count(&self) -> usize {
+        Arc::strong_count(&self.platform)
+    }
+
+    /// Spawn a future on the worker runtime if enabled.
+    fn worker_spawn<F>(&mut self, future: F) -> Result<()>
+    where
+        F: Future<Item = (), Error = ()> + Send + 'static,
+    {
+        let mut worker_runtime = self.worker_runtime.lock()?;
+        if let Some(worker_runtime) = &mut *worker_runtime {
+            worker_runtime.spawn(future);
+        } else {
+            warn!("worker_spawn(): worker_runtime unavailable");
+        }
+        Ok(())
+    }
+
+    fn runtime_start_sync(&mut self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
+        let future = lazy(move || {
+            // signal the condvar
+            info!("sync_runtime(): syncing runtime");
+            let (mutex, condvar) = &*sync_condvar;
+            if let Ok(mut terminate_complete) = mutex.lock() {
+                *terminate_complete = true;
+                condvar.notify_one();
+                Ok(())
+            } else {
+                Err(RingRtcError::MutexPoisoned(
+                    "Call Manager Close Condition Variable".to_string(),
+                )
+                .into())
+            }
+        })
+        .map_err(move |err: failure::Error| {
+            error!("Close call manager future failed: {}", err);
+            // Not much else to do here.
+        });
+        self.worker_spawn(future)
+    }
+
+    fn wait_runtime_sync(&self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
+        info!("wait_runtime_sync(): waiting for runtime sync...");
+
+        let (mutex, condvar) = &*sync_condvar;
+        if let Ok(mut terminate_complete) = mutex.lock() {
+            while !*terminate_complete {
+                terminate_complete = condvar.wait(terminate_complete).map_err(|_| {
+                    RingRtcError::MutexPoisoned("Call Manager Close Condition Variable".to_string())
+                })?;
+            }
+        } else {
+            return Err(RingRtcError::MutexPoisoned(
+                "Call Manager Close Condition Variable".to_string(),
+            )
+            .into());
+        }
+
+        info!("wait_runtime_sync(): runtime synchronized.");
+
+        Ok(())
+    }
+
+    #[allow(clippy::mutex_atomic)]
+    fn sync_runtime(&mut self) -> Result<()> {
+        // cycle a condvar through the runtime
+        let condvar = Arc::new((Mutex::new(false), Condvar::new()));
+        self.runtime_start_sync(condvar.clone())?;
+
+        // This blocks while the runtime synchronizes.
+        self.wait_runtime_sync(condvar)
+    }
+
+    fn close_runtime(&mut self) -> Result<()> {
+        info!("stopping worker runtime");
+
+        let result: Option<runtime::Runtime> = {
+            let mut worker_runtime = self.worker_runtime.lock()?;
+            worker_runtime.take()
+        };
+
+        if let Some(worker_runtime) = result {
+            let _ = worker_runtime
+                .shutdown_now()
+                .wait()
+                .map_err(|_| warn!("Problems shutting down the worker runtime"));
+        } else {
+            error!("close_runtime(): worker_runtime is unavailable");
+        }
+
+        info!("stopping worker runtime: complete");
+        Ok(())
+    }
+
+    /// Clears the active call_id
+    fn clear_active_call(&mut self) -> Result<()> {
+        let _ = self.active_call_id.lock()?.take();
+        Ok(())
+    }
+
+    /// Disposes of a Call and optionally notifies application of the reason why.
+    fn dispose_call(&mut self, call_id: CallId) -> Result<()> {
+        info!("dispose_call(): call_id: {}", call_id);
+
+        let mut call = match self.call_map.lock()?.remove(&call_id) {
+            Some(v) => v,
+            None => return Err(RingRtcError::CallIdNotFound(call_id).into()),
+        };
+
+        // blocks while call FSM shuts down.
+        call.close()
+    }
+
+    /// Sends a hangup message to a remote_peer via the application.
+    fn send_hangup(&mut self, call: Call<T>, call_id: CallId) -> Result<()> {
+        info!("send_hangup(): call_id: {}", call_id);
+
+        let connection_id = ConnectionId::new(call_id, 0);
+
+        let hangup_closure = Box::new(move |cm: &CallManager<T>| {
+            info!("send_hangup(): closure");
+
+            let remote_peer = call.remote_peer()?;
+
+            let platform = cm.platform.lock()?;
+            platform.on_send_hangup(&*remote_peer, connection_id, true)
+        });
+
+        let message_item = SignalingMessageItem {
+            call_id:         connection_id.call_id(),
+            message_type:    SignalingMessageType::Hangup,
+            message_closure: hangup_closure,
+        };
+
+        self.send_next_message(Some(message_item))
+    }
+
+    /// Concludes the specified Call.
+    ///
+    /// Conclusion includes:
+    /// - Trimming the message_queue, before possibly sending hangup message(s)
+    /// - [optional] notifying application about call ended reason
+    /// - closing down Call object
+    /// - [optional] sending hangup on all connection data channels
+    /// - [optional] sending Signal hangup message
+    fn conclude_call(
+        &mut self,
+        mut call: Call<T>,
+        send_hangup: bool,
+        event: Option<ApplicationEvent>,
+    ) -> Result<()> {
+        let call_id = call.call_id();
+
+        info!("conclude_call(): call_id: {}", call_id);
+
+        self.trim_messages(call_id)?;
+
+        if let Some(event) = event {
+            let remote_peer = call.remote_peer()?;
+            self.notify_application(&*remote_peer, event)?;
+        }
+
+        if send_hangup {
+            // all connections send hangup via data_channel
+            call.inject_hangup()?;
+        }
+
+        let mut call_manager = self.clone();
+        let cm_error = self.clone();
+        let call_error = call.clone();
+        let call_clone = call.clone();
+        let future = lazy(move || {
+            // if we want to send a hangup message, be sure that
+            // the call actually should send one
+            if send_hangup && call.should_send_hangup() {
+                // send hangup via signaling channel
+                call_manager.send_hangup(call_clone, call_id)?;
+            }
+            call_manager.dispose_call(call_id)
+        })
+        .map_err(move |err| {
+            error!("Conclude call future failed: {}", err);
+            if let Ok(remote_peer) = call_error.remote_peer() {
+                let _ = cm_error
+                    .notify_application(&*remote_peer, ApplicationEvent::EndedInternalFailure);
+            }
+        });
+        self.worker_spawn(future)
+    }
+
+    /// Concludes the active call.
+    fn conclude_active_call(&mut self, send_hangup: bool, event: ApplicationEvent) -> Result<()> {
+        info!("conclude_active_call():");
+
+        if !self.call_active()? {
+            info!("conclude_active_call(): skipping, no active call");
+            return Ok(());
+        }
+
+        let call = self.active_call()?;
+        self.clear_active_call()?;
+
+        self.conclude_call(call, send_hangup, Some(event))
+    }
+
+    /// Handle call() API from application.
+    fn handle_call(&mut self, remote_peer: <T as Platform>::AppRemotePeer) -> Result<()> {
+        info!("handle_call():");
+
+        // if no active call, create a new call
+        let mut active_call_id = self.active_call_id.lock()?;
+        match *active_call_id {
+            Some(v) => Err(RingRtcError::CallAlreadyInProgress(v).into()),
+            None => {
+                let call_id = CallId::random();
+                let mut call = Call::new(
+                    remote_peer,
+                    call_id,
+                    CallDirection::OutGoing,
+                    TIME_OUT_PERIOD,
+                    self.clone(),
+                )?;
+                let mut call_map = self.call_map.lock()?;
+
+                call_map.insert(call_id, call.clone());
+                *active_call_id = Some(call_id);
+                call.inject_start_call()
+            }
+        }
+    }
+
+    /// Handle accept_call() API from application.
+    fn handle_accept_call(&mut self, call_id: CallId) -> Result<()> {
+        let mut active_call = check_active_call!(self, "handle_accept_call");
+
+        if active_call.call_id() != call_id {
+            info!(
+                "handle_accept_call(): {} no match for active call_id {}",
+                call_id,
+                active_call.call_id()
+            );
+            return Ok(());
+        }
+
+        active_call.inject_accept_call()
+    }
+
+    fn handle_conclude_active_call(
+        &mut self,
+        active_call: Call<T>,
+        send_hangup: bool,
+        event: ApplicationEvent,
+    ) -> Result<()> {
+        self.clear_active_call()?;
+        self.conclude_call(active_call, send_hangup, Some(event))
+    }
+
+    /// Handle drop_call() API from application.
+    fn handle_drop_call(&mut self, call_id: CallId) -> Result<()> {
+        let active_call = check_active_call!(self, "handle_drop_call");
+
+        if active_call.call_id() != call_id {
+            info!(
+                "handle_drop_call(): {} no match for active call_id {}",
+                call_id,
+                active_call.call_id()
+            );
+            return Ok(());
+        }
+
+        self.handle_conclude_active_call(active_call, true, ApplicationEvent::EndedAppDroppedCall)
+    }
+
+    /// Handle proceed() API from application.
+    fn handle_proceed(
+        &mut self,
+        call_id: CallId,
+        app_call_context: <T as Platform>::AppCallContext,
+        remote_devices: Vec<DeviceId>,
+    ) -> Result<()> {
+        let mut active_call = check_active_call!(self, "handle_proceed");
+
+        if active_call.call_id() != call_id {
+            info!(
+                "handle_proceed(): {} no match for active call_id {}",
+                call_id,
+                active_call.call_id()
+            );
+            return Ok(());
+        }
+
+        active_call.set_call_context(app_call_context)?;
+        active_call.inject_proceed(remote_devices)
+    }
+
+    /// Handle message_sent() API from application.
+    fn handle_message_sent(&mut self, _call_id: CallId) -> Result<()> {
+        info!("handle_signaling_complete()");
+
+        match self.message_queue.lock() {
+            Ok(mut message_queue) => {
+                message_queue.messages_in_flight = false;
+            }
+            Err(e) => {
+                error!("Could not lock the message queue: {}", e);
+                return Err(e);
+            }
+        }
+
+        self.send_next_message(None)
+    }
+
+    /// Handle message_send_failure() API from application.
+    fn handle_message_send_failure(&mut self, call_id: CallId) -> Result<()> {
+        // Get the last sent message type and see if it was for Ice.
+        let mut last_sent_message_ice = false;
+        if let Ok(message_queue) = self.message_queue.lock() {
+            if message_queue.last_sent_message_type == SignalingMessageType::Ice {
+                last_sent_message_ice = true
+            }
+        }
+
+        let mut handle_active_call = false;
+        if let Ok(active_call) = self.active_call() {
+            if active_call.call_id() == call_id {
+                handle_active_call = true;
+                if let Ok(state) = active_call.state() {
+                    match state {
+                        CallState::Ringing | CallState::Connected | CallState::Reconnecting => {
+                            // We are in some connected state, ignore if the failed message
+                            // was an Ice message.
+                            if last_sent_message_ice {
+                                handle_active_call = false;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        if handle_active_call {
+            info!(
+                "handle_message_send_failure(): id: {}, concluding active call",
+                call_id
+            );
+
+            let _ = self.conclude_active_call(true, ApplicationEvent::EndedSignalingFailure);
+        } else {
+            // See if the associated call is in the call map.
+            let mut call = None;
+            {
+                if let Ok(call_map) = self.call_map.lock() {
+                    if let Some(v) = call_map.get(&call_id) {
+                        call = Some(v.clone());
+                    };
+                }
+            }
+
+            match call {
+                Some(call) => {
+                    info!(
+                        "handle_message_send_failure(): id: {}, concluding call",
+                        call_id
+                    );
+
+                    self.conclude_call(call, true, Some(ApplicationEvent::EndedSignalingFailure))?;
+                }
+                None => {
+                    info!("handle_message_send_failure(): no matching call found");
+                }
+            }
+        }
+
+        match self.message_queue.lock() {
+            Ok(mut message_queue) => {
+                message_queue.messages_in_flight = false;
+            }
+            Err(e) => {
+                error!("Could not lock the message queue: {}", e);
+                return Err(e);
+            }
+        }
+
+        self.send_next_message(None)
+    }
+
+    /// Handle hangup() API from application.
+    fn handle_hangup(&mut self) -> Result<()> {
+        let active_call = check_active_call!(self, "handle_hangup");
+        self.handle_conclude_active_call(active_call, true, ApplicationEvent::EndedLocalHangup)
+    }
+
+    /// Handle received_offer() API from application.
+    fn handle_received_offer(
+        &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
+        connection_id: ConnectionId,
+        offer: String,
+        timestamp: u64,
+    ) -> Result<()> {
+        info!("handle_received_offer(): id: {}", connection_id);
+        if is_expired(timestamp, Duration::from_secs(120)) {
+            info!("expired_offer(): id: {}", connection_id);
+            self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
+            // Notify application we are completely done with this remote.
+            self.notify_call_concluded(&remote_peer)?;
+            return Ok(());
+        }
+
+        let call_id = connection_id.call_id();
+
+        if self.call_active()? {
+            // Make a call object to ensure that the busy message can be sent
+            // in the future. It does not go into the call map and should not
+            // start a timeout timer.
+            let call = Call::new(
+                remote_peer.clone(),
+                call_id,
+                CallDirection::InComing,
+                0,
+                self.clone(),
+            )?;
+
+            self.notify_application(
+                &remote_peer,
+                ApplicationEvent::EndedReceivedOfferWhileActive,
+            )?;
+            self.send_busy(call, connection_id)?;
+            self.check_for_glare(&remote_peer)?;
+            return Ok(());
+        }
+
+        let mut active_call_id = self.active_call_id.lock()?;
+        match *active_call_id {
+            Some(v) => Err(RingRtcError::CallAlreadyInProgress(v).into()),
+            None => {
+                let mut call = Call::new(
+                    remote_peer,
+                    call_id,
+                    CallDirection::InComing,
+                    TIME_OUT_PERIOD,
+                    self.clone(),
+                )?;
+                let mut call_map = self.call_map.lock()?;
+
+                call_map.insert(call_id, call.clone());
+                *active_call_id = Some(call_id);
+                call.set_pending_call(connection_id.remote_device(), offer)?;
+                call.inject_start_call()
+            }
+        }
+    }
+
+    /// Handle received_answer() API from application.
+    fn handle_received_answer(
+        &mut self,
+        connection_id: ConnectionId,
+        answer: String,
+    ) -> Result<()> {
+        let mut active_call = check_active_call!(self, "handle_received_answer");
+
+        if active_call.call_id() != connection_id.call_id() {
+            info!(
+                "handle_received_answer(): skipping inactive call_id: {}",
+                connection_id.call_id()
+            );
+            return Ok(());
+        }
+
+        active_call.inject_received_answer(connection_id, answer)
+    }
+
+    /// Handle received_ice_candidates() API from application.
+    fn handle_received_ice_candidates(
+        &mut self,
+        connection_id: ConnectionId,
+        ice_candidates: Vec<IceCandidate>,
+    ) -> Result<()> {
+        let mut active_call = check_active_call!(self, "handle_received_ice_candidates");
+
+        if active_call.call_id() != connection_id.call_id() {
+            info!(
+                "handle_received_ice_candidates(): skipping inactive call_id: {}",
+                connection_id.call_id()
+            );
+            return Ok(());
+        }
+
+        active_call.inject_received_ice_candidates(connection_id, ice_candidates)
+    }
+
+    /// Handle received_hangup() API from application.
+    fn handle_received_hangup(&mut self, connection_id: ConnectionId) -> Result<()> {
+        let mut active_call = check_active_call!(self, "handle_received_hangup");
+
+        if active_call.call_id() != connection_id.call_id() {
+            info!(
+                "handle_received_hangup(): skipping inactive call_id: {}",
+                connection_id.call_id()
+            );
+            return Ok(());
+        }
+
+        active_call.inject_received_hangup(connection_id)
+    }
+
+    /// Handle received_busy() API from application.
+    fn handle_received_busy(&mut self, connection_id: ConnectionId) -> Result<()> {
+        let active_call = check_active_call!(self, "handle_received_busy");
+
+        if active_call.call_id() != connection_id.call_id() {
+            info!(
+                "handle_received_busy(): skipping inactive call_id: {}",
+                connection_id.call_id()
+            );
+            return Ok(());
+        }
+        self.handle_conclude_active_call(active_call, false, ApplicationEvent::EndedRemoteBusy)
+    }
+
+    /// Handle reset() API from application.
+    ///
+    /// Conclude all calls and clear active callId.  Do not notify the
+    /// application at the conclusion.
+    fn handle_reset(&mut self) -> Result<()> {
+        info!("handle_reset():");
+
+        // gather all the calls from the call_map.
+        let calls: Vec<Call<T>> = {
+            let call_map = self.call_map.lock()?;
+            call_map.values().cloned().collect()
+        };
+
+        // foreach call, conclude without notifying application
+        for call in calls {
+            info!("reset(): concluding call_id: {}", call.call_id());
+            let _ = self.conclude_call(call, true, None);
+        }
+
+        self.clear_active_call()?;
+
+        // clear out the message queue, the app gave up on everything
+        let mut message_queue = self.message_queue.lock()?;
+        message_queue.queue.clear();
+        message_queue.messages_in_flight = false;
+
+        info!("reset(): complete");
+        Ok(())
+    }
+
+    fn send_busy(&mut self, call: Call<T>, connection_id: ConnectionId) -> Result<()> {
+        info!("send_busy(): id: {}", connection_id);
+
+        let busy_closure = Box::new(move |cm: &CallManager<T>| {
+            info!("send_busy(): closure");
+
+            let remote_peer = call.remote_peer()?;
+
+            let platform = cm.platform.lock()?;
+            platform.on_send_busy(&*remote_peer, connection_id, true)
+        });
+
+        let message_item = SignalingMessageItem {
+            call_id:         connection_id.call_id(),
+            message_type:    SignalingMessageType::Busy,
+            message_closure: busy_closure,
+        };
+
+        self.send_next_message(Some(message_item))
+    }
+
+    /// If the active_remote_peer equals this remote peer, then we
+    /// have glare, i.e. two users are trying to call each other at
+    /// the same time.
+    fn check_for_glare(&mut self, remote_peer: &<T as Platform>::AppRemotePeer) -> Result<()> {
+        if self.remote_peer_equals_active(remote_peer) {
+            info!("check_for_glare(): remotes are equal, hanging up.");
+            self.handle_conclude_active_call(
+                self.active_call()?,
+                true,
+                ApplicationEvent::EndedRemoteGlare,
+            )
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Check if the remote_peer matches the remote_peer in the active
+    /// call.
+    fn remote_peer_equals_active(&self, remote_peer: &<T as Platform>::AppRemotePeer) -> bool {
+        if let Ok(active_call) = self.active_call() {
+            if let Ok(active_remote_peer) = active_call.remote_peer() {
+                if let Ok(platform) = self.platform.lock() {
+                    if let Ok(result) = platform.compare_remotes(&active_remote_peer, remote_peer) {
+                        return result;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Internal failure during API future that creates a call.
+    ///
+    /// The APIs call() and received_offer() use this error handler as
+    /// it is unknown exactly where the API failed, before or after
+    /// creating an active call.
+    fn internal_create_api_error(
+        &mut self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        error: failure::Error,
+    ) {
+        info!("internal_create_api_error(): error: {}", error);
+        if self.remote_peer_equals_active(remote_peer) {
+            // The future managed to create the active call and then
+            // hit problems.  Error out with active call clean up.
+            let _ = self.internal_api_error(error);
+        } else {
+            // The future hit problems before creating an active call.
+            // Simply notify the application with no call clean up.
+            let _ = self.notify_application(remote_peer, ApplicationEvent::EndedInternalFailure);
+            let _ = self.notify_call_concluded(remote_peer);
+        }
+    }
+
+    /// Internal error occured on an API future.
+    ///
+    /// This shuts down the specified call if active and notifies the
+    /// application.
+    fn internal_api_error(&mut self, error: failure::Error) -> Result<()> {
+        info!("internal_api_error(): error: {}", error);
+        if let Ok(call) = self.active_call() {
+            self.internal_error(call.call_id(), error)
+        } else {
+            info!("internal_api_error(): ignoring for inactive call");
+            Ok(())
+        }
+    }
+
+    /// Push the given message and send the next message in
+    /// the queue if no other message is currently in the
+    /// process of being sent (in flight).
+    fn send_next_message(
+        &mut self,
+        message_item_option: Option<SignalingMessageItem<T>>,
+    ) -> Result<()> {
+        info!("send_next_message():");
+
+        // Push the optional message we got to the queue.
+        if let Some(message_item) = message_item_option {
+            match self.message_queue.lock() {
+                Ok(mut message_queue) => {
+                    message_queue.queue.push_back(message_item);
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+
+        // Loop in case a sending error is encountered and jump to the next
+        // message item if so.
+        loop {
+            let closure_error: Option<failure::Error>;
+            let closure_call_id: CallId;
+
+            match self.message_queue.lock() {
+                Ok(mut message_queue) => {
+                    if message_queue.messages_in_flight {
+                        info!("send_next_message(): messages are in flight already");
+                        return Ok(());
+                    }
+
+                    match message_queue.queue.pop_front() {
+                        Some(message_item) => {
+                            info!(
+                                "send_next_message(): sending message, len: {}",
+                                message_queue.queue.len()
+                            );
+
+                            // Execute the closure and match its return value.
+                            match (message_item.message_closure)(self) {
+                                Ok(()) => {
+                                    // We have delivered the message to the app, set the
+                                    // in flight flag.
+                                    message_queue.messages_in_flight = true;
+
+                                    message_queue.last_sent_message_type =
+                                        message_item.message_type;
+
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    error!("send_next_message(): closure failed {}", e);
+                                    closure_error = Some(e);
+                                    closure_call_id = message_item.call_id;
+                                }
+                            }
+                        }
+                        None => {
+                            info!("send_next_message(): no messages to send");
+                            return Ok(());
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+
+            if let Some(e) = closure_error {
+                // Generate an error on the active call (if any) and
+                // continue trying to send the next message.
+                if let Err(e) = self.internal_error(closure_call_id, e) {
+                    error!("send_next_message(): unrecoverable {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    /// Remove all messages in the queue by call_id. Ignore Busy
+    /// messages as they might have been sent on behalf of the
+    /// call before termination.
+    fn trim_messages(&self, call_id: CallId) -> Result<()> {
+        let mut message_queue = self.message_queue.lock()?;
+        let mq = &mut *message_queue;
+
+        debug!(
+            "trim_messages(): start id: {} len: {}",
+            call_id,
+            mq.queue.len()
+        );
+        mq.queue
+            .retain(|x| (x.call_id != call_id) || (x.message_type == SignalingMessageType::Busy));
+        debug!("trim_messages(): end len: {}", mq.queue.len());
+
+        Ok(())
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    // Module level public functions start here
+    ////////////////////////////////////////////////////////////////////////
+
+    /// Inform the application that a call should be started.
+    pub(super) fn start_call(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        call_id: CallId,
+        direction: CallDirection,
+    ) -> Result<()> {
+        info!("handle_start_call(): direction: {}", direction);
+
+        let platform = self.platform.lock()?;
+        platform.on_start_call(remote_peer, call_id, direction)
+    }
+
+    /// Notify application of an event.
+    pub(super) fn notify_application(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        event: ApplicationEvent,
+    ) -> Result<()> {
+        info!("notify_application(): event: {}", event);
+
+        let platform = self.platform.lock()?;
+        platform.on_event(remote_peer, event)
+    }
+
+    /// Create a new connection to a remote device
+    pub(super) fn create_connection(
+        &self,
+        call: &Call<T>,
+        device_id: DeviceId,
+    ) -> Result<Connection<T>> {
+        let mut platform = self.platform.lock()?;
+        platform.create_connection(call, device_id)
+    }
+
+    /// Create a new application specific media stream
+    pub(super) fn create_media_stream(
+        &self,
+        connection: &Connection<T>,
+        stream: MediaStream,
+    ) -> Result<<T as Platform>::AppMediaStream> {
+        let platform = self.platform.lock()?;
+        platform.create_media_stream(connection, stream)
+    }
+
+    /// Connect a media stream to the application connection.
+    pub(super) fn connect_media(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        app_call_context: &<T as Platform>::AppCallContext,
+        app_media_stream: &<T as Platform>::AppMediaStream,
+    ) -> Result<()> {
+        let platform = self.platform.lock()?;
+        platform.on_connect_media(remote_peer, app_call_context, app_media_stream)
+    }
+
+    /// Close the media associated with the call
+    pub(super) fn close_media(
+        &self,
+        app_call_context: &<T as Platform>::AppCallContext,
+    ) -> Result<()> {
+        let platform = self.platform.lock()?;
+        platform.on_close_media(app_call_context)
+    }
+
+    /// Remote hangup of the active call.
+    pub(super) fn remote_hangup(&mut self, call_id: CallId) -> Result<()> {
+        info!("remote_hangup(): call_id: {}", call_id);
+
+        if self.call_is_active(call_id)? {
+            self.conclude_active_call(false, ApplicationEvent::EndedRemoteHangup)
+        } else {
+            info!("remote_hangup(): ignoring for inactive call");
+            Ok(())
+        }
+    }
+
+    /// Notify application that the call is concluded.
+    pub(super) fn notify_call_concluded(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+    ) -> Result<()> {
+        info!("notify_call_concluded():");
+
+        let platform = self.platform.lock()?;
+        platform.on_call_concluded(remote_peer)
+    }
+
+    /// Local timeout of the active call.
+    pub(super) fn timeout(&mut self, call_id: CallId) -> Result<()> {
+        info!("timeout(): call_id: {}", call_id);
+
+        if self.call_is_active(call_id)? {
+            self.conclude_active_call(true, ApplicationEvent::EndedTimeout)
+        } else {
+            info!("timeout(): ignoring for inactive call");
+            Ok(())
+        }
+    }
+
+    /// Network failure occured on the active call.
+    pub(super) fn connection_failure(&mut self, call_id: CallId) -> Result<()> {
+        info!("call_failed(): call_id: {}", call_id);
+
+        if self.call_is_active(call_id)? {
+            self.conclude_active_call(true, ApplicationEvent::EndedConnectionFailure)
+        } else {
+            info!("call_failed(): ignoring for inactive call");
+            Ok(())
+        }
+    }
+
+    /// Internal error occured on the active call.
+    ///
+    /// This shuts down the specified call if active and notifies the
+    /// application.
+    pub(super) fn internal_error(&mut self, call_id: CallId, error: failure::Error) -> Result<()> {
+        info!("internal_error(): call_id: {}, error: {}", call_id, error);
+
+        if self.call_is_active(call_id)? {
+            self.conclude_active_call(true, ApplicationEvent::EndedInternalFailure)
+        } else {
+            info!("internal_error(): ignoring for inactive call");
+            Ok(())
+        }
+    }
+
+    /// Send SDP offer to remote_peer via the application.
+    pub(super) fn send_offer(
+        &mut self,
+        call: Call<T>,
+        connection: Connection<T>,
+        offer: SessionDescriptionInterface,
+    ) -> Result<()> {
+        let connection_id = connection.id();
+        info!("send_offer(): id: {}", connection_id);
+
+        // Hold the description string for the closure.
+        let description = offer.get_description()?;
+
+        let offer_closure = Box::new(move |cm: &CallManager<T>| {
+            info!("send_offer(): closure");
+
+            let remote_peer = call.remote_peer()?;
+
+            if connection.can_send_messages() {
+                let platform = cm.platform.lock()?;
+                platform.on_send_offer(&*remote_peer, connection_id, false, description.as_str())
+            } else {
+                Ok(())
+            }
+        });
+
+        let message_item = SignalingMessageItem {
+            call_id:         connection_id.call_id(),
+            message_type:    SignalingMessageType::Offer,
+            message_closure: offer_closure,
+        };
+
+        self.send_next_message(Some(message_item))
+    }
+
+    /// Send SDP answer to remote_peer via the application.
+    pub(super) fn send_answer(
+        &mut self,
+        call: Call<T>,
+        connection: Connection<T>,
+        answer: SessionDescriptionInterface,
+    ) -> Result<()> {
+        let connection_id = connection.id();
+        info!("send_answer(): id: {}", connection_id);
+
+        // Hold the description string for the closure.
+        let description = answer.get_description()?;
+
+        let answer_closure = Box::new(move |cm: &CallManager<T>| {
+            info!("send_answer(): closure");
+
+            let remote_peer = call.remote_peer()?;
+
+            if connection.can_send_messages() {
+                let platform = cm.platform.lock()?;
+                platform.on_send_answer(&*remote_peer, connection_id, false, description.as_str())
+            } else {
+                Ok(())
+            }
+        });
+
+        let message_item = SignalingMessageItem {
+            call_id:         connection_id.call_id(),
+            message_type:    SignalingMessageType::Answer,
+            message_closure: answer_closure,
+        };
+
+        self.send_next_message(Some(message_item))
+    }
+
+    /// Send ICE candidates to remote_peer via the application.
+    pub(super) fn send_ice_candidates(
+        &mut self,
+        call: Call<T>,
+        connection: Connection<T>,
+    ) -> Result<()> {
+        let connection_id = connection.id();
+        info!("send_ice_candidates(): id: {}", connection_id);
+
+        let ice_closure = Box::new(move |cm: &CallManager<T>| {
+            info!("send_ice_candidates(): closure");
+
+            let remote_peer = call.remote_peer()?;
+            let candidates = connection.get_pending_ice_updates()?;
+
+            if candidates.is_empty() {
+                return Ok(());
+            }
+
+            let platform = cm.platform.lock()?;
+            platform.on_send_ice_candidates(&*remote_peer, connection_id, false, &*candidates)
+        });
+
+        let message_item = SignalingMessageItem {
+            call_id:         connection_id.call_id(),
+            message_type:    SignalingMessageType::Ice,
+            message_closure: ice_closure,
+        };
+
+        self.send_next_message(Some(message_item))
+    }
+}
+
+/// Check if the input `timestamp` matches the current system time
+/// within +/- the tolerance duration:
+///
+///   abs(current_time - timestamp) < tolerance
+///
+/// The u64 `timestamp` parameter is in milliseconds from the
+/// UNIX_EPOCH.
+///
+/// # Returns
+///
+/// - false, if the timestamp is within the tolerance window.
+///
+/// - true, if the timestamp is outside the tolerance window or if
+/// SystemTime.checked_add() fails for pathological reasons.
+fn is_expired(timestamp_ms: u64, tolerance: Duration) -> bool {
+    if let Some(timestamp) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp_ms))
+    {
+        let absolute_duration = match SystemTime::now().duration_since(timestamp) {
+            Ok(v) => v,
+            Err(e) => e.duration(),
+        };
+        tolerance.checked_sub(absolute_duration).is_none()
+    } else {
+        // timestamp + UNIX_EPOCH caused overflow
+        warn!(
+            "is_expired(): expiring wacky timestamp_ms: {}",
+            timestamp_ms
+        );
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expired_timestamps() {
+        let tolerance_secs = 120;
+        let tolerance = Duration::from_secs(tolerance_secs);
+
+        let inside_tolerance = Duration::from_secs(tolerance_secs / 2);
+        let outside_tolerance = Duration::from_secs(tolerance_secs * 2);
+
+        // 1. inside window, behind current time  (normal case)
+        let timestamp_sys = SystemTime::now().checked_sub(inside_tolerance).unwrap();
+        let timestamp = timestamp_sys
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        assert_eq!(is_expired(timestamp, tolerance), false);
+
+        // 2. inside window, ahead  current time  (normal case)
+        let timestamp_sys = SystemTime::now().checked_add(inside_tolerance).unwrap();
+        let timestamp = timestamp_sys
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        assert_eq!(is_expired(timestamp, tolerance), false);
+
+        // 3. outside window, behind current time (expired)
+        let timestamp_sys = SystemTime::now().checked_sub(outside_tolerance).unwrap();
+        let timestamp = timestamp_sys
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        assert_eq!(is_expired(timestamp, tolerance), true);
+
+        // 4. outside window, ahead current time (expired)
+        let timestamp_sys = SystemTime::now().checked_add(outside_tolerance).unwrap();
+        let timestamp = timestamp_sys
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        assert_eq!(is_expired(timestamp, tolerance), true);
+
+        // 5. Try some extreme, wacky timestamps
+        let timestamp = 0_u64;
+        assert_eq!(is_expired(timestamp, tolerance), true);
+
+        let timestamp = 0xffffffff_ffffffff;
+        assert_eq!(is_expired(timestamp, tolerance), true);
+    }
+}

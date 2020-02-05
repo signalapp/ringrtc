@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #
-# Copyright (C) 2019 Signal Messenger, LLC.
+# Copyright (C) 2019, 2020 Signal Messenger, LLC.
 # All rights reserved.
 #
 # SPDX-License-Identifier: GPL-3.0-only
@@ -9,4 +9,4 @@
 
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/ringrtc-tests}"
 export RANDOM_SEED="${RANDOM_SEED:-$(date +%s)}"
-cargo test --features sim --target-dir=$OUTPUT_DIR -- --nocapture --test-threads=1
+cargo test --features sim --target-dir=$OUTPUT_DIR "$@" -- --nocapture --test-threads=1

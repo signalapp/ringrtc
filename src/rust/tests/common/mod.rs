@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2019 Signal Messenger, LLC.
+// Copyright (C) 2019, 2020 Signal Messenger, LLC.
 // All rights reserved.
 //
 // SPDX-License-Identifier: GPL-3.0-only
@@ -10,50 +10,43 @@
 // Requires the 'sim' feature
 
 use std::env;
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 use lazy_static::lazy_static;
 use log::LevelFilter;
-use rand::{
-    Rng,
-    SeedableRng,
-};
-use rand::distributions::{
-    Distribution,
-    Standard,
-};
+use rand::distributions::{Distribution, Standard};
+use rand::{Rng, SeedableRng};
 
 use rand_chacha::ChaCha20Rng;
-use simplelog::{
-    Config,
-    SimpleLogger,
-};
+use simplelog::{Config, ConfigBuilder, SimpleLogger};
 
-use ringrtc::common::{
-    CallDirection,
-    CallId,
-};
+use ringrtc::common::{ApplicationEvent, DeviceId};
+use ringrtc::core::call::Call;
+use ringrtc::core::call_manager::CallManager;
+use ringrtc::core::connection::Connection;
+use ringrtc::sim::sim_platform::SimPlatform;
+
+/*
+use ringrtc::common::{CallDirection, CallId};
 
 use ringrtc::core::call_connection_observer::ClientEvent;
 
 use ringrtc::sim::call_connection_factory;
-use ringrtc::sim::call_connection_factory::{
-    CallConfig,
-    SimCallConnectionFactory,
-};
+use ringrtc::sim::call_connection_factory::{CallConfig, SimCallConnectionFactory};
 use ringrtc::sim::call_connection_observer::SimCallConnectionObserver;
 use ringrtc::sim::sim_platform::SimCallConnection;
+*/
 
 macro_rules! error_line {
-    () => { concat!(module_path!(), ":", line!()) };
+    () => {
+        concat!(module_path!(), ":", line!())
+    };
 }
 
 pub struct Prng {
     seed: u64,
-    rng: Mutex<Option<ChaCha20Rng>>,
+    rng:  Mutex<Option<ChaCha20Rng>>,
 }
 
 impl Prng {
@@ -80,127 +73,159 @@ impl Prng {
 
 lazy_static! {
     pub static ref PRNG: Prng = {
-
         let rand_seed = match env::var("RANDOM_SEED") {
             Ok(v) => v.parse().unwrap(),
-            Err(_) => 0,
+            Err(_) => SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect(error_line!())
+                .as_millis() as u64,
         };
 
         println!("\n*** Using random seed: {}", rand_seed);
         Prng::new(rand_seed)
-
     };
 }
 
 pub fn test_init() {
-    let log_level = if env::var("DEBUG_TESTS").is_ok() {
-        LevelFilter::Info
+    let (log_level, config) = if env::var("DEBUG_TESTS").is_ok() {
+        (
+            LevelFilter::Info,
+            ConfigBuilder::new()
+                .set_thread_level(LevelFilter::Info)
+                .set_target_level(LevelFilter::Info)
+                .set_location_level(LevelFilter::Info)
+                .build(),
+        )
     } else {
-        LevelFilter::Error
+        (LevelFilter::Error, Config::default())
     };
-    let _ = SimpleLogger::init(log_level, Config::default());
+
+    let _ = SimpleLogger::init(log_level, config);
 
     PRNG.init();
 }
 
 pub struct TestContext {
-    cc_factory:  SimCallConnectionFactory,
-    cc:          Box<SimCallConnection>,
-    cc_observer: Arc<Mutex<SimCallConnectionObserver>>,
+    platform:     SimPlatform,
+    call_manager: CallManager<SimPlatform>,
 }
 
 impl Drop for TestContext {
     fn drop(&mut self) {
         info!("Dropping TestContext");
 
-        info!("test: closing cc");
-        self.cc.close().unwrap();
+        info!("test: closing call manager");
+        self.call_manager.close().unwrap();
 
-        info!("test: closing ccf");
-        call_connection_factory::free_factory(self.cc_factory.clone()).unwrap();
+        info!("test: closing platform");
+        self.platform.close();
     }
 }
 
+#[allow(dead_code)]
 impl TestContext {
+    pub fn new() -> Self {
+        info!("TestContext::new()");
 
-    pub fn client_error_count(&self) -> usize {
-        let cc_observer = self.cc_observer.lock().unwrap();
-        cc_observer.get_error_count()
+        let mut platform = SimPlatform::new();
+        let call_manager = CallManager::new(platform.clone()).unwrap();
+
+        platform.set_call_manager(call_manager.clone());
+
+        Self {
+            platform,
+            call_manager,
+        }
     }
 
-    pub fn clear_client_error_count(&self) {
-        let cc_observer = self.cc_observer.lock().unwrap();
-        cc_observer.clear_error_count()
+    pub fn cm(&self) -> CallManager<SimPlatform> {
+        self.call_manager.clone()
     }
 
-    pub fn event_count(&self, event: ClientEvent) -> usize {
-        let mut cc_observer = self.cc_observer.lock().unwrap();
-        cc_observer.get_event_count(event)
+    pub fn active_call(&self) -> Call<SimPlatform> {
+        self.call_manager.active_call().unwrap()
     }
 
-    pub fn stream_count(&self) -> usize {
-        let cc_observer = self.cc_observer.lock().unwrap();
-        cc_observer.get_stream_count()
+    pub fn active_connection(&self) -> Connection<SimPlatform> {
+        let active_call = self.call_manager.active_call().unwrap();
+        match active_call.active_connection() {
+            Ok(v) => v,
+            Err(_) => active_call.get_connection(1 as DeviceId).unwrap(),
+        }
     }
 
-    pub fn cc(&self) -> SimCallConnection {
-        *self.cc.clone()
+    pub fn force_internal_fault(&self, enable: bool) {
+        let mut platform = self.call_manager.platform().unwrap();
+        platform.force_internal_fault(enable);
     }
 
-    pub fn should_fail(&self, enable: bool) {
-        let cc = self.cc();
-        let mut platform = cc.platform().unwrap();
-        platform.should_fail(enable);
+    pub fn force_signaling_fault(&self, enable: bool) {
+        let mut platform = self.call_manager.platform().unwrap();
+        platform.force_signaling_fault(enable);
     }
 
     pub fn offers_sent(&self) -> usize {
-        let cc = self.cc();
-        let platform = cc.platform().unwrap();
+        let platform = self.call_manager.platform().unwrap();
         platform.offers_sent()
     }
 
     pub fn answers_sent(&self) -> usize {
-        let cc = self.cc();
-        let platform = cc.platform().unwrap();
+        let platform = self.call_manager.platform().unwrap();
         platform.answers_sent()
     }
 
     pub fn ice_candidates_sent(&self) -> usize {
-        let cc = self.cc();
-        let platform = cc.platform().unwrap();
+        let platform = self.call_manager.platform().unwrap();
         platform.ice_candidates_sent()
     }
 
     pub fn hangups_sent(&self) -> usize {
-        let cc = self.cc();
-        let platform = cc.platform().unwrap();
+        let platform = self.call_manager.platform().unwrap();
         platform.hangups_sent()
     }
 
-}
+    pub fn error_count(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.error_count()
+    }
 
-pub fn create_context(call_id: CallId, direction: CallDirection) -> TestContext {
+    pub fn clear_error_count(&self) {
+        let platform = self.call_manager.platform().unwrap();
+        platform.clear_error_count()
+    }
 
-    info!("create_cc_ext(): call_id: {}, direction: {}", call_id, direction);
+    pub fn ended_count(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.ended_count()
+    }
 
-    let call_config = CallConfig {
-        call_id,
-        recipient: "testing_recipient".to_string(),
-        direction,
-    };
+    pub fn event_count(&self, event: ApplicationEvent) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.event_count(event)
+    }
 
-    info!("test: creating observer");
-    let cc_observer = Arc::new(Mutex::new(SimCallConnectionObserver::new(call_config.call_id)));
+    pub fn busys_sent(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.busys_sent()
+    }
 
-    info!("test: creating ccf");
-    let cc_factory = call_connection_factory::create_call_connection_factory().unwrap();
+    pub fn stream_count(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.stream_count()
+    }
 
-    info!("test: creating cc");
-    let cc = call_connection_factory::create_call_connection(&cc_factory, call_config, cc_observer.clone()).unwrap();
+    pub fn start_outgoing_count(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.start_outgoing_count()
+    }
 
-    TestContext {
-        cc_factory,
-        cc,
-        cc_observer,
+    pub fn start_incoming_count(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.start_incoming_count()
+    }
+
+    pub fn call_concluded_count(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.call_concluded_count()
     }
 }

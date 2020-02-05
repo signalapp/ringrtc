@@ -22,7 +22,6 @@ import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserExce
 *
 * A typical use case is in the implementation of the SignalMessageRecipient interface.
 *
-* @see SignalMessageRecipient
 */
 public class Testing {
 

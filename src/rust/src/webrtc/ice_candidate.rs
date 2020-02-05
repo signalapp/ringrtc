@@ -32,10 +32,10 @@ pub struct IceCandidate {
 
 impl fmt::Display for IceCandidate {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let text = format!("spd_mid: {}, spd_mline: {}, sdp: {}",
-                           self.sdp_mid,
-                           self.sdp_mline_index,
-                           self.sdp);
+        let text = format!(
+            "spd_mid: {}, spd_mline: {}, sdp: {}",
+            self.sdp_mid, self.sdp_mline_index, self.sdp
+        );
         write!(f, "{}", redact_string(&text))
     }
 }
@@ -62,7 +62,7 @@ impl From<&CppIceCandidate> for IceCandidate {
         IceCandidate::new(
             unsafe { CStr::from_ptr(item.sdp_mid).to_string_lossy().into_owned() },
             item.sdp_mline_index,
-            unsafe { CStr::from_ptr(item.sdp).to_string_lossy().into_owned() }
-            )
+            unsafe { CStr::from_ptr(item.sdp).to_string_lossy().into_owned() },
+        )
     }
 }

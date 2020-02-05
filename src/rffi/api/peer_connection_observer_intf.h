@@ -31,9 +31,9 @@ typedef struct {
   void (*onIceCandidatesRemoved)(rust_object);
   void (*onSignalingChange)(rust_object, webrtc::PeerConnectionInterface::SignalingState);
   void (*onIceConnectionChange)(rust_object, webrtc::PeerConnectionInterface::IceConnectionState);
-  void (*onConnectionChange)(rust_object);
+  void (*onConnectionChange)(rust_object, webrtc::PeerConnectionInterface::PeerConnectionState);
   void (*onIceConnectionReceivingChange)(rust_object);
-  void (*onIceGatheringChange)(rust_object);
+  void (*onIceGatheringChange)(rust_object, webrtc::PeerConnectionInterface::IceGatheringState);
   void (*onAddStream)(rust_object, webrtc::MediaStreamInterface*);
   void (*onRemoveStream)(rust_object);
   void (*onDataChannel)(rust_object, webrtc::DataChannelInterface*);

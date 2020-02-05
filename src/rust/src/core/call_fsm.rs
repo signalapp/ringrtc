@@ -1,131 +1,102 @@
 //
-// Copyright (C) 2019 Signal Messenger, LLC.
+// Copyright (C) 2019, 2020 Signal Messenger, LLC.
 // All rights reserved.
 //
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! Call Connection Finite State Machine
+//! Call Finite State Machine
 //!
 //! The Call FSM mediates the state machine of the client application
-//! with the state machine of WebRTC.  The FSM implements the ICE
-//! negotiation protocol without the need for the client application
-//! to intervene.
+//! with the state machines of the call's connection state machines.
 //!
 //! # Asynchronous Inputs:
 //!
-//! ## From Client application
+//! ## Control events from client application
 //!
-//! - SendOffer
-//! - AcceptAnswer
-//! - AcceptOffer
-//! - AnswerCall
+//! - StartOutgoingCall
+//! - Accept
 //! - LocalHangup
-//! - LocalVideoStatus
-//! - SendBusy
-//! - RemoteIceCandidate
-//! - RemoteHangup
 //!
-//! ## From WebRTC observer interfaces
+//! ## Flow events from client application
+//! - Proceed
+//! - Drop
+//! - Abort
 //!
-//! - LocalIceCandidate
-//! - IceConnected
-//! - IceConnectionFailed
-//! - IceConnectionDisconnected
-//! - OnAddStream
-//! - OnDataChannel
-//! - RemoteConnected
-//! - RemoteVideoStatus
+//! ## From connection observer interfaces
+//!
+//! - Ringing
+//! - Connected
+//! - RemoteVideoEnabled
+//! - RemoteVideoDisabled
 //! - RemoteHangup
+//! - ConnectionFailed
+//! - Timeout
+//! - Reconnecting
+//!
+//! ## Signaling events from client application
+//! - ReceivedAnswer
+//! - ReceivedIceCandidates
 //!
 //! ## From Internal runtime
 //!
 //! - CallTimeout
-//!
-//! # Asynchronous Outputs:
-//!
-//! ## To Client application
-//!
-//! - [ClientEvents](../call_connection_observer/enum.ClientEvent.html)
-//! - ClientErrors
+//! - InternalError
 
 extern crate tokio;
 
 use std::fmt;
-use std::sync::{
-    mpsc,
-    Arc,
-    Condvar,
-    Mutex,
-};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use futures::{
-    Future,
-    Async,
-    Poll,
-    Stream,
-};
 use futures::future::lazy;
+use futures::{Async, Future, Poll, Stream};
 use tokio::runtime;
 
-use crate::common::{
-    Result,
-    CallDirection,
-    CallId,
-    CallState,
-};
-use crate::core::call_connection_factory::EventStream;
-use crate::core::call_connection::{
-    CallConnection,
-    CallPlatform,
-};
-use crate::core::call_connection_observer::ClientEvent;
 use crate::error::RingRtcError;
-use crate::webrtc::data_channel::DataChannel;
+
+use crate::common::{ApplicationEvent, CallDirection, CallState, ConnectionId, DeviceId, Result};
+
+use crate::core::call::{Call, EventStream};
+use crate::core::connection::ObserverEvent;
+use crate::core::platform::Platform;
+
 use crate::webrtc::ice_candidate::IceCandidate;
-use crate::webrtc::media_stream::MediaStream;
 
 /// The different types of CallEvents.
-pub enum CallEvent
-{
-    /// Send SDP offer to remote peer (caller only).
-    SendOffer,
-    /// Handle SDP answer from remote peer (caller only).
-    HandleAnswer(String),
-    /// Handle SDP offer from remote peer (callee only).
-    HandleOffer(String),
+pub enum CallEvent {
+    // Control events from client application
+    /// Start a call (call struct has the direction attribute).
+    StartCall,
     /// Accept incoming call (callee only).
-    AcceptCall,
-    /// Receive hangup from remote peer.
-    RemoteHangup(CallId),
-    /// Receive call connected from remote peer.
-    RemoteConnected(CallId),
-    /// Receive video streaming status change from remote peer.
-    RemoteVideoStatus(CallId, bool),
-    /// Receive ICE candidate message from remote peer.
-    RemoteIceCandidate(IceCandidate),
-    /// Local hangup event from client application.
+    LocalAccept,
+    /// Hangup call.
     LocalHangup,
-    /// Local video streaming status change from client application.
-    LocalVideoStatus(bool),
-    /// Local ICE candidate ready, from WebRTC observer.
-    LocalIceCandidate(IceCandidate),
-    /// Local ICE status is connected, from WebRTC observer.
-    IceConnected,
-    /// Local ICE connection failed, from WebRTC observer.
-    IceConnectionFailed,
-    /// Local ICE connection disconnected, from WebRTC observer.
-    IceConnectionDisconnected,
-    /// Send the client application an error message.
-    ClientError(failure::Error),
-    /// Receive local media stream from WebRTC observer.
-    OnAddStream(MediaStream),
-    /// Receive local call time from timeout runtime.
-    CallTimeout(CallId),
-    /// Receive new available data channel from WebRTC observer (callee).
-    OnDataChannel(DataChannel),
+
+    // Flow events from client application
+    /// OK to proceed with call setup.
+    Proceed(Vec<DeviceId>),
+
+    // Signaling events from client application
+    /// Received SDP answer signal message from remote peer (caller
+    /// only).
+    ReceivedAnswer(String, DeviceId),
+    /// Received ICE candidates signal message from remote peer.
+    ReceivedIceCandidates(Vec<IceCandidate>, DeviceId),
+    /// Received hangup signal message from remote peer.
+    ReceivedHangup(DeviceId),
+
+    /// Connection observer event
+    ConnectionEvent(ObserverEvent, DeviceId),
+    /// Connection observer error
+    ConnectionError(failure::Error, DeviceId),
+
+    // Internally generated events
+    /// Notify the call manager of an internal error condition.
+    InternalError(failure::Error),
+    /// The call timed out while establishing a connection.
+    CallTimeout,
     /// Synchronize the FSM.
     Synchronize(Arc<(Mutex<bool>, Condvar)>),
     /// Shutdown the call.
@@ -135,26 +106,25 @@ pub enum CallEvent
 impl fmt::Display for CallEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            CallEvent::SendOffer                      => "SendOffer".to_string(),
-            CallEvent::HandleAnswer(_)                => "HandleAnsewr".to_string(),
-            CallEvent::HandleOffer(_)                 => "HandleOffer".to_string(),
-            CallEvent::AcceptCall                     => "AcceptCall".to_string(),
-            CallEvent::RemoteHangup(id)               => format!("RemoteHangup, call_id: 0x{:x}", id),
-            CallEvent::RemoteConnected(id)            => format!("RemoteConnected, call_id: 0x{:x}", id),
-            CallEvent::RemoteVideoStatus(id, enabled) => format!("RemoteVideoStatus, call_id: 0x{:x}, enabled: {}", id, enabled),
-            CallEvent::RemoteIceCandidate(_)          => "RemoteIceCandidate".to_string(),
-            CallEvent::LocalHangup                    => "LocalHangup".to_string(),
-            CallEvent::LocalVideoStatus(enabled)      => format!("LocalVideoStatus, enabled: {}", enabled),
-            CallEvent::LocalIceCandidate(_)           => "LocalIceCandidate".to_string(),
-            CallEvent::IceConnected                   => "IceConnected".to_string(),
-            CallEvent::IceConnectionFailed            => "IceConnectionFailed".to_string(),
-            CallEvent::IceConnectionDisconnected      => "IceConnectionDisconnected".to_string(),
-            CallEvent::ClientError(e)                 => format!("ClientError: {}", e),
-            CallEvent::CallTimeout(id)                => format!("CallTimeout, call_id: 0x{:x}", id),
-            CallEvent::OnAddStream(stream)            => format!("OnAddStream, stream: {:}", stream),
-            CallEvent::OnDataChannel(dc)              => format!("OnDataChannel, dc: {:?}", dc),
-            CallEvent::Synchronize(_)                 => "Synchronize".to_string(),
-            CallEvent::EndCall                        => "EndCall".to_string(),
+            CallEvent::StartCall => "StartCall".to_string(),
+            CallEvent::LocalAccept => "LocalAccept".to_string(),
+            CallEvent::LocalHangup => "LocalHangup".to_string(),
+            CallEvent::Proceed(devices) => format!("Proceed, devices: {:?}", devices),
+            CallEvent::ReceivedAnswer(_, d) => format!("ReceivedAnswer, device: {}", d),
+            CallEvent::ReceivedIceCandidates(_, d) => {
+                format!("ReceivedIceCandidates, device: {}", d)
+            }
+            CallEvent::ReceivedHangup(d) => format!("ReceivedHangup, device: {}", d),
+            CallEvent::ConnectionEvent(e, d) => {
+                format!("ConnectionEvent, event: {}, device: {}", e, d)
+            }
+            CallEvent::ConnectionError(e, d) => {
+                format!("ConnectionError, error: {}, device: {}", e, d)
+            }
+            CallEvent::InternalError(e) => format!("InternalError: {}", e),
+            CallEvent::CallTimeout => "CallTimeout".to_string(),
+            CallEvent::Synchronize(_) => "Synchronize".to_string(),
+            CallEvent::EndCall => "EndCall".to_string(),
         };
         write!(f, "({})", display)
     }
@@ -172,56 +142,68 @@ impl fmt::Debug for CallEvent {
 /// either handles them immediately or dispatches them to other
 /// runtimes for further processing.
 ///
-/// The FSM itself is executing on a runtime managed by the CallConnectionFactory object.
+/// The FSM itself is executing on a runtime managed by a Call object.
 ///
 /// For "quick" reactions to incoming events, the FSM handles them
 /// immediately on its own thread.
 ///
 /// For "lengthy" reactions, typically involving network access, the
-/// FSM dispatches the work to a "network" thread.
+/// FSM dispatches the work to a "worker" thread.
 ///
 /// For notification events targeted for the client application, the
 /// FSM dispatches the work to a "notify" thread.
 #[derive(Debug)]
 pub struct CallStateMachine<T>
 where
-    T: CallPlatform,
+    T: Platform,
 {
     /// Receiving end of EventPump.
-    event_stream: EventStream<T>,
+    event_stream:   EventStream<T>,
     /// Runtime for processing long running requests.
-    network_runtime: Option<runtime::Runtime>,
+    worker_runtime: Option<runtime::Runtime>,
     /// Runtime for processing client application notification events.
     notify_runtime: Option<runtime::Runtime>,
 }
 
 impl<T> fmt::Display for CallStateMachine<T>
 where
-    T: CallPlatform,
+    T: Platform,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(tid: {:?})", thread::current().id())
     }
 }
 
+impl<T> Drop for CallStateMachine<T>
+where
+    T: Platform,
+{
+    fn drop(&mut self) {
+        info!("Dropping CallStateMachine:");
+    }
+}
+
 impl<T> Future for CallStateMachine<T>
 where
-    T: CallPlatform,
+    T: Platform,
 {
     type Item = ();
     type Error = failure::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-
         loop {
-            match try_ready!(self.event_stream.poll().map_err(|_| { RingRtcError::FsmStreamPoll })) {
-                Some((cc, event)) => {
-                    let state = cc.state()?;
+            match try_ready!(self
+                .event_stream
+                .poll()
+                .map_err(|_| { RingRtcError::FsmStreamPoll }))
+            {
+                Some((call, event)) => {
+                    let state = call.state()?;
                     info!("state: {}, event: {}", state, event);
-                    if let Err(e) = self.handle_event(cc, state, event) {
+                    if let Err(e) = self.handle_event(call, state, event) {
                         error!("Handling event failed: {:?}", e);
                     }
-                },
+                }
                 None => {
                     info!("No more events!");
                     break;
@@ -236,28 +218,28 @@ where
 
 impl<T> CallStateMachine<T>
 where
-    T: CallPlatform,
+    T: Platform,
 {
     /// Creates a new CallStateMachine object.
     pub fn new(event_stream: EventStream<T>) -> Result<CallStateMachine<T>> {
         let mut fsm = CallStateMachine {
             event_stream,
-            network_runtime: Some(
+            worker_runtime: Some(
                 runtime::Builder::new()
                     .core_threads(1)
-                    .name_prefix("network-")
-                    .build()?
+                    .name_prefix("worker-")
+                    .build()?,
             ),
             notify_runtime: Some(
                 runtime::Builder::new()
                     .core_threads(1)
                     .name_prefix("notify-")
-                    .build()?
+                    .build()?,
             ),
         };
 
-        if let Some(network_runtime) = &mut fsm.network_runtime {
-            CallStateMachine::<T>::sync_thread("network", network_runtime)?;
+        if let Some(worker_runtime) = &mut fsm.worker_runtime {
+            CallStateMachine::<T>::sync_thread("worker", worker_runtime)?;
         }
         if let Some(notify_runtime) = &mut fsm.notify_runtime {
             CallStateMachine::<T>::sync_thread("notify", notify_runtime)?;
@@ -269,24 +251,23 @@ where
     /// Synchronize a runtime with the main FSM thread.
     fn sync_thread(label: &'static str, runtime: &mut runtime::Runtime) -> Result<()> {
         let (tx, rx) = mpsc::channel();
-        let future = lazy(move ||
-                          {
-                              info!("syncing {} thread: {:?}", label, thread::current().id());
-                              let _ = tx.send(true);
-                              Ok(())
-                          });
+        let future = lazy(move || {
+            info!("syncing {} thread: {:?}", label, thread::current().id());
+            let _ = tx.send(true);
+            Ok(())
+        });
         runtime.spawn(future);
         let _ = rx.recv_timeout(Duration::from_secs(2))?;
         Ok(())
     }
 
-    /// Spawn a future on the network runtime if enabled.
-    fn network_spawn<F>(&mut self, future: F)
+    /// Spawn a future on the worker runtime if enabled.
+    fn worker_spawn<F>(&mut self, future: F)
     where
         F: Future<Item = (), Error = ()> + Send + 'static,
     {
-        if let Some(network_runtime) = &mut self.network_runtime {
-            network_runtime.spawn(future);
+        if let Some(worker_runtime) = &mut self.worker_runtime {
+            worker_runtime.spawn(future);
         }
     }
 
@@ -300,574 +281,447 @@ where
         }
     }
 
-    /// Shutdown the network runtime.
-    fn drain_network_thread(&mut self) {
-        info!("draining network thread");
-        if let Some(network_runtime) = self.network_runtime.take() {
-            let _ = network_runtime.shutdown_on_idle().wait()
-                .map_err(|_| warn!("Problems shutting down the network runtime"));
+    /// Shutdown the worker runtime.
+    fn drain_worker_thread(&mut self) {
+        info!("draining worker thread");
+        if let Some(worker_runtime) = self.worker_runtime.take() {
+            let _ = worker_runtime
+                .shutdown_on_idle()
+                .wait()
+                .map_err(|_| warn!("Problems shutting down the worker runtime"));
         }
-        info!("draining network thread: complete");
+        info!("draining worker thread: complete");
     }
 
     /// Shutdown the notify runtime.
     fn drain_notify_thread(&mut self) {
         info!("draining notify thread");
         if let Some(notify_runtime) = self.notify_runtime.take() {
-            let _ = notify_runtime.shutdown_on_idle().wait()
+            let _ = notify_runtime
+                .shutdown_on_idle()
+                .wait()
                 .map_err(|_| warn!("Problems shutting down the notify runtime"));
         }
         info!("draining notify thread: complete");
     }
 
     /// Top level event dispatch.
-    fn handle_event(&mut self,
-                    cc:        CallConnection<T>,
-                    state:     CallState,
-                    event:     CallEvent) -> Result<()> {
-
+    fn handle_event(&mut self, call: Call<T>, state: CallState, event: CallEvent) -> Result<()> {
         // Handle these events even while terminating, as the remote
         // side needs to be informed.
         match event {
-            CallEvent::LocalHangup             => return self.handle_local_hangup(cc, state),
-            CallEvent::EndCall                 => return self.handle_end_call(cc),
-            CallEvent::Synchronize(sync)       => return self.handle_synchronize(sync),
-            _                                  => {},
+            CallEvent::LocalHangup => return self.handle_local_hangup(call, state),
+            CallEvent::EndCall => return self.handle_end_call(call),
+            CallEvent::Synchronize(sync) => return self.handle_synchronize(sync),
+            _ => {}
         }
 
         // If in the process of terminating the call, drop all other
         // events.
         match state {
-            CallState::Terminating | CallState::Closed
-                => {
-                    debug!("handle_event(): dropping event {} while terminating", event);
-                    return Ok(());
-                },
-            _   => (),
+            CallState::Terminating | CallState::Closed => {
+                debug!("handle_event(): dropping event {} while terminating", event);
+                return Ok(());
+            }
+            _ => (),
         }
 
         match event {
-            CallEvent::SendOffer                      => self.handle_send_offer(cc, state),
-            CallEvent::HandleAnswer(answer)           => self.handle_answer(cc, state, answer),
-            CallEvent::HandleOffer(offer)             => self.handle_offer(cc, state, offer),
-            CallEvent::AcceptCall                     => self.handle_accept_call(cc, state),
-            CallEvent::RemoteHangup(id)               => self.handle_remote_hangup(cc, state, id),
-            CallEvent::RemoteConnected(id)            => self.handle_remote_connected(cc, state, id),
-            CallEvent::RemoteVideoStatus(id, enabled) => self.handle_remote_video_status(cc, state, id, enabled),
-            CallEvent::RemoteIceCandidate(candidate)  => self.handle_remote_ice_candidate(cc, state, candidate),
-            CallEvent::LocalVideoStatus(enabled)      => self.handle_local_video_status(cc, state, enabled),
-            CallEvent::LocalIceCandidate(candidate)   => self.handle_local_ice_candidate(cc, state, candidate),
-            CallEvent::IceConnected                   => self.handle_ice_connected(cc, state),
-            CallEvent::IceConnectionFailed            => self.handle_ice_connection_failed(cc, state),
-            CallEvent::IceConnectionDisconnected      => self.handle_ice_connection_disconnected(cc, state),
-            CallEvent::ClientError(error)             => self.handle_client_error(cc, error),
-            CallEvent::CallTimeout(id)                => self.handle_call_timeout(cc, state, id),
-            CallEvent::OnAddStream(stream)            => self.handle_on_add_stream(cc, state, stream),
-            CallEvent::OnDataChannel(dc)              => self.handle_on_data_channel(cc, state, dc),
-            CallEvent::LocalHangup                    => Ok(()),
-            CallEvent::Synchronize(_)                 => Ok(()),
-            CallEvent::EndCall                        => Ok(()),
+            CallEvent::StartCall => self.handle_start_call(call, state),
+            CallEvent::Proceed(remote_devices) => self.handle_proceed(call, state, remote_devices),
+            CallEvent::LocalAccept => self.handle_local_accept(call, state),
+            CallEvent::ReceivedAnswer(answer, remote_device) => {
+                self.handle_received_answer(call, state, remote_device, answer)
+            }
+            CallEvent::ReceivedIceCandidates(ice_candidates, remote_device) => {
+                self.handle_received_ice_candidates(call, state, ice_candidates, remote_device)
+            }
+            CallEvent::ReceivedHangup(remote_device) => {
+                self.handle_received_hangup(call, remote_device)
+            }
+            CallEvent::ConnectionEvent(event, remote_device) => {
+                self.handle_connection_event(call, state, event, remote_device)
+            }
+            CallEvent::ConnectionError(error, remote_device) => {
+                self.handle_connection_error(call, error, remote_device)
+            }
+            CallEvent::InternalError(error) => self.handle_internal_error(call, error),
+            CallEvent::CallTimeout => self.handle_call_timeout(call, state),
+            CallEvent::LocalHangup => Ok(()),
+            CallEvent::Synchronize(_) => Ok(()),
+            CallEvent::EndCall => Ok(()),
         }
     }
 
-    fn handle_send_offer(&mut self,
-                         cc:        CallConnection<T>,
-                         state:     CallState) -> Result<()> {
+    fn notify_application(&mut self, call: Call<T>, event: ApplicationEvent) {
+        let mut err_call = call.clone();
+        let notify_app_future = lazy(move || {
+            if call.terminating()? {
+                return Ok(());
+            }
+            call.notify_application(event)
+        })
+        .map_err(move |err| {
+            err_call.inject_internal_error(err, "Notify Application Future failed")
+        });
+
+        self.notify_spawn(notify_app_future);
+    }
+
+    fn handle_start_call(&mut self, call: Call<T>, state: CallState) -> Result<()> {
+        info!("handle_start_call():");
 
         if let CallState::Idle = state {
-
-            cc.set_state(CallState::SendingOffer)?;
-
-            let mut error_handle  = cc.clone();
-            let send_offer_future = lazy(move ||
-                                         {
-                                             if cc.terminating()? {
-                                                 return Ok(())
-                                             }
-                                             cc.send_offer()?;
-                                             Ok(())
-                                         })
-            .map_err(move |err: failure::Error| {
-                error!("SendOfferFuture failed: {}", err);
-                let _ = error_handle.inject_client_error(err);
-            });
-
-            debug!("handle_send_offer(): spawning network task");
-            self.network_spawn(send_offer_future);
+            call.set_state(CallState::Starting)?;
+            call.handle_start_call()
         } else {
-            self.unexpected_state(state, "SendOffer");
+            self.unexpected_state(state, "StartCall");
+
+            Ok(())
         }
+    }
+
+    fn handle_proceed(
+        &mut self,
+        mut call: Call<T>,
+        state: CallState,
+        remote_devices: Vec<DeviceId>,
+    ) -> Result<()> {
+        info!("handle_proceed():");
+
+        if let CallState::Starting = state {
+            call.set_state(CallState::Connecting)?;
+
+            let mut err_call = call.clone();
+            let proceed_future = lazy(move || {
+                if call.terminating()? {
+                    return Ok(());
+                }
+                call.proceed(remote_devices)
+            })
+            .map_err(move |err| err_call.inject_internal_error(err, "Proceed Future failed"));
+
+            self.worker_spawn(proceed_future);
+        } else {
+            self.unexpected_state(state, "Proceed");
+        }
+
         Ok(())
     }
 
-    fn handle_answer(&mut self,
-                     cc:        CallConnection<T>,
-                     state:     CallState,
-                     answer:    String) -> Result<()> {
-
-        if let CallState::SendingOffer = state {
-
-            cc.set_state(CallState::IceConnecting(false))?;
-
-            let mut error_handle     = cc.clone();
-            let handle_answer_future = lazy(move ||
-                                            {
-                                                if cc.terminating()? {
-                                                    return Ok(())
-                                                }
-                                                cc.handle_answer(answer)?;
-                                                // we have local and remote sdp now
-                                                cc.set_state(CallState::IceConnecting(true))?;
-                                                cc.handle_remote_ice_updates()?;
-                                                Ok(())
-                                            })
-                .map_err(move |err: failure::Error| {
-                    error!("HandleAnswerFuture failed: {}", err);
-                    let _ = error_handle.inject_client_error(err);
-                });
-
-            debug!("handle_answer(): spawning network task");
-            self.network_spawn(handle_answer_future);
-        } else {
-            self.unexpected_state(state, "HandleAnswer");
-        }
-        Ok(())
-    }
-
-    fn handle_offer(&mut self,
-                    cc:        CallConnection<T>,
-                    state:     CallState,
-                    offer:     String) -> Result<()> {
-
-        if let CallState::Idle = state {
-
-            cc.set_state(CallState::IceConnecting(false))?;
-
-            let mut error_handle    = cc.clone();
-            let handle_offer_future = lazy(move ||
-                                           {
-                                               if cc.terminating()? {
-                                                   return Ok(())
-                                               }
-                                               cc.handle_offer(offer)?;
-                                               // we have local and remote sdp now
-                                               cc.set_state(CallState::IceConnecting(true))?;
-                                               cc.handle_remote_ice_updates()?;
-                                               Ok(())
-                                           })
-                .map_err(move |err: failure::Error| {
-                    error!("HandleOfferFuture failed: {}", err);
-                    let _ = error_handle.inject_client_error(err);
-                });
-
-            debug!("handle_offer(): spawning network task");
-            self.network_spawn(handle_offer_future);
-        } else {
-            self.unexpected_state(state, "HandleOffer");
-        }
-        Ok(())
-    }
-
-    fn notify_client(&mut self, cc: CallConnection<T>, event: ClientEvent) {
-
-        let mut error_handle     = cc.clone();
-        let notify_client_future = lazy(move ||
-                                        {
-                                            if cc.terminating()? {
-                                                return Ok(())
-                                            }
-                                            cc.notify_client(event)
-                                        })
+    fn handle_received_answer(
+        &mut self,
+        call: Call<T>,
+        state: CallState,
+        remote_device: DeviceId,
+        answer: String,
+    ) -> Result<()> {
+        if let CallState::Connecting = state {
+            let mut err_call = call.clone();
+            let handle_answer_future = lazy(move || {
+                if call.terminating()? {
+                    return Ok(());
+                }
+                call.received_answer(remote_device, answer)
+            })
             .map_err(move |err| {
-                error!("Notify Client Future failed: {}", err);
-                let _ = error_handle.inject_client_error(err);
+                err_call.inject_internal_error(err, "Handle Received Answer Future failed")
             });
-        debug!("fsm:notify_client(): spawning notify task, event: {}", event);
-        self.notify_spawn(notify_client_future);
-    }
 
-    fn handle_remote_hangup(&mut self,
-                            cc:        CallConnection<T>,
-                            state:     CallState,
-                            call_id:   CallId) -> Result<()> {
-
-        if cc.call_id() != call_id {
-            warn!("Remote hangup for non-active call");
-            return Ok(());
-        }
-        match state {
-            CallState::IceConnecting(_) |
-            CallState::IceReconnecting  |
-            CallState::IceConnected     |
-            CallState::CallConnected
-                => self.notify_client(cc, ClientEvent::RemoteHangup),
-            _   => self.unexpected_state(state, "RemoteHangup"),
-        };
-        Ok(())
-    }
-
-    fn handle_remote_connected(&mut self,
-                               cc:        CallConnection<T>,
-                               state:     CallState,
-                               call_id:   CallId) -> Result<()> {
-
-        if cc.call_id() != call_id {
-            warn!("Remote connected for non-active call");
-            return Ok(());
-        }
-        match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected
-                => {
-                    cc.set_state(CallState::CallConnected)?;
-                    self.notify_client(cc, ClientEvent::RemoteConnected);
-                },
-            _ => self.unexpected_state(state, "RemoteConnected"),
+            self.worker_spawn(handle_answer_future);
+        } else {
+            self.unexpected_state(state, "HandleReceivedAnswer");
         }
         Ok(())
     }
 
-    fn handle_remote_video_status(&mut self,
-                                  cc:        CallConnection<T>,
-                                  state:     CallState,
-                                  call_id:   CallId,
-                                  enabled:   bool) -> Result<()> {
-
-        if cc.call_id() != call_id {
-            warn!("Remote video status change for non-active call");
-            return Ok(());
-        }
-
+    fn handle_received_ice_candidates(
+        &mut self,
+        call: Call<T>,
+        state: CallState,
+        ice_candidates: Vec<IceCandidate>,
+        remote_device: DeviceId,
+    ) -> Result<()> {
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceReconnecting  |
-            CallState::IceConnected     |
-            CallState::CallConnected
-                => {
-                    if enabled {
-                        self.notify_client(cc, ClientEvent::RemoteVideoEnable);
-                    } else {
-                        self.notify_client(cc, ClientEvent::RemoteVideoDisable);
+            CallState::Starting
+            | CallState::Connecting
+            | CallState::Ringing
+            | CallState::Connected
+            | CallState::Reconnecting => {
+                let mut err_call = call.clone();
+                let handle_received_ice_future = lazy(move || {
+                    if call.terminating()? {
+                        return Ok(());
                     }
-                },
-            _ => self.unexpected_state(state, "RemoteVideoStatus"),
-        };
+                    call.received_ice_candidates(remote_device, ice_candidates)
+                })
+                .map_err(move |err| {
+                    err_call.inject_internal_error(err, "Handle Received Ice Future failed")
+                });
+
+                self.worker_spawn(handle_received_ice_future);
+            }
+            _ => self.unexpected_state(state, "HandleReceivedIceCandidates"),
+        }
         Ok(())
     }
 
-    fn handle_remote_ice_candidate(&mut self,
-                                   cc:        CallConnection<T>,
-                                   state:     CallState,
-                                   candidate: IceCandidate) -> Result<()> {
+    fn handle_received_hangup(&mut self, call: Call<T>, _remote_device: DeviceId) -> Result<()> {
+        call.set_state(CallState::Terminating)?;
+        let mut err_call = call.clone();
+        let remote_hangup_future = lazy(move || {
+            let mut call_manager = call.call_manager()?;
+            call_manager.remote_hangup(call.call_id())
+        })
+        .map_err(move |err| {
+            err_call.inject_internal_error(err, "Processing remote hangup request failed")
+        });
 
-        if let CallState::Idle = state {
-            warn!("State is now idle, ignoring remote ICE candidates...");
-            return Ok(());
-        }
+        self.worker_spawn(remote_hangup_future);
+        Ok(())
+    }
 
-        cc.buffer_remote_ice_candidate(candidate)?;
-
+    fn handle_local_accept(&mut self, call: Call<T>, state: CallState) -> Result<()> {
+        info!("handle_local_accept():");
         match state {
-            CallState::IceConnecting(false) => {},
-            CallState::IceConnecting(true) |
-            CallState::IceReconnecting     |
-            CallState::IceConnected        |
-            CallState::CallConnected
-                => {
-                    cc.handle_remote_ice_updates()?;
-                },
-            _ => self.unexpected_state(state, "RemoteIceCandidate"),
-        }
+            CallState::Ringing => {
+                call.set_state(CallState::Connected)?;
+                let mut err_call = call.clone();
+                let accept_future = lazy(move || {
+                    if call.terminating()? {
+                        return Ok(());
+                    }
+                    let mut connection = call.active_connection()?;
+                    connection.inject_accept_call()?;
+                    connection.connect_media()?;
+                    call.notify_application(ApplicationEvent::LocalConnected)
+                })
+                .map_err(move |err| {
+                    err_call.inject_internal_error(err, "Processing local accept request failed")
+                });
 
-        Ok(())
-    }
-
-    fn handle_accept_call(&mut self,
-                          cc:        CallConnection<T>,
-                          state:     CallState) -> Result<()> {
-
-        match state {
-            CallState::IceConnecting(_) |
-            CallState::IceReconnecting  |
-            CallState::IceConnected
-                => {
-                    // notify the peer via a data channel message.
-                    let mut error_handle = cc.clone();
-                    let connected_future = lazy(move ||
-                                                {
-                                                    if cc.terminating()? {
-                                                        return Ok(())
-                                                    }
-                                                    cc.send_connected()?;
-                                                    cc.set_state(CallState::CallConnected)
-                                                })
-                        .map_err(move |err| {
-                            error!("Sending Connected failed: {}", err);
-                            let _ = error_handle.inject_client_error(err);
-                        });
-                    debug!("handle_accept_call(): spawning network task");
-                    self.network_spawn(connected_future);
-                },
-            _ => self.unexpected_state(state, "AcceptCall"),
+                self.worker_spawn(accept_future);
+            }
+            _ => self.unexpected_state(state, "LocalAccept"),
         }
         Ok(())
     }
 
-    fn handle_local_hangup(&mut self,
-                           cc:        CallConnection<T>,
-                           state:     CallState) -> Result<()> {
-
+    fn handle_local_hangup(&mut self, mut call: Call<T>, state: CallState) -> Result<()> {
+        info!("handle_local_hangup():");
         match state {
             CallState::Idle => self.unexpected_state(state, "LocalHangup"),
-            _               => {
-                let hang_up_future   = lazy(move || cc.send_hang_up())
-                    .map_err(move |err| {
-                        error!("Sending Hang Up failed: {}", err);
-                    });
-                debug!("handle_local_hangup(): spawning network task");
-                self.network_spawn(hang_up_future);
-            },
+            _ => {
+                let mut err_call = call.clone();
+                let hangup_future = lazy(move || call.hangup()).map_err(move |err| {
+                    err_call.inject_internal_error(err, "Processing local hangup request failed")
+                });
+
+                self.worker_spawn(hangup_future);
+            }
         }
         Ok(())
     }
 
-    fn handle_local_video_status(&mut self,
-                                 cc:        CallConnection<T>,
-                                 state:     CallState,
-                                 enabled:   bool) -> Result<()> {
-
-        match state {
-            CallState::IceConnecting(_) |
-            CallState::IceReconnecting  |
-            CallState::IceConnected     |
-            CallState::CallConnected
-                => {
-                    // notify the peer via a data channel message.
-                    let local_video_status_future = lazy(move ||
-                                                         {
-                                                             if cc.terminating()? {
-                                                                 return Ok(())
-                                                             }
-                                                             cc.send_video_status(enabled)
-                                                         })
-                        .map_err(move |err| {
-                            error!("Sending local video status failed: {}", err);
-                        });
-                    debug!("handle_local_video_status(): spawning network task");
-                    self.network_spawn(local_video_status_future);
-                },
-            _ => self.unexpected_state(state, "LocalVideoStatus"),
-        };
-        Ok(())
+    fn ignore_connection_event(&self, id: ConnectionId, state: CallState, event: ObserverEvent) {
+        info!(
+            "id: {}: Ignoring event: {}, while in state: {}",
+            id, event, state
+        );
     }
 
-    fn handle_local_ice_candidate(&mut self,
-                                  cc:        CallConnection<T>,
-                                  state:     CallState,
-                                  candidate: IceCandidate) -> Result<()> {
+    fn handle_connection_event(
+        &mut self,
+        mut call: Call<T>,
+        state: CallState,
+        event: ObserverEvent,
+        remote_device: DeviceId,
+    ) -> Result<()> {
+        let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
-        if let CallState::Idle = state {
-            warn!("State is now idle, ignoring local ICE candidates...");
-            return Ok(());
-        }
-
-        cc.buffer_local_ice_candidate(candidate)?;
-
-        match state {
-            CallState::IceConnecting(_) |
-            CallState::IceReconnecting  |
-            CallState::IceConnected     |
-            CallState::CallConnected
-                => {
-                // send signal message to the other side with the ICE
-                // candidate.
-                let mut error_handle  = cc.clone();
-                let ice_update_future = lazy(move ||
-                                             {
-                                                 if cc.terminating()? {
-                                                     return Ok(())
-                                                 }
-                                                 cc.send_pending_ice_updates()
-                                             })
-                        .map_err(move |err: failure::Error| {
-                            error!("IceUpdateFuture failed: {}", err);
-                            let _ = error_handle.inject_client_error(err);
-                        });
-                debug!("handle_local_ice_candidate(): spawning network task");
-                self.network_spawn(ice_update_future);
-            },
-            _ => (),
-        }
-        Ok(())
-    }
-
-    fn handle_ice_connected(&mut self,
-                            cc:        CallConnection<T>,
-                            state:     CallState) -> Result<()> {
-
-        match state {
-            CallState::IceConnecting(_)
-                => {
-                    cc.set_state(CallState::IceConnected)?;
-                    // When ICE connects for the first time (or
-                    // reconnects before the call was completely
-                    // connected), notify only the *caller* about the
-                    // ringing event.
-                    if let CallDirection::OutGoing = cc.direction() {
-                        self.notify_client(cc.clone(), ClientEvent::Ringing);
+        match event {
+            ObserverEvent::ConnectionRinging => {
+                match state {
+                    CallState::Connecting => {
+                        call.set_state(CallState::Ringing)?;
+                        if let CallDirection::InComing = call.direction() {
+                            self.notify_application(call, ApplicationEvent::LocalRinging)
+                        } else {
+                            self.notify_application(call, ApplicationEvent::RemoteRinging)
+                        }
                     }
-                },
-            CallState::IceReconnecting
-                => {
-                    // ICE has reconnected after the call was
-                    // previously connected.  Return to that state
-                    // now.
-                    cc.set_state(CallState::CallConnected)?;
-                    self.notify_client(cc.clone(), ClientEvent::Ringing);
-                },
-            _ => (),
+                    _ => {
+                        self.ignore_connection_event(connection_id, state, event);
+                    }
+                }
+                Ok(())
+            }
+            ObserverEvent::RemoteConnected => {
+                match call.direction() {
+                    CallDirection::OutGoing => match state {
+                        CallState::Ringing => {
+                            call.set_state(CallState::Connected)?;
+                            call.set_active_device_id(remote_device)?;
+                            let mut err_call = call.clone();
+                            let media_future = lazy(move || {
+                                if call.terminating()? {
+                                    return Ok(());
+                                }
+                                let connection = call.active_connection()?;
+                                connection.connect_media()?;
+                                call.notify_application(ApplicationEvent::RemoteConnected)
+                            })
+                            .map_err(move |err| {
+                                err_call.inject_internal_error(
+                                    err,
+                                    "Processing connect_media request failed",
+                                )
+                            });
+                            self.worker_spawn(media_future);
+                        }
+                        _ => {
+                            self.ignore_connection_event(connection_id, state, event);
+                        }
+                    },
+                    CallDirection::InComing => {
+                        warn!(
+                            "Ignoring RemoteConnected for incoming call: {}",
+                            connection_id
+                        );
+                    }
+                }
+                Ok(())
+            }
+            ObserverEvent::RemoteHangup => self.handle_received_hangup(call, remote_device),
+            ObserverEvent::RemoteVideoStatus(enable) => {
+                if call.active_device_id()? == remote_device {
+                    match state {
+                        CallState::Connected => {
+                            if enable {
+                                self.notify_application(call, ApplicationEvent::RemoteVideoEnable)
+                            } else {
+                                self.notify_application(call, ApplicationEvent::RemoteVideoDisable)
+                            }
+                        }
+                        _ => {
+                            self.ignore_connection_event(connection_id, state, event);
+                        }
+                    }
+                } else {
+                    info!(
+                        "id: {}: Ignoring event: {}, from inactive connection.",
+                        connection_id, event
+                    );
+                }
+                Ok(())
+            }
+            ObserverEvent::ConnectionReconnecting => {
+                if call.active_device_id()? == remote_device {
+                    match state {
+                        CallState::Connected => {
+                            call.set_state(CallState::Reconnecting)?;
+                            self.notify_application(call, ApplicationEvent::Reconnecting)
+                        }
+                        _ => {
+                            self.ignore_connection_event(connection_id, state, event);
+                        }
+                    }
+                } else {
+                    info!(
+                        "id: {}: Ignoring event: {}, from inactive connection.",
+                        connection_id, event
+                    );
+                }
+                Ok(())
+            }
+            ObserverEvent::ConnectionReconnected => {
+                if call.active_device_id()? == remote_device {
+                    match state {
+                        CallState::Reconnecting => {
+                            call.set_state(CallState::Connected)?;
+                            self.notify_application(call, ApplicationEvent::Reconnected)
+                        }
+                        _ => {
+                            self.ignore_connection_event(connection_id, state, event);
+                        }
+                    }
+                } else {
+                    info!(
+                        "id: {}: Ignoring event: {}, from inactive connection.",
+                        connection_id, event
+                    );
+                }
+                Ok(())
+            }
+            ObserverEvent::ConnectionFailed => {
+                let mut err_call = call.clone();
+                let future = lazy(move || {
+                    if call.terminating()? {
+                        return Ok(());
+                    }
+                    call.connection_failed(remote_device)
+                })
+                .map_err(move |err| {
+                    err_call
+                        .inject_internal_error(err, "Processing connection_failed request failed")
+                });
+                self.worker_spawn(future);
+                Ok(())
+            }
         }
-        Ok(())
     }
 
-    fn handle_ice_connection_failed(&mut self,
-                                    cc:        CallConnection<T>,
-                                    state:     CallState) -> Result<()> {
+    fn handle_internal_error(&mut self, call: Call<T>, error: failure::Error) -> Result<()> {
+        info!("handle_internal_error():");
 
-        match state {
-            CallState::IceConnecting(_) |
-            CallState::IceReconnecting  |
-            CallState::IceConnected     |
-            CallState::CallConnected
-                => {
-                    cc.set_state(CallState::IceConnectionFailed)?;
-                    // For callee -- the call was disconnected while answering/local_ringing
-                    // For caller -- the recipient was unreachable
-                    self.notify_client(cc, ClientEvent::ConnectionFailed);
-                },
-            _ => self.unexpected_state(state, "IceConnectionFailed"),
-        };
-        Ok(())
-    }
-
-    fn handle_ice_connection_disconnected(&mut self,
-                                          cc:        CallConnection<T>,
-                                          state:     CallState) -> Result<()> {
-
-        match state {
-            CallState::IceConnecting(_) |
-            CallState::IceConnected
-                => {
-                    // ICE disconnected *before* the call was
-                    // connected, so simply go back to the
-                    // IceConnecting state.
-                    cc.set_state(CallState::IceConnecting(true))?;
-                },
-            CallState::CallConnected
-                => {
-                    // ICE disconnected *after* the call was
-                    // connected, go to IceReconnecting state.
-                    cc.set_state(CallState::IceReconnecting)?;
-                    self.notify_client(cc, ClientEvent::CallReconnecting);
-                },
-            _ => self.unexpected_state(state, "IceConnectionDisconnected"),
-        };
-        Ok(())
-    }
-
-    fn handle_client_error(&mut self,
-                           cc:        CallConnection<T>,
-                           error:     failure::Error) -> Result<()> {
-
-        let notify_error_future = lazy(move ||
-                                       {
-                                           if cc.terminating()? {
-                                               return Ok(())
-                                           }
-                                           cc.notify_error(error)
-                                        })
-            .map_err(|err| {
-                error!("Notify Error Future failed: {}", err);
-                // Nothing else we can do here.
+        let internal_error_future =
+            lazy(move || call.internal_error(error)).map_err(move |err: failure::Error| {
+                error!("Processing internal error future failed: {}", err);
+                // Nothing else to do here
             });
-        debug!("fsm:notify_client(): spawning notify task, notify error");
-        self.notify_spawn(notify_error_future);
+
+        self.worker_spawn(internal_error_future);
         Ok(())
     }
 
-    fn handle_call_timeout(&mut self,
-                           cc:        CallConnection<T>,
-                           state:     CallState,
-                           call_id:   CallId) -> Result<()> {
+    fn handle_connection_error(
+        &mut self,
+        call: Call<T>,
+        error: failure::Error,
+        remote_device: DeviceId,
+    ) -> Result<()> {
+        let id = ConnectionId::new(call.call_id(), remote_device);
+        info!("handle_connection_error(): id: {}", id);
 
-        if cc.call_id() != call_id {
-            warn!("Call timeout received for non-active call");
-            return Ok(());
-        }
-        match state {
-            CallState::CallConnected => {}, // Ok
-            _                        => self.notify_client(cc, ClientEvent::CallTimeout),
-        };
-        Ok(())
+        // Treat a connection internal error as a call internal error,
+        // i.e. ignore the remote_device ID.
+        self.handle_internal_error(call, error)
     }
 
-    fn handle_on_add_stream(&mut self,
-                            cc:        CallConnection<T>,
-                            state:     CallState,
-                            stream:    MediaStream) -> Result<()> {
+    fn handle_call_timeout(&mut self, call: Call<T>, state: CallState) -> Result<()> {
+        info!("handle_call_timeout():");
 
         match state {
-            CallState::IceConnecting(_) |
-            CallState::IceReconnecting  |
-            CallState::IceConnected     |
-            CallState::CallConnected
-                => {
-                    let mut error_handle = cc.clone();
-                    let notify_future    = lazy(move ||
-                                             {
-                                                 if cc.terminating()? {
-                                                     return Ok(())
-                                                 }
-                                                 cc.notify_on_add_stream(stream)
-                                             })
-                        .map_err(move |err| {
-                            error!("Notify On Media Stream Future failed: {}", err);
-                            let _ = error_handle.inject_client_error(err);
-                        });
-                    debug!("handle_on_add_stream(): spawning notify task");
-                    self.notify_spawn(notify_future);
-                },
-            _ => self.unexpected_state(state, "OnAddStream"),
+            CallState::Connected | CallState::Reconnecting => {} // Ok
+            _ => {
+                let mut err_call = call.clone();
+                let timeout_future = lazy(move || {
+                    let mut call_manager = call.call_manager()?;
+                    call_manager.timeout(call.call_id())
+                })
+                .map_err(move |err| {
+                    err_call.inject_internal_error(err, "Processing call timeout failed")
+                });
+
+                self.worker_spawn(timeout_future);
+            }
         }
         Ok(())
     }
 
-    fn handle_on_data_channel(&mut self,
-                              mut cc:       CallConnection<T>,
-                              state:        CallState,
-                              data_channel: DataChannel) -> Result<()> {
-
-        match state {
-            CallState::IceConnected     |
-            CallState::CallConnected
-                => {
-                    let dc_observer_handle = cc.clone();
-                    let notify_handle = cc.clone();
-                    debug_assert_eq!(CallDirection::InComing, cc.direction(),
-                                     "onDataChannel should only happen for incoming calls");
-                    cc.on_data_channel(data_channel, dc_observer_handle)?;
-                    self.notify_client(notify_handle, ClientEvent::Ringing);
-                },
-            _ => self.unexpected_state(state, "OnDataChannel"),
-        }
-        Ok(())
-    }
-
-    fn handle_synchronize(&mut self,
-                          sync: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
-
-        if let Some(network_runtime) = &mut self.network_runtime {
-            CallStateMachine::<T>::sync_thread("network", network_runtime)?;
+    fn handle_synchronize(&mut self, sync: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
+        if let Some(worker_runtime) = &mut self.worker_runtime {
+            CallStateMachine::<T>::sync_thread("worker", worker_runtime)?;
         }
         if let Some(notify_runtime) = &mut self.notify_runtime {
             CallStateMachine::<T>::sync_thread("notify", notify_runtime)?;
@@ -879,27 +733,23 @@ where
             condvar.notify_one();
             Ok(())
         } else {
-            Err(RingRtcError::MutexPoisoned("CallConnection Synchronize Condition Variable".to_string()).into())
+            Err(RingRtcError::MutexPoisoned(
+                "CallConnection Synchronize Condition Variable".to_string(),
+            )
+            .into())
         }
-
     }
 
-    fn handle_end_call(&mut self, mut cc: CallConnection<T>) -> Result<()> {
-        self.terminate();
-
-        self.drain_network_thread();
+    fn handle_end_call(&mut self, mut call: Call<T>) -> Result<()> {
+        self.event_stream.close();
+        self.drain_worker_thread();
         self.drain_notify_thread();
 
-        cc.notify_terminate_complete()
-    }
-
-    fn terminate(&mut self) {
-        info!("terminate: closing event stream");
-        self.event_stream.close();
+        call.set_state(CallState::Closed)?;
+        call.terminate_complete()
     }
 
     fn unexpected_state(&self, state: CallState, event: &str) {
         warn!("Unexpected event {}, while in state {:?}", event, state);
     }
-
 }

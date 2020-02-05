@@ -7,8 +7,8 @@ version          = version_number
 group            = group_info
 
 android {
-    compileSdkVersion 24
-    buildToolsVersion "24.0.2"
+    compileSdkVersion 28
+    buildToolsVersion '28.0.3'
 
     sourceSets {
         main {
@@ -20,26 +20,22 @@ android {
         consumerProguardFiles proguard_file
     }
 
-    libraryVariants.all { variant ->
-        variant.outputs.each { output ->
-            def outputFile = output.outputFile
-            if (outputFile != null && outputFile.name.endsWith('.aar')) {
-                def fileName = "${archivesBaseName}-${version}.aar"
-                output.outputFile = new File(release_output_dir, fileName)
-            }
+    android.libraryVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName =  "${archivesBaseName}-${version}.aar"
         }
     }
 }
 
 dependencies {
     for (String dir : release_jni_lib_dirs) {
-        compile fileTree(dir: dir, include: ['*.jar'])
+        implementation fileTree(dir: dir, include: ['*.jar'])
     }
-    testCompile 'junit:junit:4.12'
+    testImplementation 'junit:junit:4.12'
 }
 
 signing {
-    required { has("release") && gradle.taskGraph.hasTask("uploadArchives") }
+    required { isReleaseVersion && gradle.taskGraph.hasTask("uploadArchives") }
     sign configurations.archives
 }
 

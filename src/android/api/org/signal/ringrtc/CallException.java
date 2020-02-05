@@ -11,9 +11,7 @@ package org.signal.ringrtc;
 
 /**
 * A simple exception class that can be thrown by any of the {@link
-* org.signal.ringrtc.CallConnection} class methods.
-*
-* @see SignalMessageRecipient
+* org.signal.ringrtc.CallManager} class methods.
 */
 public class CallException extends Exception {
   public CallException() {

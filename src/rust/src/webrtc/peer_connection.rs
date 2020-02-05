@@ -11,49 +11,43 @@ use std::fmt;
 
 use crate::common::Result;
 use crate::error::RingRtcError;
-use crate::webrtc::data_channel::{
-    RffiDataChannelInit,
-    DataChannel,
-};
+use crate::webrtc::data_channel::{DataChannel, RffiDataChannelInit};
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver,
-    SetSessionDescriptionObserver,
     SessionDescriptionInterface,
+    SetSessionDescriptionObserver,
 };
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection as pc;
 #[cfg(not(feature = "sim"))]
 pub use crate::webrtc::ffi::peer_connection::{
-    RffiPeerConnectionInterface,
     RffiDataChannelInterface,
+    RffiPeerConnectionInterface,
 };
 
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection as pc;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::peer_connection::{
-    RffiPeerConnectionInterface,
     RffiDataChannelInterface,
+    RffiPeerConnectionInterface,
 };
 
 /// Rust wrapper around WebRTC C++ PeerConnectionInterface object.
-pub struct PeerConnection
-{
+pub struct PeerConnection {
     /// Pointer to C++ PeerConnectionInterface.
     rffi_pc_interface: *const RffiPeerConnectionInterface,
 }
 
-impl fmt::Display for PeerConnection
-{
+impl fmt::Display for PeerConnection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "pc_interface: {:p}", self.rffi_pc_interface)
     }
 }
 
-impl fmt::Debug for PeerConnection
-{
+impl fmt::Debug for PeerConnection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
@@ -62,14 +56,11 @@ impl fmt::Debug for PeerConnection
 unsafe impl Send for PeerConnection {}
 unsafe impl Sync for PeerConnection {}
 
-impl PeerConnection
-{
+impl PeerConnection {
     /// Create a new Rust PeerConnection object from a WebRTC C++
     /// PeerConnectionInterface object.
     pub fn new(rffi_pc_interface: *const RffiPeerConnectionInterface) -> Self {
-        Self {
-            rffi_pc_interface,
-        }
+        Self { rffi_pc_interface }
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::CreateDataChannel().
@@ -78,9 +69,11 @@ impl PeerConnection
         let data_channel_config = RffiDataChannelInit::new(true)?;
 
         let rffi_data_channel = unsafe {
-            pc::Rust_createDataChannel(self.rffi_pc_interface,
-                                       data_channel_label.as_ptr(),
-                                       &data_channel_config)
+            pc::Rust_createDataChannel(
+                self.rffi_pc_interface,
+                data_channel_label.as_ptr(),
+                &data_channel_config,
+            )
         };
         if rffi_data_channel.is_null() {
             return Err(RingRtcError::CreateDataChannel(data_channel_label.into_string()?).into());
@@ -97,12 +90,18 @@ impl PeerConnection
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::SetLocalDescription().
-    pub fn set_local_description(&self,
-                                 ssd_observer: &SetSessionDescriptionObserver,
-                                 desc: &SessionDescriptionInterface) {
-        unsafe { pc::Rust_setLocalDescription(self.rffi_pc_interface,
-                                              ssd_observer.rffi_observer(),
-                                              desc.rffi_interface()) }
+    pub fn set_local_description(
+        &self,
+        ssd_observer: &SetSessionDescriptionObserver,
+        desc: &SessionDescriptionInterface,
+    ) {
+        unsafe {
+            pc::Rust_setLocalDescription(
+                self.rffi_pc_interface,
+                ssd_observer.rffi_observer(),
+                desc.rffi_interface(),
+            )
+        }
     }
 
     /// Rust wrapper around C++ webrtc::CreateSessionDescription(kAnswer).
@@ -111,12 +110,18 @@ impl PeerConnection
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::SetRemoteDescription().
-    pub fn set_remote_description(&self,
-                                  ssd_observer: &SetSessionDescriptionObserver,
-                                  desc: &SessionDescriptionInterface) {
-        unsafe { pc::Rust_setRemoteDescription(self.rffi_pc_interface,
-                                               ssd_observer.rffi_observer(),
-                                               desc.rffi_interface()) };
+    pub fn set_remote_description(
+        &self,
+        ssd_observer: &SetSessionDescriptionObserver,
+        desc: &SessionDescriptionInterface,
+    ) {
+        unsafe {
+            pc::Rust_setRemoteDescription(
+                self.rffi_pc_interface,
+                ssd_observer.rffi_observer(),
+                desc.rffi_interface(),
+            )
+        };
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::AddIceCandidate().
@@ -125,8 +130,12 @@ impl PeerConnection
         let sdp_mid = CString::new(clone.sdp_mid)?;
         let sdp = CString::new(clone.sdp)?;
         let add_ok = unsafe {
-            pc::Rust_addIceCandidate(self.rffi_pc_interface,
-                                     sdp_mid.as_ptr(), clone.sdp_mline_index, sdp.as_ptr())
+            pc::Rust_addIceCandidate(
+                self.rffi_pc_interface,
+                sdp_mid.as_ptr(),
+                clone.sdp_mline_index,
+                sdp.as_ptr(),
+            )
         };
         if add_ok {
             Ok(())
@@ -134,5 +143,4 @@ impl PeerConnection
             Err(RingRtcError::AddIceCandidate.into())
         }
     }
-
 }

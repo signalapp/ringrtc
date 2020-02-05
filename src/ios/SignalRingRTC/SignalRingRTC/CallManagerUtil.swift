@@ -1,14 +1,10 @@
 //
-//  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
+//  Copyright (c) 2020 Open Whisper Systems. All rights reserved.
 //
 
 import SignalRingRTC.RingRTC
 
-//struct IOSByteSlice {
-//  var bytes: UnsafePointer<Int8>
-//  var len: Int
-//}
-extension IOSByteSlice {
+extension AppByteSlice {
     func asUnsafeBufferPointer() -> UnsafeBufferPointer<UInt8> {
         return UnsafeBufferPointer(start: bytes, count: len)
     }

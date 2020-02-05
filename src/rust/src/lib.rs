@@ -30,10 +30,13 @@ mod error;
 
 /// Core, platform independent functionality.
 pub mod core {
-    pub mod call_connection;
-    pub mod call_connection_factory;
-    pub mod call_connection_observer;
+    pub mod call;
     pub mod call_fsm;
+    pub mod call_manager;
+    pub mod call_mutex;
+    pub mod connection;
+    pub mod connection_fsm;
+    pub mod platform;
     pub mod util;
 }
 
@@ -42,18 +45,16 @@ mod protobuf {
     pub mod data_channel;
 }
 
-#[cfg(target_os="android")]
+#[cfg(target_os = "android")]
 /// Android specific implementation.
 mod android {
     extern crate jni;
     #[allow(clippy::missing_safety_doc)]
     mod api {
-        mod jni_call_connection;
-        mod jni_call_connection_factory;
+        mod jni_call_manager;
     }
     mod android_platform;
-    mod call_connection_factory;
-    mod call_connection_observer;
+    mod call_manager;
     mod error;
     mod jni_util;
     mod logging;
@@ -61,22 +62,18 @@ mod android {
     mod webrtc_peer_connection_factory;
 }
 
-#[cfg(target_os="ios")]
+#[cfg(target_os = "ios")]
 /// iOS specific implementation.
 mod ios {
     mod api {
-        mod objc_call_connection;
-        mod objc_call_connection_factory;
-        mod objc_call_connection_global;
+        pub mod call_manager_interface;
     }
-    mod call_connection_factory;
-    mod call_connection_observer;
+    mod call_manager;
     mod error;
+    mod ios_media_stream;
     mod ios_platform;
     mod ios_util;
     mod logging;
-    mod webrtc_ios_media_stream;
-    mod webrtc_app_peer_connection;
 }
 
 /// Foreign Function Interface (FFI) to WebRTC C++ library.
@@ -110,8 +107,6 @@ pub mod webrtc {
 
 #[cfg(feature = "sim")]
 pub mod sim {
-    pub mod call_connection_factory;
-    pub mod call_connection_observer;
     pub mod error;
     pub mod sim_platform;
 }

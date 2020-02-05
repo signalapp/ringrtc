@@ -1,0 +1,15 @@
+# rustfmt for ringrtc
+
+enum_discrim_align_threshold = 30
+imports_layout               = "HorizontalVertical"
+license_template_path        = "rustfmt.license-template"
+max_width                    = 100
+struct_field_align_threshold = 30
+unstable_features            = true
+
+ignore = [
+       # Don't format the generated protobuf code
+       "src/protobuf",
+]
+
+

@@ -7,17 +7,17 @@
 
 //! WebRTC FFI Data Channel Observer Interface.
 
-use crate::core::util::{
-    RustObject,
-    CppObject,
-};
+use crate::core::util::{CppObject, RustObject};
 
 /// Incomplete type for C++ DataChannelObserver.
 #[repr(C)]
-pub struct RffiDataChannelObserverInterface { _private: [u8; 0] }
+pub struct RffiDataChannelObserverInterface {
+    _private: [u8; 0],
+}
 
-extern {
-    pub fn Rust_createDataChannelObserver(call_connection: RustObject,
-                                          dc_observer_cb:  CppObject)
-                                          -> *const RffiDataChannelObserverInterface;
+extern "C" {
+    pub fn Rust_createDataChannelObserver(
+        call_connection: RustObject,
+        dc_observer_cb: CppObject,
+    ) -> *const RffiDataChannelObserverInterface;
 }

@@ -16,11 +16,10 @@ SOURCEPATH="${ANDROID_SRC_DIR}/api"
 CLASSPATH="${OUTPUT_DIR}/release/libs/libwebrtc.jar"
 
 ANDROID_SDK="${WEBRTC_SRC_DIR}/third_party/android_sdk/public/platforms/android-28"
-ANDROID_SDK_SUPPORT="${WEBRTC_SRC_DIR}/third_party/android_tools/sdk/extras/android/support/annotations"
-ANDROIDX="${WEBRTC_SRC_DIR}/third_party/androidx/lib"
+ANDROID_ANNOTATIONS="${WEBRTC_SRC_DIR}/third_party/android_deps/libs/androidx_annotation_annotation"
 
-for d in "$ANDROID_DEPS_DIR" "$ANDROID_SDK" "$ANDROIDX" "$ANDROID_SDK_SUPPORT" ; do
-    for f in $(find "$d" -type f -name '*.jar') ; do
+for d in "$ANDROID_DEPS_DIR" "$ANDROID_SDK" "$ANDROID_ANNOTATIONS" ; do
+    for f in $(find -L "$d" -type f -name '*.jar') ; do
         CLASSPATH="${CLASSPATH}:$f"
     done
 done

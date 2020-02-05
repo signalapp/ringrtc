@@ -24,7 +24,8 @@ futures     = { version = "0.1"    }
 lazy_static = { version = "1"      }
 libc        = { version = "0.2"    }
 log         = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
-prost       = { version = "0.6.1"  }
+prost       = { version = "0.6.1"    }
+rand        = { version = "0.7", features = [] }
 regex       = { version = "1"      }
 
 # Optional, needed to build protobufs
@@ -32,7 +33,6 @@ prost-build = { version = "0.6.1",  optional = true }
 
 # Optional, needed by the 'sim' feature
 simplelog   = { version = "^0.7.3", optional = true, default-features = false }
-rand        = { version = "0.7",    optional = true, features = [] }
 rand_chacha = { version = "0.2.1",  optional = true }
 
 [dependencies.tokio]
@@ -43,7 +43,7 @@ features = ["rt-full"]
 [features]
 default = []
 protobuf_gen_deps = ["prost-build"]
-sim = ["simplelog", "rand", "rand_chacha"]
+sim = ["simplelog", "rand_chacha"]
 
 [[bin]]
 name = "protobuf-gen"

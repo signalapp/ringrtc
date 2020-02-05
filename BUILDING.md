@@ -38,6 +38,7 @@ Install rustup, the rust management system:
 Install additional rustup components:
 
     rustup component add clippy
+    rustup toolchain install nightly
 
 Install additional components via `cargo`:
 
@@ -110,3 +111,10 @@ When the build is complete, the frameworks will be available here:
     out/WebRTC.framework
 
 Dynamic symbol files are also available in the `out/` directory for each framework.
+
+## Working with the Code
+
+We use `rustfmt` to keep the rust code tidy.  In the `src/rust`
+directory, run the `format-code` script to format the code:
+
+    ./scripts/format-code

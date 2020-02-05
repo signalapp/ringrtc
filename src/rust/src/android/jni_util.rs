@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2019 Signal Messenger, LLC.
+// Copyright (C) 2019, 2020 Signal Messenger, LLC.
 // All rights reserved.
 //
 // SPDX-License-Identifier: GPL-3.0-only
@@ -9,14 +9,8 @@
 
 use std::collections::HashMap;
 
+use jni::objects::{GlobalRef, JClass, JList, JObject, JValue};
 use jni::JNIEnv;
-use jni::objects::{
-    JValue,
-    JObject,
-    JList,
-    JClass,
-    GlobalRef,
-};
 
 use crate::android::error::AndroidError;
 use crate::common::Result;
@@ -27,12 +21,11 @@ pub fn jni_call_method<'a>(
     object: JObject,
     name: &str,
     sig: &str,
-    args: &[JValue]
-) -> Result<JValue<'a>>
-{
+    args: &[JValue],
+) -> Result<JValue<'a>> {
     match env.call_method(object, name, sig, args) {
         Ok(v) => Ok(v),
-        Err(_) => Err(AndroidError::JniCallMethod(name.to_string(), sig.to_string()).into()),
+        Err(e) => Err(AndroidError::JniCallMethod(name.to_string(), sig.to_string(), e).into()),
     }
 }
 
@@ -43,12 +36,16 @@ pub fn jni_call_static_method<'a>(
     class: &str,
     name: &str,
     sig: &str,
-    args: &[JValue]
-) -> Result<JValue<'a>>
-{
+    args: &[JValue],
+) -> Result<JValue<'a>> {
     match env.call_static_method(class, name, sig, args) {
         Ok(v) => Ok(v),
-        Err(_) => Err(AndroidError::JniCallStaticMethod(class.to_string(), name.to_string(), sig.to_string()).into()),
+        Err(_) => Err(AndroidError::JniCallStaticMethod(
+            class.to_string(),
+            name.to_string(),
+            sig.to_string(),
+        )
+        .into()),
     }
 }
 
@@ -57,27 +54,11 @@ pub fn jni_new_object<'a>(
     env: &'a JNIEnv,
     class: &str,
     sig: &str,
-    args: &[JValue]
-) -> Result<JObject<'a>>
-{
+    args: &[JValue],
+) -> Result<JObject<'a>> {
     match env.new_object(class, sig, args) {
         Ok(v) => Ok(v),
         Err(_) => Err(AndroidError::JniCallConstructor(class.to_string(), sig.to_string()).into()),
-    }
-}
-
-/// Wrapper around JNIEnv::set_field() with logging.
-pub fn jni_set_field<'a>(
-    env: &'a JNIEnv,
-    obj: JObject,
-    name: &str,
-    ty: &str,
-    val: JValue
-) -> Result<()>
-{
-    match env.set_field(obj, name, ty, val) {
-        Ok(_) => Ok(()),
-        Err(_) => Err(AndroidError::JniSetField(name.to_string(), ty.to_string()).into()),
     }
 }
 
@@ -86,9 +67,8 @@ pub fn jni_get_field<'a>(
     env: &'a JNIEnv,
     obj: JObject,
     name: &str,
-    ty: &str
-) -> Result<JValue<'a>>
-{
+    ty: &str,
+) -> Result<JValue<'a>> {
     match env.get_field(obj, name, ty) {
         Ok(v) => Ok(v),
         Err(_) => Err(AndroidError::JniGetField(name.to_string(), ty.to_string()).into()),
@@ -100,10 +80,7 @@ pub fn jni_new_linked_list<'a>(env: &'a JNIEnv) -> Result<JList<'a, 'a>> {
     // create empty java linked list object
     const LINKED_LIST_CLASS: &str = "java/util/LinkedList";
     const LINKED_LIST_CLASS_SIG: &str = "()V";
-    let list = jni_new_object(env,
-                              LINKED_LIST_CLASS,
-                              LINKED_LIST_CLASS_SIG,
-                              &[])?;
+    let list = jni_new_object(env, LINKED_LIST_CLASS, LINKED_LIST_CLASS_SIG, &[])?;
     Ok(env.get_list(list)?)
 }
 
@@ -116,6 +93,7 @@ pub fn jni_new_linked_list<'a>(env: &'a JNIEnv) -> Result<JList<'a, 'a>> {
 /// The solution here is to look up the class objects at init time on
 /// the main thread and cache a global reference to the object for
 /// later use.
+#[derive(Clone)]
 pub struct ClassCache {
     /// HashMap mapping the class name (String) to Java object
     map: HashMap<String, GlobalRef>,
@@ -135,7 +113,6 @@ impl ClassCache {
     /// * Adding the same class twice is treated as an error.
     /// * If the class lookup fails, return an error.
     pub fn add_class(&mut self, env: &JNIEnv, class_name: &str) -> Result<()> {
-
         let class_string = String::from(class_name);
         if self.map.contains_key(&class_string) {
             return Err(AndroidError::ClassCacheDuplicate(class_name.to_string()).into());
@@ -149,7 +126,6 @@ impl ClassCache {
         let class_ref = env.new_global_ref(JObject::from(class_object))?;
         self.map.insert(String::from(class_name), class_ref);
         Ok(())
-
     }
 
     /// Retrieve the class object specified by `class_name` and return it.
@@ -163,5 +139,4 @@ impl ClassCache {
             Err(AndroidError::ClassCacheLookup(class_name.to_string()).into())
         }
     }
-
 }

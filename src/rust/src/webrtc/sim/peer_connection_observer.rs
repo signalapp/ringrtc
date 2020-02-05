@@ -7,10 +7,7 @@
 
 //! WebRTC Simulation Peer Connection Observer Interface.
 
-use crate::core::util::{
-    RustObject,
-    CppObject,
-};
+use crate::core::util::{CppObject, RustObject};
 
 /// Simulation type for PeerConnectionObserver.
 pub type RffiPeerConnectionObserverInterface = u32;
@@ -18,9 +15,10 @@ pub type RffiPeerConnectionObserverInterface = u32;
 static FAKE_OBSERVER: u32 = 7;
 
 #[allow(non_snake_case)]
-pub unsafe fn Rust_createPeerConnectionObserver(_cc_ptr:          RustObject,
-                                                _pc_observer_cb:  CppObject)
-                                                -> *const RffiPeerConnectionObserverInterface {
+pub unsafe fn Rust_createPeerConnectionObserver(
+    _cc_ptr: RustObject,
+    _pc_observer_cb: CppObject,
+) -> *const RffiPeerConnectionObserverInterface {
     info!("Rust_createPeerConnectionObserver():");
     &FAKE_OBSERVER
 }
