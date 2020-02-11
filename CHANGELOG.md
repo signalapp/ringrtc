@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.0
+
+- Add Call Manager component
+
 ## v0.3.3
 
 - Update WebRTC to 3987
