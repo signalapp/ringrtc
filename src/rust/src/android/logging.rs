@@ -64,27 +64,31 @@ impl Log for AndroidLogger {
                 None => "unknown",
             };
 
-            let tag = match env.new_string(path) {
-                Ok(v) => JObject::from(v),
-                Err(_) => return,
-            };
-
-            let msg = match env.new_string(format!("{}", record.args())) {
-                Ok(v) => JObject::from(v),
-                Err(_) => return,
-            };
-
             let level = record.level() as i32;
-            let values = [level.into(), tag.into(), msg.into()];
 
-            // Ignore the result here, can't do anything about it
-            // anyway.
-            let _ = env.call_static_method(
-                JClass::from(self.logger.as_obj()),
-                LOGGER_METHOD,
-                LOGGER_SIG,
-                &values,
-            );
+            let _ = env.with_local_frame(5, || {
+                let tag = match env.new_string(path) {
+                    Ok(v) => JObject::from(v),
+                    Err(_) => return Ok(JObject::null()),
+                };
+
+                let msg = match env.new_string(format!("{}", record.args())) {
+                    Ok(v) => JObject::from(v),
+                    Err(_) => return Ok(JObject::null()),
+                };
+
+                let values = [level.into(), tag.into(), msg.into()];
+
+                // Ignore the result here, can't do anything about it
+                // anyway.
+                let _ = env.call_static_method(
+                    JClass::from(self.logger.as_obj()),
+                    LOGGER_METHOD,
+                    LOGGER_SIG,
+                    &values,
+                );
+                Ok(JObject::null())
+            });
         }
     }
 
