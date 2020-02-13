@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.1
+
+- Android: improve logging
+
 ## v1.0.0
 
 - Add Call Manager component

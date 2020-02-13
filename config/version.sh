@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #
-# Copyright (C) 2019 Signal Messenger, LLC.
+# Copyright (C) 2019, 2020 Signal Messenger, LLC.
 # All rights reserved.
 #
 # SPDX-License-Identifier: GPL-3.0-only
@@ -13,7 +13,7 @@ WEBRTC_VERSION="3987"
 
 RINGRTC_MAJOR_VERSION=1
 RINGRTC_MINOR_VERSION=0
-RINGRTC_REVISION=0
+RINGRTC_REVISION=1
 
 # Specify RingRTC version to publish.
 RINGRTC_VERSION="${RINGRTC_MAJOR_VERSION}.${RINGRTC_MINOR_VERSION}.${RINGRTC_REVISION}"
