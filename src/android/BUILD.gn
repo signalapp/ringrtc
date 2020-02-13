@@ -36,7 +36,6 @@ if (is_android) {
       "api/org/signal/ringrtc/CallId.java",
       "api/org/signal/ringrtc/CallException.java",
       "api/org/signal/ringrtc/CallManager.java",
-      "api/org/signal/ringrtc/CallState.java",
       "api/org/signal/ringrtc/CameraControl.java",
       "api/org/signal/ringrtc/Connection.java",
       "api/org/signal/ringrtc/Log.java",
