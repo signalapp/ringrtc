@@ -19,11 +19,14 @@ use futures::Future;
 use tokio::runtime;
 
 use crate::common::{
+    AnswerParameters,
     CallDirection,
     CallId,
     ConnectionId,
     ConnectionState,
     DeviceId,
+    FeatureLevel,
+    HangupParameters,
     Result,
     RingBench,
 };
@@ -37,6 +40,7 @@ use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_candidate::IceCandidate;
+use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media_stream::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::sdp_observer::{
@@ -61,7 +65,7 @@ pub enum ObserverEvent {
     RemoteVideoStatus(bool),
 
     /// The remote side has hungup.
-    RemoteHangup,
+    RemoteHangup(HangupParameters),
 
     /// The call failed to connect during ICE negotiation.
     ConnectionFailed,
@@ -189,6 +193,16 @@ type EventPump<T> = Sender<(Connection<T>, ConnectionEvent)>;
 /// The event stream is the tuple (Connection, ConnectionEvent).
 pub type EventStream<T> = Receiver<(Connection<T>, ConnectionEvent)>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectionForkingType {
+    // A parent connection should broadcast signaling messages.
+    Parent,
+    // A child connection should not send any messages.
+    Child,
+    // An non-forking connection should send non-broadcast messages.
+    NonForking,
+}
+
 /// Represents the connection between a local client and one remote
 /// peer.
 ///
@@ -205,6 +219,8 @@ where
     call_id:                         CallId,
     /// Device ID of the remote device.
     remote_device:                   DeviceId,
+    /// The detected feature level of the protocol used by the remote device.
+    remote_feature_level:            Arc<CallMutex<FeatureLevel>>,
     /// Connection ID, identifying the call and remote_device.
     connection_id:                   ConnectionId,
     /// The call direction, inbound or outbound.
@@ -221,6 +237,8 @@ where
     pending_inbound_ice_candidates:  Arc<CallMutex<Vec<IceCandidate>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
     terminate_condvar:               Arc<(Mutex<bool>, Condvar)>,
+    /// This is write-once configuration and will not change.
+    forking_type:                    ConnectionForkingType,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -287,6 +305,7 @@ where
             event_pump:                      self.event_pump.clone(),
             call_id:                         self.call_id,
             remote_device:                   self.remote_device,
+            remote_feature_level:            Arc::clone(&self.remote_feature_level),
             connection_id:                   self.connection_id,
             direction:                       self.direction,
             state:                           Arc::clone(&self.state),
@@ -295,6 +314,7 @@ where
             pending_outbound_ice_candidates: Arc::clone(&self.pending_outbound_ice_candidates),
             pending_inbound_ice_candidates:  Arc::clone(&self.pending_inbound_ice_candidates),
             terminate_condvar:               Arc::clone(&self.terminate_condvar),
+            forking_type:                    self.forking_type,
         }
     }
 }
@@ -305,7 +325,11 @@ where
 {
     /// Create a new Connection.
     #[allow(clippy::mutex_atomic)]
-    pub fn new(call: Call<T>, remote_device: DeviceId) -> Result<Self> {
+    pub fn new(
+        call: Call<T>,
+        remote_device: DeviceId,
+        forking_type: ConnectionForkingType,
+    ) -> Result<Self> {
         // create a FSM runtime for this connection
         let mut context = Context::new()?;
         let (event_pump, receiver) = futures::sync::mpsc::channel(256);
@@ -329,6 +353,11 @@ where
             event_pump,
             call_id,
             remote_device,
+            // Until otherwise detected, remotes are assumed to be multi-ring capable.
+            remote_feature_level: Arc::new(CallMutex::new(
+                FeatureLevel::MultiRing,
+                "remote_feature_level",
+            )),
             direction,
             connection_id: ConnectionId::new(call_id, remote_device),
             call: Arc::new(CallMutex::new(call, "call")),
@@ -344,6 +373,7 @@ where
                 "pending_inbound_ice_candidates",
             )),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
+            forking_type,
         };
 
         connection.init_connection_ptr()?;
@@ -386,6 +416,19 @@ where
     pub fn set_state(&self, new_state: ConnectionState) -> Result<()> {
         let mut state = self.state.lock()?;
         *state = new_state;
+        Ok(())
+    }
+
+    /// Return the current feature level of the remote.
+    pub fn remote_feature_level(&self) -> Result<FeatureLevel> {
+        let remote_feature_level = self.remote_feature_level.lock()?;
+        Ok(*remote_feature_level)
+    }
+
+    /// Update the current feature level of the remote.
+    pub fn set_remote_feature_level(&self, new_remote_feature_level: FeatureLevel) -> Result<()> {
+        let mut remote_feature_level = self.remote_feature_level.lock()?;
+        *remote_feature_level = new_remote_feature_level;
         Ok(())
     }
 
@@ -495,8 +538,18 @@ where
         Arc::strong_count(&self.webrtc)
     }
 
+    pub fn create_shared_ice_gatherer(&self) -> Result<IceGatherer> {
+        let webrtc = self.webrtc.lock()?;
+        webrtc.pc_interface()?.create_shared_ice_gatherer()
+    }
+
+    pub fn use_shared_ice_gatherer(&self, ice_gatherer: &IceGatherer) -> Result<()> {
+        let webrtc = self.webrtc.lock()?;
+        webrtc.pc_interface()?.use_shared_ice_gatherer(ice_gatherer)
+    }
+
     /// Create an SDP offer message.
-    fn create_offer(&self) -> Result<SessionDescriptionInterface> {
+    pub fn create_offer(&self) -> Result<SessionDescriptionInterface> {
         let csd_observer = create_csd_observer();
 
         let webrtc = self.webrtc.lock()?;
@@ -537,12 +590,17 @@ where
 
     /// Send an SDP offer message to the remote peer via the signaling
     /// channel.
-    pub fn send_offer(&self) -> Result<()> {
-        let offer = self.create_offer()?;
-        self.set_local_description(&offer)?;
-
+    pub fn send_offer(&self, offer: String) -> Result<()> {
+        if self.forking_type == ConnectionForkingType::Child {
+            let local_desc = SessionDescriptionInterface::create_sdp_offer(offer)?;
+            self.set_local_description(&local_desc)?;
+            return Ok(()); // It was already sent by the parent.
+        }
+        let local_desc = SessionDescriptionInterface::create_sdp_offer(offer.clone())?;
+        self.set_local_description(&local_desc)?;
+        let broadcast = self.forking_type == ConnectionForkingType::Parent;
         let call = self.call()?;
-        call.send_offer(self.clone(), offer.get_description()?)
+        call.send_offer(self.clone(), offer, broadcast)
     }
 
     /// Check to see if this Connection is able to send messages.
@@ -572,11 +630,15 @@ where
         self.set_remote_description(&desc)?;
 
         let answer = self.create_answer()?;
+
+        // Get the answer string here before it is mutated with candidates.
+        let answer_string = answer.get_description()?;
+
         self.set_local_description(&answer)?;
         self.inject_have_local_remote_sdp()?;
 
         let call = self.call()?;
-        call.send_answer(self.clone(), answer.get_description()?)
+        call.send_answer(self.clone(), answer_string)
     }
 
     /// Buffer local ICE candidates.
@@ -594,7 +656,8 @@ where
         // to send for this Connection.
         if num_ice_candidates == 1 {
             let call = self.call()?;
-            call.send_ice_candidates(self.clone())?
+            let broadcast = self.forking_type == ConnectionForkingType::Parent;
+            call.send_ice_candidates(self.clone(), broadcast)?
         }
 
         Ok(())
@@ -652,21 +715,25 @@ where
 
     /// Send a hangup message to the remote peer via the
     /// PeerConnection DataChannel.
-    pub fn send_hangup(&self) -> Result<()> {
+    pub fn send_hangup_via_data_channel(&self, hangup_parameters: HangupParameters) -> Result<()> {
         ringbench!(
             RingBench::Connection,
             RingBench::WebRTC,
-            format!("dc(hangup)\t{}", self.connection_id)
+            format!(
+                "dc(hangup.{})\t{}",
+                hangup_parameters.hangup_type(),
+                self.connection_id
+            )
         );
 
         let webrtc = self.webrtc.lock()?;
         if let Ok(data_channel) = webrtc.data_channel() {
-            if let Err(e) = data_channel.send_hang_up(self.call_id) {
+            if let Err(e) = data_channel.send_hangup(self.call_id, hangup_parameters) {
                 info!("data_channel.send_hang_up() failed: {}", e);
             }
         } else {
             info!(
-                "send_hangup(): id: {}, skipping, data_channel not present",
+                "send_hangup_via_data_channel(): id: {}, skipping, data_channel not present",
                 self.connection_id
             );
         }
@@ -880,8 +947,8 @@ where
     }
 
     /// Inject a `SendOffer` event into the FSM.
-    pub fn inject_send_offer(&mut self) -> Result<()> {
-        let event = ConnectionEvent::SendOffer;
+    pub fn inject_send_offer(&mut self, offer: String) -> Result<()> {
+        let event = ConnectionEvent::SendOffer(offer);
         self.inject_event(event)
     }
 
@@ -892,11 +959,11 @@ where
     /// # Arguments
     ///
     /// * `answer` - String containing the remote SDP answer.
-    pub fn inject_handle_answer(&mut self, answer: String) -> Result<()> {
+    pub fn inject_handle_answer(&mut self, answer: AnswerParameters) -> Result<()> {
         info!(
             "id: {}, RX SDP answer:\n{}",
             self.id(),
-            redact_string(&answer)
+            redact_string(&answer.sdp())
         );
         let event = ConnectionEvent::HandleAnswer(answer);
         self.inject_event(event)
@@ -935,6 +1002,9 @@ where
     ///
     /// * `candidate` - Locally generated IceCandidate.
     pub fn inject_local_ice_candidate(&mut self, candidate: IceCandidate) -> Result<()> {
+        if self.forking_type == ConnectionForkingType::Child {
+            return Ok(());
+        }
         let event = ConnectionEvent::LocalIceCandidate(candidate);
         self.inject_event(event)
     }
@@ -992,8 +1062,12 @@ where
     /// # Arguments
     ///
     /// * `call_id` - Call ID from the remote peer.
-    pub fn inject_remote_hangup(&mut self, call_id: CallId) -> Result<()> {
-        self.inject_event(ConnectionEvent::RemoteHangup(call_id))
+    pub fn inject_remote_hangup(
+        &mut self,
+        call_id: CallId,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
+        self.inject_event(ConnectionEvent::RemoteHangup(call_id, hangup_parameters))
     }
 
     /// Inject a `RemoteVideoStatus` event into the FSM.
@@ -1008,12 +1082,25 @@ where
         self.inject_event(ConnectionEvent::RemoteVideoStatus(call_id, enabled))
     }
 
-    /// Inject a local `HangUp` event into the FSM.
+    /// Inject a local `Hangup` event into the FSM.
     ///
     /// `Called By:` Local application.
-    pub fn inject_hangup(&mut self) -> Result<()> {
+    pub fn inject_send_hangup_via_data_channel(&mut self) -> Result<()> {
         self.set_state(ConnectionState::Terminating)?;
-        self.inject_event(ConnectionEvent::LocalHangup)
+        self.inject_event(ConnectionEvent::SendHangupViaDataChannel)
+    }
+
+    /// Inject a local `Hangup With Type` event into the FSM.
+    ///
+    /// `Called By:` Connection event observer.
+    pub fn inject_send_hangup_via_data_channel_with_type(
+        &mut self,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
+        self.set_state(ConnectionState::Terminating)?;
+        self.inject_event(ConnectionEvent::SendHangupViaDataChannelWithType(
+            hangup_parameters,
+        ))
     }
 
     /// Inject a local `AcceptCall` event into the FSM.

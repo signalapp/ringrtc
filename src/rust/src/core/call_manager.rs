@@ -19,18 +19,25 @@ use futures::Future;
 use tokio::runtime;
 
 use crate::common::{
+    AnswerParameters,
     ApplicationEvent,
     CallDirection,
     CallId,
+    CallMediaType,
     CallState,
     ConnectionId,
     DeviceId,
+    FeatureLevel,
+    HangupParameters,
+    HangupType,
+    OfferParameters,
     Result,
     RingBench,
+    USE_LEGACY_HANGUP_MESSAGE,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
-use crate::core::connection::Connection;
+use crate::core::connection::{Connection, ConnectionForkingType};
 use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 
@@ -269,16 +276,22 @@ where
     }
 
     /// Create an outgoing call.
-    pub fn call(&mut self, remote_peer: <T as Platform>::AppRemotePeer) -> Result<()> {
+    pub fn call(
+        &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
+        call_media_type: CallMediaType,
+    ) -> Result<()> {
         info!("API:call():");
 
         let mut call_manager = self.clone();
         let mut cm_error = self.clone();
         let remote_peer_error = remote_peer.clone();
-        let future = lazy(move || call_manager.handle_call(remote_peer)).map_err(move |err| {
-            error!("Handle call failed: {}", err);
-            cm_error.internal_create_api_error(&remote_peer_error, err);
-        });
+        let future = lazy(move || call_manager.handle_call(remote_peer, call_media_type)).map_err(
+            move |err| {
+                error!("Handle call failed: {}", err);
+                cm_error.internal_create_api_error(&remote_peer_error, err);
+            },
+        );
         self.worker_spawn(future)
     }
 
@@ -297,14 +310,18 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
+        app_local_device: DeviceId,
         remote_devices: Vec<DeviceId>,
+        enable_forking: bool,
     ) -> Result<()> {
         handle_active_call_api!(
             self,
             CallManager::handle_proceed,
             call_id,
             app_call_context,
-            remote_devices
+            app_local_device,
+            remote_devices,
+            enable_forking
         )
     }
 
@@ -328,26 +345,28 @@ where
         &mut self,
         remote_peer: <T as Platform>::AppRemotePeer,
         connection_id: ConnectionId,
-        offer: String,
-        timestamp: u64,
+        offer: OfferParameters,
     ) -> Result<()> {
         info!("API:received_offer():");
 
         let mut call_manager = self.clone();
         let mut cm_error = self.clone();
         let remote_peer_error = remote_peer.clone();
-        let future = lazy(move || {
-            call_manager.handle_received_offer(remote_peer, connection_id, offer, timestamp)
-        })
-        .map_err(move |err| {
-            error!("Handle received offer failed: {}", err);
-            cm_error.internal_create_api_error(&remote_peer_error, err);
-        });
+        let future =
+            lazy(move || call_manager.handle_received_offer(remote_peer, connection_id, offer))
+                .map_err(move |err| {
+                    error!("Handle received offer failed: {}", err);
+                    cm_error.internal_create_api_error(&remote_peer_error, err);
+                });
         self.worker_spawn(future)
     }
 
     /// Received SDP answer from application.
-    pub fn received_answer(&mut self, connection_id: ConnectionId, answer: String) -> Result<()> {
+    pub fn received_answer(
+        &mut self,
+        connection_id: ConnectionId,
+        answer: AnswerParameters,
+    ) -> Result<()> {
         handle_active_call_api!(
             self,
             CallManager::handle_received_answer,
@@ -372,8 +391,17 @@ where
     }
 
     /// Received hangup message from application.
-    pub fn received_hangup(&mut self, connection_id: ConnectionId) -> Result<()> {
-        handle_active_call_api!(self, CallManager::handle_received_hangup, connection_id)
+    pub fn received_hangup(
+        &mut self,
+        connection_id: ConnectionId,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
+        handle_active_call_api!(
+            self,
+            CallManager::handle_received_hangup,
+            connection_id,
+            hangup_parameters
+        )
     }
 
     /// Received busy message from application.
@@ -611,7 +639,13 @@ where
     }
 
     /// Sends a hangup message to a remote_peer via the application.
-    fn send_hangup(&mut self, call: Call<T>, call_id: CallId) -> Result<()> {
+    pub(super) fn send_hangup(
+        &mut self,
+        call: Call<T>,
+        call_id: CallId,
+        hangup_parameters: HangupParameters,
+        use_legacy_hangup_message: bool,
+    ) -> Result<()> {
         info!("send_hangup(): call_id: {}", call_id);
 
         let connection_id = ConnectionId::new(call_id, 0);
@@ -626,7 +660,13 @@ where
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_hangup(&*remote_peer, connection_id, true)
+            platform.on_send_hangup(
+                &*remote_peer,
+                connection_id,
+                true,
+                hangup_parameters,
+                use_legacy_hangup_message,
+            )
         });
 
         let message_item = SignalingMessageItem {
@@ -664,7 +704,7 @@ where
         }
 
         if send_hangup {
-            // all connections send hangup via data_channel
+            // All connections send hangup via data_channel.
             call.inject_hangup()?;
         }
 
@@ -673,11 +713,17 @@ where
         let call_error = call.clone();
         let call_clone = call.clone();
         let future = lazy(move || {
-            // if we want to send a hangup message, be sure that
-            // the call actually should send one
+            // If we want to send a hangup message, be sure that
+            // the call actually should send one.
             if send_hangup && call.should_send_hangup() {
-                // send hangup via signaling channel
-                call_manager.send_hangup(call_clone, call_id)?;
+                // Send hangup via signaling channel.
+                // Use legacy hangup signaling by default.
+                call_manager.send_hangup(
+                    call_clone,
+                    call_id,
+                    HangupParameters::new(HangupType::Normal, None),
+                    USE_LEGACY_HANGUP_MESSAGE,
+                )?;
             }
             call_manager.dispose_call(call_id)
         })
@@ -707,7 +753,11 @@ where
     }
 
     /// Handle call() API from application.
-    fn handle_call(&mut self, remote_peer: <T as Platform>::AppRemotePeer) -> Result<()> {
+    fn handle_call(
+        &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
+        call_media_type: CallMediaType,
+    ) -> Result<()> {
         info!("handle_call():");
 
         // if no active call, create a new call
@@ -720,6 +770,7 @@ where
                     remote_peer,
                     call_id,
                     CallDirection::OutGoing,
+                    call_media_type,
                     TIME_OUT_PERIOD,
                     self.clone(),
                 )?;
@@ -795,7 +846,9 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
+        app_local_device: DeviceId,
         remote_devices: Vec<DeviceId>,
+        enable_forking: bool,
     ) -> Result<()> {
         let mut active_call = check_active_call!(self, "handle_proceed");
 
@@ -814,8 +867,9 @@ where
             format!("proceed()\t{}", call_id)
         );
 
+        active_call.set_local_device(app_local_device)?;
         active_call.set_call_context(app_call_context)?;
-        active_call.inject_proceed(remote_devices)
+        active_call.inject_proceed(remote_devices, enable_forking)
     }
 
     /// Handle message_sent() API from application.
@@ -931,17 +985,35 @@ where
         &mut self,
         remote_peer: <T as Platform>::AppRemotePeer,
         connection_id: ConnectionId,
-        offer: String,
-        timestamp: u64,
+        offer: OfferParameters,
     ) -> Result<()> {
         ringbench!(
             RingBench::Application,
             RingBench::CallManager,
-            format!("received_offer()\t{}", connection_id)
+            format!(
+                "received_offer()\t{}\t{}\t{}",
+                connection_id,
+                offer.remote_feature_level(),
+                offer.is_local_device_primary()
+            )
         );
-        if is_expired(timestamp, Duration::from_secs(120)) {
-            info!("expired_offer(): id: {}", connection_id);
+
+        if is_expired(offer.timestamp(), Duration::from_secs(120)) {
+            info!("handle_received_offer(): expired for id: {}", connection_id);
             self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
+            // Notify application we are completely done with this remote.
+            self.notify_call_concluded(&remote_peer)?;
+            return Ok(());
+        }
+
+        if (offer.remote_feature_level() == FeatureLevel::Unspecified)
+            && !offer.is_local_device_primary()
+        {
+            info!("handle_received_offer(): offer from legacy not supported on linked device for id: {}", connection_id);
+            self.notify_application(
+                &remote_peer,
+                ApplicationEvent::EndedIgnoreCallsFromNonMultiringCallers,
+            )?;
             // Notify application we are completely done with this remote.
             self.notify_call_concluded(&remote_peer)?;
             return Ok(());
@@ -957,6 +1029,7 @@ where
                 remote_peer.clone(),
                 call_id,
                 CallDirection::InComing,
+                offer.call_media_type(),
                 0,
                 self.clone(),
             )?;
@@ -966,7 +1039,7 @@ where
                 ApplicationEvent::EndedReceivedOfferWhileActive,
             )?;
             self.send_busy(call, connection_id)?;
-            self.check_for_glare(&remote_peer)?;
+            self.check_for_glare(&remote_peer, connection_id.remote_device())?;
             return Ok(());
         }
 
@@ -978,6 +1051,7 @@ where
                     remote_peer,
                     call_id,
                     CallDirection::InComing,
+                    offer.call_media_type(),
                     TIME_OUT_PERIOD,
                     self.clone(),
                 )?;
@@ -985,7 +1059,7 @@ where
 
                 call_map.insert(call_id, call.clone());
                 *active_call_id = Some(call_id);
-                call.set_pending_call(connection_id.remote_device(), offer)?;
+                call.set_pending_call(connection_id.remote_device(), offer.sdp())?;
                 call.inject_start_call()
             }
         }
@@ -995,7 +1069,7 @@ where
     fn handle_received_answer(
         &mut self,
         connection_id: ConnectionId,
-        answer: String,
+        answer: AnswerParameters,
     ) -> Result<()> {
         let mut active_call = check_active_call!(self, "handle_received_answer");
 
@@ -1044,7 +1118,11 @@ where
     }
 
     /// Handle received_hangup() API from application.
-    fn handle_received_hangup(&mut self, connection_id: ConnectionId) -> Result<()> {
+    fn handle_received_hangup(
+        &mut self,
+        connection_id: ConnectionId,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
         let mut active_call = check_active_call!(self, "handle_received_hangup");
 
         if active_call.call_id() != connection_id.call_id() {
@@ -1060,7 +1138,7 @@ where
             RingBench::CallManager,
             format!("received_hangup()\t{}", connection_id)
         );
-        active_call.inject_received_hangup(connection_id)
+        active_call.inject_received_hangup(connection_id, hangup_parameters)
     }
 
     /// Handle received_busy() API from application.
@@ -1080,7 +1158,31 @@ where
             RingBench::CallManager,
             format!("received_busy()\t{}", connection_id)
         );
-        self.handle_conclude_active_call(active_call, false, ApplicationEvent::EndedRemoteBusy)
+
+        // Invoke hangup_other for the call, which will inject hangup/busy
+        // to all connections, if any.
+        active_call.send_hangup_via_data_channel_to_all_except(HangupParameters::new(
+            HangupType::Busy,
+            Some(connection_id.remote_device()),
+        ))?;
+
+        // Send out hangup/busy to all callees via signal messaging.
+        // Use legacy signaling since the busy device, legacy or
+        // otherwise, should ignore the message.
+        let mut call_manager = active_call.call_manager()?;
+        call_manager.send_hangup(
+            active_call.clone(),
+            active_call.call_id(),
+            HangupParameters::new(HangupType::Busy, Some(connection_id.remote_device())),
+            USE_LEGACY_HANGUP_MESSAGE,
+        )?;
+
+        // Handle the normal processing of busy by concluding the call locally.
+        self.handle_conclude_active_call(
+            active_call.clone(),
+            false,
+            ApplicationEvent::EndedRemoteBusy,
+        )
     }
 
     /// Handle reset() API from application.
@@ -1140,29 +1242,40 @@ where
 
     /// If the active_remote_peer equals this remote peer, then we
     /// have glare, i.e. two users are trying to call each other at
-    /// the same time.
-    fn check_for_glare(&mut self, remote_peer: &<T as Platform>::AppRemotePeer) -> Result<()> {
-        if self.remote_peer_equals_active(remote_peer) {
-            info!("check_for_glare(): remotes are equal, hanging up.");
-            self.handle_conclude_active_call(
-                self.active_call()?,
-                true,
-                ApplicationEvent::EndedRemoteGlare,
-            )
-        } else {
-            Ok(())
+    /// the same time. They must have the same device_id as well.
+    fn check_for_glare(
+        &mut self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        remote_device_id: DeviceId,
+    ) -> Result<()> {
+        if let Ok(active_call) = self.active_call() {
+            if self.remote_peer_equals_active(&active_call, remote_peer) {
+                if let Ok(active_device_id) = active_call.active_device_id() {
+                    if remote_device_id == active_device_id {
+                        info!("check_for_glare(): remotes are equal, hanging up.");
+                        return self.handle_conclude_active_call(
+                            active_call,
+                            true,
+                            ApplicationEvent::EndedRemoteGlare,
+                        );
+                    }
+                }
+            }
         }
+        Ok(())
     }
 
     /// Check if the remote_peer matches the remote_peer in the active
     /// call.
-    fn remote_peer_equals_active(&self, remote_peer: &<T as Platform>::AppRemotePeer) -> bool {
-        if let Ok(active_call) = self.active_call() {
-            if let Ok(active_remote_peer) = active_call.remote_peer() {
-                if let Ok(platform) = self.platform.lock() {
-                    if let Ok(result) = platform.compare_remotes(&active_remote_peer, remote_peer) {
-                        return result;
-                    }
+    fn remote_peer_equals_active(
+        &self,
+        active_call: &Call<T>,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+    ) -> bool {
+        if let Ok(active_remote_peer) = active_call.remote_peer() {
+            if let Ok(platform) = self.platform.lock() {
+                if let Ok(result) = platform.compare_remotes(&active_remote_peer, remote_peer) {
+                    return result;
                 }
             }
         }
@@ -1180,16 +1293,20 @@ where
         error: failure::Error,
     ) {
         info!("internal_create_api_error(): error: {}", error);
-        if self.remote_peer_equals_active(remote_peer) {
-            // The future managed to create the active call and then
-            // hit problems.  Error out with active call clean up.
-            let _ = self.internal_api_error(error);
-        } else {
-            // The future hit problems before creating an active call.
-            // Simply notify the application with no call clean up.
-            let _ = self.notify_application(remote_peer, ApplicationEvent::EndedInternalFailure);
-            let _ = self.notify_call_concluded(remote_peer);
+        if let Ok(active_call) = self.active_call() {
+            if self.remote_peer_equals_active(&active_call, remote_peer) {
+                // The future managed to create the active call and then
+                // hit problems.  Error out with active call clean up.
+                let _ = self.internal_api_error(error);
+                return;
+            }
         }
+
+        // The future hit problems before creating or accessing
+        //an active call. Simply notify the application with no
+        // call clean up.
+        let _ = self.notify_application(remote_peer, ApplicationEvent::EndedInternalFailure);
+        let _ = self.notify_call_concluded(remote_peer);
     }
 
     /// Internal error occured on an API future.
@@ -1349,9 +1466,10 @@ where
         &self,
         call: &Call<T>,
         device_id: DeviceId,
+        forking_type: ConnectionForkingType,
     ) -> Result<Connection<T>> {
         let mut platform = self.platform.lock()?;
-        platform.create_connection(call, device_id)
+        platform.create_connection(call, device_id, forking_type)
     }
 
     /// Create a new application specific media stream
@@ -1384,12 +1502,19 @@ where
         platform.on_close_media(app_call_context)
     }
 
-    /// Remote hangup of the active call.
-    pub(super) fn remote_hangup(&mut self, call_id: CallId) -> Result<()> {
+    /// Received hangup from remote for the active call.
+    pub(super) fn remote_hangup(
+        &mut self,
+        call_id: CallId,
+        event: Option<ApplicationEvent>,
+    ) -> Result<()> {
         info!("remote_hangup(): call_id: {}", call_id);
 
         if self.call_is_active(call_id)? {
-            self.conclude_active_call(false, ApplicationEvent::EndedRemoteHangup)
+            match event {
+                Some(e) => self.conclude_active_call(false, e),
+                None => self.conclude_active_call(false, ApplicationEvent::EndedRemoteHangup),
+            }
         } else {
             info!("remote_hangup(): ignoring for inactive call");
             Ok(())
@@ -1451,7 +1576,9 @@ where
         &mut self,
         call: Call<T>,
         connection: Connection<T>,
+        broadcast: bool,
         offer: String,
+        call_media_type: CallMediaType,
     ) -> Result<()> {
         let connection_id = connection.id();
         info!("send_offer(): id: {}", connection_id);
@@ -1473,7 +1600,13 @@ where
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_offer(&*remote_peer, connection_id, false, offer.as_str())
+                platform.on_send_offer(
+                    &*remote_peer,
+                    connection_id,
+                    broadcast,
+                    offer.as_str(),
+                    call_media_type,
+                )
             } else {
                 Ok(())
             }
@@ -1535,6 +1668,7 @@ where
         &mut self,
         call: Call<T>,
         connection: Connection<T>,
+        broadcast: bool,
     ) -> Result<()> {
         let connection_id = connection.id();
         info!("send_ice_candidates(): id: {}", connection_id);
@@ -1559,7 +1693,7 @@ where
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_ice_candidates(&*remote_peer, connection_id, false, &*candidates)
+            platform.on_send_ice_candidates(&*remote_peer, connection_id, broadcast, &*candidates)
         });
 
         let message_item = SignalingMessageItem {

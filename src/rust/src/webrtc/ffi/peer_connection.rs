@@ -10,6 +10,7 @@
 use std::os::raw::c_char;
 
 use crate::webrtc::data_channel::RffiDataChannelInit;
+use crate::webrtc::ffi::ice_gatherer::RffiIceGathererInterface;
 
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
@@ -63,5 +64,14 @@ extern "C" {
         sdp_mid: *const c_char,
         sdp_mline_index: i32,
         sdp: *const c_char,
+    ) -> bool;
+
+    pub fn Rust_createSharedIceGatherer(
+        pc_interface: *const RffiPeerConnectionInterface,
+    ) -> *const RffiIceGathererInterface;
+
+    pub fn Rust_useSharedIceGatherer(
+        pc_interface: *const RffiPeerConnectionInterface,
+        ice_gatherer: *const RffiIceGathererInterface,
     ) -> bool;
 }

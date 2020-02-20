@@ -13,6 +13,7 @@ use crate::common::Result;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::{DataChannel, RffiDataChannelInit};
 use crate::webrtc::ice_candidate::IceCandidate;
+use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver,
     SessionDescriptionInterface,
@@ -141,6 +142,29 @@ impl PeerConnection {
             Ok(())
         } else {
             Err(RingRtcError::AddIceCandidate.into())
+        }
+    }
+
+    // Rust wrapper around C++ PeerConnectionInterface::CreateSharedIceGatherer().
+    pub fn create_shared_ice_gatherer(&self) -> Result<IceGatherer> {
+        let rffi_ice_gatherer = unsafe { pc::Rust_createSharedIceGatherer(self.rffi_pc_interface) };
+        if rffi_ice_gatherer.is_null() {
+            return Err(RingRtcError::CreateIceGatherer.into());
+        }
+
+        let ice_gatherer = IceGatherer::new(rffi_ice_gatherer);
+
+        Ok(ice_gatherer)
+    }
+
+    // Rust wrapper around C++ PeerConnectionInterface::UseSharedIceGatherer().
+    pub fn use_shared_ice_gatherer(&self, ice_gatherer: &IceGatherer) -> Result<()> {
+        let ok =
+            unsafe { pc::Rust_useSharedIceGatherer(self.rffi_pc_interface, ice_gatherer.rffi()) };
+        if ok {
+            Ok(())
+        } else {
+            Err(RingRtcError::UseIceGatherer.into())
         }
     }
 }

@@ -14,7 +14,7 @@ use bytes::Bytes;
 use libc::size_t;
 use prost::Message;
 
-use crate::common::{CallDirection, CallId, Result};
+use crate::common::{CallDirection, CallId, HangupParameters, HangupType, Result};
 use crate::core::connection::Connection;
 use crate::core::platform::Platform;
 
@@ -128,8 +128,14 @@ extern "C" fn dc_observer_OnMessage<T>(
             );
         }
     } else if let Some(hangup) = message.hangup {
-        cc.inject_remote_hangup(CallId::new(hangup.id()))
-            .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));
+        cc.inject_remote_hangup(
+            CallId::new(hangup.id()),
+            HangupParameters::new(
+                HangupType::from_i32(hangup.r#type() as i32),
+                Some(hangup.device_id()),
+            ),
+        )
+        .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));
     } else if let Some(video_status) = message.video_streaming_status {
         cc.inject_remote_video_status(CallId::new(video_status.id()), video_status.enabled())
             .unwrap_or_else(|e| warn!("unable to inject remote video status event: {}", e));

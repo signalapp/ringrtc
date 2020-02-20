@@ -179,9 +179,24 @@ impl TestContext {
         platform.ice_candidates_sent()
     }
 
-    pub fn hangups_sent(&self) -> usize {
+    pub fn normal_hangups_sent(&self) -> usize {
         let platform = self.call_manager.platform().unwrap();
-        platform.hangups_sent()
+        platform.normal_hangups_sent()
+    }
+
+    pub fn accepted_hangups_sent(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.accepted_hangups_sent()
+    }
+
+    pub fn declined_hangups_sent(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.declined_hangups_sent()
+    }
+
+    pub fn busy_hangups_sent(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.busy_hangups_sent()
     }
 
     pub fn error_count(&self) -> usize {

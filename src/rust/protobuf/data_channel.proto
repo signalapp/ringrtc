@@ -19,7 +19,16 @@ message Connected {
 }
 
 message Hangup {
-  optional uint64 id = 1;
+  enum Type {
+    NORMAL   = 0;
+    ACCEPTED = 1;
+    DECLINED = 2;
+    BUSY     = 3;
+  }
+
+  optional uint64 id       = 1;
+  optional Type   type     = 2 [default = NORMAL];
+  optional uint32 deviceId = 3 [default = 0];
 }
 
 message VideoStreamingStatus {

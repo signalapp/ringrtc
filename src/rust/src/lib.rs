@@ -83,6 +83,7 @@ pub mod webrtc {
     pub mod data_channel;
     pub mod data_channel_observer;
     pub mod ice_candidate;
+    pub mod ice_gatherer;
     pub mod media_stream;
     pub mod peer_connection;
     pub mod peer_connection_observer;
@@ -91,6 +92,7 @@ pub mod webrtc {
     mod ffi {
         pub mod data_channel;
         pub mod data_channel_observer;
+        pub mod ice_gatherer;
         pub mod peer_connection;
         pub mod peer_connection_observer;
         pub mod ref_count;
@@ -100,6 +102,7 @@ pub mod webrtc {
     mod sim {
         pub mod data_channel;
         pub mod data_channel_observer;
+        pub mod ice_gatherer;
         pub mod peer_connection;
         pub mod peer_connection_observer;
         pub mod ref_count;

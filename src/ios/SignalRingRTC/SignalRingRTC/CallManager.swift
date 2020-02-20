@@ -25,32 +25,60 @@ public enum CallManagerEvent: Int32 {
     case endedLocalHangup = 4
     /// The call ended because of a remote hangup.
     case endedRemoteHangup = 5
+    /// The call ended because the call was accepted by a different device.
+    case endedRemoteHangupAccepted = 6
+    /// The call ended because the call was declined by a different device.
+    case endedRemoteHangupDeclined = 7
+    /// The call ended because the call was declared busy by a different device.
+    case endedRemoteHangupBusy = 8
     /// The call ended because of a remote busy message.
-    case endedRemoteBusy = 6
+    case endedRemoteBusy = 9
     /// The call ended because of glare (received offer from same remote).
-    case endedRemoteGlare = 7
+    case endedRemoteGlare = 10
     /// The call ended because it timed out during setup.
-    case endedTimeout = 8
+    case endedTimeout = 11
     /// The call ended because of an internal error condition.
-    case endedInternalFailure = 9
+    case endedInternalFailure = 12
     /// The call ended because a signaling message couldn't be sent.
-    case endedSignalingFailure = 10
+    case endedSignalingFailure = 13
     /// The call ended because setting up the connection failed.
-    case endedConnectionFailure = 11
+    case endedConnectionFailure = 14
     /// The call ended because the application wanted to drop the call.
-    case endedDropped = 12
+    case endedDropped = 15
     /// The remote side has enabled video.
-    case remoteVideoEnable = 13
+    case remoteVideoEnable = 16
     /// The remote side has disabled video.
-    case remoteVideoDisable = 14
+    case remoteVideoDisable = 17
     /// The call dropped while connected and is now reconnecting.
-    case reconnecting = 15
+    case reconnecting = 18
     /// The call dropped while connected and is now reconnected.
-    case reconnected = 16
+    case reconnected = 19
     /// The received offer is expired.
-    case endedReceivedOfferExpired = 17
+    case endedReceivedOfferExpired = 20
     /// Received an offer while already handling an active call.
-    case endedReceivedOfferWhileActive = 18
+    case endedReceivedOfferWhileActive = 21
+    /// Received an offer on a linked device from one that doesn't support multi-ring.
+    case endedIgnoreCallsFromNonMultiringCallers = 22
+}
+
+/// Type of media for call at time of origination.
+public enum CallMediaType: Int32 {
+    /// Call should start as audio only.
+    case audioCall = 0
+    /// Call should start as audio/video.
+    case videoCall = 1
+}
+
+/// Type of hangup message.
+public enum HangupType: Int32 {
+    /// Normal hangup, typically remote user initiated.
+    case normal = 0
+    /// Call was accepted elsewhere by a different device.
+    case accepted = 1
+    /// Call was declined elsewhere by a different device.
+    case declined = 2
+    /// Call was declared busy elsewhere by a different device.
+    case busy = 3
 }
 
 // We define our own structure for Ice Candidates so that the
@@ -89,35 +117,35 @@ public protocol CallManagerDelegate: class {
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendOffer callId: UInt64, call: CallManagerDelegateCallType, destDevice: UInt32?, sdp: String)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendOffer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, sdp: String, callMediaType: CallMediaType)
 
     /**
      * An Answer message should be sent to the given remote.
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendAnswer callId: UInt64, call: CallManagerDelegateCallType, destDevice: UInt32?, sdp: String)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendAnswer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, sdp: String)
 
     /**
      * An Ice Candidate message should be sent to the given remote.
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendIceCandidates callId: UInt64, call: CallManagerDelegateCallType, destDevice: UInt32?, candidates: [CallManagerIceCandidate])
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendIceCandidates callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate])
 
     /**
      * A Hangup message should be sent to the given remote.
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHangup callId: UInt64, call: CallManagerDelegateCallType, destDevice: UInt32?)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHangup callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool)
 
     /**
      * A Busy message should be sent to the given remote.
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendBusy callId: UInt64, call: CallManagerDelegateCallType, destDevice: UInt32?)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendBusy callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?)
 
     /**
      * Two call 'remote' pointers should be compared to see if they refer to the same
@@ -189,13 +217,13 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Control API
 
-    public func placeCall(call: CallType) throws {
+    public func placeCall(call: CallType, callMediaType: CallMediaType) throws {
         AssertIsOnMainThread()
         Logger.debug("call")
 
         let unmanagedCall: Unmanaged<CallType> = Unmanaged.passUnretained(call)
 
-        let retPtr = ringrtcCall(ringRtcCallManager, unmanagedCall.toOpaque())
+        let retPtr = ringrtcCall(ringRtcCallManager, unmanagedCall.toOpaque(), callMediaType.rawValue)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "call() function failure")
         }
@@ -226,7 +254,16 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Flow API
 
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, deviceList: [UInt32]) throws {
+    /// Proceed with a call after the shouldStartCall delegate was invoked.
+    ///
+    /// - Parameters:
+    ///   - callId: The callId as provided by the shouldStartCall delegate
+    ///   - iceServers: A list of RTC Ice Servers to be provided to WebRTC
+    ///   - hideIp: A flag used to hide the IP of the user by using relay (TURN) servers only
+    ///   - localDevice: The local device ID of the client (must be valid for lifetime of the call)
+    ///   - remoteDeviceList: An array of remote device IDs for the peer, only used when placing a call
+    ///   - enableForking: If true, use one offer and set of local ICE candidates for all remote devices
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, localDevice: UInt32, remoteDeviceList: [UInt32], enableForking: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("proceed")
 
@@ -242,13 +279,15 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         let capturer = RTCCameraVideoCapturer(delegate: videoSource)
         let videoCaptureController = VideoCaptureController(capturer: capturer, settingsDelegate: self)
+        // This defaults to ECDSA, which should be fast.
+        let certificate = RTCCertificate.generate(withParams: [:])!
 
         // Create a call context object to hold on to some of
         // the settings needed by the application when actually
         // creating the connection.
-        let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController)
+        let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController, certificate: certificate)
 
-        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), deviceList, deviceList.count)
+        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), localDevice, remoteDeviceList, remoteDeviceList.count, enableForking)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "proceed() function failure")
         }
@@ -366,7 +405,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Signaling API
 
-    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, sdp: String, timestamp: UInt64) throws {
+    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, sdp: String, timestamp: UInt64, callMediaType: CallMediaType, remoteSupportsMultiRing: Bool, isLocalDevicePrimary: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedOffer")
 
@@ -376,7 +415,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             len: bytes.count)
 
         let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, offer, timestamp)
+        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, offer, timestamp, callMediaType.rawValue, remoteSupportsMultiRing, isLocalDevicePrimary)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedOffer() function failure")
         }
@@ -384,7 +423,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         _ = unmanagedRemote.retain()
     }
 
-    public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, sdp: String) throws {
+    public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, sdp: String, remoteSupportsMultiRing: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedAnswer")
 
@@ -393,7 +432,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             bytes: bytes,
             len: bytes.count)
 
-        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, sourceDevice, answer)
+        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, sourceDevice, answer, remoteSupportsMultiRing)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedAnswer() function failure")
         }
@@ -442,11 +481,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    public func receivedHangup(sourceDevice: UInt32, callId: UInt64) throws {
+    public func receivedHangup(sourceDevice: UInt32, callId: UInt64, hangupType: HangupType, deviceId: UInt32) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedHangup")
 
-        let retPtr = ringrtcReceivedHangup(ringRtcCallManager, callId, sourceDevice)
+        let retPtr = ringrtcReceivedHangup(ringRtcCallManager, callId, sourceDevice, hangupType.rawValue, deviceId)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedHangup() function failure")
         }
@@ -492,7 +531,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Signaling Observers
 
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, offer: String) {
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, offer: String, callMediaType: CallMediaType) {
         Logger.debug("onSendOffer")
 
         DispatchQueue.main.async {
@@ -501,11 +540,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendOffer: callId, call: callReference, destDevice: deviceId, sdp: offer)
+            delegate.callManager(self, shouldSendOffer: callId, call: callReference, destinationDeviceId: destinationDeviceId, sdp: offer, callMediaType: callMediaType)
         }
     }
 
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, answer: String) {
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, answer: String) {
         Logger.debug("onSendAnswer")
 
         DispatchQueue.main.async {
@@ -514,11 +553,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendAnswer: callId, call: callReference, destDevice: deviceId, sdp: answer)
+            delegate.callManager(self, shouldSendAnswer: callId, call: callReference, destinationDeviceId: destinationDeviceId, sdp: answer)
         }
     }
 
-    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
+    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
         Logger.debug("onSendIceCandidates")
 
         DispatchQueue.main.async {
@@ -527,11 +566,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendIceCandidates: callId, call: callReference, destDevice: deviceId, candidates: candidates)
+            delegate.callManager(self, shouldSendIceCandidates: callId, call: callReference, destinationDeviceId: destinationDeviceId, candidates: candidates)
         }
     }
 
-    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?) {
+    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool) {
         Logger.debug("onSendHangup")
 
         DispatchQueue.main.async {
@@ -540,11 +579,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendHangup: callId, call: callReference, destDevice: deviceId)
+            delegate.callManager(self, shouldSendHangup: callId, call: callReference, destinationDeviceId: destinationDeviceId, hangupType: hangupType, deviceId: deviceId, useLegacyHangupMessage: useLegacyHangupMessage)
         }
     }
 
-    func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?) {
+    func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?) {
         Logger.debug("onSendBusy")
 
         DispatchQueue.main.async {
@@ -553,7 +592,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendBusy: callId, call: callReference, destDevice: deviceId)
+            delegate.callManager(self, shouldSendBusy: callId, call: callReference, destinationDeviceId: destinationDeviceId)
         }
     }
 
@@ -567,6 +606,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         // Create the configuration.
         let configuration = RTCConfiguration()
+        // All the connections of a given call should use the same certificate.
+        configuration.certificate = appCallContext.certificate
 
         // Update the configuration with the provided Ice Servers.
         // @todo Validate and if none, set a backup value, don't expect

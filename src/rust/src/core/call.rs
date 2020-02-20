@@ -19,22 +19,26 @@ use tokio::runtime;
 use tokio::timer::Delay;
 
 use crate::common::{
+    AnswerParameters,
     ApplicationEvent,
     CallDirection,
     CallId,
+    CallMediaType,
     CallState,
     ConnectionId,
     DeviceId,
+    HangupParameters,
     Result,
 };
 // use crate::core::call_connection_observer::ClientEvent;
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
 use crate::core::call_manager::CallManager;
 use crate::core::call_mutex::CallMutex;
-use crate::core::connection::{Connection, ObserverEvent};
+use crate::core::connection::{Connection, ConnectionForkingType, ObserverEvent};
 use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_candidate::IceCandidate;
+use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media_stream::MediaStream;
 
 /// Encapsulates the FSM and runtime upon which a Call runs.
@@ -101,6 +105,15 @@ type EventPump<T> = Sender<(Call<T>, CallEvent)>;
 /// The event stream is the tuple (Call, CallEvent).
 pub type EventStream<T> = Receiver<(Call<T>, CallEvent)>;
 
+struct ForkingState<T>
+where
+    T: Platform,
+{
+    parent_connection: Connection<T>,
+    ice_gatherer:      IceGatherer,
+    shared_offer:      String,
+}
+
 /// Represents the set of connections between a local client and
 /// 1-to-many remote peer devices for the same call recipient.
 pub struct Call<T>
@@ -113,6 +126,8 @@ where
     call_id:           CallId,
     /// The call direction, inbound or outbound.
     direction:         CallDirection,
+    /// The call media type at time of origination.
+    media_type:        CallMediaType,
     /// The application specific remote peer of this call
     app_remote_peer:   Arc<CallMutex<<T as Platform>::AppRemotePeer>>,
     /// The application specific context for this call
@@ -133,6 +148,12 @@ where
     terminate_condvar: Arc<(Mutex<bool>, Condvar)>,
     /// Whether or not an offer has been sent via messaging for this call.
     did_send_offer:    Arc<AtomicBool>,
+    /// The local DeviceId of the client (for this call only).
+    local_device_id:   Arc<CallMutex<Option<DeviceId>>>,
+    /// When doing call forking, the parent that must be kept alive to keep
+    /// ICE candidates and signaling alive.
+    /// And we also need to keep around that parent's offer that it created.
+    forking:           Arc<CallMutex<Option<ForkingState<T>>>>,
 }
 
 impl<T> fmt::Display for Call<T>
@@ -198,6 +219,7 @@ where
             call_manager:      Arc::clone(&self.call_manager),
             call_id:           self.call_id,
             direction:         self.direction,
+            media_type:        self.media_type,
             app_remote_peer:   Arc::clone(&self.app_remote_peer),
             app_call_context:  Arc::clone(&self.app_call_context),
             state:             Arc::clone(&self.state),
@@ -208,6 +230,8 @@ where
             connection_map:    Arc::clone(&self.connection_map),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
             did_send_offer:    Arc::clone(&self.did_send_offer),
+            local_device_id:   Arc::clone(&self.local_device_id),
+            forking:           Arc::clone(&self.forking),
         }
     }
 }
@@ -222,6 +246,7 @@ where
         app_remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         direction: CallDirection,
+        media_type: CallMediaType,
         time_out_period: u64,
         call_manager: CallManager<T>,
     ) -> Result<Self> {
@@ -238,6 +263,7 @@ where
             call_manager: Arc::new(CallMutex::new(call_manager, "call_manager")),
             call_id,
             direction,
+            media_type,
             app_remote_peer: Arc::new(CallMutex::new(app_remote_peer, "app_remote_peer")),
             app_call_context: Arc::new(CallMutex::new(None, "app_call_context")),
             state: Arc::new(CallMutex::new(CallState::Idle, "state")),
@@ -248,6 +274,8 @@ where
             connection_map: Arc::new(CallMutex::new(HashMap::new(), "connection_map")),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             did_send_offer: Arc::new(AtomicBool::new(false)),
+            local_device_id: Arc::new(CallMutex::new(None, "local_device_id")),
+            forking: Arc::new(CallMutex::new(None, "forking")),
         };
 
         if time_out_period > 0 {
@@ -352,6 +380,22 @@ where
         Ok(())
     }
 
+    /// Store the local Device Id associated with this call.
+    pub fn set_local_device(&self, local_device: DeviceId) -> Result<()> {
+        let mut local_device_id = self.local_device_id.lock()?;
+        *local_device_id = Some(local_device);
+        Ok(())
+    }
+
+    /// Return the local Device Id associated with this call.
+    pub fn local_device_id(&self) -> Result<DeviceId> {
+        let local_device_id = self.local_device_id.lock()?;
+        match *local_device_id {
+            Some(device_id) => Ok(device_id),
+            None => Err(RingRtcError::LocalDeviceIdNotFound.into()),
+        }
+    }
+
     /// Store the application specific CallContext associated with this call.
     pub fn set_call_context(&self, call_context: <T as Platform>::AppCallContext) -> Result<()> {
         let mut app_call_context = self.app_call_context.lock()?;
@@ -430,7 +474,12 @@ where
     /// Send an SDP offer to the remote_peer.
     ///
     /// This is a pass through to the CallManager.
-    pub fn send_offer(&self, connection: Connection<T>, offer: String) -> Result<()> {
+    pub fn send_offer(
+        &self,
+        connection: Connection<T>,
+        offer: String,
+        broadcast: bool,
+    ) -> Result<()> {
         let state = self.state()?;
 
         info!("send_offer(): {}", state);
@@ -446,7 +495,7 @@ where
                 // We have handed at least one Offer message to the platform...
                 self.did_send_offer.store(true, Ordering::Release);
 
-                call_manager.send_offer(self.clone(), connection, offer)
+                call_manager.send_offer(self.clone(), connection, broadcast, offer, self.media_type)
             }
         }
     }
@@ -475,7 +524,7 @@ where
     /// Send ICE candidates to the remote_peer.
     ///
     /// This is a pass through to the CallManager.
-    pub fn send_ice_candidates(&self, connection: Connection<T>) -> Result<()> {
+    pub fn send_ice_candidates(&self, connection: Connection<T>, broadcast: bool) -> Result<()> {
         let state = self.state()?;
 
         info!("send_ice_candidates(): {}", state);
@@ -488,7 +537,7 @@ where
             _ => {
                 let mut call_manager = self.call_manager()?;
 
-                call_manager.send_ice_candidates(self.clone(), connection)
+                call_manager.send_ice_candidates(self.clone(), connection, broadcast)
             }
         }
     }
@@ -528,7 +577,7 @@ where
     ///
     /// - create a Connection for the single remote DeviceId.
     /// - handle the previously stored pending Offer and ICE Candidates
-    pub fn proceed(&mut self, remote_devices: Vec<DeviceId>) -> Result<()> {
+    pub fn proceed(&mut self, remote_devices: Vec<DeviceId>, enable_forking: bool) -> Result<()> {
         info!("proceed():");
 
         let call_manager = self.call_manager()?;
@@ -542,8 +591,11 @@ where
                         pending_call.remote_device
                     );
 
-                    let mut connection =
-                        call_manager.create_connection(self, pending_call.remote_device)?;
+                    let mut connection = call_manager.create_connection(
+                        self,
+                        pending_call.remote_device,
+                        ConnectionForkingType::NonForking,
+                    )?;
                     connection.inject_handle_offer(pending_call.offer)?;
 
                     if !pending_call.ice_candidates.is_empty() {
@@ -568,14 +620,40 @@ where
                 }
             }
             CallDirection::OutGoing => {
-                for remote_device in remote_devices {
-                    info!("proceed(): outgoing: remote_device: {}", remote_device);
+                if enable_forking {
+                    info!(
+                        "proceed(): outgoing with forking: remote_devices: {:?}",
+                        remote_devices
+                    );
+                    // Note: This causes the call to receive ICE candidates from the forking parent.
+                    let mut parent_connection =
+                        call_manager.create_connection(&self, 0, ConnectionForkingType::Parent)?;
+                    let ice_gatherer = parent_connection.create_shared_ice_gatherer()?;
+                    parent_connection.use_shared_ice_gatherer(&ice_gatherer)?;
+                    let shared_offer = parent_connection.create_offer()?;
+                    parent_connection.inject_send_offer(shared_offer.get_description()?)?;
+                    // Keep around so that it's not closed until all the connections are closed.
+                    let shared_offer = shared_offer.get_description()?;
+                    *(self.forking.lock()?) = Some(ForkingState {
+                        parent_connection,
+                        ice_gatherer,
+                        shared_offer,
+                    });
+                } else {
+                    for remote_device in remote_devices {
+                        info!("proceed(): outgoing: remote_device: {}", remote_device);
 
-                    let mut connection = call_manager.create_connection(self, remote_device)?;
-                    connection.inject_send_offer()?;
+                        let mut connection = call_manager.create_connection(
+                            self,
+                            remote_device,
+                            ConnectionForkingType::NonForking,
+                        )?;
+                        let offer = connection.create_offer()?;
+                        connection.inject_send_offer(offer.get_description()?)?;
 
-                    let mut connection_map = self.connection_map.lock()?;
-                    connection_map.insert(remote_device, connection);
+                        let mut connection_map = self.connection_map.lock()?;
+                        connection_map.insert(remote_device, connection);
+                    }
                 }
             }
         }
@@ -583,7 +661,7 @@ where
     }
 
     /// Handle the received SDP answer.
-    pub fn received_answer(&self, remote_device: DeviceId, answer: String) -> Result<()> {
+    pub fn received_answer(&self, remote_device: DeviceId, answer: AnswerParameters) -> Result<()> {
         info!(
             "received_answer(): id: {}",
             self.call_id().format(remote_device)
@@ -592,7 +670,35 @@ where
         let mut connection_map = self.connection_map.lock()?;
         let connection = match connection_map.get_mut(&remote_device) {
             Some(v) => v,
-            None => return Err(RingRtcError::ConnectionNotFound(remote_device).into()),
+            None => {
+                if self.state()? == CallState::Connected || self.state()? == CallState::Reconnecting
+                {
+                    info!("received an answer from remote device {} when already connected, so ignore.", remote_device);
+                    return Ok(());
+                }
+                let mut maybe_forking = self.forking.lock()?;
+                if let Some(forking) = maybe_forking.as_mut() {
+                    info!("recevied_answer from remote_device {}; forking enabled, so inject into connection_map.", remote_device);
+                    let call_manager = self.call_manager()?;
+                    let mut child_connection = call_manager.create_connection(
+                        &self,
+                        remote_device,
+                        ConnectionForkingType::Child,
+                    )?;
+                    child_connection.use_shared_ice_gatherer(&forking.ice_gatherer)?;
+                    // Note that this doesn't actually send an offer.  It just sets the local description and state
+                    // as if it has sent an offer.
+                    child_connection.inject_send_offer(forking.shared_offer.clone())?;
+                    child_connection.inject_handle_answer(answer)?;
+                    connection_map.insert(remote_device, child_connection);
+                    return Ok(());
+                }
+                info!(
+                    "recevied_answer for new remote_device {}; forking not enabled, so fail.",
+                    remote_device
+                );
+                return Err(RingRtcError::ConnectionNotFound(remote_device).into());
+            }
         };
         connection.inject_handle_answer(answer)
     }
@@ -617,7 +723,16 @@ where
             let mut connection_map = self.connection_map.lock()?;
             match connection_map.get_mut(&remote_device) {
                 Some(connection) => connection.inject_received_ice_candidates(ice_candidates),
-                None => Err(RingRtcError::ConnectionNotFound(remote_device).into()),
+                None => {
+                    if self.state()? == CallState::Connected
+                        || self.state()? == CallState::Reconnecting
+                    {
+                        // This can happen when call forking is enabled.
+                        info!("received_ice_candidates from unknown remote device {} when already connected, so ignore.", remote_device);
+                        return Ok(());
+                    }
+                    Err(RingRtcError::ConnectionNotFound(remote_device).into())
+                }
             }
         }
     }
@@ -635,18 +750,59 @@ where
         }
     }
 
-    /// Hangup this Call.
+    /// Send Hangup for this Call.
     ///
-    /// Sends a hanging on all underlying Connections.
-    pub fn hangup(&mut self) -> Result<()> {
-        info!("hangup(): {}", self.call_id());
+    /// Sends a hangup (HangupType::Normal) on all underlying Connections
+    /// via the data channel (if established).
+    pub fn send_hangup_via_data_channel_to_all(&mut self) -> Result<()> {
+        info!("send_hangup_via_data_channel_to_all(): {}", self.call_id());
 
         let mut connection_map = self.connection_map.lock()?;
         for connection in connection_map.values_mut() {
-            info!("hangup(): id: {}", connection.id());
-            connection.inject_hangup()?;
+            info!(
+                "send_hangup_via_data_channel_to_all(): id: {}",
+                connection.id()
+            );
+            connection.inject_send_hangup_via_data_channel()?;
         }
         Ok(())
+    }
+
+    /// Send Hangup for this Call.
+    ///
+    /// Sends a hangup (for the given HangupType) on all underlying Connections
+    /// via the data channel (if established) except for the given device_id.
+    pub fn send_hangup_via_data_channel_to_all_except(
+        &self,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
+        info!(
+            "send_hangup_via_data_channel_to_all_except(): {} hangup: {}",
+            self.call_id(),
+            hangup_parameters
+        );
+
+        match hangup_parameters.device_id() {
+            Some(device_id) => {
+                let mut connection_map = self.connection_map.lock()?;
+                for connection in connection_map.values_mut() {
+                    if device_id != connection.id().remote_device() {
+                        info!(
+                            "send_hangup_via_data_channel_to_all_except(): id: {}",
+                            connection.id()
+                        );
+                        connection
+                            .inject_send_hangup_via_data_channel_with_type(hangup_parameters)?;
+                    }
+                }
+                Ok(())
+            }
+            None => {
+                // Shouldn't be possible.
+                error!("send_hangup_via_data_channel_to_all_except(): Missing device_id");
+                Ok(())
+            }
+        }
     }
 
     /// A connection failed to connect ICE.
@@ -707,6 +863,9 @@ where
             call_manager.close_media(&call_context)?;
         }
 
+        if let Some(mut forking) = self.forking.lock()?.take() {
+            forking.parent_connection.close()?;
+        }
         let mut connection_map = self.connection_map.lock()?;
         for (_, mut connection) in connection_map.drain() {
             info!("close_connections(): id: {}", connection.id());
@@ -714,6 +873,32 @@ where
             connection.close()?;
         }
         connection_map.clear();
+        Ok(())
+    }
+
+    /// Close and shutdown Connections for all devices except the device
+    /// that accepted the call.
+    pub fn close_connections_except_accepted(&mut self, accepted_device: DeviceId) -> Result<()> {
+        let mut connection_map = self.connection_map.lock()?;
+
+        info!("close_connections_except_accepted():");
+
+        connection_map.retain(|_, connection| {
+            if connection.id().remote_device() != accepted_device {
+                // blocks as connection FSM shutsdown
+                if let Err(e) = connection.close() {
+                    error!("Error when closing {}", e)
+                }
+            }
+
+            connection.id().remote_device() == accepted_device
+        });
+
+        info!(
+            "close_connections_except_accepted(): len: {}.",
+            connection_map.len()
+        );
+
         Ok(())
     }
 
@@ -805,8 +990,12 @@ where
     }
 
     /// Inject a call Proceed event into the FSM.
-    pub fn inject_proceed(&mut self, remote_devices: Vec<DeviceId>) -> Result<()> {
-        let event = CallEvent::Proceed(remote_devices);
+    pub fn inject_proceed(
+        &mut self,
+        remote_devices: Vec<DeviceId>,
+        enable_forking: bool,
+    ) -> Result<()> {
+        let event = CallEvent::Proceed(remote_devices, enable_forking);
         self.inject_event(event)
     }
 
@@ -825,9 +1014,9 @@ where
     pub fn inject_received_answer(
         &mut self,
         connection_id: ConnectionId,
-        answer: String,
+        answer: AnswerParameters,
     ) -> Result<()> {
-        let event = CallEvent::ReceivedAnswer(answer, connection_id.remote_device());
+        let event = CallEvent::ReceivedAnswer(connection_id.remote_device(), answer);
         self.inject_event(event)
     }
 
@@ -837,13 +1026,17 @@ where
         connection_id: ConnectionId,
         ice_candidates: Vec<IceCandidate>,
     ) -> Result<()> {
-        let event = CallEvent::ReceivedIceCandidates(ice_candidates, connection_id.remote_device());
+        let event = CallEvent::ReceivedIceCandidates(connection_id.remote_device(), ice_candidates);
         self.inject_event(event)
     }
 
     /// Inject a `ReceivedHangup` event into the FSM
-    pub fn inject_received_hangup(&mut self, connection_id: ConnectionId) -> Result<()> {
-        let event = CallEvent::ReceivedHangup(connection_id.remote_device());
+    pub fn inject_received_hangup(
+        &mut self,
+        connection_id: ConnectionId,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
+        let event = CallEvent::ReceivedHangup(connection_id.remote_device(), hangup_parameters);
         self.inject_event(event)
     }
 
@@ -965,7 +1158,7 @@ where
         let connection_map = self.connection_map.lock()?;
         match connection_map.get(&device_id) {
             Some(v) => Ok(v.clone()),
-            None => Err(RingRtcError::ConnectionNotFound(self.active_device_id()?).into()),
+            None => Err(RingRtcError::ConnectionNotFound(device_id).into()),
         }
     }
 }

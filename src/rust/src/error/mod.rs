@@ -27,6 +27,8 @@ pub enum RingRtcError {
     NoActiveCall,
     #[fail(display = "CallID not found in call_map: {}", _0)]
     CallIdNotFound(CallId),
+    #[fail(display = "No local DeviceID found")]
+    LocalDeviceIdNotFound,
     #[fail(display = "Connection not found in connection_map: {}", _0)]
     ConnectionNotFound(DeviceId),
     #[fail(display = "Active device ID is already set, remote_device: {}", _0)]
@@ -91,6 +93,12 @@ pub enum RingRtcError {
     DataChannelSend,
     #[fail(display = "Data channel protocol error: {}", _0)]
     DataChannelProtocol(String),
+
+    // IceGatherer error codes
+    #[fail(display = "UseSharedIceGatherer failure")]
+    UseIceGatherer,
+    #[fail(display = "CreateIceGatherer failure")]
+    CreateIceGatherer,
 
     // Misc error codes
     #[fail(display = "Event stream polling failed")]

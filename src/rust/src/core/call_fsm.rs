@@ -56,7 +56,19 @@ use tokio::runtime;
 
 use crate::error::RingRtcError;
 
-use crate::common::{ApplicationEvent, CallDirection, CallState, ConnectionId, DeviceId, Result};
+use crate::common::{
+    AnswerParameters,
+    ApplicationEvent,
+    CallDirection,
+    CallState,
+    ConnectionId,
+    DeviceId,
+    FeatureLevel,
+    HangupParameters,
+    HangupType,
+    Result,
+    USE_LEGACY_HANGUP_MESSAGE,
+};
 
 use crate::core::call::{Call, EventStream};
 use crate::core::connection::ObserverEvent;
@@ -76,16 +88,16 @@ pub enum CallEvent {
 
     // Flow events from client application
     /// OK to proceed with call setup.
-    Proceed(Vec<DeviceId>),
+    Proceed(Vec<DeviceId>, bool),
 
     // Signaling events from client application
     /// Received SDP answer signal message from remote peer (caller
     /// only).
-    ReceivedAnswer(String, DeviceId),
+    ReceivedAnswer(DeviceId, AnswerParameters),
     /// Received ICE candidates signal message from remote peer.
-    ReceivedIceCandidates(Vec<IceCandidate>, DeviceId),
+    ReceivedIceCandidates(DeviceId, Vec<IceCandidate>),
     /// Received hangup signal message from remote peer.
-    ReceivedHangup(DeviceId),
+    ReceivedHangup(DeviceId, HangupParameters),
 
     /// Connection observer event
     ConnectionEvent(ObserverEvent, DeviceId),
@@ -109,12 +121,22 @@ impl fmt::Display for CallEvent {
             CallEvent::StartCall => "StartCall".to_string(),
             CallEvent::LocalAccept => "LocalAccept".to_string(),
             CallEvent::LocalHangup => "LocalHangup".to_string(),
-            CallEvent::Proceed(devices) => format!("Proceed, devices: {:?}", devices),
-            CallEvent::ReceivedAnswer(_, d) => format!("ReceivedAnswer, device: {}", d),
-            CallEvent::ReceivedIceCandidates(_, d) => {
+            CallEvent::Proceed(devices, enable_forking) => format!(
+                "Proceed, devices: {:?}, enable_forking: {}",
+                devices, enable_forking
+            ),
+            CallEvent::ReceivedAnswer(d, answer) => format!(
+                "ReceivedAnswer, device: {} remote_feature_level: {}",
+                d,
+                answer.remote_feature_level()
+            ),
+            CallEvent::ReceivedIceCandidates(d, _) => {
                 format!("ReceivedIceCandidates, device: {}", d)
             }
-            CallEvent::ReceivedHangup(d) => format!("ReceivedHangup, device: {}", d),
+            CallEvent::ReceivedHangup(d, hangup_parameters) => format!(
+                "ReceivedHangup, device: {} hangup: {}",
+                d, hangup_parameters
+            ),
             CallEvent::ConnectionEvent(e, d) => {
                 format!("ConnectionEvent, event: {}, device: {}", e, d)
             }
@@ -328,16 +350,18 @@ where
 
         match event {
             CallEvent::StartCall => self.handle_start_call(call, state),
-            CallEvent::Proceed(remote_devices) => self.handle_proceed(call, state, remote_devices),
+            CallEvent::Proceed(remote_devices, enable_forking) => {
+                self.handle_proceed(call, state, remote_devices, enable_forking)
+            }
             CallEvent::LocalAccept => self.handle_local_accept(call, state),
-            CallEvent::ReceivedAnswer(answer, remote_device) => {
+            CallEvent::ReceivedAnswer(remote_device, answer) => {
                 self.handle_received_answer(call, state, remote_device, answer)
             }
-            CallEvent::ReceivedIceCandidates(ice_candidates, remote_device) => {
+            CallEvent::ReceivedIceCandidates(remote_device, ice_candidates) => {
                 self.handle_received_ice_candidates(call, state, ice_candidates, remote_device)
             }
-            CallEvent::ReceivedHangup(remote_device) => {
-                self.handle_received_hangup(call, remote_device)
+            CallEvent::ReceivedHangup(remote_device, hangup_parameters) => {
+                self.handle_received_hangup(call, state, remote_device, hangup_parameters)
             }
             CallEvent::ConnectionEvent(event, remote_device) => {
                 self.handle_connection_event(call, state, event, remote_device)
@@ -386,6 +410,7 @@ where
         mut call: Call<T>,
         state: CallState,
         remote_devices: Vec<DeviceId>,
+        enable_forking: bool,
     ) -> Result<()> {
         info!("handle_proceed():");
 
@@ -397,7 +422,7 @@ where
                 if call.terminating()? {
                     return Ok(());
                 }
-                call.proceed(remote_devices)
+                call.proceed(remote_devices, enable_forking)
             })
             .map_err(move |err| err_call.inject_internal_error(err, "Proceed Future failed"));
 
@@ -414,9 +439,10 @@ where
         call: Call<T>,
         state: CallState,
         remote_device: DeviceId,
-        answer: String,
+        answer: AnswerParameters,
     ) -> Result<()> {
-        if let CallState::Connecting = state {
+        // Accept answers when we are ringing so we can get answers for more than one connection.
+        if state == CallState::Connecting || state == CallState::Ringing {
             let mut err_call = call.clone();
             let handle_answer_future = lazy(move || {
                 if call.terminating()? {
@@ -466,19 +492,124 @@ where
         Ok(())
     }
 
-    fn handle_received_hangup(&mut self, call: Call<T>, _remote_device: DeviceId) -> Result<()> {
-        call.set_state(CallState::Terminating)?;
-        let mut err_call = call.clone();
-        let remote_hangup_future = lazy(move || {
-            let mut call_manager = call.call_manager()?;
-            call_manager.remote_hangup(call.call_id())
-        })
-        .map_err(move |err| {
-            err_call.inject_internal_error(err, "Processing remote hangup request failed")
-        });
+    fn handle_received_hangup(
+        &mut self,
+        call: Call<T>,
+        state: CallState,
+        remote_device: DeviceId,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
+        info!(
+            "handle_received_hangup(): remote_device: {}, hangup: {}",
+            remote_device, hangup_parameters
+        );
 
-        self.worker_spawn(remote_hangup_future);
-        Ok(())
+        let mut err_call = call.clone();
+
+        let hangup_event = match hangup_parameters.hangup_type() {
+            HangupType::Accepted => ApplicationEvent::EndedRemoteHangupAccepted,
+            HangupType::Declined => ApplicationEvent::EndedRemoteHangupDeclined,
+            HangupType::Busy => ApplicationEvent::EndedRemoteHangupBusy,
+            HangupType::Normal => {
+                match call.direction() {
+                    CallDirection::InComing => {
+                        // Callees will never need to send hangup messages in reaction
+                        // to the received hangup since only callers perform such call
+                        // management in multi-ring scenarios.
+
+                        // Normal handling of the received hangup.
+                        call.set_state(CallState::Terminating)?;
+                    }
+                    CallDirection::OutGoing => match state {
+                        CallState::Idle
+                        | CallState::Connected
+                        | CallState::Reconnecting
+                        | CallState::Terminating
+                        | CallState::Closed => {
+                            // We are already connected and can assume that the hangup
+                            // is a traditional "in-call" hangup. Hangups to other
+                            // callees/connections would have been sent at the time
+                            // of transitioning to the Connected state. Therefore, we
+                            // don't need to send anything out in reaction to the
+                            // received hangup.
+                            // @note Idle and Closed states shouldn't reach this function...
+                            if remote_device == call.active_device_id()? {
+                                // Normal handling of the received hangup.
+                                call.set_state(CallState::Terminating)?;
+                            } else {
+                                info!("handle_received_hangup(): Ignoring hangup message from a device we aren't in a call with after connection");
+                                return Ok(());
+                            }
+                        }
+                        CallState::Starting | CallState::Connecting | CallState::Ringing => {
+                            // A normal hangup has been received on a call for which
+                            // we are the caller and which is not yet accepted. This
+                            // means that the callee device is declining the call.
+
+                            // Make sure the call is in a terminating state asap.
+                            call.set_state(CallState::Terminating)?;
+
+                            // Send out hangup/declined to all callees.
+                            let hangup_parameters =
+                                HangupParameters::new(HangupType::Declined, Some(remote_device));
+
+                            // Send via the data channel except to the decliner.
+                            call.send_hangup_via_data_channel_to_all_except(hangup_parameters)?;
+
+                            // Also send out via signal messaging.
+                            let mut call_manager = call.call_manager()?;
+                            call_manager.send_hangup(
+                                call.clone(),
+                                call.call_id(),
+                                hangup_parameters,
+                                USE_LEGACY_HANGUP_MESSAGE,
+                            )?;
+                        }
+                    },
+                }
+
+                // Continue with the normal handling of a received hangup, to hang up
+                // the local device.
+                let remote_hangup_future = lazy(move || {
+                    let mut call_manager = call.call_manager()?;
+                    call_manager.remote_hangup(call.call_id(), None)
+                })
+                .map_err(move |err| {
+                    err_call.inject_internal_error(err, "Processing remote hangup request failed")
+                });
+
+                self.worker_spawn(remote_hangup_future);
+
+                // Return for any HangupType::Normal case.
+                return Ok(());
+            }
+        };
+
+        match hangup_parameters.device_id() {
+            Some(device_id) => {
+                // If this is the device that caused the hangup, it can be ignored.
+                if call.local_device_id()? == device_id {
+                    info!("handle_received_hangup(): Ignoring hangup message for the referenced device");
+                    Ok(())
+                } else {
+                    let remote_hangup_future = lazy(move || {
+                        let mut call_manager = call.call_manager()?;
+                        call_manager.remote_hangup(call.call_id(), Some(hangup_event))
+                    })
+                    .map_err(move |err| {
+                        err_call
+                            .inject_internal_error(err, "Processing remote hangup request failed")
+                    });
+
+                    self.worker_spawn(remote_hangup_future);
+                    Ok(())
+                }
+            }
+            None => {
+                info!("handle_received_hangup(): Missing device_id for hangup, ignoring");
+                Ok(())
+            }
+        }
     }
 
     fn handle_local_accept(&mut self, call: Call<T>, state: CallState) -> Result<()> {
@@ -513,9 +644,11 @@ where
             CallState::Idle => self.unexpected_state(state, "LocalHangup"),
             _ => {
                 let mut err_call = call.clone();
-                let hangup_future = lazy(move || call.hangup()).map_err(move |err| {
-                    err_call.inject_internal_error(err, "Processing local hangup request failed")
-                });
+                let hangup_future = lazy(move || call.send_hangup_via_data_channel_to_all())
+                    .map_err(move |err| {
+                        err_call
+                            .inject_internal_error(err, "Processing local hangup request failed")
+                    });
 
                 self.worker_spawn(hangup_future);
             }
@@ -560,16 +693,60 @@ where
                 match call.direction() {
                     CallDirection::OutGoing => match state {
                         CallState::Ringing => {
+                            info!(
+                                "handle_connection_event(): Connection from {}",
+                                remote_device
+                            );
+
                             call.set_state(CallState::Connected)?;
                             call.set_active_device_id(remote_device)?;
+
+                            // Send out hangup/accepted to all callees.
+                            let hangup_parameters =
+                                HangupParameters::new(HangupType::Accepted, Some(remote_device));
+
+                            // Send via the data channel except to the accepter.
+                            call.send_hangup_via_data_channel_to_all_except(hangup_parameters)?;
+
                             let mut err_call = call.clone();
-                            let media_future = lazy(move || {
+                            let connected_future = lazy(move || {
                                 if call.terminating()? {
                                     return Ok(());
                                 }
+
+                                // Get the media and application working for the first connection.
                                 let connection = call.active_connection()?;
                                 connection.connect_media()?;
-                                call.notify_application(ApplicationEvent::RemoteConnected)
+                                call.notify_application(ApplicationEvent::RemoteConnected)?;
+
+                                // If the remote device of the active connection can support
+                                // multi-ring, we send a "legacy" Hangup message. The callee
+                                // that accepted the call will ignore it and all other callees,
+                                // legacy or otherwise, will handle it and end.
+                                //
+                                // If the remote device is not multi-ring capable, then we send
+                                // a new "non-legacy" Hangup message because the callee that
+                                // accepted the call will ignore it as it is not defined in their
+                                // protocol definition.
+                                let use_legacy_hangup_message =
+                                    match connection.remote_feature_level()? {
+                                        FeatureLevel::Unspecified => !USE_LEGACY_HANGUP_MESSAGE,
+                                        FeatureLevel::MultiRing => USE_LEGACY_HANGUP_MESSAGE,
+                                    };
+
+                                // Send the accepted indication via hangup signaling (it will be
+                                // replicated to all remote peers).
+                                let mut call_manager = call.call_manager()?;
+                                call_manager.send_hangup(
+                                    call.clone(),
+                                    call.call_id(),
+                                    hangup_parameters,
+                                    use_legacy_hangup_message,
+                                )?;
+
+                                // Close all the other connections (this blocks).
+                                let mut call_clone = call.clone();
+                                call_clone.close_connections_except_accepted(remote_device)
                             })
                             .map_err(move |err| {
                                 err_call.inject_internal_error(
@@ -577,7 +754,7 @@ where
                                     "Processing connect_media request failed",
                                 )
                             });
-                            self.worker_spawn(media_future);
+                            self.worker_spawn(connected_future);
                         }
                         _ => {
                             self.ignore_connection_event(connection_id, state, event);
@@ -592,7 +769,9 @@ where
                 }
                 Ok(())
             }
-            ObserverEvent::RemoteHangup => self.handle_received_hangup(call, remote_device),
+            ObserverEvent::RemoteHangup(hangup_parameters) => {
+                self.handle_received_hangup(call, state, remote_device, hangup_parameters)
+            }
             ObserverEvent::RemoteVideoStatus(enable) => {
                 if call.active_device_id()? == remote_device {
                     match state {

@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2019 Signal Messenger, LLC.
+// Copyright (C) 2020 Signal Messenger, LLC.
 // All rights reserved.
 //
 // SPDX-License-Identifier: GPL-3.0-only
@@ -14,6 +14,20 @@ pub struct Connected {
 pub struct Hangup {
     #[prost(uint64, optional, tag="1")]
     pub id: ::std::option::Option<u64>,
+    #[prost(enumeration="hangup::Type", optional, tag="2", default="Normal")]
+    pub r#type: ::std::option::Option<i32>,
+    #[prost(uint32, optional, tag="3", default="0")]
+    pub device_id: ::std::option::Option<u32>,
+}
+pub mod hangup {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum Type {
+        Normal = 0,
+        Accepted = 1,
+        Declined = 2,
+        Busy = 3,
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VideoStreamingStatus {

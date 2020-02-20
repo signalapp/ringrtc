@@ -68,4 +68,11 @@ Rust_addIceCandidate(webrtc::PeerConnectionInterface* pc_interface,
                      int32_t                          sdp_mline_index,
                      const char*                      sdp);
 
+RUSTEXPORT webrtc::IceGathererInterface*
+Rust_createSharedIceGatherer(webrtc::PeerConnectionInterface* pc_interface);
+
+RUSTEXPORT bool
+Rust_useSharedIceGatherer(webrtc::PeerConnectionInterface* pc_interface,
+                          webrtc::IceGathererInterface* ice_gatherer);
+
 #endif /* RFFI_API_PEER_CONNECTION_INTERFACE_INTF_H__ */

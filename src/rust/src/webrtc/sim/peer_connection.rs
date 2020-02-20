@@ -10,6 +10,7 @@
 use std::os::raw::c_char;
 
 use crate::webrtc::data_channel::RffiDataChannelInit;
+use crate::webrtc::sim::ice_gatherer::{RffiIceGathererInterface, FAKE_ICE_GATHERER};
 
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
@@ -77,5 +78,22 @@ pub unsafe fn Rust_addIceCandidate(
     _sdp: *const c_char,
 ) -> bool {
     info!("Rust_addIceCandidate():");
+    true
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn Rust_createSharedIceGatherer(
+    _pc_interface: *const RffiPeerConnectionInterface,
+) -> *const RffiIceGathererInterface {
+    info!("Rust_createSharedIceGatherer:");
+    &FAKE_ICE_GATHERER
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn Rust_useSharedIceGatherer(
+    _pc_interface: *const RffiPeerConnectionInterface,
+    _ice_gatherer: *const RffiIceGathererInterface,
+) -> bool {
+    info!("Rust_useSharedIceGatherer:");
     true
 }

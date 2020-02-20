@@ -18,9 +18,18 @@ use jni::{JNIEnv, JavaVM};
 use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::webrtc_java_media_stream::JavaMediaStream;
-use crate::common::{ApplicationEvent, CallDirection, CallId, ConnectionId, DeviceId, Result};
+use crate::common::{
+    ApplicationEvent,
+    CallDirection,
+    CallId,
+    CallMediaType,
+    ConnectionId,
+    DeviceId,
+    HangupParameters,
+    Result,
+};
 use crate::core::call::Call;
-use crate::core::connection::Connection;
+use crate::core::connection::{Connection, ConnectionForkingType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media_stream::MediaStream;
@@ -191,12 +200,13 @@ impl Platform for AndroidPlatform {
         &mut self,
         call: &Call<Self>,
         remote_device: DeviceId,
+        forking_type: ConnectionForkingType,
     ) -> Result<Connection<Self>> {
         let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
         info!("create_connection(): {}", connection_id);
 
-        let connection = Connection::new(call.clone(), remote_device)?;
+        let connection = Connection::new(call.clone(), remote_device, forking_type)?;
 
         let connection_ptr = connection.get_connection_ptr()?;
         let call_id_jlong = u64::from(call.call_id()) as jlong;
@@ -324,6 +334,7 @@ impl Platform for AndroidPlatform {
         connection_id: ConnectionId,
         broadcast: bool,
         description: &str,
+        call_media_type: CallMediaType,
     ) -> Result<()> {
         info!(
             "on_send_offer(): id: {}, broadcast: {}",
@@ -336,8 +347,33 @@ impl Platform for AndroidPlatform {
         let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
         let remote_device = connection_id.remote_device() as jint;
 
+        // convert rust enum into Java enum
+        let class = "CallMediaType";
+        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
+        let class_object = self.class_cache.get_class(&class_path)?;
+
+        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
+        let method_signature = format!("(I)L{};", class_path);
+        let args = [JValue::from(call_media_type as i32)];
+        let jni_enum = match env.call_static_method(
+            class_object,
+            ENUM_FROM_NATIVE_INDEX_METHOD,
+            &method_signature,
+            &args,
+        ) {
+            Ok(v) => v.l()?,
+            Err(_) => {
+                return Err(AndroidError::JniCallStaticMethod(
+                    class_path,
+                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
+                    method_signature.to_string(),
+                )
+                .into())
+            }
+        };
+
         const SEND_OFFER_MESSAGE_METHOD: &str = "onSendOffer";
-        const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;)V";
+        const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;Lorg/signal/ringrtc/CallManager$CallMediaType;)V";
 
         let args = [
             call_id_jlong.into(),
@@ -345,6 +381,7 @@ impl Platform for AndroidPlatform {
             remote_device.into(),
             broadcast.into(),
             JObject::from(env.new_string(description)?).into(),
+            jni_enum.into(),
         ];
         let _ = jni_call_method(
             &env,
@@ -456,6 +493,8 @@ impl Platform for AndroidPlatform {
         remote_peer: &Self::AppRemotePeer,
         connection_id: ConnectionId,
         broadcast: bool,
+        hangup_parameters: HangupParameters,
+        use_legacy_hangup_message: bool,
     ) -> Result<()> {
         info!(
             "on_send_hangup(): id: {}, broadcast: {}",
@@ -468,14 +507,50 @@ impl Platform for AndroidPlatform {
         let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
         let remote_device = connection_id.remote_device() as jint;
 
+        let device_id = match hangup_parameters.device_id() {
+            Some(d) => d,
+            // We set the device_id to 0 in case it is not defined. It will
+            // only be used for hangup types other than Normal.
+            None => 0,
+        } as jint;
+
+        // convert rust enum into Java enum
+        let class = "HangupType";
+        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
+        let class_object = self.class_cache.get_class(&class_path)?;
+
+        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
+        let method_signature = format!("(I)L{};", class_path);
+        let args = [JValue::from(hangup_parameters.hangup_type() as i32)];
+        let jni_enum = match env.call_static_method(
+            class_object,
+            ENUM_FROM_NATIVE_INDEX_METHOD,
+            &method_signature,
+            &args,
+        ) {
+            Ok(v) => v.l()?,
+            Err(_) => {
+                return Err(AndroidError::JniCallStaticMethod(
+                    class_path,
+                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
+                    method_signature.to_string(),
+                )
+                .into())
+            }
+        };
+
         const SEND_HANGUP_MESSAGE_METHOD: &str = "onSendHangup";
-        const SEND_HANGUP_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZ)V";
+        const SEND_HANGUP_MESSAGE_SIG: &str =
+            "(JLorg/signal/ringrtc/Remote;IZLorg/signal/ringrtc/CallManager$HangupType;IZ)V";
 
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
             remote_device.into(),
             broadcast.into(),
+            jni_enum.into(),
+            device_id.into(),
+            use_legacy_hangup_message.into(),
         ];
         let _ = jni_call_method(
             &env,
@@ -639,6 +714,8 @@ impl AndroidPlatform {
         let mut class_cache = ClassCache::new();
         for class in &[
             "org/signal/ringrtc/CallManager$CallEvent",
+            "org/signal/ringrtc/CallManager$CallMediaType",
+            "org/signal/ringrtc/CallManager$HangupType",
             ICE_CANDIDATE_CLASS,
         ] {
             class_cache.add_class(env, class)?;

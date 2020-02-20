@@ -17,13 +17,15 @@ use crate::common::{
     ApplicationEvent,
     CallDirection,
     CallId,
+    CallMediaType,
     ConnectionId,
     DeviceId,
+    HangupParameters,
     Result,
     DATA_CHANNEL_NAME,
 };
 use crate::core::call::Call;
-use crate::core::connection::Connection;
+use crate::core::connection::{Connection, ConnectionForkingType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::ios::api::call_manager_interface::{
     AppCallContext,
@@ -102,12 +104,13 @@ impl Platform for IOSPlatform {
         &mut self,
         call: &Call<Self>,
         remote_device: DeviceId,
+        forking_type: ConnectionForkingType,
     ) -> Result<Connection<Self>> {
         let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
         info!("create_connection(): {}", connection_id);
 
-        let connection = Connection::new(call.clone(), remote_device)?;
+        let connection = Connection::new(call.clone(), remote_device, forking_type)?;
 
         let connection_ptr = connection.get_connection_ptr()?;
 
@@ -167,17 +170,11 @@ impl Platform for IOSPlatform {
     ) -> Result<()> {
         info!("on_start_call(): id: {}, direction: {}", call_id, direction);
 
-        let direction = if direction == CallDirection::OutGoing {
-            true
-        } else {
-            false
-        };
-
         (self.app_interface.onStartCall)(
             self.app_interface.object,
             remote_peer.ptr,
             u64::from(call_id) as u64,
-            direction,
+            direction == CallDirection::OutGoing,
         );
 
         Ok(())
@@ -197,6 +194,7 @@ impl Platform for IOSPlatform {
         connection_id: ConnectionId,
         broadcast: bool,
         description: &str,
+        call_media_type: CallMediaType,
     ) -> Result<()> {
         info!(
             "on_send_offer(): id: {}, broadcast: {}",
@@ -215,6 +213,7 @@ impl Platform for IOSPlatform {
             connection_id.remote_device(),
             broadcast,
             string_slice,
+            call_media_type as i32,
         );
 
         Ok(())
@@ -313,11 +312,20 @@ impl Platform for IOSPlatform {
         remote_peer: &Self::AppRemotePeer,
         connection_id: ConnectionId,
         broadcast: bool,
+        hangup_parameters: HangupParameters,
+        use_legacy_hangup_message: bool,
     ) -> Result<()> {
         info!(
             "on_send_hangup(): id: {}, broadcast: {}",
             connection_id, broadcast
         );
+
+        let device_id = match hangup_parameters.device_id() {
+            Some(d) => d,
+            // We set the device_id to 0 in case it is not defined. It will
+            // only be used for hangup types other than Normal.
+            None => 0,
+        };
 
         (self.app_interface.onSendHangup)(
             self.app_interface.object,
@@ -325,6 +333,9 @@ impl Platform for IOSPlatform {
             remote_peer.ptr,
             connection_id.remote_device(),
             broadcast,
+            hangup_parameters.hangup_type() as i32,
+            device_id,
+            use_legacy_hangup_message,
         );
 
         Ok(())

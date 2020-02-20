@@ -26,6 +26,7 @@ import org.webrtc.MediaStream;
 import org.webrtc.NativeLibraryLoader;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
+import org.webrtc.RtcCertificatePem;
 import org.webrtc.SurfaceViewRenderer;
 import org.webrtc.VideoDecoderFactory;
 import org.webrtc.VideoEncoderFactory;
@@ -155,19 +156,21 @@ public class CallManager {
    *
    * Indication from application to start a new outgoing call
    *
-   * @param remote  remote side fo the call
+   * @param remote         remote side fo the call
+   * @param callMediaType  used to specify origination as an audio or video call
    *
    * @throws CallException for native code failures
    *
    */
-  public void call(Remote remote)
+  public void call(         Remote        remote,
+                   @NonNull CallMediaType callMediaType)
     throws CallException
   {
     checkCallManagerExists();
 
     Log.i(TAG, "call(): creating new call:");
 
-    ringrtcCall(nativeCallManager, remote);
+    ringrtcCall(nativeCallManager, remote, callMediaType.ordinal());
   }
 
   /**
@@ -182,8 +185,10 @@ public class CallManager {
    * @param camera          camera control to use for this Call
    * @param iceServers      list of ICE servers to use for this Call
    * @param hideIp          if true hide caller's IP by using a TURN server
+   * @param localDevice     the local deviceId of the client
    * @param remoteDevices   list of remote deviceIds for this recipient
    * @param enableCamera    if true, enable the local camera video track when created
+   * @param enableForking   if true, use one offer and set of local ICE candidates for all remote devices
    *
    * @throws CallException for native code failures
    *
@@ -196,8 +201,10 @@ public class CallManager {
                       @NonNull CameraControl                  camera,
                       @NonNull List<PeerConnection.IceServer> iceServers,
                                boolean                        hideIp,
+                      @NonNull Integer                        localDevice,
                       @NonNull List<Integer>                  remoteDevices,
-                               boolean                        enableCamera)
+                               boolean                        enableCamera,
+                               boolean                        enableForking)
     throws CallException
   {
 
@@ -205,6 +212,8 @@ public class CallManager {
 
     Log.i(TAG, "proceed(): callId: " + callId + ", hideIp: " + hideIp);
 
+    // Defaults to ECDSA, which should be fast.
+    RtcCertificatePem certificate = RtcCertificatePem.generateCertificate();
     CallContext callContext = new CallContext(callId,
                                               context,
                                               eglBase,
@@ -212,13 +221,16 @@ public class CallManager {
                                               remoteRenderer,
                                               camera,
                                               iceServers,
-                                              hideIp);
+                                              hideIp,
+                                              certificate);
 
     callContext.setVideoEnabled(enableCamera);
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
                    callContext,
-                   remoteDevices);
+                   localDevice,
+                   remoteDevices,
+                   enableForking);
 
   }
 
@@ -301,20 +313,26 @@ public class CallManager {
    *
    * This is the beginning of an incoming call.
    *
-   * @param callId       callId for the call
-   * @param remote       remote side fo the call
-   * @param remoteDevice deviceId of remote peer
-   * @param offer        text of the SDP offer
-   * @param timestamp    timestamp of when offer was sent, in milliseconds
+   * @param callId                   callId for the call
+   * @param remote                   remote side fo the call
+   * @param remoteDevice             deviceId of remote peer
+   * @param offer                    text of the SDP offer
+   * @param timestamp                timestamp of when offer was sent, in milliseconds
+   * @param callMediaType            the origination type for the call, audio or video
+   * @param remoteSupportsMultiRing  if true, the remote device supports the multi-ring feature
+   * @param isLocalDevicePrimary     if true, the local device is considered a primary device
    *
    * @throws CallException for native code failures
    *
    */
-  public void receivedOffer(CallId  callId,
-                            Remote  remote,
-                            Integer remoteDevice,
-                            String  offer,
-                            Long    timestamp)
+  public void receivedOffer(CallId        callId,
+                            Remote        remote,
+                            Integer       remoteDevice,
+                            String        offer,
+                            Long          timestamp,
+                            CallMediaType callMediaType,
+                            boolean       remoteSupportsMultiRing,
+                            boolean       isLocalDevicePrimary)
     throws CallException
   {
     checkCallManagerExists();
@@ -326,21 +344,28 @@ public class CallManager {
                          remote,
                          remoteDevice.intValue(),
                          offer,
-                         timestamp.longValue());
+                         timestamp.longValue(),
+                         callMediaType.ordinal(),
+                         remoteSupportsMultiRing,
+                         isLocalDevicePrimary);
   }
 
   /**
    *
    * Notification from application of a received SDP Answer
    *
-   * @param callId       callId for the call
-   * @param remoteDevice deviceId of remote peer
-   * @param answer       text of the SDP answer
+   * @param callId                   callId for the call
+   * @param remoteDevice             deviceId of remote peer
+   * @param answer                   text of the SDP answer
+   * @param remoteSupportsMultiRing  if true, the remote device supports the multi-ring feature
    *
    * @throws CallException for native code failures
    *
    */
-  public void receivedAnswer(CallId callId, Integer remoteDevice, String answer)
+  public void receivedAnswer(CallId  callId,
+                             Integer remoteDevice,
+                             String  answer,
+                             boolean remoteSupportsMultiRing)
     throws CallException
   {
     checkCallManagerExists();
@@ -349,7 +374,8 @@ public class CallManager {
     ringrtcReceivedAnswer(nativeCallManager,
                           callId.longValue(),
                           remoteDevice.intValue(),
-                          answer);
+                          answer,
+                          remoteSupportsMultiRing);
   }
 
   /**
@@ -379,13 +405,18 @@ public class CallManager {
    *
    * Notification from application of received Hangup message
    *
-   * @param callId       callId for the call
-   * @param remoteDevice deviceId of remote peer
+   * @param callId        callId for the call
+   * @param remoteDevice  deviceId of remote peer
+   * @param hangupType    type of hangup, normal or handled elsewhere
+   * @param deviceId      if not a normal hangup, the associated deviceId
    *
    * @throws CallException for native code failures
    *
    */
-  public void receivedHangup(CallId callId, Integer remoteDevice)
+  public void receivedHangup(CallId     callId,
+                             Integer    remoteDevice,
+                             HangupType hangupType,
+                             Integer    deviceId)
     throws CallException
   {
     checkCallManagerExists();
@@ -393,7 +424,9 @@ public class CallManager {
     Log.i(TAG, "receivedHangup(): id: " + callId.format(remoteDevice));
     ringrtcReceivedHangup(nativeCallManager,
                           callId.longValue(),
-                          remoteDevice.intValue());
+                          remoteDevice.intValue(),
+                          hangupType.ordinal(),
+                          deviceId.intValue());
   }
 
   /**
@@ -543,6 +576,7 @@ public class CallManager {
     if (callContext.hideIp) {
       configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;
     }
+    configuration.certificate = callContext.certificate;
 
     constraints.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
 
@@ -684,9 +718,9 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void onSendOffer(long callId, Remote remote, int remoteDevice, boolean broadcast, String sdp) {
+  private void onSendOffer(long callId, Remote remote, int remoteDevice, boolean broadcast, String sdp, CallMediaType callMediaType) {
     Log.i(TAG, "onSendOffer():");
-    observer.onSendOffer(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast), sdp);
+    observer.onSendOffer(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast), sdp, callMediaType);
   }
 
   @CalledByNative
@@ -702,9 +736,9 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void onSendHangup(long callId, Remote remote, int remoteDevice, boolean broadcast) {
+  private void onSendHangup(long callId, Remote remote, int remoteDevice, boolean broadcast, HangupType hangupType, int deviceId, boolean useLegacyHangupMessage) {
     Log.i(TAG, "onSendHangup():");
-    observer.onSendHangup(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast));
+    observer.onSendHangup(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast), hangupType, Integer.valueOf(deviceId), Boolean.valueOf(useLegacyHangupMessage));
   }
 
   @CalledByNative
@@ -743,6 +777,7 @@ public class CallManager {
               public final  boolean                        hideIp;
     @Nullable public final  VideoSource                    videoSource;
     @Nullable public final  VideoTrack                     videoTrack;
+    @NonNull  public final  RtcCertificatePem              certificate;
 
     public CallContext(@NonNull CallId                         callId,
                        @NonNull Context                        context,
@@ -751,7 +786,8 @@ public class CallManager {
                        @NonNull SurfaceViewRenderer            remoteRenderer,
                        @NonNull CameraControl                  camera,
                        @NonNull List<PeerConnection.IceServer> iceServers,
-                                boolean                        hideIp) {
+                                boolean                        hideIp,
+                       @NonNull RtcCertificatePem              certificate) {
 
       Log.i(TAG, "ctor(): " + callId);
 
@@ -760,6 +796,7 @@ public class CallManager {
       this.cameraControl  = camera;
       this.iceServers     = iceServers;
       this.hideIp         = hideIp;
+      this.certificate    = certificate;
 
       VideoEncoderFactory encoderFactory = new DefaultVideoEncoderFactory(eglBase.getEglBaseContext(),
                                                                           true, true);
@@ -847,6 +884,15 @@ public class CallManager {
     /** The call ended because of a remote hangup. */
     ENDED_REMOTE_HANGUP,
 
+    /** The call ended because the call was accepted by a different device. */
+    ENDED_REMOTE_HANGUP_ACCEPTED,
+
+    /** The call ended because the call was declined by a different device. */
+    ENDED_REMOTE_HANGUP_DECLINED,
+
+    /** The call ended because the call was declared busy by a different device. */
+    ENDED_REMOTE_HANGUP_BUSY,
+
     /** The call ended because of a remote busy message. */
     ENDED_REMOTE_BUSY,
 
@@ -884,10 +930,59 @@ public class CallManager {
     ENDED_RECEIVED_OFFER_EXPIRED,
 
     /** Received an offer while already handling an active call. */
-    ENDED_RECEIVED_OFFER_WHILE_ACTIVE;
+    ENDED_RECEIVED_OFFER_WHILE_ACTIVE,
+
+    /** Received an offer on a linked device from one that doesn't support multi-ring. */
+    ENDED_IGNORE_CALLS_FROM_NON_MULTIRING_CALLERS;
 
     @CalledByNative
     static CallEvent fromNativeIndex(int nativeIndex) {
+      return values()[nativeIndex];
+    }
+
+  }
+
+  /**
+   *
+   * Enumeration of the type of media for a call at time of origination
+   *
+   */
+  public enum CallMediaType {
+
+    /** Call should start as audio only. */
+    AUDIO_CALL,
+
+    /** Call should start as audio/video. */
+    VIDEO_CALL;
+
+    @CalledByNative
+    static CallMediaType fromNativeIndex(int nativeIndex) {
+      return values()[nativeIndex];
+    }
+
+  }
+
+  /**
+   *
+   * Enumeration of the type of hangup messages
+   *
+   */
+  public enum HangupType {
+
+    /** Normal hangup, typically remote user initiated. */
+    NORMAL,
+
+    /** Call was accepted elsewhere by a different device. */
+    ACCEPTED,
+
+    /** Call was declined elsewhere by a different device. */
+    DECLINED,
+
+    /** Call was declared busy elsewhere by a different device. */
+    BUSY;
+
+    @CalledByNative
+    static HangupType fromNativeIndex(int nativeIndex) {
       return values()[nativeIndex];
     }
 
@@ -934,14 +1029,15 @@ public class CallManager {
      *
      * Notification that an SDP offer is ready to be sent
      *
-     * @param callId        callId for the call
-     * @param remote        remote peer of the outgoing call
-     * @param remoteDevice  deviceId of remote peer
-     * @param broadcast     if true, send broadcast message
-     * @param sdp           SDP offer
+     * @param callId         callId for the call
+     * @param remote         remote peer of the outgoing call
+     * @param remoteDevice   deviceId of remote peer
+     * @param broadcast      if true, send broadcast message
+     * @param sdp            SDP offer
+     * @param callMediaType  the origination type for the call, audio or video
      *
      */
-    void onSendOffer(CallId callId, Remote remote, Integer remoteDevice, Boolean broadcast, String sdp);
+    void onSendOffer(CallId callId, Remote remote, Integer remoteDevice, Boolean broadcast, String sdp, CallMediaType callMediaType);
 
     /**
      *
@@ -963,7 +1059,7 @@ public class CallManager {
      * @param callId         callId for the call
      * @param remote         remote peer of the outgoing call
      * @param remoteDevice   deviceId of remote peer
-     * @param broadcast     if true, send broadcast message
+     * @param broadcast      if true, send broadcast message
      * @param iceCandidates  ICE candidates
      *
      */
@@ -973,13 +1069,16 @@ public class CallManager {
      *
      * Notification that hangup message is ready to be sent
      *
-     * @param callId        callId for the call
-     * @param remote        remote peer of the call
-     * @param remoteDevice  deviceId of remote peer
-     * @param broadcast     if true, send broadcast message
+     * @param callId                  callId for the call
+     * @param remote                  remote peer of the call
+     * @param remoteDevice            deviceId of remote peer
+     * @param broadcast               if true, send broadcast message
+     * @param hangupType              type of hangup, normal or handled elsewhere
+     * @param deviceId                if not a normal hangup, the associated deviceId
+     * @param useLegacyHangupMessage  if true, use legacyHangup as opposed to hangup in protocol
      *
      */
-    void onSendHangup(CallId callId, Remote remote, Integer remoteDevice, Boolean broadcast);
+    void onSendHangup(CallId callId, Remote remote, Integer remoteDevice, Boolean broadcast, HangupType hangupType, Integer deviceId, Boolean useLegacyHangupMessage);
 
     /**
      *
@@ -1030,14 +1129,16 @@ public class CallManager {
     throws CallException;
 
   private native
-    void ringrtcCall(long nativeCallManager, Remote remote)
+    void ringrtcCall(long nativeCallManager, Remote remote, int callMediaType)
     throws CallException;
 
   private native
     void ringrtcProceed(long          nativeCallManager,
                         long          callId,
                         CallContext   callContext,
-                        List<Integer> remoteDevices)
+                        int           localDevice,
+                        List<Integer> remoteDevices,
+                        boolean       enableForking)
     throws CallException;
 
   private native
@@ -1053,19 +1154,23 @@ public class CallManager {
     throws CallException;
 
   private native
-    void ringrtcReceivedAnswer(long   nativeCallManager,
-                               long   callId,
-                               int    remoteDevice,
-                               String answer)
+    void ringrtcReceivedAnswer(long    nativeCallManager,
+                               long    callId,
+                               int     remoteDevice,
+                               String  answer,
+                               boolean remoteSupportsMultiRing)
     throws CallException;
 
   private native
-    void ringrtcReceivedOffer(long   nativeCallManager,
-                              long   callId,
-                              Remote remote,
-                              int    remoteDevice,
-                              String offer,
-                              long   timestamp)
+    void ringrtcReceivedOffer(long    nativeCallManager,
+                              long    callId,
+                              Remote  remote,
+                              int     remoteDevice,
+                              String  offer,
+                              long    timestamp,
+                              int     callMediaType,
+                              boolean remoteSupportsMultiRing,
+                              boolean isLocalDevicePrimary)
     throws CallException;
 
   private native
@@ -1078,7 +1183,9 @@ public class CallManager {
   private native
     void ringrtcReceivedHangup(long nativeCallManager,
                                long callId,
-                               int  remoteDevice)
+                               int  remoteDevice,
+                               int  hangupType,
+                               int  deviceId)
     throws CallException;
 
   private native

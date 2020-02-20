@@ -14,7 +14,7 @@ use std::ptr;
 use bytes::BytesMut;
 use prost::Message;
 
-use crate::common::{CallId, Result};
+use crate::common::{CallId, HangupParameters, Result};
 use crate::core::util::CppObject;
 use crate::error::RingRtcError;
 use crate::protobuf::data_channel::{Connected, Data, Hangup, VideoStreamingStatus};
@@ -181,10 +181,12 @@ impl DataChannel {
         }
     }
 
-    /// Send `HangUp` message via the DataChannel.
-    pub fn send_hang_up(&self, call_id: CallId) -> Result<()> {
+    /// Send `Hangup` message via the DataChannel.
+    pub fn send_hangup(&self, call_id: CallId, hangup_parameters: HangupParameters) -> Result<()> {
         let mut hangup = Hangup::default();
         hangup.id = Some(u64::from(call_id));
+        hangup.r#type = Some(hangup_parameters.hangup_type() as i32);
+        hangup.device_id = hangup_parameters.device_id();
         let mut data = Data::default();
         data.hangup = Some(hangup);
 

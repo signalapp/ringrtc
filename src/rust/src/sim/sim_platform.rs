@@ -16,14 +16,17 @@ use crate::common::{
     ApplicationEvent,
     CallDirection,
     CallId,
+    CallMediaType,
     ConnectionId,
     DeviceId,
+    HangupParameters,
+    HangupType,
     Result,
     DATA_CHANNEL_NAME,
 };
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
-use crate::core::connection::Connection;
+use crate::core::connection::{Connection, ConnectionForkingType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::sim::error::SimError;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
@@ -39,23 +42,29 @@ impl PlatformItem for SimPlatformItem {}
 #[derive(Default)]
 struct SimStats {
     /// Number of offers sent
-    offers_sent:         AtomicUsize,
+    offers_sent:           AtomicUsize,
     /// Number of answers sent
-    answers_sent:        AtomicUsize,
+    answers_sent:          AtomicUsize,
     /// Number of ICE candidates sent
-    ice_candidates_sent: AtomicUsize,
-    /// Number of hang ups sent
-    hangups_sent:        AtomicUsize,
+    ice_candidates_sent:   AtomicUsize,
+    /// Number of normal hangups sent
+    normal_hangups_sent:   AtomicUsize,
+    /// Number of accepted hangups sent
+    accepted_hangups_sent: AtomicUsize,
+    /// Number of declined hangups sent
+    declined_hangups_sent: AtomicUsize,
+    /// Number of busy hangups sent
+    busy_hangups_sent:     AtomicUsize,
     /// Number of busy messages sent
-    busys_sent:          AtomicUsize,
+    busys_sent:            AtomicUsize,
     /// Number of start outgoing call events
-    start_outgoing:      AtomicUsize,
+    start_outgoing:        AtomicUsize,
     /// Number of start incoming call events
-    start_incoming:      AtomicUsize,
+    start_incoming:        AtomicUsize,
     /// Number of call concluded events
-    call_concluded:      AtomicUsize,
+    call_concluded:        AtomicUsize,
     /// Track stream counts
-    stream_count:        AtomicUsize,
+    stream_count:          AtomicUsize,
 }
 
 /// Simulation implementation of platform::Platform.
@@ -104,12 +113,13 @@ impl Platform for SimPlatform {
         &mut self,
         call: &Call<Self>,
         remote_device: DeviceId,
+        forking_type: ConnectionForkingType,
     ) -> Result<Connection<Self>> {
         let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
         info!("create_connection(): {}", connection_id);
 
-        let connection = Connection::new(call.clone(), remote_device).unwrap();
+        let connection = Connection::new(call.clone(), remote_device, forking_type).unwrap();
         connection
             .set_app_connection("Simulation".to_owned())
             .unwrap();
@@ -168,6 +178,7 @@ impl Platform for SimPlatform {
         connection_id: ConnectionId,
         broadcast: bool,
         description: &str,
+        _call_media_type: CallMediaType,
     ) -> Result<()> {
         info!(
             "on_send_offer(): remote_peer: {}, id: {}, broadcast: {}, offer: {}",
@@ -245,6 +256,8 @@ impl Platform for SimPlatform {
         remote_peer: &Self::AppRemotePeer,
         connection_id: ConnectionId,
         broadcast: bool,
+        hangup_parameters: HangupParameters,
+        _use_legacy: bool,
     ) -> Result<()> {
         info!(
             "on_send_hangup(): remote_peer: {}, id: {}, broadcast: {}",
@@ -254,7 +267,29 @@ impl Platform for SimPlatform {
         if self.force_internal_fault.load(Ordering::Acquire) {
             Err(SimError::SendHangupError.into())
         } else {
-            let _ = self.stats.hangups_sent.fetch_add(1, Ordering::AcqRel);
+            match hangup_parameters.hangup_type() {
+                HangupType::Normal => {
+                    let _ = self
+                        .stats
+                        .normal_hangups_sent
+                        .fetch_add(1, Ordering::AcqRel);
+                }
+                HangupType::Accepted => {
+                    let _ = self
+                        .stats
+                        .accepted_hangups_sent
+                        .fetch_add(1, Ordering::AcqRel);
+                }
+                HangupType::Declined => {
+                    let _ = self
+                        .stats
+                        .declined_hangups_sent
+                        .fetch_add(1, Ordering::AcqRel);
+                }
+                HangupType::Busy => {
+                    let _ = self.stats.busy_hangups_sent.fetch_add(1, Ordering::AcqRel);
+                }
+            }
             if self.force_internal_fault.load(Ordering::Acquire) {
                 self.message_send_failure(connection_id.call_id()).unwrap();
             } else {
@@ -438,8 +473,20 @@ impl SimPlatform {
         self.stats.ice_candidates_sent.load(Ordering::Acquire)
     }
 
-    pub fn hangups_sent(&self) -> usize {
-        self.stats.hangups_sent.load(Ordering::Acquire)
+    pub fn normal_hangups_sent(&self) -> usize {
+        self.stats.normal_hangups_sent.load(Ordering::Acquire)
+    }
+
+    pub fn accepted_hangups_sent(&self) -> usize {
+        self.stats.accepted_hangups_sent.load(Ordering::Acquire)
+    }
+
+    pub fn declined_hangups_sent(&self) -> usize {
+        self.stats.declined_hangups_sent.load(Ordering::Acquire)
+    }
+
+    pub fn busy_hangups_sent(&self) -> usize {
+        self.stats.busy_hangups_sent.load(Ordering::Acquire)
     }
 
     pub fn busys_sent(&self) -> usize {

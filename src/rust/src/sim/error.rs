@@ -22,6 +22,8 @@ pub enum SimError {
     SendHangupError,
     #[fail(display = "Simulation: Intentional: Send busy failed")]
     SendBusyError,
+    #[fail(display = "Simulation: Intentional: Send accepted failed")]
+    SendAcceptedError,
     #[fail(display = "Simulation: Intentional: Add Media Stream failed")]
     MediaStreamError,
     #[fail(display = "Simulation: Intentional: Close Media failed")]

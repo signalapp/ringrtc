@@ -9,10 +9,19 @@
 /// implement for calling.
 use std::fmt;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, ConnectionId, DeviceId, Result};
+use crate::common::{
+    ApplicationEvent,
+    CallDirection,
+    CallId,
+    CallMediaType,
+    ConnectionId,
+    DeviceId,
+    HangupParameters,
+    Result,
+};
 
 use crate::core::call::Call;
-use crate::core::connection::Connection;
+use crate::core::connection::{Connection, ConnectionForkingType};
 
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media_stream::MediaStream;
@@ -40,7 +49,8 @@ pub trait Platform: fmt::Debug + fmt::Display + Sync + Send + Sized + 'static {
     fn create_connection(
         &mut self,
         call: &Call<Self>,
-        device_id: DeviceId,
+        remote_device: DeviceId,
+        forking_type: ConnectionForkingType,
     ) -> Result<Connection<Self>>;
 
     /// Inform the client application that a call should be started.
@@ -64,6 +74,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Sync + Send + Sized + 'static {
         connection_id: ConnectionId,
         broadcast: bool,
         description: &str,
+        call_media_type: CallMediaType,
     ) -> Result<()>;
 
     /// Send an SDP answer to a remote peer using the signaling
@@ -99,6 +110,8 @@ pub trait Platform: fmt::Debug + fmt::Display + Sync + Send + Sized + 'static {
         remote_peer: &Self::AppRemotePeer,
         connection_id: ConnectionId,
         broadcast: bool,
+        hangup_parameters: HangupParameters,
+        use_legacy_hangup_message: bool,
     ) -> Result<()>;
 
     /// Send a call busy message to a remote peer using the

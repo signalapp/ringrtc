@@ -16,7 +16,18 @@ use crate::ios::logging::{init_logging, IOSLogger};
 use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppObject};
 use crate::ios::ios_platform::IOSPlatform;
 
-use crate::common::{CallId, ConnectionId, DeviceId, Result};
+use crate::common::{
+    AnswerParameters,
+    CallId,
+    CallMediaType,
+    ConnectionId,
+    DeviceId,
+    FeatureLevel,
+    HangupParameters,
+    HangupType,
+    OfferParameters,
+    Result,
+};
 
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 
@@ -54,12 +65,16 @@ pub fn create(app_call_manager: *mut c_void, app_interface: AppInterface) -> Res
 }
 
 /// Application notification to start a new call.
-pub fn call(call_manager: *mut IOSCallManager, app_remote: *const c_void) -> Result<()> {
+pub fn call(
+    call_manager: *mut IOSCallManager,
+    app_remote: *const c_void,
+    call_media_type: CallMediaType,
+) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
     info!("call():");
 
-    call_manager.call(AppObject::from(app_remote))
+    call_manager.call(AppObject::from(app_remote), call_media_type)
 }
 
 /// Application notification to proceed with a new call
@@ -67,7 +82,9 @@ pub fn proceed(
     call_manager: *mut IOSCallManager,
     call_id: u64,
     app_call_context: AppCallContext,
+    app_local_device: DeviceId,
     app_remote_devices: Vec<u32>,
+    enable_forking: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -86,7 +103,13 @@ pub fn proceed(
         info!("proceed(): device id: {}", device);
     }
 
-    call_manager.proceed(call_id, Arc::new(app_call_context), remote_devices)
+    call_manager.proceed(
+        call_id,
+        Arc::new(app_call_context),
+        app_local_device,
+        remote_devices,
+        enable_forking,
+    )
 }
 
 /// Application notification that the sending of the previous message was a success.
@@ -121,12 +144,16 @@ pub fn received_answer(
     call_id: u64,
     remote_device: DeviceId,
     app_answer: &str,
+    remote_feature_level: FeatureLevel,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
 
     info!("received_answer(): id: {}", connection_id);
-    call_manager.received_answer(connection_id, app_answer.to_string())
+    call_manager.received_answer(
+        connection_id,
+        AnswerParameters::new(app_answer.to_string(), remote_feature_level),
+    )
 }
 
 /// Application notification of received SDP offer message
@@ -137,6 +164,9 @@ pub fn received_offer(
     remote_device: DeviceId,
     app_offer: &str,
     timestamp: u64,
+    call_media_type: CallMediaType,
+    remote_feature_level: FeatureLevel,
+    is_local_device_primary: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
@@ -146,8 +176,13 @@ pub fn received_offer(
     call_manager.received_offer(
         AppObject::from(app_remote),
         connection_id,
-        app_offer.to_string(),
-        timestamp,
+        OfferParameters::new(
+            app_offer.to_string(),
+            timestamp,
+            call_media_type,
+            remote_feature_level,
+            is_local_device_primary,
+        ),
     )
 }
 
@@ -175,13 +210,18 @@ pub fn received_hangup(
     call_manager: *mut IOSCallManager,
     call_id: u64,
     remote_device: DeviceId,
+    hangup_type: HangupType,
+    device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
 
     info!("received_hangup(): id: {}", connection_id);
 
-    call_manager.received_hangup(connection_id)
+    call_manager.received_hangup(
+        connection_id,
+        HangupParameters::new(hangup_type, Some(device_id)),
+    )
 }
 
 /// Application notification of received Busy message

@@ -19,7 +19,20 @@ use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
-use crate::common::{CallDirection, CallId, ConnectionId, DeviceId, Result, DATA_CHANNEL_NAME};
+use crate::common::{
+    AnswerParameters,
+    CallDirection,
+    CallId,
+    CallMediaType,
+    ConnectionId,
+    DeviceId,
+    FeatureLevel,
+    HangupParameters,
+    HangupType,
+    OfferParameters,
+    Result,
+    DATA_CHANNEL_NAME,
+};
 use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 
@@ -135,6 +148,7 @@ pub fn call(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     jni_remote: JObject,
+    call_media_type: CallMediaType,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
@@ -142,7 +156,7 @@ pub fn call(
 
     let app_remote_peer = env.new_global_ref(jni_remote)?;
 
-    call_manager.call(app_remote_peer)
+    call_manager.call(app_remote_peer, call_media_type)
 }
 
 /// Application notification to proceed with a new call
@@ -151,7 +165,9 @@ pub fn proceed(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     jni_call_context: JObject,
+    local_device_id: DeviceId,
     jni_remote_devices: JObject,
+    enable_forking: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -175,7 +191,13 @@ pub fn proceed(
     let android_call_context =
         AndroidCallContext::new(platform, env.new_global_ref(jni_call_context)?);
 
-    call_manager.proceed(call_id, android_call_context, remote_devices)
+    call_manager.proceed(
+        call_id,
+        android_call_context,
+        local_device_id,
+        remote_devices,
+        enable_forking,
+    )
 }
 
 /// Application notification that signal message was sent successfully
@@ -211,12 +233,16 @@ pub fn received_answer(
     call_id: jlong,
     remote_device: DeviceId,
     jni_answer: JString,
+    remote_feature_level: FeatureLevel,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
 
     info!("received_answer(): id: {}", connection_id);
-    call_manager.received_answer(connection_id, env.get_string(jni_answer)?.into())
+    call_manager.received_answer(
+        connection_id,
+        AnswerParameters::new(env.get_string(jni_answer)?.into(), remote_feature_level),
+    )
 }
 
 /// Application notification of received SDP offer message
@@ -228,6 +254,9 @@ pub fn received_offer(
     remote_device: DeviceId,
     jni_offer: JString,
     timestamp: u64,
+    call_media_type: CallMediaType,
+    remote_feature_level: FeatureLevel,
+    is_local_device_primary: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
@@ -239,8 +268,13 @@ pub fn received_offer(
     call_manager.received_offer(
         app_remote_peer,
         connection_id,
-        env.get_string(jni_offer)?.into(),
-        timestamp,
+        OfferParameters::new(
+            env.get_string(jni_offer)?.into(),
+            timestamp,
+            call_media_type,
+            remote_feature_level,
+            is_local_device_primary,
+        ),
     )
 }
 
@@ -296,13 +330,18 @@ pub fn received_hangup(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     remote_device: DeviceId,
+    hangup_type: HangupType,
+    device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
 
     info!("received_hangup(): id: {}", connection_id);
 
-    call_manager.received_hangup(connection_id)
+    call_manager.received_hangup(
+        connection_id,
+        HangupParameters::new(hangup_type, Some(device_id)),
+    )
 }
 
 /// Application notification of received Busy message

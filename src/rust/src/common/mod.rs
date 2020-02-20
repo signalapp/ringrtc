@@ -148,7 +148,16 @@ pub enum ApplicationEvent {
     /// The call ended because of a remote hangup.
     EndedRemoteHangup,
 
-    /// The call ended because of a remote busy message.
+    /// The call ended because the call was accepted by a different device.
+    EndedRemoteHangupAccepted,
+
+    /// The call ended because the call was declined by a different device.
+    EndedRemoteHangupDeclined,
+
+    /// The call ended because the call was declared busy by a different device.
+    EndedRemoteHangupBusy,
+
+    /// The call ended because of a remote busy message from a callee.
     EndedRemoteBusy,
 
     /// The call ended because of glare (received offer from same remote).
@@ -186,6 +195,9 @@ pub enum ApplicationEvent {
 
     /// Received an offer while already handling an active call.
     EndedReceivedOfferWhileActive,
+
+    /// Received an offer on a linked device from one that doesn't support multi-ring.
+    EndedIgnoreCallsFromNonMultiringCallers,
 }
 
 impl Clone for ApplicationEvent {
@@ -264,6 +276,214 @@ impl CallDirection {
         }
     }
 }
+
+/// The supported feature level of the remote peer.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FeatureLevel {
+    /// Unspecified by remote, usually means a legacy/older protocol.
+    Unspecified = 0,
+
+    /// Remote is multi-ring capable.
+    MultiRing,
+}
+
+impl fmt::Display for FeatureLevel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl FeatureLevel {
+    pub fn from_i32(value: i32) -> Self {
+        match value {
+            0 => FeatureLevel::Unspecified,
+            1 => FeatureLevel::MultiRing,
+            _ => panic!("Unknown value: {}", value),
+        }
+    }
+}
+
+/// Type of media for a call at time of origination.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CallMediaType {
+    /// Call should start as audio only.
+    Audio = 0,
+
+    /// Call should start as audio/video.
+    Video,
+}
+
+impl fmt::Display for CallMediaType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl CallMediaType {
+    pub fn from_i32(value: i32) -> Self {
+        match value {
+            0 => CallMediaType::Audio,
+            1 => CallMediaType::Video,
+            _ => panic!("Unknown value: {}", value),
+        }
+    }
+}
+
+/// Type of hangup message.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum HangupType {
+    /// Normal hangup, typically remote user initiated.
+    Normal = 0,
+
+    /// Call was accepted elsewhere by a different device.
+    Accepted,
+
+    /// Call was declined elsewhere by a different device.
+    Declined,
+
+    // Call was declared busy elsewhere by a different device.
+    Busy,
+}
+
+impl fmt::Display for HangupType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl HangupType {
+    pub fn from_i32(value: i32) -> Self {
+        match value {
+            0 => HangupType::Normal,
+            1 => HangupType::Accepted,
+            2 => HangupType::Declined,
+            3 => HangupType::Busy,
+            _ => panic!("Unknown value: {}", value),
+        }
+    }
+}
+
+/// A grouping of parameters associated with a received Offer.
+pub struct OfferParameters {
+    /// The Offer SDP string.
+    sdp:                     String,
+    /// The timestamp when the offer was received, milliseconds since 1970, UTC.
+    timestamp:               u64,
+    /// The type of call indicated by the Offer.
+    call_media_type:         CallMediaType,
+    /// The feature level supported by the remote device.
+    remote_feature_level:    FeatureLevel,
+    /// If true, the local device is the primary device, otherwise a linked device.
+    is_local_device_primary: bool,
+}
+
+impl OfferParameters {
+    pub fn new(
+        sdp: String,
+        timestamp: u64,
+        call_media_type: CallMediaType,
+        remote_feature_level: FeatureLevel,
+        is_local_device_primary: bool,
+    ) -> Self {
+        Self {
+            sdp,
+            timestamp,
+            call_media_type,
+            remote_feature_level,
+            is_local_device_primary,
+        }
+    }
+
+    pub fn sdp(&self) -> String {
+        self.sdp.to_string()
+    }
+
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
+    pub fn call_media_type(&self) -> CallMediaType {
+        self.call_media_type
+    }
+
+    pub fn remote_feature_level(&self) -> FeatureLevel {
+        self.remote_feature_level
+    }
+
+    pub fn is_local_device_primary(&self) -> bool {
+        self.is_local_device_primary
+    }
+}
+
+/// A grouping of parameters associated with an Answer.
+pub struct AnswerParameters {
+    /// The Answer SDP string.
+    sdp:                  String,
+    /// The feature level supported by the remote device.
+    remote_feature_level: FeatureLevel,
+}
+
+impl AnswerParameters {
+    pub fn new(sdp: String, remote_feature_level: FeatureLevel) -> Self {
+        Self {
+            sdp,
+            remote_feature_level,
+        }
+    }
+
+    pub fn sdp(&self) -> String {
+        self.sdp.to_string()
+    }
+
+    pub fn remote_feature_level(&self) -> FeatureLevel {
+        self.remote_feature_level
+    }
+}
+
+/// A grouping of parameters associated with a Hangup.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct HangupParameters {
+    /// The type of hangup.
+    hangup_type: HangupType,
+    /// For some types, the id of the associated device for which the
+    /// hangup refers to (e.g. the callee that accepted or declined
+    /// a call).
+    device_id:   Option<DeviceId>,
+}
+
+impl fmt::Display for HangupParameters {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.device_id {
+            Some(d) => write!(f, "{}/{}", self.hangup_type, d),
+            None => write!(f, "{}/None", self.hangup_type),
+        }
+    }
+}
+
+impl HangupParameters {
+    pub fn new(hangup_type: HangupType, device_id: Option<DeviceId>) -> Self {
+        Self {
+            hangup_type,
+            device_id,
+        }
+    }
+
+    pub fn hangup_type(&self) -> HangupType {
+        self.hangup_type
+    }
+
+    pub fn device_id(&self) -> Option<DeviceId> {
+        self.device_id
+    }
+}
+
+/// A helper type to document when to use the legacy hangup message.
+/// By default the legacy message definition will be used when we
+/// want all devices to hangup.
+pub const USE_LEGACY_HANGUP_MESSAGE: bool = true;
 
 /// The label of the WebRTC DataChannel.
 pub const DATA_CHANNEL_NAME: &str = "signaling";

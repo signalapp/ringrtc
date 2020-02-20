@@ -9,11 +9,11 @@ import SignalCoreKit
 protocol CallManagerInterfaceDelegate: class {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, offer: String)
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, answer: String)
-    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, candidates: [CallManagerIceCandidate])
-    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?)
-    func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?)
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, offer: String, callMediaType: CallMediaType)
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, answer: String)
+    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate])
+    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool)
+    func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
     func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
     func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool
@@ -76,44 +76,44 @@ class CallManagerInterface {
         }
     }
 
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, offer: String) {
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, offer: String, callMediaType: CallMediaType) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendOffer(callId: callId, remote: remote, deviceId: deviceId, offer: offer)
+        delegate.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, offer: offer, callMediaType: callMediaType)
     }
 
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, answer: String) {
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, answer: String) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendAnswer(callId: callId, remote: remote, deviceId: deviceId, answer: answer)
+        delegate.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, answer: answer)
     }
 
-    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
+    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendIceCandidates(callId: callId, remote: remote, deviceId: deviceId, candidates: candidates)
+        delegate.onSendIceCandidates(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, candidates: candidates)
     }
 
-    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?) {
+    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendHangup(callId: callId, remote: remote, deviceId: deviceId)
+        delegate.onSendHangup(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, hangupType: hangupType, deviceId: deviceId, useLegacyHangupMessage: useLegacyHangupMessage)
     }
 
-    func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, deviceId: UInt32?) {
+    func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendBusy(callId: callId, remote: remote, deviceId: deviceId)
+        delegate.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
     }
 
     func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
@@ -190,7 +190,7 @@ func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: U
     obj.onEvent(remote: remote, event: event)
 }
 
-func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, deviceId: UInt32, broadcast: Bool, offer: AppByteSlice) {
+func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, offer: AppByteSlice, mediaType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -208,15 +208,23 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
     }
 
     // If we will broadcast this message, ignore the deviceId.
-    var deviceId: UInt32? = deviceId
+    var destinationDeviceId: UInt32? = destinationDeviceId
     if broadcast {
-        deviceId = nil
+        destinationDeviceId = nil
     }
 
-    obj.onSendOffer(callId: callId, remote: remote, deviceId: deviceId, offer: string)
+    let callMediaType: CallMediaType
+    if let validMediaType = CallMediaType(rawValue: mediaType) {
+        callMediaType = validMediaType
+    } else {
+        owsFailDebug("unexpected call media type")
+        return
+    }
+
+    obj.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, offer: string, callMediaType: callMediaType)
 }
 
-func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, deviceId: UInt32, broadcast: Bool, answer: AppByteSlice) {
+func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, answer: AppByteSlice) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -234,15 +242,15 @@ func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: 
     }
 
     // If we will broadcast this message, ignore the deviceId.
-    var deviceId: UInt32? = deviceId
+    var destinationDeviceId: UInt32? = destinationDeviceId
     if broadcast {
-        deviceId = nil
+        destinationDeviceId = nil
     }
 
-    obj.onSendAnswer(callId: callId, remote: remote, deviceId: deviceId, answer: string)
+    obj.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, answer: string)
 }
 
-func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, deviceId: UInt32, broadcast: Bool, candidates: UnsafePointer<AppIceCandidateArray>?) {
+func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, candidates: UnsafePointer<AppIceCandidateArray>?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -287,15 +295,15 @@ func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, c
     }
 
     // If we will broadcast this message, ignore the deviceId.
-    var deviceId: UInt32? = deviceId
+    var destinationDeviceId: UInt32? = destinationDeviceId
     if broadcast {
-        deviceId = nil
+        destinationDeviceId = nil
     }
 
-    obj.onSendIceCandidates(callId: callId, remote: remote, deviceId: deviceId, candidates: finalCandidates)
+    obj.onSendIceCandidates(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, candidates: finalCandidates)
 }
 
-func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, deviceId: UInt32, broadcast: Bool) {
+func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, type: Int32, deviceId: UInt32, useLegacyHangupMessage: Bool) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -308,15 +316,23 @@ func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: 
     }
 
     // If we will broadcast this message, ignore the deviceId.
-    var deviceId: UInt32? = deviceId
+    var destinationDeviceId: UInt32? = destinationDeviceId
     if broadcast {
-        deviceId = nil
+        destinationDeviceId = nil
     }
 
-    obj.onSendHangup(callId: callId, remote: remote, deviceId: deviceId)
+    let hangupType: HangupType
+    if let validHangupType = HangupType(rawValue: type) {
+        hangupType = validHangupType
+    } else {
+        owsFailDebug("unexpected hangup type")
+        return
+    }
+
+    obj.onSendHangup(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, hangupType: hangupType, deviceId: deviceId, useLegacyHangupMessage: useLegacyHangupMessage)
 }
 
-func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, deviceId: UInt32, broadcast: Bool) {
+func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -329,12 +345,12 @@ func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UI
     }
 
     // If we will broadcast this message, ignore the deviceId.
-    var deviceId: UInt32? = deviceId
+    var destinationDeviceId: UInt32? = destinationDeviceId
     if broadcast {
-        deviceId = nil
+        destinationDeviceId = nil
     }
 
-    obj.onSendBusy(callId: callId, remote: remote, deviceId: deviceId)
+    obj.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
 }
 
 func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, observer: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?) -> AppConnectionInterface {

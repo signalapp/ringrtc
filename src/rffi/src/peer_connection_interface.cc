@@ -8,6 +8,8 @@
  */
 
 #include "api/data_channel_interface.h"
+#include "api/ice_gatherer_interface.h"
+#include "api/ice_transport_interface.h"
 #include "api/peer_connection_interface.h"
 #include "sdk/media_constraints.h"
 #include "rffi/api/peer_connection_interface_intf.h"
@@ -128,6 +130,20 @@ Rust_addIceCandidate(PeerConnectionInterface* pc_interface,
       CreateIceCandidate(str_sdp_mid, sdp_mline_index, str_sdp, nullptr));
 
   return pc_interface->AddIceCandidate(candidate.get());
+}
+
+RUSTEXPORT IceGathererInterface*
+Rust_createSharedIceGatherer(PeerConnectionInterface* pc_interface) {
+  rtc::scoped_refptr<IceGathererInterface> ice_gatherer = pc_interface->CreateSharedIceGatherer();
+
+  // IceGatherer is now owned by caller.  Must call Rust_releaseRef() eventually.
+  return ice_gatherer.release();
+}
+
+RUSTEXPORT bool
+Rust_useSharedIceGatherer(PeerConnectionInterface* pc_interface,
+                          IceGathererInterface* ice_gatherer) {
+  return pc_interface->UseSharedIceGatherer(rtc::scoped_refptr<IceGathererInterface>(ice_gatherer));
 }
 
 } // namespace rffi

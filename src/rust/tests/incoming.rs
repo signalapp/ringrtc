@@ -18,10 +18,13 @@ use std::time::SystemTime;
 use ringrtc::common::{
     ApplicationEvent,
     CallId,
+    CallMediaType,
     CallState,
     ConnectionId,
     ConnectionState,
     DeviceId,
+    FeatureLevel,
+    OfferParameters,
 };
 
 use ringrtc::webrtc::ice_candidate::IceCandidate;
@@ -54,11 +57,16 @@ fn start_inbound_call() -> TestContext {
     cm.received_offer(
         remote_peer,
         connection_id,
-        format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect(error_line!())
-            .as_millis() as u64,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect(error_line!())
+                .as_millis() as u64,
+            CallMediaType::Audio,
+            FeatureLevel::MultiRing,
+            true,
+        ),
     )
     .expect(error_line!());
 
@@ -75,10 +83,13 @@ fn start_inbound_call() -> TestContext {
     );
 
     let remote_devices = Vec::<DeviceId>::new();
+    let enable_forking = false;
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        1 as DeviceId,
         remote_devices,
+        enable_forking,
     )
     .expect(error_line!());
 
@@ -214,11 +225,16 @@ fn start_inbound_call_with_error() {
     cm.received_offer(
         remote_peer,
         connection_id,
-        format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect(error_line!())
-            .as_millis() as u64,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect(error_line!())
+                .as_millis() as u64,
+            CallMediaType::Audio,
+            FeatureLevel::MultiRing,
+            true,
+        ),
     )
     .expect(error_line!());
 
@@ -238,10 +254,13 @@ fn start_inbound_call_with_error() {
     context.force_internal_fault(true);
 
     let remote_devices = Vec::<DeviceId>::new();
+    let enable_forking = false;
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        1 as DeviceId,
         remote_devices,
+        enable_forking,
     )
     .expect(error_line!());
 
@@ -278,11 +297,16 @@ fn receive_offer_while_active() {
     cm.received_offer(
         remote_peer,
         connection_id,
-        format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect(error_line!())
-            .as_millis() as u64,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect(error_line!())
+                .as_millis() as u64,
+            CallMediaType::Audio,
+            FeatureLevel::MultiRing,
+            true,
+        ),
     )
     .expect(error_line!());
 
@@ -310,12 +334,17 @@ fn receive_expired_offer() {
     cm.received_offer(
         remote_peer,
         connection_id,
-        format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect(error_line!())
-            .as_millis() as u64
-            - 1000000,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect(error_line!())
+                .as_millis() as u64
+                - 1000000,
+            CallMediaType::Audio,
+            FeatureLevel::MultiRing,
+            true,
+        ),
     )
     .expect(error_line!());
 

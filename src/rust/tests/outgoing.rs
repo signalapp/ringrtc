@@ -17,12 +17,18 @@ use std::thread;
 use std::time::SystemTime;
 
 use ringrtc::common::{
+    AnswerParameters,
     ApplicationEvent,
     CallId,
+    CallMediaType,
     CallState,
     ConnectionId,
     ConnectionState,
     DeviceId,
+    FeatureLevel,
+    HangupParameters,
+    HangupType,
+    OfferParameters,
 };
 
 use ringrtc::sim::error::SimError;
@@ -57,7 +63,7 @@ fn create_cm() {
 // - check call is in Connecting state
 //
 // Now in the Connecting state.
-fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
+fn start_outbound_n_remote_call(n_remotes: u16, enable_forking: bool) -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
@@ -65,7 +71,8 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     assert!(n_remotes < 20);
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    cm.call(remote_peer).expect(error_line!());
+    cm.call(remote_peer, CallMediaType::Audio)
+        .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
@@ -88,22 +95,23 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        1 as DeviceId,
         remote_devices,
+        enable_forking,
     )
     .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
-
-    let connection = active_call
-        .get_connection(1 as DeviceId)
-        .expect(error_line!());
 
     // add a received answer for each remote
     for i in 1..(n_remotes + 1) {
         let remote_id = ConnectionId::new(active_call.call_id(), i as DeviceId);
         cm.received_answer(
             remote_id,
-            format!("ANSWER-{}-{}", i, PRNG.gen::<u16>()).to_owned(),
+            AnswerParameters::new(
+                format!("ANSWER-{}-{}", i, PRNG.gen::<u16>()).to_owned(),
+                FeatureLevel::MultiRing,
+            ),
         )
         .expect(error_line!());
 
@@ -117,13 +125,19 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
             .expect(error_line!());
 
         cm.synchronize().expect(error_line!());
+        let connection = active_call
+            .get_connection(i as DeviceId)
+            .expect(error_line!());
         assert_eq!(
             connection.state().expect(error_line!()),
             ConnectionState::IceConnecting(true)
         );
     }
 
-    assert_eq!(context.offers_sent(), n_remotes.into());
+    assert_eq!(
+        context.offers_sent(),
+        if enable_forking { 1 } else { n_remotes.into() }
+    );
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Connecting
@@ -148,7 +162,8 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
 //
 // Now in the Connecting state.
 fn start_outbound_call() -> TestContext {
-    start_outbound_n_remote_call(1)
+    let enable_forking = false;
+    start_outbound_n_remote_call(1, enable_forking)
 }
 
 // Create an outbound call session up to the CallConnected state.
@@ -247,7 +262,7 @@ fn outbound_local_hang_up() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
-    assert_eq!(context.hangups_sent(), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
 
     // TODO - verify that the data_channel sent a hangup message
 }
@@ -422,7 +437,7 @@ fn outbound_call_connected_local_hangup() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
-    assert_eq!(context.hangups_sent(), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
 
     // TODO - verify that the data_channel sent a hangup message
 }
@@ -512,7 +527,7 @@ fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
-    assert_eq!(context.hangups_sent(), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
 }
 
 #[test]
@@ -622,7 +637,8 @@ fn received_remote_hangup() {
     let active_call = context.active_call();
 
     let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
-    cm.received_hangup(remote_id).expect(error_line!());
+    cm.received_hangup(remote_id, HangupParameters::new(HangupType::Normal, None))
+        .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
@@ -708,7 +724,8 @@ fn outbound_proceed_with_error() {
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    cm.call(remote_peer).expect(error_line!());
+    cm.call(remote_peer, CallMediaType::Audio)
+        .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
@@ -728,10 +745,13 @@ fn outbound_proceed_with_error() {
     let active_call = context.active_call();
     let mut remote_devices = Vec::<DeviceId>::new();
     remote_devices.push(1);
+    let enable_forking = false;
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        1 as DeviceId,
         remote_devices,
+        enable_forking,
     )
     .expect(error_line!());
 
@@ -774,7 +794,7 @@ fn outbound_call_connected_local_hangup_with_error() {
         1
     );
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
-    assert_eq!(context.hangups_sent(), 0);
+    assert_eq!(context.normal_hangups_sent(), 0);
 }
 
 #[test]
@@ -812,11 +832,20 @@ fn local_ice_candidate_with_error() {
 // One of the remote devices accepts the call, which is followed by a
 // local hangup.
 #[test]
-fn outbound_multiple_remote_devices() {
+fn outbound_multiple_remote_devices_without_forking() {
+    outbound_multiple_remote_devices(false)
+}
+
+#[test]
+fn outbound_multiple_remote_devices_with_forking() {
+    outbound_multiple_remote_devices(true)
+}
+
+fn outbound_multiple_remote_devices(enable_forking: bool) {
     test_init();
 
     let n_remotes: u16 = 5;
-    let context = start_outbound_n_remote_call(n_remotes);
+    let context = start_outbound_n_remote_call(n_remotes, enable_forking);
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -877,6 +906,7 @@ fn outbound_multiple_remote_devices() {
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert_eq!(context.accepted_hangups_sent(), 1);
 
     cm.hangup().expect(error_line!());
 
@@ -886,7 +916,7 @@ fn outbound_multiple_remote_devices() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
-    assert_eq!(context.hangups_sent(), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
 }
 
 // Create multiple call managers, each managing one outbound call.
@@ -899,13 +929,14 @@ fn outbound_multiple_call_managers() {
     test_init();
 
     let n_call_manager = 5;
+    let enable_forking = false;
 
     let mut thread_vec = Vec::new();
     for i in 0..n_call_manager {
         info!("test:{}: creating call manager", i);
 
         let child = thread::spawn(move || {
-            outbound_multiple_remote_devices();
+            outbound_multiple_remote_devices(enable_forking);
         });
 
         thread_vec.push(child);
@@ -940,11 +971,16 @@ fn glare() {
     cm.received_offer(
         remote_peer,
         connection_id,
-        format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect(error_line!())
-            .as_millis() as u64,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect(error_line!())
+                .as_millis() as u64,
+            CallMediaType::Audio,
+            FeatureLevel::MultiRing,
+            true,
+        ),
     )
     .expect(error_line!());
 
@@ -972,7 +1008,8 @@ fn start_outbound_receive_busy() {
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    cm.call(remote_peer).expect(error_line!());
+    cm.call(remote_peer, CallMediaType::Audio)
+        .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
@@ -992,11 +1029,13 @@ fn start_outbound_receive_busy() {
     let mut remote_devices = Vec::<DeviceId>::new();
 
     remote_devices.push(1);
-
+    let enable_forking = false;
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        1 as DeviceId,
         remote_devices,
+        enable_forking,
     )
     .expect(error_line!());
 

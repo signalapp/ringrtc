@@ -51,15 +51,17 @@ public class Connection {
     }
 
     func createAudioSender(audioTrack: RTCAudioTrack) {
-        let audioSender = self.peerConnection.sender(withKind: kRTCMediaStreamTrackKindAudio, streamId: "ARDAMS")
-        audioSender.track = audioTrack
-        self.audioSender = audioSender
+        // We use addTrack instead of createSender or addTransceiver because it uses
+        // the track's ID instead of a random ID in the SDP, which is important
+        // for call forking.
+        self.audioSender = self.peerConnection.add(audioTrack, streamIds: ["ARDAMS"])
     }
 
     func createVideoSender(videoTrack: RTCVideoTrack) {
-        let videoSender = self.peerConnection.sender(withKind: kRTCMediaStreamTrackKindVideo, streamId: "ARDAMS")
-        videoSender.track = videoTrack
-        self.videoSender = videoSender
+        // We use addTrack instead of createSender or addTransceiver because it uses
+        // the track's ID instead of a random ID in the SDP, which is important
+        // for call forking.
+        self.videoSender = self.peerConnection.add(videoTrack, streamIds: ["ARDAMS"])
     }
 }
 
