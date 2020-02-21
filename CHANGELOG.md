@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.2
+
+- Cherry pick updates from WebRTC 4044
+
 ## v1.0.1
 
 - Android: improve logging
