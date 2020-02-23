@@ -4,3 +4,5 @@ cscope.*
 .dir-locals.el
 .cargo
 .idea
+*.xcodeproj
+*.xcworkspace
