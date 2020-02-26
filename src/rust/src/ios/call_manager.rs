@@ -167,7 +167,11 @@ pub fn received_ice_candidates(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
 
-    info!("received_ice_candidate(): id: {}", connection_id);
+    info!(
+        "received_ice_candidates(): id: {} len: {}",
+        connection_id,
+        ice_candidates.len()
+    );
 
     if !call_manager.call_is_active(connection_id.call_id())? {
         warn!(
@@ -177,10 +181,7 @@ pub fn received_ice_candidates(
         return Ok(());
     }
 
-    info!("ice_candidate size: {}", ice_candidates.len());
-    call_manager.received_ice_candidates(connection_id, &ice_candidates)?;
-
-    Ok(())
+    call_manager.received_ice_candidates(connection_id, &ice_candidates)
 }
 
 /// Application notification of received Hangup message

@@ -36,7 +36,6 @@ use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media_stream::MediaStream;
-use crate::webrtc::sdp_observer::SessionDescriptionInterface;
 
 /// Encapsulates the FSM and runtime upon which a Call runs.
 struct FsmContext {
@@ -431,11 +430,7 @@ where
     /// Send an SDP offer to the remote_peer.
     ///
     /// This is a pass through to the CallManager.
-    pub fn send_offer(
-        &self,
-        connection: Connection<T>,
-        offer: SessionDescriptionInterface,
-    ) -> Result<()> {
+    pub fn send_offer(&self, connection: Connection<T>, offer: String) -> Result<()> {
         let state = self.state()?;
 
         info!("send_offer(): {}", state);
@@ -459,11 +454,7 @@ where
     /// Send an SDP answer to the remote_peer.
     ///
     /// This is a pass through to the CallManager.
-    pub fn send_answer(
-        &self,
-        connection: Connection<T>,
-        answer: SessionDescriptionInterface,
-    ) -> Result<()> {
+    pub fn send_answer(&self, connection: Connection<T>, answer: String) -> Result<()> {
         let state = self.state()?;
 
         info!("send_answer(): {}", state);

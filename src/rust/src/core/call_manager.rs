@@ -26,6 +26,7 @@ use crate::common::{
     ConnectionId,
     DeviceId,
     Result,
+    RingBench,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
@@ -33,9 +34,9 @@ use crate::core::connection::Connection;
 use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 
+use crate::core::util::redact_string;
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media_stream::MediaStream;
-use crate::webrtc::sdp_observer::SessionDescriptionInterface;
 
 const TIME_OUT_PERIOD: u64 = 120;
 
@@ -616,7 +617,11 @@ where
         let connection_id = ConnectionId::new(call_id, 0);
 
         let hangup_closure = Box::new(move |cm: &CallManager<T>| {
-            info!("send_hangup(): closure");
+            ringbench!(
+                RingBench::CallManager,
+                RingBench::Application,
+                format!("send_hangup()\t{}", connection_id)
+            );
 
             let remote_peer = call.remote_peer()?;
 
@@ -718,8 +723,14 @@ where
                     TIME_OUT_PERIOD,
                     self.clone(),
                 )?;
-                let mut call_map = self.call_map.lock()?;
 
+                ringbench!(
+                    RingBench::Application,
+                    RingBench::CallManager,
+                    format!("call()\t{}", call_id)
+                );
+
+                let mut call_map = self.call_map.lock()?;
                 call_map.insert(call_id, call.clone());
                 *active_call_id = Some(call_id);
                 call.inject_start_call()
@@ -740,6 +751,11 @@ where
             return Ok(());
         }
 
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("accept()\t{}", call_id)
+        );
         active_call.inject_accept_call()
     }
 
@@ -766,6 +782,11 @@ where
             return Ok(());
         }
 
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("drop()\t{}", call_id)
+        );
         self.handle_conclude_active_call(active_call, true, ApplicationEvent::EndedAppDroppedCall)
     }
 
@@ -787,13 +808,23 @@ where
             return Ok(());
         }
 
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("proceed()\t{}", call_id)
+        );
+
         active_call.set_call_context(app_call_context)?;
         active_call.inject_proceed(remote_devices)
     }
 
     /// Handle message_sent() API from application.
-    fn handle_message_sent(&mut self, _call_id: CallId) -> Result<()> {
-        info!("handle_signaling_complete()");
+    fn handle_message_sent(&mut self, call_id: CallId) -> Result<()> {
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("message_sent()\t{}", call_id)
+        );
 
         match self.message_queue.lock() {
             Ok(mut message_queue) => {
@@ -886,6 +917,12 @@ where
     /// Handle hangup() API from application.
     fn handle_hangup(&mut self) -> Result<()> {
         let active_call = check_active_call!(self, "handle_hangup");
+
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("hangup()\t{}", active_call.call_id())
+        );
         self.handle_conclude_active_call(active_call, true, ApplicationEvent::EndedLocalHangup)
     }
 
@@ -897,7 +934,11 @@ where
         offer: String,
         timestamp: u64,
     ) -> Result<()> {
-        info!("handle_received_offer(): id: {}", connection_id);
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("received_offer()\t{}", connection_id)
+        );
         if is_expired(timestamp, Duration::from_secs(120)) {
             info!("expired_offer(): id: {}", connection_id);
             self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
@@ -966,6 +1007,11 @@ where
             return Ok(());
         }
 
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("received_answer()\t{}", connection_id)
+        );
         active_call.inject_received_answer(connection_id, answer)
     }
 
@@ -985,6 +1031,15 @@ where
             return Ok(());
         }
 
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!(
+                "received_ice_candidates({})\t{}",
+                ice_candidates.len(),
+                connection_id,
+            )
+        );
         active_call.inject_received_ice_candidates(connection_id, ice_candidates)
     }
 
@@ -1000,6 +1055,11 @@ where
             return Ok(());
         }
 
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("received_hangup()\t{}", connection_id)
+        );
         active_call.inject_received_hangup(connection_id)
     }
 
@@ -1014,6 +1074,12 @@ where
             );
             return Ok(());
         }
+
+        ringbench!(
+            RingBench::Application,
+            RingBench::CallManager,
+            format!("received_busy()\t{}", connection_id)
+        );
         self.handle_conclude_active_call(active_call, false, ApplicationEvent::EndedRemoteBusy)
     }
 
@@ -1051,7 +1117,11 @@ where
         info!("send_busy(): id: {}", connection_id);
 
         let busy_closure = Box::new(move |cm: &CallManager<T>| {
-            info!("send_busy(): closure");
+            ringbench!(
+                RingBench::CallManager,
+                RingBench::Application,
+                format!("send_busy()\t{}", connection_id)
+            );
 
             let remote_peer = call.remote_peer()?;
 
@@ -1248,7 +1318,11 @@ where
         call_id: CallId,
         direction: CallDirection,
     ) -> Result<()> {
-        info!("handle_start_call(): direction: {}", direction);
+        ringbench!(
+            RingBench::CallManager,
+            RingBench::Application,
+            format!("start()\t{}", call_id)
+        );
 
         let platform = self.platform.lock()?;
         platform.on_start_call(remote_peer, call_id, direction)
@@ -1260,7 +1334,11 @@ where
         remote_peer: &<T as Platform>::AppRemotePeer,
         event: ApplicationEvent,
     ) -> Result<()> {
-        info!("notify_application(): event: {}", event);
+        ringbench!(
+            RingBench::CallManager,
+            RingBench::Application,
+            format!("event({})", event)
+        );
 
         let platform = self.platform.lock()?;
         platform.on_event(remote_peer, event)
@@ -1373,22 +1451,29 @@ where
         &mut self,
         call: Call<T>,
         connection: Connection<T>,
-        offer: SessionDescriptionInterface,
+        offer: String,
     ) -> Result<()> {
         let connection_id = connection.id();
         info!("send_offer(): id: {}", connection_id);
 
-        // Hold the description string for the closure.
-        let description = offer.get_description()?;
-
         let offer_closure = Box::new(move |cm: &CallManager<T>| {
-            info!("send_offer(): closure");
+            ringbench!(
+                RingBench::CallManager,
+                RingBench::Application,
+                format!("send_offer()\t{}", connection_id)
+            );
+
+            info!(
+                "id: {}, TX SDP offer:\n{}",
+                connection_id,
+                redact_string(&offer)
+            );
 
             let remote_peer = call.remote_peer()?;
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_offer(&*remote_peer, connection_id, false, description.as_str())
+                platform.on_send_offer(&*remote_peer, connection_id, false, offer.as_str())
             } else {
                 Ok(())
             }
@@ -1408,22 +1493,29 @@ where
         &mut self,
         call: Call<T>,
         connection: Connection<T>,
-        answer: SessionDescriptionInterface,
+        answer: String,
     ) -> Result<()> {
         let connection_id = connection.id();
         info!("send_answer(): id: {}", connection_id);
 
-        // Hold the description string for the closure.
-        let description = answer.get_description()?;
-
         let answer_closure = Box::new(move |cm: &CallManager<T>| {
-            info!("send_answer(): closure");
+            ringbench!(
+                RingBench::CallManager,
+                RingBench::Application,
+                format!("send_answer()\t{}", connection_id)
+            );
+
+            info!(
+                "id: {}, TX SDP answer:\n{}",
+                connection_id,
+                redact_string(&answer)
+            );
 
             let remote_peer = call.remote_peer()?;
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_answer(&*remote_peer, connection_id, false, description.as_str())
+                platform.on_send_answer(&*remote_peer, connection_id, false, answer.as_str())
             } else {
                 Ok(())
             }
@@ -1448,14 +1540,23 @@ where
         info!("send_ice_candidates(): id: {}", connection_id);
 
         let ice_closure = Box::new(move |cm: &CallManager<T>| {
-            info!("send_ice_candidates(): closure");
-
-            let remote_peer = call.remote_peer()?;
             let candidates = connection.get_pending_ice_updates()?;
 
             if candidates.is_empty() {
                 return Ok(());
             }
+
+            ringbench!(
+                RingBench::CallManager,
+                RingBench::Application,
+                format!(
+                    "send_ice_candidates({})\t{}",
+                    candidates.len(),
+                    connection_id,
+                )
+            );
+
+            let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
             platform.on_send_ice_candidates(&*remote_peer, connection_id, false, &*candidates)

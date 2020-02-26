@@ -8,10 +8,10 @@ https://webrtc.googlesource.com/src.git/+/95cb56bd895dc83b8588e2b0090d417ecd9efa
  1 file changed, 25 insertions(+), 13 deletions(-)
 
 diff --git a/modules/video_coding/rtp_frame_reference_finder.cc b/modules/video_coding/rtp_frame_reference_finder.cc
-index 51228218d0..f656cd65d7 100644
+index 2424b28f27..927c9609bf 100644
 --- a/modules/video_coding/rtp_frame_reference_finder.cc
 +++ b/modules/video_coding/rtp_frame_reference_finder.cc
-@@ -207,7 +207,7 @@ RtpFrameReferenceFinder::ManageFramePidOrSeqNum(RtpFrameObject* frame,
+@@ -208,7 +208,7 @@ RtpFrameReferenceFinder::ManageFramePidOrSeqNum(RtpFrameObject* frame,
    // If |picture_id| is specified then we use that to set the frame references,
    // otherwise we use sequence number.
    if (picture_id != kNoPictureId) {
@@ -20,7 +20,7 @@ index 51228218d0..f656cd65d7 100644
      frame->num_references =
          frame->frame_type() == VideoFrameType::kVideoFrameKey ? 0 : 1;
      frame->references[0] = frame->id.picture_id - 1;
-@@ -268,7 +268,6 @@ RtpFrameReferenceFinder::ManageFramePidOrSeqNum(RtpFrameObject* frame,
+@@ -269,7 +269,6 @@ RtpFrameReferenceFinder::ManageFramePidOrSeqNum(RtpFrameObject* frame,
      seq_num_it->second.second = frame->id.picture_id;
    }
  
@@ -28,7 +28,7 @@ index 51228218d0..f656cd65d7 100644
    UpdateLastPictureIdWithPadding(frame->id.picture_id);
    frame->id.picture_id = rtp_seq_num_unwrapper_.Unwrap(frame->id.picture_id);
    return kHandOff;
-@@ -277,10 +276,8 @@ RtpFrameReferenceFinder::ManageFramePidOrSeqNum(RtpFrameObject* frame,
+@@ -278,10 +277,8 @@ RtpFrameReferenceFinder::ManageFramePidOrSeqNum(RtpFrameObject* frame,
  RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp8(
      RtpFrameObject* frame) {
    const RTPVideoHeader& video_header = frame->GetRtpVideoHeader();
@@ -40,7 +40,7 @@ index 51228218d0..f656cd65d7 100644
  
    if (codec_header.pictureId == kNoPictureId ||
        codec_header.temporalIdx == kNoTemporalIdx ||
-@@ -292,7 +289,7 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp8(
+@@ -293,7 +290,7 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp8(
    if (codec_header.temporalIdx >= kMaxTemporalLayers)
      return kDrop;
  
@@ -49,7 +49,7 @@ index 51228218d0..f656cd65d7 100644
  
    if (last_picture_id_ == -1)
      last_picture_id_ = frame->id.picture_id;
-@@ -306,7 +303,7 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp8(
+@@ -307,7 +304,7 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp8(
      } while (last_picture_id_ != frame->id.picture_id);
    }
  
@@ -58,7 +58,7 @@ index 51228218d0..f656cd65d7 100644
  
    // Clean up info for base layers that are too old.
    int64_t old_tl0_pic_idx = unwrapped_tl0 - kMaxLayerInfo;
-@@ -321,6 +318,9 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp8(
+@@ -322,6 +319,9 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp8(
                                   clean_frames_to);
  
    if (frame->frame_type() == VideoFrameType::kVideoFrameKey) {
@@ -68,7 +68,7 @@ index 51228218d0..f656cd65d7 100644
      frame->num_references = 0;
      layer_info_[unwrapped_tl0].fill(-1);
      UpdateLayerInfoVp8(frame, unwrapped_tl0, codec_header.temporalIdx);
-@@ -426,10 +426,8 @@ void RtpFrameReferenceFinder::UpdateLayerInfoVp8(RtpFrameObject* frame,
+@@ -427,10 +427,8 @@ void RtpFrameReferenceFinder::UpdateLayerInfoVp8(RtpFrameObject* frame,
  RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
      RtpFrameObject* frame) {
    const RTPVideoHeader& video_header = frame->GetRtpVideoHeader();
@@ -80,7 +80,7 @@ index 51228218d0..f656cd65d7 100644
  
    if (codec_header.picture_id == kNoPictureId ||
        codec_header.temporal_idx == kNoTemporalIdx) {
-@@ -437,17 +435,21 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
+@@ -438,17 +436,21 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
    }
  
    // Protect against corrupted packets with arbitrary large temporal idx.
@@ -104,7 +104,7 @@ index 51228218d0..f656cd65d7 100644
      frame->num_references = codec_header.num_ref_pics;
      for (size_t i = 0; i < frame->num_references; ++i) {
        frame->references[i] = Subtract<kPicIdLength>(frame->id.picture_id,
-@@ -465,7 +467,8 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
+@@ -466,7 +468,8 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
    }
  
    GofInfo* info;
@@ -114,7 +114,7 @@ index 51228218d0..f656cd65d7 100644
    if (codec_header.ss_data_available) {
      if (codec_header.temporal_idx != 0) {
        RTC_LOG(LS_WARNING) << "Received scalability structure on a non base "
-@@ -475,6 +478,12 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
+@@ -476,6 +479,12 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
          return kDrop;
        }
  
@@ -127,7 +127,7 @@ index 51228218d0..f656cd65d7 100644
        GofInfoVP9 gof = codec_header.gof;
        if (gof.num_frames_in_gof == 0) {
          RTC_LOG(LS_WARNING) << "Number of frames in GOF is zero. Assume "
-@@ -561,6 +570,9 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
+@@ -562,6 +571,9 @@ RtpFrameReferenceFinder::FrameDecision RtpFrameReferenceFinder::ManageFrameVp9(
                                                      frame->id.picture_id);
    size_t gof_idx = diff % info->gof->num_frames_in_gof;
  

@@ -50,13 +50,13 @@ extern crate tokio;
 use std::fmt;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use futures::future::lazy;
 use futures::{Async, Future, Poll, Stream};
 use tokio::runtime;
 
-use crate::common::{CallDirection, CallId, ConnectionState, Result};
+use crate::common::{CallDirection, CallId, ConnectionState, Result, RingBench};
 use crate::core::connection::{Connection, EventStream, ObserverEvent};
 use crate::core::platform::Platform;
 use crate::error::RingRtcError;
@@ -501,6 +501,8 @@ where
         state: ConnectionState,
         call_id: CallId,
     ) -> Result<()> {
+        ringbench!(RingBench::WebRTC, RingBench::Connection, "dc(hangup)");
+
         if connection.call_id() != call_id {
             warn!("Remote hangup for non-active call");
             return Ok(());
@@ -523,6 +525,8 @@ where
         state: ConnectionState,
         call_id: CallId,
     ) -> Result<()> {
+        ringbench!(RingBench::WebRTC, RingBench::Connection, "dc(connected)");
+
         if connection.call_id() != call_id {
             warn!("Remote connected for non-active call");
             return Ok(());
@@ -670,7 +674,11 @@ where
         state: ConnectionState,
         candidate: IceCandidate,
     ) -> Result<()> {
-        info!("handle_local_ice_candidate()");
+        ringbench!(
+            RingBench::WebRTC,
+            RingBench::Connection,
+            format!("ice_candidate()\t{}", connection.id())
+        );
 
         match state {
             ConnectionState::Idle | ConnectionState::Terminating | ConnectionState::Closed => {
@@ -822,6 +830,12 @@ where
         state: ConnectionState,
         data_channel: DataChannel,
     ) -> Result<()> {
+        ringbench!(
+            RingBench::WebRTC,
+            RingBench::Connection,
+            "on_data_channel()"
+        );
+
         match state {
             ConnectionState::IceConnected | ConnectionState::CallConnected => {
                 let dc_observer_handle = connection.clone();

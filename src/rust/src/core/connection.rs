@@ -12,12 +12,21 @@ extern crate tokio;
 use std::fmt;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
+use std::time::SystemTime;
 
 use futures::sync::mpsc::{Receiver, Sender};
 use futures::Future;
 use tokio::runtime;
 
-use crate::common::{CallDirection, CallId, ConnectionId, ConnectionState, DeviceId, Result};
+use crate::common::{
+    CallDirection,
+    CallId,
+    ConnectionId,
+    ConnectionState,
+    DeviceId,
+    Result,
+    RingBench,
+};
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
@@ -532,14 +541,8 @@ where
         let offer = self.create_offer()?;
         self.set_local_description(&offer)?;
 
-        info!(
-            "id: {}, TX SDP offer:\n{}",
-            self.id(),
-            redact_string(&offer.get_description()?)
-        );
-
         let call = self.call()?;
-        call.send_offer(self.clone(), offer)
+        call.send_offer(self.clone(), offer.get_description()?)
     }
 
     /// Check to see if this Connection is able to send messages.
@@ -572,14 +575,8 @@ where
         self.set_local_description(&answer)?;
         self.inject_have_local_remote_sdp()?;
 
-        info!(
-            "id: {}, TX SDP answer:\n{}",
-            self.id(),
-            redact_string(&answer.get_description()?)
-        );
-
         let call = self.call()?;
-        call.send_answer(self.clone(), answer)
+        call.send_answer(self.clone(), answer.get_description()?)
     }
 
     /// Buffer local ICE candidates.
@@ -638,10 +635,12 @@ where
             return Ok(());
         }
 
-        info!(
-            "handle_remote_ice_updates(): Remote ICE candidates length: {}",
-            ice_candidates.len()
+        ringbench!(
+            RingBench::Connection,
+            RingBench::WebRTC,
+            format!("ice_candidates({})", ice_candidates.len())
         );
+
         let webrtc = self.webrtc.lock()?;
         for candidate in &(*ice_candidates) {
             webrtc.pc_interface()?.add_ice_candidate(candidate)?;
@@ -654,7 +653,12 @@ where
     /// Send a hangup message to the remote peer via the
     /// PeerConnection DataChannel.
     pub fn send_hangup(&self) -> Result<()> {
-        info!("send_hangup(): id: {}", self.connection_id);
+        ringbench!(
+            RingBench::Connection,
+            RingBench::WebRTC,
+            format!("dc(hangup)\t{}", self.connection_id)
+        );
+
         let webrtc = self.webrtc.lock()?;
         if let Ok(data_channel) = webrtc.data_channel() {
             if let Err(e) = data_channel.send_hang_up(self.call_id) {
@@ -672,8 +676,13 @@ where
     /// Send a call connected message to the remote peer via the
     /// PeerConnection DataChannel.
     pub fn send_connected(&self) -> Result<()> {
-        let webrtc = self.webrtc.lock()?;
+        ringbench!(
+            RingBench::Connection,
+            RingBench::WebRTC,
+            format!("dc(connected)\t{}", self.connection_id)
+        );
 
+        let webrtc = self.webrtc.lock()?;
         webrtc.data_channel()?.send_connected(self.call_id)?;
         Ok(())
     }

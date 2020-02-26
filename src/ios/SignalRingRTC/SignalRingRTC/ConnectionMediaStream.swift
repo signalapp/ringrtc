@@ -11,6 +11,9 @@ public class ConnectionMediaStream {
     // Associate this application MediaStream object with a Connection.
     let connection: Connection
 
+    // Hold on to the stream object when it is created.
+    var mediaStream: RTCMediaStream?
+
     init(connection: Connection) {
         self.connection = connection
 
@@ -57,8 +60,8 @@ func connectionMediaStreamCreateMediaStream(object: UnsafeMutableRawPointer?, na
         return nil
     }
 
-    // We get RTCMediaStream, but just return the raw pointer.
-    let mediaStream = obj.connection.createStream(fromNative: nativeStream)
+    let mediaStream = obj.connection.createStream(nativeStream: nativeStream)
+    obj.mediaStream = mediaStream
 
-    return UnsafeMutableRawPointer(Unmanaged.passRetained(mediaStream).toOpaque())
+    return UnsafeMutableRawPointer(Unmanaged.passUnretained(mediaStream).toOpaque())
 }

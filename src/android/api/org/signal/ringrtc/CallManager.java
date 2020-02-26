@@ -537,6 +537,8 @@ public class CallManager {
 
     configuration.bundlePolicy  = PeerConnection.BundlePolicy.MAXBUNDLE;
     configuration.rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE;
+    configuration.tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED;
+    configuration.pruneTurnPorts = true;
 
     if (callContext.hideIp) {
       configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;

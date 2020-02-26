@@ -445,52 +445,60 @@ pub extern "C" fn ringrtcReceivedOffer(
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcReceivedIceCandidate(
+pub extern "C" fn ringrtcReceivedIceCandidates(
     callManager: *mut c_void,
     callId: u64,
     remoteDevice: u32,
-    app_candidate: AppIceCandidate,
+    appIceCandidateArray: *const AppIceCandidateArray,
 ) -> *mut c_void {
+    let count = unsafe { (*appIceCandidateArray).count };
+    let candidates = unsafe { (*appIceCandidateArray).candidates };
+
+    let app_ice_candidates = unsafe { slice::from_raw_parts(candidates, count) };
     let mut ice_candidates = Vec::new();
 
-    // Build the Rust strings.
-    let sdp_bytes =
-        unsafe { slice::from_raw_parts(app_candidate.sdp.bytes, app_candidate.sdp.len as usize) };
+    for app_ice_candidate in app_ice_candidates {
+        // Build the Rust strings.
+        let sdp_bytes = unsafe {
+            slice::from_raw_parts(
+                app_ice_candidate.sdp.bytes,
+                app_ice_candidate.sdp.len as usize,
+            )
+        };
+        let sdp_string = match str::from_utf8(sdp_bytes) {
+            Ok(sdp_desc) => sdp_desc,
+            Err(_e) => "",
+        };
 
-    let sdp_string = match str::from_utf8(sdp_bytes) {
-        Ok(sdp_desc) => sdp_desc,
-        Err(_e) => "",
-    };
+        let sdp_mid_bytes = unsafe {
+            slice::from_raw_parts(
+                app_ice_candidate.sdpMid.bytes,
+                app_ice_candidate.sdpMid.len as usize,
+            )
+        };
+        let sdp_mid_string = match str::from_utf8(sdp_mid_bytes) {
+            Ok(sdp_mid_desc) => sdp_mid_desc,
+            Err(_e) => "",
+        };
 
-    let sdp_mid_bytes = unsafe {
-        slice::from_raw_parts(
-            app_candidate.sdpMid.bytes,
-            app_candidate.sdpMid.len as usize,
-        )
-    };
+        if sdp_string.is_empty() || sdp_mid_string.is_empty() {
+            warn!("ringrtcReceivedIceCandidates(): Candidate not valid!");
+            continue;
+        }
 
-    let sdp_mid_string = match str::from_utf8(sdp_mid_bytes) {
-        Ok(sdp_mid_desc) => sdp_mid_desc,
-        Err(_e) => "",
-    };
-
-    if sdp_string.is_empty() || sdp_mid_string.is_empty() {
-        warn!("ringrtcReceivedIceCandidates: No valid candidates!");
-        return ptr::null_mut();
+        let ice_candidate = IceCandidate::new(
+            sdp_mid_string.to_string(),
+            app_ice_candidate.sdpMLineIndex,
+            sdp_string.to_string(),
+        );
+        ice_candidates.push(ice_candidate);
     }
-
-    let ice_candidate = IceCandidate::new(
-        sdp_mid_string.to_string(),
-        app_candidate.sdpMLineIndex,
-        sdp_string.to_string(),
-    );
-    ice_candidates.push(ice_candidate);
 
     match call_manager::received_ice_candidates(
         callManager as *mut IOSCallManager,
         callId,
         remoteDevice as DeviceId,
-        ice_candidates.to_vec(),
+        ice_candidates,
     ) {
         Ok(_v) => {
             // Return the object reference back as indication of success.

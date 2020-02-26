@@ -9,7 +9,7 @@ cameras.
  1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/sdk/android/api/org/webrtc/Camera2Capturer.java b/sdk/android/api/org/webrtc/Camera2Capturer.java
-index baf1e96b6bdc..c04a3a5d89ca 100644
+index baf1e96b6b..c04a3a5d89 100644
 --- a/sdk/android/api/org/webrtc/Camera2Capturer.java
 +++ b/sdk/android/api/org/webrtc/Camera2Capturer.java
 @@ -21,7 +21,11 @@ public class Camera2Capturer extends CameraCapturer {

@@ -10,8 +10,9 @@
 use std::fmt;
 use std::marker::PhantomData;
 use std::ptr;
+use std::time::SystemTime;
 
-use crate::common::{Result, DATA_CHANNEL_NAME};
+use crate::common::{Result, RingBench, DATA_CHANNEL_NAME};
 use crate::core::connection::Connection;
 use crate::core::platform::Platform;
 use crate::core::util::{ptr_as_mut, CppObject, RustObject};
@@ -131,10 +132,10 @@ extern "C" fn pc_observer_OnSignalingChange<T>(
 {
     let object = unsafe { ptr_as_mut(connection_ptr) };
     if let Ok(connection) = object {
-        info!(
-            "pc_observer_OnSignalingChange(): {}, new_state: {:?}",
-            connection.id(),
-            new_state
+        ringbench!(
+            RingBench::WebRTC,
+            RingBench::Connection,
+            format!("signaling_change({:?})\t{}", new_state, connection.id())
         );
     } else {
         warn!("pc_observer_OnSignalingChange(): ptr_as_mut() failed.");
@@ -151,11 +152,16 @@ extern "C" fn pc_observer_OnIceConnectionChange<T>(
 {
     let object = unsafe { ptr_as_mut(connection_ptr) };
     if let Ok(connection) = object {
-        info!(
-            "pc_observer_OnIceConnectionChange(): {}, new_state: {:?}",
-            connection.id(),
-            new_state
+        ringbench!(
+            RingBench::WebRTC,
+            RingBench::Connection,
+            format!(
+                "ice_connection_change({:?})\t{}",
+                new_state,
+                connection.id()
+            )
         );
+
         use IceConnectionState::*;
         match new_state {
             Completed | Connected => {
@@ -194,10 +200,10 @@ extern "C" fn pc_observer_OnConnectionChange<T>(
 {
     let object = unsafe { ptr_as_mut(connection_ptr) };
     if let Ok(connection) = object {
-        info!(
-            "pc_observer_OnConnectionChange(): {}, new_state: {:?}",
-            connection.id(),
-            new_state
+        ringbench!(
+            RingBench::WebRTC,
+            RingBench::Connection,
+            format!("connection_change({:?})\t{}", new_state, connection.id())
         );
     } else {
         warn!("pc_observer_OnConnectionChange(): ptr_as_mut() failed.");
@@ -231,10 +237,10 @@ extern "C" fn pc_observer_OnIceGatheringChange<T>(
 {
     let object = unsafe { ptr_as_mut(connection_ptr) };
     if let Ok(connection) = object {
-        info!(
-            "pc_observer_OnIceGatheringChange(): {}, new_state: {:?}",
-            connection.id(),
-            new_state
+        ringbench!(
+            RingBench::WebRTC,
+            RingBench::Connection,
+            format!("ice_gathering_change({:?})\t{}", new_state, connection.id())
         );
     } else {
         warn!("pc_observer_OnIceGatheringChange(): ptr_as_mut() failed.");

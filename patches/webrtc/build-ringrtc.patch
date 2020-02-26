@@ -20,10 +20,10 @@ Step 2 -- Update the top level //BUILD.gn file to depend on the minimal
  create mode 100644 ringrtc/BUILD.gn
 
 diff --git a/BUILD.gn b/BUILD.gn
-index 31cf726ee4ae..9b02e1cafecd 100644
+index f4988035b9..a7c8569009 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -420,6 +420,7 @@ if (!build_with_chromium) {
+@@ -435,6 +435,7 @@ if (!build_with_chromium) {
        "pc:peerconnection",
        "pc:rtc_pc",
        "pc:rtc_pc_base",
@@ -33,7 +33,7 @@ index 31cf726ee4ae..9b02e1cafecd 100644
        "video",
 diff --git a/ringrtc/BUILD.gn b/ringrtc/BUILD.gn
 new file mode 100644
-index 000000000000..46ab0fc153a7
+index 0000000000..46ab0fc153
 --- /dev/null
 +++ b/ringrtc/BUILD.gn
 @@ -0,0 +1,7 @@

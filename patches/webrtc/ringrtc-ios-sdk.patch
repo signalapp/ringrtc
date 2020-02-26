@@ -15,98 +15,116 @@ via Objective-C/C++. The application-level CallConnection object wraps
 it all up in a way that is still compatible with most normal WebRTC
 operations and objects.
 ---
- sdk/objc/api/peerconnection/RTCPeerConnection.h  |   18 +++++++
- sdk/objc/api/peerconnection/RTCPeerConnection.mm |   55 ++++++++++++++++++++++
- 2 files changed, 72 insertions(+), 1 deletion(-)
+ .../api/peerconnection/RTCPeerConnection+Private.h |    6 ++-
+ sdk/objc/api/peerconnection/RTCPeerConnection.h    |   12 ++++++
+ sdk/objc/api/peerconnection/RTCPeerConnection.mm   |   40 +++++++++++++++++---
+ .../api/peerconnection/RTCPeerConnectionFactory.h  |    5 +--
+ .../api/peerconnection/RTCPeerConnectionFactory.mm |    6 ++-
+ 5 files changed, 53 insertions(+), 16 deletions(-)
 
+diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection+Private.h b/sdk/objc/api/peerconnection/RTCPeerConnection+Private.h
+index ce08cd5f6a..e30ba7cf49 100644
+--- a/sdk/objc/api/peerconnection/RTCPeerConnection+Private.h
++++ b/sdk/objc/api/peerconnection/RTCPeerConnection+Private.h
+@@ -73,13 +73,13 @@ class PeerConnectionDelegateAdapter : public PeerConnectionObserver {
+     nativePeerConnection;
+ 
+ /** Initialize an RTCPeerConnection with a configuration, constraints, and
+- *  delegate.
++ *  observer.
+  */
+ - (instancetype)initWithFactory:(RTCPeerConnectionFactory *)factory
+                   configuration:(RTCConfiguration *)configuration
+                     constraints:(RTCMediaConstraints *)constraints
+-                       delegate:(nullable id<RTCPeerConnectionDelegate>)delegate
+-    NS_DESIGNATED_INITIALIZER;
++                       observer:(void *)observer
++        NS_DESIGNATED_INITIALIZER;
+ 
+ + (webrtc::PeerConnectionInterface::SignalingState)nativeSignalingStateForState:
+         (RTCSignalingState)state;
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.h b/sdk/objc/api/peerconnection/RTCPeerConnection.h
-index 012295c24151..ef9baae7eb5f 100644
+index 012295c241..6cd24ab87d 100644
 --- a/sdk/objc/api/peerconnection/RTCPeerConnection.h
 +++ b/sdk/objc/api/peerconnection/RTCPeerConnection.h
-@@ -195,7 +195,23 @@ RTC_OBJC_EXPORT
-  */
- @property(nonatomic, readonly) NSArray<RTCRtpTransceiver *> *transceivers;
+@@ -197,6 +197,18 @@ RTC_OBJC_EXPORT
  
--- (instancetype)init NS_UNAVAILABLE;
-+- (instancetype)init NS_DESIGNATED_INITIALIZER;
-+
-+/** Initialize using an existing instance with a custom observer.
-+ */
-+- (void *)initializeWithCustomObserver:(void *)customObserver
-+                               factory:(RTCPeerConnectionFactory *)factory
-+                         configuration:(RTCConfiguration *)configuration
-+                           constraints:(RTCMediaConstraints *)constraints;
-+
+ - (instancetype)init NS_UNAVAILABLE;
+ 
 +/** Given a native WebRTC stream, create an objc sdk RTCMediaStream.
 + */
 +- (RTCMediaStream *)createStreamFromNative:(void *)nativeStream;
 +
-+/** Free resources for a RTCMediaStream that was allocated with
-+ *  createStreamFromNative().
++/** Return the underlying WebRTC Peer Connection object pointer.
 + */
-+- (void)releaseStream:(RTCMediaStream *)stream;
- 
++- (void *)getRawPeerConnection;
++
++/** Releases the underlying WebRTC Peer Connection.
++ */
++- (void)releaseRawPeerConnection:(void *)rawPeerConnection;
++
  /** Sets the PeerConnection's global configuration to |configuration|.
   *  Any changes to STUN/TURN servers or ICE candidate policy will affect the
+  *  next gathering phase, and cause the next call to createOffer to generate
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.mm b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
-index 32a8a4baea64..f2e4f38fe5a4 100644
+index 32a8a4baea..2f5f56ed69 100644
 --- a/sdk/objc/api/peerconnection/RTCPeerConnection.mm
 +++ b/sdk/objc/api/peerconnection/RTCPeerConnection.mm
-@@ -302,6 +302,12 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
- @synthesize delegate = _delegate;
- @synthesize factory = _factory;
- 
-+- (instancetype)init {
-+  // Designated initializer doesn't do much, we intend to set state
-+  // later.
-+  return [super init];
-+}
-+
+@@ -294,6 +294,7 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
+   RTCPeerConnectionFactory *_factory;
+   NSMutableArray<RTCMediaStream *> *_localStreams;
+   std::unique_ptr<webrtc::PeerConnectionDelegateAdapter> _observer;
++  std::unique_ptr<webrtc::PeerConnectionObserver> _customObserver;
+   rtc::scoped_refptr<webrtc::PeerConnectionInterface> _peerConnection;
+   std::unique_ptr<webrtc::MediaConstraints> _nativeConstraints;
+   BOOL _hasStartedRtcEventLog;
+@@ -305,33 +306,58 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
  - (instancetype)initWithFactory:(RTCPeerConnectionFactory *)factory
                    configuration:(RTCConfiguration *)configuration
                      constraints:(RTCMediaConstraints *)constraints
-@@ -332,6 +338,55 @@ void PeerConnectionDelegateAdapter::OnRemoveTrack(
+-                       delegate:(id<RTCPeerConnectionDelegate>)delegate {
++                       observer:(void *)observer {
+   NSParameterAssert(factory);
+   std::unique_ptr<webrtc::PeerConnectionInterface::RTCConfiguration> config(
+       [configuration createNativeConfiguration]);
+   if (!config) {
+     return nil;
+   }
++
+   if (self = [super init]) {
+-    _observer.reset(new webrtc::PeerConnectionDelegateAdapter(self));
+     _nativeConstraints = constraints.nativeConstraints;
+     CopyConstraintsIntoRtcConfiguration(_nativeConstraints.get(),
+                                         config.get());
++
++    _customObserver.reset((webrtc::PeerConnectionObserver *)observer);
++
+     _peerConnection =
+-        factory.nativeFactory->CreatePeerConnection(*config,
+-                                                    nullptr,
+-                                                    nullptr,
+-                                                    _observer.get());
++      factory.nativeFactory->CreatePeerConnection(*config,
++                                                  nullptr,
++                                                  nullptr,
++                                                  _customObserver.get());
+     if (!_peerConnection) {
+       return nil;
+     }
++
+     _factory = factory;
+     _localStreams = [[NSMutableArray alloc] init];
+-    _delegate = delegate;
++
++    // We don't use the delegate from here.
++    _delegate = nil;
+   }
++
    return self;
  }
  
-+- (void *)initializeWithCustomObserver:(void *)customObserver
-+                               factory:(RTCPeerConnectionFactory *)factory
-+                         configuration:(RTCConfiguration *)configuration
-+                           constraints:(RTCMediaConstraints *)constraints {
-+  NSParameterAssert(factory);
-+  std::unique_ptr<webrtc::PeerConnectionInterface::RTCConfiguration> config(
-+      [configuration createNativeConfiguration]);
-+  if (!config) {
-+    return nil;
-+  }
-+
-+  _nativeConstraints = constraints.nativeConstraints;
-+  CopyConstraintsIntoRtcConfiguration(_nativeConstraints.get(),
-+                                      config.get());
-+
-+  webrtc::PeerConnectionObserver *observer = (webrtc::PeerConnectionObserver *)customObserver;
-+
-+  _peerConnection =
-+    factory.nativeFactory->CreatePeerConnection(*config,
-+                                                nullptr,
-+                                                nullptr,
-+                                                observer);
-+  if (!_peerConnection) {
-+    return nil;
-+  }
-+
-+  _factory = factory;
-+  _localStreams = [[NSMutableArray alloc] init];
-+
-+  // We don't use the delegate from here.
-+  _delegate = nil;
-+
-+  // This is the bonafide WebRTC PeerConnection!
-+  return _peerConnection;
-+}
-+
 +- (RTCMediaStream *)createStreamFromNative:(void *)nativeStream {
-+  // @note Modelled on the PeerConnectionDelegateAdapter::OnAddStream
++  // @note Modeled on the PeerConnectionDelegateAdapter::OnAddStream
 +  // function above in this file.
 +
 +  webrtc::MediaStreamInterface *stream = (webrtc::MediaStreamInterface *)nativeStream;
@@ -114,10 +132,54 @@ index 32a8a4baea64..f2e4f38fe5a4 100644
 +  return [[RTCMediaStream alloc] initWithFactory:_factory nativeMediaStream:stream];
 +}
 +
-+- (void)releaseStream:(RTCMediaStream *)stream {
-+  // @todo
++- (void *)getRawPeerConnection {
++  return _peerConnection;
++}
++
++- (void)releaseRawPeerConnection:(void *)rawPeerConnection {
++  rtc::scoped_refptr<webrtc::PeerConnectionInterface> _pc = (webrtc::PeerConnectionInterface *)rawPeerConnection;
++  _pc.release();
 +}
 +
  - (NSArray<RTCMediaStream *> *)localStreams {
    return [_localStreams copy];
  }
+diff --git a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h
+index c808218b54..3e9817d3c2 100644
+--- a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h
++++ b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h
+@@ -60,12 +60,11 @@ RTC_OBJC_EXPORT
+ - (RTCMediaStream *)mediaStreamWithStreamId:(NSString *)streamId;
+ 
+ /** Initialize an RTCPeerConnection with a configuration, constraints, and
+- *  delegate.
++ *  observer.
+  */
+ - (RTCPeerConnection *)peerConnectionWithConfiguration:(RTCConfiguration *)configuration
+                                            constraints:(RTCMediaConstraints *)constraints
+-                                              delegate:
+-                                                  (nullable id<RTCPeerConnectionDelegate>)delegate;
++                                              observer:(void *)observer;
+ 
+ /** Set the options to be used for subsequently created RTCPeerConnections */
+ - (void)setOptions:(nonnull RTCPeerConnectionFactoryOptions *)options;
+diff --git a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
+index 4ac33d2436..bc7dfd1443 100644
+--- a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
++++ b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
+@@ -288,12 +288,12 @@
+     (RTCConfiguration *)configuration
+                                            constraints:
+     (RTCMediaConstraints *)constraints
+-                                              delegate:
+-    (nullable id<RTCPeerConnectionDelegate>)delegate {
++                                              observer:
++    (void *)observer {
+   return [[RTCPeerConnection alloc] initWithFactory:self
+                                       configuration:configuration
+                                         constraints:constraints
+-                                           delegate:delegate];
++                                           observer:observer];
+ }
+ 
+ - (void)setOptions:(nonnull RTCPeerConnectionFactoryOptions *)options {

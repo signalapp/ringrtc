@@ -6,12 +6,16 @@ import SignalRingRTC.RingRTC
 import WebRTC
 import SignalCoreKit
 
-public class Connection: RTCPeerConnection {
+public class Connection {
     private var audioSender: RTCRtpSender?
     private var videoSender: RTCRtpSender?
 
-    override init() {
-        super.init()
+    private var peerConnection: RTCPeerConnection
+    private var nativePeerConnection: UnsafeMutableRawPointer
+
+    init(pcObserver: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, configuration: RTCConfiguration, constraints: RTCMediaConstraints) {
+        self.peerConnection = factory.peerConnection(with: configuration, constraints: constraints, observer: pcObserver)
+        self.nativePeerConnection = self.peerConnection.getRawPeerConnection()
 
         Logger.debug("object! Connection created... \(ObjectIdentifier(self))")
     }
@@ -20,15 +24,19 @@ public class Connection: RTCPeerConnection {
         Logger.debug("object! Connection destroyed... \(ObjectIdentifier(self))")
     }
 
-    public override func close() {
-        Logger.debug("")
+    func close() {
+        // Give the native pointer back...
+        Logger.debug("Releasing PeerConnection")
+        self.peerConnection.releaseRawPeerConnection(self.nativePeerConnection)
 
-        super.close()
+        Logger.debug("Closing PeerConnection")
+        self.peerConnection.close()
 
-        self.audioSender = nil
-        self.videoSender = nil
+        Logger.debug("Done")
+    }
 
-        Logger.debug("done")
+    func getRawPeerConnection() -> UnsafeMutableRawPointer? {
+        return self.nativePeerConnection
     }
 
     func getWrapper(pc: UnsafeMutableRawPointer?) -> AppConnectionInterface {
@@ -38,14 +46,18 @@ public class Connection: RTCPeerConnection {
             destroy: connectionDestroy)
     }
 
+    func createStream(nativeStream: UnsafeMutableRawPointer) -> RTCMediaStream {
+        return self.peerConnection.createStream(fromNative: nativeStream)
+    }
+
     func createAudioSender(audioTrack: RTCAudioTrack) {
-        let audioSender = self.sender(withKind: kRTCMediaStreamTrackKindAudio, streamId: "ARDAMS")
+        let audioSender = self.peerConnection.sender(withKind: kRTCMediaStreamTrackKindAudio, streamId: "ARDAMS")
         audioSender.track = audioTrack
         self.audioSender = audioSender
     }
 
     func createVideoSender(videoTrack: RTCVideoTrack) {
-        let videoSender = self.sender(withKind: kRTCMediaStreamTrackKindVideo, streamId: "ARDAMS")
+        let videoSender = self.peerConnection.sender(withKind: kRTCMediaStreamTrackKindVideo, streamId: "ARDAMS")
         videoSender.track = videoTrack
         self.videoSender = videoSender
     }
@@ -56,8 +68,6 @@ func connectionDestroy(object: UnsafeMutableRawPointer?) {
         owsFailDebug("object was unexpectedly nil")
         return
     }
-
-    Logger.debug("")
 
     let connection = Unmanaged<Connection>.fromOpaque(object).takeRetainedValue()
     // @note There should not be any retainers left for the object

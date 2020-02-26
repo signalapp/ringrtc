@@ -25,7 +25,9 @@ extern crate log;
 #[cfg(feature = "sim")]
 extern crate simplelog;
 
+#[macro_use]
 pub mod common;
+
 mod error;
 
 /// Core, platform independent functionality.

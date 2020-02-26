@@ -13,7 +13,7 @@ WebRTC.framework.
  1 file changed, 2 insertions(+)
 
 diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index 2c8a114c27ca..a22bf70524b6 100644
+index d326630ad9..aa0f98f102 100644
 --- a/sdk/BUILD.gn
 +++ b/sdk/BUILD.gn
 @@ -10,6 +10,7 @@ import("../webrtc.gni")
@@ -24,7 +24,7 @@ index 2c8a114c27ca..a22bf70524b6 100644
  }
  if (is_mac) {
    import("//build/config/mac/rules.gni")
-@@ -1347,6 +1348,7 @@ if (is_ios || is_mac) {
+@@ -1348,6 +1349,7 @@ if (is_ios || is_mac) {
            ":videocodec_objc",
            ":videotoolbox_objc",
            "../rtc_base:rtc_base_approved",

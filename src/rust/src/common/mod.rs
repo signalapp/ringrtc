@@ -267,3 +267,46 @@ impl CallDirection {
 
 /// The label of the WebRTC DataChannel.
 pub const DATA_CHANNEL_NAME: &str = "signaling";
+
+// Benchmarking component list.
+pub enum RingBench {
+    Application,
+    CallManager,
+    Call,
+    Connection,
+    WebRTC,
+    Network,
+}
+
+impl fmt::Display for RingBench {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                RingBench::Application => "app",
+                RingBench::CallManager => "cm",
+                RingBench::Call => "call",
+                RingBench::Connection => "conn",
+                RingBench::WebRTC => "rtc",
+                RingBench::Network => "net",
+            }
+        )
+    }
+}
+
+#[macro_export]
+macro_rules! ringbench {
+    ($source:expr, $destination:expr, $operation:expr) => {
+        info!(
+            "ringrtc!\t{}\t{} -> {}: {}",
+            match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                Ok(v) => v.as_millis(),
+                Err(_) => 0,
+            },
+            $source,
+            $destination,
+            $operation
+        );
+    };
+}

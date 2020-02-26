@@ -403,21 +403,42 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         AssertIsOnMainThread()
         Logger.debug("receivedIceCandidates")
 
-        for candidate in candidates {
-            let sdpBytes = Array(candidate.sdp.utf8)
+        let appIceCandidates: [AppIceCandidate] = candidates.map { candidate in
+            var count = candidate.sdp.utf8.count
+            let sdpPtr = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+            sdpPtr.initialize(from: Array(candidate.sdp.utf8), count: count)
             let sdp = AppByteSlice(
-                bytes: sdpBytes,
-                len: sdpBytes.count)
+                bytes: sdpPtr,
+                len: count)
 
-            let sdpMidBytes = Array(candidate.sdpMid.utf8)
+            count = candidate.sdpMid.utf8.count
+            let sdpMidPtr = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+            sdpMidPtr.initialize(from: Array(candidate.sdpMid.utf8), count: count)
             let sdpMid = AppByteSlice(
-                bytes: sdpMidBytes,
-                len: sdpMidBytes.count)
+                bytes: sdpMidPtr,
+                len: count)
 
-            let retPtr = ringrtcReceivedIceCandidate(ringRtcCallManager, callId, sourceDevice, AppIceCandidate(sdpMid: sdpMid, sdpMLineIndex: candidate.sdpMLineIndex, sdp: sdp))
-            if retPtr == nil {
-                throw CallManagerError.apiFailed(description: "ringrtcReceivedIceCandidates() function failure")
+            return AppIceCandidate(sdpMid: sdpMid, sdpMLineIndex: candidate.sdpMLineIndex, sdp: sdp)
+        }
+
+        // Make sure to release the allocated memory when the function exists,
+        // to ensure that the pointers are still valid when used in the RingRTC
+        // API function.
+        defer {
+            for appIceCandidate in appIceCandidates {
+                appIceCandidate.sdpMid.bytes.deallocate()
+                appIceCandidate.sdp.bytes.deallocate()
             }
+        }
+
+        var appIceCandidateArray = AppIceCandidateArray(
+            candidates: appIceCandidates,
+            count: candidates.count
+        )
+
+        let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, sourceDevice, &appIceCandidateArray)
+        if retPtr == nil {
+            throw CallManagerError.apiFailed(description: "ringrtcReceivedIceCandidates() function failure")
         }
     }
 
@@ -555,6 +576,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // Initialize the configuration.
         configuration.bundlePolicy = .maxBundle
         configuration.rtcpMuxPolicy = .require
+        configuration.tcpCandidatePolicy = .disabled
+        configuration.shouldPruneTurnPorts = true
 
         if appCallContext.hideIp {
             configuration.iceTransportPolicy = .relay
@@ -564,16 +587,13 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: ["DtlsSrtpKeyAgreement": "true"])
 
         Logger.debug("Create application connection object...")
-        let connection = Connection()
+        let connection = Connection(pcObserver: pcObserver!,
+                                       factory: self.factory!,
+                                 configuration: configuration,
+                                   constraints: constraints)
 
-        Logger.debug("Initializing the application connection object with custom observer...")
-        let pc = connection.initialize(withCustomObserver: pcObserver!,
-                                                  factory: self.factory!,
-                                            configuration: configuration,
-                                              constraints: constraints)
-        // If pc is nil Call Manager will handle internally.
-
-        Logger.debug("RTCPeerConnection: \(pc)")
+        let pc = connection.getRawPeerConnection()
+        // If pc is nil CallManager will handle it internally.
 
         // We always negotiate for both audio and video streams, add
         // them to the connection so WebRTC sets them up.
