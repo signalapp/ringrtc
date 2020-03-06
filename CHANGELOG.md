@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.0
+
+- Disable unused audio codecs and RTP header extensions
+
+- Adjust settings and logging
+
+- iOS: Minor optimizations
+
 ## v1.0.2
 
 - Cherry pick updates from WebRTC 4044
