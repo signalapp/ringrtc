@@ -3,4 +3,8 @@ cscope.*
 .DS_Store
 .dir-locals.el
 .cargo
+*.code-workspace
+**/.vscode
 .idea
+src/webrtc/
+src/jar.list

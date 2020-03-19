@@ -31,19 +31,11 @@ esac
 BIN_DIR="$(realpath -e $(dirname $0))"
 . "${BIN_DIR}/env.sh"
 
-if [ -d "$OUTPUT_DIR" ] ; then
-    echo "ERROR: Project output directory exists: $OUTPUT_DIR"
-    echo "To proceed first remove this directory"
-    exit 1
-fi
 mkdir -p $OUTPUT_DIR
 echo "WEBRTC_PLATFORM=$WEBRTC_PLATFORM" > "${OUTPUT_DIR}/platform.env"
 
 # WebRTC checkout
 $BIN_DIR/gsync-webrtc "$WEBRTC_REVISION"
-
-# Apply patches to WebRTC
-$BIN_DIR/apply-patches
 
 # Platform specific setup
 prepare_workspace_platform

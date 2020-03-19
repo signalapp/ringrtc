@@ -31,9 +31,6 @@ set -e
 BIN_DIR="$(realpath -e $(dirname $0))"
 . "${BIN_DIR}/env.sh"
 
-# Verify the build environment is sane.
-check_build_env
-
 usage()
 {
     echo 'usage: build-ios [-d|-c] [-w, -r]
@@ -51,8 +48,8 @@ usage()
 clean()
 {
   # Remove all possible artifact directories.
-  rm -r -f ${OUTPUT_DIR}/webrtc/src/out/debug
-  rm -r -f ${OUTPUT_DIR}/webrtc/src/out/release
+  rm -r -f ${OUTPUT_DIR}/debug
+  rm -r -f ${OUTPUT_DIR}/release
   rm -r -f ${OUTPUT_DIR}/WebRTC.framework
   rm -r -f ${OUTPUT_DIR}/WebRTC.framework.dSYM
   rm -r -f ${RINGRTC_SRC_DIR}/rust/target
@@ -89,18 +86,17 @@ done
 # The WebRTC part of the build resulting in WebRTC.framework.
 if [ "${BUILD_WHAT}" == "all" ] || [ "${BUILD_WHAT}" == "webrtc" ]
 then
-  echo "Building the WebRTC.framework..."
+  echo "Building the WebRTC.framework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
   
-  cd ${OUTPUT_DIR}/webrtc/src
-  ./tools_webrtc/ios/build_ios_libs.py -o out/${BUILD_TYPE} --build_config ${BUILD_TYPE} 
+  (cd ${WEBRTC_SRC_DIR} && ./tools_webrtc/ios/build_ios_libs.py -o ${OUTPUT_DIR}/${BUILD_TYPE} --build_config ${BUILD_TYPE})
   
-  cd ${PROJECT_DIR}
-  
+  echo "Copying to ${OUTPUT_DIR}"
+
   # Copy WebRTC.framework up.
-  cp -r -f ${OUTPUT_DIR}/webrtc/src/out/${BUILD_TYPE}/WebRTC.framework ${OUTPUT_DIR}
+  cp -r -f ${OUTPUT_DIR}/${BUILD_TYPE}/WebRTC.framework ${OUTPUT_DIR}
 
   # Copy WebRTC.dSYM up for local debugging.
-  cp -r -f ${OUTPUT_DIR}/webrtc/src/out/${BUILD_TYPE}/WebRTC.dSYM ${OUTPUT_DIR}/WebRTC.framework.dSYM
+  cp -r -f ${OUTPUT_DIR}/${BUILD_TYPE}/WebRTC.dSYM ${OUTPUT_DIR}/WebRTC.framework.dSYM
 
   "${BIN_DIR}/print_build_env.py" \
       --webrtc-version="${WEBRTC_VERSION}" \

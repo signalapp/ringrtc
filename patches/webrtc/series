@@ -1,8 +1,0 @@
-# This series applies on GIT commit 4c4a7ec67fe0825b364b10c49f7602c868b00c22
-build-ringrtc.patch
-build-ringrtc-ios.patch
-ringrtc-ios-sdk.patch
-android-camera2capturer-custom-enumerator.patch
-security-cherry-pick.patch
-disable-audio-codecs.patch
-disable-header-extensions.patch

@@ -7,8 +7,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 #
 
-# Specify WebRTC upstream version.  This corresponds to the
-# "branch-heads" git branch of the webrtc repository.
+# Specify WebRTC version.  This corresponds to the
+# branch or tag of the signalapp/webrtc repository.
 WEBRTC_VERSION="3987"
 
 RINGRTC_MAJOR_VERSION=1

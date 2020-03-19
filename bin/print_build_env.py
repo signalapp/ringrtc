@@ -37,7 +37,7 @@ def ParseArgs():
     return parser.parse_args()
 
 BIN_DIR = os.path.dirname(__file__)
-webrtc_src_dir = os.path.join(BIN_DIR, '../out/webrtc/src')
+webrtc_src_dir = os.path.join(BIN_DIR, '../src/webrtc/src')
 ringrtc_src_dir = os.path.join(BIN_DIR, '..')
 
 @contextlib.contextmanager

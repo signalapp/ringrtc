@@ -7,10 +7,7 @@
 
 solutions = [
   { "name"        : "src",
-    "url"         : "https://webrtc.googlesource.com/src.git",
+    "url"         : "git@github.com:signalapp/webrtc.git",
     "deps_file"   : "DEPS",
-    "managed"     : False,
-    "custom_deps" : {},
-    "custom_vars": {},
   },
 ]

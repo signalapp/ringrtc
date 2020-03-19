@@ -668,7 +668,7 @@ public class CallManager {
   @CalledByNative
   private void onStartCall(Remote remote, long callId, boolean isOutgoing) {
     Log.i(TAG, "onStartCall():");
-    observer.onStartCall(remote, new CallId(callId), new Boolean(isOutgoing));
+    observer.onStartCall(remote, new CallId(callId), Boolean.valueOf(isOutgoing));
   }
 
   @CalledByNative
@@ -686,31 +686,31 @@ public class CallManager {
   @CalledByNative
   private void onSendOffer(long callId, Remote remote, int remoteDevice, boolean broadcast, String sdp) {
     Log.i(TAG, "onSendOffer():");
-    observer.onSendOffer(new CallId(callId), remote, new Integer(remoteDevice), new Boolean(broadcast), sdp);
+    observer.onSendOffer(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast), sdp);
   }
 
   @CalledByNative
   private void onSendAnswer(long callId, Remote remote, int remoteDevice, boolean broadcast, String sdp) {
     Log.i(TAG, "onSendAnswer():");
-    observer.onSendAnswer(new CallId(callId), remote, new Integer(remoteDevice), new Boolean(broadcast), sdp);
+    observer.onSendAnswer(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast), sdp);
   }
 
   @CalledByNative
   private void onSendIceCandidates(long callId, Remote remote, int remoteDevice, boolean broadcast, List<IceCandidate> iceCandidates) {
     Log.i(TAG, "onSendIceCandidates():");
-    observer.onSendIceCandidates(new CallId(callId), remote, new Integer(remoteDevice), new Boolean(broadcast), iceCandidates);
+    observer.onSendIceCandidates(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast), iceCandidates);
   }
 
   @CalledByNative
   private void onSendHangup(long callId, Remote remote, int remoteDevice, boolean broadcast) {
     Log.i(TAG, "onSendHangup():");
-    observer.onSendHangup(new CallId(callId), remote, new Integer(remoteDevice), new Boolean(broadcast));
+    observer.onSendHangup(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast));
   }
 
   @CalledByNative
   private void onSendBusy(long callId, Remote remote, int remoteDevice, boolean broadcast) {
     Log.i(TAG, "onSendBusy():");
-    observer.onSendBusy(new CallId(callId), remote, new Integer(remoteDevice), new Boolean(broadcast));
+    observer.onSendBusy(new CallId(callId), remote, Integer.valueOf(remoteDevice), Boolean.valueOf(broadcast));
   }
 
   @CalledByNative

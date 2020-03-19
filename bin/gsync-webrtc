@@ -27,14 +27,10 @@ esac
     exit 1
 }
 
-echo "Syncing WebRTC revision : $WEBRTC_REVISION"
+echo "Downloading WebRTC dependencies to ${WEBRTC_DIR} from version ${WEBRTC_VERSION}"
 echo "CONFIGURED_WEBRTC_VERSION=${WEBRTC_VERSION}" > "${OUTPUT_DIR}/webrtc-version.env"
 
-cd "$WEBRTC_DIR"
-gclient sync --jobs 16 -v --with_branch_heads \
-        --revision=src@"$WEBRTC_REVISION"
-
-mkdir -p src/ringrtc
-echo "ringrtc_src = \"${RINGRTC_SRC_DIR}\"" >  "${RINGRTC_WEBRTC_SRC_DIR}/ringrtc-src-dir.gni"
-
-cd -
+(
+ cd "$WEBRTC_DIR"
+ gclient sync --jobs 32 --with_tags "--revision=src@${WEBRTC_VERSION}"
+)
