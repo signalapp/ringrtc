@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.0
+
+- Move to vendored WebRTC at signalapp/webrtc
+
+- Reference signalapp/webrtc@3987, includes cherry picked updates from WebRTC 4044
+
 ## v1.1.0
 
 - Disable unused audio codecs and RTP header extensions
