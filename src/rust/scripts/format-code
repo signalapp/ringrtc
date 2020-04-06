@@ -1,3 +1,6 @@
 #!/bin/sh
 
-cargo +nightly fmt "$@"
+# Be sure to install the specific nightly toolchain:
+# rustup toolchain install nightly-2020-03-15
+
+cargo +nightly-2020-03-15 fmt "$@"

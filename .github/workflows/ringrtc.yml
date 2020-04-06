@@ -9,11 +9,13 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Install nightly toolchain
-      run: rustup toolchain install nightly
+      run: rustup toolchain install nightly-2020-03-15
     - name: Install nightly rustfmt
-      run: rustup component add rustfmt --toolchain nightly
+      run: rustup component add rustfmt --toolchain nightly-2020-03-15
     - name: Check code format
-      run: cargo +nightly fmt --manifest-path=./src/rust/Cargo.toml -- --check
+      run: |
+        cd src/rust
+        cargo +nightly-2020-03-15 fmt -- --check
     - name: Install cargo clippy
       run: rustup component add clippy
     - name: Check rust lint

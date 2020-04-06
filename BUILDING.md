@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (10.1 or later).
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.3 or later).
 
 ## Prerequisites
 
@@ -12,50 +12,46 @@ The following is derived from the depot_tools tutorial: https://commondatastorag
 
     cd <somewhere>
     git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-    cd depot_tools
     export PATH=<somewhere>/depot_tools:"$PATH"
-
-### stgit
-
-Install the "stacked git" package.
-
-#### Android
-
-On Ubuntu run:
-
-    apt install stgit
-
-#### iOS
-
-    brew install stgit
 
 ### Rust Components
 
-Install rustup, the rust management system:
+Install rustup, the Rust management system:
 
     curl https://sh.rustup.rs -sSf | sh
 
-Install additional rustup components:
+(Optional) Install additional rustup components:
 
     rustup component add clippy
     rustup toolchain install nightly
+
+#### Android
+
+Install Rust target support for Android via `rustup`:
+
+    rustup target add \
+      arm-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
+
+#### iOS
+
+Install Rust target support for iOS via `rustup`:
+
+    rustup target add \
+      aarch64-apple-ios armv7-apple-ios armv7s-apple-ios x86_64-apple-ios i386-apple-ios
 
 Install additional components via `cargo`:
 
     cargo install cargo-lipo
     cargo install cbindgen
 
-Install rust target support via `rustup`:
+### Other Android Dependencies
 
-#### Android
+You might need some of these. Of course it is assumed that you have the Android SDK installed,
+along with the NDK, LLDB, and SDK Tools options. A properly configured JDK (such as openjdk-8-jdk)
+is also assumed. You may also need the following (on Ubuntu):
 
-    rustup target add \
-      arm-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
+    sudo apt install libglib2.0-dev
 
-#### ios
-
-    rustup target add \
-      aarch64-apple-ios armv7-apple-ios armv7s-apple-ios x86_64-apple-ios i386-apple-ios
 
 ### Other iOS Dependencies
 
@@ -64,7 +60,7 @@ Install rust target support via `rustup`:
 
 After the initial checkout (described below), you will need to install Bundle dependencies at least once:
 
-    cd src/ios
+    cd src/ios/SignalRingRTC
     bundle install
 
 ## Initial Checkout
@@ -87,7 +83,14 @@ You can then add the Signal repo to sync with upstream changes:
 
 ### Android
 
-To build an AAR suitable for including in an Android project, run:
+To build an AAR suitable for including in an Android project, first
+setup the gradle file
+`${PROJECT_ROOT}/publish/android/local.properties`, specifying the
+location of the Android SDK:
+
+    sdk.dir=/path/to/Android/Sdk
+
+To perform the build run:
 
     make android
     
