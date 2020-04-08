@@ -30,7 +30,7 @@ if (is_android) {
   }
 
   rtc_android_library("ringrtc_java") {
-    java_files = [
+    sources = [
       "api/org/signal/ringrtc/BuildInfo.java",
       "api/org/signal/ringrtc/CalledByNative.java",
       "api/org/signal/ringrtc/CallId.java",
