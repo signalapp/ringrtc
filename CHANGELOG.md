@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.0
+
+- Update build documentation
+
+- Reference signalapp/webrtc@4044
+
 ## v1.2.0
 
 - Move to vendored WebRTC at signalapp/webrtc
