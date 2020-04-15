@@ -154,15 +154,9 @@ pub fn proceed(
     jni_remote_devices: JObject,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
     let call_id = CallId::from(call_id);
 
     info!("proceed(): {}", call_id);
-
-    if !call_manager.call_active()? {
-        warn!("proceed(): skipping inactive call");
-        return Ok(());
-    }
 
     // Convert Java List<Integer> into a Rust Vec<DeviceId>.
     let mut remote_devices = Vec::<DeviceId>::new();
@@ -180,6 +174,7 @@ pub fn proceed(
     let platform = call_manager.platform()?.try_clone()?;
     let android_call_context =
         AndroidCallContext::new(platform, env.new_global_ref(jni_call_context)?);
+
     call_manager.proceed(call_id, android_call_context, remote_devices)
 }
 
@@ -197,7 +192,7 @@ pub fn message_send_failure(call_manager: *mut AndroidCallManager, call_id: jlon
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
 
-    info!("message_send_fail(): call_id: {}", call_id);
+    info!("message_send_failure(): call_id: {}", call_id);
     call_manager.message_send_failure(call_id)
 }
 
@@ -260,16 +255,6 @@ pub fn received_ice_candidates(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
 
-    info!("add_ice_candidates(): id: {}", connection_id);
-
-    if !call_manager.call_is_active(connection_id.call_id())? {
-        warn!(
-            "add_ice_candidates(): skipping inactive call_id: {}",
-            connection_id.call_id()
-        );
-        return Ok(());
-    }
-
     // Convert Java list of org.webrtc.IceCandidate into Rust Vector of IceCandidate
     let candidate_list = env.get_list(jni_ice_candidates)?;
     let mut ice_candidates = Vec::new();
@@ -297,10 +282,13 @@ pub fn received_ice_candidates(
         ice_candidates.push(ice_candidate);
     }
 
-    info!("ice_candidate size: {}", ice_candidates.len());
-    call_manager.received_ice_candidates(connection_id, &ice_candidates)?;
+    info!(
+        "received_ice_candidates(): id: {} len: {}",
+        connection_id,
+        ice_candidates.len()
+    );
 
-    Ok(())
+    call_manager.received_ice_candidates(connection_id, &ice_candidates)
 }
 
 /// Application notification of received Hangup message

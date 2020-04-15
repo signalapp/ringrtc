@@ -70,13 +70,9 @@ pub fn proceed(
     app_remote_devices: Vec<u32>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let call_id = CallId::from(call_id);
 
-    info!("proceed():");
-
-    if !call_manager.call_active()? {
-        warn!("proceed(): skipping inactive call");
-        return Ok(());
-    }
+    info!("proceed(): {}", call_id);
 
     // Convert Rust Vec<u32> into a Rust Vec<DeviceId>.
     let mut remote_devices = Vec::<DeviceId>::new();
@@ -90,27 +86,25 @@ pub fn proceed(
         info!("proceed(): device id: {}", device);
     }
 
-    call_manager.proceed(
-        CallId::from(call_id),
-        Arc::new(app_call_context),
-        remote_devices,
-    )
+    call_manager.proceed(call_id, Arc::new(app_call_context), remote_devices)
 }
 
 /// Application notification that the sending of the previous message was a success.
 pub fn message_sent(call_manager: *mut IOSCallManager, call_id: u64) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let call_id = CallId::from(call_id);
 
-    info!("message_sent():");
-    call_manager.message_sent(CallId::from(call_id))
+    info!("message_sent(): call_id: {}", call_id);
+    call_manager.message_sent(call_id)
 }
 
 /// Application notification that the sending of the previous message was a failure.
 pub fn message_send_failure(call_manager: *mut IOSCallManager, call_id: u64) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let call_id = CallId::from(call_id);
 
-    info!("message_send_failure():");
-    call_manager.message_send_failure(CallId::from(call_id))
+    info!("message_send_failure(): call_id: {}", call_id);
+    call_manager.message_send_failure(call_id)
 }
 
 /// Application notification of local hangup.
@@ -173,14 +167,6 @@ pub fn received_ice_candidates(
         ice_candidates.len()
     );
 
-    if !call_manager.call_is_active(connection_id.call_id())? {
-        warn!(
-            "received_ice_candidates(): skipping inactive call_id: {}",
-            connection_id.call_id()
-        );
-        return Ok(());
-    }
-
     call_manager.received_ice_candidates(connection_id, &ice_candidates)
 }
 
@@ -214,10 +200,12 @@ pub fn received_busy(
 
 /// Application notification to accept the incoming call
 pub fn accept_call(call_manager: *mut IOSCallManager, call_id: u64) -> Result<()> {
-    info!("accept_call():");
+    let call_id = CallId::from(call_id);
+
+    info!("accept_call(): {}", call_id);
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.accept_call(CallId::from(call_id))
+    call_manager.accept_call(call_id)
 }
 
 /// CMI request for the active Connection object
@@ -253,10 +241,12 @@ pub fn set_video_enable(call_manager: *mut IOSCallManager, enable: bool) -> Resu
 
 /// CMI request to drop the active call
 pub fn drop_call(call_manager: *mut IOSCallManager, call_id: u64) -> Result<()> {
-    info!("drop_call():");
+    let call_id = CallId::from(call_id);
+
+    info!("drop_call(): {}", call_id);
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.drop_call(CallId::from(call_id))
+    call_manager.drop_call(call_id)
 }
 
 /// CMI request to reset the Call Manager

@@ -56,6 +56,8 @@ final class TestDelegate: CallManagerDelegate {
     var shouldSendIceCandidatesInvoked = false
     var shouldSendHangupInvoked: Bool? = false
     var shouldCompareCallsInvoked = false
+    var shouldStartRingingLocal = false
+    var shouldStartRingingRemote = false
 //    var shouldConcludeCallInvoked = false
 //    var concludedCallCount = 0
 
@@ -136,8 +138,12 @@ final class TestDelegate: CallManagerDelegate {
         switch event {
         case .ringingLocal:
             Logger.debug("TestDelegate:ringingLocal")
+            shouldStartRingingLocal = true
+            
         case .ringingRemote:
             Logger.debug("TestDelegate:ringingRemote")
+            shouldStartRingingRemote = true
+            
         case .connectedLocal:
             Logger.debug("TestDelegate:connectedLocal")
         case .connectedRemote:
@@ -1255,7 +1261,6 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
-    // Test! To see if two clients can work!
     func testCallManagerMultiCall() {
         Logger.debug("Test: MultiCall...")
 
@@ -1348,7 +1353,7 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        expect(delegateCallee.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 1)
+        expect(delegateCallee.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 2)
         delegateCallee.shouldSendAnswerInvoked = false
 
         expect(delegateCallee.recentCallId).to(equal(callId))
@@ -1390,11 +1395,157 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        // Let's see what happens!
+        // We should get to the ringing state in each client.
+        expect(delegateCaller.shouldStartRingingRemote).toEventually(equal(true), timeout: 2)
+        expect(delegateCallee.shouldStartRingingLocal).toEventually(equal(true), timeout: 1)
 
         // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 30.0)
+        delay(interval: 1.0)
 
+        // Release the Call Managers.
+        callManagerCaller = nil
+        callManagerCallee = nil
+
+        // See what clears up after closing the Call Manager...
+        delay(interval: 1.0)
+
+        Logger.debug("Test: Exiting test function...")
+    }
+
+    func testCallManagerMultiCallFastIceCheck() {
+        Logger.debug("Test: MultiCall check that immediate ICE message is handled...")
+
+        let delegateCaller = TestDelegate()
+        let delegateCallee = TestDelegate()
+
+        var callManagerCaller: CallManager<OpaqueCallData, TestDelegate>?
+        var callManagerCallee: CallManager<OpaqueCallData, TestDelegate>?
+
+        callManagerCaller = CallManager()
+        callManagerCaller?.delegate = delegateCaller
+        expect(callManagerCaller).toNot(beNil())
+
+        callManagerCallee = CallManager()
+        callManagerCallee?.delegate = delegateCallee
+        expect(callManagerCallee).toNot(beNil())
+
+        delegateCaller.expectedValue = 1111
+        delegateCallee.expectedValue = 2222
+
+        do {
+            Logger.debug("Test: Invoking call()...")
+
+            // Define some CallData for simulation. This is defined in a block
+            // so that we validate that it is retained correctly and accessible
+            // outside this block.
+            let call = OpaqueCallData(value: delegateCaller.expectedValue)
+
+            try callManagerCaller?.placeCall(call: call)
+        } catch {
+            XCTFail("Call Manager call() failed: \(error)")
+            return
+        }
+
+        expect(delegateCaller.startOutgoingCallInvoked).toEventually(equal(true), timeout: 1)
+        delegateCaller.startOutgoingCallInvoked = false
+
+        // For now, these variables will be common to both Call Managers.
+        let iceServers = [RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"])]
+        let useTurnOnly = false
+        let deviceList: [UInt32] = [1]
+
+        let callId = delegateCaller.recentCallId
+
+        do {
+            Logger.debug("Test: Invoking proceed()...")
+            _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, deviceList: deviceList)
+        } catch {
+            XCTFail("Call Manager proceed() failed: \(error)")
+            return
+        }
+
+        // Wait for the offer.
+        expect(delegateCaller.shouldSendOfferInvoked).toEventually(equal(true), timeout: 1)
+
+        // Wait for the initial set of ICE candidates.
+        expect(delegateCaller.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
+
+        // We have an Offer and ICE candidates. Simulate them coming in rapid
+        // succession, to ensure that the Offer is handled and the ICE candidates
+        // aren't dropped.
+        let sourceDevice: UInt32 = 1
+
+        do {
+            Logger.debug("Test: Invoking receivedOffer() and receivedIceCandidates()...")
+
+            // Define some CallData for simulation. This is defined in a block
+            // so that we validate that it is retained correctly and accessible
+            // outside this block.
+            let call = OpaqueCallData(value: delegateCallee.expectedValue)
+
+            // Inject current timestamp for now. We assume that Rust will also look
+            // at the system clock, but it may be nice to hook that up also to some
+            // value injection mechanism.
+            let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
+
+            try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: delegateCaller.sentOffer, timestamp: timestamp)
+            try callManagerCallee?.receivedIceCandidates(sourceDevice: sourceDevice, callId: callId, candidates: delegateCaller.sentIceCandidates)
+        } catch {
+            XCTFail("Call Manager receivedOffer() failed: \(error)")
+            return
+        }
+
+        // Continue on with the call to see it get a connection.
+        expect(delegateCallee.startIncomingCallInvoked).toEventually(equal(true), timeout: 1)
+        delegateCallee.startIncomingCallInvoked = false
+
+        do {
+            Logger.debug("Test: Invoking proceed()...")
+            _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, deviceList: deviceList)
+        } catch {
+            XCTFail("Call Manager proceed() failed: \(error)")
+            return
+        }
+
+        expect(delegateCallee.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 2)
+        delegateCallee.shouldSendAnswerInvoked = false
+
+        expect(delegateCallee.recentCallId).to(equal(callId))
+
+        // We have an answer, so give it back to the caller.
+
+        do {
+            Logger.debug("Test: Invoking receivedAnswer()...")
+
+            try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, sdp: delegateCallee.sentAnswer)
+        } catch {
+            XCTFail("Call Manager receivedAnswer() failed: \(error)")
+            return
+        }
+
+        // Delay to see if we can catch all Ice candidates being sent...
+        delay(interval: 1.0)
+
+        // We've sent an answer, so we should see some Ice Candidates.
+        // We don't care how many though. No need to reset the flag.
+        expect(delegateCallee.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
+
+        // Give Ice candidates to one another.
+
+        do {
+            Logger.debug("Test: Invoking receivedIceCandidates()...")
+            try callManagerCaller?.receivedIceCandidates(sourceDevice: sourceDevice, callId: callId, candidates: delegateCallee.sentIceCandidates)
+        } catch {
+            XCTFail("Call Manager receivedIceCandidates() failed: \(error)")
+            return
+        }
+
+        // We should get to the ringing state in each client.
+        expect(delegateCaller.shouldStartRingingRemote).toEventually(equal(true), timeout: 5)
+        expect(delegateCallee.shouldStartRingingLocal).toEventually(equal(true), timeout: 1)
+
+        delay(interval: 1.0)
+        
         // Release the Call Managers.
         callManagerCaller = nil
         callManagerCallee = nil
