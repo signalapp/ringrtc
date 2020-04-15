@@ -59,9 +59,11 @@ PHONY += clean
 clean:
 	$(Q) ./bin/build-aar --clean
 	$(Q) ./bin/build-ios --clean
+	$(Q) rm -rf ./src/webrtc/src/out
 
 PHONY += distclean
 distclean:
 	$(Q) rm -rf ./out
+	$(Q) rm -rf ./src/webrtc/src/out
 
 .PHONY: $(PHONY)
