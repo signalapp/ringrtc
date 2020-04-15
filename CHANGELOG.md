@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.1
+
+- Fix issue preventing some calls from ringing
+
 ## v1.3.0
 
 - Update build documentation
