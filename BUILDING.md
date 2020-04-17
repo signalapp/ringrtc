@@ -20,10 +20,10 @@ Install rustup, the Rust management system:
 
     curl https://sh.rustup.rs -sSf | sh
 
-(Optional) Install additional rustup components:
+We need to use Rust 1.41.1 for now to maintain support for 32-bit clients.
 
-    rustup component add clippy
-    rustup toolchain install nightly
+    rustup toolchain install 1.41.1
+    rustup default 1.41.1
 
 #### Android
 
@@ -117,7 +117,10 @@ Dynamic symbol files are also available in the `out/` directory for each framewo
 
 ## Working with the Code
 
-We use `rustfmt` to keep the rust code tidy.  In the `src/rust`
-directory, run the `format-code` script to format the code:
+We use `rustfmt` to keep the rust code tidy. To install:
+
+    rustup toolchain install nightly-2020-03-15 --force
+
+To format the code, in the `src/rust` directory, run the `format-code` script:
 
     ./scripts/format-code
