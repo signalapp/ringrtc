@@ -18,6 +18,7 @@ import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
+import org.webrtc.SoftwareVideoEncoderFactory;
 import org.webrtc.EglBase;
 import org.webrtc.IceCandidate;
 import org.webrtc.Logging.Severity;
@@ -33,6 +34,8 @@ import org.webrtc.VideoEncoderFactory;
 import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 
 /**
@@ -798,8 +801,40 @@ public class CallManager {
       this.hideIp         = hideIp;
       this.certificate    = certificate;
 
-      VideoEncoderFactory encoderFactory = new DefaultVideoEncoderFactory(eglBase.getEglBaseContext(),
-                                                                          true, true);
+      Set<String> HARDWARE_ENCODING_BLACKLIST = new HashSet<String>() {{
+         // Samsung S6 with Exynos 7420 SoC
+         add("SM-G920F");
+         add("SM-G920FD");
+         add("SM-G920FQ");
+         add("SM-G920I");
+         add("SM-G920A");
+         add("SM-G920T");
+
+         // Samsung S7 with Exynos 8890 SoC
+         add("SM-G930F");
+         add("SM-G930FD");
+         add("SM-G930W8");
+         add("SM-G930S");
+         add("SM-G930K");
+         add("SM-G930L");
+
+         // Samsung S7 Edge with Exynos 8890 SoC
+         add("SM-G935F");
+         add("SM-G935FD");
+         add("SM-G935W8");
+         add("SM-G935S");
+         add("SM-G935K");
+         add("SM-G935L");
+      }};
+
+      VideoEncoderFactory encoderFactory;
+
+      if (HARDWARE_ENCODING_BLACKLIST.contains(Build.MODEL)) {
+        encoderFactory = new SoftwareVideoEncoderFactory();
+      } else {
+        encoderFactory = new DefaultVideoEncoderFactory(eglBase.getEglBaseContext(), true, true);
+      }
+
       VideoDecoderFactory decoderFactory = new DefaultVideoDecoderFactory(eglBase.getEglBaseContext());
 
       this.peerConnectionFactory = PeerConnectionFactory.builder()
