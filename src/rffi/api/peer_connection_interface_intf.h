@@ -47,6 +47,10 @@ Rust_setRemoteDescription(webrtc::PeerConnectionInterface*                 pc_in
                           webrtc::rffi::SetSessionDescriptionObserverRffi* ssd_observer,
                           webrtc::SessionDescriptionInterface*             description);
 
+RUSTEXPORT void
+Rust_setOutgoingAudioEnabled(webrtc::PeerConnectionInterface* pc_interface,
+                             bool                             enabled);
+
 /*
  * NOTE: The object created with Rust_createDataChannel() must be
  * freed using Rust_releaseRef().

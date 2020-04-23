@@ -179,6 +179,13 @@ fn connect_inbound_call() -> TestContext {
     assert_eq!(context.event_count(ApplicationEvent::LocalRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert_eq!(
+        false,
+        active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled(),
+    );
 
     info!("test: add media stream");
     active_connection
@@ -202,6 +209,13 @@ fn connect_inbound_call() -> TestContext {
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert_eq!(
+        true,
+        active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled(),
+    );
 
     context
 }

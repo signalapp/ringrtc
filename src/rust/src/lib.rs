@@ -99,7 +99,7 @@ pub mod webrtc {
         pub mod sdp_observer;
     }
     #[cfg(feature = "sim")]
-    mod sim {
+    pub mod sim {
         pub mod data_channel;
         pub mod data_channel_observer;
         pub mod ice_gatherer;

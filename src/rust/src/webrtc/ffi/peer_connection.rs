@@ -53,6 +53,11 @@ extern "C" {
         desc: *const RffiSessionDescriptionInterface,
     );
 
+    pub fn Rust_setOutgoingAudioEnabled(
+        pc_interface: *const RffiPeerConnectionInterface,
+        enabled: bool,
+    );
+
     pub fn Rust_createDataChannel(
         pc_interface: *const RffiPeerConnectionInterface,
         label: *const c_char,

@@ -196,9 +196,10 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
     jni_answer: JString,
     remote_supports_multi_ring: jboolean,
 ) {
-    let remote_feature_level = match remote_supports_multi_ring == jni::sys::JNI_TRUE {
-        true => FeatureLevel::MultiRing,
-        false => FeatureLevel::Unspecified,
+    let remote_feature_level = if remote_supports_multi_ring == jni::sys::JNI_TRUE {
+        FeatureLevel::MultiRing
+    } else {
+        FeatureLevel::Unspecified
     };
 
     match call_manager::received_answer(
@@ -231,9 +232,10 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     remote_supports_multi_ring: jboolean,
     jni_is_local_device_primary: jboolean,
 ) {
-    let remote_feature_level = match remote_supports_multi_ring == jni::sys::JNI_TRUE {
-        true => FeatureLevel::MultiRing,
-        false => FeatureLevel::Unspecified,
+    let remote_feature_level = if remote_supports_multi_ring == jni::sys::JNI_TRUE {
+        FeatureLevel::MultiRing
+    } else {
+        FeatureLevel::Unspecified
     };
 
     match call_manager::received_offer(

@@ -94,6 +94,25 @@ Rust_setRemoteDescription(PeerConnectionInterface*           pc_interface,
   pc_interface->SetRemoteDescription(ssd_observer, description);
 }
 
+RUSTEXPORT void
+Rust_setOutgoingAudioEnabled(PeerConnectionInterface* pc_interface,
+                             bool                     enabled) {
+  // Note: calling SetAudioRecording(enabled) is deprecated and it's not clear
+  // that it even does anything any more.
+  int encodings_changed = 0;
+  for (auto& sender : pc_interface->GetSenders()) {
+    if (sender->media_type() == cricket::MediaType::MEDIA_TYPE_AUDIO) {
+      RtpParameters parameters = sender->GetParameters();
+      for (auto& encoding: parameters.encodings) {
+        encoding.active = enabled;
+        encodings_changed++;
+      }
+      sender->SetParameters(parameters);
+    }
+  }
+  RTC_LOG(LS_INFO) << "Rust_setOutgoingAudioEnabled(" << enabled << ") for " << encodings_changed << " audio encodings.";
+}
+
 RUSTEXPORT DataChannelInterface*
 Rust_createDataChannel(PeerConnectionInterface*   pc_interface,
                        const char*                label,

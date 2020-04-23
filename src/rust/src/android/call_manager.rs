@@ -246,6 +246,7 @@ pub fn received_answer(
 }
 
 /// Application notification of received SDP offer message
+#[allow(clippy::too_many_arguments)]
 pub fn received_offer(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,

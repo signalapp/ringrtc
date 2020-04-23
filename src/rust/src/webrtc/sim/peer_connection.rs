@@ -8,7 +8,9 @@
 //! WebRTC Simulation Peer Connection Interface
 
 use std::os::raw::c_char;
+use std::sync::{Arc, Mutex};
 
+use crate::core::platform::PlatformItem;
 use crate::webrtc::data_channel::RffiDataChannelInit;
 use crate::webrtc::sim::ice_gatherer::{RffiIceGathererInterface, FAKE_ICE_GATHERER};
 
@@ -19,7 +21,53 @@ use crate::webrtc::sdp_observer::{
 };
 
 /// Simulation type for PeerConnectionInterface.
-pub type RffiPeerConnectionInterface = u32;
+#[derive(Clone)]
+pub struct RffiPeerConnectionInterface {
+    state: Arc<Mutex<RffiPeerConnectionState>>,
+}
+
+impl PlatformItem for RffiPeerConnectionInterface {}
+
+impl RffiPeerConnectionInterface {
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(RffiPeerConnectionState {
+                local_description_set:  false,
+                remote_description_set: false,
+                outgoing_audio_enabled: true,
+            })),
+        }
+    }
+
+    fn set_local_description(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.local_description_set = true;
+    }
+
+    fn set_remote_description(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.remote_description_set = true;
+    }
+
+    fn set_outgoing_audio_enabled(&self, enabled: bool) {
+        let mut state = self.state.lock().unwrap();
+        if !(state.local_description_set && state.remote_description_set) {
+            panic!("Can't Rust_setOutgoingAudioEnabled if you haven't received an answer yet.");
+        }
+        state.outgoing_audio_enabled = enabled;
+    }
+
+    pub fn outgoing_audio_enabled(&self) -> bool {
+        let state = self.state.lock().unwrap();
+        state.outgoing_audio_enabled
+    }
+}
+
+struct RffiPeerConnectionState {
+    local_description_set:  bool,
+    remote_description_set: bool,
+    outgoing_audio_enabled: bool,
+}
 
 /// Simulation type for DataChannelInterface.
 pub type RffiDataChannelInterface = u32;
@@ -36,11 +84,12 @@ pub unsafe fn Rust_createOffer(
 
 #[allow(non_snake_case)]
 pub unsafe fn Rust_setLocalDescription(
-    _pc_interface: *const RffiPeerConnectionInterface,
+    pc_interface: *const RffiPeerConnectionInterface,
     _ssd_observer: *const RffiSetSessionDescriptionObserver,
     _desc: *const RffiSessionDescriptionInterface,
 ) {
     info!("Rust_setLocalDescription():");
+    (*pc_interface).set_local_description();
 }
 
 #[allow(non_snake_case)]
@@ -53,11 +102,21 @@ pub unsafe fn Rust_createAnswer(
 
 #[allow(non_snake_case)]
 pub unsafe fn Rust_setRemoteDescription(
-    _pc_interface: *const RffiPeerConnectionInterface,
+    pc_interface: *const RffiPeerConnectionInterface,
     _ssd_observer: *const RffiSetSessionDescriptionObserver,
     _desc: *const RffiSessionDescriptionInterface,
 ) {
     info!("Rust_setRemoteDescription():");
+    (*pc_interface).set_remote_description();
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn Rust_setOutgoingAudioEnabled(
+    pc_interface: *const RffiPeerConnectionInterface,
+    enabled: bool,
+) {
+    info!("Rust_setOutgoingAudioEnabled({})", enabled);
+    (*pc_interface).set_outgoing_audio_enabled(enabled);
 }
 
 #[allow(non_snake_case)]

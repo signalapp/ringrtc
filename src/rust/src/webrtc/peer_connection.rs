@@ -125,6 +125,18 @@ impl PeerConnection {
         };
     }
 
+    /// Does something like:
+    /// let sender = pc.get_audio_sender();
+    /// sender.set_parameters({active: enabled});
+    /// Which disables/enables the sending of any audio.
+    /// Must be called *after* the answer has been set via
+    /// set_remote_description or set_local_description.
+    pub fn set_outgoing_audio_enabled(&self, enabled: bool) {
+        unsafe {
+            pc::Rust_setOutgoingAudioEnabled(self.rffi_pc_interface, enabled);
+        }
+    }
+
     /// Rust wrapper around C++ PeerConnectionInterface::AddIceCandidate().
     pub fn add_ice_candidate(&self, candidate: &IceCandidate) -> Result<()> {
         let clone = candidate.clone();

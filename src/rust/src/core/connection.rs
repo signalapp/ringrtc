@@ -416,6 +416,9 @@ where
     pub fn set_state(&self, new_state: ConnectionState) -> Result<()> {
         let mut state = self.state.lock()?;
         *state = new_state;
+        if new_state == ConnectionState::CallConnected {
+            self.set_outgoing_audio_enabled(true)?;
+        }
         Ok(())
     }
 
@@ -493,6 +496,12 @@ where
             )
             .into()),
         }
+    }
+
+    // Only for tests
+    pub fn app_connection_ptr_for_tests(&self) -> *const <T as Platform>::AppConnection {
+        let webrtc = self.webrtc.lock().unwrap();
+        webrtc.app_connection.as_ref().unwrap()
     }
 
     /// Returns `true` if the call is terminating.
@@ -621,6 +630,7 @@ where
     pub fn handle_answer(&mut self, answer: String) -> Result<()> {
         let desc = SessionDescriptionInterface::create_sdp_answer(answer)?;
         self.set_remote_description(&desc)?;
+        self.set_outgoing_audio_enabled(false)?;
         self.inject_have_local_remote_sdp()
     }
 
@@ -635,10 +645,17 @@ where
         let answer_string = answer.get_description()?;
 
         self.set_local_description(&answer)?;
+        self.set_outgoing_audio_enabled(false)?;
         self.inject_have_local_remote_sdp()?;
 
         let call = self.call()?;
         call.send_answer(self.clone(), answer_string)
+    }
+
+    pub fn set_outgoing_audio_enabled(&self, enabled: bool) -> Result<()> {
+        let webrtc = self.webrtc.lock()?;
+        webrtc.pc_interface()?.set_outgoing_audio_enabled(enabled);
+        Ok(())
     }
 
     /// Buffer local ICE candidates.

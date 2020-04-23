@@ -887,6 +887,13 @@ fn outbound_multiple_remote_devices(enable_forking: bool) {
         "test:active_remote:{}: injecting call connected",
         active_remote
     );
+    assert_eq!(
+        false,
+        active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled(),
+    );
     active_connection
         .inject_remote_connected(active_call.call_id())
         .expect(error_line!());
@@ -900,6 +907,13 @@ fn outbound_multiple_remote_devices(enable_forking: bool) {
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Connected
+    );
+    assert_eq!(
+        true,
+        active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled(),
     );
 
     assert_eq!(context.event_count(ApplicationEvent::RemoteConnected), 1);

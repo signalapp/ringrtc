@@ -33,6 +33,7 @@ use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media_stream::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
+use crate::webrtc::sim::peer_connection::RffiPeerConnectionInterface;
 
 /// Simulation implmentation for platform::Platform::{AppMediaStream,
 /// AppRemotePeer, AppCallContext}
@@ -106,7 +107,7 @@ impl Drop for SimPlatform {
 impl Platform for SimPlatform {
     type AppMediaStream = SimPlatformItem;
     type AppRemotePeer = SimPlatformItem;
-    type AppConnection = SimPlatformItem;
+    type AppConnection = RffiPeerConnectionInterface;
     type AppCallContext = SimPlatformItem;
 
     fn create_connection(
@@ -119,13 +120,12 @@ impl Platform for SimPlatform {
 
         info!("create_connection(): {}", connection_id);
 
-        let connection = Connection::new(call.clone(), remote_device, forking_type).unwrap();
-        connection
-            .set_app_connection("Simulation".to_owned())
-            .unwrap();
+        let fake_pc = RffiPeerConnectionInterface::new();
 
-        let fake_pc_interface: u32 = 1;
-        let pc_interface = PeerConnection::new(&fake_pc_interface);
+        let connection = Connection::new(call.clone(), remote_device, forking_type).unwrap();
+        connection.set_app_connection(fake_pc).unwrap();
+
+        let pc_interface = PeerConnection::new(connection.app_connection_ptr_for_tests());
 
         if let CallDirection::OutGoing = connection.direction() {
             // Create data channel observer and data channel
