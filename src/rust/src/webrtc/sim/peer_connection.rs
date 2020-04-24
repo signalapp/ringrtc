@@ -26,6 +26,12 @@ pub struct RffiPeerConnectionInterface {
     state: Arc<Mutex<RffiPeerConnectionState>>,
 }
 
+impl Default for RffiPeerConnectionInterface {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlatformItem for RffiPeerConnectionInterface {}
 
 impl RffiPeerConnectionInterface {
@@ -74,7 +80,7 @@ pub type RffiDataChannelInterface = u32;
 
 static FAKE_DC_INTERFACE: u32 = 9;
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createOffer(
     _pc_interface: *const RffiPeerConnectionInterface,
     _csd_observer: *const RffiCreateSessionDescriptionObserver,
@@ -82,7 +88,7 @@ pub unsafe fn Rust_createOffer(
     info!("Rust_createOffer():");
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setLocalDescription(
     pc_interface: *const RffiPeerConnectionInterface,
     _ssd_observer: *const RffiSetSessionDescriptionObserver,
@@ -92,7 +98,7 @@ pub unsafe fn Rust_setLocalDescription(
     (*pc_interface).set_local_description();
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createAnswer(
     _pc_interface: *const RffiPeerConnectionInterface,
     _csd_observer: *const RffiCreateSessionDescriptionObserver,
@@ -100,7 +106,7 @@ pub unsafe fn Rust_createAnswer(
     info!("Rust_createAnswer():");
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setRemoteDescription(
     pc_interface: *const RffiPeerConnectionInterface,
     _ssd_observer: *const RffiSetSessionDescriptionObserver,
@@ -110,7 +116,7 @@ pub unsafe fn Rust_setRemoteDescription(
     (*pc_interface).set_remote_description();
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setOutgoingAudioEnabled(
     pc_interface: *const RffiPeerConnectionInterface,
     enabled: bool,
@@ -119,7 +125,7 @@ pub unsafe fn Rust_setOutgoingAudioEnabled(
     (*pc_interface).set_outgoing_audio_enabled(enabled);
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createDataChannel(
     _pc_interface: *const RffiPeerConnectionInterface,
     _label: *const c_char,
@@ -129,7 +135,7 @@ pub unsafe fn Rust_createDataChannel(
     &FAKE_DC_INTERFACE
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_addIceCandidate(
     _pc_interface: *const RffiPeerConnectionInterface,
     _sdp_mid: *const c_char,
@@ -140,7 +146,7 @@ pub unsafe fn Rust_addIceCandidate(
     true
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createSharedIceGatherer(
     _pc_interface: *const RffiPeerConnectionInterface,
 ) -> *const RffiIceGathererInterface {
@@ -148,7 +154,7 @@ pub unsafe fn Rust_createSharedIceGatherer(
     &FAKE_ICE_GATHERER
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_useSharedIceGatherer(
     _pc_interface: *const RffiPeerConnectionInterface,
     _ice_gatherer: *const RffiIceGathererInterface,

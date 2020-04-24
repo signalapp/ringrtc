@@ -14,7 +14,7 @@ pub type RffiPeerConnectionObserverInterface = u32;
 
 static FAKE_OBSERVER: u32 = 7;
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createPeerConnectionObserver(
     _cc_ptr: RustObject,
     _pc_observer_cb: CppObject,

@@ -14,7 +14,7 @@ pub type RffiDataChannelObserverInterface = u32;
 
 static FAKE_OBSERVER: u32 = 5;
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createDataChannelObserver(
     _call_connection: RustObject,
     _dc_observer_cb: CppObject,

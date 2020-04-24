@@ -16,7 +16,7 @@ use libc::{size_t, strdup};
 use crate::webrtc::data_channel_observer::RffiDataChannelObserverInterface;
 use crate::webrtc::peer_connection::RffiDataChannelInterface;
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_dataChannelSend(
     _dc_interface: *const RffiDataChannelInterface,
     _buffer: *const u8,
@@ -27,7 +27,7 @@ pub unsafe fn Rust_dataChannelSend(
     true
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_registerDataChannelObserver(
     _dc_interface: *const RffiDataChannelInterface,
     _dc_observer: *const RffiDataChannelObserverInterface,
@@ -35,7 +35,7 @@ pub unsafe fn Rust_registerDataChannelObserver(
     info!("Rust_registerDataChannelObserver(): ");
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_unregisterDataChannelObserver(
     _dc_interface: *const RffiDataChannelInterface,
     _dc_observer: *const RffiDataChannelObserverInterface,
@@ -43,7 +43,7 @@ pub unsafe fn Rust_unregisterDataChannelObserver(
     info!("Rust_unregisterDataChannelObserver(): ");
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_dataChannelGetLabel(
     _dc_interface: *const RffiDataChannelInterface,
 ) -> *const c_char {

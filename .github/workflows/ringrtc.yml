@@ -12,6 +12,8 @@ jobs:
       run: rustup toolchain install nightly-2020-03-15
     - name: Install nightly rustfmt
       run: rustup component add rustfmt --toolchain nightly-2020-03-15
+    - name: Show rust versions
+      run: rustup show
     - name: Check code format
       run: |
         cd src/rust

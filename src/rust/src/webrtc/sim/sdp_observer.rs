@@ -38,7 +38,7 @@ pub type RffiSetSessionDescriptionObserver = u32;
 
 static FAKE_SSD_OBSERVER: u32 = 15;
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createSetSessionDescriptionObserver(
     ssd_observer: RustObject,
     ssd_observer_cb: *const c_void,
@@ -52,7 +52,7 @@ pub unsafe fn Rust_createSetSessionDescriptionObserver(
     &FAKE_SSD_OBSERVER
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createCreateSessionDescriptionObserver(
     csd_observer: RustObject,
     csd_observer_cb: *const c_void,
@@ -69,7 +69,7 @@ pub unsafe fn Rust_createCreateSessionDescriptionObserver(
     &FAKE_CSD_OBSERVER
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_getOfferDescription(
     offer: *const RffiSessionDescriptionInterface,
 ) -> *const c_char {
@@ -80,7 +80,7 @@ pub unsafe fn Rust_getOfferDescription(
     }
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createSessionDescriptionAnswer(
     _description: *const c_char,
 ) -> *const RffiSessionDescriptionInterface {
@@ -88,7 +88,7 @@ pub unsafe fn Rust_createSessionDescriptionAnswer(
     &FAKE_SDP_ANSWER
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createSessionDescriptionOffer(
     _description: *const c_char,
 ) -> *const RffiSessionDescriptionInterface {
