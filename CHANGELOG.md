@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.0
+
+- Add Multi-Ring feature
+
+- Android: Fix video encoder crash on some devices
+
+- Update build documentation
+
+- Update Rust dependencies
+
 ## v1.3.1
 
 - Fix issue preventing some calls from ringing
