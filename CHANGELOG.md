@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.2
+
+- Reference signalapp/webrtc@4044c, improves connectivity and cherry picked updates
+
 ## v1.3.1
 
 - Fix issue preventing some calls from ringing
