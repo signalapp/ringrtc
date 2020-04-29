@@ -2,8 +2,14 @@
 
 ## v2.0.1
 
-- Reference signalapp/webrtc@4044b, which fixes a call forking bug
-and uses PORTALLOCATOR_ENABLE_ANY_ADDRESS_PORTS.
+- Reference signalapp/webrtc@4044c
+  - Fixes a call forking bug
+  - Improves connectivity using PORTALLOCATOR_ENABLE_ANY_ADDRESS_PORTS
+  - Cherry picked updates from WebRTC
+
+- Disable TURN port pruning
+
+- Fix glare handling before connection
 
 ## v2.0.0
 
