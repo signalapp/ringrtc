@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.1
+
+- Reference signalapp/webrtc@4044b, which fixes a call forking bug
+and uses PORTALLOCATOR_ENABLE_ANY_ADDRESS_PORTS.
+
 ## v2.0.0
 
 - Add Multi-Ring feature
