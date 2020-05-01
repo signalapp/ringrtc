@@ -966,7 +966,56 @@ fn outbound_multiple_call_managers() {
 
 // Two users call each other at the same time
 #[test]
-fn glare() {
+fn glare_before_connect() {
+    test_init();
+
+    let context = start_outbound_call();
+    let mut cm = context.cm();
+
+    // Create incoming call with same remote
+
+    let remote_peer = {
+        let active_call = context.active_call();
+        let remote_peer = active_call.remote_peer().expect(error_line!());
+        remote_peer.to_owned()
+    };
+    info!("active remote_peer: {}", remote_peer);
+
+    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    cm.received_offer(
+        remote_peer,
+        connection_id,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect(error_line!())
+                .as_millis() as u64,
+            CallMediaType::Audio,
+            FeatureLevel::MultiRing,
+            true,
+        ),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    // glare case should send a busy to the new caller and conclude
+    // the current call.  So two conclude call events.
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedReceivedOfferWhileActive),
+        1
+    );
+    assert_eq!(context.busys_sent(), 1);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.call_concluded_count(), 2);
+}
+
+// Two users call each other at the same time
+#[test]
+fn glare_after_connect() {
     test_init();
 
     let context = connect_outbound_call();

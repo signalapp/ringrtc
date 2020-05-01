@@ -1240,25 +1240,51 @@ where
         self.send_next_message(Some(message_item))
     }
 
-    /// If the active_remote_peer equals this remote peer, then we
-    /// have glare, i.e. two users are trying to call each other at
-    /// the same time. They must have the same device_id as well.
+    /// If the remote peer of the active call equals the remote peer
+    /// of an incoming offer, then we might have a glare situation.
+    ///
+    /// - If there is no active device id, this is glare since the
+    ///   peers are calling each other at the same time and still in
+    ///   the session setup, including the ringing state.
+    /// - If there is an active device id and it equals the device id
+    ///   of the incoming offer, this is an invalid state and will
+    ///   be treated as glare (two devices can't be in more than one
+    ///   call with one-another at the same time).
+    /// - If there is an active device id and it is different than the
+    ///   device id of the incoming offer, this is a valid state and
+    ///   will be allowed. In this case, the caller might be calling
+    ///   from one of their other devices. The incoming call will get
+    ///   a busy but here we ensure that the active call isn't ended.
+    ///
+    /// If glare is detected, the active call will be concluded. It is
+    /// assumed that a busy message would have already been sent to
+    /// reject the incoming offer.
     fn check_for_glare(
         &mut self,
         remote_peer: &<T as Platform>::AppRemotePeer,
         remote_device_id: DeviceId,
     ) -> Result<()> {
         if let Ok(active_call) = self.active_call() {
+            info!("check_for_glare(): active call detected");
             if self.remote_peer_equals_active(&active_call, remote_peer) {
+                info!("check_for_glare(): remote peers match");
                 if let Ok(active_device_id) = active_call.active_device_id() {
+                    info!("check_for_glare(): active device exists");
                     if remote_device_id == active_device_id {
-                        info!("check_for_glare(): remotes are equal, hanging up.");
+                        info!("check_for_glare(): peer device matches, hangup active call");
                         return self.handle_conclude_active_call(
                             active_call,
                             true,
                             ApplicationEvent::EndedRemoteGlare,
                         );
                     }
+                } else {
+                    info!("check_for_glare(): no active device, hangup active call");
+                    return self.handle_conclude_active_call(
+                        active_call,
+                        true,
+                        ApplicationEvent::EndedRemoteGlare,
+                    );
                 }
             }
         }
