@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.2
+
+- Reference signalapp/webrtc@4044d
+
 ## v2.0.1
 
 - Reference signalapp/webrtc@4044c
