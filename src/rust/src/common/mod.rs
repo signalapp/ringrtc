@@ -9,8 +9,6 @@
 
 use std::fmt;
 
-use rand;
-
 /// Common Result type, using `failure::Error` for Error.
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
