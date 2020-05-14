@@ -18,7 +18,7 @@ The following is derived from the depot_tools tutorial: https://commondatastorag
 
 Install rustup, the Rust management system:
 
-    curl https://sh.rustup.rs -sSf | sh
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 We need to use Rust 1.41.1 for now to maintain support for 32-bit clients.
 
@@ -52,16 +52,15 @@ is also assumed. You may also need the following (on Ubuntu):
 
     sudo apt install libglib2.0-dev
 
-
 ### Other iOS Dependencies
 
-    xcode-select --install
+You might need to change the location of the build tools (this depends on where Xcode is installed):
+
+    sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+
+You may also need coreutils if not yet installed:
+
     brew install coreutils
-
-After the initial checkout (described below), you will need to install Bundle dependencies at least once:
-
-    cd src/ios/SignalRingRTC
-    bundle install
 
 ## Initial Checkout
 
@@ -116,6 +115,24 @@ When the build is complete, the frameworks will be available here:
 Dynamic symbol files are also available in the `out/` directory for each framework.
 
 ## Working with the Code
+
+### Rebuilding
+
+To re-build, do the following:
+
+    make distclean
+    make <android|ios>
+
+### iOS Testing
+
+To run tests for iOS, you can use the SignalRingRTC project. You might need to install
+the dependencies, at least once:
+
+    cd src/ios/SignalRingRTC
+    bundle install
+    bundle exec pod install
+
+### Formatting
 
 We use `rustfmt` to keep the rust code tidy. To install:
 
