@@ -33,6 +33,7 @@ import org.webrtc.VideoDecoderFactory;
 import org.webrtc.VideoEncoderFactory;
 import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
+import org.webrtc.VideoSink;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -183,7 +184,7 @@ public class CallManager {
    * @param callId          callId for the call
    * @param context         Call service context
    * @param eglBase         eglBase to use for this Call
-   * @param localRenderer   local camera renderer to use for this Call
+   * @param localSink       local video sink to use for this Call
    * @param remoteRenderer  remote camera renderer to use for this Call
    * @param camera          camera control to use for this Call
    * @param iceServers      list of ICE servers to use for this Call
@@ -199,7 +200,7 @@ public class CallManager {
   public void proceed(@NonNull CallId                         callId,
                       @NonNull Context                        context,
                       @NonNull EglBase                        eglBase,
-                      @NonNull SurfaceViewRenderer            localRenderer,
+                      @NonNull VideoSink		                  localSink,
                       @NonNull SurfaceViewRenderer            remoteRenderer,
                       @NonNull CameraControl                  camera,
                       @NonNull List<PeerConnection.IceServer> iceServers,
@@ -220,7 +221,7 @@ public class CallManager {
     CallContext callContext = new CallContext(callId,
                                               context,
                                               eglBase,
-                                              localRenderer,
+                                              localSink,
                                               remoteRenderer,
                                               camera,
                                               iceServers,
@@ -784,7 +785,7 @@ public class CallManager {
     public CallContext(@NonNull CallId                         callId,
                        @NonNull Context                        context,
                        @NonNull EglBase                        eglBase,
-                       @NonNull SurfaceViewRenderer            localRenderer,
+                       @NonNull VideoSink                      localSink,
                        @NonNull SurfaceViewRenderer            remoteRenderer,
                        @NonNull CameraControl                  camera,
                        @NonNull List<PeerConnection.IceServer> iceServers,
@@ -851,7 +852,7 @@ public class CallManager {
 
         // Connect camera as the local video source.
         cameraControl.initCapturer(videoSource.getCapturerObserver());
-        videoTrack.addSink(localRenderer);
+        videoTrack.addSink(localSink);
       } else {
         this.videoSource = null;
         this.videoTrack  = null;
