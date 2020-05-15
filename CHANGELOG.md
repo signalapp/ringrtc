@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.3
+
+- Android: Use video sink for remote video stream
+
 ## v2.0.2
 
 - Reference signalapp/webrtc@4044d
