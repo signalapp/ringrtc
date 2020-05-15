@@ -28,7 +28,6 @@ import org.webrtc.NativeLibraryLoader;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.RtcCertificatePem;
-import org.webrtc.SurfaceViewRenderer;
 import org.webrtc.VideoDecoderFactory;
 import org.webrtc.VideoEncoderFactory;
 import org.webrtc.VideoSource;
@@ -185,7 +184,7 @@ public class CallManager {
    * @param context         Call service context
    * @param eglBase         eglBase to use for this Call
    * @param localSink       local video sink to use for this Call
-   * @param remoteRenderer  remote camera renderer to use for this Call
+   * @param remoteSink      remote video sink to use for this Call
    * @param camera          camera control to use for this Call
    * @param iceServers      list of ICE servers to use for this Call
    * @param hideIp          if true hide caller's IP by using a TURN server
@@ -201,7 +200,7 @@ public class CallManager {
                       @NonNull Context                        context,
                       @NonNull EglBase                        eglBase,
                       @NonNull VideoSink		                  localSink,
-                      @NonNull SurfaceViewRenderer            remoteRenderer,
+                      @NonNull VideoSink                      remoteSink,
                       @NonNull CameraControl                  camera,
                       @NonNull List<PeerConnection.IceServer> iceServers,
                                boolean                        hideIp,
@@ -222,7 +221,7 @@ public class CallManager {
                                               context,
                                               eglBase,
                                               localSink,
-                                              remoteRenderer,
+                                              remoteSink,
                                               camera,
                                               iceServers,
                                               hideIp,
@@ -670,7 +669,7 @@ public class CallManager {
       Log.i(TAG, "onConnectMedia(): enabling videoTrack(0)");
       VideoTrack remoteVideoTrack = mediaStream.videoTracks.get(0);
       remoteVideoTrack.setEnabled(true);
-      remoteVideoTrack.addSink(callContext.remoteRenderer);
+      remoteVideoTrack.addSink(callContext.remoteSink);
     } else {
       Log.w(TAG, "onConnectMedia(): Media stream contains unexpected number of video tracks: " + mediaStream.videoTracks.size());
     }
@@ -771,7 +770,7 @@ public class CallManager {
     /** Connection factory */
     @NonNull  public final  PeerConnectionFactory          peerConnectionFactory;
     /** Remote camera surface renderer */
-    @NonNull  public final  SurfaceViewRenderer            remoteRenderer;
+    @NonNull  public final  VideoSink                      remoteSink;
     /** Camera controller */
     @NonNull  public final  CameraControl                  cameraControl;
     /** ICE server list */
@@ -786,7 +785,7 @@ public class CallManager {
                        @NonNull Context                        context,
                        @NonNull EglBase                        eglBase,
                        @NonNull VideoSink                      localSink,
-                       @NonNull SurfaceViewRenderer            remoteRenderer,
+                       @NonNull VideoSink                      remoteSink,
                        @NonNull CameraControl                  camera,
                        @NonNull List<PeerConnection.IceServer> iceServers,
                                 boolean                        hideIp,
@@ -795,7 +794,7 @@ public class CallManager {
       Log.i(TAG, "ctor(): " + callId);
 
       this.callId         = callId;
-      this.remoteRenderer = remoteRenderer;
+      this.remoteSink     = remoteSink;
       this.cameraControl  = camera;
       this.iceServers     = iceServers;
       this.hideIp         = hideIp;
