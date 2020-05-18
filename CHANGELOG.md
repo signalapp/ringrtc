@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.4
+
+- Reference signalapp/webrtc@4044d
+
 ## v1.3.3
 
 - Android: Fix video encoder crash on some devices
