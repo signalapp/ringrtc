@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.1.0
+
+- Implement native interface
+
+- Reference signalapp/webrtc@4044e
+
+- Minor API improvements (call, proceed, receivedOffer)
+
 ## v2.0.3
 
 - Android: Use video sink for remote video stream
