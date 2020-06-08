@@ -84,7 +84,7 @@ def ParseArgs():
                         help='''Additional GN flags, overriding anything set internally
                                 by this script.''')
     parser.add_argument('-j', '--jobs',
-                        default=8,
+                        default=32,
                         help='Number of parallel ninja jobs to run.')
     parser.add_argument('--gradle-dir',
                         required=True,

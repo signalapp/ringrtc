@@ -96,12 +96,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCall(
     call_manager: jlong,
     jni_remote: JObject,
     call_media_type: jint,
+    local_device: jint,
 ) {
     match call_manager::call(
         &env,
         call_manager as *mut AndroidCallManager,
         jni_remote,
         CallMediaType::from_i32(call_media_type),
+        local_device as DeviceId,
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -118,7 +120,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
     call_manager: jlong,
     call_id: jlong,
     jni_call_context: JObject,
-    local_device: jint,
     jni_remote_devices: JObject,
     jni_enable_forking: jboolean,
 ) {
@@ -127,7 +128,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
         call_manager as *mut AndroidCallManager,
         call_id,
         jni_call_context,
-        local_device as DeviceId,
         jni_remote_devices,
         jni_enable_forking == jni::sys::JNI_TRUE,
     ) {
@@ -227,8 +227,9 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     jni_remote: JObject,
     remote_device: jint,
     jni_offer: JString,
-    timestamp: jlong,
+    message_age_sec: jlong,
     call_media_type: jint,
+    local_device: jint,
     remote_supports_multi_ring: jboolean,
     jni_is_local_device_primary: jboolean,
 ) {
@@ -245,8 +246,9 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
         jni_remote,
         remote_device as DeviceId,
         jni_offer,
-        timestamp as u64,
+        message_age_sec as u64,
         CallMediaType::from_i32(call_media_type),
+        local_device as DeviceId,
         remote_feature_level,
         jni_is_local_device_primary == jni::sys::JNI_TRUE,
     ) {

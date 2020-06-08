@@ -161,19 +161,21 @@ public class CallManager {
    *
    * @param remote         remote side fo the call
    * @param callMediaType  used to specify origination as an audio or video call
+   * @param localDevice     the local deviceId of the client
    *
    * @throws CallException for native code failures
    *
    */
   public void call(         Remote        remote,
-                   @NonNull CallMediaType callMediaType)
+                   @NonNull CallMediaType callMediaType,
+                   @NonNull Integer       localDevice)
     throws CallException
   {
     checkCallManagerExists();
 
     Log.i(TAG, "call(): creating new call:");
 
-    ringrtcCall(nativeCallManager, remote, callMediaType.ordinal());
+    ringrtcCall(nativeCallManager, remote, callMediaType.ordinal(), localDevice);
   }
 
   /**
@@ -188,7 +190,6 @@ public class CallManager {
    * @param camera          camera control to use for this Call
    * @param iceServers      list of ICE servers to use for this Call
    * @param hideIp          if true hide caller's IP by using a TURN server
-   * @param localDevice     the local deviceId of the client
    * @param remoteDevices   list of remote deviceIds for this recipient
    * @param enableCamera    if true, enable the local camera video track when created
    * @param enableForking   if true, use one offer and set of local ICE candidates for all remote devices
@@ -204,7 +205,6 @@ public class CallManager {
                       @NonNull CameraControl                  camera,
                       @NonNull List<PeerConnection.IceServer> iceServers,
                                boolean                        hideIp,
-                      @NonNull Integer                        localDevice,
                       @NonNull List<Integer>                  remoteDevices,
                                boolean                        enableCamera,
                                boolean                        enableForking)
@@ -231,7 +231,6 @@ public class CallManager {
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
                    callContext,
-                   localDevice,
                    remoteDevices,
                    enableForking);
 
@@ -320,8 +319,9 @@ public class CallManager {
    * @param remote                   remote side fo the call
    * @param remoteDevice             deviceId of remote peer
    * @param offer                    text of the SDP offer
-   * @param timestamp                timestamp of when offer was sent, in milliseconds
+   * @param messageAgeSec            approximate age of the offer message, in seconds
    * @param callMediaType            the origination type for the call, audio or video
+   * @param localDevice              the local deviceId of the client
    * @param remoteSupportsMultiRing  if true, the remote device supports the multi-ring feature
    * @param isLocalDevicePrimary     if true, the local device is considered a primary device
    *
@@ -332,8 +332,9 @@ public class CallManager {
                             Remote        remote,
                             Integer       remoteDevice,
                             String        offer,
-                            Long          timestamp,
+                            Long          messageAgeSec,
                             CallMediaType callMediaType,
+                            Integer       localDevice,
                             boolean       remoteSupportsMultiRing,
                             boolean       isLocalDevicePrimary)
     throws CallException
@@ -347,8 +348,9 @@ public class CallManager {
                          remote,
                          remoteDevice.intValue(),
                          offer,
-                         timestamp.longValue(),
+                         messageAgeSec.longValue(),
                          callMediaType.ordinal(),
+                         localDevice,
                          remoteSupportsMultiRing,
                          isLocalDevicePrimary);
   }
@@ -702,9 +704,9 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void onStartCall(Remote remote, long callId, boolean isOutgoing) {
+  private void onStartCall(Remote remote, long callId, boolean isOutgoing, CallMediaType callMediaType) {
     Log.i(TAG, "onStartCall():");
-    observer.onStartCall(remote, new CallId(callId), Boolean.valueOf(isOutgoing));
+    observer.onStartCall(remote, new CallId(callId), Boolean.valueOf(isOutgoing), callMediaType);
   }
 
   @CalledByNative
@@ -1033,12 +1035,13 @@ public class CallManager {
      *
      * Notification to start a call
      *
-     * @param remote      remote peer of the call
-     * @param callId      callId for the call
-     * @param isOutgoing  true for an outgoing call, false for incoming
+     * @param remote         remote peer of the call
+     * @param callId         callId for the call
+     * @param isOutgoing     true for an outgoing call, false for incoming
+     * @param callMediaType  the origination type for the call, audio or video
      *
      */
-    void onStartCall(Remote remote, CallId callId, Boolean isOutgoing);
+    void onStartCall(Remote remote, CallId callId, Boolean isOutgoing, CallMediaType callMediaType);
 
     /**
      *
@@ -1163,14 +1166,13 @@ public class CallManager {
     throws CallException;
 
   private native
-    void ringrtcCall(long nativeCallManager, Remote remote, int callMediaType)
+    void ringrtcCall(long nativeCallManager, Remote remote, int callMediaType, int localDevice)
     throws CallException;
 
   private native
     void ringrtcProceed(long          nativeCallManager,
                         long          callId,
                         CallContext   callContext,
-                        int           localDevice,
                         List<Integer> remoteDevices,
                         boolean       enableForking)
     throws CallException;
@@ -1201,8 +1203,9 @@ public class CallManager {
                               Remote  remote,
                               int     remoteDevice,
                               String  offer,
-                              long    timestamp,
+                              long    messageAgeSec,
                               int     callMediaType,
+                              int     localDevice,
                               boolean remoteSupportsMultiRing,
                               boolean isLocalDevicePrimary)
     throws CallException;

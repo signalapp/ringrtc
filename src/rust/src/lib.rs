@@ -78,14 +78,26 @@ mod ios {
     mod logging;
 }
 
+#[cfg(feature = "electron")]
+pub mod electron;
+
+#[cfg(feature = "native")]
+pub mod native;
+
 /// Foreign Function Interface (FFI) to WebRTC C++ library.
 pub mod webrtc {
     pub mod data_channel;
     pub mod data_channel_observer;
     pub mod ice_candidate;
     pub mod ice_gatherer;
-    pub mod media_stream;
+    #[cfg(feature = "simnet")]
+    pub mod injectable_network;
+    #[cfg(feature = "native")]
+    pub mod logging;
+    pub mod media;
     pub mod peer_connection;
+    #[cfg(any(feature = "native", feature = "sim"))]
+    pub mod peer_connection_factory;
     pub mod peer_connection_observer;
     pub mod sdp_observer;
     #[cfg(not(feature = "sim"))]
@@ -93,7 +105,11 @@ pub mod webrtc {
         pub mod data_channel;
         pub mod data_channel_observer;
         pub mod ice_gatherer;
+        pub mod logging;
+        pub mod media;
         pub mod peer_connection;
+        #[cfg(feature = "native")]
+        pub mod peer_connection_factory;
         pub mod peer_connection_observer;
         pub mod ref_count;
         pub mod sdp_observer;
@@ -103,7 +119,9 @@ pub mod webrtc {
         pub mod data_channel;
         pub mod data_channel_observer;
         pub mod ice_gatherer;
+        pub mod media;
         pub mod peer_connection;
+        pub mod peer_connection_factory;
         pub mod peer_connection_observer;
         pub mod ref_count;
         pub mod sdp_observer;
@@ -114,4 +132,11 @@ pub mod webrtc {
 pub mod sim {
     pub mod error;
     pub mod sim_platform;
+}
+
+#[cfg(feature = "simnet")]
+pub mod simnet {
+    pub mod actor;
+    pub mod router;
+    pub mod units;
 }

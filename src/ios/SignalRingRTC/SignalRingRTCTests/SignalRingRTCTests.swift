@@ -112,7 +112,7 @@ final class TestDelegate: CallManagerDelegate {
     // main thread, we don't need any protection.
     var canSendICE = false
 
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldStartCall call: OpaqueCallData, callId: UInt64, isOutgoing: Bool) {
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldStartCall call: OpaqueCallData, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType) {
         Logger.debug("TestDelegate:shouldStartCall")
         generalInvocationDetected = true
 
@@ -144,7 +144,7 @@ final class TestDelegate: CallManagerDelegate {
 //                    // We will only call proceed if we haven't concluded the call.
 //                    if !callData.concluded {
                         do {
-                            _ = try callManager.proceed(callId: callId, iceServers: self.iceServers, hideIp: self.useTurnOnly, localDevice: self.localDevice, remoteDeviceList: self.deviceList, enableForking: false)
+                            _ = try callManager.proceed(callId: callId, iceServers: self.iceServers, hideIp: self.useTurnOnly, remoteDeviceList: self.deviceList, enableForking: false)
                         } catch {
                             XCTFail("\(error)")
                         }
@@ -629,6 +629,8 @@ class SignalRingRTCTests: XCTestCase {
         // with the given value:
         delegate.expectedValue = 1111
 
+        let localDevice: UInt32 = 1
+
         do {
             Logger.debug("Test: Invoking call()...")
 
@@ -637,7 +639,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.placeCall(call: call, callMediaType: .audioCall)
+            try callManager?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -649,13 +651,12 @@ class SignalRingRTCTests: XCTestCase {
         let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
         let useTurnOnly = false
         let deviceList: [UInt32] = [1]
-        let localDevice: UInt32 = 1
 
         var callId = delegate.recentCallId
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -732,6 +733,8 @@ class SignalRingRTCTests: XCTestCase {
         // with the given value:
         delegate.expectedValue = 1111
 
+        let localDevice: UInt32 = 1
+
         do {
             Logger.debug("Test: Invoking call()...")
 
@@ -740,7 +743,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.placeCall(call: call, callMediaType: .audioCall)
+            try callManager?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -752,7 +755,6 @@ class SignalRingRTCTests: XCTestCase {
         let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
         let useTurnOnly = false
         let deviceList: [UInt32] = [1]
-        let localDevice: UInt32 = 1
 
         let callId = delegate.recentCallId
 
@@ -761,7 +763,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -798,6 +800,7 @@ class SignalRingRTCTests: XCTestCase {
         delegate.expectedValue = 1111
 
         let callId: UInt64 = 1234
+        let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
 
         do {
@@ -808,12 +811,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            // Inject current timestamp for now. We assume that Rust will also look
-            // at the system clock, but it may be nice to hook that up also to some
-            // value injection mechanism.
-            let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -825,11 +823,10 @@ class SignalRingRTCTests: XCTestCase {
         let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
         let useTurnOnly = false
         let deviceList: [UInt32] = [1]
-        let localDevice: UInt32 = 1
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -892,6 +889,7 @@ class SignalRingRTCTests: XCTestCase {
         delegate.expectedValue = 1111
 
         let callId: UInt64 = 1234
+        let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
 
         do {
@@ -902,12 +900,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            // Inject current timestamp for now. We assume that Rust will also look
-            // at the system clock, but it may be nice to hook that up also to some
-            // value injection mechanism.
-            let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: false, isLocalDevicePrimary: false)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: false, isLocalDevicePrimary: false)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -935,6 +928,8 @@ class SignalRingRTCTests: XCTestCase {
         // with the given value:
         delegate.expectedValue = 1111
 
+        let localDevice: UInt32 = 1
+
         for _ in 1...5 {
             do {
                 Logger.debug("Test: Invoking call()...")
@@ -944,7 +939,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-                try callManager?.placeCall(call: call, callMediaType: .audioCall)
+                try callManager?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -983,6 +978,8 @@ class SignalRingRTCTests: XCTestCase {
         // with the given value:
         delegate.expectedValue = 1111
 
+        let localDevice: UInt32 = 1
+
         for _ in 1...5 {
             do {
                 Logger.debug("Test: Invoking call()...")
@@ -992,7 +989,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-                try callManager?.placeCall(call: call, callMediaType: .audioCall)
+                try callManager?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -1034,6 +1031,8 @@ class SignalRingRTCTests: XCTestCase {
         // with the given value:
         delegate.expectedValue = 1111
 
+        let localDevice: UInt32 = 1
+
         for _ in 1...1 {
             do {
                 Logger.debug("Test: Invoking call()...")
@@ -1043,7 +1042,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-                try callManager?.placeCall(call: call, callMediaType: .audioCall)
+                try callManager?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -1055,13 +1054,12 @@ class SignalRingRTCTests: XCTestCase {
             let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
             let useTurnOnly = false
             let deviceList: [UInt32] = [1]
-            let localDevice: UInt32 = 1
 
             let callId = delegate.recentCallId
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1109,6 +1107,8 @@ class SignalRingRTCTests: XCTestCase {
         // with the given value:
         delegate.expectedValue = 1111
 
+        let localDevice: UInt32 = 1
+
         for _ in 1...5 {
             do {
                 Logger.debug("Test: Invoking call()...")
@@ -1118,7 +1118,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-                try callManager?.placeCall(call: call, callMediaType: .audioCall)
+                try callManager?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -1130,13 +1130,12 @@ class SignalRingRTCTests: XCTestCase {
             let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
             let useTurnOnly = false
             let deviceList: [UInt32] = [1]
-            let localDevice: UInt32 = 1
 
             let callId = delegate.recentCallId
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1186,6 +1185,7 @@ class SignalRingRTCTests: XCTestCase {
         delegate.expectedValue = 1111
 
         let callId: UInt64 = 1234
+        let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
 
         // Setup to simulate proceed automatically.
@@ -1203,12 +1203,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            // Inject current timestamp for now. We assume that Rust will also look
-            // at the system clock, but it may be nice to hook that up also to some
-            // value injection mechanism.
-            let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1255,6 +1250,7 @@ class SignalRingRTCTests: XCTestCase {
         delegate.expectedValue = 1111
 
         let callId: UInt64 = 1234
+        let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
 
         // Setup to simulate proceed automatically.
@@ -1272,12 +1268,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            // Inject current timestamp for now. We assume that Rust will also look
-            // at the system clock, but it may be nice to hook that up also to some
-            // value injection mechanism.
-            let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1322,6 +1313,7 @@ class SignalRingRTCTests: XCTestCase {
         expect(callManagerCaller).toNot(beNil())
         delegateCaller.expectedValue = 12345
         let callerAddress: Int32 = 888888
+        let callerLocalDevice: UInt32 = 1
 
         let delegateCallee = TestDelegate()
         var callManagerCallee: CallManager<OpaqueCallData, TestDelegate>?
@@ -1330,6 +1322,7 @@ class SignalRingRTCTests: XCTestCase {
         expect(callManagerCallee).toNot(beNil())
         delegateCallee.expectedValue = 11111
         let calleeAddress: Int32 = 777777
+        let calleeLocalDevice: UInt32 = 1
 
         // Setup the automatic ICE flow for the call.
         delegateCaller.callManagerICE = [(callManagerCallee!, delegateCallee, 1)]
@@ -1342,7 +1335,6 @@ class SignalRingRTCTests: XCTestCase {
         let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
         let useTurnOnly = false
         let deviceList: [UInt32] = [1]  // Not used if forking is enabled.
-        let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
 
         for _ in 1...2 {
@@ -1360,7 +1352,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegateCaller.expectedValue, remote: calleeAddress)
 
-                try callManagerCaller?.placeCall(call: call, callMediaType: .audioCall)
+                try callManagerCaller?.placeCall(call: call, callMediaType: .audioCall, localDevice: callerLocalDevice)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -1374,7 +1366,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1392,12 +1384,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegateCallee.expectedValue, remote: callerAddress)
 
-                // Inject current timestamp for now. We assume that Rust will also look
-                // at the system clock, but it may be nice to hook that up also to some
-                // value injection mechanism.
-                let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
-                try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: delegateCaller.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -1414,7 +1401,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1503,6 +1490,9 @@ class SignalRingRTCTests: XCTestCase {
         delegateCaller.expectedValue = 1111
         delegateCallee.expectedValue = 2222
 
+        let callerLocalDevice: UInt32 = 1
+        let calleeLocalDevice: UInt32 = 1
+
         do {
             Logger.debug("Test: Invoking call()...")
 
@@ -1511,7 +1501,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegateCaller.expectedValue, remote: delegateCaller.expectedValue)
 
-            try callManagerCaller?.placeCall(call: call, callMediaType: .audioCall)
+            try callManagerCaller?.placeCall(call: call, callMediaType: .audioCall, localDevice: callerLocalDevice)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -1524,13 +1514,12 @@ class SignalRingRTCTests: XCTestCase {
         let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
         let useTurnOnly = false
         let deviceList: [UInt32] = [1]
-        let localDevice: UInt32 = 1
 
         let callId = delegateCaller.recentCallId
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+            _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -1555,13 +1544,8 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegateCallee.expectedValue, remote: delegateCallee.expectedValue)
 
-            // Inject current timestamp for now. We assume that Rust will also look
-            // at the system clock, but it may be nice to hook that up also to some
-            // value injection mechanism.
-            let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
             // Send the ICE candidates right after the offer.
-            try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: delegateCaller.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
             try callManagerCallee?.receivedIceCandidates(sourceDevice: sourceDevice, callId: callId, candidates: delegateCaller.sentIceCandidates)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
@@ -1574,7 +1558,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+            _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -1676,8 +1660,7 @@ class SignalRingRTCTests: XCTestCase {
         // A starts to call B.
         do {
             Logger.debug("Test: A calls B...")
-//            let callOutgoingAB = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
-            try callManagerA?.placeCall(call: callOutgoingAtoB, callMediaType: .audioCall)
+            try callManagerA?.placeCall(call: callOutgoingAtoB, callMediaType: .audioCall, localDevice: localDevice)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -1689,7 +1672,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerA?.proceed(callId: callIdAtoB, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+            _ = try callManagerA?.proceed(callId: callIdAtoB, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -1701,8 +1684,7 @@ class SignalRingRTCTests: XCTestCase {
         // B starts to call A.
         do {
             Logger.debug("Test:B calls A...")
-//            let callOutgoingBA = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
-            try callManagerB?.placeCall(call: callOutgoingBtoA, callMediaType: .audioCall)
+            try callManagerB?.placeCall(call: callOutgoingBtoA, callMediaType: .audioCall, localDevice: localDevice)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -1716,7 +1698,7 @@ class SignalRingRTCTests: XCTestCase {
             // Proceed on the B side.
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB?.proceed(callId: callIdBtoA, iceServers: iceServers, hideIp: useTurnOnly, localDevice: localDevice, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerB?.proceed(callId: callIdBtoA, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1729,9 +1711,7 @@ class SignalRingRTCTests: XCTestCase {
         // Give the offer from A to B.
         do {
             Logger.debug("Test: Invoking B.receivedOffer(A)...")
-//            let callIncomingAtoB = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
-            let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-            try callManagerB?.receivedOffer(call: callIncomingAtoB, sourceDevice: sourceDevice, callId: callIdAtoB, sdp: delegateA.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManagerB?.receivedOffer(call: callIncomingAtoB, sourceDevice: sourceDevice, callId: callIdAtoB, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1773,9 +1753,7 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from B to A.
             do {
                 Logger.debug("Test: Invoking A.receivedOffer(B)...")
-//                let callIncomingBtoA = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
-                let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-                try callManagerA?.receivedOffer(call: callIncomingBtoA, sourceDevice: sourceDevice, callId: callIdBtoA, sdp: delegateB.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerA?.receivedOffer(call: callIncomingBtoA, sourceDevice: sourceDevice, callId: callIdBtoA, sdp: delegateB.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -1939,18 +1917,17 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 let call = OpaqueCallData(value: busyCallee.delegate.expectedValue, remote: extraAddress)
-                try busyCallee.callManager.placeCall(call: call, callMediaType: .audioCall)
+                try busyCallee.callManager.placeCall(call: call, callMediaType: .audioCall, localDevice: busyCallee.deviceId)
                 expect(busyCallee.delegate.startOutgoingCallInvoked).toEventually(equal(true), timeout: 1)
                 busyCallee.delegate.startOutgoingCallInvoked = false
 
                 let callId = busyCallee.delegate.recentCallId
-                _ = try busyCallee.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: busyCallee.deviceId, remoteDeviceList: deviceList, enableForking: true)
+                _ = try busyCallee.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
                 expect(busyCallee.delegate.shouldSendOfferInvoked).toEventually(equal(true), timeout: 1)
                 busyCallee.delegate.shouldSendOfferInvoked = false
 
                 let callExtra = OpaqueCallData(value: delegateExtra.expectedValue, remote: calleeAddress)
-                let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-                try callManagerExtra?.receivedOffer(call: callExtra, sourceDevice: busyCallee.deviceId, callId: callId, sdp: busyCallee.delegate.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerExtra?.receivedOffer(call: callExtra, sourceDevice: busyCallee.deviceId, callId: callId, sdp: busyCallee.delegate.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: extraDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
 
                 expect(busyCallee.delegate.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
                 busyCallee.delegate.canSendICE = true
@@ -1959,7 +1936,7 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateExtra.startIncomingCallInvoked).toEventually(equal(true), timeout: 1)
                 delegateExtra.startIncomingCallInvoked = false
 
-                try callManagerExtra?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: extraDevice, remoteDeviceList: deviceList, enableForking: true)
+                try callManagerExtra?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
 
                 expect(delegateExtra.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 1)
                 delegateExtra.shouldSendAnswerInvoked = false
@@ -2006,7 +1983,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegateCaller.expectedValue, remote: calleeAddress)
 
-                try callManagerCaller?.placeCall(call: call, callMediaType: .audioCall)
+                try callManagerCaller?.placeCall(call: call, callMediaType: .audioCall, localDevice: callerDevice)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -2020,7 +1997,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: callerDevice, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2043,16 +2020,11 @@ class SignalRingRTCTests: XCTestCase {
                     // outside this block.
                     let call = OpaqueCallData(value: element.delegate.expectedValue, remote: callerAddress)
 
-                    // Inject current timestamp for now. We assume that Rust will also look
-                    // at the system clock, but it may be nice to hook that up also to some
-                    // value injection mechanism.
-                    let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
                     Logger.debug("Test: Invoking receivedOffer()...")
 
                     // @note We are specifying multiple devices as primary, but it shouldn't
                     // matter for this type of testing.
-                    try element.callManager.receivedOffer(call: call, sourceDevice: callerDevice, callId: callId, sdp: delegateCaller.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                    try element.callManager.receivedOffer(call: call, sourceDevice: callerDevice, callId: callId, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: element.deviceId, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
                 }
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
@@ -2079,7 +2051,7 @@ class SignalRingRTCTests: XCTestCase {
                     element.delegate.startIncomingCallInvoked = false
 
                     Logger.debug("Test: Invoking proceed()...")
-                    _ = try element.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, localDevice: element.deviceId, remoteDeviceList: deviceList, enableForking: true)
+                    _ = try element.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
                 }
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
@@ -2418,7 +2390,7 @@ class SignalRingRTCTests: XCTestCase {
         // A1 starts to call B.
         do {
             Logger.debug("Test: A1 calls B...")
-            try callManagerA1?.placeCall(call: callOutgoingA1toB, callMediaType: .audioCall)
+            try callManagerA1?.placeCall(call: callOutgoingA1toB, callMediaType: .audioCall, localDevice: a1Device)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -2430,7 +2402,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerA1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, localDevice: a1Device, remoteDeviceList: deviceList, enableForking: true)
+            _ = try callManagerA1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -2445,7 +2417,7 @@ class SignalRingRTCTests: XCTestCase {
             // B starts to call A.
             do {
                 Logger.debug("Test:B calls A...")
-                try callManagerB1?.placeCall(call: callOutgoingB1toA, callMediaType: .audioCall)
+                try callManagerB1?.placeCall(call: callOutgoingB1toA, callMediaType: .audioCall, localDevice: b1Device)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -2457,7 +2429,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB1?.proceed(callId: callIdB1toA, iceServers: iceServers, hideIp: useTurnOnly, localDevice: b1Device, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerB1?.proceed(callId: callIdB1toA, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2469,9 +2441,8 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from A1 to B1 & B2.
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
-                let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-                try callManagerB1?.receivedOffer(call: callIncomingA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-                try callManagerB2?.receivedOffer(call: callIncomingA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                try callManagerB1?.receivedOffer(call: callIncomingA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerB2?.receivedOffer(call: callIncomingA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2481,8 +2452,7 @@ class SignalRingRTCTests: XCTestCase {
                 // Give the offer from B1 to A1.
                 do {
                     Logger.debug("Test: Invoking A1.receivedOffer(B1)...")
-                    let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-                    try callManagerA1?.receivedOffer(call: callIncomingB1toA1, sourceDevice: b1Device, callId: callIdB1toA, sdp: delegateB1.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                    try callManagerA1?.receivedOffer(call: callIncomingB1toA1, sourceDevice: b1Device, callId: callIdB1toA, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
                 } catch {
                     XCTFail("Call Manager receivedOffer() failed: \(error)")
                     return
@@ -2531,7 +2501,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB2?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, localDevice: b2Device, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerB2?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2613,9 +2583,8 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from A1 to B1 & B2.
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
-                let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-                try callManagerB1?.receivedOffer(call: callIncomingA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-                try callManagerB2?.receivedOffer(call: callIncomingA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                try callManagerB1?.receivedOffer(call: callIncomingA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerB2?.receivedOffer(call: callIncomingA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2629,8 +2598,8 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, localDevice: b1Device, remoteDeviceList: deviceList, enableForking: true)
-                _ = try callManagerB2?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, localDevice: b2Device, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerB1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerB2?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2708,7 +2677,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: A2 calls B...")
-                try callManagerA2?.placeCall(call: callOutgoingA2toB, callMediaType: .audioCall)
+                try callManagerA2?.placeCall(call: callOutgoingA2toB, callMediaType: .audioCall, localDevice: a2Device)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -2720,7 +2689,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerA2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, localDevice: a2Device, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerA2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2732,9 +2701,8 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from A2 to B1 & B2.
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A2)...")
-                let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-                try callManagerB1?.receivedOffer(call: callIncomingA2toB1, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-                try callManagerB2?.receivedOffer(call: callIncomingA2toB2, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, timestamp: timestamp, callMediaType: .audioCall, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                try callManagerB1?.receivedOffer(call: callIncomingA2toB1, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerB2?.receivedOffer(call: callIncomingA2toB2, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2756,7 +2724,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, localDevice: b2Device, remoteDeviceList: deviceList, enableForking: true)
+                _ = try callManagerB2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, remoteDeviceList: deviceList, enableForking: true)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return

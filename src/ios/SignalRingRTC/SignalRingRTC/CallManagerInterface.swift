@@ -7,7 +7,7 @@ import WebRTC
 import SignalCoreKit
 
 protocol CallManagerInterfaceDelegate: class {
-    func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool)
+    func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, offer: String, callMediaType: CallMediaType)
     func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, answer: String)
@@ -56,12 +56,12 @@ class CallManagerInterface {
 
     // MARK: Delegate Handlers
 
-    func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool) {
+    func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onStartCall(remote: remote, callId: callId, isOutgoing: isOutgoing)
+        delegate.onStartCall(remote: remote, callId: callId, isOutgoing: isOutgoing, callMediaType: callMediaType)
     }
 
     func onEvent(remote: UnsafeRawPointer, event: Int32) {
@@ -160,7 +160,7 @@ func callManagerInterfaceDestroy(object: UnsafeMutableRawPointer?) {
     // so deinit should be called implicitly.
 }
 
-func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, callId: UInt64, isOutgoing: Bool) {
+func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, callId: UInt64, isOutgoing: Bool, mediaType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -172,7 +172,15 @@ func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: U
         return
     }
 
-    obj.onStartCall(remote: remote, callId: callId, isOutgoing: isOutgoing)
+    let callMediaType: CallMediaType
+    if let validMediaType = CallMediaType(rawValue: mediaType) {
+        callMediaType = validMediaType
+    } else {
+        owsFailDebug("unexpected call media type")
+        return
+    }
+
+    obj.onStartCall(remote: remote, callId: callId, isOutgoing: isOutgoing, callMediaType: callMediaType)
 }
 
 func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, event: Int32) {

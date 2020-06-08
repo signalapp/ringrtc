@@ -18,7 +18,7 @@ mkdir -p "$WEBRTC_DIR"
 TARGET_GCLIENT="${WEBRTC_DIR}/.gclient"
 cp "${CONFIG_DIR}/webrtc.gclient.common" "$TARGET_GCLIENT"
 case "$WEBRTC_PLATFORM" in
-    android|ios)
+    android|ios|mac|unix|windows)
         cat "${CONFIG_DIR}/webrtc.gclient.${WEBRTC_PLATFORM}" >> "$TARGET_GCLIENT"
 esac
 

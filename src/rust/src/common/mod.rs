@@ -18,6 +18,12 @@ pub struct CallId {
     id: u64,
 }
 
+impl CallId {
+    pub fn as_u64(self) -> u64 {
+        self.id
+    }
+}
+
 impl fmt::Display for CallId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "0x{:x}", self.id)
@@ -368,10 +374,12 @@ impl HangupType {
 pub struct OfferParameters {
     /// The Offer SDP string.
     sdp:                     String,
-    /// The timestamp when the offer was received, milliseconds since 1970, UTC.
-    timestamp:               u64,
+    /// The approximate age of the offer message, in seconds.
+    message_age_sec:         u64,
     /// The type of call indicated by the Offer.
     call_media_type:         CallMediaType,
+    /// The local DeviceId of the client.
+    local_device_id:         DeviceId,
     /// The feature level supported by the remote device.
     remote_feature_level:    FeatureLevel,
     /// If true, the local device is the primary device, otherwise a linked device.
@@ -381,15 +389,17 @@ pub struct OfferParameters {
 impl OfferParameters {
     pub fn new(
         sdp: String,
-        timestamp: u64,
+        message_age_sec: u64,
         call_media_type: CallMediaType,
+        local_device_id: DeviceId,
         remote_feature_level: FeatureLevel,
         is_local_device_primary: bool,
     ) -> Self {
         Self {
             sdp,
-            timestamp,
+            message_age_sec,
             call_media_type,
+            local_device_id,
             remote_feature_level,
             is_local_device_primary,
         }
@@ -399,12 +409,16 @@ impl OfferParameters {
         self.sdp.to_string()
     }
 
-    pub fn timestamp(&self) -> u64 {
-        self.timestamp
+    pub fn message_age_sec(&self) -> u64 {
+        self.message_age_sec
     }
 
     pub fn call_media_type(&self) -> CallMediaType {
         self.call_media_type
+    }
+
+    pub fn local_device_id(&self) -> DeviceId {
+        self.local_device_id
     }
 
     pub fn remote_feature_level(&self) -> FeatureLevel {

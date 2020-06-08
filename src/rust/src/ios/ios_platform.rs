@@ -41,7 +41,7 @@ use crate::ios::ios_util::*;
 
 use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_candidate::IceCandidate;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnectionInterface};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
 
@@ -140,7 +140,7 @@ impl Platform for IOSPlatform {
             return Err(IOSError::ExtractNativePeerConnectionInterface.into());
         }
 
-        let pc_interface = PeerConnection::new(rffi_pc_interface);
+        let pc_interface = PeerConnection::unowned(rffi_pc_interface);
 
         if let CallDirection::OutGoing = connection.direction() {
             // Create data channel observer and data channel.
@@ -167,6 +167,7 @@ impl Platform for IOSPlatform {
         remote_peer: &Self::AppRemotePeer,
         call_id: CallId,
         direction: CallDirection,
+        call_media_type: CallMediaType,
     ) -> Result<()> {
         info!("on_start_call(): id: {}, direction: {}", call_id, direction);
 
@@ -175,6 +176,7 @@ impl Platform for IOSPlatform {
             remote_peer.ptr,
             u64::from(call_id) as u64,
             direction == CallDirection::OutGoing,
+            call_media_type as i32,
         );
 
         Ok(())

@@ -32,7 +32,7 @@ use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionForkingType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::webrtc::ice_candidate::IceCandidate;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 
 const RINGRTC_PACKAGE: &str = "org/signal/ringrtc";
 const CALL_MANAGER_CLASS: &str = "CallManager";
@@ -252,6 +252,7 @@ impl Platform for AndroidPlatform {
         remote_peer: &Self::AppRemotePeer,
         call_id: CallId,
         direction: CallDirection,
+        call_media_type: CallMediaType,
     ) -> Result<()> {
         info!(
             "on_start_call(): call_id: {}, direction: {}",
@@ -267,10 +268,41 @@ impl Platform for AndroidPlatform {
             CallDirection::InComing => false,
         };
 
-        const START_CALL_METHOD: &str = "onStartCall";
-        const START_CALL_SIG: &str = "(Lorg/signal/ringrtc/Remote;JZ)V";
+        // convert rust enum into Java enum
+        let class = "CallMediaType";
+        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
+        let class_object = self.class_cache.get_class(&class_path)?;
 
-        let args = [jni_remote.into(), call_id_jlong.into(), is_outgoing.into()];
+        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
+        let method_signature = format!("(I)L{};", class_path);
+        let args = [JValue::from(call_media_type as i32)];
+        let jni_enum = match env.call_static_method(
+            class_object,
+            ENUM_FROM_NATIVE_INDEX_METHOD,
+            &method_signature,
+            &args,
+        ) {
+            Ok(v) => v.l()?,
+            Err(_) => {
+                return Err(AndroidError::JniCallStaticMethod(
+                    class_path,
+                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
+                    method_signature.to_string(),
+                )
+                .into())
+            }
+        };
+
+        const START_CALL_METHOD: &str = "onStartCall";
+        const START_CALL_SIG: &str =
+            "(Lorg/signal/ringrtc/Remote;JZLorg/signal/ringrtc/CallManager$CallMediaType;)V";
+
+        let args = [
+            jni_remote.into(),
+            call_id_jlong.into(),
+            is_outgoing.into(),
+            jni_enum.into(),
+        ];
         let _ = jni_call_method(
             &env,
             jni_call_manager,

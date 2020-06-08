@@ -39,7 +39,7 @@ use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 
 /// Encapsulates the FSM and runtime upon which a Call runs.
 struct FsmContext {
@@ -128,6 +128,8 @@ where
     direction:         CallDirection,
     /// The call media type at time of origination.
     media_type:        CallMediaType,
+    /// The local DeviceId of the client.
+    local_device_id:   DeviceId,
     /// The application specific remote peer of this call
     app_remote_peer:   Arc<CallMutex<<T as Platform>::AppRemotePeer>>,
     /// The application specific context for this call
@@ -148,8 +150,6 @@ where
     terminate_condvar: Arc<(Mutex<bool>, Condvar)>,
     /// Whether or not an offer has been sent via messaging for this call.
     did_send_offer:    Arc<AtomicBool>,
-    /// The local DeviceId of the client (for this call only).
-    local_device_id:   Arc<CallMutex<Option<DeviceId>>>,
     /// When doing call forking, the parent that must be kept alive to keep
     /// ICE candidates and signaling alive.
     /// And we also need to keep around that parent's offer that it created.
@@ -220,6 +220,7 @@ where
             call_id:           self.call_id,
             direction:         self.direction,
             media_type:        self.media_type,
+            local_device_id:   self.local_device_id,
             app_remote_peer:   Arc::clone(&self.app_remote_peer),
             app_call_context:  Arc::clone(&self.app_call_context),
             state:             Arc::clone(&self.state),
@@ -230,7 +231,6 @@ where
             connection_map:    Arc::clone(&self.connection_map),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
             did_send_offer:    Arc::clone(&self.did_send_offer),
-            local_device_id:   Arc::clone(&self.local_device_id),
             forking:           Arc::clone(&self.forking),
         }
     }
@@ -247,6 +247,7 @@ where
         call_id: CallId,
         direction: CallDirection,
         media_type: CallMediaType,
+        local_device_id: DeviceId,
         time_out_period: u64,
         call_manager: CallManager<T>,
     ) -> Result<Self> {
@@ -264,6 +265,7 @@ where
             call_id,
             direction,
             media_type,
+            local_device_id,
             app_remote_peer: Arc::new(CallMutex::new(app_remote_peer, "app_remote_peer")),
             app_call_context: Arc::new(CallMutex::new(None, "app_call_context")),
             state: Arc::new(CallMutex::new(CallState::Idle, "state")),
@@ -274,7 +276,6 @@ where
             connection_map: Arc::new(CallMutex::new(HashMap::new(), "connection_map")),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             did_send_offer: Arc::new(AtomicBool::new(false)),
-            local_device_id: Arc::new(CallMutex::new(None, "local_device_id")),
             forking: Arc::new(CallMutex::new(None, "forking")),
         };
 
@@ -380,20 +381,9 @@ where
         Ok(())
     }
 
-    /// Store the local Device Id associated with this call.
-    pub fn set_local_device(&self, local_device: DeviceId) -> Result<()> {
-        let mut local_device_id = self.local_device_id.lock()?;
-        *local_device_id = Some(local_device);
-        Ok(())
-    }
-
     /// Return the local Device Id associated with this call.
-    pub fn local_device_id(&self) -> Result<DeviceId> {
-        let local_device_id = self.local_device_id.lock()?;
-        match *local_device_id {
-            Some(device_id) => Ok(device_id),
-            None => Err(RingRtcError::LocalDeviceIdNotFound.into()),
-        }
+    pub fn local_device_id(&self) -> DeviceId {
+        self.local_device_id
     }
 
     /// Store the application specific CallContext associated with this call.
@@ -450,7 +440,7 @@ where
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.start_call(&*remote_peer, self.call_id, self.direction)
+        call_manager.start_call(&*remote_peer, self.call_id, self.direction, self.media_type)
     }
 
     /// Notify application of an event.

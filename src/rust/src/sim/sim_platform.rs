@@ -31,7 +31,7 @@ use crate::core::platform::{Platform, PlatformItem};
 use crate::sim::error::SimError;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_candidate::IceCandidate;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::sim::peer_connection::RffiPeerConnectionInterface;
 
@@ -125,7 +125,7 @@ impl Platform for SimPlatform {
         let connection = Connection::new(call.clone(), remote_device, forking_type).unwrap();
         connection.set_app_connection(fake_pc).unwrap();
 
-        let pc_interface = PeerConnection::new(connection.app_connection_ptr_for_tests());
+        let pc_interface = PeerConnection::unowned(connection.app_connection_ptr_for_tests());
 
         if let CallDirection::OutGoing = connection.direction() {
             // Create data channel observer and data channel
@@ -146,10 +146,11 @@ impl Platform for SimPlatform {
         remote_peer: &Self::AppRemotePeer,
         call_id: CallId,
         direction: CallDirection,
+        call_media_type: CallMediaType,
     ) -> Result<()> {
         info!(
-            "on_start_call(): remote_peer: {}, call_id: {}, direction: {}",
-            remote_peer, call_id, direction
+            "on_start_call(): remote_peer: {}, call_id: {}, direction: {}, call_media_type {}",
+            remote_peer, call_id, direction, call_media_type
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {

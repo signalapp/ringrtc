@@ -27,6 +27,8 @@ pub use crate::webrtc::ffi::peer_connection::{
     RffiDataChannelInterface,
     RffiPeerConnectionInterface,
 };
+#[cfg(not(feature = "sim"))]
+use crate::webrtc::ffi::ref_count;
 
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection as pc;
@@ -35,11 +37,15 @@ pub use crate::webrtc::sim::peer_connection::{
     RffiDataChannelInterface,
     RffiPeerConnectionInterface,
 };
+#[cfg(feature = "sim")]
+use crate::webrtc::sim::ref_count;
 
 /// Rust wrapper around WebRTC C++ PeerConnectionInterface object.
 pub struct PeerConnection {
     /// Pointer to C++ PeerConnectionInterface.
     rffi_pc_interface: *const RffiPeerConnectionInterface,
+    // If owned, release ref count when Dropped
+    owned:             bool,
 }
 
 impl fmt::Display for PeerConnection {
@@ -54,14 +60,35 @@ impl fmt::Debug for PeerConnection {
     }
 }
 
+impl Drop for PeerConnection {
+    fn drop(&mut self) {
+        info!("PeerConnection::drop()");
+        if self.owned && !self.rffi_pc_interface.is_null() {
+            ref_count::release_ref(self.rffi_pc_interface as crate::core::util::CppObject);
+        }
+    }
+}
+
 unsafe impl Send for PeerConnection {}
 unsafe impl Sync for PeerConnection {}
 
 impl PeerConnection {
     /// Create a new Rust PeerConnection object from a WebRTC C++
     /// PeerConnectionInterface object.
-    pub fn new(rffi_pc_interface: *const RffiPeerConnectionInterface) -> Self {
-        Self { rffi_pc_interface }
+    pub fn unowned(rffi_pc_interface: *const RffiPeerConnectionInterface) -> Self {
+        let owned = false;
+        Self {
+            rffi_pc_interface,
+            owned,
+        }
+    }
+
+    pub fn owned(rffi_pc_interface: *const RffiPeerConnectionInterface) -> Self {
+        let owned = true;
+        Self {
+            rffi_pc_interface,
+            owned,
+        }
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::CreateDataChannel().

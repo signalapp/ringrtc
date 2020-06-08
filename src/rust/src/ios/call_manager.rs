@@ -69,12 +69,17 @@ pub fn call(
     call_manager: *mut IOSCallManager,
     app_remote: *const c_void,
     call_media_type: CallMediaType,
+    app_local_device: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
     info!("call():");
 
-    call_manager.call(AppObject::from(app_remote), call_media_type)
+    call_manager.call(
+        AppObject::from(app_remote),
+        call_media_type,
+        app_local_device,
+    )
 }
 
 /// Application notification to proceed with a new call
@@ -82,7 +87,6 @@ pub fn proceed(
     call_manager: *mut IOSCallManager,
     call_id: u64,
     app_call_context: AppCallContext,
-    app_local_device: DeviceId,
     app_remote_devices: Vec<u32>,
     enable_forking: bool,
 ) -> Result<()> {
@@ -106,7 +110,6 @@ pub fn proceed(
     call_manager.proceed(
         call_id,
         Arc::new(app_call_context),
-        app_local_device,
         remote_devices,
         enable_forking,
     )
@@ -163,8 +166,9 @@ pub fn received_offer(
     app_remote: *const c_void,
     remote_device: DeviceId,
     app_offer: &str,
-    timestamp: u64,
+    message_age_sec: u64,
     call_media_type: CallMediaType,
+    app_local_device: DeviceId,
     remote_feature_level: FeatureLevel,
     is_local_device_primary: bool,
 ) -> Result<()> {
@@ -178,8 +182,9 @@ pub fn received_offer(
         connection_id,
         OfferParameters::new(
             app_offer.to_string(),
-            timestamp,
+            message_age_sec,
             call_media_type,
+            app_local_device,
             remote_feature_level,
             is_local_device_primary,
         ),

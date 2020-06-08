@@ -125,7 +125,7 @@ pub fn create_peer_connection(
     if rffi_pc_interface.is_null() {
         return Err(AndroidError::ExtractNativePeerConnectionInterface.into());
     }
-    let pc_interface = PeerConnection::new(rffi_pc_interface);
+    let pc_interface = PeerConnection::unowned(rffi_pc_interface);
 
     if let CallDirection::OutGoing = connection.direction() {
         // Create data channel observer and data channel
@@ -149,6 +149,7 @@ pub fn call(
     call_manager: *mut AndroidCallManager,
     jni_remote: JObject,
     call_media_type: CallMediaType,
+    local_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
@@ -156,7 +157,7 @@ pub fn call(
 
     let app_remote_peer = env.new_global_ref(jni_remote)?;
 
-    call_manager.call(app_remote_peer, call_media_type)
+    call_manager.call(app_remote_peer, call_media_type, local_device_id)
 }
 
 /// Application notification to proceed with a new call
@@ -165,7 +166,6 @@ pub fn proceed(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     jni_call_context: JObject,
-    local_device_id: DeviceId,
     jni_remote_devices: JObject,
     enable_forking: bool,
 ) -> Result<()> {
@@ -194,7 +194,6 @@ pub fn proceed(
     call_manager.proceed(
         call_id,
         android_call_context,
-        local_device_id,
         remote_devices,
         enable_forking,
     )
@@ -254,8 +253,9 @@ pub fn received_offer(
     jni_remote: JObject,
     remote_device: DeviceId,
     jni_offer: JString,
-    timestamp: u64,
+    message_age_sec: u64,
     call_media_type: CallMediaType,
+    local_device_id: DeviceId,
     remote_feature_level: FeatureLevel,
     is_local_device_primary: bool,
 ) -> Result<()> {
@@ -271,8 +271,9 @@ pub fn received_offer(
         connection_id,
         OfferParameters::new(
             env.get_string(jni_offer)?.into(),
-            timestamp,
+            message_age_sec,
             call_media_type,
+            local_device_id,
             remote_feature_level,
             is_local_device_primary,
         ),

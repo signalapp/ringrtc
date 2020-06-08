@@ -15,7 +15,7 @@ use crate::ios::error::IOSError;
 
 use crate::common::Result;
 
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 
 /// Rust wrapper around application stream interface and RTCMediaStream object.
 pub struct IOSMediaStream {

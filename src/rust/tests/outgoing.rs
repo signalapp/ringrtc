@@ -14,7 +14,6 @@ extern crate log;
 
 use std::ptr;
 use std::thread;
-use std::time::SystemTime;
 
 use ringrtc::common::{
     AnswerParameters,
@@ -34,7 +33,7 @@ use ringrtc::common::{
 use ringrtc::sim::error::SimError;
 
 use ringrtc::webrtc::ice_candidate::IceCandidate;
-use ringrtc::webrtc::media_stream::MediaStream;
+use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
 mod common;
@@ -71,7 +70,7 @@ fn start_outbound_n_remote_call(n_remotes: u16, enable_forking: bool) -> TestCon
     assert!(n_remotes < 20);
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    cm.call(remote_peer, CallMediaType::Audio)
+    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -95,7 +94,6 @@ fn start_outbound_n_remote_call(n_remotes: u16, enable_forking: bool) -> TestCon
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        1 as DeviceId,
         remote_devices,
         enable_forking,
     )
@@ -724,7 +722,7 @@ fn outbound_proceed_with_error() {
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    cm.call(remote_peer, CallMediaType::Audio)
+    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -749,7 +747,6 @@ fn outbound_proceed_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        1 as DeviceId,
         remote_devices,
         enable_forking,
     )
@@ -987,11 +984,9 @@ fn glare_before_connect() {
         connection_id,
         OfferParameters::new(
             format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect(error_line!())
-                .as_millis() as u64,
+            0,
             CallMediaType::Audio,
+            1 as DeviceId,
             FeatureLevel::MultiRing,
             true,
         ),
@@ -1036,11 +1031,9 @@ fn glare_after_connect() {
         connection_id,
         OfferParameters::new(
             format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect(error_line!())
-                .as_millis() as u64,
+            0,
             CallMediaType::Audio,
+            1 as DeviceId,
             FeatureLevel::MultiRing,
             true,
         ),
@@ -1071,7 +1064,7 @@ fn start_outbound_receive_busy() {
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    cm.call(remote_peer, CallMediaType::Audio)
+    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1096,7 +1089,6 @@ fn start_outbound_receive_busy() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        1 as DeviceId,
         remote_devices,
         enable_forking,
     )

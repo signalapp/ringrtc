@@ -104,7 +104,7 @@ public protocol CallManagerDelegate: class {
      * A call, either outgoing or incoming, should be started by the application.
      * Invoked on the main thread, asychronously.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldStartCall call: CallManagerDelegateCallType, callId: UInt64, isOutgoing: Bool)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldStartCall call: CallManagerDelegateCallType, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
 
     /**
      * onEvent will be invoked in response to Call Manager library operations.
@@ -217,13 +217,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Control API
 
-    public func placeCall(call: CallType, callMediaType: CallMediaType) throws {
+    /// Place a call to a remote peer.
+    ///
+    /// - Parameters:
+    ///   - call: The application call context
+    ///   - callMediaType: The type of call to place (audio or video)
+    ///   - localDevice: The local device ID of the client (must be valid for lifetime of the call)
+    public func placeCall(call: CallType, callMediaType: CallMediaType, localDevice: UInt32) throws {
         AssertIsOnMainThread()
         Logger.debug("call")
 
         let unmanagedCall: Unmanaged<CallType> = Unmanaged.passUnretained(call)
 
-        let retPtr = ringrtcCall(ringRtcCallManager, unmanagedCall.toOpaque(), callMediaType.rawValue)
+        let retPtr = ringrtcCall(ringRtcCallManager, unmanagedCall.toOpaque(), callMediaType.rawValue, localDevice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "call() function failure")
         }
@@ -260,10 +266,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - callId: The callId as provided by the shouldStartCall delegate
     ///   - iceServers: A list of RTC Ice Servers to be provided to WebRTC
     ///   - hideIp: A flag used to hide the IP of the user by using relay (TURN) servers only
-    ///   - localDevice: The local device ID of the client (must be valid for lifetime of the call)
     ///   - remoteDeviceList: An array of remote device IDs for the peer, only used when placing a call
     ///   - enableForking: If true, use one offer and set of local ICE candidates for all remote devices
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, localDevice: UInt32, remoteDeviceList: [UInt32], enableForking: Bool) throws {
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, remoteDeviceList: [UInt32], enableForking: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("proceed")
 
@@ -287,7 +292,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // creating the connection.
         let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController, certificate: certificate)
 
-        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), localDevice, remoteDeviceList, remoteDeviceList.count, enableForking)
+        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), remoteDeviceList, remoteDeviceList.count, enableForking)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "proceed() function failure")
         }
@@ -405,7 +410,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Signaling API
 
-    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, sdp: String, timestamp: UInt64, callMediaType: CallMediaType, remoteSupportsMultiRing: Bool, isLocalDevicePrimary: Bool) throws {
+    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, sdp: String, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, remoteSupportsMultiRing: Bool, isLocalDevicePrimary: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedOffer")
 
@@ -415,7 +420,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             len: bytes.count)
 
         let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, offer, timestamp, callMediaType.rawValue, remoteSupportsMultiRing, isLocalDevicePrimary)
+        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, offer, messageAgeSec, callMediaType.rawValue, localDevice, remoteSupportsMultiRing, isLocalDevicePrimary)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedOffer() function failure")
         }
@@ -503,7 +508,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Event Observers
 
-    func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool) {
+    func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType) {
         Logger.debug("onStartCall")
 
         DispatchQueue.main.async {
@@ -512,7 +517,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldStartCall: callReference, callId: callId, isOutgoing: isOutgoing)
+            delegate.callManager(self, shouldStartCall: callReference, callId: callId, isOutgoing: isOutgoing, callMediaType: callMediaType)
         }
     }
 

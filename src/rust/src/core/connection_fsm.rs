@@ -71,7 +71,7 @@ use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_candidate::IceCandidate;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 
 /// The different types of Connection Events.
 pub enum ConnectionEvent {

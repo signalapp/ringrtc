@@ -15,7 +15,7 @@ use std::ptr;
 
 use crate::android::error::AndroidError;
 use crate::common::Result;
-use crate::webrtc::media_stream::{MediaStream, RffiMediaStreamInterface};
+use crate::webrtc::media::{MediaStream, RffiMediaStreamInterface};
 
 /// Incomplete type for C++ JavaMediaStream.
 #[repr(C)]

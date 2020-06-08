@@ -19,7 +19,8 @@ use crate::core::util::{ptr_as_mut, CppObject, RustObject};
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_candidate::{CppIceCandidate, IceCandidate};
-use crate::webrtc::media_stream::{MediaStream, RffiMediaStreamInterface};
+use crate::webrtc::media::MediaStream;
+use crate::webrtc::media::RffiMediaStreamInterface;
 use crate::webrtc::peer_connection::RffiDataChannelInterface;
 
 /// Rust version of WebRTC RTCSignalingState enum

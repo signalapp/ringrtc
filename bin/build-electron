@@ -1,0 +1,119 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2020 Signal Messenger, LLC.
+# All rights reserved.
+#
+# SPDX-License-Identifier: GPL-3.0-only
+#
+
+set -e
+
+BIN_DIR="$(realpath -e $(dirname $0))"
+. "${BIN_DIR}/env.sh"
+
+usage()
+{
+    echo 'usage: build-electron [-d|-r|-c]
+    where:
+        -d to create a debug build (default)
+        -r to create a release build
+        -c to clean the build artifacts'
+}
+
+clean()
+{
+    # Remove all possible artifact directories.
+    echo "Nothing yet to clean..."
+}
+
+BUILD_TYPE=debug
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -d | --debug )
+            BUILD_TYPE=debug
+            ;;
+        -r | --release )
+            BUILD_TYPE=release
+            ;;
+        -c | --clean )
+            clean
+            exit
+            ;;
+        -h | --help )
+            usage
+            exit
+            ;;
+        * )
+            usage
+            exit 1
+    esac
+    shift
+done
+
+get_default_platform()
+{
+    hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
+
+    case "$(rustup show active-toolchain)" in 
+        *"x86_64-apple-darwin"* )
+            echo "darwin"
+            ;;
+        *"x86_64-pc-windows"* )
+            echo "win32"
+            ;;
+        *"x86_64-unknown-linux"* )
+            echo "linux"
+            ;;
+        * )
+            echo "unknown"
+    esac
+}
+
+DEFAULT_PLATFORM=$(get_default_platform)
+if [ "${DEFAULT_PLATFORM}" = "unknown" ]
+then
+    echo "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting."
+    exit 1
+fi
+
+# Build WebRTC.
+(
+    cd src/webrtc/src
+
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        gn gen -C out/Debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_include_pulse_audio=false"
+        ninja -C out/Debug
+    else
+        gn gen -C out/Release "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_include_pulse_audio=false is_debug=false "
+        ninja -C out/Release
+    fi
+)
+
+# Build and link the final RingRTC library.
+(
+    cd src/rust
+
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        npm_config_arch=x64 npm_config_target_arch=x64 npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=8.2.5 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp cargo build --features electron
+    else
+        npm_config_arch=x64 npm_config_target_arch=x64 npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=8.2.5 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp RUSTFLAGS="-C link-arg=-s" cargo build --features electron --release
+    fi
+
+    if [ $DEFAULT_PLATFORM = "darwin" ]
+    then
+        mkdir -p ../node/build/darwin
+        cp -f target/${BUILD_TYPE}/libringrtc.dylib ../node/build/darwin/libringrtc.node
+    elif [ $DEFAULT_PLATFORM = "win32" ]
+    then
+        mkdir -p ../node/build/win32
+        cp -f target/${BUILD_TYPE}/ringrtc.dll ../node/build/win32/libringrtc.node
+    elif [ $DEFAULT_PLATFORM = "linux" ]
+    then
+        mkdir -p ../node/build/linux
+        cp -f target/${BUILD_TYPE}/libringrtc.so ../node/build/linux/libringrtc.node
+    fi
+)

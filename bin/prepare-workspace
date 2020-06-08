@@ -13,18 +13,24 @@ BIN_DIR="$(realpath -e $(dirname $0))"
 . "${BIN_DIR}/env.sh"
 
 case "$1" in
-    android|unix)
+    android)
         WEBRTC_PLATFORM="android"
         ;;
-    ios|mac)
+    ios)
         WEBRTC_PLATFORM="ios"
+        ;;
+    mac)
+        WEBRTC_PLATFORM="mac"
+        ;;
+    unix)
+        WEBRTC_PLATFORM="unix"
         ;;
     windows)
         WEBRTC_PLATFORM="windows"
         ;;
     *)
         echo "ERROR: Unknown platform type: $1"
-        echo "Supported platforms: 'android', 'ios', 'unix', 'mac'"
+        echo "Supported platforms: 'android', 'ios', 'mac', 'unix', 'windows'"
         exit 1
 esac
 

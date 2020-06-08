@@ -58,11 +58,20 @@ prepare_workspace_platform() {
     exit 1
 }
 
+INTENDED_WEBRTC_PLATFORM=$WEBRTC_PLATFORM
+
 # current platform if it exists
 if [ -f "${OUTPUT_DIR}/platform.env" ] ; then
     . "${OUTPUT_DIR}/platform.env"
 fi
 if [ -n "$WEBRTC_PLATFORM" ] ; then
+
+    # don't mix platforms
+    if [ -n "$INTENDED_WEBRTC_PLATFORM" ] && [ "$WEBRTC_PLATFORM" != "$INTENDED_WEBRTC_PLATFORM" ] ; then
+        echo "ERROR: $WEBRTC_PLATFORM platform already exists, try 'make distclean' first."
+        exit 1
+    fi
+
     # platform specific env if it exists
     PLATFORM_ENV="${BIN_DIR}/env-${WEBRTC_PLATFORM}.sh"
     if [ -f "$PLATFORM_ENV" ] ; then

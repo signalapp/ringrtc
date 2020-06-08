@@ -12,7 +12,7 @@ use std::fmt;
 use std::stringify;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use futures::future::lazy;
 use futures::Future;
@@ -43,9 +43,10 @@ use crate::error::RingRtcError;
 
 use crate::core::util::redact_string;
 use crate::webrtc::ice_candidate::IceCandidate;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 
-const TIME_OUT_PERIOD: u64 = 120;
+const TIME_OUT_PERIOD_SEC: u64 = 120;
+pub const MAX_MESSAGE_AGE_SEC: u64 = 120;
 
 /// Spawns a task on the worker runtime thread to handle an API
 /// request with error handling.
@@ -280,18 +281,33 @@ where
         &mut self,
         remote_peer: <T as Platform>::AppRemotePeer,
         call_media_type: CallMediaType,
+        local_device_id: DeviceId,
     ) -> Result<()> {
         info!("API:call():");
+        let call_id = CallId::random();
+        self.create_outgoing_call(remote_peer, call_id, call_media_type, local_device_id)
+    }
+
+    /// Create an outgoing call with specified CallId.
+    pub fn create_outgoing_call(
+        &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
+        call_id: CallId,
+        call_media_type: CallMediaType,
+        local_device_id: DeviceId,
+    ) -> Result<()> {
+        info!("API:create_outgoing_call({}):", call_id);
 
         let mut call_manager = self.clone();
         let mut cm_error = self.clone();
         let remote_peer_error = remote_peer.clone();
-        let future = lazy(move || call_manager.handle_call(remote_peer, call_media_type)).map_err(
-            move |err| {
-                error!("Handle call failed: {}", err);
-                cm_error.internal_create_api_error(&remote_peer_error, err);
-            },
-        );
+        let future = lazy(move || {
+            call_manager.handle_call(remote_peer, call_id, call_media_type, local_device_id)
+        })
+        .map_err(move |err| {
+            error!("Handle call failed: {}", err);
+            cm_error.internal_create_api_error(&remote_peer_error, err);
+        });
         self.worker_spawn(future)
     }
 
@@ -310,7 +326,6 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        app_local_device: DeviceId,
         remote_devices: Vec<DeviceId>,
         enable_forking: bool,
     ) -> Result<()> {
@@ -319,7 +334,6 @@ where
             CallManager::handle_proceed,
             call_id,
             app_call_context,
-            app_local_device,
             remote_devices,
             enable_forking
         )
@@ -756,7 +770,9 @@ where
     fn handle_call(
         &mut self,
         remote_peer: <T as Platform>::AppRemotePeer,
+        call_id: CallId,
         call_media_type: CallMediaType,
+        local_device_id: DeviceId,
     ) -> Result<()> {
         info!("handle_call():");
 
@@ -765,13 +781,13 @@ where
         match *active_call_id {
             Some(v) => Err(RingRtcError::CallAlreadyInProgress(v).into()),
             None => {
-                let call_id = CallId::random();
                 let mut call = Call::new(
                     remote_peer,
                     call_id,
                     CallDirection::OutGoing,
                     call_media_type,
-                    TIME_OUT_PERIOD,
+                    local_device_id,
+                    TIME_OUT_PERIOD_SEC,
                     self.clone(),
                 )?;
 
@@ -838,7 +854,7 @@ where
             RingBench::CallManager,
             format!("drop()\t{}", call_id)
         );
-        self.handle_conclude_active_call(active_call, true, ApplicationEvent::EndedAppDroppedCall)
+        self.handle_conclude_active_call(active_call, false, ApplicationEvent::EndedAppDroppedCall)
     }
 
     /// Handle proceed() API from application.
@@ -846,7 +862,6 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        app_local_device: DeviceId,
         remote_devices: Vec<DeviceId>,
         enable_forking: bool,
     ) -> Result<()> {
@@ -867,7 +882,6 @@ where
             format!("proceed()\t{}", call_id)
         );
 
-        active_call.set_local_device(app_local_device)?;
         active_call.set_call_context(app_call_context)?;
         active_call.inject_proceed(remote_devices, enable_forking)
     }
@@ -998,7 +1012,7 @@ where
             )
         );
 
-        if is_expired(offer.timestamp(), Duration::from_secs(120)) {
+        if offer.message_age_sec() > MAX_MESSAGE_AGE_SEC {
             info!("handle_received_offer(): expired for id: {}", connection_id);
             self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
             // Notify application we are completely done with this remote.
@@ -1030,6 +1044,7 @@ where
                 call_id,
                 CallDirection::InComing,
                 offer.call_media_type(),
+                offer.local_device_id(),
                 0,
                 self.clone(),
             )?;
@@ -1052,7 +1067,8 @@ where
                     call_id,
                     CallDirection::InComing,
                     offer.call_media_type(),
-                    TIME_OUT_PERIOD,
+                    offer.local_device_id(),
+                    TIME_OUT_PERIOD_SEC,
                     self.clone(),
                 )?;
                 let mut call_map = self.call_map.lock()?;
@@ -1370,6 +1386,11 @@ where
             }
         }
 
+        let assume_messages_sent = {
+            let platform = self.platform.lock()?;
+            platform.assume_messages_sent()
+        };
+
         // Loop in case a sending error is encountered and jump to the next
         // message item if so.
         loop {
@@ -1395,7 +1416,9 @@ where
                                 Ok(()) => {
                                     // We have delivered the message to the app, set the
                                     // in flight flag.
-                                    message_queue.messages_in_flight = true;
+                                    // But the platform can override that and prevent messages
+                                    // from being queued.
+                                    message_queue.messages_in_flight = !assume_messages_sent;
 
                                     message_queue.last_sent_message_type =
                                         message_item.message_type;
@@ -1460,6 +1483,7 @@ where
         remote_peer: &<T as Platform>::AppRemotePeer,
         call_id: CallId,
         direction: CallDirection,
+        call_media_type: CallMediaType,
     ) -> Result<()> {
         ringbench!(
             RingBench::CallManager,
@@ -1468,7 +1492,7 @@ where
         );
 
         let platform = self.platform.lock()?;
-        platform.on_start_call(remote_peer, call_id, direction)
+        platform.on_start_call(remote_peer, call_id, direction, call_media_type)
     }
 
     /// Notify application of an event.
@@ -1729,90 +1753,5 @@ where
         };
 
         self.send_next_message(Some(message_item))
-    }
-}
-
-/// Check if the input `timestamp` matches the current system time
-/// within +/- the tolerance duration:
-///
-///   abs(current_time - timestamp) < tolerance
-///
-/// The u64 `timestamp` parameter is in milliseconds from the
-/// UNIX_EPOCH.
-///
-/// # Returns
-///
-/// - false, if the timestamp is within the tolerance window.
-///
-/// - true, if the timestamp is outside the tolerance window or if
-/// SystemTime.checked_add() fails for pathological reasons.
-fn is_expired(timestamp_ms: u64, tolerance: Duration) -> bool {
-    if let Some(timestamp) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp_ms))
-    {
-        let absolute_duration = match SystemTime::now().duration_since(timestamp) {
-            Ok(v) => v,
-            Err(e) => e.duration(),
-        };
-        tolerance.checked_sub(absolute_duration).is_none()
-    } else {
-        // timestamp + UNIX_EPOCH caused overflow
-        warn!(
-            "is_expired(): expiring wacky timestamp_ms: {}",
-            timestamp_ms
-        );
-        false
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn expired_timestamps() {
-        let tolerance_secs = 120;
-        let tolerance = Duration::from_secs(tolerance_secs);
-
-        let inside_tolerance = Duration::from_secs(tolerance_secs / 2);
-        let outside_tolerance = Duration::from_secs(tolerance_secs * 2);
-
-        // 1. inside window, behind current time  (normal case)
-        let timestamp_sys = SystemTime::now().checked_sub(inside_tolerance).unwrap();
-        let timestamp = timestamp_sys
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        assert_eq!(is_expired(timestamp, tolerance), false);
-
-        // 2. inside window, ahead  current time  (normal case)
-        let timestamp_sys = SystemTime::now().checked_add(inside_tolerance).unwrap();
-        let timestamp = timestamp_sys
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        assert_eq!(is_expired(timestamp, tolerance), false);
-
-        // 3. outside window, behind current time (expired)
-        let timestamp_sys = SystemTime::now().checked_sub(outside_tolerance).unwrap();
-        let timestamp = timestamp_sys
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        assert_eq!(is_expired(timestamp, tolerance), true);
-
-        // 4. outside window, ahead current time (expired)
-        let timestamp_sys = SystemTime::now().checked_add(outside_tolerance).unwrap();
-        let timestamp = timestamp_sys
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        assert_eq!(is_expired(timestamp, tolerance), true);
-
-        // 5. Try some extreme, wacky timestamps
-        let timestamp = 0_u64;
-        assert_eq!(is_expired(timestamp, tolerance), true);
-
-        let timestamp = 0xffffffff_ffffffff;
-        assert_eq!(is_expired(timestamp, tolerance), true);
     }
 }

@@ -27,8 +27,6 @@ pub enum RingRtcError {
     NoActiveCall,
     #[fail(display = "CallID not found in call_map: {}", _0)]
     CallIdNotFound(CallId),
-    #[fail(display = "No local DeviceID found")]
-    LocalDeviceIdNotFound,
     #[fail(display = "Connection not found in connection_map: {}", _0)]
     ConnectionNotFound(DeviceId),
     #[fail(display = "Active device ID is already set, remote_device: {}", _0)]
@@ -55,6 +53,21 @@ pub enum RingRtcError {
     CreateDataChannel(String),
     #[fail(display = "Unable to create C++ DataChannelObserver")]
     CreateDataChannelObserver,
+    #[cfg(any(feature = "native", feature = "sim"))]
+    #[fail(display = "Unable to create C++ PeerConnectionFactory")]
+    CreatePeerConnectionFactory,
+    #[cfg(any(feature = "native", feature = "sim"))]
+    #[fail(display = "Unable to create C++ PeerConnection")]
+    CreatePeerConnection,
+    #[cfg(any(feature = "native", feature = "sim"))]
+    #[fail(display = "Unable to create C++ VideoSource")]
+    CreateVideoSource,
+    #[cfg(any(feature = "native", feature = "sim"))]
+    #[fail(display = "Unable to create C++ AudioTrack")]
+    CreateAudioTrack,
+    #[cfg(any(feature = "native", feature = "sim"))]
+    #[fail(display = "Unable to generate C++ RTCCertificate")]
+    GenerateCertificate,
 
     // WebRTC / C++ session description error codes
     #[fail(

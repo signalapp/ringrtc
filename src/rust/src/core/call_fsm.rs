@@ -588,7 +588,7 @@ where
         match hangup_parameters.device_id() {
             Some(device_id) => {
                 // If this is the device that caused the hangup, it can be ignored.
-                if call.local_device_id()? == device_id {
+                if call.local_device_id() == device_id {
                     info!("handle_received_hangup(): Ignoring hangup message for the referenced device");
                     Ok(())
                 } else {

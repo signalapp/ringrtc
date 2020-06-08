@@ -23,3 +23,32 @@ if (is_ios) {
     # @note The RingRTC build is done outside of gn/ninja...
   }
 }
+
+if (is_linux || is_mac || is_win) {
+  import("//webrtc.gni")
+
+  rtc_library("ringrtc") {
+    visibility = [ "*" ]
+
+    include_dirs = [ "." ]
+
+    defines = [ "ENABLE_RINGRTC" ]
+
+    deps = [
+      "//sdk:media_constraints",
+    ]
+
+    sources = [
+      "rffi/src/data_channel.cc",
+      "rffi/src/data_channel_observer.cc",
+      "rffi/src/injectable_network.cc",
+      "rffi/src/logging.cc",
+      "rffi/src/media.cc",
+      "rffi/src/peer_connection_factory.cc",
+      "rffi/src/peer_connection_interface.cc",
+      "rffi/src/peer_connection_observer.cc",
+      "rffi/src/ref_count.cc",
+      "rffi/src/sdp_observer.cc",
+    ]
+  }
+}

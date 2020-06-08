@@ -24,7 +24,7 @@ use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionForkingType};
 
 use crate::webrtc::ice_candidate::IceCandidate;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 
 /// A trait encompassing the traits the platform associated types must
 /// implement.
@@ -32,7 +32,7 @@ pub trait PlatformItem: Sync + Send + 'static {}
 
 /// A trait describing the interface an operating system platform must
 /// implement for calling.
-pub trait Platform: fmt::Debug + fmt::Display + Sync + Send + Sized + 'static {
+pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     /// Opaque application specific media stream.
     type AppMediaStream: PlatformItem;
 
@@ -59,6 +59,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Sync + Send + Sized + 'static {
         remote_peer: &Self::AppRemotePeer,
         call_id: CallId,
         direction: CallDirection,
+        call_media_type: CallMediaType,
     ) -> Result<()>;
 
     /// Notify the client application about an event.
@@ -156,4 +157,10 @@ pub trait Platform: fmt::Debug + fmt::Display + Sync + Send + Sized + 'static {
 
     /// Notify the application that the call is completely concluded
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()>;
+
+    /// Return true if you want a CallManager to always assume you called
+    /// message_sent() for every signaling message.
+    fn assume_messages_sent(&self) -> bool {
+        false
+    }
 }

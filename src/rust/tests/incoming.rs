@@ -13,7 +13,6 @@ extern crate ringrtc;
 extern crate log;
 
 use std::ptr;
-use std::time::SystemTime;
 
 use ringrtc::common::{
     ApplicationEvent,
@@ -27,8 +26,9 @@ use ringrtc::common::{
     OfferParameters,
 };
 
+use ringrtc::core::call_manager::MAX_MESSAGE_AGE_SEC;
 use ringrtc::webrtc::ice_candidate::IceCandidate;
-use ringrtc::webrtc::media_stream::MediaStream;
+use ringrtc::webrtc::media::MediaStream;
 
 use ringrtc::webrtc::data_channel::DataChannel;
 
@@ -59,11 +59,9 @@ fn start_inbound_call() -> TestContext {
         connection_id,
         OfferParameters::new(
             format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect(error_line!())
-                .as_millis() as u64,
+            0,
             CallMediaType::Audio,
+            1 as DeviceId,
             FeatureLevel::MultiRing,
             true,
         ),
@@ -87,7 +85,6 @@ fn start_inbound_call() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        1 as DeviceId,
         remote_devices,
         enable_forking,
     )
@@ -241,11 +238,9 @@ fn start_inbound_call_with_error() {
         connection_id,
         OfferParameters::new(
             format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect(error_line!())
-                .as_millis() as u64,
+            0,
             CallMediaType::Audio,
+            1 as DeviceId,
             FeatureLevel::MultiRing,
             true,
         ),
@@ -272,7 +267,6 @@ fn start_inbound_call_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        1 as DeviceId,
         remote_devices,
         enable_forking,
     )
@@ -313,11 +307,9 @@ fn receive_offer_while_active() {
         connection_id,
         OfferParameters::new(
             format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect(error_line!())
-                .as_millis() as u64,
+            0,
             CallMediaType::Audio,
+            1 as DeviceId,
             FeatureLevel::MultiRing,
             true,
         ),
@@ -350,12 +342,108 @@ fn receive_expired_offer() {
         connection_id,
         OfferParameters::new(
             format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect(error_line!())
-                .as_millis() as u64
-                - 1000000,
+            86400, // one day old
             CallMediaType::Audio,
+            1 as DeviceId,
+            FeatureLevel::MultiRing,
+            true,
+        ),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedReceivedOfferExpired),
+        1
+    );
+}
+
+#[test]
+fn receive_offer_before_age_limit() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    // create off way in the past
+    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    cm.received_offer(
+        remote_peer,
+        connection_id,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            MAX_MESSAGE_AGE_SEC - 1,
+            CallMediaType::Audio,
+            1 as DeviceId,
+            FeatureLevel::MultiRing,
+            true,
+        ),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedReceivedOfferExpired),
+        0
+    );
+}
+
+#[test]
+fn receive_offer_at_age_limit() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    // create off way in the past
+    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    cm.received_offer(
+        remote_peer,
+        connection_id,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            MAX_MESSAGE_AGE_SEC,
+            CallMediaType::Audio,
+            1 as DeviceId,
+            FeatureLevel::MultiRing,
+            true,
+        ),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedReceivedOfferExpired),
+        0
+    );
+}
+
+#[test]
+fn receive_expired_offer_after_age_limit() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    // create off way in the past
+    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    cm.received_offer(
+        remote_peer,
+        connection_id,
+        OfferParameters::new(
+            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            MAX_MESSAGE_AGE_SEC + 1,
+            CallMediaType::Audio,
+            1 as DeviceId,
             FeatureLevel::MultiRing,
             true,
         ),

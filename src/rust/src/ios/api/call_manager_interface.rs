@@ -194,8 +194,13 @@ pub struct AppInterface {
     /// Swift object clean up method.
     pub destroy:                      extern "C" fn(object: *mut c_void),
     ///
-    pub onStartCall:
-        extern "C" fn(object: *mut c_void, remote: *const c_void, callId: u64, isOutgoing: bool),
+    pub onStartCall: extern "C" fn(
+        object: *mut c_void,
+        remote: *const c_void,
+        callId: u64,
+        isOutgoing: bool,
+        callMediaType: i32,
+    ),
     /// Swift event callback method.
     pub onEvent: extern "C" fn(object: *mut c_void, remote: *const c_void, event: i32),
     ///
@@ -314,11 +319,13 @@ pub extern "C" fn ringrtcCall(
     callManager: *mut c_void,
     appRemote: *const c_void,
     callMediaType: i32,
+    appLocalDevice: u32,
 ) -> *mut c_void {
     match call_manager::call(
         callManager as *mut IOSCallManager,
         appRemote,
         CallMediaType::from_i32(callMediaType),
+        appLocalDevice as DeviceId,
     ) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
@@ -334,7 +341,6 @@ pub extern "C" fn ringrtcProceed(
     callManager: *mut c_void,
     callId: u64,
     appCallContext: AppCallContext,
-    appLocalDevice: u32,
     appRemoteDevices: *const u32,
     appRemoteDevicesLen: size_t,
     enable_forking: bool,
@@ -347,7 +353,6 @@ pub extern "C" fn ringrtcProceed(
         callManager as *mut IOSCallManager,
         callId,
         appCallContext,
-        appLocalDevice as DeviceId,
         device_slice.to_vec(),
         enable_forking,
     ) {
@@ -440,8 +445,9 @@ pub extern "C" fn ringrtcReceivedOffer(
     appRemote: *const c_void,
     remoteDevice: u32,
     offer: AppByteSlice,
-    timestamp: u64,
+    messageAgeSec: u64,
     callMediaType: i32,
+    appLocalDevice: u32,
     remoteSupportsMultiRing: bool,
     isLocalDevicePrimary: bool,
 ) -> *mut c_void {
@@ -461,8 +467,9 @@ pub extern "C" fn ringrtcReceivedOffer(
                 appRemote,
                 remoteDevice as DeviceId,
                 session_desc,
-                timestamp,
+                messageAgeSec,
                 CallMediaType::from_i32(callMediaType),
+                appLocalDevice as DeviceId,
                 remote_feature_level,
                 isLocalDevicePrimary,
             ) {

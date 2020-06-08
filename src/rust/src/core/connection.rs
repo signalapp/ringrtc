@@ -41,7 +41,7 @@ use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media_stream::MediaStream;
+use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::sdp_observer::{
     create_csd_observer,

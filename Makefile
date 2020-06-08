@@ -55,6 +55,15 @@ ios/%: out/ios.env
 		./bin/build-ios ; \
 	fi
 
+electron:
+	# TODO ./bin/prepare-workspace
+	$(Q) ./bin/build-electron
+	$(Q) (cd src/node && yarn install && yarn build)
+
+cli:
+	# TODO: ./bin/prepare-workspace
+	$(Q) ./bin/build-cli
+
 PHONY += clean
 clean:
 	$(Q) ./bin/build-aar --clean

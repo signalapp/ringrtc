@@ -8,6 +8,7 @@
  */
 
 #include "rffi/api/ref_count.h"
+#include "rtc_base/logging.h"
 
 namespace webrtc {
 namespace rffi {
@@ -17,7 +18,8 @@ namespace rffi {
  */
 RUSTEXPORT void
 Rust_releaseRef(rtc::RefCountInterface* ref_counted_ptr) {
-  ref_counted_ptr->Release();
+  auto result = ref_counted_ptr->Release();
+  RTC_LOG(LS_VERBOSE) << "Did it get deleted? " << (result == rtc::RefCountReleaseStatus::kDroppedLastRef);
 }
 
 /*

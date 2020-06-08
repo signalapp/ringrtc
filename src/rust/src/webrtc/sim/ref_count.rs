@@ -10,7 +10,6 @@
 use crate::core::util::CppObject;
 
 /// Rust wrapper around RefCountInterface::AddRef()
-#[allow(dead_code)]
 pub fn add_ref(_ref_counted_pointer: CppObject) {
     info!("add_ref()");
 }

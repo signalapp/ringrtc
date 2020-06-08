@@ -12,10 +12,14 @@ authors = ["Curt Brune <curt@signal.org>", "Jim Gustafson <jim@signal.org>", "Pe
 edition = "2018"
 description = "A Rust interface for WebRTC"
 license = "GPL-3.0-only"
-build = false
 
 [lib]
 crate_type = ["cdylib", "staticlib", "lib"]
+
+[[bin]]
+name = "cli"
+path = "src/cli.rs"
+required-features = ["native", "simnet"]
 
 [dependencies]
 bytes       = { version = "0.5.4"  }
@@ -35,6 +39,13 @@ prost-build = { version = "0.6.1",  optional = true }
 simplelog   = { version = "^0.7.3", optional = true, default-features = false }
 rand_chacha = { version = "0.2.1",  optional = true }
 
+# Optional, needed by the "electron" feature
+neon = { version = "0.4.0", optional = true }
+
+[build-dependencies]
+# Needed by the "electron" feature
+neon-build = "0.4.0"
+
 [dependencies.tokio]
 version = "=0.1.22"
 default-features = false
@@ -44,6 +55,9 @@ features = ["rt-full"]
 default = []
 protobuf_gen_deps = ["prost-build"]
 sim = ["simplelog", "rand_chacha"]
+electron = ["neon", "native"]
+native = []  # We have this so we can more easily disable things only native clients need
+simnet = []  # We have this so we can more easily disable things only simulated native client need
 
 [[bin]]
 name = "protobuf-gen"

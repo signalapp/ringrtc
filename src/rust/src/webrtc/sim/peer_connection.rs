@@ -78,7 +78,7 @@ struct RffiPeerConnectionState {
 /// Simulation type for DataChannelInterface.
 pub type RffiDataChannelInterface = u32;
 
-static FAKE_DC_INTERFACE: u32 = 9;
+static FAKE_DC_INTERFACE: RffiDataChannelInterface = 9;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createOffer(
