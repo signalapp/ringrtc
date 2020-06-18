@@ -273,6 +273,7 @@ impl CallEndpoint {
                 let signaling_sender = Box::new(endpoint.clone());
                 let incoming_video_sink = Box::new(endpoint.clone());
                 let platform = NativePlatform::new(
+                    true, // cli doesn't support async sending yet.
                     pcf.clone(),
                     state_handler,
                     signaling_sender,

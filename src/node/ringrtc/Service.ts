@@ -17,7 +17,7 @@ export class RingRTCType {
   private _call: Call | null;
 
   // Set by UX
-  handleOutgoingSignaling: ((remoteUserId: UserId, message: CallingMessage) => Promise<void>) | null = null;
+  handleOutgoingSignaling: ((remoteUserId: UserId, message: CallingMessage) => Promise<boolean>) | null = null;
   handleIncomingCall: ((call: Call) => Promise<CallSettings | null>) | null = null;
   handleAutoEndedIncomingCallRequest: ((remoteUserId: UserId, reason: CallEndedReason) => void) | null = null;
   handleNeedsPermission: ((remoteUserId: UserId) => void) | null = null;
@@ -184,7 +184,7 @@ export class RingRTCType {
     message.offer.callId = callId;
     message.offer.type = offerType;
     message.offer.sdp = sdp;
-    this.sendSignaling(remoteUserId, remoteDeviceId, broadcast, message);
+    this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
 
   // Called by Rust
@@ -199,7 +199,7 @@ export class RingRTCType {
     message.answer = new AnswerMessage();
     message.answer.callId = callId;
     message.answer.sdp = sdp;
-    this.sendSignaling(remoteUserId, remoteDeviceId, broadcast, message);
+    this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
 
   // Called by Rust
@@ -220,7 +220,7 @@ export class RingRTCType {
       copy.sdp = candidate.sdp;
       message.iceCandidates.push(copy);
     }
-    this.sendSignaling(remoteUserId, remoteDeviceId, broadcast, message);
+    this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
 
   // Called by Rust
@@ -237,7 +237,7 @@ export class RingRTCType {
     message.legacyHangup.callId = callId;
     message.legacyHangup.type = hangupType;
     message.legacyHangup.deviceId = deviceId || 0;
-    this.sendSignaling(remoteUserId, remoteDeviceId, broadcast, message);
+    this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
 
   // Called by Rust
@@ -254,7 +254,7 @@ export class RingRTCType {
     message.hangup.callId = callId;
     message.hangup.type = hangupType;
     message.hangup.deviceId = deviceId || 0;
-    this.sendSignaling(remoteUserId, remoteDeviceId, broadcast, message);
+    this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
 
   // Called by Rust
@@ -267,7 +267,33 @@ export class RingRTCType {
     const message = new CallingMessage();
     message.busy = new BusyMessage();
     message.busy.callId = callId;
-    this.sendSignaling(remoteUserId, remoteDeviceId, broadcast, message);
+    this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
+  }
+
+  private sendSignaling(
+    remoteUserId: UserId,
+    remoteDeviceId: DeviceId,
+    callId: CallId,
+    broadcast: boolean,
+    message: CallingMessage
+  ): void {
+    message.supportsMultiRing = true;
+    if (!broadcast) {
+      message.destinationDeviceId = remoteDeviceId;
+    }
+
+    (async () => {
+      if (this.handleOutgoingSignaling) {
+        const signalingResult = await this.handleOutgoingSignaling(remoteUserId, message);
+        if (signalingResult) {
+          this.callManager.signalingMessageSent(callId);
+        } else {
+          this.callManager.signalingMessageSendFailed(callId);
+        }
+      } else {
+        this.callManager.signalingMessageSendFailed(callId);
+      }
+    })();
   }
 
   // Called by Rust
@@ -279,24 +305,6 @@ export class RingRTCType {
   ): void {
     if (this.handleLogMessage) {
       this.handleLogMessage(level, fileName, line, message);
-    }
-  }
-
-  private sendSignaling(
-    remoteUserId: UserId,
-    remoteDeviceId: DeviceId,
-    broadcast: boolean,
-    message: CallingMessage
-
-    ) {
-    message.supportsMultiRing = true;
-    if (!broadcast) {
-      message.destinationDeviceId = remoteDeviceId;
-    }
-
-    if (this.handleOutgoingSignaling) {
-      // TODO: Use promise to implement signaling queueing
-      this.handleOutgoingSignaling(remoteUserId, message);
     }
   }
 
@@ -807,6 +815,8 @@ export interface CallManager {
   accept(callId: CallId): void;
   ignore(callId: CallId): void;
   hangup(): void;
+  signalingMessageSent(callId: CallId): void;
+  signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
   sendVideoStatus(enabled: boolean): void;
   sendVideoFrame(width: number, height: number, buffer: ArrayBuffer): void;

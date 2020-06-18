@@ -115,9 +115,7 @@ pub enum SignalingMessage {
 impl fmt::Display for SignalingMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            SignalingMessage::Offer(media_type, _) => {
-                format!("Offer({:?}, ...)", media_type)
-            }
+            SignalingMessage::Offer(media_type, _) => format!("Offer({:?}, ...)", media_type),
             SignalingMessage::Answer(_) => format!("Answer(...)"),
             SignalingMessage::IceCandidates(_) => format!("IceCandidates(...)"),
             SignalingMessage::Hangup(parameters, use_legacy) => {
@@ -225,20 +223,23 @@ impl fmt::Debug for EndReason {
 }
 
 pub struct NativePlatform {
-    peer_connection_factory: PeerConnectionFactory,
-    signaling_sender:        Box<dyn SignalingSender + Send>,
-    state_handler:           Box<dyn CallStateHandler + Send>,
-    incoming_video_sink:     Box<dyn VideoSink + Send>,
+    should_assume_messages_sent: bool,
+    peer_connection_factory:     PeerConnectionFactory,
+    signaling_sender:            Box<dyn SignalingSender + Send>,
+    state_handler:               Box<dyn CallStateHandler + Send>,
+    incoming_video_sink:         Box<dyn VideoSink + Send>,
 }
 
 impl NativePlatform {
     pub fn new(
+        should_assume_messages_sent: bool,
         peer_connection_factory: PeerConnectionFactory,
         signaling_sender: Box<dyn SignalingSender + Send>,
         state_handler: Box<dyn CallStateHandler + Send>,
         incoming_video_sink: Box<dyn VideoSink + Send>,
     ) -> Self {
         Self {
+            should_assume_messages_sent,
             peer_connection_factory,
             signaling_sender,
             state_handler,
@@ -471,8 +472,7 @@ impl Platform for NativePlatform {
     }
 
     fn assume_messages_sent(&self) -> bool {
-        // TODO: Figure out how we can call message_sent() and avoid needing this.
-        true
+        self.should_assume_messages_sent
     }
 
     fn on_send_offer(

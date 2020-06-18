@@ -205,6 +205,7 @@ impl CallEndpoint {
         let outgoing_video = peer_connection_factory.create_outgoing_video_source()?;
         let unrendered_frame = OneFrameBuffer::new();
         let platform = NativePlatform::new(
+            false, // Use async notification from app to send next message.
             peer_connection_factory,
             // All the things get pumped into the same event channel,
             // but the NativePlatform doesn't know that.
@@ -362,6 +363,30 @@ declare_types! {
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
                 cm.call_manager.hangup()?;
+                Ok(())
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            Ok(cx.undefined().upcast())
+        }
+
+        method signalingMessageSent(mut cx) {
+            let call_id = get_call_id_arg(&mut cx, 0);
+            debug!("JsCallManager.signalingMessageSent({})", call_id);
+
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |mut cm| {
+                cm.call_manager.message_sent(call_id)?;
+                Ok(())
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            Ok(cx.undefined().upcast())
+        }
+
+        method signalingMessageSendFailed(mut cx) {
+            let call_id = get_call_id_arg(&mut cx, 0);
+            debug!("JsCallManager.signalingMessageSendFailed({})", call_id);
+
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |mut cm| {
+                cm.call_manager.message_send_failure(call_id)?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
