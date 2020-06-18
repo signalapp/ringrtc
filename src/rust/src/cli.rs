@@ -414,7 +414,7 @@ impl CallEndpoint {
             let cm = &mut state.call_manager;
             let connection_id = ConnectionId::new(call_id, sender_device_id);
             match msg {
-                SignalingMessage::Offer(media_type, local_device_id, offer) => {
+                SignalingMessage::Offer(media_type, offer) => {
                     let local_is_primary = state.device_id == 1;
                     cm.received_offer(
                         sender_id,
@@ -423,7 +423,7 @@ impl CallEndpoint {
                             offer,
                             0,
                             media_type,
-                            local_device_id,
+                            state.device_id,
                             FeatureLevel::MultiRing,
                             local_is_primary,
                         ),

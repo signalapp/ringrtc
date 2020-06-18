@@ -84,10 +84,10 @@ fi
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        gn gen -C out/Debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_include_pulse_audio=false"
+        gn gen -C out/Debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false"
         ninja -C out/Debug
     else
-        gn gen -C out/Release "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_include_pulse_audio=false is_debug=false "
+        gn gen -C out/Release "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false is_debug=false "
         ninja -C out/Release
     fi
 )

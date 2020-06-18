@@ -587,7 +587,7 @@ declare_types! {
                 match event {
                     Event::SendSignaling(peer_id, maybe_device_id, call_id, signal) => {
                         let (method_name, data1, data2) : (&str, Handle<JsValue>, Handle<JsValue>) = match signal {
-                            SignalingMessage::Offer(media_type, _local_device_id, sdp) => ("onSendOffer", cx.number(media_type as i32).upcast(), cx.string(sdp).upcast()),
+                            SignalingMessage::Offer(media_type, sdp) => ("onSendOffer", cx.number(media_type as i32).upcast(), cx.string(sdp).upcast()),
                             SignalingMessage::Answer(sdp) => ("onSendAnswer", cx.string(sdp).upcast(), cx.undefined().upcast()),
                             SignalingMessage::IceCandidates(candidates) => ("onSendIceCandidates", {
                                 let js_candidates = JsArray::new(&mut cx, candidates.len() as u32);

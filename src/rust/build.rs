@@ -16,6 +16,13 @@ fn main() {
     eprintln!("build.rs: target: {}, profile: {}", target, profile);
 
     if cfg!(feature = "native") {
+        println!("cargo:rustc-link-lib=webrtc");
+        if debug {
+            println!("cargo:rustc-link-search=native=../../src/webrtc/src/out/Debug/obj/",);
+        } else {
+            println!("cargo:rustc-link-search=native=../../src/webrtc/src/out/Release/obj/",);
+        }
+    
         if cfg!(target_os = "macos") {
             println!("cargo:rustc-link-lib=dylib=c++");
             println!("cargo:rustc-link-lib=framework=Foundation");
@@ -43,13 +50,6 @@ fn main() {
             }
         } else {
             println!("cargo:rustc-link-lib=stdc++");
-        }
-
-        println!("cargo:rustc-link-lib=webrtc");
-        if debug {
-            println!("cargo:rustc-link-search=native=../../src/webrtc/src/out/Debug/obj/",);
-        } else {
-            println!("cargo:rustc-link-search=native=../../src/webrtc/src/out/Release/obj/",);
         }
     }
 

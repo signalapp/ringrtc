@@ -105,7 +105,7 @@ pub trait CallStateHandler {
 // TODO: Should unify this with SignalingMessageType?
 #[derive(Clone)]
 pub enum SignalingMessage {
-    Offer(CallMediaType, DeviceId, String),
+    Offer(CallMediaType, String),
     Answer(String),
     IceCandidates(Vec<IceCandidate>),
     Hangup(HangupParameters, bool),
@@ -115,8 +115,8 @@ pub enum SignalingMessage {
 impl fmt::Display for SignalingMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            SignalingMessage::Offer(media_type, local_device_id, _) => {
-                format!("Offer({:?}, {}, ...)", media_type, local_device_id)
+            SignalingMessage::Offer(media_type, _) => {
+                format!("Offer({:?}, ...)", media_type)
             }
             SignalingMessage::Answer(_) => format!("Answer(...)"),
             SignalingMessage::IceCandidates(_) => format!("IceCandidates(...)"),
@@ -491,7 +491,7 @@ impl Platform for NativePlatform {
             remote_peer,
             connection_id,
             broadcast,
-            SignalingMessage::Offer(call_media_type, 0, offer.to_string()),
+            SignalingMessage::Offer(call_media_type, offer.to_string()),
         )?;
         Ok(())
     }
