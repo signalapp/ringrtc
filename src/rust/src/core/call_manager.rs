@@ -306,7 +306,7 @@ where
         })
         .map_err(move |err| {
             error!("Handle call failed: {}", err);
-            cm_error.internal_create_api_error(&remote_peer_error, err);
+            cm_error.internal_create_api_error(&remote_peer_error, call_id, err);
         });
         self.worker_spawn(future)
     }
@@ -370,7 +370,11 @@ where
             lazy(move || call_manager.handle_received_offer(remote_peer, connection_id, offer))
                 .map_err(move |err| {
                     error!("Handle received offer failed: {}", err);
-                    cm_error.internal_create_api_error(&remote_peer_error, err);
+                    cm_error.internal_create_api_error(
+                        &remote_peer_error,
+                        connection_id.call_id(),
+                        err,
+                    );
                 });
         self.worker_spawn(future)
     }
@@ -1016,7 +1020,7 @@ where
             info!("handle_received_offer(): expired for id: {}", connection_id);
             self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
             // Notify application we are completely done with this remote.
-            self.notify_call_concluded(&remote_peer)?;
+            self.notify_call_concluded(&remote_peer, connection_id.call_id())?;
             return Ok(());
         }
 
@@ -1029,7 +1033,7 @@ where
                 ApplicationEvent::EndedIgnoreCallsFromNonMultiringCallers,
             )?;
             // Notify application we are completely done with this remote.
-            self.notify_call_concluded(&remote_peer)?;
+            self.notify_call_concluded(&remote_peer, connection_id.call_id())?;
             return Ok(());
         }
 
@@ -1332,6 +1336,7 @@ where
     fn internal_create_api_error(
         &mut self,
         remote_peer: &<T as Platform>::AppRemotePeer,
+        call_id: CallId,
         error: failure::Error,
     ) {
         info!("internal_create_api_error(): error: {}", error);
@@ -1345,10 +1350,10 @@ where
         }
 
         // The future hit problems before creating or accessing
-        //an active call. Simply notify the application with no
+        // an active call. Simply notify the application with no
         // call clean up.
         let _ = self.notify_application(remote_peer, ApplicationEvent::EndedInternalFailure);
-        let _ = self.notify_call_concluded(remote_peer);
+        let _ = self.notify_call_concluded(remote_peer, call_id);
     }
 
     /// Internal error occured on an API future.
@@ -1575,8 +1580,13 @@ where
     pub(super) fn notify_call_concluded(
         &self,
         remote_peer: &<T as Platform>::AppRemotePeer,
+        _call_id: CallId,
     ) -> Result<()> {
-        info!("notify_call_concluded():");
+        ringbench!(
+            RingBench::CallManager,
+            RingBench::Application,
+            format!("call_concluded()\t{}", _call_id)
+        );
 
         let platform = self.platform.lock()?;
         platform.on_call_concluded(remote_peer)

@@ -197,7 +197,7 @@ where
             // release the the remote object.
             if let Ok(call_manager) = self.call_manager() {
                 if let Ok(remote_peer) = self.remote_peer() {
-                    let _ = call_manager.notify_call_concluded(&*remote_peer);
+                    let _ = call_manager.notify_call_concluded(&*remote_peer, self.call_id);
                 }
             }
         } else {
