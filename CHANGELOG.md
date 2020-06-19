@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.1.1
+
+- Reference signalapp/webrtc@4044f
+
 ## v2.1.0
 
 - Implement native interface
