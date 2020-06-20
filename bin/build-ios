@@ -10,7 +10,7 @@
 # Be sure of the following pre-requisites in your environment (MacOS & Xcode):
 #
 # $ xcode-select --install
-# $ rustup target add aarch64-apple-ios armv7-apple-ios armv7s-apple-ios x86_64-apple-ios i386-apple-ios
+# $ rustup target add aarch64-apple-ios x86_64-apple-ios
 # $ cargo install cargo-lipo
 # $ cargo install cbindgen
 #
@@ -93,9 +93,9 @@ done
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
   echo "Building the WebRTC.framework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
-  
-  (cd ${WEBRTC_SRC_DIR} && ./tools_webrtc/ios/build_ios_libs.py -o ${OUTPUT_DIR}/${BUILD_TYPE} --build_config ${BUILD_TYPE})
-  
+
+  (cd ${WEBRTC_SRC_DIR} && ./tools_webrtc/ios/build_ios_libs.py -o ${OUTPUT_DIR}/${BUILD_TYPE} --build_config ${BUILD_TYPE} --arch {arm64,x64})
+
   echo "Copying to ${OUTPUT_DIR}"
 
   # Copy WebRTC.framework up.
@@ -114,25 +114,22 @@ if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
 then
   # @todo It would be nice if cargo lipo could output to a different
   # directory for an out-of-source build...
-  
+
   echo "Creating universal binary in ${OUTPUT_DIR}/libringrtc..."
 
   (
   cd ${RINGRTC_SRC_DIR}/rust
-  
-  # @todo Figure out if we need to support the simulator or not, and then bring
-  # in appropriate x86/i386 support...
-  
+
   if [ "${BUILD_TYPE}" = "debug" ]
   then
-    cargo lipo --targets aarch64-apple-ios,armv7-apple-ios,armv7s-apple-ios,x86_64-apple-ios
+    cargo lipo --targets aarch64-apple-ios,x86_64-apple-ios
   else
-    cargo lipo --release --targets aarch64-apple-ios,armv7-apple-ios,armv7s-apple-ios,x86_64-apple-ios
+    cargo lipo --release --targets aarch64-apple-ios,x86_64-apple-ios
   fi
-  
+
   mkdir -p ${OUTPUT_DIR}/libringrtc
   cp -f ${RINGRTC_SRC_DIR}/rust/target/universal/${BUILD_TYPE}/libringrtc.a ${OUTPUT_DIR}/libringrtc/libringrtc.a
-  
+
   # Create the modulemap:
   echo 'framework module SignalRingRTC {
       umbrella header "SignalRingRTC.h"

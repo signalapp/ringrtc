@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.3 or later).
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.4.1 or later).
 
 ## Prerequisites
 
@@ -20,10 +20,10 @@ Install rustup, the Rust management system:
 
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-We need to use Rust 1.41.1 for now to maintain support for 32-bit clients.
+We currently use Rust 1.44.1 for official builds, but any recent stable version should work.
 
-    rustup toolchain install 1.41.1
-    rustup default 1.41.1
+    rustup toolchain install 1.44.1
+    rustup default 1.44.1
 
 #### Android
 
@@ -36,8 +36,7 @@ Install Rust target support for Android via `rustup`:
 
 Install Rust target support for iOS via `rustup`:
 
-    rustup target add \
-      aarch64-apple-ios armv7-apple-ios armv7s-apple-ios x86_64-apple-ios i386-apple-ios
+    rustup target add aarch64-apple-ios x86_64-apple-ios
 
 Install additional components via `cargo`:
 
@@ -105,7 +104,7 @@ To build frameworks suitable for including in an Xcode project, run:
 
     make ios
     
-This will produce release and debug builds for all architectures.
+This will produce release builds for all architectures.
 
 When the build is complete, the frameworks will be available here:
 
