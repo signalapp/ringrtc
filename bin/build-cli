@@ -23,8 +23,8 @@ usage()
 
 clean()
 {
-  # Remove all possible artifact directories.
-  echo "Nothing yet to clean..."
+    # Remove all possible artifact directories.
+    echo "Nothing yet to clean..."
 }
 
 BUILD_TYPE=debug
@@ -52,38 +52,71 @@ while [ "$1" != "" ]; do
     shift
 done
 
+get_default_platform()
+{
+    hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
+
+    case "$(rustup show active-toolchain)" in 
+        *"x86_64-apple-darwin"* )
+            echo "darwin"
+            ;;
+        *"x86_64-pc-windows"* )
+            echo "win32"
+            ;;
+        *"x86_64-unknown-linux"* )
+            echo "linux"
+            ;;
+        * )
+            echo "unknown"
+    esac
+}
+
+DEFAULT_PLATFORM=$(get_default_platform)
+if [ "${DEFAULT_PLATFORM}" = "unknown" ]
+then
+    echo "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting."
+    exit 1
+fi
+
 # Build WebRTC.
 (
-  cd src/webrtc/src
+    cd src/webrtc/src
 
-  if [ "${BUILD_TYPE}" = "debug" ]
-  then
-    gn gen -C out/Debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false"
-    ninja -C out/Debug
-  else
-    gn gen -C out/Release "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false is_debug=false"
-    ninja -C out/Release
-  fi
+    if [ $DEFAULT_PLATFORM = "darwin" ]
+    then
+        # HACK: Force WebRTC to use a MacOS target of 10.12.1 to support SCTP library.
+        # TODO: Remove this when changed upstream.
+        sed -i '' 's/10.10.0/10.12.1/g' ./build/config/mac/mac_sdk.gni
+    fi
+
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        gn gen -C out/Debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false"
+        ninja -C out/Debug
+    else
+        gn gen -C out/Release "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false is_debug=false"
+        ninja -C out/Release
+    fi
 )
 
 # Build and link the final RingRTC library.
 (
-  cd src/rust
+    cd src/rust
 
-  if [ "${BUILD_TYPE}" = "debug" ]
-  then
-    # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
-    # TODO: Figure out why and fix this
-    rm -f target/debug/deps/libringrtc.rlib
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
+        # TODO: Figure out why and fix this
+        rm -f target/debug/deps/libringrtc.rlib
 
-    cargo build --bin cli --features=native,simnet
-    echo "Can run with src/rust/target/debug/cli"
-  else
-    # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
-    # TODO: Figure out why and fix this
-    rm -f target/release/deps/libringrtc.rlib
+        cargo build --bin cli --features=native,simnet
+        echo "Can run with src/rust/target/debug/cli"
+    else
+        # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
+        # TODO: Figure out why and fix this
+        rm -f target/release/deps/libringrtc.rlib
 
-    cargo build --bin cli --features=native,simnet --release
-    echo "Can run with src/rust/target/release/cli"
-  fi
+        cargo build --bin cli --features=native,simnet --release
+        echo "Can run with src/rust/target/release/cli"
+    fi
 )

@@ -82,6 +82,13 @@ fi
 (
     cd src/webrtc/src
 
+    if [ $DEFAULT_PLATFORM = "darwin" ]
+    then
+        # HACK: Force WebRTC to use a MacOS target of 10.12.1 to support SCTP library.
+        # TODO: Remove this when changed upstream.
+        sed -i '' 's/10.10.0/10.12.1/g' ./build/config/mac/mac_sdk.gni
+    fi
+
     if [ "${BUILD_TYPE}" = "debug" ]
     then
         gn gen -C out/Debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false"
