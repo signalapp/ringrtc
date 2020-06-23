@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.2.0
+
+- Reference signalapp/webrtc@4044g
+
+- iOS: Remove 32-bit support, require 11.0 target
+
 ## v2.1.1
 
 - Reference signalapp/webrtc@4044f
