@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.3.0
+
+- Reference signalapp/webrtc@4103
+
+- Add support for call request permissions
+
 ## v2.2.0
 
 - Reference signalapp/webrtc@4044g
