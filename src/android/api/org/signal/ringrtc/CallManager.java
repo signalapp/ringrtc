@@ -929,6 +929,9 @@ public class CallManager {
     /** The call ended because the call was declared busy by a different device. */
     ENDED_REMOTE_HANGUP_BUSY,
 
+    /** The call ended because the call needed permission on a different device. */
+    ENDED_REMOTE_HANGUP_NEED_PERMISSION,
+
     /** The call ended because of a remote busy message. */
     ENDED_REMOTE_BUSY,
 
@@ -1015,7 +1018,10 @@ public class CallManager {
     DECLINED,
 
     /** Call was declared busy elsewhere by a different device. */
-    BUSY;
+    BUSY,
+
+    /** Call needed permission on a different device. */
+    NEED_PERMISSION;
 
     @CalledByNative
     static HangupType fromNativeIndex(int nativeIndex) {

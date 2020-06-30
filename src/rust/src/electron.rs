@@ -497,6 +497,7 @@ declare_types! {
                 1 => HangupType::Accepted,
                 2 => HangupType::Declined,
                 3 => HangupType::Busy,
+                4 => HangupType::NeedPermission,
                 _ => HangupType::Normal,  // TODO: Do something better.  Default matches are evil.
             };
             let hangup_device_id = if hangup_device_id.is_a::<JsNull>() {
@@ -695,6 +696,7 @@ declare_types! {
                             EndReason::AcceptedOnAnotherDevice => "AcceptedOnAnotherDevice",
                             EndReason::DeclinedOnAnotherDevice => "DeclinedOnAnotherDevice",
                             EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
+                            EndReason::NeedPermissionOnAnotherDevice => "NeedPermissionOnAnotherDevice",
                             EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
                         };
                         let args = vec![

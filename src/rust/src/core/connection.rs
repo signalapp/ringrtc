@@ -716,7 +716,7 @@ where
         }
 
         ringbench!(
-            RingBench::Connection,
+            RingBench::Conn,
             RingBench::WebRTC,
             format!("ice_candidates({})", ice_candidates.len())
         );
@@ -734,13 +734,9 @@ where
     /// PeerConnection DataChannel.
     pub fn send_hangup_via_data_channel(&self, hangup_parameters: HangupParameters) -> Result<()> {
         ringbench!(
-            RingBench::Connection,
+            RingBench::Conn,
             RingBench::WebRTC,
-            format!(
-                "dc(hangup.{})\t{}",
-                hangup_parameters.hangup_type(),
-                self.connection_id
-            )
+            format!("dc(hangup/{})\t{}", hangup_parameters, self.connection_id)
         );
 
         let webrtc = self.webrtc.lock()?;
@@ -761,7 +757,7 @@ where
     /// PeerConnection DataChannel.
     pub fn send_connected(&self) -> Result<()> {
         ringbench!(
-            RingBench::Connection,
+            RingBench::Conn,
             RingBench::WebRTC,
             format!("dc(connected)\t{}", self.connection_id)
         );
@@ -1101,23 +1097,13 @@ where
 
     /// Inject a local `Hangup` event into the FSM.
     ///
-    /// `Called By:` Local application.
-    pub fn inject_send_hangup_via_data_channel(&mut self) -> Result<()> {
-        self.set_state(ConnectionState::Terminating)?;
-        self.inject_event(ConnectionEvent::SendHangupViaDataChannel)
-    }
-
-    /// Inject a local `Hangup With Type` event into the FSM.
-    ///
-    /// `Called By:` Connection event observer.
-    pub fn inject_send_hangup_via_data_channel_with_type(
+    /// `Called By:` Local application, connection event observer.
+    pub fn inject_send_hangup_via_data_channel(
         &mut self,
         hangup_parameters: HangupParameters,
     ) -> Result<()> {
         self.set_state(ConnectionState::Terminating)?;
-        self.inject_event(ConnectionEvent::SendHangupViaDataChannelWithType(
-            hangup_parameters,
-        ))
+        self.inject_event(ConnectionEvent::SendHangupViaDataChannel(hangup_parameters))
     }
 
     /// Inject a local `AcceptCall` event into the FSM.

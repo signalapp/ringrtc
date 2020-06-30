@@ -23,6 +23,8 @@ use ringrtc::common::{
     ConnectionState,
     DeviceId,
     FeatureLevel,
+    HangupParameters,
+    HangupType,
     OfferParameters,
 };
 
@@ -222,6 +224,106 @@ fn inbound_call_connected() {
     test_init();
 
     let _ = connect_inbound_call();
+}
+
+#[test]
+fn inbound_call_hangup_accepted() {
+    test_init();
+
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    let acceptee = 2 as DeviceId;
+    cm.received_hangup(
+        remote_id,
+        HangupParameters::new(HangupType::Accepted, Some(acceptee)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedRemoteHangupAccepted),
+        1
+    );
+}
+
+#[test]
+fn inbound_call_hangup_declined() {
+    test_init();
+
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    let declinee = 2 as DeviceId;
+    cm.received_hangup(
+        remote_id,
+        HangupParameters::new(HangupType::Declined, Some(declinee)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedRemoteHangupDeclined),
+        1
+    );
+}
+
+#[test]
+fn inbound_call_hangup_busy() {
+    test_init();
+
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    let busyee = 2 as DeviceId;
+    cm.received_hangup(
+        remote_id,
+        HangupParameters::new(HangupType::Busy, Some(busyee)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedRemoteHangupBusy),
+        1
+    );
+}
+
+#[test]
+fn inbound_call_hangup_need_permission() {
+    test_init();
+
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    let permissionee = 2 as DeviceId;
+    cm.received_hangup(
+        remote_id,
+        HangupParameters::new(HangupType::NeedPermission, Some(permissionee)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
+        1
+    );
 }
 
 #[test]

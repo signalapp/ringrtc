@@ -14,19 +14,20 @@ pub struct Connected {
 pub struct Hangup {
     #[prost(uint64, optional, tag="1")]
     pub id: ::std::option::Option<u64>,
-    #[prost(enumeration="hangup::Type", optional, tag="2", default="Normal")]
+    #[prost(enumeration="hangup::Type", optional, tag="2")]
     pub r#type: ::std::option::Option<i32>,
-    #[prost(uint32, optional, tag="3", default="0")]
+    #[prost(uint32, optional, tag="3")]
     pub device_id: ::std::option::Option<u32>,
 }
 pub mod hangup {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Type {
-        Normal = 0,
-        Accepted = 1,
-        Declined = 2,
-        Busy = 3,
+        HangupNormal = 0,
+        HangupAccepted = 1,
+        HangupDeclined = 2,
+        HangupBusy = 3,
+        HangupNeedPermission = 4,
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

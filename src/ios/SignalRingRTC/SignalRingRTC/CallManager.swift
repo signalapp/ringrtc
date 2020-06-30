@@ -31,34 +31,36 @@ public enum CallManagerEvent: Int32 {
     case endedRemoteHangupDeclined = 7
     /// The call ended because the call was declared busy by a different device.
     case endedRemoteHangupBusy = 8
+    /// The call ended because the call needed permission on a different device.
+    case endedRemoteHangupNeedPermission = 9
     /// The call ended because of a remote busy message.
-    case endedRemoteBusy = 9
+    case endedRemoteBusy = 10
     /// The call ended because of glare (received offer from same remote).
-    case endedRemoteGlare = 10
+    case endedRemoteGlare = 11
     /// The call ended because it timed out during setup.
-    case endedTimeout = 11
+    case endedTimeout = 12
     /// The call ended because of an internal error condition.
-    case endedInternalFailure = 12
+    case endedInternalFailure = 13
     /// The call ended because a signaling message couldn't be sent.
-    case endedSignalingFailure = 13
+    case endedSignalingFailure = 14
     /// The call ended because setting up the connection failed.
-    case endedConnectionFailure = 14
+    case endedConnectionFailure = 15
     /// The call ended because the application wanted to drop the call.
-    case endedDropped = 15
+    case endedDropped = 16
     /// The remote side has enabled video.
-    case remoteVideoEnable = 16
+    case remoteVideoEnable = 17
     /// The remote side has disabled video.
-    case remoteVideoDisable = 17
+    case remoteVideoDisable = 18
     /// The call dropped while connected and is now reconnecting.
-    case reconnecting = 18
+    case reconnecting = 19
     /// The call dropped while connected and is now reconnected.
-    case reconnected = 19
+    case reconnected = 20
     /// The received offer is expired.
-    case endedReceivedOfferExpired = 20
+    case endedReceivedOfferExpired = 21
     /// Received an offer while already handling an active call.
-    case endedReceivedOfferWhileActive = 21
+    case endedReceivedOfferWhileActive = 22
     /// Received an offer on a linked device from one that doesn't support multi-ring.
-    case endedIgnoreCallsFromNonMultiringCallers = 22
+    case endedIgnoreCallsFromNonMultiringCallers = 23
 }
 
 /// Type of media for call at time of origination.
@@ -79,6 +81,8 @@ public enum HangupType: Int32 {
     case declined = 2
     /// Call was declared busy elsewhere by a different device.
     case busy = 3
+    /// Call needed permission on a different device.
+    case needPermission = 4
 }
 
 // We define our own structure for Ice Candidates so that the

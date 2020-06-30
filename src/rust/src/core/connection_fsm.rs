@@ -62,7 +62,6 @@ use crate::common::{
     CallId,
     ConnectionState,
     HangupParameters,
-    HangupType,
     Result,
     RingBench,
 };
@@ -94,9 +93,7 @@ pub enum ConnectionEvent {
     /// Receive ICE candidate message from remote peer.
     ReceivedIceCandidates(Vec<IceCandidate>),
     /// Event from client application to send hangup via the data channel.
-    SendHangupViaDataChannel,
-    /// Event to send hangup for a specific type via the data channel.
-    SendHangupViaDataChannelWithType(HangupParameters),
+    SendHangupViaDataChannel(HangupParameters),
     /// Local video streaming status change from client application.
     LocalVideoStatus(bool),
     /// Local ICE candidate ready, from WebRTC observer.
@@ -136,11 +133,9 @@ impl fmt::Display for ConnectionEvent {
                 format!("RemoteVideoStatus, call_id: {}, enabled: {}", id, enabled)
             }
             ConnectionEvent::ReceivedIceCandidates(_) => "RemoteIceCandidates".to_string(),
-            ConnectionEvent::SendHangupViaDataChannel => "SendHangupViaDataChannel".to_string(),
-            ConnectionEvent::SendHangupViaDataChannelWithType(hangup_parameters) => format!(
-                "SendHangupViaDataChannelWithType, hangup: {}",
-                hangup_parameters
-            ),
+            ConnectionEvent::SendHangupViaDataChannel(hangup_parameters) => {
+                format!("SendHangupViaDataChannel, hangup: {}", hangup_parameters)
+            }
             ConnectionEvent::LocalVideoStatus(enabled) => {
                 format!("LocalVideoStatus, enabled: {}", enabled)
             }
@@ -332,11 +327,8 @@ where
         // Handle these events even while terminating, as the remote
         // side needs to be informed.
         match event {
-            ConnectionEvent::SendHangupViaDataChannel => {
-                return self.handle_send_hangup_via_data_channel(connection, state)
-            }
-            ConnectionEvent::SendHangupViaDataChannelWithType(hangup_parameters) => {
-                return self.handle_send_hangup_via_data_channel_with_description(
+            ConnectionEvent::SendHangupViaDataChannel(hangup_parameters) => {
+                return self.handle_send_hangup_via_data_channel(
                     connection,
                     state,
                     hangup_parameters,
@@ -397,8 +389,7 @@ where
             ConnectionEvent::OnDataChannel(dc) => {
                 self.handle_on_data_channel(connection, state, dc)
             }
-            ConnectionEvent::SendHangupViaDataChannel => Ok(()),
-            ConnectionEvent::SendHangupViaDataChannelWithType(_) => Ok(()),
+            ConnectionEvent::SendHangupViaDataChannel(_) => Ok(()),
             ConnectionEvent::Synchronize(_) => Ok(()),
             ConnectionEvent::EndCall => Ok(()),
         }
@@ -536,12 +527,8 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::WebRTC,
-            RingBench::Connection,
-            format!(
-                "dc(hangup.{})\t{}",
-                hangup_parameters.hangup_type(),
-                call_id
-            )
+            RingBench::Conn,
+            format!("dc(hangup/{})\t{}", hangup_parameters, call_id)
         );
 
         if connection.call_id() != call_id {
@@ -566,7 +553,7 @@ where
         state: ConnectionState,
         call_id: CallId,
     ) -> Result<()> {
-        ringbench!(RingBench::WebRTC, RingBench::Connection, "dc(connected)");
+        ringbench!(RingBench::WebRTC, RingBench::Conn, "dc(connected)");
 
         if connection.call_id() != call_id {
             warn!("Remote connected for non-active call");
@@ -664,37 +651,10 @@ where
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
-    ) -> Result<()> {
-        match state {
-            ConnectionState::Idle => self.unexpected_state(state, "SendHangupViaDataChannel"),
-            _ => {
-                let mut err_connection = connection.clone();
-                let hangup_future = lazy(move || {
-                    connection.send_hangup_via_data_channel(HangupParameters::new(
-                        HangupType::Normal,
-                        None,
-                    ))
-                })
-                .map_err(move |err| {
-                    err_connection.inject_internal_error(err, "Sending Hangup failed")
-                });
-
-                self.worker_spawn(hangup_future);
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_send_hangup_via_data_channel_with_description(
-        &mut self,
-        connection: Connection<T>,
-        state: ConnectionState,
         hangup_parameters: HangupParameters,
     ) -> Result<()> {
         match state {
-            ConnectionState::Idle => {
-                self.unexpected_state(state, "SendHangupViaDataChannelWithType")
-            }
+            ConnectionState::Idle => self.unexpected_state(state, "SendHangupViaDataChannel"),
             _ => {
                 let mut err_connection = connection.clone();
                 let hangup_future =
@@ -747,7 +707,7 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::WebRTC,
-            RingBench::Connection,
+            RingBench::Conn,
             format!("ice_candidate()\t{}", connection.id())
         );
 
@@ -901,11 +861,7 @@ where
         state: ConnectionState,
         data_channel: DataChannel,
     ) -> Result<()> {
-        ringbench!(
-            RingBench::WebRTC,
-            RingBench::Connection,
-            "on_data_channel()"
-        );
+        ringbench!(RingBench::WebRTC, RingBench::Conn, "on_data_channel()");
 
         match state {
             ConnectionState::IceConnected | ConnectionState::CallConnected => {

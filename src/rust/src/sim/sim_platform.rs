@@ -43,29 +43,31 @@ impl PlatformItem for SimPlatformItem {}
 #[derive(Default)]
 struct SimStats {
     /// Number of offers sent
-    offers_sent:           AtomicUsize,
+    offers_sent:                  AtomicUsize,
     /// Number of answers sent
-    answers_sent:          AtomicUsize,
+    answers_sent:                 AtomicUsize,
     /// Number of ICE candidates sent
-    ice_candidates_sent:   AtomicUsize,
+    ice_candidates_sent:          AtomicUsize,
     /// Number of normal hangups sent
-    normal_hangups_sent:   AtomicUsize,
+    normal_hangups_sent:          AtomicUsize,
     /// Number of accepted hangups sent
-    accepted_hangups_sent: AtomicUsize,
+    accepted_hangups_sent:        AtomicUsize,
     /// Number of declined hangups sent
-    declined_hangups_sent: AtomicUsize,
+    declined_hangups_sent:        AtomicUsize,
     /// Number of busy hangups sent
-    busy_hangups_sent:     AtomicUsize,
+    busy_hangups_sent:            AtomicUsize,
+    /// Number of need permission hangups sent
+    need_permission_hangups_sent: AtomicUsize,
     /// Number of busy messages sent
-    busys_sent:            AtomicUsize,
+    busys_sent:                   AtomicUsize,
     /// Number of start outgoing call events
-    start_outgoing:        AtomicUsize,
+    start_outgoing:               AtomicUsize,
     /// Number of start incoming call events
-    start_incoming:        AtomicUsize,
+    start_incoming:               AtomicUsize,
     /// Number of call concluded events
-    call_concluded:        AtomicUsize,
+    call_concluded:               AtomicUsize,
     /// Track stream counts
-    stream_count:          AtomicUsize,
+    stream_count:                 AtomicUsize,
 }
 
 /// Simulation implementation of platform::Platform.
@@ -290,6 +292,12 @@ impl Platform for SimPlatform {
                 HangupType::Busy => {
                     let _ = self.stats.busy_hangups_sent.fetch_add(1, Ordering::AcqRel);
                 }
+                HangupType::NeedPermission => {
+                    let _ = self
+                        .stats
+                        .need_permission_hangups_sent
+                        .fetch_add(1, Ordering::AcqRel);
+                }
             }
             if self.force_internal_fault.load(Ordering::Acquire) {
                 self.message_send_failure(connection_id.call_id()).unwrap();
@@ -488,6 +496,12 @@ impl SimPlatform {
 
     pub fn busy_hangups_sent(&self) -> usize {
         self.stats.busy_hangups_sent.load(Ordering::Acquire)
+    }
+
+    pub fn need_permission_hangups_sent(&self) -> usize {
+        self.stats
+            .need_permission_hangups_sent
+            .load(Ordering::Acquire)
     }
 
     pub fn busys_sent(&self) -> usize {

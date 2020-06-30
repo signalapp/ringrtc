@@ -199,6 +199,11 @@ impl TestContext {
         platform.busy_hangups_sent()
     }
 
+    pub fn need_permission_hangups_sent(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.need_permission_hangups_sent()
+    }
+
     pub fn error_count(&self) -> usize {
         let platform = self.call_manager.platform().unwrap();
         platform.error_count()

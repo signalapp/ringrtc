@@ -161,6 +161,9 @@ pub enum ApplicationEvent {
     /// The call ended because the call was declared busy by a different device.
     EndedRemoteHangupBusy,
 
+    /// The call ended because the call needed permission on a different device.
+    EndedRemoteHangupNeedPermission,
+
     /// The call ended because of a remote busy message from a callee.
     EndedRemoteBusy,
 
@@ -350,6 +353,9 @@ pub enum HangupType {
 
     // Call was declared busy elsewhere by a different device.
     Busy,
+
+    // Call needed permission on a different device.
+    NeedPermission,
 }
 
 impl fmt::Display for HangupType {
@@ -365,6 +371,7 @@ impl HangupType {
             1 => HangupType::Accepted,
             2 => HangupType::Declined,
             3 => HangupType::Busy,
+            4 => HangupType::NeedPermission,
             _ => panic!("Unknown value: {}", value),
         }
     }
@@ -469,7 +476,7 @@ pub struct HangupParameters {
 impl fmt::Display for HangupParameters {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.device_id {
-            Some(d) => write!(f, "{}/{}", self.hangup_type, d),
+            Some(device_id) => write!(f, "{}/{}", self.hangup_type, device_id),
             None => write!(f, "{}/None", self.hangup_type),
         }
     }
@@ -481,6 +488,10 @@ impl HangupParameters {
             hangup_type,
             device_id,
         }
+    }
+
+    pub fn normal() -> HangupParameters {
+        HangupParameters::new(HangupType::Normal, None)
     }
 
     pub fn hangup_type(&self) -> HangupType {
@@ -502,10 +513,10 @@ pub const DATA_CHANNEL_NAME: &str = "signaling";
 
 // Benchmarking component list.
 pub enum RingBench {
-    Application,
-    CallManager,
+    App,
+    CM,
     Call,
-    Connection,
+    Conn,
     WebRTC,
     Network,
 }
@@ -516,10 +527,10 @@ impl fmt::Display for RingBench {
             f,
             "{}",
             match self {
-                RingBench::Application => "app",
-                RingBench::CallManager => "cm",
+                RingBench::App => "app",
+                RingBench::CM => "cm",
                 RingBench::Call => "call",
-                RingBench::Connection => "conn",
+                RingBench::Conn => "conn",
                 RingBench::WebRTC => "rtc",
                 RingBench::Network => "net",
             }
@@ -532,6 +543,22 @@ macro_rules! ringbench {
     ($source:expr, $destination:expr, $operation:expr) => {
         info!(
             "ringrtc!\t{}\t{} -> {}: {}",
+            match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                Ok(v) => v.as_millis(),
+                Err(_) => 0,
+            },
+            $source,
+            $destination,
+            $operation
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! ringbenchx {
+    ($source:expr, $destination:expr, $operation:expr) => {
+        info!(
+            "ringrtc!\t{}\t{} -x {}: {}",
             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                 Ok(v) => v.as_millis(),
                 Err(_) => 0,

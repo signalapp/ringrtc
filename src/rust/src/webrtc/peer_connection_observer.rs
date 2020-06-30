@@ -135,7 +135,7 @@ extern "C" fn pc_observer_OnSignalingChange<T>(
     if let Ok(connection) = object {
         ringbench!(
             RingBench::WebRTC,
-            RingBench::Connection,
+            RingBench::Conn,
             format!("signaling_change({:?})\t{}", new_state, connection.id())
         );
     } else {
@@ -155,7 +155,7 @@ extern "C" fn pc_observer_OnIceConnectionChange<T>(
     if let Ok(connection) = object {
         ringbench!(
             RingBench::WebRTC,
-            RingBench::Connection,
+            RingBench::Conn,
             format!(
                 "ice_connection_change({:?})\t{}",
                 new_state,
@@ -203,7 +203,7 @@ extern "C" fn pc_observer_OnConnectionChange<T>(
     if let Ok(connection) = object {
         ringbench!(
             RingBench::WebRTC,
-            RingBench::Connection,
+            RingBench::Conn,
             format!("connection_change({:?})\t{}", new_state, connection.id())
         );
     } else {
@@ -240,7 +240,7 @@ extern "C" fn pc_observer_OnIceGatheringChange<T>(
     if let Ok(connection) = object {
         ringbench!(
             RingBench::WebRTC,
-            RingBench::Connection,
+            RingBench::Conn,
             format!("ice_gathering_change({:?})\t{}", new_state, connection.id())
         );
     } else {

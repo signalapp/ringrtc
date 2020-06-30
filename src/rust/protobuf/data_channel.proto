@@ -20,15 +20,16 @@ message Connected {
 
 message Hangup {
   enum Type {
-    NORMAL   = 0;
-    ACCEPTED = 1;
-    DECLINED = 2;
-    BUSY     = 3;
+    HANGUP_NORMAL          = 0;
+    HANGUP_ACCEPTED        = 1;
+    HANGUP_DECLINED        = 2;
+    HANGUP_BUSY            = 3;
+    HANGUP_NEED_PERMISSION = 4;
   }
 
   optional uint64 id       = 1;
-  optional Type   type     = 2 [default = NORMAL];
-  optional uint32 deviceId = 3 [default = 0];
+  optional Type   type     = 2;
+  optional uint32 deviceId = 3;
 }
 
 message VideoStreamingStatus {
@@ -37,9 +38,7 @@ message VideoStreamingStatus {
 }
 
 message Data {
-
   optional Connected            connected            = 1;
   optional Hangup               hangup               = 2;
   optional VideoStreamingStatus videoStreamingStatus = 3;
-
 }

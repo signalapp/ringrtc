@@ -742,9 +742,11 @@ where
 
     /// Send Hangup for this Call.
     ///
-    /// Sends a hangup (HangupType::Normal) on all underlying Connections
-    /// via the data channel (if established).
-    pub fn send_hangup_via_data_channel_to_all(&mut self) -> Result<()> {
+    /// Sends a hangup to all underlying Connections via the data channel (if established).
+    pub fn send_hangup_via_data_channel_to_all(
+        &mut self,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
         info!("send_hangup_via_data_channel_to_all(): {}", self.call_id());
 
         let mut connection_map = self.connection_map.lock()?;
@@ -753,7 +755,7 @@ where
                 "send_hangup_via_data_channel_to_all(): id: {}",
                 connection.id()
             );
-            connection.inject_send_hangup_via_data_channel()?;
+            connection.inject_send_hangup_via_data_channel(hangup_parameters)?;
         }
         Ok(())
     }
@@ -781,8 +783,7 @@ where
                             "send_hangup_via_data_channel_to_all_except(): id: {}",
                             connection.id()
                         );
-                        connection
-                            .inject_send_hangup_via_data_channel_with_type(hangup_parameters)?;
+                        connection.inject_send_hangup_via_data_channel(hangup_parameters)?;
                     }
                 }
                 Ok(())
@@ -995,9 +996,9 @@ where
     }
 
     /// Inject a local `HangUp` event into the FSM.
-    pub fn inject_hangup(&mut self) -> Result<()> {
+    pub fn inject_hangup(&mut self, hangup_parameters: HangupParameters) -> Result<()> {
         self.set_state(CallState::Terminating)?;
-        self.inject_event(CallEvent::LocalHangup)
+        self.inject_event(CallEvent::LocalHangup(hangup_parameters))
     }
 
     /// Inject a `ReceivedAnswer` event into the FSM

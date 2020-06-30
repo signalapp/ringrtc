@@ -83,7 +83,7 @@ macro_rules! check_active_call {
                 v
             }
             _ => {
-                info!("{}(): ignoring for inactive call", $f);
+                ringbenchx!(RingBench::CM, RingBench::App, "inactive");
                 return Ok(());
             }
         }
@@ -670,9 +670,9 @@ where
 
         let hangup_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CallManager,
-                RingBench::Application,
-                format!("send_hangup()\t{}", connection_id)
+                RingBench::CM,
+                RingBench::App,
+                format!("send_hangup({})\t{}", hangup_parameters, connection_id)
             );
 
             let remote_peer = call.remote_peer()?;
@@ -707,7 +707,7 @@ where
     fn conclude_call(
         &mut self,
         mut call: Call<T>,
-        send_hangup: bool,
+        hangup: Option<HangupParameters>,
         event: Option<ApplicationEvent>,
     ) -> Result<()> {
         let call_id = call.call_id();
@@ -721,9 +721,9 @@ where
             self.notify_application(&*remote_peer, event)?;
         }
 
-        if send_hangup {
+        if let Some(hangup_parameters) = hangup {
             // All connections send hangup via data_channel.
-            call.inject_hangup()?;
+            call.inject_hangup(hangup_parameters)?;
         }
 
         let mut call_manager = self.clone();
@@ -731,17 +731,19 @@ where
         let call_error = call.clone();
         let call_clone = call.clone();
         let future = lazy(move || {
-            // If we want to send a hangup message, be sure that
-            // the call actually should send one.
-            if send_hangup && call.should_send_hangup() {
-                // Send hangup via signaling channel.
-                // Use legacy hangup signaling by default.
-                call_manager.send_hangup(
-                    call_clone,
-                    call_id,
-                    HangupParameters::new(HangupType::Normal, None),
-                    USE_LEGACY_HANGUP_MESSAGE,
-                )?;
+            if let Some(hangup_parameters) = hangup {
+                // If we want to send a hangup message, be sure that
+                // the call actually should send one.
+                if call.should_send_hangup() {
+                    // Send hangup via signaling channel.
+                    // Use legacy hangup signaling by default.
+                    call_manager.send_hangup(
+                        call_clone,
+                        call_id,
+                        hangup_parameters,
+                        USE_LEGACY_HANGUP_MESSAGE,
+                    )?;
+                }
             }
             call_manager.dispose_call(call_id)
         })
@@ -767,7 +769,13 @@ where
         let call = self.active_call()?;
         self.clear_active_call()?;
 
-        self.conclude_call(call, send_hangup, Some(event))
+        let hangup = if send_hangup {
+            Some(HangupParameters::normal())
+        } else {
+            None
+        };
+
+        self.conclude_call(call, hangup, Some(event))
     }
 
     /// Handle call() API from application.
@@ -778,7 +786,11 @@ where
         call_media_type: CallMediaType,
         local_device_id: DeviceId,
     ) -> Result<()> {
-        info!("handle_call():");
+        ringbench!(
+            RingBench::App,
+            RingBench::CM,
+            format!("call()\t{}", call_id)
+        );
 
         // if no active call, create a new call
         let mut active_call_id = self.active_call_id.lock()?;
@@ -795,12 +807,6 @@ where
                     self.clone(),
                 )?;
 
-                ringbench!(
-                    RingBench::Application,
-                    RingBench::CallManager,
-                    format!("call()\t{}", call_id)
-                );
-
                 let mut call_map = self.call_map.lock()?;
                 call_map.insert(call_id, call.clone());
                 *active_call_id = Some(call_id);
@@ -811,54 +817,46 @@ where
 
     /// Handle accept_call() API from application.
     fn handle_accept_call(&mut self, call_id: CallId) -> Result<()> {
-        let mut active_call = check_active_call!(self, "handle_accept_call");
+        ringbench!(
+            RingBench::App,
+            RingBench::CM,
+            format!("accept()\t{}", call_id)
+        );
 
+        let mut active_call = check_active_call!(self, "handle_accept_call");
         if active_call.call_id() != call_id {
-            info!(
-                "handle_accept_call(): {} no match for active call_id {}",
-                call_id,
-                active_call.call_id()
-            );
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
-        ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
-            format!("accept()\t{}", call_id)
-        );
         active_call.inject_accept_call()
     }
 
     fn handle_conclude_active_call(
         &mut self,
         active_call: Call<T>,
-        send_hangup: bool,
+        hangup: Option<HangupParameters>,
         event: ApplicationEvent,
     ) -> Result<()> {
         self.clear_active_call()?;
-        self.conclude_call(active_call, send_hangup, Some(event))
+        self.conclude_call(active_call, hangup, Some(event))
     }
 
     /// Handle drop_call() API from application.
     fn handle_drop_call(&mut self, call_id: CallId) -> Result<()> {
-        let active_call = check_active_call!(self, "handle_drop_call");
+        ringbench!(
+            RingBench::App,
+            RingBench::CM,
+            format!("drop()\t{}", call_id)
+        );
 
+        let active_call = check_active_call!(self, "handle_drop_call");
         if active_call.call_id() != call_id {
-            info!(
-                "handle_drop_call(): {} no match for active call_id {}",
-                call_id,
-                active_call.call_id()
-            );
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
-        ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
-            format!("drop()\t{}", call_id)
-        );
-        self.handle_conclude_active_call(active_call, false, ApplicationEvent::EndedAppDroppedCall)
+        self.handle_conclude_active_call(active_call, None, ApplicationEvent::EndedAppDroppedCall)
     }
 
     /// Handle proceed() API from application.
@@ -869,22 +867,17 @@ where
         remote_devices: Vec<DeviceId>,
         enable_forking: bool,
     ) -> Result<()> {
-        let mut active_call = check_active_call!(self, "handle_proceed");
-
-        if active_call.call_id() != call_id {
-            info!(
-                "handle_proceed(): {} no match for active call_id {}",
-                call_id,
-                active_call.call_id()
-            );
-            return Ok(());
-        }
-
         ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
+            RingBench::App,
+            RingBench::CM,
             format!("proceed()\t{}", call_id)
         );
+
+        let mut active_call = check_active_call!(self, "handle_proceed");
+        if active_call.call_id() != call_id {
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            return Ok(());
+        }
 
         active_call.set_call_context(app_call_context)?;
         active_call.inject_proceed(remote_devices, enable_forking)
@@ -893,8 +886,8 @@ where
     /// Handle message_sent() API from application.
     fn handle_message_sent(&mut self, call_id: CallId) -> Result<()> {
         ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
+            RingBench::App,
+            RingBench::CM,
             format!("message_sent()\t{}", call_id)
         );
 
@@ -965,7 +958,11 @@ where
                         call_id
                     );
 
-                    self.conclude_call(call, true, Some(ApplicationEvent::EndedSignalingFailure))?;
+                    self.conclude_call(
+                        call,
+                        Some(HangupParameters::normal()),
+                        Some(ApplicationEvent::EndedSignalingFailure),
+                    )?;
                 }
                 None => {
                     info!("handle_message_send_failure(): no matching call found");
@@ -988,14 +985,15 @@ where
 
     /// Handle hangup() API from application.
     fn handle_hangup(&mut self) -> Result<()> {
+        ringbench!(RingBench::App, RingBench::CM, "hangup()");
+
         let active_call = check_active_call!(self, "handle_hangup");
 
-        ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
-            format!("hangup()\t{}", active_call.call_id())
-        );
-        self.handle_conclude_active_call(active_call, true, ApplicationEvent::EndedLocalHangup)
+        self.handle_conclude_active_call(
+            active_call,
+            Some(HangupParameters::normal()),
+            ApplicationEvent::EndedLocalHangup,
+        )
     }
 
     /// Handle received_offer() API from application.
@@ -1006,10 +1004,10 @@ where
         offer: OfferParameters,
     ) -> Result<()> {
         ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
+            RingBench::App,
+            RingBench::CM,
             format!(
-                "received_offer()\t{}\t{}\t{}",
+                "received_offer()\t{}\tfeature={}\tprimary={}",
                 connection_id,
                 offer.remote_feature_level(),
                 offer.is_local_device_primary()
@@ -1017,7 +1015,7 @@ where
         );
 
         if offer.message_age_sec() > MAX_MESSAGE_AGE_SEC {
-            info!("handle_received_offer(): expired for id: {}", connection_id);
+            ringbenchx!(RingBench::CM, RingBench::App, "offer expired");
             self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
             // Notify application we are completely done with this remote.
             self.notify_call_concluded(&remote_peer, connection_id.call_id())?;
@@ -1027,7 +1025,11 @@ where
         if (offer.remote_feature_level() == FeatureLevel::Unspecified)
             && !offer.is_local_device_primary()
         {
-            info!("handle_received_offer(): offer from legacy not supported on linked device for id: {}", connection_id);
+            ringbenchx!(
+                RingBench::CM,
+                RingBench::App,
+                "offer not supported on linked device"
+            );
             self.notify_application(
                 &remote_peer,
                 ApplicationEvent::EndedIgnoreCallsFromNonMultiringCallers,
@@ -1091,21 +1093,18 @@ where
         connection_id: ConnectionId,
         answer: AnswerParameters,
     ) -> Result<()> {
-        let mut active_call = check_active_call!(self, "handle_received_answer");
+        ringbench!(
+            RingBench::App,
+            RingBench::CM,
+            format!("received_answer()\t{}", connection_id)
+        );
 
+        let mut active_call = check_active_call!(self, "handle_received_answer");
         if active_call.call_id() != connection_id.call_id() {
-            info!(
-                "handle_received_answer(): skipping inactive call_id: {}",
-                connection_id.call_id()
-            );
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
-        ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
-            format!("received_answer()\t{}", connection_id)
-        );
         active_call.inject_received_answer(connection_id, answer)
     }
 
@@ -1115,25 +1114,22 @@ where
         connection_id: ConnectionId,
         ice_candidates: Vec<IceCandidate>,
     ) -> Result<()> {
-        let mut active_call = check_active_call!(self, "handle_received_ice_candidates");
-
-        if active_call.call_id() != connection_id.call_id() {
-            info!(
-                "handle_received_ice_candidates(): skipping inactive call_id: {}",
-                connection_id.call_id()
-            );
-            return Ok(());
-        }
-
         ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
+            RingBench::App,
+            RingBench::CM,
             format!(
                 "received_ice_candidates({})\t{}",
                 ice_candidates.len(),
                 connection_id,
             )
         );
+
+        let mut active_call = check_active_call!(self, "handle_received_ice_candidates");
+        if active_call.call_id() != connection_id.call_id() {
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            return Ok(());
+        }
+
         active_call.inject_received_ice_candidates(connection_id, ice_candidates)
     }
 
@@ -1143,41 +1139,34 @@ where
         connection_id: ConnectionId,
         hangup_parameters: HangupParameters,
     ) -> Result<()> {
-        let mut active_call = check_active_call!(self, "handle_received_hangup");
+        ringbench!(
+            RingBench::App,
+            RingBench::CM,
+            format!("received_hangup({})\t{}", hangup_parameters, connection_id)
+        );
 
+        let mut active_call = check_active_call!(self, "handle_received_hangup");
         if active_call.call_id() != connection_id.call_id() {
-            info!(
-                "handle_received_hangup(): skipping inactive call_id: {}",
-                connection_id.call_id()
-            );
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
-        ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
-            format!("received_hangup()\t{}", connection_id)
-        );
         active_call.inject_received_hangup(connection_id, hangup_parameters)
     }
 
     /// Handle received_busy() API from application.
     fn handle_received_busy(&mut self, connection_id: ConnectionId) -> Result<()> {
-        let active_call = check_active_call!(self, "handle_received_busy");
-
-        if active_call.call_id() != connection_id.call_id() {
-            info!(
-                "handle_received_busy(): skipping inactive call_id: {}",
-                connection_id.call_id()
-            );
-            return Ok(());
-        }
-
         ringbench!(
-            RingBench::Application,
-            RingBench::CallManager,
+            RingBench::App,
+            RingBench::CM,
             format!("received_busy()\t{}", connection_id)
         );
+
+        let active_call = check_active_call!(self, "handle_received_busy");
+        if active_call.call_id() != connection_id.call_id() {
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            return Ok(());
+        }
 
         // Invoke hangup_other for the call, which will inject hangup/busy
         // to all connections, if any.
@@ -1200,7 +1189,7 @@ where
         // Handle the normal processing of busy by concluding the call locally.
         self.handle_conclude_active_call(
             active_call.clone(),
-            false,
+            None,
             ApplicationEvent::EndedRemoteBusy,
         )
     }
@@ -1221,7 +1210,7 @@ where
         // foreach call, conclude without notifying application
         for call in calls {
             info!("reset(): concluding call_id: {}", call.call_id());
-            let _ = self.conclude_call(call, true, None);
+            let _ = self.conclude_call(call, Some(HangupParameters::normal()), None);
         }
 
         self.clear_active_call()?;
@@ -1240,8 +1229,8 @@ where
 
         let busy_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CallManager,
-                RingBench::Application,
+                RingBench::CM,
+                RingBench::App,
                 format!("send_busy()\t{}", connection_id)
             );
 
@@ -1294,7 +1283,7 @@ where
                         info!("check_for_glare(): peer device matches, hangup active call");
                         return self.handle_conclude_active_call(
                             active_call,
-                            true,
+                            Some(HangupParameters::normal()),
                             ApplicationEvent::EndedRemoteGlare,
                         );
                     }
@@ -1302,7 +1291,7 @@ where
                     info!("check_for_glare(): no active device, hangup active call");
                     return self.handle_conclude_active_call(
                         active_call,
-                        true,
+                        Some(HangupParameters::normal()),
                         ApplicationEvent::EndedRemoteGlare,
                     );
                 }
@@ -1491,8 +1480,8 @@ where
         call_media_type: CallMediaType,
     ) -> Result<()> {
         ringbench!(
-            RingBench::CallManager,
-            RingBench::Application,
+            RingBench::CM,
+            RingBench::App,
             format!("start()\t{}", call_id)
         );
 
@@ -1506,11 +1495,7 @@ where
         remote_peer: &<T as Platform>::AppRemotePeer,
         event: ApplicationEvent,
     ) -> Result<()> {
-        ringbench!(
-            RingBench::CallManager,
-            RingBench::Application,
-            format!("event({})", event)
-        );
+        ringbench!(RingBench::CM, RingBench::App, format!("event({})", event));
 
         let platform = self.platform.lock()?;
         platform.on_event(remote_peer, event)
@@ -1583,8 +1568,8 @@ where
         _call_id: CallId,
     ) -> Result<()> {
         ringbench!(
-            RingBench::CallManager,
-            RingBench::Application,
+            RingBench::CM,
+            RingBench::App,
             format!("call_concluded()\t{}", _call_id)
         );
 
@@ -1645,8 +1630,8 @@ where
 
         let offer_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CallManager,
-                RingBench::Application,
+                RingBench::CM,
+                RingBench::App,
                 format!("send_offer()\t{}", connection_id)
             );
 
@@ -1693,8 +1678,8 @@ where
 
         let answer_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CallManager,
-                RingBench::Application,
+                RingBench::CM,
+                RingBench::App,
                 format!("send_answer()\t{}", connection_id)
             );
 
@@ -1741,8 +1726,8 @@ where
             }
 
             ringbench!(
-                RingBench::CallManager,
-                RingBench::Application,
+                RingBench::CM,
+                RingBench::App,
                 format!(
                     "send_ice_candidates({})\t{}",
                     candidates.len(),

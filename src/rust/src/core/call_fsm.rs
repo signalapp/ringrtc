@@ -84,7 +84,7 @@ pub enum CallEvent {
     /// Accept incoming call (callee only).
     LocalAccept,
     /// Hangup call.
-    LocalHangup,
+    LocalHangup(HangupParameters),
 
     // Flow events from client application
     /// OK to proceed with call setup.
@@ -120,7 +120,9 @@ impl fmt::Display for CallEvent {
         let display = match self {
             CallEvent::StartCall => "StartCall".to_string(),
             CallEvent::LocalAccept => "LocalAccept".to_string(),
-            CallEvent::LocalHangup => "LocalHangup".to_string(),
+            CallEvent::LocalHangup(hangup_parameters) => {
+                format!("LocalHangup, hangup: {}", hangup_parameters)
+            }
             CallEvent::Proceed(devices, enable_forking) => format!(
                 "Proceed, devices: {:?}, enable_forking: {}",
                 devices, enable_forking
@@ -332,7 +334,9 @@ where
         // Handle these events even while terminating, as the remote
         // side needs to be informed.
         match event {
-            CallEvent::LocalHangup => return self.handle_local_hangup(call, state),
+            CallEvent::LocalHangup(hangup_parameters) => {
+                return self.handle_local_hangup(call, state, hangup_parameters)
+            }
             CallEvent::EndCall => return self.handle_end_call(call),
             CallEvent::Synchronize(sync) => return self.handle_synchronize(sync),
             _ => {}
@@ -371,7 +375,7 @@ where
             }
             CallEvent::InternalError(error) => self.handle_internal_error(call, error),
             CallEvent::CallTimeout => self.handle_call_timeout(call, state),
-            CallEvent::LocalHangup => Ok(()),
+            CallEvent::LocalHangup(_) => Ok(()),
             CallEvent::Synchronize(_) => Ok(()),
             CallEvent::EndCall => Ok(()),
         }
@@ -510,6 +514,7 @@ where
             HangupType::Accepted => ApplicationEvent::EndedRemoteHangupAccepted,
             HangupType::Declined => ApplicationEvent::EndedRemoteHangupDeclined,
             HangupType::Busy => ApplicationEvent::EndedRemoteHangupBusy,
+            HangupType::NeedPermission => ApplicationEvent::EndedRemoteHangupNeedPermission,
             HangupType::Normal => {
                 match call.direction() {
                     CallDirection::InComing => {
@@ -638,17 +643,25 @@ where
         Ok(())
     }
 
-    fn handle_local_hangup(&mut self, mut call: Call<T>, state: CallState) -> Result<()> {
+    fn handle_local_hangup(
+        &mut self,
+        mut call: Call<T>,
+        state: CallState,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
         info!("handle_local_hangup():");
         match state {
             CallState::Idle => self.unexpected_state(state, "LocalHangup"),
             _ => {
                 let mut err_call = call.clone();
-                let hangup_future = lazy(move || call.send_hangup_via_data_channel_to_all())
-                    .map_err(move |err| {
-                        err_call
-                            .inject_internal_error(err, "Processing local hangup request failed")
-                    });
+                let hangup_future =
+                    lazy(move || call.send_hangup_via_data_channel_to_all(hangup_parameters))
+                        .map_err(move |err| {
+                            err_call.inject_internal_error(
+                                err,
+                                "Processing local hangup request failed",
+                            )
+                        });
 
                 self.worker_spawn(hangup_future);
             }

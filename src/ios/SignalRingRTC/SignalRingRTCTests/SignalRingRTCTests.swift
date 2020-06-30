@@ -61,6 +61,7 @@ final class TestDelegate: CallManagerDelegate {
     var shouldSendHangupAcceptedInvoked = false
     var shouldSendHangupDeclinedInvoked = false
     var shouldSendHangupBusyInvoked = false
+    var shouldSendHangupNeedPermissionInvoked = false
     var shouldSendBusyInvoked = false
     var shouldCompareCallsInvoked = false
 //    var shouldConcludeCallInvoked = false
@@ -76,6 +77,7 @@ final class TestDelegate: CallManagerDelegate {
     var eventEndedRemoteHangupAccepted = false
     var eventEndedRemoteHangupDeclined = false
     var eventEndedRemoteHangupBusy = false
+    var eventEndedRemoteHangupNeedPermission = false
     var eventEndedRemoteBusy = false
     var eventEndedRemoteGlare = false
     var eventEndedSignalingFailure = false
@@ -205,6 +207,11 @@ final class TestDelegate: CallManagerDelegate {
             Logger.debug("TestDelegate:endedRemoteHangupBusy")
             eventGeneralEnded = true
             eventEndedRemoteHangupBusy = true
+
+        case .endedRemoteHangupNeedPermission:
+            Logger.debug("TestDelegate:endedRemoteHangupNeedPermission")
+            eventGeneralEnded = true
+            eventEndedRemoteHangupNeedPermission = true
 
         case .endedRemoteBusy:
             Logger.debug("TestDelegate:endedRemoteBusy")
@@ -408,6 +415,7 @@ final class TestDelegate: CallManagerDelegate {
                 switch hangupType {
                 case .normal:
                     self.shouldSendHangupNormalInvoked = true
+                    self.hangupDeviceId = deviceId
                 case .accepted:
                     self.shouldSendHangupAcceptedInvoked = true
                     self.hangupDeviceId = deviceId
@@ -416,6 +424,9 @@ final class TestDelegate: CallManagerDelegate {
                     self.hangupDeviceId = deviceId
                 case .busy:
                     self.shouldSendHangupBusyInvoked = true
+                    self.hangupDeviceId = deviceId
+                case .needPermission:
+                    self.shouldSendHangupNeedPermissionInvoked = true
                     self.hangupDeviceId = deviceId
                 }
 
