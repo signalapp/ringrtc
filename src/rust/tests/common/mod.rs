@@ -164,6 +164,11 @@ impl TestContext {
         platform.force_signaling_fault(enable);
     }
 
+    pub fn no_auto_message_sent_for_ice(&self, enable: bool) {
+        let mut platform = self.call_manager.platform().unwrap();
+        platform.no_auto_message_sent_for_ice(enable);
+    }
+
     pub fn offers_sent(&self) -> usize {
         let platform = self.call_manager.platform().unwrap();
         platform.offers_sent()

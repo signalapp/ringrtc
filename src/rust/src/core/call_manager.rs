@@ -1450,7 +1450,9 @@ where
 
     /// Remove all messages in the queue by call_id. Ignore Busy
     /// messages as they might have been sent on behalf of the
-    /// call before termination.
+    /// call before termination. Also ignore Hangup messages, since
+    /// they should always be sent as backup for callees to end
+    /// their side of the call.
     fn trim_messages(&self, call_id: CallId) -> Result<()> {
         let mut message_queue = self.message_queue.lock()?;
         let mq = &mut *message_queue;
@@ -1460,8 +1462,11 @@ where
             call_id,
             mq.queue.len()
         );
-        mq.queue
-            .retain(|x| (x.call_id != call_id) || (x.message_type == SignalingMessageType::Busy));
+        mq.queue.retain(|x| {
+            (x.call_id != call_id)
+                || (x.message_type == SignalingMessageType::Busy)
+                || (x.message_type == SignalingMessageType::Hangup)
+        });
         debug!("trim_messages(): end len: {}", mq.queue.len());
 
         Ok(())

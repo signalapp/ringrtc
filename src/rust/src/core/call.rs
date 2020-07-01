@@ -1152,4 +1152,14 @@ where
             None => Err(RingRtcError::ConnectionNotFound(device_id).into()),
         }
     }
+
+    /// Return the parent connection when forking is used.
+    ///
+    /// `Called By:` Test infrastructure
+    #[cfg(feature = "sim")]
+    pub fn get_parent_connection(&self) -> Result<Connection<T>> {
+        let forking = self.forking.lock()?;
+        let parent_connection = forking.as_ref().unwrap().parent_connection.clone();
+        Ok(parent_connection)
+    }
 }

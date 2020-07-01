@@ -74,18 +74,20 @@ struct SimStats {
 #[derive(Clone, Default)]
 pub struct SimPlatform {
     /// Platform API statistics
-    stats:                 Arc<SimStats>,
+    stats:                        Arc<SimStats>,
     /// True if the CallPlatform functions should simulate an internal failure.
-    force_internal_fault:  Arc<AtomicBool>,
+    force_internal_fault:         Arc<AtomicBool>,
     /// True if the signaling functions should indicate a signaling
     /// failure to the call manager.
-    force_signaling_fault: Arc<AtomicBool>,
+    force_signaling_fault:        Arc<AtomicBool>,
     /// Track event frequencies
-    event_map:             Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
+    event_map:                    Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
     /// Track whether close media happened
-    close_media:           Arc<AtomicBool>,
+    close_media:                  Arc<AtomicBool>,
     /// Call Manager
-    call_manager:          Arc<Mutex<Option<CallManager<Self>>>>,
+    call_manager:                 Arc<Mutex<Option<CallManager<Self>>>>,
+    /// True to manually require message_sent() to be invoked for Ice messages.
+    no_auto_message_sent_for_ice: Arc<AtomicBool>,
 }
 
 impl fmt::Display for SimPlatform {
@@ -246,8 +248,10 @@ impl Platform for SimPlatform {
                 .ice_candidates_sent
                 .fetch_add(ice_candidates.len(), Ordering::AcqRel);
             if self.force_internal_fault.load(Ordering::Acquire) {
-                self.message_send_failure(connection_id.call_id()).unwrap();
-            } else {
+                if !self.no_auto_message_sent_for_ice.load(Ordering::Acquire) {
+                    self.message_send_failure(connection_id.call_id()).unwrap();
+                }
+            } else if !self.no_auto_message_sent_for_ice.load(Ordering::Acquire) {
                 self.message_sent(connection_id.call_id()).unwrap();
             }
             Ok(())
@@ -429,6 +433,11 @@ impl SimPlatform {
 
     pub fn force_signaling_fault(&mut self, enable: bool) {
         self.force_signaling_fault.store(enable, Ordering::Release);
+    }
+
+    pub fn no_auto_message_sent_for_ice(&mut self, enable: bool) {
+        self.no_auto_message_sent_for_ice
+            .store(enable, Ordering::Release);
     }
 
     pub fn event_count(&self, event: ApplicationEvent) -> usize {

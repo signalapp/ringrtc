@@ -49,6 +49,58 @@ fn create_cm() {
     let _ = TestContext::new();
 }
 
+// Create an outbound call, sending offer to an unknown number of remotes.
+//
+// - create call manager
+// - create an outbound call with N remote devices
+// - check start outgoing event happened
+// - check active call state is Starting
+// - call proceed() with forking
+//
+fn start_outbound_and_proceed() -> TestContext {
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(cm.active_call().is_ok(), true);
+    assert_eq!(context.start_outgoing_count(), 1);
+    assert_eq!(context.start_incoming_count(), 0);
+
+    let active_call = context.active_call();
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Starting
+    );
+
+    let mut remote_devices = Vec::<DeviceId>::new();
+    remote_devices.push(1);
+
+    cm.proceed(
+        active_call.call_id(),
+        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        remote_devices,
+        true,
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.offers_sent(), 1);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Connecting
+    );
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 0);
+
+    context
+}
+
 // Create an outbound N-remote call session up to the IceConnecting state.
 //
 // - create call manager
@@ -627,7 +679,74 @@ fn receive_remote_ice_candidate() {
 }
 
 #[test]
-fn received_remote_hangup() {
+fn received_remote_hangup_before_connection() {
+    test_init();
+
+    let context = start_outbound_and_proceed();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    // Receiving a Hangup/Normal before connection implies the callee is declining.
+    cm.received_hangup(remote_id, HangupParameters::new(HangupType::Normal, None))
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
+    assert_eq!(context.normal_hangups_sent(), 0);
+    // Other callees should get Hangup/Declined.
+    assert_eq!(context.declined_hangups_sent(), 1);
+}
+
+#[test]
+fn received_remote_hangup_before_connection_with_message_in_flight() {
+    test_init();
+
+    let context = start_outbound_and_proceed();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let parent_connection = active_call.get_parent_connection();
+
+    // Simulate sending of an ICE candidate message, and leaving it 'in-flight' so
+    // the subsequent Hangup message is queued until message_sent() is called.
+    context.no_auto_message_sent_for_ice(true);
+
+    let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    parent_connection
+        .unwrap()
+        .inject_local_ice_candidate(ice_candidate)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ice_candidates_sent(), 1);
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    // Receiving a Normal hangup before connection implies the callee is declining.
+    cm.received_hangup(remote_id, HangupParameters::new(HangupType::Normal, None))
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
+
+    // Now free the message queue so that the next message can fly.
+    cm.message_sent(active_call.call_id()).expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.normal_hangups_sent(), 0);
+
+    // We expect that a Hangup/Declined still goes out via Signal messaging.
+    assert_eq!(context.declined_hangups_sent(), 1);
+}
+
+#[test]
+fn received_remote_hangup_after_connection() {
     test_init();
 
     let context = connect_outbound_call();
@@ -642,6 +761,7 @@ fn received_remote_hangup() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
+    assert_eq!(context.normal_hangups_sent(), 0);
 }
 
 #[test]
