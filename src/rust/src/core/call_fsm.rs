@@ -508,113 +508,113 @@ where
             remote_device, hangup_parameters
         );
 
-        let mut err_call = call.clone();
+        let direction = call.direction();
+        let hangup_type = hangup_parameters.hangup_type();
 
-        let hangup_event = match hangup_parameters.hangup_type() {
-            HangupType::Accepted => ApplicationEvent::EndedRemoteHangupAccepted,
-            HangupType::Declined => ApplicationEvent::EndedRemoteHangupDeclined,
-            HangupType::Busy => ApplicationEvent::EndedRemoteHangupBusy,
-            HangupType::NeedPermission => ApplicationEvent::EndedRemoteHangupNeedPermission,
-            HangupType::Normal => {
-                match call.direction() {
-                    CallDirection::InComing => {
-                        // Callees will never need to send hangup messages in reaction
-                        // to the received hangup since only callers perform such call
-                        // management in multi-ring scenarios.
+        // If the callee that originated the hangup, ignore messages that are propagated
+        // back to us from the caller.
+        if direction == CallDirection::InComing
+            && Some(call.local_device_id()) == hangup_parameters.device_id()
+        {
+            info!("handle_received_hangup(): Ignoring hangup message originated by this device");
+            return Ok(());
+        }
 
-                        // Normal handling of the received hangup.
-                        call.set_state(CallState::Terminating)?;
-                    }
-                    CallDirection::OutGoing => match state {
-                        CallState::Idle
-                        | CallState::Connected
-                        | CallState::Reconnecting
-                        | CallState::Terminating
-                        | CallState::Closed => {
-                            // We are already connected and can assume that the hangup
-                            // is a traditional "in-call" hangup. Hangups to other
-                            // callees/connections would have been sent at the time
-                            // of transitioning to the Connected state. Therefore, we
-                            // don't need to send anything out in reaction to the
-                            // received hangup.
-                            // @note Idle and Closed states shouldn't reach this function...
-                            if remote_device == call.active_device_id()? {
-                                // Normal handling of the received hangup.
-                                call.set_state(CallState::Terminating)?;
-                            } else {
-                                info!("handle_received_hangup(): Ignoring hangup message from a device we aren't in a call with after connection");
-                                return Ok(());
-                            }
-                        }
-                        CallState::Starting | CallState::Connecting | CallState::Ringing => {
-                            // A normal hangup has been received on a call for which
-                            // we are the caller and which is not yet accepted. This
-                            // means that the callee device is declining the call.
-
-                            // Make sure the call is in a terminating state asap.
-                            call.set_state(CallState::Terminating)?;
-
-                            // Send out hangup/declined to all callees.
-                            let hangup_parameters =
-                                HangupParameters::new(HangupType::Declined, Some(remote_device));
-
-                            // Send via the data channel except to the decliner.
-                            call.send_hangup_via_data_channel_to_all_except(hangup_parameters)?;
-
-                            // Also send out via signal messaging.
-                            let mut call_manager = call.call_manager()?;
-                            call_manager.send_hangup(
-                                call.clone(),
-                                call.call_id(),
-                                hangup_parameters,
-                                USE_LEGACY_HANGUP_MESSAGE,
-                            )?;
-                        }
-                    },
-                }
-
-                // Continue with the normal handling of a received hangup, to hang up
-                // the local device.
-                let remote_hangup_future = lazy(move || {
-                    let mut call_manager = call.call_manager()?;
-                    call_manager.remote_hangup(call.call_id(), None)
-                })
-                .map_err(move |err| {
-                    err_call.inject_internal_error(err, "Processing remote hangup request failed")
-                });
-
-                self.worker_spawn(remote_hangup_future);
-
-                // Return for any HangupType::Normal case.
+        // If already connected to device A, ignore hangup messages from device B.
+        if let Ok(active_device_id) = call.active_device_id() {
+            if remote_device != active_device_id {
+                info!("handle_received_hangup(): Ignoring hangup message from devices we aren't connected with");
                 return Ok(());
             }
+        }
+
+        // Setup helper tuples for common scenarios to handle.
+        let no_app_event_and_no_propagation = (true, None, None);
+        let app_event_without_propagation = |event| (true, None, Some(event));
+        let propagate_without_app_event = |hangup_to_send| (true, Some(hangup_to_send), None);
+        let propagate_with_app_event =
+            |hangup_to_send, event| (true, Some(hangup_to_send), Some(event));
+        let unexpected = (false, None, None);
+
+        // Find out how we will handle the current hangup scenario.
+        // - expected: true if an expected scenario
+        // - hangup_to_propagate: If a caller, the hangup to send to other callees
+        // - app_event_override: The event, if any, to return to the UX to override the default
+        let (expected, hangup_to_propagate, app_event_override) = match (hangup_type, direction) {
+            // Caller gets NeedsPermission: propagate it as Normal with specific app event.
+            (HangupType::NeedPermission, CallDirection::OutGoing) => propagate_with_app_event(
+                HangupParameters::new(HangupType::NeedPermission, Some(remote_device)),
+                ApplicationEvent::EndedRemoteHangupNeedPermission,
+            ),
+
+            // Callee gets Normal: no propagation.
+            (HangupType::Normal, CallDirection::InComing) => no_app_event_and_no_propagation,
+
+            // Caller gets Normal hangup: propagate it as Declined.
+            (HangupType::Normal, CallDirection::OutGoing) => propagate_without_app_event(
+                HangupParameters::new(HangupType::Declined, Some(remote_device)),
+            ),
+
+            // Callee gets propagated hangup: use specific app event.
+            (HangupType::Accepted, CallDirection::InComing) => {
+                app_event_without_propagation(ApplicationEvent::EndedRemoteHangupAccepted)
+            }
+            (HangupType::Declined, CallDirection::InComing) => {
+                app_event_without_propagation(ApplicationEvent::EndedRemoteHangupDeclined)
+            }
+            (HangupType::Busy, CallDirection::InComing) => {
+                app_event_without_propagation(ApplicationEvent::EndedRemoteHangupBusy)
+            }
+
+            // Everything else is unexpected: warn, and mostly treat like normal, no propagation.
+            (HangupType::NeedPermission, CallDirection::InComing) => unexpected,
+            (HangupType::Accepted, CallDirection::OutGoing) => unexpected,
+            (HangupType::Declined, CallDirection::OutGoing) => unexpected,
+            (HangupType::Busy, CallDirection::OutGoing) => unexpected,
         };
 
-        match hangup_parameters.device_id() {
-            Some(device_id) => {
-                // If this is the device that caused the hangup, it can be ignored.
-                if call.local_device_id() == device_id {
-                    info!("handle_received_hangup(): Ignoring hangup message for the referenced device");
-                    Ok(())
-                } else {
-                    let remote_hangup_future = lazy(move || {
-                        let mut call_manager = call.call_manager()?;
-                        call_manager.remote_hangup(call.call_id(), Some(hangup_event))
-                    })
-                    .map_err(move |err| {
-                        err_call
-                            .inject_internal_error(err, "Processing remote hangup request failed")
-                    });
+        if !expected {
+            warn!(
+                "handle_received_hangup(): Unexpected hangup type: {}",
+                hangup_parameters
+            );
+        }
 
-                    self.worker_spawn(remote_hangup_future);
-                    Ok(())
-                }
-            }
-            None => {
-                info!("handle_received_hangup(): Missing device_id for hangup, ignoring");
-                Ok(())
+        // Set the state to terminating here if not Idle | Terminating | Closed.
+        if let CallState::Starting
+        | CallState::Connecting
+        | CallState::Ringing
+        | CallState::Connected
+        | CallState::Reconnecting = state
+        {
+            call.set_state(CallState::Terminating)?;
+        }
+
+        // Only callers can propagate hangups to other callee devices.
+        if let Some(hangup_to_propagate) = hangup_to_propagate {
+            // Don't propagate if we're already connected because because a
+            // Hangup/Accepted has been sent to the other callees.
+            // Don't propagate if we're already terminating or closed because
+            // we already sent out a Hangup to the other callees.
+            // Not for Idle | Connected | Reconnecting | Terminating | Closed states:
+            if let CallState::Starting | CallState::Connecting | CallState::Ringing = state {
+                call.send_hangup_via_data_channel_and_signaling(hangup_to_propagate)?;
             }
         }
+
+        // Send a Hangup event to the UX, if a call is being remotely hungup, the user
+        // should always know.
+        let mut err_call = call.clone();
+        self.worker_spawn(
+            lazy(move || {
+                call.call_manager()?
+                    .remote_hangup(call.call_id(), app_event_override)
+            })
+            .map_err(move |err| {
+                err_call.inject_internal_error(err, "Processing remote hangup event failed")
+            }),
+        );
+        Ok(())
     }
 
     fn handle_local_accept(&mut self, call: Call<T>, state: CallState) -> Result<()> {
@@ -645,7 +645,7 @@ where
 
     fn handle_local_hangup(
         &mut self,
-        mut call: Call<T>,
+        call: Call<T>,
         state: CallState,
         hangup_parameters: HangupParameters,
     ) -> Result<()> {

@@ -920,6 +920,9 @@ public class CallManager {
     /** The call ended because of a remote hangup. */
     ENDED_REMOTE_HANGUP,
 
+    /** The call ended because the remote needs permission. */
+    ENDED_REMOTE_HANGUP_NEED_PERMISSION,
+
     /** The call ended because the call was accepted by a different device. */
     ENDED_REMOTE_HANGUP_ACCEPTED,
 
@@ -928,9 +931,6 @@ public class CallManager {
 
     /** The call ended because the call was declared busy by a different device. */
     ENDED_REMOTE_HANGUP_BUSY,
-
-    /** The call ended because the call needed permission on a different device. */
-    ENDED_REMOTE_HANGUP_NEED_PERMISSION,
 
     /** The call ended because of a remote busy message. */
     ENDED_REMOTE_BUSY,

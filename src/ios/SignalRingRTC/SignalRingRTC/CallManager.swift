@@ -25,14 +25,14 @@ public enum CallManagerEvent: Int32 {
     case endedLocalHangup = 4
     /// The call ended because of a remote hangup.
     case endedRemoteHangup = 5
+    /// The call ended because the remote needs permission.
+    case endedRemoteHangupNeedPermission = 6
     /// The call ended because the call was accepted by a different device.
-    case endedRemoteHangupAccepted = 6
+    case endedRemoteHangupAccepted = 7
     /// The call ended because the call was declined by a different device.
-    case endedRemoteHangupDeclined = 7
+    case endedRemoteHangupDeclined = 8
     /// The call ended because the call was declared busy by a different device.
-    case endedRemoteHangupBusy = 8
-    /// The call ended because the call needed permission on a different device.
-    case endedRemoteHangupNeedPermission = 9
+    case endedRemoteHangupBusy = 9
     /// The call ended because of a remote busy message.
     case endedRemoteBusy = 10
     /// The call ended because of glare (received offer from same remote).

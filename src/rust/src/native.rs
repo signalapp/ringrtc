@@ -178,6 +178,7 @@ impl fmt::Debug for CallState {
 pub enum EndReason {
     LocalHangup,
     RemoteHangup,
+    RemoteHangupNeedPermission,
     Declined,
     Busy, // Remote side is busy
     Glare,
@@ -190,7 +191,6 @@ pub enum EndReason {
     AcceptedOnAnotherDevice,
     DeclinedOnAnotherDevice,
     BusyOnAnotherDevice,
-    NeedPermissionOnAnotherDevice,
     CallerIsNotMultiring,
 }
 
@@ -199,6 +199,7 @@ impl fmt::Display for EndReason {
         let display = match self {
             EndReason::LocalHangup => "LocalHangup",
             EndReason::RemoteHangup => "RemoteHangup",
+            EndReason::RemoteHangupNeedPermission => "RemoteHangupNeedPermission",
             EndReason::Declined => "Declined",
             EndReason::Busy => "Busy",
             EndReason::Glare => "Glare",
@@ -211,7 +212,6 @@ impl fmt::Display for EndReason {
             EndReason::AcceptedOnAnotherDevice => "AcceptedOnAnotherDevice",
             EndReason::DeclinedOnAnotherDevice => "DeclinedOnAnotherDevice",
             EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
-            EndReason::NeedPermissionOnAnotherDevice => "NeedPermissionOnAnotherDevice",
             EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
         };
         write!(f, "({})", display)
@@ -410,6 +410,10 @@ impl Platform for NativePlatform {
             ApplicationEvent::EndedRemoteHangup => {
                 self.send_state(remote_peer, CallState::Ended(EndReason::RemoteHangup))
             }
+            ApplicationEvent::EndedRemoteHangupNeedPermission => self.send_state(
+                remote_peer,
+                CallState::Ended(EndReason::RemoteHangupNeedPermission),
+            ),
             ApplicationEvent::EndedRemoteBusy => {
                 self.send_state(remote_peer, CallState::Ended(EndReason::Busy))
             }
@@ -450,10 +454,6 @@ impl Platform for NativePlatform {
             ApplicationEvent::EndedRemoteHangupBusy => self.send_state(
                 remote_peer,
                 CallState::Ended(EndReason::BusyOnAnotherDevice),
-            ),
-            ApplicationEvent::EndedRemoteHangupNeedPermission => self.send_state(
-                remote_peer,
-                CallState::Ended(EndReason::NeedPermissionOnAnotherDevice),
             ),
             ApplicationEvent::EndedIgnoreCallsFromNonMultiringCallers => self.send_state(
                 remote_peer,

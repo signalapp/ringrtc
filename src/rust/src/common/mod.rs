@@ -152,6 +152,9 @@ pub enum ApplicationEvent {
     /// The call ended because of a remote hangup.
     EndedRemoteHangup,
 
+    /// The call ended because the remote needs permission.
+    EndedRemoteHangupNeedPermission,
+
     /// The call ended because the call was accepted by a different device.
     EndedRemoteHangupAccepted,
 
@@ -160,9 +163,6 @@ pub enum ApplicationEvent {
 
     /// The call ended because the call was declared busy by a different device.
     EndedRemoteHangupBusy,
-
-    /// The call ended because the call needed permission on a different device.
-    EndedRemoteHangupNeedPermission,
 
     /// The call ended because of a remote busy message from a callee.
     EndedRemoteBusy,

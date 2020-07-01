@@ -746,6 +746,89 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
 }
 
 #[test]
+fn received_remote_hangup_before_connection_for_permission() {
+    test_init();
+
+    let context = start_outbound_and_proceed();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    // Receiving a Hangup/NeedPermission before connection implies the callee is indicating
+    // that they need to obtain permission to handle the message.
+    cm.received_hangup(
+        remote_id,
+        HangupParameters::new(HangupType::NeedPermission, Some(1)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
+        1
+    );
+    // Other callees should get Hangup/Normal.
+    assert_eq!(context.need_permission_hangups_sent(), 1);
+    assert_eq!(context.declined_hangups_sent(), 0);
+}
+
+#[test]
+fn received_remote_hangup_before_connection_for_permission_with_message_in_flight() {
+    test_init();
+
+    let context = start_outbound_and_proceed();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let parent_connection = active_call.get_parent_connection();
+
+    // Simulate sending of an ICE candidate message, and leaving it 'in-flight' so
+    // the subsequent Hangup message is queued until message_sent() is called.
+    context.no_auto_message_sent_for_ice(true);
+
+    let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    parent_connection
+        .unwrap()
+        .inject_local_ice_candidate(ice_candidate)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ice_candidates_sent(), 1);
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    // Receiving a Hangup/NeedPermission before connection implies the callee is indicating
+    // that they need to obtain permission to handle the message.
+    cm.received_hangup(
+        remote_id,
+        HangupParameters::new(HangupType::NeedPermission, Some(1)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
+        1
+    );
+
+    // Now free the message queue so that the next message can fly.
+    cm.message_sent(active_call.call_id()).expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+
+    // Other callees should get Hangup/Normal.
+    assert_eq!(context.need_permission_hangups_sent(), 1);
+    assert_eq!(context.declined_hangups_sent(), 0);
+}
+
+#[test]
 fn received_remote_hangup_after_connection() {
     test_init();
 
@@ -762,6 +845,30 @@ fn received_remote_hangup_after_connection() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
+}
+
+#[test]
+fn received_remote_needs_permission() {
+    test_init();
+
+    let context = start_outbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
+    cm.received_hangup(
+        remote_id,
+        HangupParameters::new(HangupType::NeedPermission, None),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
+        1
+    );
 }
 
 #[test]

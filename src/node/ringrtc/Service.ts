@@ -20,7 +20,6 @@ export class RingRTCType {
   handleOutgoingSignaling: ((remoteUserId: UserId, message: CallingMessage) => Promise<boolean>) | null = null;
   handleIncomingCall: ((call: Call) => Promise<CallSettings | null>) | null = null;
   handleAutoEndedIncomingCallRequest: ((remoteUserId: UserId, reason: CallEndedReason) => void) | null = null;
-  handleNeedsPermission: ((remoteUserId: UserId) => void) | null = null;
   handleLogMessage: ((level: CallLogLevel, fileName: string, line: number, message: string) => void) | null = null;
 
   constructor() {
@@ -328,12 +327,6 @@ export class RingRTCType {
       const callId = message.offer.callId;
       const sdp = message.offer.sdp;
       const offerType = message.offer.type || OfferType.AudioCall;
-      if (offerType === OfferType.NeedsPermission) {
-        if (!!this.handleNeedsPermission) {
-          this.handleNeedsPermission(remoteUserId);
-        }
-        return;
-      }
       this.callManager.receivedOffer(
         remoteUserId,
         remoteDeviceId,
@@ -770,7 +763,6 @@ export class OfferMessage {
 export enum OfferType {
   AudioCall = 0,
   VideoCall = 1,
-  NeedsPermission = 2,
 }
 
 export class AnswerMessage {
@@ -800,6 +792,7 @@ export enum HangupType {
   Accepted = 1,
   Declined = 2,
   Busy = 3,
+  NeedPermission = 4,
 }
 
 export interface CallManager {
@@ -928,6 +921,7 @@ export enum CallState {
 export enum CallEndedReason {
   LocalHangup = "LocalHangup",
   RemoteHangup = "RemoteHangup",
+  RemoteHangupNeedPermission = "RemoteHangupNeedPermission",
   Declined = "Declined",
   Busy = "Busy",
   Glare = "Glare",

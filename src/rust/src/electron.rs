@@ -684,6 +684,7 @@ declare_types! {
                         let reason_string = match reason {
                             EndReason::LocalHangup => "LocalHangup",
                             EndReason::RemoteHangup => "RemoteHangup",
+                            EndReason::RemoteHangupNeedPermission => "RemoteHangupNeedPermission",
                             EndReason::Declined => "Declined",
                             EndReason::Busy => "Busy",
                             EndReason::Glare => "Glare",
@@ -696,7 +697,6 @@ declare_types! {
                             EndReason::AcceptedOnAnotherDevice => "AcceptedOnAnotherDevice",
                             EndReason::DeclinedOnAnotherDevice => "DeclinedOnAnotherDevice",
                             EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
-                            EndReason::NeedPermissionOnAnotherDevice => "NeedPermissionOnAnotherDevice",
                             EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
                         };
                         let args = vec![

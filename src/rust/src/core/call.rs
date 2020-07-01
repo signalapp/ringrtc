@@ -29,6 +29,7 @@ use crate::common::{
     DeviceId,
     HangupParameters,
     Result,
+    USE_LEGACY_HANGUP_MESSAGE,
 };
 // use crate::core::call_connection_observer::ClientEvent;
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
@@ -744,7 +745,7 @@ where
     ///
     /// Sends a hangup to all underlying Connections via the data channel (if established).
     pub fn send_hangup_via_data_channel_to_all(
-        &mut self,
+        &self,
         hangup_parameters: HangupParameters,
     ) -> Result<()> {
         info!("send_hangup_via_data_channel_to_all(): {}", self.call_id());
@@ -794,6 +795,29 @@ where
                 Ok(())
             }
         }
+    }
+
+    /// Convenience function to send a hangup using both the data channel to currently
+    /// connected remotes and signaling to all as a backup.
+    pub fn send_hangup_via_data_channel_and_signaling(
+        &self,
+        hangup_parameters: HangupParameters,
+    ) -> Result<()> {
+        // Send hangup via the data channel.
+        if hangup_parameters.device_id() == None {
+            self.send_hangup_via_data_channel_to_all(hangup_parameters)?;
+        } else {
+            // Exclude sending hangup to the given device_id (usually the decliner).
+            self.send_hangup_via_data_channel_to_all_except(hangup_parameters)?;
+        }
+
+        // Send hangup via signaling.
+        self.call_manager()?.send_hangup(
+            self.clone(),
+            self.call_id(),
+            hangup_parameters,
+            USE_LEGACY_HANGUP_MESSAGE,
+        )
     }
 
     /// A connection failed to connect ICE.

@@ -193,6 +193,11 @@ final class TestDelegate: CallManagerDelegate {
             eventGeneralEnded = true
             eventEndedRemoteHangup = true
 
+        case .endedRemoteHangupNeedPermission:
+            Logger.debug("TestDelegate:endedRemoteHangupNeedPermission")
+            eventGeneralEnded = true
+            eventEndedRemoteHangupNeedPermission = true
+
         case .endedRemoteHangupAccepted:
             Logger.debug("TestDelegate:endedRemoteHangupAccepted")
             eventGeneralEnded = true
@@ -207,11 +212,6 @@ final class TestDelegate: CallManagerDelegate {
             Logger.debug("TestDelegate:endedRemoteHangupBusy")
             eventGeneralEnded = true
             eventEndedRemoteHangupBusy = true
-
-        case .endedRemoteHangupNeedPermission:
-            Logger.debug("TestDelegate:endedRemoteHangupNeedPermission")
-            eventGeneralEnded = true
-            eventEndedRemoteHangupNeedPermission = true
 
         case .endedRemoteBusy:
             Logger.debug("TestDelegate:endedRemoteBusy")

@@ -1551,13 +1551,13 @@ where
     pub(super) fn remote_hangup(
         &mut self,
         call_id: CallId,
-        event: Option<ApplicationEvent>,
+        app_event_override: Option<ApplicationEvent>,
     ) -> Result<()> {
         info!("remote_hangup(): call_id: {}", call_id);
 
         if self.call_is_active(call_id)? {
-            match event {
-                Some(e) => self.conclude_active_call(false, e),
+            match app_event_override {
+                Some(event) => self.conclude_active_call(false, event),
                 None => self.conclude_active_call(false, ApplicationEvent::EndedRemoteHangup),
             }
         } else {
