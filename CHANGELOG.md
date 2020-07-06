@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.3.1
+
+- Fix for call request support
+
+- Fix to ensure hangups sent
+
 ## v2.3.0
 
 - Reference signalapp/webrtc@4103
