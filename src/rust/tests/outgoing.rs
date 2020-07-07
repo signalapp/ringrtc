@@ -83,8 +83,6 @@ fn start_outbound_and_proceed() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        remote_devices,
-        true,
     )
     .expect(error_line!());
 
@@ -114,7 +112,7 @@ fn start_outbound_and_proceed() -> TestContext {
 // - check call is in Connecting state
 //
 // Now in the Connecting state.
-fn start_outbound_n_remote_call(n_remotes: u16, enable_forking: bool) -> TestContext {
+fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
@@ -137,17 +135,9 @@ fn start_outbound_n_remote_call(n_remotes: u16, enable_forking: bool) -> TestCon
         CallState::Starting
     );
 
-    let mut remote_devices = Vec::<DeviceId>::new();
-
-    for i in 1..(n_remotes + 1) {
-        remote_devices.push(i.into());
-    }
-
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        remote_devices,
-        enable_forking,
     )
     .expect(error_line!());
 
@@ -184,10 +174,7 @@ fn start_outbound_n_remote_call(n_remotes: u16, enable_forking: bool) -> TestCon
         );
     }
 
-    assert_eq!(
-        context.offers_sent(),
-        if enable_forking { 1 } else { n_remotes.into() }
-    );
+    assert_eq!(context.offers_sent(), 1,);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Connecting
@@ -212,8 +199,7 @@ fn start_outbound_n_remote_call(n_remotes: u16, enable_forking: bool) -> TestCon
 //
 // Now in the Connecting state.
 fn start_outbound_call() -> TestContext {
-    let enable_forking = false;
-    start_outbound_n_remote_call(1, enable_forking)
+    start_outbound_n_remote_call(1)
 }
 
 // Create an outbound call session up to the CallConnected state.
@@ -643,8 +629,9 @@ fn inject_local_ice_candidate() {
     let mut active_connection = context.active_connection();
 
     let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let force_send = true;
     active_connection
-        .inject_local_ice_candidate(ice_candidate)
+        .inject_local_ice_candidate(ice_candidate, force_send)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -714,9 +701,10 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     context.no_auto_message_sent_for_ice(true);
 
     let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let force_send = true;
     parent_connection
         .unwrap()
-        .inject_local_ice_candidate(ice_candidate)
+        .inject_local_ice_candidate(ice_candidate, force_send)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -789,9 +777,10 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     context.no_auto_message_sent_for_ice(true);
 
     let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let force_send = true;
     parent_connection
         .unwrap()
-        .inject_local_ice_candidate(ice_candidate)
+        .inject_local_ice_candidate(ice_candidate, force_send)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -968,14 +957,9 @@ fn outbound_proceed_with_error() {
     context.force_internal_fault(true);
 
     let active_call = context.active_call();
-    let mut remote_devices = Vec::<DeviceId>::new();
-    remote_devices.push(1);
-    let enable_forking = false;
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        remote_devices,
-        enable_forking,
     )
     .expect(error_line!());
 
@@ -1033,8 +1017,9 @@ fn local_ice_candidate_with_error() {
     context.force_internal_fault(true);
 
     let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let force_send = true;
     active_connection
-        .inject_local_ice_candidate(ice_candidate)
+        .inject_local_ice_candidate(ice_candidate, force_send)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1051,25 +1036,12 @@ fn local_ice_candidate_with_error() {
     assert_eq!(context.ice_candidates_sent(), 0);
 }
 
-// Create outbound call to multiple remote devices.
-//
-// One of the remote devices accepts the call, which is followed by a
-// local hangup.
-#[test]
-fn outbound_multiple_remote_devices_without_forking() {
-    outbound_multiple_remote_devices(false)
-}
-
-#[test]
-fn outbound_multiple_remote_devices_with_forking() {
-    outbound_multiple_remote_devices(true)
-}
-
-fn outbound_multiple_remote_devices(enable_forking: bool) {
+fn outbound_multiple_remote_devices() {
     test_init();
 
-    let n_remotes: u16 = 5;
-    let context = start_outbound_n_remote_call(n_remotes, enable_forking);
+    // With 5, we hit "too many files open" on Linux.
+    let n_remotes: u16 = 3;
+    let context = start_outbound_n_remote_call(n_remotes);
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -1166,15 +1138,15 @@ fn outbound_multiple_remote_devices(enable_forking: bool) {
 fn outbound_multiple_call_managers() {
     test_init();
 
-    let n_call_manager = 5;
-    let enable_forking = false;
+    // 5 seems too many for Linux
+    let n_call_manager = 3;
 
     let mut thread_vec = Vec::new();
     for i in 0..n_call_manager {
         info!("test:{}: creating call manager", i);
 
         let child = thread::spawn(move || {
-            outbound_multiple_remote_devices(enable_forking);
+            outbound_multiple_remote_devices();
         });
 
         thread_vec.push(child);
@@ -1309,17 +1281,8 @@ fn start_outbound_receive_busy() {
         active_call.call_id()
     };
 
-    let mut remote_devices = Vec::<DeviceId>::new();
-
-    remote_devices.push(1);
-    let enable_forking = false;
-    cm.proceed(
-        call_id,
-        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        remote_devices,
-        enable_forking,
-    )
-    .expect(error_line!());
+    cm.proceed(call_id, format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned())
+        .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 

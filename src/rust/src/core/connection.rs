@@ -194,13 +194,16 @@ type EventPump<T> = Sender<(Connection<T>, ConnectionEvent)>;
 pub type EventStream<T> = Receiver<(Connection<T>, ConnectionEvent)>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ConnectionForkingType {
-    // A parent connection should broadcast signaling messages.
-    Parent,
-    // A child connection should not send any messages.
-    Child,
-    // An non-forking connection should send non-broadcast messages.
-    NonForking,
+pub enum ConnectionType {
+    // As a caller, the parent connection signals to all remote devices.
+    // This is like "signaling mode == broadcast".
+    OutgoingParent,
+    // As a caller, the child connections don't signal anything.
+    // This is like "signaling mode == disabled".
+    OutgoingChild,
+    // As a callee, the connection signals to one remote device.
+    Incoming,
+    // This is like "signaling mode == unicast".
 }
 
 /// Represents the connection between a local client and one remote
@@ -218,8 +221,6 @@ where
     /// Unique 64-bit number identifying the call.
     call_id:                         CallId,
     /// Device ID of the remote device.
-    remote_device:                   DeviceId,
-    /// The detected feature level of the protocol used by the remote device.
     remote_feature_level:            Arc<CallMutex<FeatureLevel>>,
     /// Connection ID, identifying the call and remote_device.
     connection_id:                   ConnectionId,
@@ -238,7 +239,7 @@ where
     /// Condition variable used at termination to quiesce and synchronize the FSM.
     terminate_condvar:               Arc<(Mutex<bool>, Condvar)>,
     /// This is write-once configuration and will not change.
-    forking_type:                    ConnectionForkingType,
+    connection_type:                 ConnectionType,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -304,7 +305,6 @@ where
             call:                            Arc::clone(&self.call),
             event_pump:                      self.event_pump.clone(),
             call_id:                         self.call_id,
-            remote_device:                   self.remote_device,
             remote_feature_level:            Arc::clone(&self.remote_feature_level),
             connection_id:                   self.connection_id,
             direction:                       self.direction,
@@ -314,7 +314,7 @@ where
             pending_outbound_ice_candidates: Arc::clone(&self.pending_outbound_ice_candidates),
             pending_inbound_ice_candidates:  Arc::clone(&self.pending_inbound_ice_candidates),
             terminate_condvar:               Arc::clone(&self.terminate_condvar),
-            forking_type:                    self.forking_type,
+            connection_type:                 self.connection_type,
         }
     }
 }
@@ -328,7 +328,7 @@ where
     pub fn new(
         call: Call<T>,
         remote_device: DeviceId,
-        forking_type: ConnectionForkingType,
+        connection_type: ConnectionType,
     ) -> Result<Self> {
         // create a FSM runtime for this connection
         let mut context = Context::new()?;
@@ -352,7 +352,6 @@ where
         let connection = Self {
             event_pump,
             call_id,
-            remote_device,
             // Until otherwise detected, remotes are assumed to be multi-ring capable.
             remote_feature_level: Arc::new(CallMutex::new(
                 FeatureLevel::MultiRing,
@@ -373,7 +372,7 @@ where
                 "pending_inbound_ice_candidates",
             )),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
-            forking_type,
+            connection_type,
         };
 
         connection.init_connection_ptr()?;
@@ -384,11 +383,6 @@ where
     /// Return the Call identifier.
     pub fn call_id(&self) -> CallId {
         self.call_id
-    }
-
-    /// Return the remote device identifier.
-    pub fn remote_device(&self) -> DeviceId {
-        self.remote_device
     }
 
     /// Return the connection identifier.
@@ -465,7 +459,10 @@ where
         // per connection.
         let mut webrtc = self.webrtc.lock()?;
         match webrtc.app_media_stream {
-            Some(_) => Err(RingRtcError::ActiveMediaStreamAlreadySet(self.remote_device).into()),
+            Some(_) => Err(RingRtcError::ActiveMediaStreamAlreadySet(
+                self.connection_id.remote_device(),
+            )
+            .into()),
             None => {
                 webrtc.app_media_stream = Some(app_media_stream);
                 Ok(())
@@ -477,7 +474,10 @@ where
     pub fn set_app_connection(&self, app_connection: <T as Platform>::AppConnection) -> Result<()> {
         let mut webrtc = self.webrtc.lock()?;
         match webrtc.app_connection {
-            Some(_) => Err(RingRtcError::AppConnectionAlreadySet(self.remote_device).into()),
+            Some(_) => Err(RingRtcError::AppConnectionAlreadySet(
+                self.connection_id.remote_device(),
+            )
+            .into()),
             None => {
                 webrtc.app_connection = Some(app_connection);
                 Ok(())
@@ -600,14 +600,14 @@ where
     /// Send an SDP offer message to the remote peer via the signaling
     /// channel.
     pub fn send_offer(&self, offer: String) -> Result<()> {
-        if self.forking_type == ConnectionForkingType::Child {
+        if self.connection_type == ConnectionType::OutgoingChild {
             let local_desc = SessionDescriptionInterface::create_sdp_offer(offer)?;
             self.set_local_description(&local_desc)?;
             return Ok(()); // It was already sent by the parent.
         }
         let local_desc = SessionDescriptionInterface::create_sdp_offer(offer.clone())?;
         self.set_local_description(&local_desc)?;
-        let broadcast = self.forking_type == ConnectionForkingType::Parent;
+        let broadcast = self.connection_type == ConnectionType::OutgoingParent;
         let call = self.call()?;
         call.send_offer(self.clone(), offer, broadcast)
     }
@@ -673,7 +673,7 @@ where
         // to send for this Connection.
         if num_ice_candidates == 1 {
             let call = self.call()?;
-            let broadcast = self.forking_type == ConnectionForkingType::Parent;
+            let broadcast = self.connection_type == ConnectionType::OutgoingParent;
             call.send_ice_candidates(self.clone(), broadcast)?
         }
 
@@ -1014,8 +1014,12 @@ where
     /// # Arguments
     ///
     /// * `candidate` - Locally generated IceCandidate.
-    pub fn inject_local_ice_candidate(&mut self, candidate: IceCandidate) -> Result<()> {
-        if self.forking_type == ConnectionForkingType::Child {
+    pub fn inject_local_ice_candidate(
+        &mut self,
+        candidate: IceCandidate,
+        force_send: bool,
+    ) -> Result<()> {
+        if !force_send && self.connection_type == ConnectionType::OutgoingChild {
             return Ok(());
         }
         let event = ConnectionEvent::LocalIceCandidate(candidate);

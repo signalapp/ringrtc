@@ -21,7 +21,7 @@ use crate::common::{
 };
 
 use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionForkingType};
+use crate::core::connection::{Connection, ConnectionType};
 
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::MediaStream;
@@ -50,7 +50,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         &mut self,
         call: &Call<Self>,
         remote_device: DeviceId,
-        forking_type: ConnectionForkingType,
+        connection_type: ConnectionType,
     ) -> Result<Connection<Self>>;
 
     /// Inform the client application that a call should be started.

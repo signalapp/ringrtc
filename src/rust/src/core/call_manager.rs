@@ -37,7 +37,7 @@ use crate::common::{
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
-use crate::core::connection::{Connection, ConnectionForkingType};
+use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 
@@ -326,17 +326,8 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        remote_devices: Vec<DeviceId>,
-        enable_forking: bool,
     ) -> Result<()> {
-        handle_active_call_api!(
-            self,
-            CallManager::handle_proceed,
-            call_id,
-            app_call_context,
-            remote_devices,
-            enable_forking
-        )
+        handle_active_call_api!(self, CallManager::handle_proceed, call_id, app_call_context)
     }
 
     /// OK for the library to continue to send signaling messages.
@@ -864,8 +855,6 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        remote_devices: Vec<DeviceId>,
-        enable_forking: bool,
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
@@ -880,7 +869,7 @@ where
         }
 
         active_call.set_call_context(app_call_context)?;
-        active_call.inject_proceed(remote_devices, enable_forking)
+        active_call.inject_proceed()
     }
 
     /// Handle message_sent() API from application.
@@ -1511,10 +1500,10 @@ where
         &self,
         call: &Call<T>,
         device_id: DeviceId,
-        forking_type: ConnectionForkingType,
+        connection_type: ConnectionType,
     ) -> Result<Connection<T>> {
         let mut platform = self.platform.lock()?;
-        platform.create_connection(call, device_id, forking_type)
+        platform.create_connection(call, device_id, connection_type)
     }
 
     /// Create a new application specific media stream

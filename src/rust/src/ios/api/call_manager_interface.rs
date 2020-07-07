@@ -341,21 +341,8 @@ pub extern "C" fn ringrtcProceed(
     callManager: *mut c_void,
     callId: u64,
     appCallContext: AppCallContext,
-    appRemoteDevices: *const u32,
-    appRemoteDevicesLen: size_t,
-    enable_forking: bool,
 ) -> *mut c_void {
-    // Convert the remoteDevices list from a u32 array to a vector.
-    let device_slice =
-        unsafe { slice::from_raw_parts(appRemoteDevices, appRemoteDevicesLen as usize) };
-
-    match call_manager::proceed(
-        callManager as *mut IOSCallManager,
-        callId,
-        appCallContext,
-        device_slice.to_vec(),
-        enable_forking,
-    ) {
+    match call_manager::proceed(callManager as *mut IOSCallManager, callId, appCallContext) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager

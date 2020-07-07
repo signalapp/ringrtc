@@ -303,7 +303,6 @@ declare_types! {
             let ice_server_password = cx.argument::<JsString>(2)?.value();
             let js_ice_server_urls = cx.argument::<JsArray>(3)?;
             let hide_ip = cx.argument::<JsBoolean>(4)?.value();
-            let enable_forking = cx.argument::<JsBoolean>(5)?.value();
 
             let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len() as usize);
             for i in 0..js_ice_server_urls.len() {
@@ -315,8 +314,7 @@ declare_types! {
                 ice_server_username,
                 ice_server_password,
                 ice_server_urls);
-            let remote_device_ids = vec![1 as DeviceId];
-            debug!("JsCallManager.proceed({}, {:?}, {}, {})", call_id, ice_server, hide_ip, enable_forking);
+            debug!("JsCallManager.proceed({}, {:?}, {})", call_id, ice_server, hide_ip);
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
@@ -327,7 +325,7 @@ declare_types! {
                     ice_server,
                     cm.outgoing_audio.clone(),
                     cm.outgoing_video.clone());
-                cm.call_manager.proceed(call_id, call_context, remote_device_ids, enable_forking)?;
+                cm.call_manager.proceed(call_id, call_context)?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())

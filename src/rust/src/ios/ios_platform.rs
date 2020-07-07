@@ -25,7 +25,7 @@ use crate::common::{
     DATA_CHANNEL_NAME,
 };
 use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionForkingType};
+use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::ios::api::call_manager_interface::{
     AppCallContext,
@@ -104,13 +104,13 @@ impl Platform for IOSPlatform {
         &mut self,
         call: &Call<Self>,
         remote_device: DeviceId,
-        forking_type: ConnectionForkingType,
+        connection_type: ConnectionType,
     ) -> Result<Connection<Self>> {
         let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
         info!("create_connection(): {}", connection_id);
 
-        let connection = Connection::new(call.clone(), remote_device, forking_type)?;
+        let connection = Connection::new(call.clone(), remote_device, connection_type)?;
 
         let connection_ptr = connection.get_connection_ptr()?;
 

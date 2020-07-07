@@ -16,7 +16,7 @@ use crate::common::{
 };
 use crate::common::{CallMediaType, HangupParameters};
 use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionForkingType};
+use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_candidate::IceCandidate;
@@ -305,7 +305,7 @@ impl Platform for NativePlatform {
         &mut self,
         call: &Call<Self>,
         remote_device_id: DeviceId,
-        forking_type: ConnectionForkingType,
+        connection_type: ConnectionType,
     ) -> Result<Connection<Self>> {
         info!(
             "NativePlatform::create_connection(): call: {} remote_device_id: {}",
@@ -313,7 +313,7 @@ impl Platform for NativePlatform {
         );
 
         // Like AndroidPlatform::create_connection
-        let connection = Connection::new(call.clone(), remote_device_id, forking_type)?;
+        let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
         let context = call.call_context()?;
 
         // Like android::call_manager::create_peer_connection

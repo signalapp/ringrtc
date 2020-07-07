@@ -41,6 +41,7 @@ fn main() {
             println!("cargo:rustc-link-lib=dmoguids");
             println!("cargo:rustc-link-lib=msdmo");
             println!("cargo:rustc-link-lib=wmcodecdspuuid");
+            println!("cargo:rustc-link-lib=secur32");
 
             // Use statically linked 'libcmt[d]' instead of dynamically linked 'msvcrt[d]'.
             if debug {

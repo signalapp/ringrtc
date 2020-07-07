@@ -82,13 +82,9 @@ fn start_inbound_call() -> TestContext {
         CallState::Starting
     );
 
-    let remote_devices = Vec::<DeviceId>::new();
-    let enable_forking = false;
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        remote_devices,
-        enable_forking,
     )
     .expect(error_line!());
 
@@ -339,13 +335,9 @@ fn start_inbound_call_with_error() {
     // cause the sending of the answer to fail.
     context.force_internal_fault(true);
 
-    let remote_devices = Vec::<DeviceId>::new();
-    let enable_forking = false;
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
-        remote_devices,
-        enable_forking,
     )
     .expect(error_line!());
 

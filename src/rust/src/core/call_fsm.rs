@@ -88,7 +88,7 @@ pub enum CallEvent {
 
     // Flow events from client application
     /// OK to proceed with call setup.
-    Proceed(Vec<DeviceId>, bool),
+    Proceed,
 
     // Signaling events from client application
     /// Received SDP answer signal message from remote peer (caller
@@ -123,10 +123,7 @@ impl fmt::Display for CallEvent {
             CallEvent::LocalHangup(hangup_parameters) => {
                 format!("LocalHangup, hangup: {}", hangup_parameters)
             }
-            CallEvent::Proceed(devices, enable_forking) => format!(
-                "Proceed, devices: {:?}, enable_forking: {}",
-                devices, enable_forking
-            ),
+            CallEvent::Proceed => "Proceed".to_string(),
             CallEvent::ReceivedAnswer(d, answer) => format!(
                 "ReceivedAnswer, device: {} remote_feature_level: {}",
                 d,
@@ -354,9 +351,7 @@ where
 
         match event {
             CallEvent::StartCall => self.handle_start_call(call, state),
-            CallEvent::Proceed(remote_devices, enable_forking) => {
-                self.handle_proceed(call, state, remote_devices, enable_forking)
-            }
+            CallEvent::Proceed => self.handle_proceed(call, state),
             CallEvent::LocalAccept => self.handle_local_accept(call, state),
             CallEvent::ReceivedAnswer(remote_device, answer) => {
                 self.handle_received_answer(call, state, remote_device, answer)
@@ -409,13 +404,7 @@ where
         }
     }
 
-    fn handle_proceed(
-        &mut self,
-        mut call: Call<T>,
-        state: CallState,
-        remote_devices: Vec<DeviceId>,
-        enable_forking: bool,
-    ) -> Result<()> {
+    fn handle_proceed(&mut self, mut call: Call<T>, state: CallState) -> Result<()> {
         info!("handle_proceed():");
 
         if let CallState::Starting = state {
@@ -426,7 +415,7 @@ where
                 if call.terminating()? {
                     return Ok(());
                 }
-                call.proceed(remote_devices, enable_forking)
+                call.proceed()
             })
             .map_err(move |err| err_call.inject_internal_error(err, "Proceed Future failed"));
 

@@ -56,7 +56,6 @@ fn main() {
         "".to_string(), // password
         vec![],         //  vec!["stun:stun.l.google.com".to_string()],
     );
-    let enable_forking = true;
     let stopper = Stopper::new();
     let signaling_server = SignalingServer::new(&stopper);
     let router = Router::new(&stopper);
@@ -82,7 +81,6 @@ fn main() {
         1 as DeviceId,
         hide_ip,
         &ice_server,
-        enable_forking,
         &signaling_server,
         &router,
         &stopper,
@@ -109,7 +107,6 @@ fn main() {
         1 as DeviceId,
         hide_ip,
         &ice_server,
-        enable_forking,
         &signaling_server,
         &router,
         &stopper,
@@ -139,7 +136,6 @@ fn main() {
                 device_id as DeviceId,
                 hide_ip,
                 &ice_server,
-                enable_forking,
                 &signaling_server,
                 &router,
                 &stopper,
@@ -203,9 +199,8 @@ struct CallEndpoint {
 }
 
 struct CallEndpointState {
-    peer_id:        PeerId,
-    device_id:      DeviceId,
-    enable_forking: bool,
+    peer_id:   PeerId,
+    device_id: DeviceId,
 
     // How we send and receive signaling
     signaling_server: SignalingServer,
@@ -230,7 +225,6 @@ impl CallEndpoint {
         device_id: DeviceId,
         hide_ip: bool,
         ice_server: &IceServer,
-        enable_forking: bool,
         signaling_server: &SignalingServer,
         router: &Router,
         stopper: &Stopper,
@@ -300,7 +294,6 @@ impl CallEndpoint {
                 CallEndpointState {
                     peer_id,
                     device_id,
-                    enable_forking,
 
                     signaling_server,
                     network,
@@ -519,16 +512,9 @@ impl CallStateHandler for CallEndpoint {
             if let CallState::Incoming(call_id, _call_media_type)
             | CallState::Outgoing(call_id, _call_media_type) = call_state
             {
-                // It's easier just to hardcode this, but I suppose we could make it part of the state if we wanted to.
-                let remote_device_ids = (1u32..=6u32).collect();
                 state
                     .call_manager
-                    .proceed(
-                        call_id,
-                        state.call_context.clone(),
-                        remote_device_ids,
-                        state.enable_forking,
-                    )
+                    .proceed(call_id, state.call_context.clone())
                     .expect("proceed with outgoing call");
             }
         });

@@ -104,7 +104,6 @@ export class RingRTCType {
   }
 
   private proceed(callId: CallId, settings: CallSettings): void {
-    const enableForking = true;
     // tslint:disable no-floating-promises
     (async () => {
       // This is a silly way of causing a deadlock.
@@ -116,7 +115,6 @@ export class RingRTCType {
         settings.iceServer.password || '',
         settings.iceServer.urls,
         settings.hideIp,
-        enableForking
       );
     })();
   }
@@ -803,7 +801,6 @@ export interface CallManager {
     iceServerPassword: string,
     iceServerUrls: Array<string>,
     hideIp: boolean,
-    enableForking: boolean
   ): void;
   accept(callId: CallId): void;
   ignore(callId: CallId): void;

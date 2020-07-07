@@ -87,32 +87,13 @@ pub fn proceed(
     call_manager: *mut IOSCallManager,
     call_id: u64,
     app_call_context: AppCallContext,
-    app_remote_devices: Vec<u32>,
-    enable_forking: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
 
     info!("proceed(): {}", call_id);
 
-    // Convert Rust Vec<u32> into a Rust Vec<DeviceId>.
-    let mut remote_devices = Vec::<DeviceId>::new();
-    for device in app_remote_devices {
-        let device_id = device as DeviceId;
-        remote_devices.push(device_id);
-    }
-
-    info!("proceed(): remote_devices size: {}", remote_devices.len());
-    for device in &remote_devices {
-        info!("proceed(): device id: {}", device);
-    }
-
-    call_manager.proceed(
-        call_id,
-        Arc::new(app_call_context),
-        remote_devices,
-        enable_forking,
-    )
+    call_manager.proceed(call_id, Arc::new(app_call_context))
 }
 
 /// Application notification that the sending of the previous message was a success.

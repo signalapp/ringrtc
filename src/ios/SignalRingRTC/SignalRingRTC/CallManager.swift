@@ -270,9 +270,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - callId: The callId as provided by the shouldStartCall delegate
     ///   - iceServers: A list of RTC Ice Servers to be provided to WebRTC
     ///   - hideIp: A flag used to hide the IP of the user by using relay (TURN) servers only
-    ///   - remoteDeviceList: An array of remote device IDs for the peer, only used when placing a call
-    ///   - enableForking: If true, use one offer and set of local ICE candidates for all remote devices
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, remoteDeviceList: [UInt32], enableForking: Bool) throws {
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("proceed")
 
@@ -296,7 +294,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // creating the connection.
         let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController, certificate: certificate)
 
-        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), remoteDeviceList, remoteDeviceList.count, enableForking)
+        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper())
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "proceed() function failure")
         }

@@ -190,9 +190,7 @@ public class CallManager {
    * @param camera          camera control to use for this Call
    * @param iceServers      list of ICE servers to use for this Call
    * @param hideIp          if true hide caller's IP by using a TURN server
-   * @param remoteDevices   list of remote deviceIds for this recipient
    * @param enableCamera    if true, enable the local camera video track when created
-   * @param enableForking   if true, use one offer and set of local ICE candidates for all remote devices
    *
    * @throws CallException for native code failures
    *
@@ -205,12 +203,9 @@ public class CallManager {
                       @NonNull CameraControl                  camera,
                       @NonNull List<PeerConnection.IceServer> iceServers,
                                boolean                        hideIp,
-                      @NonNull List<Integer>                  remoteDevices,
-                               boolean                        enableCamera,
-                               boolean                        enableForking)
+                               boolean                        enableCamera)
     throws CallException
   {
-
     checkCallManagerExists();
 
     Log.i(TAG, "proceed(): callId: " + callId + ", hideIp: " + hideIp);
@@ -230,9 +225,7 @@ public class CallManager {
     callContext.setVideoEnabled(enableCamera);
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
-                   callContext,
-                   remoteDevices,
-                   enableForking);
+                   callContext);
 
   }
 
@@ -1178,9 +1171,7 @@ public class CallManager {
   private native
     void ringrtcProceed(long          nativeCallManager,
                         long          callId,
-                        CallContext   callContext,
-                        List<Integer> remoteDevices,
-                        boolean       enableForking)
+                        CallContext   callContext)
     throws CallException;
 
   private native

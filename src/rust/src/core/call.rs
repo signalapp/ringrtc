@@ -35,7 +35,7 @@ use crate::common::{
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
 use crate::core::call_manager::CallManager;
 use crate::core::call_mutex::CallMutex;
-use crate::core::connection::{Connection, ConnectionForkingType, ObserverEvent};
+use crate::core::connection::{Connection, ConnectionType, ObserverEvent};
 use crate::core::platform::Platform;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_candidate::IceCandidate;
@@ -568,7 +568,7 @@ where
     ///
     /// - create a Connection for the single remote DeviceId.
     /// - handle the previously stored pending Offer and ICE Candidates
-    pub fn proceed(&mut self, remote_devices: Vec<DeviceId>, enable_forking: bool) -> Result<()> {
+    pub fn proceed(&mut self) -> Result<()> {
         info!("proceed():");
 
         let call_manager = self.call_manager()?;
@@ -585,7 +585,7 @@ where
                     let mut connection = call_manager.create_connection(
                         self,
                         pending_call.remote_device,
-                        ConnectionForkingType::NonForking,
+                        ConnectionType::Incoming,
                     )?;
                     connection.inject_handle_offer(pending_call.offer)?;
 
@@ -611,41 +611,20 @@ where
                 }
             }
             CallDirection::OutGoing => {
-                if enable_forking {
-                    info!(
-                        "proceed(): outgoing with forking: remote_devices: {:?}",
-                        remote_devices
-                    );
-                    // Note: This causes the call to receive ICE candidates from the forking parent.
-                    let mut parent_connection =
-                        call_manager.create_connection(&self, 0, ConnectionForkingType::Parent)?;
-                    let ice_gatherer = parent_connection.create_shared_ice_gatherer()?;
-                    parent_connection.use_shared_ice_gatherer(&ice_gatherer)?;
-                    let shared_offer = parent_connection.create_offer()?;
-                    parent_connection.inject_send_offer(shared_offer.get_description()?)?;
-                    // Keep around so that it's not closed until all the connections are closed.
-                    let shared_offer = shared_offer.get_description()?;
-                    *(self.forking.lock()?) = Some(ForkingState {
-                        parent_connection,
-                        ice_gatherer,
-                        shared_offer,
-                    });
-                } else {
-                    for remote_device in remote_devices {
-                        info!("proceed(): outgoing: remote_device: {}", remote_device);
-
-                        let mut connection = call_manager.create_connection(
-                            self,
-                            remote_device,
-                            ConnectionForkingType::NonForking,
-                        )?;
-                        let offer = connection.create_offer()?;
-                        connection.inject_send_offer(offer.get_description()?)?;
-
-                        let mut connection_map = self.connection_map.lock()?;
-                        connection_map.insert(remote_device, connection);
-                    }
-                }
+                // Note: This causes the call to receive ICE candidates from the forking parent.
+                let mut parent_connection =
+                    call_manager.create_connection(&self, 0, ConnectionType::OutgoingParent)?;
+                let ice_gatherer = parent_connection.create_shared_ice_gatherer()?;
+                parent_connection.use_shared_ice_gatherer(&ice_gatherer)?;
+                let shared_offer = parent_connection.create_offer()?;
+                parent_connection.inject_send_offer(shared_offer.get_description()?)?;
+                // Keep around so that it's not closed until all the connections are closed.
+                let shared_offer = shared_offer.get_description()?;
+                *(self.forking.lock()?) = Some(ForkingState {
+                    parent_connection,
+                    ice_gatherer,
+                    shared_offer,
+                });
             }
         }
         Ok(())
@@ -674,7 +653,7 @@ where
                     let mut child_connection = call_manager.create_connection(
                         &self,
                         remote_device,
-                        ConnectionForkingType::Child,
+                        ConnectionType::OutgoingChild,
                     )?;
                     child_connection.use_shared_ice_gatherer(&forking.ice_gatherer)?;
                     // Note that this doesn't actually send an offer.  It just sets the local description and state
@@ -1005,12 +984,8 @@ where
     }
 
     /// Inject a call Proceed event into the FSM.
-    pub fn inject_proceed(
-        &mut self,
-        remote_devices: Vec<DeviceId>,
-        enable_forking: bool,
-    ) -> Result<()> {
-        let event = CallEvent::Proceed(remote_devices, enable_forking);
+    pub fn inject_proceed(&mut self) -> Result<()> {
+        let event = CallEvent::Proceed;
         self.inject_event(event)
     }
 

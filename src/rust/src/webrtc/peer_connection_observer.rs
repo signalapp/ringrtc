@@ -98,8 +98,9 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
         info!("pc_observer_OnIceCandidate: {}", connection.id());
         if !candidate.is_null() {
             let ice_candidate = IceCandidate::from(unsafe { &*candidate });
+            let force_send = false;
             connection
-                .inject_local_ice_candidate(ice_candidate)
+                .inject_local_ice_candidate(ice_candidate, force_send)
                 .unwrap_or_else(|e| error!("Problems adding ice canddiate to fsm: {}", e));
         } else {
             warn!("Ignoring null IceCandidate pointer");

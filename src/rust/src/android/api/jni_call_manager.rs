@@ -120,16 +120,12 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
     call_manager: jlong,
     call_id: jlong,
     jni_call_context: JObject,
-    jni_remote_devices: JObject,
-    jni_enable_forking: jboolean,
 ) {
     match call_manager::proceed(
         &env,
         call_manager as *mut AndroidCallManager,
         call_id,
         jni_call_context,
-        jni_remote_devices,
-        jni_enable_forking == jni::sys::JNI_TRUE,
     ) {
         Ok(v) => v,
         Err(e) => {

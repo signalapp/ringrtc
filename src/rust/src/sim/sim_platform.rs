@@ -26,7 +26,7 @@ use crate::common::{
 };
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
-use crate::core::connection::{Connection, ConnectionForkingType};
+use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::sim::error::SimError;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
@@ -118,7 +118,7 @@ impl Platform for SimPlatform {
         &mut self,
         call: &Call<Self>,
         remote_device: DeviceId,
-        forking_type: ConnectionForkingType,
+        connection_type: ConnectionType,
     ) -> Result<Connection<Self>> {
         let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
@@ -126,7 +126,7 @@ impl Platform for SimPlatform {
 
         let fake_pc = RffiPeerConnectionInterface::new();
 
-        let connection = Connection::new(call.clone(), remote_device, forking_type).unwrap();
+        let connection = Connection::new(call.clone(), remote_device, connection_type).unwrap();
         connection.set_app_connection(fake_pc).unwrap();
 
         let pc_interface = PeerConnection::unowned(connection.app_connection_ptr_for_tests());

@@ -29,7 +29,7 @@ use crate::common::{
     Result,
 };
 use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionForkingType};
+use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::MediaStream;
@@ -200,13 +200,13 @@ impl Platform for AndroidPlatform {
         &mut self,
         call: &Call<Self>,
         remote_device: DeviceId,
-        forking_type: ConnectionForkingType,
+        connection_type: ConnectionType,
     ) -> Result<Connection<Self>> {
         let connection_id = ConnectionId::new(call.call_id(), remote_device);
 
         info!("create_connection(): {}", connection_id);
 
-        let connection = Connection::new(call.clone(), remote_device, forking_type)?;
+        let connection = Connection::new(call.clone(), remote_device, connection_type)?;
 
         let connection_ptr = connection.get_connection_ptr()?;
         let call_id_jlong = u64::from(call.call_id()) as jlong;
@@ -268,30 +268,7 @@ impl Platform for AndroidPlatform {
             CallDirection::InComing => false,
         };
 
-        // convert rust enum into Java enum
-        let class = "CallMediaType";
-        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
-        let class_object = self.class_cache.get_class(&class_path)?;
-
-        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
-        let method_signature = format!("(I)L{};", class_path);
-        let args = [JValue::from(call_media_type as i32)];
-        let jni_enum = match env.call_static_method(
-            class_object,
-            ENUM_FROM_NATIVE_INDEX_METHOD,
-            &method_signature,
-            &args,
-        ) {
-            Ok(v) => v.l()?,
-            Err(_) => {
-                return Err(AndroidError::JniCallStaticMethod(
-                    class_path,
-                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
-                    method_signature.to_string(),
-                )
-                .into())
-            }
-        };
+        let jni_call_media_type = self.java_enum(&env, "CallMediaType", call_media_type as i32)?;
 
         const START_CALL_METHOD: &str = "onStartCall";
         const START_CALL_SIG: &str =
@@ -301,7 +278,7 @@ impl Platform for AndroidPlatform {
             jni_remote.into(),
             call_id_jlong.into(),
             is_outgoing.into(),
-            jni_enum.into(),
+            jni_call_media_type.into(),
         ];
         let _ = jni_call_method(
             &env,
@@ -319,36 +296,13 @@ impl Platform for AndroidPlatform {
         let env = self.java_env()?;
         let jni_remote = remote_peer.as_obj();
 
-        // convert rust enum into Java enum
-        let class = "CallEvent";
-        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
-        let class_object = self.class_cache.get_class(&class_path)?;
-
-        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
-        let method_signature = format!("(I)L{};", class_path);
-        let args = [JValue::from(event as i32)];
-        let jni_enum = match env.call_static_method(
-            class_object,
-            ENUM_FROM_NATIVE_INDEX_METHOD,
-            &method_signature,
-            &args,
-        ) {
-            Ok(v) => v.l()?,
-            Err(_) => {
-                return Err(AndroidError::JniCallStaticMethod(
-                    class_path,
-                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
-                    method_signature.to_string(),
-                )
-                .into())
-            }
-        };
+        let jni_event = self.java_enum(&env, "CallEvent", event as i32)?;
 
         const ON_EVENT_METHOD: &str = "onEvent";
         const ON_EVENT_SIG: &str =
             "(Lorg/signal/ringrtc/Remote;Lorg/signal/ringrtc/CallManager$CallEvent;)V";
 
-        let args = [jni_remote.into(), jni_enum.into()];
+        let args = [jni_remote.into(), jni_event.into()];
 
         let _ = jni_call_method(
             &env,
@@ -378,32 +332,7 @@ impl Platform for AndroidPlatform {
         let jni_call_manager = self.jni_call_manager.as_obj();
         let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
         let remote_device = connection_id.remote_device() as jint;
-
-        // convert rust enum into Java enum
-        let class = "CallMediaType";
-        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
-        let class_object = self.class_cache.get_class(&class_path)?;
-
-        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
-        let method_signature = format!("(I)L{};", class_path);
-        let args = [JValue::from(call_media_type as i32)];
-        let jni_enum = match env.call_static_method(
-            class_object,
-            ENUM_FROM_NATIVE_INDEX_METHOD,
-            &method_signature,
-            &args,
-        ) {
-            Ok(v) => v.l()?,
-            Err(_) => {
-                return Err(AndroidError::JniCallStaticMethod(
-                    class_path,
-                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
-                    method_signature.to_string(),
-                )
-                .into())
-            }
-        };
-
+        let jni_call_media_type = self.java_enum(&env, "CallMediaType", call_media_type as i32)?;
         const SEND_OFFER_MESSAGE_METHOD: &str = "onSendOffer";
         const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;Lorg/signal/ringrtc/CallManager$CallMediaType;)V";
 
@@ -413,7 +342,7 @@ impl Platform for AndroidPlatform {
             remote_device.into(),
             broadcast.into(),
             JObject::from(env.new_string(description)?).into(),
-            jni_enum.into(),
+            jni_call_media_type.into(),
         ];
         let _ = jni_call_method(
             &env,
@@ -546,30 +475,8 @@ impl Platform for AndroidPlatform {
             None => 0,
         } as jint;
 
-        // convert rust enum into Java enum
-        let class = "HangupType";
-        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
-        let class_object = self.class_cache.get_class(&class_path)?;
-
-        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
-        let method_signature = format!("(I)L{};", class_path);
-        let args = [JValue::from(hangup_parameters.hangup_type() as i32)];
-        let jni_enum = match env.call_static_method(
-            class_object,
-            ENUM_FROM_NATIVE_INDEX_METHOD,
-            &method_signature,
-            &args,
-        ) {
-            Ok(v) => v.l()?,
-            Err(_) => {
-                return Err(AndroidError::JniCallStaticMethod(
-                    class_path,
-                    ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
-                    method_signature.to_string(),
-                )
-                .into())
-            }
-        };
+        let jni_hangup_type =
+            self.java_enum(&env, "HangupType", hangup_parameters.hangup_type() as i32)?;
 
         const SEND_HANGUP_MESSAGE_METHOD: &str = "onSendHangup";
         const SEND_HANGUP_MESSAGE_SIG: &str =
@@ -580,7 +487,7 @@ impl Platform for AndroidPlatform {
             jni_remote.into(),
             remote_device.into(),
             broadcast.into(),
-            jni_enum.into(),
+            jni_hangup_type.into(),
             device_id.into(),
             use_legacy_hangup_message.into(),
         ];
@@ -775,5 +682,27 @@ impl AndroidPlatform {
             jni_call_manager: self.jni_call_manager.clone(),
             class_cache:      self.class_cache.clone(),
         })
+    }
+
+    fn java_enum<'a>(&'a self, env: &'a JNIEnv, class: &str, value: i32) -> Result<JObject<'a>> {
+        let class_path = format!("{}/{}${}", RINGRTC_PACKAGE, CALL_MANAGER_CLASS, class);
+        let class_object = self.class_cache.get_class(&class_path)?;
+        const ENUM_FROM_NATIVE_INDEX_METHOD: &str = "fromNativeIndex";
+        let method_signature = format!("(I)L{};", class_path);
+        let args = [JValue::from(value)];
+        match env.call_static_method(
+            class_object,
+            ENUM_FROM_NATIVE_INDEX_METHOD,
+            &method_signature,
+            &args,
+        ) {
+            Ok(v) => Ok(v.l()?),
+            Err(_) => Err(AndroidError::JniCallStaticMethod(
+                class_path,
+                ENUM_FROM_NATIVE_INDEX_METHOD.to_string(),
+                method_signature.to_string(),
+            )
+            .into()),
+        }
     }
 }

@@ -166,37 +166,17 @@ pub fn proceed(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     jni_call_context: JObject,
-    jni_remote_devices: JObject,
-    enable_forking: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
 
     info!("proceed(): {}", call_id);
 
-    // Convert Java List<Integer> into a Rust Vec<DeviceId>.
-    let mut remote_devices = Vec::<DeviceId>::new();
-    let device_list = env.get_list(jni_remote_devices)?;
-    for device in device_list.iter()? {
-        let device_id = jni_call_method(env, device, "intValue", "()I", &[])?.i()? as DeviceId;
-        remote_devices.push(device_id);
-    }
-
-    info!("proceed(): remote_devices size: {}", remote_devices.len());
-    for device in &remote_devices {
-        info!("proceed(): device id: {}", device);
-    }
-
     let platform = call_manager.platform()?.try_clone()?;
     let android_call_context =
         AndroidCallContext::new(platform, env.new_global_ref(jni_call_context)?);
 
-    call_manager.proceed(
-        call_id,
-        android_call_context,
-        remote_devices,
-        enable_forking,
-    )
+    call_manager.proceed(call_id, android_call_context)
 }
 
 /// Application notification that signal message was sent successfully
