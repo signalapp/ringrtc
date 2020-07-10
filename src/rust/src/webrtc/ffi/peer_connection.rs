@@ -11,12 +11,12 @@ use std::os::raw::c_char;
 
 use crate::webrtc::data_channel::RffiDataChannelInit;
 use crate::webrtc::ffi::ice_gatherer::RffiIceGathererInterface;
-
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
     RffiSessionDescriptionInterface,
     RffiSetSessionDescriptionObserver,
 };
+use crate::webrtc::stats_observer::RffiStatsObserver;
 
 /// Incomplete type for C++ PeerConnectionInterface.
 #[repr(C)]
@@ -79,4 +79,9 @@ extern "C" {
         pc_interface: *const RffiPeerConnectionInterface,
         ice_gatherer: *const RffiIceGathererInterface,
     ) -> bool;
+
+    pub fn Rust_getStats(
+        pc_interface: *const RffiPeerConnectionInterface,
+        stats_observer: *const RffiStatsObserver,
+    );
 }

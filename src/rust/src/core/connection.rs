@@ -7,16 +7,16 @@
 
 //! A peer-to-peer connection interface.
 
-extern crate tokio;
-
 use std::fmt;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use futures::sync::mpsc::{Receiver, Sender};
 use futures::Future;
+use tokio::prelude::*;
 use tokio::runtime;
+use tokio::timer::Interval;
 
 use crate::common::{
     AnswerParameters,
@@ -48,6 +48,7 @@ use crate::webrtc::sdp_observer::{
     create_ssd_observer,
     SessionDescriptionInterface,
 };
+use crate::webrtc::stats_observer::{create_stats_observer, StatsObserver};
 
 /// Connection observer status notification types
 ///
@@ -107,6 +108,8 @@ where
     app_media_stream:      Option<<T as Platform>::AppMediaStream>,
     /// Application specific peer connection
     app_connection:        Option<<T as Platform>::AppConnection>,
+    /// Boxed copy of the stats collector object shared for callbacks.
+    stats_observer:        Option<Box<StatsObserver>>,
 }
 
 // Send and Sync needed to share *const pointer types across threads.
@@ -240,6 +243,8 @@ where
     terminate_condvar:               Arc<(Mutex<bool>, Condvar)>,
     /// This is write-once configuration and will not change.
     connection_type:                 ConnectionType,
+    /// Tokio runtime for background task execution of stats collection.
+    stats_runtime:                   Arc<CallMutex<Option<runtime::Runtime>>>,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -315,6 +320,7 @@ where
             pending_inbound_ice_candidates:  Arc::clone(&self.pending_inbound_ice_candidates),
             terminate_condvar:               Arc::clone(&self.terminate_condvar),
             connection_type:                 self.connection_type,
+            stats_runtime:                   Arc::clone(&self.stats_runtime),
         }
     }
 }
@@ -347,6 +353,7 @@ where
             connection_ptr:        None,
             app_media_stream:      None,
             app_connection:        None,
+            stats_observer:        None,
         };
 
         let connection = Self {
@@ -373,6 +380,7 @@ where
             )),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             connection_type,
+            stats_runtime: Arc::new(CallMutex::new(None, "stats_runtime")),
         };
 
         connection.init_connection_ptr()?;
@@ -555,6 +563,62 @@ where
     pub fn use_shared_ice_gatherer(&self, ice_gatherer: &IceGatherer) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
         webrtc.pc_interface()?.use_shared_ice_gatherer(ice_gatherer)
+    }
+
+    /// Creates a runtime for statistics to run a timer for the given interval
+    /// duration to invoke PeerConnection::GetStats which will pass specific stats
+    /// to StatsObserver::on_stats_complete.
+    pub fn start_stats(&self, duration: Duration) -> Result<()> {
+        if duration.as_secs() == 0 {
+            return Ok(());
+        }
+
+        // Define the future for stats logging.
+        let connection = self.clone();
+        let stats_future = Interval::new_interval(duration)
+            .map_err(|e| error!("Connection stats Interval failed: {:?}", e))
+            .for_each(move |_| {
+                connection.get_stats().unwrap();
+                Ok(())
+            });
+
+        // Create a stats observer object.
+        let stats_observer = create_stats_observer();
+
+        // Store it with the webrtc object.
+        let mut webrtc = self.webrtc.lock()?;
+        webrtc.stats_observer = Some(stats_observer);
+
+        debug!("start_stats(): starting the stats runtime");
+        let mut stats_runtime = self.stats_runtime.lock()?;
+        match *stats_runtime {
+            Some(_) => warn!("start_stats(): stats timer already running"),
+            None => {
+                // Start the stats runtime.
+                let mut runtime = runtime::Builder::new()
+                    .core_threads(1)
+                    .name_prefix("stats-")
+                    .build()?;
+
+                runtime.spawn(stats_future);
+
+                *stats_runtime = Some(runtime);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_stats(&self) -> Result<()> {
+        let webrtc = self.webrtc.lock()?;
+        match webrtc.stats_observer.as_ref() {
+            Some(collector) => webrtc.pc_interface()?.get_stats(collector),
+            None => {
+                // Just log this, it shouldn't affect overall call state.
+                warn!("get_stats(): No stats_collector found");
+                Ok(())
+            }
+        }
     }
 
     /// Create an SDP offer message.
@@ -873,11 +937,24 @@ where
 
         self.set_state(ConnectionState::Closed)?;
 
+        // Stop the timer runtime, if any.
+        let mut stats_runtime = self.stats_runtime.lock()?;
+        if let Some(stats_runtime) = stats_runtime.take() {
+            info!("close(): stopping the stats runtime");
+            let _ = stats_runtime
+                .shutdown_now()
+                .wait()
+                .map_err(|_| warn!("Problems shutting down the stats runtime"));
+        }
+
         // Free up webrtc related resources.
         let mut webrtc = self.webrtc.lock()?;
 
         // dispose of the media stream
         let _ = webrtc.app_media_stream.take();
+
+        // dispose of the stats observer
+        let _ = webrtc.stats_observer.take();
 
         // unregister the data channel observer
         if let Some(data_channel) = webrtc.data_channel.take().as_mut() {

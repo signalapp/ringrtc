@@ -13,6 +13,7 @@
 #include "api/peer_connection_interface.h"
 #include "rffi/api/data_channel.h"
 #include "rffi/api/sdp_observer_intf.h"
+#include "rffi/api/stats_observer_intf.h"
 
 /**
  * Rust friendly wrapper around some webrtc::PeerConnectionInterface
@@ -78,5 +79,9 @@ Rust_createSharedIceGatherer(webrtc::PeerConnectionInterface* pc_interface);
 RUSTEXPORT bool
 Rust_useSharedIceGatherer(webrtc::PeerConnectionInterface* pc_interface,
                           webrtc::IceGathererInterface* ice_gatherer);
+
+RUSTEXPORT void
+Rust_getStats(webrtc::PeerConnectionInterface* pc_interface,
+              webrtc::rffi::StatsObserverRffi* stats_observer);
 
 #endif /* RFFI_API_PEER_CONNECTION_INTERFACE_INTF_H__ */

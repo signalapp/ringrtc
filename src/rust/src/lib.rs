@@ -100,6 +100,7 @@ pub mod webrtc {
     pub mod peer_connection_factory;
     pub mod peer_connection_observer;
     pub mod sdp_observer;
+    pub mod stats_observer;
     #[cfg(not(feature = "sim"))]
     mod ffi {
         pub mod data_channel;
@@ -113,6 +114,7 @@ pub mod webrtc {
         pub mod peer_connection_observer;
         pub mod ref_count;
         pub mod sdp_observer;
+        pub mod stats_observer;
     }
     #[cfg(feature = "sim")]
     pub mod sim {
@@ -125,6 +127,7 @@ pub mod webrtc {
         pub mod peer_connection_observer;
         pub mod ref_count;
         pub mod sdp_observer;
+        pub mod stats_observer;
     }
 }
 

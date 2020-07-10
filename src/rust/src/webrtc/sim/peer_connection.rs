@@ -12,13 +12,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::core::platform::PlatformItem;
 use crate::webrtc::data_channel::RffiDataChannelInit;
-use crate::webrtc::sim::ice_gatherer::{RffiIceGathererInterface, FAKE_ICE_GATHERER};
-
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
     RffiSessionDescriptionInterface,
     RffiSetSessionDescriptionObserver,
 };
+use crate::webrtc::sim::ice_gatherer::{RffiIceGathererInterface, FAKE_ICE_GATHERER};
+use crate::webrtc::stats_observer::RffiStatsObserver;
 
 /// Simulation type for PeerConnectionInterface.
 #[derive(Clone)]
@@ -161,4 +161,12 @@ pub unsafe fn Rust_useSharedIceGatherer(
 ) -> bool {
     info!("Rust_useSharedIceGatherer:");
     true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_getStats(
+    _pc_interface: *const RffiPeerConnectionInterface,
+    _stats_observer: *const RffiStatsObserver,
+) {
+    info!("Rust_getStats:");
 }

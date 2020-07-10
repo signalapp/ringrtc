@@ -43,8 +43,6 @@
 //! - CallTimeout
 //! - InternalError
 
-extern crate tokio;
-
 use std::fmt;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
@@ -71,6 +69,7 @@ use crate::common::{
 };
 
 use crate::core::call::{Call, EventStream};
+use crate::core::call_manager::STATS_PERIOD_SEC;
 use crate::core::connection::ObserverEvent;
 use crate::core::platform::Platform;
 
@@ -619,6 +618,7 @@ where
                     let mut connection = call.active_connection()?;
                     connection.inject_accept_call()?;
                     connection.connect_media()?;
+                    connection.start_stats(Duration::from_secs(STATS_PERIOD_SEC))?;
                     call.notify_application(ApplicationEvent::LocalConnected)
                 })
                 .map_err(move |err| {
@@ -719,6 +719,7 @@ where
                                 // Get the media and application working for the first connection.
                                 let connection = call.active_connection()?;
                                 connection.connect_media()?;
+                                connection.start_stats(Duration::from_secs(STATS_PERIOD_SEC))?;
                                 call.notify_application(ApplicationEvent::RemoteConnected)?;
 
                                 // If the remote device of the active connection can support

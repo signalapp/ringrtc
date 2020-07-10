@@ -14,6 +14,7 @@
 #include "sdk/media_constraints.h"
 #include "rffi/api/peer_connection_interface_intf.h"
 #include "rffi/src/sdp_observer.h"
+#include "rffi/src/stats_observer.h"
 
 #include <string>
 
@@ -163,6 +164,12 @@ RUSTEXPORT bool
 Rust_useSharedIceGatherer(PeerConnectionInterface* pc_interface,
                           IceGathererInterface* ice_gatherer) {
   return pc_interface->UseSharedIceGatherer(rtc::scoped_refptr<IceGathererInterface>(ice_gatherer));
+}
+
+RUSTEXPORT void
+Rust_getStats(PeerConnectionInterface* pc_interface,
+              StatsObserverRffi* stats_observer) {
+    pc_interface->GetStats(stats_observer, nullptr, PeerConnectionInterface::kStatsOutputLevelStandard);
 }
 
 } // namespace rffi

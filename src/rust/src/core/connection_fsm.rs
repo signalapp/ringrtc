@@ -45,8 +45,6 @@
 //! - [ObserverEvents](../connection/enum.ObserverEvent.html)
 //! - ObserverErrors
 
-extern crate tokio;
-
 use std::fmt;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;

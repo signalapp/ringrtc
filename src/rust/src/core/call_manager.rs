@@ -46,6 +46,7 @@ use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::MediaStream;
 
 const TIME_OUT_PERIOD_SEC: u64 = 120;
+pub const STATS_PERIOD_SEC: u64 = 10;
 pub const MAX_MESSAGE_AGE_SEC: u64 = 120;
 
 /// Spawns a task on the worker runtime thread to handle an API

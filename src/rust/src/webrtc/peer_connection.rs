@@ -19,6 +19,7 @@ use crate::webrtc::sdp_observer::{
     SessionDescriptionInterface,
     SetSessionDescriptionObserver,
 };
+use crate::webrtc::stats_observer::StatsObserver;
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection as pc;
@@ -205,5 +206,12 @@ impl PeerConnection {
         } else {
             Err(RingRtcError::UseIceGatherer.into())
         }
+    }
+
+    // Rust wrapper around C++ PeerConnectionInterface::GetStats().
+    pub fn get_stats(&self, stats_observer: &StatsObserver) -> Result<()> {
+        unsafe { pc::Rust_getStats(self.rffi_pc_interface, stats_observer.rffi_stats_observer()) };
+
+        Ok(())
     }
 }

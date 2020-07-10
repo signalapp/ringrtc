@@ -49,6 +49,7 @@ if (is_linux || is_mac || is_win) {
       "rffi/src/peer_connection_observer.cc",
       "rffi/src/ref_count.cc",
       "rffi/src/sdp_observer.cc",
+      "rffi/src/stats_observer.cc",
     ]
   }
 }
