@@ -400,6 +400,16 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    public func setLowBandwidthMode(enabled: Bool) {
+        AssertIsOnMainThread()
+        Logger.debug("setLowBandwidthMode(\(enabled))")
+
+        let retPtr = ringrtcSetLowBandwidthMode(ringRtcCallManager, enabled)
+        if retPtr == nil {
+            owsFailDebug("ringrtcSetLowBandwidthMode() function failure")
+        }
+    }
+
     // MARK: - Signaling API
 
     public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data?, sdp: String?, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, remoteSupportsMultiRing: Bool, isLocalDevicePrimary: Bool) throws {

@@ -7,6 +7,8 @@
 
 //! Common types used throughout the library.
 
+pub mod units;
+
 use std::fmt;
 
 /// Common Result type, using `failure::Error` for Error.
@@ -322,6 +324,35 @@ impl CallMediaType {
             1 => CallMediaType::Video,
             _ => panic!("Unknown value: {}", value),
         }
+    }
+}
+
+/// Standard bitrates used in RingRTC.
+#[repr(u64)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BandwidthMode {
+    /// Minimal possible value for the maximum bitrate.
+    Min    = 30_000,
+
+    /// Maximum bitrate used for sending if in the low bandwidth mode.
+    Low    = 300_000,
+
+    /// Normal maximum bitrate used for calls.
+    Normal = 2_000_000,
+
+    /// Maximum possible maximum bitrate
+    Max    = 2_000_001,
+}
+
+impl fmt::Display for BandwidthMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl BandwidthMode {
+    pub fn max_bitrate(self) -> units::DataRate {
+        units::DataRate::from_bps(self as u64)
     }
 }
 

@@ -8,7 +8,7 @@
 use log::{debug, info};
 
 use ringrtc::{
-    common::{CallId, CallMediaType, DeviceId, FeatureLevel, Result},
+    common::{units::DataRate, CallId, CallMediaType, DeviceId, FeatureLevel, Result},
     core::{call_manager::CallManager, signaling},
     native::{
         CallState,
@@ -22,7 +22,6 @@ use ringrtc::{
         actor::{Actor, Stopper},
         router,
         router::{LinkConfig, Router},
-        units::DataRate,
     },
     webrtc::{
         injectable_network,

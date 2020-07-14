@@ -32,18 +32,24 @@ message Hangup {
   optional uint32 deviceId = 3;
 }
 
-message VideoStreamingStatus {
-  optional uint64 id      = 1;
-  optional bool   enabled = 2;
+message SenderStatus {
+  optional uint64 id            = 1;
+  optional bool   video_enabled = 2;
+}
+
+message ReceiverStatus {
+  optional uint64 id              = 1;
+  optional uint64 max_bitrate_bps = 2;
 }
 
 message Data {
-  optional Accepted             accepted             = 1;
-  optional Hangup               hangup               = 2;
-  optional VideoStreamingStatus videoStreamingStatus = 3;
+  optional Accepted       accepted       = 1;
+  optional Hangup         hangup         = 2;
+  optional SenderStatus   senderStatus   = 3;
   // If set, a larger value means a later message than a smaller value.
   // Can be used to detect that messages are out of order.
   // Useful when sending over transports that don't have ordering
   // (or when sending over more than one transport)
-  optional uint64               sequenceNumber       = 4;
+  optional uint64         sequenceNumber = 4;
+  optional ReceiverStatus receiverStatus = 5;
 }

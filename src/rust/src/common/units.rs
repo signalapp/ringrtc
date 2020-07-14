@@ -26,7 +26,7 @@ impl DataRate {
         Self::per_second(DataSize::from_bits(bps))
     }
 
-    pub fn as_bps(&self) -> u64 {
+    pub fn as_bps(self) -> u64 {
         self.size_per_second.as_bits()
     }
 
@@ -34,7 +34,7 @@ impl DataRate {
         Self::per_second(DataSize::from_kilobits(kbps))
     }
 
-    pub fn as_kbps(&self) -> u64 {
+    pub fn as_kbps(self) -> u64 {
         self.size_per_second.as_kilobits()
     }
 
@@ -42,7 +42,7 @@ impl DataRate {
         Self::per_second(DataSize::from_megabits(kbps))
     }
 
-    pub fn as_mbps(&self) -> u64 {
+    pub fn as_mbps(self) -> u64 {
         self.size_per_second.as_megabits()
     }
 }
@@ -62,15 +62,15 @@ pub struct DataSize {
 
 #[allow(dead_code)]
 impl DataSize {
-    pub fn per_second(&self) -> DataRate {
-        DataRate::per_second(*self)
+    pub fn per_second(self) -> DataRate {
+        DataRate::per_second(self)
     }
 
     pub fn from_bits(bits: u64) -> Self {
         Self { bits }
     }
 
-    pub fn as_bits(&self) -> u64 {
+    pub fn as_bits(self) -> u64 {
         self.bits
     }
 
@@ -78,7 +78,7 @@ impl DataSize {
         Self::from_bits(bytes * 8)
     }
 
-    pub fn as_bytes(&self) -> u64 {
+    pub fn as_bytes(self) -> u64 {
         self.as_bits() / 8
     }
 
@@ -86,7 +86,7 @@ impl DataSize {
         Self::from_bits(kbits * 1024)
     }
 
-    pub fn as_kilobits(&self) -> u64 {
+    pub fn as_kilobits(self) -> u64 {
         self.as_bits() / 1024
     }
 
@@ -94,7 +94,7 @@ impl DataSize {
         Self::from_bytes(kbytes * 1024)
     }
 
-    pub fn as_kilobytes(&self) -> u64 {
+    pub fn as_kilobytes(self) -> u64 {
         self.as_bytes() / 1024
     }
 
@@ -102,7 +102,7 @@ impl DataSize {
         Self::from_kilobits(mbits * 1024)
     }
 
-    pub fn as_megabits(&self) -> u64 {
+    pub fn as_megabits(self) -> u64 {
         self.as_kilobits() / 1024
     }
 
@@ -110,7 +110,7 @@ impl DataSize {
         Self::from_kilobytes(mbytes * 1024)
     }
 
-    pub fn as_megabytes(&self) -> u64 {
+    pub fn as_megabytes(self) -> u64 {
         self.as_kilobytes() / 1024
     }
 }

@@ -17,12 +17,12 @@ use std::sync::Arc;
 use bytes::BytesMut;
 use prost::Message;
 
-use crate::common::{CallId, Result};
+use crate::common::{units::DataRate, CallId, Result};
 use crate::core::call_mutex::CallMutex;
 use crate::core::signaling;
 use crate::core::util::CppObject;
 use crate::error::RingRtcError;
-use crate::protobuf::data_channel::{Accepted, Data, Hangup, VideoStreamingStatus};
+use crate::protobuf::data_channel::{Accepted, Data, Hangup, ReceiverStatus, SenderStatus};
 use crate::webrtc::data_channel_observer::RffiDataChannelObserverInterface;
 
 #[cfg(not(feature = "sim"))]
@@ -244,13 +244,22 @@ impl DataChannel {
         self.update_and_send(move |data| data.accepted = Some(accepted))
     }
 
-    /// Send `VideoStatus` message via the DataChannel.
-    pub fn send_video_status(&self, call_id: CallId, enabled: bool) -> Result<()> {
-        let mut video_status = VideoStreamingStatus::default();
-        video_status.id = Some(u64::from(call_id));
-        video_status.enabled = Some(enabled);
+    /// Send `SenderStatus` message via the DataChannel.
+    pub fn send_sender_status(&self, call_id: CallId, enabled: bool) -> Result<()> {
+        let mut sender_status = SenderStatus::default();
+        sender_status.id = Some(u64::from(call_id));
+        sender_status.video_enabled = Some(enabled);
 
-        self.update_and_send(move |data| data.video_streaming_status = Some(video_status))
+        self.update_and_send(move |data| data.sender_status = Some(sender_status))
+    }
+
+    /// Send `ReceiverStatus` message via the DataChannel.
+    pub fn send_receiver_status(&self, call_id: CallId, max_bitrate: DataRate) -> Result<()> {
+        let mut receiver_status = ReceiverStatus::default();
+        receiver_status.id = Some(u64::from(call_id));
+        receiver_status.max_bitrate_bps = Some(max_bitrate.as_bps());
+
+        self.update_and_send(move |data| data.receiver_status = Some(receiver_status))
     }
 
     /// Sends the current accumulated state of the call.

@@ -87,4 +87,9 @@ extern "C" {
         pc_interface: *const RffiPeerConnectionInterface,
         stats_observer: *const RffiStatsObserver,
     );
+
+    pub fn Rust_setMaxSendBitrate(
+        pc_interface: *const RffiPeerConnectionInterface,
+        max_bitrate_bps: i32,
+    );
 }

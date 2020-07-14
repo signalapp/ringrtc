@@ -11,7 +11,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, Result};
+use crate::common::{BandwidthMode, CallId, CallMediaType, DeviceId, FeatureLevel, Result};
 use crate::core::call_manager::CallManager;
 use crate::core::signaling;
 use crate::native::{
@@ -389,7 +389,26 @@ declare_types! {
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |cm| {
                 let mut active_connection = cm.call_manager.active_connection()?;
-                active_connection.inject_send_video_status_via_data_channel(enabled)?;
+                active_connection.inject_send_sender_status_via_data_channel(enabled)?;
+                Ok(())
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            Ok(cx.undefined().upcast())
+        }
+
+        method setLowBandwidthMode(mut cx) {
+            debug!("JsCallManager.setLowBandwidthMode()");
+            let enabled = cx.argument::<JsBoolean>(0)?.value();
+
+            let mode = if enabled {
+                BandwidthMode::Low
+            } else {
+                BandwidthMode::Normal
+            };
+
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |cm| {
+                let mut active_connection = cm.call_manager.active_connection()?;
+                active_connection.set_bandwidth_mode(mode)?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())

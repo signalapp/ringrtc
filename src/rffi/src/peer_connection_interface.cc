@@ -209,5 +209,14 @@ Rust_getStats(PeerConnectionInterface* pc_interface,
     pc_interface->GetStats(stats_observer, nullptr, PeerConnectionInterface::kStatsOutputLevelStandard);
 }
 
+RUSTEXPORT void
+Rust_setMaxSendBitrate(PeerConnectionInterface* pc_interface,
+                       int32_t                  max_bitrate_bps) {
+    struct BitrateSettings bitrate_settings;
+    bitrate_settings.max_bitrate_bps = max_bitrate_bps;
+
+    pc_interface->SetBitrate(bitrate_settings);
+}
+
 } // namespace rffi
 } // namespace webrtc

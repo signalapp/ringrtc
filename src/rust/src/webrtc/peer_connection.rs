@@ -9,7 +9,7 @@
 use std::ffi::CString;
 use std::fmt;
 
-use crate::common::Result;
+use crate::common::{units::DataRate, Result};
 use crate::core::signaling;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::{DataChannel, RffiDataChannelInit};
@@ -210,6 +210,13 @@ impl PeerConnection {
     // Rust wrapper around C++ PeerConnectionInterface::GetStats().
     pub fn get_stats(&self, stats_observer: &StatsObserver) -> Result<()> {
         unsafe { pc::Rust_getStats(self.rffi_pc_interface, stats_observer.rffi_stats_observer()) };
+
+        Ok(())
+    }
+
+    // Rust wrapper around C++ PeerConnectionInterface::SetBitrate().
+    pub fn set_max_send_bitrate(&self, max_bitrate: DataRate) -> Result<()> {
+        unsafe { pc::Rust_setMaxSendBitrate(self.rffi_pc_interface, max_bitrate.as_bps() as i32) };
 
         Ok(())
     }

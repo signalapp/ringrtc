@@ -185,3 +185,11 @@ pub unsafe fn Rust_getStats(
 ) {
     info!("Rust_getStats:");
 }
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_setMaxSendBitrate(
+    _pc_interface: *const RffiPeerConnectionInterface,
+    _max_bitrate_bps: i32,
+) {
+    info!("Rust_setMaxSendBitrate:");
+}

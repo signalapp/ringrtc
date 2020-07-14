@@ -5,10 +5,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-use crate::simnet::{
-    actor::{Actor, Stopper},
-    units::{DataRate, DataSize},
-};
+use crate::common::units::{DataRate, DataSize};
+use crate::simnet::actor::{Actor, Stopper};
 use rand::{distributions, distributions::Distribution, rngs::ThreadRng, thread_rng, Rng};
 use std::{
     collections::HashMap,

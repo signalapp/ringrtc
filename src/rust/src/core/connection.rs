@@ -7,6 +7,7 @@
 
 //! A peer-to-peer connection interface.
 
+use std::cmp::min;
 use std::fmt;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -19,6 +20,8 @@ use tokio::runtime;
 use tokio::timer::Interval;
 
 use crate::common::{
+    units::DataRate,
+    BandwidthMode,
     CallDirection,
     CallId,
     CallMediaType,
@@ -35,8 +38,8 @@ use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
 use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::core::util::ptr_as_box;
-
 use crate::error::RingRtcError;
+
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_gatherer::IceGatherer;
@@ -67,8 +70,8 @@ pub enum ConnectionObserverEvent {
     /// The remote side sent an accepted message via the data channel.
     ReceivedAcceptedViaDataChannel,
 
-    /// The remote side sent a video status message via the data channel.
-    ReceivedVideoStatusViaDataChannel(bool),
+    /// The remote side sent a sender status message via the data channel.
+    ReceivedSenderStatusViaDataChannel(bool),
 
     /// The remote side sent a hangup message via the data channel
     /// or via signaling.
@@ -116,6 +119,10 @@ where
     app_connection:        Option<<T as Platform>::AppConnection>,
     /// Boxed copy of the stats collector object shared for callbacks.
     stats_observer:        Option<Box<StatsObserver>>,
+    /// The current maximum bitrate setting for the local endpoint.
+    local_max_bitrate:     DataRate,
+    /// The current maximum bitrate setting for the remote endpoint.
+    remote_max_bitrate:    DataRate,
 }
 
 // Send and Sync needed to share *const pointer types across threads.
@@ -128,11 +135,13 @@ where
     T: Platform,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "pc_interface: {:?}, data_channel: {:?}, data_channel_observer: {:?}, connection_ptr: {:?}",
+        write!(f, "pc_interface: {:?}, data_channel: {:?}, data_channel_observer: {:?}, connection_ptr: {:?}, local_max_bitrate: {:?}, remote_max_bitrate: {:?}",
                self.pc_interface,
                self.data_channel,
                self.data_channel_observer,
-               self.connection_ptr)
+               self.connection_ptr,
+               self.local_max_bitrate,
+               self.remote_max_bitrate)
     }
 }
 
@@ -404,6 +413,8 @@ where
             incoming_media:        None,
             app_connection:        None,
             stats_observer:        None,
+            local_max_bitrate:     BandwidthMode::Normal.max_bitrate(),
+            remote_max_bitrate:    BandwidthMode::Normal.max_bitrate(),
         };
 
         let connection = Self {
@@ -415,8 +426,8 @@ where
                 FeatureLevel::MultiRing,
                 "remote_feature_level",
             )),
-            direction,
             connection_id: ConnectionId::new(call_id, remote_device),
+            direction,
             call: Arc::new(CallMutex::new(call, "call")),
             state: Arc::new(CallMutex::new(ConnectionState::NotYetStarted, "state")),
             context: Arc::new(CallMutex::new(context, "context")),
@@ -838,6 +849,76 @@ where
         Arc::strong_count(&self.webrtc)
     }
 
+    /// Sets the maximum send bitrate only for the local
+    /// peer_connection. Called when a connection is first started to
+    /// ensure the BandwidthMode::Normal.max_bitrate() is set in WebRTC.
+    /// Does not send the remote side any message.
+    pub fn set_local_max_send_bitrate(&self, local_max: DataRate) -> Result<()> {
+        info!("set_local_max_send_bitrate(): local_max: {:?}", local_max);
+
+        let mut webrtc = self.webrtc.lock()?;
+        webrtc.local_max_bitrate = local_max;
+        webrtc.pc_interface()?.set_max_send_bitrate(local_max)
+    }
+
+    /// Sets the maximum bitrate for all media combined.
+    /// This includes sending and receiving.
+    /// Sending by changing the PeerConnection.
+    /// Receiving by sending a message to the remote side to send less
+    /// The app can set this via the `set_bandwidth_mode` API.
+    pub fn set_local_max_bitrate(&self, local_max: DataRate) -> Result<()> {
+        let mut webrtc = self.webrtc.lock()?;
+
+        if local_max == webrtc.local_max_bitrate {
+            // The local bitrate has not changed, so there is nothing to do.
+            return Ok(());
+        }
+        webrtc.local_max_bitrate = local_max;
+
+        // Use the smallest bitrate for the session.
+        let combined_max = min(local_max, webrtc.remote_max_bitrate);
+        info!(
+            "set_local_max_bitrate(): local: {:?} remote: {:?} combined: {:?}",
+            local_max, webrtc.remote_max_bitrate, combined_max
+        );
+
+        webrtc.pc_interface()?.set_max_send_bitrate(combined_max)?;
+
+        // Send the remote peer the current receiver status via the
+        // PeerConnection DataChannel.
+        webrtc
+            .data_channel()?
+            .send_receiver_status(self.call_id, local_max)
+    }
+
+    /// Sets the maximum sending bitrate for all media combined.
+    /// Unlike set_local_max_bitrate, it does not send a message to the remote
+    /// side to affect receiving.  Rather, it comes from the remote side
+    /// and thus must affect local sending.
+    pub fn set_remote_max_bitrate(&self, remote_max: DataRate) -> Result<()> {
+        let mut webrtc = self.webrtc.lock()?;
+
+        let remote_max = clamp(
+            remote_max,
+            BandwidthMode::Min.max_bitrate(),
+            BandwidthMode::Max.max_bitrate(),
+        );
+        if remote_max == webrtc.remote_max_bitrate {
+            // The remote bitrate has not changed, so there is nothing to do.
+            return Ok(());
+        }
+        webrtc.remote_max_bitrate = remote_max;
+
+        // Use the smallest bitrate for the session.
+        let combined_max = min(webrtc.local_max_bitrate, remote_max);
+        info!(
+            "set_remote_max_bitrate(): local: {:?} remote: {:?} combined: {:?}",
+            webrtc.local_max_bitrate, remote_max, combined_max
+        );
+
+        webrtc.pc_interface()?.set_max_send_bitrate(combined_max)
+    }
+
     /// Creates a runtime for statistics to run a timer for the given interval
     /// duration to invoke PeerConnection::GetStats which will pass specific stats
     /// to StatsObserver::on_stats_complete.
@@ -1030,19 +1111,19 @@ where
         Ok(())
     }
 
-    /// Send the remote peer the current video status via the
+    /// Send the remote peer the current sender status via the
     /// PeerConnection DataChannel.
     ///
     /// # Arguments
     ///
-    /// * `enabled` - `true` when the local side is streaming video,
+    /// * `video_enabled` - `true` when the local side is streaming video,
     /// otherwise `false`.
-    pub fn send_video_status_via_data_channel(&self, enabled: bool) -> Result<()> {
+    pub fn send_sender_status_via_data_channel(&self, video_enabled: bool) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
 
         webrtc
             .data_channel()?
-            .send_video_status(self.call_id, enabled)
+            .send_sender_status(self.call_id, video_enabled)
     }
 
     /// Notify the parent call observer about an event.
@@ -1299,23 +1380,45 @@ where
         self.inject_event(ConnectionEvent::ReceivedHangup(call_id, hangup))
     }
 
-    /// Inject a `ReceivedVideoStatusViaDataChannel` event into the FSM.
+    /// Inject a `ReceivedSenderStatusViaDataChannel` event into the FSM.
     ///
     /// `Called By:` WebRTC `DataChannelObserver` call back thread.
     ///
     /// # Arguments
     ///
     /// * `call_id` - Call ID from the remote peer.
-    /// * `enabled` - `true` if the remote peer is streaming video.
-    pub fn inject_received_video_status_via_data_channel(
+    /// * `video_enabled` - `true` if the remote peer is streaming video.
+    pub fn inject_received_sender_status_via_data_channel(
         &mut self,
         call_id: CallId,
-        enabled: bool,
+        video_enabled: bool,
         sequence_number: Option<u64>,
     ) -> Result<()> {
-        self.inject_event(ConnectionEvent::ReceivedVideoStatusViaDataChannel(
+        self.inject_event(ConnectionEvent::ReceivedSenderStatusViaDataChannel(
             call_id,
-            enabled,
+            video_enabled,
+            sequence_number,
+        ))
+    }
+
+    /// Inject a `ReceivedReceiverStatusViaDataChannel` event into the FSM.
+    ///
+    /// `Called By:` WebRTC `DataChannelObserver` call back thread.
+    ///
+    /// # Arguments
+    ///
+    /// * `call_id` - Call ID from the remote peer.
+    /// * `max_bitrate_bps` - the bitrate that the remote peer wants to use for
+    /// the session.
+    pub fn inject_received_receiver_status_via_data_channel(
+        &mut self,
+        call_id: CallId,
+        max_bitrate: DataRate,
+        sequence_number: Option<u64>,
+    ) -> Result<()> {
+        self.inject_event(ConnectionEvent::ReceivedReceiverStatusViaDataChannel(
+            call_id,
+            max_bitrate,
             sequence_number,
         ))
     }
@@ -1333,13 +1436,27 @@ where
         self.inject_event(ConnectionEvent::Accept)
     }
 
-    /// Inject a `LocalVideoStatus` event into the FSM.
+    /// Inject a `SendSenderStatusViaDataChannel` event into the FSM.
     ///
     /// `Called By:` Local application.
     ///
-    /// * `enabled` - `true` if the local peer is streaming video.
-    pub fn inject_send_video_status_via_data_channel(&mut self, enabled: bool) -> Result<()> {
-        self.inject_event(ConnectionEvent::SendVideoStatusViaDataChannel(enabled))
+    /// * `video_enabled` - `true` if the local peer is streaming video.
+    pub fn inject_send_sender_status_via_data_channel(
+        &mut self,
+        video_enabled: bool,
+    ) -> Result<()> {
+        self.inject_event(ConnectionEvent::SendSenderStatusViaDataChannel(
+            video_enabled,
+        ))
+    }
+
+    /// Inject a `SetBandwidthMode` event into the FSM.
+    ///
+    /// `Called By:` Local application.
+    ///
+    /// * `mode` - The bandwidth mode that should be used
+    pub fn set_bandwidth_mode(&mut self, mode: BandwidthMode) -> Result<()> {
+        self.inject_event(ConnectionEvent::SetBandwidthMode(mode))
     }
 
     /// Inject a `ReceivedIce` event into the FSM.
@@ -1434,4 +1551,15 @@ where
         // have happened during the first sync.
         self.inject_synchronize()
     }
+}
+
+#[inline]
+pub fn clamp<T: PartialOrd>(val: T, min: T, max: T) -> T {
+    if val < min {
+        return min;
+    }
+    if val > max {
+        return max;
+    }
+    val
 }

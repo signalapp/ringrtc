@@ -20,7 +20,7 @@ use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
-use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, Result};
+use crate::common::{BandwidthMode, CallId, CallMediaType, DeviceId, FeatureLevel, Result};
 use crate::core::connection::Connection;
 use crate::core::signaling;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
@@ -407,7 +407,19 @@ pub fn set_video_enable(call_manager: *mut AndroidCallManager, enable: bool) -> 
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
-    active_connection.inject_send_video_status_via_data_channel(enable)
+    active_connection.inject_send_sender_status_via_data_channel(enable)
+}
+
+/// CMI request to set the low bandwidth mode
+pub fn set_bandwidth_mode(
+    call_manager: *mut AndroidCallManager,
+    mode: BandwidthMode,
+) -> Result<()> {
+    info!("set_low_bandwidth_mode():");
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let mut active_connection = call_manager.active_connection()?;
+    active_connection.set_bandwidth_mode(mode)
 }
 
 /// CMI request to drop the active call

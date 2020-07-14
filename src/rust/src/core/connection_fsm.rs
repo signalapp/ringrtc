@@ -21,7 +21,8 @@
 //! - AcceptOffer
 //! - AnswerCall
 //! - LocalHangup
-//! - SendVideoStatusViaDataChannel
+//! - SendSenderStatusViaDataChannel
+//! - SendReceiverStatusViaDataChannel
 //! - SendBusy
 //! - ReceivedIce
 //! - ReceivedHangup
@@ -35,7 +36,8 @@
 //! - ReceivedIncomingMedia
 //! - ReceivedDataChannel
 //! - ReceivedAcceptedViaDataChannel
-//! - ReceivedVideoStatusViaDataChannel
+//! - ReceivedSenderStatusViaDataChannel
+//! - ReceivedReceiverStatusViaDataChannel
 //! - ReceivedHangup
 //!
 //! # Asynchronous Outputs:
@@ -54,7 +56,15 @@ use futures::future::lazy;
 use futures::{Async, Future, Poll, Stream};
 use tokio::runtime;
 
-use crate::common::{CallDirection, CallId, ConnectionState, Result, RingBench};
+use crate::common::{
+    units::DataRate,
+    BandwidthMode,
+    CallDirection,
+    CallId,
+    ConnectionState,
+    Result,
+    RingBench,
+};
 use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
 use crate::core::platform::Platform;
 use crate::core::signaling;
@@ -82,19 +92,27 @@ pub enum ConnectionEvent {
     Accept,
     /// Receive accepted message from remote peer.
     /// Source: data channel (PeerConnection)
-    /// Action: bubble up to Call and tranisition states
+    /// Action: bubble up to Call and transition states
     ReceivedAcceptedViaDataChannel(CallId),
-    /// Receive video streaming status change from remote peer.
+    /// Receive sender status change from remote peer.
     /// Source: data channel (PeerConnection)
     /// Action: Bubble up to app, which should change the "in call" screen.
-    ReceivedVideoStatusViaDataChannel(CallId, bool, Option<u64>),
-    /// Send video status message via the data channel
+    ReceivedSenderStatusViaDataChannel(CallId, bool, Option<u64>),
+    /// Receive receiver status change from remote peer.
+    /// Source: data channel (PeerConnection)
+    /// Action: Make adjustments in connection if necessary.
+    ReceivedReceiverStatusViaDataChannel(CallId, DataRate, Option<u64>),
+    /// Send sender status message via the data channel
     /// Source: app (user action)
-    /// Action: Send a video status message over the data channel.
-    SendVideoStatusViaDataChannel(bool),
+    /// Action: Send a sender status message over the data channel.
+    SendSenderStatusViaDataChannel(bool),
+    /// Set bandwidth mode
+    /// Source: app (user setting)
+    /// Action: Set bitrate and send a receiver status message over the data channel.
+    SetBandwidthMode(BandwidthMode),
     /// Local ICE candidate from PeerConnection
     /// Source: PeerConnection
-    /// Action: Send ICE candiate over signaling.
+    /// Action: Send ICE candidate over signaling.
     LocalIceCandidate(signaling::IceCandidate),
     /// ICE state changed.
     /// Source: PeerConnection
@@ -140,19 +158,30 @@ impl fmt::Display for ConnectionEvent {
             ConnectionEvent::ReceivedAcceptedViaDataChannel(id) => {
                 format!("ReceivedAcceptedViaDataChannel, call_id: {}", id)
             }
-            ConnectionEvent::ReceivedVideoStatusViaDataChannel(id, enabled, sequence_number) => {
+            ConnectionEvent::ReceivedSenderStatusViaDataChannel(id, video_enabled, sequence_number) => {
                 format!(
-                    "ReceivedVideoStatusViaDataChannel, call_id: {}, enabled: {}, seqnum: {:?}",
-                    id, enabled, sequence_number
+                    "ReceivedSenderStatusViaDataChannel, call_id: {}, video_enabled: {}, seqnum: {:?}",
+                    id, video_enabled, sequence_number
+                )
+            }
+            ConnectionEvent::ReceivedReceiverStatusViaDataChannel(id, max_bitrate, sequence_number) => {
+                format!(
+                    "ReceivedReceiverStatusViaDataChannel, call_id: {}, max_bitrate: {:?}, seqnum: {:?}",
+                    id, max_bitrate, sequence_number
                 )
             }
             ConnectionEvent::ReceivedIce(_) => "RemoteIceCandidates".to_string(),
             ConnectionEvent::SendHangupViaDataChannel(hangup) => {
                 format!("SendHangupViaDataChannel, hangup: {}", hangup)
             }
-            ConnectionEvent::SendVideoStatusViaDataChannel(enabled) => {
-                format!("SendVideoStatusViaDataChannel, enabled: {}", enabled)
-            }
+            ConnectionEvent::SendSenderStatusViaDataChannel(enabled) => format!(
+                "SendSenderStatusViaDataChannel, enabled: {}",
+                enabled
+            ),
+            ConnectionEvent::SetBandwidthMode(mode) => format!(
+                "SetBandwidthMode, mode: {:?}",
+                mode
+            ),
             ConnectionEvent::LocalIceCandidate(_) => "LocalIceCandidate".to_string(),
             ConnectionEvent::IceConnected => "IceConnected".to_string(),
             ConnectionEvent::IceFailed => "IceConnectionFailed".to_string(),
@@ -197,14 +226,17 @@ where
     T: Platform,
 {
     /// Receiving end of EventPump.
-    event_stream:                             EventStream<T>,
+    event_stream: EventStream<T>,
     /// Runtime for processing long running requests.
-    worker_runtime:                           Option<runtime::Runtime>,
+    worker_runtime: Option<runtime::Runtime>,
     /// Runtime for processing observer notification events.
-    notify_runtime:                           Option<runtime::Runtime>,
-    /// The sequence number of the last received remote video status
-    /// We process remote video status messages larger than this value.
-    last_remote_video_status_sequence_number: Option<u64>,
+    notify_runtime: Option<runtime::Runtime>,
+    /// The sequence number of the last received remote sender status
+    /// We process remote sender status messages larger than this value.
+    last_remote_sender_status_sequence_number: Option<u64>,
+    /// The sequence number of the last received remote receiver status
+    /// We process remote receiver status messages larger than this value.
+    last_remote_receiver_status_sequence_number: Option<u64>,
 }
 
 impl<T> fmt::Display for ConnectionStateMachine<T>
@@ -235,7 +267,11 @@ where
                     match (state, &event) {
                         (
                             ConnectionState::ConnectedAndAccepted,
-                            ConnectionEvent::ReceivedVideoStatusViaDataChannel(_, _, _),
+                            ConnectionEvent::ReceivedSenderStatusViaDataChannel(_, _, _),
+                        )
+                        | (
+                            ConnectionState::ConnectedAndAccepted,
+                            ConnectionEvent::ReceivedReceiverStatusViaDataChannel(_, _, _),
                         )
                         | (
                             ConnectionState::ConnectedAndAccepted,
@@ -282,7 +318,8 @@ where
                     .name_prefix("notify-")
                     .build()?,
             ),
-            last_remote_video_status_sequence_number: None,
+            last_remote_sender_status_sequence_number: None,
+            last_remote_receiver_status_sequence_number: None,
         };
 
         if let Some(worker_runtime) = &mut fsm.worker_runtime {
@@ -388,17 +425,34 @@ where
             ConnectionEvent::ReceivedAcceptedViaDataChannel(id) => {
                 self.handle_received_accepted_via_data_channel(connection, state, id)
             }
-            ConnectionEvent::ReceivedVideoStatusViaDataChannel(id, enable, sequence_number) => self
-                .handle_received_video_status_via_data_channel(
-                    connection,
-                    state,
-                    id,
-                    enable,
-                    sequence_number,
-                ),
+            ConnectionEvent::ReceivedSenderStatusViaDataChannel(
+                id,
+                video_enable,
+                sequence_number,
+            ) => self.handle_received_sender_status_via_data_channel(
+                connection,
+                state,
+                id,
+                video_enable,
+                sequence_number,
+            ),
+            ConnectionEvent::ReceivedReceiverStatusViaDataChannel(
+                id,
+                max_bitrate,
+                sequence_number,
+            ) => self.handle_received_receiver_status_via_data_channel(
+                connection,
+                state,
+                id,
+                max_bitrate,
+                sequence_number,
+            ),
             ConnectionEvent::ReceivedIce(ice) => self.handle_received_ice(connection, state, ice),
-            ConnectionEvent::SendVideoStatusViaDataChannel(enabled) => {
-                self.handle_send_video_status_via_data_channel(connection, state, enabled)
+            ConnectionEvent::SendSenderStatusViaDataChannel(enabled) => {
+                self.handle_send_sender_status_via_data_channel(connection, state, enabled)
+            }
+            ConnectionEvent::SetBandwidthMode(mode) => {
+                self.handle_set_bandwidth_mode(connection, state, mode)
             }
             ConnectionEvent::LocalIceCandidate(candidate) => {
                 self.handle_local_ice_candidate(connection, state, candidate)
@@ -492,27 +546,27 @@ where
         Ok(())
     }
 
-    fn handle_received_video_status_via_data_channel(
+    fn handle_received_sender_status_via_data_channel(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
         call_id: CallId,
-        enabled: bool,
+        video_enable: bool,
         sequence_number: Option<u64>,
     ) -> Result<()> {
         debug!(
-            "handle_received_video_status_via_data_channel(): enabled: {}, sequence_number: {:?}",
-            enabled, sequence_number
+            "handle_received_sender_status_via_data_channel(): video_enable: {}, sequence_number: {:?}",
+            video_enable, sequence_number
         );
 
         if connection.call_id() != call_id {
-            warn!("Remote video status change for non-active call");
+            warn!("Remote sender status change for non-active call");
             return Ok(());
         }
 
         let out_of_order = match (
             sequence_number,
-            self.last_remote_video_status_sequence_number,
+            self.last_remote_sender_status_sequence_number,
         ) {
             // If no sequence number was sent, we assume this is a legacy client that is only
             // using ordered delivery.
@@ -524,7 +578,7 @@ where
                 if seqnum < last_seqnum {
                     // Warn only when packets arrive out of order, but not on expected retransmits with the same
                     // sequence number.
-                    warn!("Dropped remote video status message because it arrived out of order.");
+                    warn!("Dropped remote sender status message because it arrived out of order.");
                 };
                 seqnum <= last_seqnum
             }
@@ -534,7 +588,7 @@ where
             return Ok(());
         }
         if sequence_number.is_some() {
-            self.last_remote_video_status_sequence_number = sequence_number;
+            self.last_remote_sender_status_sequence_number = sequence_number;
         }
 
         match state {
@@ -543,9 +597,68 @@ where
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => self.notify_observer(
                 connection,
-                ConnectionObserverEvent::ReceivedVideoStatusViaDataChannel(enabled),
+                ConnectionObserverEvent::ReceivedSenderStatusViaDataChannel(video_enable),
             ),
-            _ => self.unexpected_state(state, "ReceivedVideoStatusViaDataChannel"),
+            _ => self.unexpected_state(state, "ReceivedSenderStatusViaDataChannel"),
+        };
+        Ok(())
+    }
+
+    fn handle_received_receiver_status_via_data_channel(
+        &mut self,
+        connection: Connection<T>,
+        state: ConnectionState,
+        call_id: CallId,
+        max_bitrate: DataRate,
+        sequence_number: Option<u64>,
+    ) -> Result<()> {
+        debug!(
+            "handle_received_receiver_status_via_data_channel(): max_bitrate: {:?}, sequence_number: {:?}",
+            max_bitrate, sequence_number
+        );
+
+        if connection.call_id() != call_id {
+            warn!("Remote sender status change for non-active call");
+            return Ok(());
+        }
+
+        let out_of_order = match (
+            sequence_number,
+            self.last_remote_receiver_status_sequence_number,
+        ) {
+            // If no sequence number was sent, we assume this is a legacy client that is only
+            // using ordered delivery.
+            (None, _) => false,
+            // This is the first sequence number
+            (Some(_), None) => false,
+            // If they are equal, we treat it as out of order as well.
+            (Some(seqnum), Some(last_seqnum)) => {
+                if seqnum < last_seqnum {
+                    // Warn only when packets arrive out of order, but not on expected retransmits with the same
+                    // sequence number.
+                    warn!(
+                        "Dropped remote receiver status message because it arrived out of order."
+                    );
+                };
+                seqnum <= last_seqnum
+            }
+        };
+        if out_of_order {
+            // Just ignore out of order status messages.
+            return Ok(());
+        }
+        if sequence_number.is_some() {
+            self.last_remote_receiver_status_sequence_number = sequence_number;
+        }
+
+        match state {
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
+                connection.set_remote_max_bitrate(max_bitrate)?
+            }
+            _ => self.unexpected_state(state, "ReceivedReceiverStatusViaDataChannel"),
         };
         Ok(())
     }
@@ -622,11 +735,11 @@ where
         Ok(())
     }
 
-    fn handle_send_video_status_via_data_channel(
+    fn handle_send_sender_status_via_data_channel(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
-        enabled: bool,
+        video_enabled: bool,
     ) -> Result<()> {
         match state {
             ConnectionState::ConnectingBeforeAccepted
@@ -635,19 +748,49 @@ where
             | ConnectionState::ConnectedAndAccepted => {
                 // notify the peer via a data channel message.
                 let mut err_connection = connection.clone();
-                let send_video_status_future = lazy(move || {
+                let send_sender_status_future = lazy(move || {
                     if connection.terminating()? {
                         return Ok(());
                     }
-                    connection.send_video_status_via_data_channel(enabled)
+                    connection.send_sender_status_via_data_channel(video_enabled)
                 })
                 .map_err(move |err| {
-                    err_connection.inject_internal_error(err, "Sending local video status failed")
+                    err_connection.inject_internal_error(err, "Sending local sender status failed")
                 });
 
-                self.worker_spawn(send_video_status_future);
+                self.worker_spawn(send_sender_status_future);
             }
-            _ => self.unexpected_state(state, "SendVideoStatusViaDataChannel"),
+            _ => self.unexpected_state(state, "SendSenderStatusViaDataChannel"),
+        };
+        Ok(())
+    }
+
+    fn handle_set_bandwidth_mode(
+        &mut self,
+        connection: Connection<T>,
+        state: ConnectionState,
+        mode: BandwidthMode,
+    ) -> Result<()> {
+        match state {
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
+                let mut err_connection = connection.clone();
+                let set_bandwidth_mode_future = lazy(move || {
+                    if connection.terminating()? {
+                        return Ok(());
+                    }
+
+                    connection.set_local_max_bitrate(mode.max_bitrate())
+                })
+                .map_err(move |err| {
+                    err_connection.inject_internal_error(err, "Setting low bandwidth mode failed")
+                });
+
+                self.worker_spawn(set_bandwidth_mode_future);
+            }
+            _ => self.unexpected_state(state, "SetBandwidthMode"),
         };
         Ok(())
     }

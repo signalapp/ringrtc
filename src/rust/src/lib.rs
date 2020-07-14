@@ -142,5 +142,4 @@ pub mod sim {
 pub mod simnet {
     pub mod actor;
     pub mod router;
-    pub mod units;
 }

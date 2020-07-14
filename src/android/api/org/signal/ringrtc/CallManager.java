@@ -533,6 +533,24 @@ public class CallManager {
 
   /**
    *
+   * Notification from application to enable/disable the low bandwidth
+   * mode for the session.
+   *
+   * @param enabled  if true, then enable low bandwidth mode
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  public void setLowBandwidthMode(boolean enabled)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    ringrtcSetLowBandwidthMode(nativeCallManager, enabled);
+  }
+
+  /**
+   *
    * Notification from application to hangup the active call.
    *
    * @throws CallException for native code failures
@@ -1257,6 +1275,10 @@ public class CallManager {
 
   private native
     void ringrtcSetVideoEnable(long nativeCallManager, boolean enable)
+    throws CallException;
+
+  private native
+    void ringrtcSetLowBandwidthMode(long nativeCallManager, boolean enabled)
     throws CallException;
 
   private native

@@ -14,7 +14,7 @@ use bytes::Bytes;
 use libc::size_t;
 use prost::Message;
 
-use crate::common::{CallDirection, CallId, Result};
+use crate::common::{units::DataRate, CallDirection, CallId, Result};
 use crate::core::connection::Connection;
 use crate::core::platform::Platform;
 use crate::core::signaling;
@@ -137,13 +137,22 @@ extern "C" fn dc_observer_OnMessage<T>(
         .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));
         message_handled = true;
     };
-    if let Some(video_status) = message.video_streaming_status {
-        cc.inject_received_video_status_via_data_channel(
-            CallId::new(video_status.id()),
-            video_status.enabled(),
+    if let Some(sender_status) = message.sender_status {
+        cc.inject_received_sender_status_via_data_channel(
+            CallId::new(sender_status.id()),
+            sender_status.video_enabled(),
             message.sequence_number,
         )
-        .unwrap_or_else(|e| warn!("unable to inject remote video status event: {}", e));
+        .unwrap_or_else(|e| warn!("unable to inject remote sender status event: {}", e));
+        message_handled = true;
+    };
+    if let Some(receiver_status) = message.receiver_status {
+        cc.inject_received_receiver_status_via_data_channel(
+            CallId::new(receiver_status.id()),
+            DataRate::from_bps(receiver_status.max_bitrate_bps()),
+            message.sequence_number,
+        )
+        .unwrap_or_else(|e| warn!("unable to inject remote receiver status event: {}", e));
         message_handled = true;
     };
     if !message_handled {

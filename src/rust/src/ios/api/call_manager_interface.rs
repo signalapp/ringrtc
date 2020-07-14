@@ -17,7 +17,7 @@ use crate::ios::call_manager::IOSCallManager;
 use crate::ios::ios_util::*;
 use crate::ios::logging::IOSLogger;
 
-use crate::common::{CallMediaType, DeviceId, FeatureLevel};
+use crate::common::{BandwidthMode, CallMediaType, DeviceId, FeatureLevel};
 use crate::core::signaling;
 
 ///
@@ -597,6 +597,26 @@ pub extern "C" fn ringrtcGetActiveCallContext(callManager: *mut c_void) -> *mut 
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) -> *mut c_void {
     match call_manager::set_video_enable(callManager as *mut IOSCallManager, enable) {
+        Ok(_v) => {
+            // Return the object reference back as indication of success.
+            callManager
+        }
+        Err(_e) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcSetLowBandwidthMode(
+    callManager: *mut c_void,
+    enabled: bool,
+) -> *mut c_void {
+    let mode = if enabled {
+        BandwidthMode::Low
+    } else {
+        BandwidthMode::Normal
+    };
+    match call_manager::set_bandwidth_mode(callManager as *mut IOSCallManager, mode) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager

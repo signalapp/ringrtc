@@ -18,6 +18,7 @@ use std::time::Duration;
 
 use ringrtc::common::{
     ApplicationEvent,
+    BandwidthMode,
     CallId,
     CallMediaType,
     CallState,
@@ -611,7 +612,7 @@ fn inject_call_error() {
 }
 
 #[test]
-fn inject_send_video_status_via_data_channel() {
+fn inject_send_sender_status_via_data_channel() {
     test_init();
 
     let context = connect_outbound_call();
@@ -619,12 +620,50 @@ fn inject_send_video_status_via_data_channel() {
     let mut active_connection = context.active_connection();
 
     active_connection
-        .inject_send_video_status_via_data_channel(false)
+        .inject_send_sender_status_via_data_channel(false)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
 
+    // TODO -- verify that the data channel object sent a message
+}
+
+#[test]
+fn set_bandwidth_mode_normal() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+    let mut active_connection = context.active_connection();
+
+    active_connection
+        .set_bandwidth_mode(BandwidthMode::Normal)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    // TODO -- verify that the bitrate was changed
+    // TODO -- verify that the data channel object sent a message
+}
+
+#[test]
+fn set_bandwidth_mode_Low() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+    let mut active_connection = context.active_connection();
+
+    active_connection
+        .set_bandwidth_mode(BandwidthMode::Low)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    // TODO -- verify that the bitrate was changed
     // TODO -- verify that the data channel object sent a message
 }
 
@@ -901,7 +940,7 @@ fn received_remote_video_status() {
         let enable = PRNG.gen::<bool>();
 
         active_connection
-            .inject_received_video_status_via_data_channel(active_call.call_id(), enable, Some(i))
+            .inject_received_sender_status_via_data_channel(active_call.call_id(), enable, Some(i))
             .expect(error_line!());
         cm.synchronize().expect(error_line!());
 
@@ -924,11 +963,11 @@ fn received_remote_video_status() {
 
     // Ignore old ones
     active_connection
-        .inject_received_video_status_via_data_channel(active_call.call_id(), true, Some(1))
+        .inject_received_sender_status_via_data_channel(active_call.call_id(), true, Some(1))
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     active_connection
-        .inject_received_video_status_via_data_channel(active_call.call_id(), false, Some(2))
+        .inject_received_sender_status_via_data_channel(active_call.call_id(), false, Some(2))
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 

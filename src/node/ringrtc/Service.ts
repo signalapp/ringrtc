@@ -782,6 +782,21 @@ export class Call {
     })();
   }
 
+  setLowBandwidthMode(enabled: boolean) {
+    // tslint:disable no-floating-promises
+    (async () => {
+      // This is a silly way of causing a deadlock.
+      // tslint:disable-next-line await-promise
+      await 0;
+      try {
+        this._callManager.setLowBandwidthMode(enabled);
+      } catch {
+        // We may not have an active connection any more.
+        // In which case it doesn't matter
+      }
+    })();
+  }
+
   private enableOrDisableRenderer(): void {
     if (!this._videoRenderer) {
       return;
@@ -898,6 +913,7 @@ export interface CallManager {
   signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
   sendVideoStatus(enabled: boolean): void;
+  setLowBandwidthMode(enabled: boolean): void;
   sendVideoFrame(width: number, height: number, buffer: ArrayBuffer): void;
   receiveVideoFrame(buffer: ArrayBuffer): [number, number] | undefined;
   receivedOffer(

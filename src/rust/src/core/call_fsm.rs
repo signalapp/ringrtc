@@ -56,6 +56,7 @@ use crate::error::RingRtcError;
 
 use crate::common::{
     ApplicationEvent,
+    BandwidthMode,
     CallDirection,
     CallId,
     CallState,
@@ -80,7 +81,7 @@ pub enum CallEvent {
     SendHangupViaDataChannelToAll(signaling::Hangup),
 
     // Flow events from client application
-    /// OK to proceed with call setup.
+    /// OK to proceed with call setup including user options.
     Proceed,
 
     // Signaling events from client application
@@ -624,6 +625,7 @@ where
                     let mut connection = call.active_connection()?;
                     connection.inject_accept()?;
                     connection.connect_incoming_media()?;
+                    connection.set_local_max_send_bitrate(BandwidthMode::Normal.max_bitrate())?;
                     connection.start_tick()?;
                     call.notify_application(ApplicationEvent::LocalAccepted)
                 })
@@ -735,6 +737,9 @@ where
                                 // Get the media and application working for the first connection.
                                 let connection = call.active_connection()?;
                                 connection.connect_incoming_media()?;
+                                connection.set_local_max_send_bitrate(
+                                    BandwidthMode::Normal.max_bitrate(),
+                                )?;
                                 connection.start_tick()?;
                                 call.notify_application(ApplicationEvent::RemoteAccepted)?;
 
@@ -799,7 +804,7 @@ where
                     hangup,
                 },
             ),
-            ConnectionObserverEvent::ReceivedVideoStatusViaDataChannel(enabled) => {
+            ConnectionObserverEvent::ReceivedSenderStatusViaDataChannel(enabled) => {
                 if call.active_device_id()? == remote_device_id {
                     match state {
                         CallState::ConnectedAndAccepted => {

@@ -18,7 +18,7 @@ use crate::android::android_platform::AndroidPlatform;
 use crate::android::call_manager;
 use crate::android::call_manager::AndroidCallManager;
 use crate::android::error;
-use crate::common::{CallMediaType, DeviceId, FeatureLevel};
+use crate::common::{BandwidthMode, CallMediaType, DeviceId, FeatureLevel};
 use crate::core::connection::Connection;
 use crate::core::signaling;
 
@@ -391,6 +391,28 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetVideoEnab
     enable: jboolean,
 ) {
     match call_manager::set_video_enable(call_manager as *mut AndroidCallManager, enable != 0) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetLowBandwidthMode(
+    env: JNIEnv<'static>,
+    _object: JObject,
+    call_manager: jlong,
+    enabled: bool,
+) {
+    let mode = if enabled {
+        BandwidthMode::Low
+    } else {
+        BandwidthMode::Normal
+    };
+
+    match call_manager::set_bandwidth_mode(call_manager as *mut AndroidCallManager, mode) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
