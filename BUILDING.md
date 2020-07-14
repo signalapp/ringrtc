@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.4.1 or later).
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.4.1 or later), and for the host platform as a Node.js module for use in Electron apps.
 
 ## Prerequisites
 
@@ -42,6 +42,20 @@ Install additional components via `cargo`:
 
     cargo install cargo-lipo
     cargo install cbindgen
+
+#### Electron
+
+Install Node.js of the matching version. The current version can be found in src/node/.nvmrc;
+you can use NVM or just manually install the corresponding version.
+
+Install Yarn:
+
+    npm install --global yarn
+
+Install other Node.js dependencies with Yarn:
+
+    cd src/node
+    yarn install --frozen-lockfile
 
 ### Other Android Dependencies
 
@@ -113,6 +127,27 @@ When the build is complete, the frameworks will be available here:
 
 Dynamic symbol files are also available in the `out/` directory for each framework.
 
+### Electron
+
+To build the Node.js module suitable for including in an Electron app, run:
+
+    make electron
+
+This will produce a release build for the host architecture.
+
+When the build is complete, the library will be available here:
+    src/node/build/<platform>/libringrtc.node
+
+### CLI test tool
+
+To build the CLI test tool for the host platform, run:
+
+    make cli
+
+When the build is complete, the binary will be available at src/rust/target/debug/cli.
+The test tool establishes a call over simulated signaling and media channels. You
+should hear echo from the speakers while the tool is running.
+
 ## Working with the Code
 
 ### Rebuilding
@@ -120,7 +155,7 @@ Dynamic symbol files are also available in the `out/` directory for each framewo
 To re-build, do the following:
 
     make distclean
-    make <android|ios>
+    make <android|ios|electron|cli>
 
 ### iOS Testing
 
