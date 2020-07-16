@@ -17,9 +17,8 @@ use crate::ios::call_manager::IOSCallManager;
 use crate::ios::ios_util::*;
 use crate::ios::logging::IOSLogger;
 
-use crate::common::{CallMediaType, DeviceId, FeatureLevel, HangupType};
-
-use crate::webrtc::ice_candidate::IceCandidate;
+use crate::common::{CallMediaType, DeviceId, FeatureLevel};
+use crate::core::signaling;
 
 ///
 #[repr(C)]
@@ -76,9 +75,7 @@ impl From<*const c_void> for AppObject {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppIceCandidate {
-    pub sdpMid:        AppByteSlice,
-    pub sdpMLineIndex: i32,
-    pub sdp:           AppByteSlice,
+    pub sdp: AppByteSlice,
 }
 
 /// Structure for passing multiple Ice Candidates to Swift.
@@ -392,26 +389,26 @@ pub extern "C" fn ringrtcHangup(callManager: *mut c_void) -> *mut c_void {
 pub extern "C" fn ringrtcReceivedAnswer(
     callManager: *mut c_void,
     callId: u64,
-    remoteDevice: u32,
-    answer: AppByteSlice,
-    remoteSupportsMultiRing: bool,
+    senderDeviceId: u32,
+    sdp: AppByteSlice,
+    senderSupportsMultiRing: bool,
 ) -> *mut c_void {
     // Build the Rust string.
-    let answer_bytes = unsafe { slice::from_raw_parts(answer.bytes, answer.len as usize) };
+    let sdp_bytes = unsafe { slice::from_raw_parts(sdp.bytes, sdp.len as usize) };
 
-    let remote_feature_level = match remoteSupportsMultiRing {
+    let sender_device_feature_level = match senderSupportsMultiRing {
         true => FeatureLevel::MultiRing,
         false => FeatureLevel::Unspecified,
     };
 
-    match str::from_utf8(answer_bytes) {
-        Ok(session_desc) => {
+    match str::from_utf8(sdp_bytes) {
+        Ok(sdp) => {
             match call_manager::received_answer(
                 callManager as *mut IOSCallManager,
                 callId,
-                remoteDevice as DeviceId,
-                session_desc,
-                remote_feature_level,
+                senderDeviceId as DeviceId,
+                sdp,
+                sender_device_feature_level,
             ) {
                 Ok(_v) => {
                     // Return the object reference back as indication of success.
@@ -429,36 +426,36 @@ pub extern "C" fn ringrtcReceivedAnswer(
 pub extern "C" fn ringrtcReceivedOffer(
     callManager: *mut c_void,
     callId: u64,
-    appRemote: *const c_void,
-    remoteDevice: u32,
-    offer: AppByteSlice,
+    remotePeer: *const c_void,
+    senderDeviceId: u32,
+    sdp: AppByteSlice,
     messageAgeSec: u64,
     callMediaType: i32,
-    appLocalDevice: u32,
-    remoteSupportsMultiRing: bool,
-    isLocalDevicePrimary: bool,
+    recevierDeviceId: u32,
+    senderSupportsMultiRing: bool,
+    receiverDeviceIsPrimary: bool,
 ) -> *mut c_void {
     // Build the Rust string.
-    let offer_bytes = unsafe { slice::from_raw_parts(offer.bytes, offer.len as usize) };
+    let sdp_bytes = unsafe { slice::from_raw_parts(sdp.bytes, sdp.len as usize) };
 
-    let remote_feature_level = match remoteSupportsMultiRing {
+    let sender_device_feature_level = match senderSupportsMultiRing {
         true => FeatureLevel::MultiRing,
         false => FeatureLevel::Unspecified,
     };
 
-    match str::from_utf8(offer_bytes) {
-        Ok(session_desc) => {
+    match str::from_utf8(sdp_bytes) {
+        Ok(sdp) => {
             match call_manager::received_offer(
                 callManager as *mut IOSCallManager,
                 callId,
-                appRemote,
-                remoteDevice as DeviceId,
-                session_desc,
+                remotePeer,
+                senderDeviceId as DeviceId,
+                sdp,
                 messageAgeSec,
                 CallMediaType::from_i32(callMediaType),
-                appLocalDevice as DeviceId,
-                remote_feature_level,
-                isLocalDevicePrimary,
+                recevierDeviceId as DeviceId,
+                sender_device_feature_level,
+                receiverDeviceIsPrimary,
             ) {
                 Ok(_v) => {
                     // Return the object reference back as indication of success.
@@ -476,7 +473,7 @@ pub extern "C" fn ringrtcReceivedOffer(
 pub extern "C" fn ringrtcReceivedIceCandidates(
     callManager: *mut c_void,
     callId: u64,
-    remoteDevice: u32,
+    senderDeviceId: u32,
     appIceCandidateArray: *const AppIceCandidateArray,
 ) -> *mut c_void {
     let count = unsafe { (*appIceCandidateArray).count };
@@ -493,40 +490,26 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
                 app_ice_candidate.sdp.len as usize,
             )
         };
-        let sdp_string = match str::from_utf8(sdp_bytes) {
-            Ok(sdp_desc) => sdp_desc,
-            Err(_e) => "",
-        };
 
-        let sdp_mid_bytes = unsafe {
-            slice::from_raw_parts(
-                app_ice_candidate.sdpMid.bytes,
-                app_ice_candidate.sdpMid.len as usize,
-            )
-        };
-        let sdp_mid_string = match str::from_utf8(sdp_mid_bytes) {
-            Ok(sdp_mid_desc) => sdp_mid_desc,
-            Err(_e) => "",
-        };
+        let sdp = str::from_utf8(sdp_bytes).unwrap_or("");
 
-        if sdp_string.is_empty() || sdp_mid_string.is_empty() {
+        if sdp.is_empty() {
             warn!("ringrtcReceivedIceCandidates(): Candidate not valid!");
             continue;
         }
 
-        let ice_candidate = IceCandidate::new(
-            sdp_mid_string.to_string(),
-            app_ice_candidate.sdpMLineIndex,
-            sdp_string.to_string(),
-        );
-        ice_candidates.push(ice_candidate);
+        ice_candidates.push(signaling::IceCandidate::from_sdp(sdp.to_string()));
     }
 
-    match call_manager::received_ice_candidates(
+    match call_manager::received_ice(
         callManager as *mut IOSCallManager,
         callId,
-        remoteDevice as DeviceId,
-        ice_candidates,
+        signaling::ReceivedIce {
+            ice:              signaling::Ice {
+                candidates_added: ice_candidates,
+            },
+            sender_device_id: senderDeviceId as DeviceId,
+        },
     ) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
@@ -549,7 +532,7 @@ pub extern "C" fn ringrtcReceivedHangup(
         callManager as *mut IOSCallManager,
         callId,
         remoteDevice as DeviceId,
-        HangupType::from_i32(hangupType),
+        signaling::HangupType::from_i32(hangupType).unwrap_or(signaling::HangupType::Normal),
         deviceId as DeviceId,
     ) {
         Ok(_v) => {

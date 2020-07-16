@@ -14,10 +14,10 @@ use bytes::Bytes;
 use libc::size_t;
 use prost::Message;
 
-use crate::common::{CallDirection, CallId, HangupParameters, HangupType, Result};
+use crate::common::{CallDirection, CallId, Result};
 use crate::core::connection::Connection;
 use crate::core::platform::Platform;
-
+use crate::core::signaling;
 use crate::core::util::{ptr_as_mut, CppObject, RustObject};
 use crate::error::RingRtcError;
 use crate::protobuf::data_channel::Data;
@@ -128,11 +128,12 @@ extern "C" fn dc_observer_OnMessage<T>(
             );
         }
     } else if let Some(hangup) = message.hangup {
-        cc.inject_remote_hangup(
+        cc.inject_received_hangup(
             CallId::new(hangup.id()),
-            HangupParameters::new(
-                HangupType::from_i32(hangup.r#type() as i32),
-                Some(hangup.device_id()),
+            signaling::Hangup::from_type_and_device_id(
+                signaling::HangupType::from_i32(hangup.r#type() as i32)
+                    .unwrap_or(signaling::HangupType::Normal),
+                hangup.device_id(),
             ),
         )
         .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));

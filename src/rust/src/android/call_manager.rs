@@ -8,6 +8,7 @@
 //! Android CallManager Interface.
 
 use std::panic;
+use std::time::Duration;
 
 use jni::objects::{JClass, JObject, JString};
 use jni::sys::{jlong, jobject};
@@ -19,27 +20,13 @@ use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
-use crate::common::{
-    AnswerParameters,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    ConnectionId,
-    DeviceId,
-    FeatureLevel,
-    HangupParameters,
-    HangupType,
-    OfferParameters,
-    Result,
-    DATA_CHANNEL_NAME,
-};
+use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, Result};
 use crate::core::connection::Connection;
+use crate::core::signaling;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 
 use crate::core::call_manager::CallManager;
 
-use crate::webrtc::data_channel_observer::DataChannelObserver;
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
 
@@ -127,15 +114,6 @@ pub fn create_peer_connection(
     }
     let pc_interface = PeerConnection::unowned(rffi_pc_interface);
 
-    if let CallDirection::OutGoing = connection.direction() {
-        // Create data channel observer and data channel
-        let dc_observer = DataChannelObserver::new(connection.clone())?;
-        let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-        unsafe { data_channel.register_observer(dc_observer.rffi_interface())? };
-        connection.set_data_channel(data_channel)?;
-        connection.set_data_channel_observer(dc_observer)?;
-    }
-
     connection.set_pc_interface(pc_interface)?;
 
     info!("connection: {:?}", connection);
@@ -205,124 +183,135 @@ pub fn hangup(call_manager: *mut AndroidCallManager) -> Result<()> {
     call_manager.hangup()
 }
 
-/// Application notification of received SDP answer message
+/// Application notification of received answer message
 pub fn received_answer(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
-    remote_device: DeviceId,
-    jni_answer: JString,
-    remote_feature_level: FeatureLevel,
+    sender_device_id: DeviceId,
+    sdp: JString,
+    sender_device_feature_level: FeatureLevel,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
+    let sdp: String = env.get_string(sdp)?.into();
 
-    info!("received_answer(): id: {}", connection_id);
+    info!(
+        "received_answer(): call_id: {} sender_device_id: {}",
+        call_id, sender_device_id
+    );
     call_manager.received_answer(
-        connection_id,
-        AnswerParameters::new(env.get_string(jni_answer)?.into(), remote_feature_level),
+        call_id,
+        signaling::ReceivedAnswer {
+            answer: signaling::Answer::from_sdp(sdp),
+            sender_device_id,
+            sender_device_feature_level,
+        },
     )
 }
 
-/// Application notification of received SDP offer message
+/// Application notification of received offer message
 #[allow(clippy::too_many_arguments)]
 pub fn received_offer(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
-    jni_remote: JObject,
-    remote_device: DeviceId,
-    jni_offer: JString,
-    message_age_sec: u64,
+    remote_peer: JObject,
+    sender_device_id: DeviceId,
+    sdp: JString,
+    age_sec: u64,
     call_media_type: CallMediaType,
-    local_device_id: DeviceId,
-    remote_feature_level: FeatureLevel,
-    is_local_device_primary: bool,
+    receiver_device_id: DeviceId,
+    sender_device_feature_level: FeatureLevel,
+    receiver_device_is_primary: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
+    let remote_peer = env.new_global_ref(remote_peer)?;
+    let sdp: String = env.get_string(sdp)?.into();
 
-    info!("received_offer(): id: {}", connection_id);
-
-    let app_remote_peer = env.new_global_ref(jni_remote)?;
+    info!(
+        "received_offer(): call_id: {} sender_device_id: {}",
+        call_id, sender_device_id
+    );
 
     call_manager.received_offer(
-        app_remote_peer,
-        connection_id,
-        OfferParameters::new(
-            env.get_string(jni_offer)?.into(),
-            message_age_sec,
-            call_media_type,
-            local_device_id,
-            remote_feature_level,
-            is_local_device_primary,
-        ),
+        remote_peer,
+        call_id,
+        signaling::ReceivedOffer {
+            offer: signaling::Offer::from_sdp(call_media_type, sdp),
+            age: Duration::from_secs(age_sec),
+            sender_device_id,
+            sender_device_feature_level,
+            receiver_device_id,
+            receiver_device_is_primary,
+        },
     )
 }
 
 /// Application notification to add ICE candidates to a Connection
-pub fn received_ice_candidates(
+pub fn received_ice(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
-    remote_device: DeviceId,
-    jni_ice_candidates: JObject,
+    sender_device_id: DeviceId,
+    jni_candidates: JObject,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
 
     // Convert Java list of org.webrtc.IceCandidate into Rust Vector of IceCandidate
-    let candidate_list = env.get_list(jni_ice_candidates)?;
-    let mut ice_candidates = Vec::new();
-    for jni_candidate in candidate_list.iter()? {
-        const SDP_MID_FIELD: &str = "sdpMid";
-        const STRING_TYPE: &str = "Ljava/lang/String;";
-        let sdp_mid = jni_get_field(&env, jni_candidate, SDP_MID_FIELD, STRING_TYPE)?.l()?;
-        let sdp_mid = env.get_string(JString::from(sdp_mid))?.into();
-
-        const SDP_M_LINE_INDEX_FIELD: &str = "sdpMLineIndex";
-        const SDP_M_LINE_INDEX_TYPE: &str = "I";
-        let sdp_m_line = jni_get_field(
-            &env,
-            jni_candidate,
-            SDP_M_LINE_INDEX_FIELD,
-            SDP_M_LINE_INDEX_TYPE,
-        )?
-        .i()? as i32;
-
+    let jni_candidate_list = env.get_list(jni_candidates)?;
+    let mut signaling_candidates = Vec::new();
+    for jni_candidate in jni_candidate_list.iter()? {
         const SDP_FIELD: &str = "sdp";
+        const STRING_TYPE: &str = "Ljava/lang/String;";
         let sdp = jni_get_field(&env, jni_candidate, SDP_FIELD, STRING_TYPE)?.l()?;
         let sdp = env.get_string(JString::from(sdp))?.into();
 
-        let ice_candidate = IceCandidate::new(sdp_mid, sdp_m_line, sdp);
-        ice_candidates.push(ice_candidate);
+        signaling_candidates.push(signaling::IceCandidate::from_sdp(sdp));
     }
 
     info!(
-        "received_ice_candidates(): id: {} len: {}",
-        connection_id,
-        ice_candidates.len()
+        "received_ice(): call_id: {} sender_device_id: {} candidates: {}",
+        call_id,
+        sender_device_id,
+        signaling_candidates.len()
     );
 
-    call_manager.received_ice_candidates(connection_id, &ice_candidates)
+    call_manager.received_ice(
+        call_id,
+        signaling::ReceivedIce {
+            ice: signaling::Ice {
+                candidates_added: signaling_candidates,
+            },
+            sender_device_id,
+        },
+    )
 }
 
 /// Application notification of received Hangup message
 pub fn received_hangup(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
-    remote_device: DeviceId,
-    hangup_type: HangupType,
-    device_id: DeviceId,
+    sender_device_id: DeviceId,
+    hangup_type: signaling::HangupType,
+    hangup_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
 
-    info!("received_hangup(): id: {}", connection_id);
+    info!(
+        "received_hangup(): call_id: {} sender_device_id: {}",
+        call_id, sender_device_id
+    );
 
     call_manager.received_hangup(
-        connection_id,
-        HangupParameters::new(hangup_type, Some(device_id)),
+        call_id,
+        signaling::ReceivedHangup {
+            sender_device_id,
+            hangup: signaling::Hangup::from_type_and_device_id(hangup_type, hangup_device_id),
+        },
     )
 }
 
@@ -330,14 +319,17 @@ pub fn received_hangup(
 pub fn received_busy(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
-    remote_device: DeviceId,
+    sender_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
 
-    info!("received_busy(): id: {}", connection_id);
+    info!(
+        "received_busy(): call_id: {} sender_device_id: {}",
+        call_id, sender_device_id
+    );
 
-    call_manager.received_busy(connection_id)
+    call_manager.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
 }
 
 /// Application notification to accept the incoming call

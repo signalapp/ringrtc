@@ -41,14 +41,9 @@ extern "C" {
         csd_observer_cb: *const c_void,
     ) -> *const RffiCreateSessionDescriptionObserver;
 
-    pub fn Rust_getOfferDescription(offer: *const RffiSessionDescriptionInterface)
-        -> *const c_char;
+    pub fn Rust_toSdp(offer: *const RffiSessionDescriptionInterface) -> *const c_char;
 
-    pub fn Rust_createSessionDescriptionAnswer(
-        description: *const c_char,
-    ) -> *const RffiSessionDescriptionInterface;
+    pub fn Rust_answerFromSdp(sdp: *const c_char) -> *const RffiSessionDescriptionInterface;
 
-    pub fn Rust_createSessionDescriptionOffer(
-        description: *const c_char,
-    ) -> *const RffiSessionDescriptionInterface;
+    pub fn Rust_offerFromSdp(sdp: *const c_char) -> *const RffiSessionDescriptionInterface;
 }

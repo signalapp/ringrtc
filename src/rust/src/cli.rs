@@ -8,24 +8,14 @@
 use log::{debug, info};
 
 use ringrtc::{
-    common::{
-        AnswerParameters,
-        CallId,
-        CallMediaType,
-        ConnectionId,
-        DeviceId,
-        FeatureLevel,
-        OfferParameters,
-        Result,
-    },
-    core::call_manager::CallManager,
+    common::{CallId, CallMediaType, DeviceId, FeatureLevel, Result},
+    core::{call_manager::CallManager, signaling},
     native::{
         CallState,
         CallStateHandler,
         NativeCallContext,
         NativePlatform,
         PeerId,
-        SignalingMessage,
         SignalingSender,
     },
     simnet::{
@@ -399,48 +389,63 @@ impl CallEndpoint {
         sender_id: &PeerId,
         sender_device_id: DeviceId,
         call_id: CallId,
-        msg: SignalingMessage,
+        msg: signaling::Message,
     ) {
         // To send across threads
         let sender_id = sender_id.clone();
 
         self.actor.send(move |state| {
             let cm = &mut state.call_manager;
-            let connection_id = ConnectionId::new(call_id, sender_device_id);
             match msg {
-                SignalingMessage::Offer(media_type, offer) => {
-                    let local_is_primary = state.device_id == 1;
+                signaling::Message::Offer(offer) => {
                     cm.received_offer(
                         sender_id,
-                        connection_id,
-                        OfferParameters::new(
+                        call_id,
+                        signaling::ReceivedOffer {
                             offer,
-                            0,
-                            media_type,
-                            state.device_id,
-                            FeatureLevel::MultiRing,
-                            local_is_primary,
-                        ),
+                            age: Duration::from_secs(0),
+                            sender_device_id,
+                            sender_device_feature_level: FeatureLevel::MultiRing,
+                            receiver_device_id: state.device_id,
+                            receiver_device_is_primary: (state.device_id == 1),
+                        },
                     )
                     .expect("receive offer");
                 }
-                SignalingMessage::Answer(answer) => {
+                signaling::Message::Answer(answer) => {
                     cm.received_answer(
-                        connection_id,
-                        AnswerParameters::new(answer, FeatureLevel::MultiRing),
+                        call_id,
+                        signaling::ReceivedAnswer {
+                            answer,
+                            sender_device_id,
+                            sender_device_feature_level: FeatureLevel::MultiRing,
+                        },
                     )
                     .expect("received answer");
                 }
-                SignalingMessage::IceCandidates(ice_candidates) => {
-                    cm.received_ice_candidates(connection_id, &ice_candidates)
-                        .expect("received ice candidates");
+                signaling::Message::Ice(ice) => {
+                    cm.received_ice(
+                        call_id,
+                        signaling::ReceivedIce {
+                            ice,
+                            sender_device_id,
+                        },
+                    )
+                    .expect("received ice candidates");
                 }
-                SignalingMessage::Hangup(description, _use_legacy) => {
-                    cm.received_hangup(connection_id, description)
-                        .expect("received hangup");
+                signaling::Message::Hangup(hangup) | signaling::Message::LegacyHangup(hangup) => {
+                    cm.received_hangup(
+                        call_id,
+                        signaling::ReceivedHangup {
+                            hangup,
+                            sender_device_id,
+                        },
+                    )
+                    .expect("received hangup");
                 }
-                SignalingMessage::Busy => {
-                    cm.received_busy(connection_id).expect("received busy");
+                signaling::Message::Busy => {
+                    cm.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
+                        .expect("received busy");
                 }
             }
         });
@@ -471,9 +476,9 @@ impl SignalingSender for CallEndpoint {
     fn send_signaling(
         &self,
         recipient_id: &PeerId,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        msg: SignalingMessage,
+        call_id: CallId,
+        _receiver_device_id: Option<DeviceId>,
+        msg: signaling::Message,
     ) -> Result<()> {
         // To send across threads
         let recipient_id = recipient_id.clone();
@@ -481,20 +486,16 @@ impl SignalingSender for CallEndpoint {
         self.actor.send(move |state| {
             let sender_id = &state.peer_id;
             let sender_device_id = state.device_id;
-            // Note that the DeviceId in the ConnectionId is for the
-            // remote device, which isn't relevant here.
-            let call_id = connection_id.call_id();
             state.signaling_server.send_signaling(
                 &sender_id,
                 sender_device_id,
                 &recipient_id,
                 call_id,
-                broadcast,
                 msg,
             );
             state
                 .call_manager
-                .message_sent(connection_id.call_id())
+                .message_sent(call_id)
                 .expect("signaling message sent");
         });
         Ok(())
@@ -587,8 +588,7 @@ impl SignalingServer {
         sender_device_id: DeviceId,
         recipient_id: &PeerId,
         call_id: CallId,
-        _broadcast: bool,
-        msg: SignalingMessage,
+        msg: signaling::Message,
     ) {
         // To send across threads
         let sender_id = sender_id.clone();

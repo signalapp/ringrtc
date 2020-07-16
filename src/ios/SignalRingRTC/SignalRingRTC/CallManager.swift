@@ -87,16 +87,12 @@ public enum HangupType: Int32 {
 
 // We define our own structure for Ice Candidates so that the
 // Call Service doesn't need a direct WebRTC dependency and
-// we don't need the SSKProtoCallMessageIceUpdate dependency.
+// we don't need the SSKProtoCallMessageIce dependency.
 public class CallManagerIceCandidate {
-    public let sdpMid: String
-    public let sdpMLineIndex: Int32
     public let sdp: String
 
-    public init(sdp: String, sdpMLineIndex: Int32, sdpMid: String) {
+    public init(sdp: String) {
         self.sdp = sdp
-        self.sdpMLineIndex = sdpMLineIndex
-        self.sdpMid = sdpMid
     }
 }
 
@@ -457,14 +453,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
                 bytes: sdpPtr,
                 len: count)
 
-            count = candidate.sdpMid.utf8.count
-            let sdpMidPtr = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
-            sdpMidPtr.initialize(from: Array(candidate.sdpMid.utf8), count: count)
-            let sdpMid = AppByteSlice(
-                bytes: sdpMidPtr,
-                len: count)
-
-            return AppIceCandidate(sdpMid: sdpMid, sdpMLineIndex: candidate.sdpMLineIndex, sdp: sdp)
+            return AppIceCandidate(sdp: sdp)
         }
 
         // Make sure to release the allocated memory when the function exists,
@@ -472,7 +461,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // API function.
         defer {
             for appIceCandidate in appIceCandidates {
-                appIceCandidate.sdpMid.bytes.deallocate()
                 appIceCandidate.sdp.bytes.deallocate()
             }
         }

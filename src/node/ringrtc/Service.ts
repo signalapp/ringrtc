@@ -212,7 +212,7 @@ export class RingRTCType {
     for (const candidate of candidates) {
       const copy = new IceCandidateMessage();
       copy.callId = callId;
-      copy.mid = candidate.mid;
+      copy.mid = "";
       copy.midIndex = 0;
       copy.sdp = candidate.sdp;
       message.iceCandidates.push(copy);

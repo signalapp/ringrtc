@@ -41,39 +41,39 @@ Rust_setLocalDescription(PeerConnectionInterface*           pc_interface,
 }
 
 RUSTEXPORT const char*
-Rust_getOfferDescription(SessionDescriptionInterface* offer) {
+Rust_toSdp(SessionDescriptionInterface* sdi) {
 
-  std::string description;
-  if (offer->ToString(&description)) {
-    return strdup(&description[0u]);
+  std::string sdp;
+  if (sdi->ToString(&sdp)) {
+    return strdup(&sdp[0u]);
   }
 
-  RTC_LOG(LS_ERROR) << "Unable to convert SessionDescription to std::string";
+  RTC_LOG(LS_ERROR) << "Unable to convert SessionDescription to SDP";
   return nullptr;
 }
 
 static SessionDescriptionInterface*
-createSessionDescriptionInterface(SdpType type, const char* description) {
+createSessionDescriptionInterface(SdpType type, const char* sdp) {
 
-  if (description != nullptr) {
-    std::string sdp = std::string(description);
-    std::unique_ptr<SessionDescriptionInterface> answer =
-      CreateSessionDescription(type, sdp);
+  if (sdp != nullptr) {
+    std::string sdp_str = std::string(sdp);
+    std::unique_ptr<SessionDescriptionInterface> session_desription =
+      CreateSessionDescription(type, sdp_str);
 
-    return answer.release();
+    return session_desription.release();
   } else {
     return nullptr;
   }
 }
 
 RUSTEXPORT SessionDescriptionInterface*
-Rust_createSessionDescriptionAnswer(const char* description) {
-  return createSessionDescriptionInterface(SdpType::kAnswer, description);
+Rust_answerFromSdp(const char* sdp) {
+  return createSessionDescriptionInterface(SdpType::kAnswer, sdp);
 }
 
 RUSTEXPORT SessionDescriptionInterface*
-Rust_createSessionDescriptionOffer(const char* description) {
-  return createSessionDescriptionInterface(SdpType::kOffer, description);
+Rust_offerFromSdp(const char* sdp) {
+  return createSessionDescriptionInterface(SdpType::kOffer, sdp);
 }
 
 RUSTEXPORT void
@@ -139,15 +139,10 @@ Rust_createDataChannel(PeerConnectionInterface*   pc_interface,
 
 RUSTEXPORT bool
 Rust_addIceCandidate(PeerConnectionInterface* pc_interface,
-                     const char*              sdp_mid,
-                     int32_t                  sdp_mline_index,
                      const char*              sdp) {
-
-  std::string str_sdp_mid = std::string(sdp_mid);
-  std::string str_sdp = std::string(sdp);
-
+  // Since we always use bundle, we can always use index 0 and ignore the mid
   std::unique_ptr<IceCandidateInterface> candidate(
-      CreateIceCandidate(str_sdp_mid, sdp_mline_index, str_sdp, nullptr));
+      CreateIceCandidate("", 0, std::string(sdp), nullptr));
 
   return pc_interface->AddIceCandidate(candidate.get());
 }

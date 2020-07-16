@@ -292,14 +292,7 @@ func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, c
             continue
         }
 
-        guard let sdpMidString = iceCandidate.sdpMid.asString() else {
-            owsFailDebug("unexpected string")
-
-            // @note We prefer to ignore this array item.
-            continue
-        }
-
-        finalCandidates.append(CallManagerIceCandidate(sdp: sdpString, sdpMLineIndex: iceCandidate.sdpMLineIndex, sdpMid: sdpMidString))
+        finalCandidates.append(CallManagerIceCandidate(sdp: sdpString))
     }
 
     // If we will broadcast this message, ignore the deviceId.

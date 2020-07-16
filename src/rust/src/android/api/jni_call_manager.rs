@@ -18,8 +18,9 @@ use crate::android::android_platform::AndroidPlatform;
 use crate::android::call_manager;
 use crate::android::call_manager::AndroidCallManager;
 use crate::android::error;
-use crate::common::{CallMediaType, DeviceId, FeatureLevel, HangupType};
+use crate::common::{CallMediaType, DeviceId, FeatureLevel};
 use crate::core::connection::Connection;
+use crate::core::signaling;
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -222,7 +223,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     call_id: jlong,
     jni_remote: JObject,
     remote_device: jint,
-    jni_offer: JString,
+    jni_sdp: JString,
     message_age_sec: jlong,
     call_media_type: jint,
     local_device: jint,
@@ -241,7 +242,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
         call_id,
         jni_remote,
         remote_device as DeviceId,
-        jni_offer,
+        jni_sdp,
         message_age_sec as u64,
         CallMediaType::from_i32(call_media_type),
         local_device as DeviceId,
@@ -265,7 +266,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedIceC
     remote_device: jint,
     jni_ice_candidates: JObject,
 ) {
-    match call_manager::received_ice_candidates(
+    match call_manager::received_ice(
         &env,
         call_manager as *mut AndroidCallManager,
         call_id,
@@ -294,7 +295,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHang
         call_manager as *mut AndroidCallManager,
         call_id,
         remote_device as DeviceId,
-        HangupType::from_i32(hangup_type),
+        signaling::HangupType::from_i32(hangup_type).unwrap_or(signaling::HangupType::Normal),
         device_id as DeviceId,
     ) {
         Ok(v) => v,

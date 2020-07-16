@@ -10,9 +10,9 @@ use std::ffi::CString;
 use std::fmt;
 
 use crate::common::Result;
+use crate::core::signaling;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::{DataChannel, RffiDataChannelInit};
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver,
@@ -166,18 +166,10 @@ impl PeerConnection {
     }
 
     /// Rust wrapper around C++ PeerConnectionInterface::AddIceCandidate().
-    pub fn add_ice_candidate(&self, candidate: &IceCandidate) -> Result<()> {
+    pub fn add_ice_candidate(&self, candidate: &signaling::IceCandidate) -> Result<()> {
         let clone = candidate.clone();
-        let sdp_mid = CString::new(clone.sdp_mid)?;
         let sdp = CString::new(clone.sdp)?;
-        let add_ok = unsafe {
-            pc::Rust_addIceCandidate(
-                self.rffi_pc_interface,
-                sdp_mid.as_ptr(),
-                clone.sdp_mline_index,
-                sdp.as_ptr(),
-            )
-        };
+        let add_ok = unsafe { pc::Rust_addIceCandidate(self.rffi_pc_interface, sdp.as_ptr()) };
         if add_ok {
             Ok(())
         } else {

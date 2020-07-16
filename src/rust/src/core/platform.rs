@@ -9,21 +9,12 @@
 /// implement for calling.
 use std::fmt;
 
-use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    ConnectionId,
-    DeviceId,
-    HangupParameters,
-    Result,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
+use crate::core::signaling;
 
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::MediaStream;
 
 /// A trait encompassing the traits the platform associated types must
@@ -65,66 +56,45 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     /// Notify the client application about an event.
     fn on_event(&self, remote_peer: &Self::AppRemotePeer, event: ApplicationEvent) -> Result<()>;
 
-    /// Send an SDP offer to a remote peer using the signaling
-    /// channel.
-    ///
-    /// If broadcast is true, then send to all remote peers.
+    /// Send an offer to a remote peer using the signaling
+    /// channel.  Offers are always broadcast to all devices.
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
-        call_media_type: CallMediaType,
+        call_id: CallId,
+        offer: signaling::Offer,
     ) -> Result<()>;
 
-    /// Send an SDP answer to a remote peer using the signaling
+    /// Send an answer to a remote peer using the signaling
     /// channel.
-    ///
-    /// If broadcast is true, then send to all remote peers.
     fn on_send_answer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
+        call_id: CallId,
+        send: signaling::SendAnswer,
     ) -> Result<()>;
 
-    /// Send ICE Candidates to a remote peer using the signaling
+    /// Send an ICE message to a remote peer using the signaling
     /// channel.
-    ///
-    /// If broadcast is true, then send to all remote peers.
-    fn on_send_ice_candidates(
+    fn on_send_ice(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        candidates: &[IceCandidate],
+        call_id: CallId,
+        send: signaling::SendIce,
     ) -> Result<()>;
 
-    /// Send a call hangup message to a remote peer using the
+    /// Send a hangup message to a remote peer using the
     /// signaling channel.
-    ///
-    /// If broadcast is true, then send to all remote peers.
     fn on_send_hangup(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        hangup_parameters: HangupParameters,
-        use_legacy_hangup_message: bool,
+        call_id: CallId,
+        send: signaling::SendHangup,
     ) -> Result<()>;
 
     /// Send a call busy message to a remote peer using the
-    /// signaling channel.
-    ///
-    /// If broadcast is true, then send to all remote peers.
-    fn on_send_busy(
-        &self,
-        remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-    ) -> Result<()>;
+    /// signaling channel.  This always broadcasts to all devices.
+    fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()>;
 
     /// Create a platform dependent media stream from the base WebRTC
     /// MediaStream.

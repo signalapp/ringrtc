@@ -12,37 +12,31 @@ use std::fmt;
 use std::stringify;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use futures::future::lazy;
 use futures::Future;
 use tokio::runtime;
 
 use crate::common::{
-    AnswerParameters,
     ApplicationEvent,
     CallDirection,
     CallId,
     CallMediaType,
     CallState,
-    ConnectionId,
     DeviceId,
     FeatureLevel,
-    HangupParameters,
-    HangupType,
-    OfferParameters,
     Result,
     RingBench,
-    USE_LEGACY_HANGUP_MESSAGE,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::Platform;
+use crate::core::signaling;
 use crate::error::RingRtcError;
 
 use crate::core::util::redact_string;
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::MediaStream;
 
 const TIME_OUT_PERIOD_SEC: u64 = 120;
@@ -112,17 +106,6 @@ macro_rules! handle_api {
     }};
 }
 
-/// The different kinds of messages that can be added to the message_queue.
-#[derive(Debug, PartialEq)]
-pub enum SignalingMessageType {
-    None,
-    Offer,
-    Answer,
-    Ice,
-    Hangup,
-    Busy,
-}
-
 /// A structure to hold messages in the message_queue, identified by their CallId.
 pub struct SignalingMessageItem<T>
 where
@@ -131,9 +114,9 @@ where
     /// The CallId of the Call that the message belongs to.
     call_id:         CallId,
     /// The type of message the item corresponds to.
-    message_type:    SignalingMessageType,
+    message_type:    signaling::MessageType,
     /// The closure to be called which will send the message.
-    message_closure: Box<dyn Fn(&CallManager<T>) -> Result<()> + Send>,
+    message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<()> + Send>,
 }
 
 /// A structure implementing a message queue used to control the
@@ -147,7 +130,7 @@ where
     /// The message queue.
     queue:                  VecDeque<SignalingMessageItem<T>>,
     /// The type of the last message sent from the message queue.
-    last_sent_message_type: SignalingMessageType,
+    last_sent_message_type: Option<signaling::MessageType>,
     /// Whether or not a message is still being handled by the
     /// application (true if a message is currently in the process
     /// of being sent). We will only send one at a time to the
@@ -163,7 +146,7 @@ where
     pub fn new() -> Result<Self> {
         Ok(Self {
             queue:                  VecDeque::new(),
-            last_sent_message_type: SignalingMessageType::None,
+            last_sent_message_type: None,
             messages_in_flight:     false,
         })
     }
@@ -346,12 +329,12 @@ where
         handle_active_call_api!(self, CallManager::handle_hangup)
     }
 
-    /// Received SDP offer from application.
+    /// Received offer from application.
     pub fn received_offer(
         &mut self,
         remote_peer: <T as Platform>::AppRemotePeer,
-        connection_id: ConnectionId,
-        offer: OfferParameters,
+        call_id: CallId,
+        received: signaling::ReceivedOffer,
     ) -> Result<()> {
         info!("API:received_offer():");
 
@@ -359,64 +342,48 @@ where
         let mut cm_error = self.clone();
         let remote_peer_error = remote_peer.clone();
         let future =
-            lazy(move || call_manager.handle_received_offer(remote_peer, connection_id, offer))
+            lazy(move || call_manager.handle_received_offer(remote_peer, call_id, received))
                 .map_err(move |err| {
                     error!("Handle received offer failed: {}", err);
-                    cm_error.internal_create_api_error(
-                        &remote_peer_error,
-                        connection_id.call_id(),
-                        err,
-                    );
+                    cm_error.internal_create_api_error(&remote_peer_error, call_id, err);
                 });
         self.worker_spawn(future)
     }
 
-    /// Received SDP answer from application.
+    /// Received answer from application.
     pub fn received_answer(
         &mut self,
-        connection_id: ConnectionId,
-        answer: AnswerParameters,
+        call_id: CallId,
+        received: signaling::ReceivedAnswer,
     ) -> Result<()> {
-        handle_active_call_api!(
-            self,
-            CallManager::handle_received_answer,
-            connection_id,
-            answer
-        )
+        handle_active_call_api!(self, CallManager::handle_received_answer, call_id, received)
     }
 
     /// Received ICE candidates from application.
-    pub fn received_ice_candidates(
+    pub fn received_ice(
         &mut self,
-        connection_id: ConnectionId,
-        ice_candidates: &[IceCandidate],
+        call_id: CallId,
+        received: signaling::ReceivedIce,
     ) -> Result<()> {
-        let ice_vec: Vec<IceCandidate> = ice_candidates.into();
-        handle_active_call_api!(
-            self,
-            CallManager::handle_received_ice_candidates,
-            connection_id,
-            ice_vec
-        )
+        handle_active_call_api!(self, CallManager::handle_received_ice, call_id, received)
     }
 
     /// Received hangup message from application.
     pub fn received_hangup(
         &mut self,
-        connection_id: ConnectionId,
-        hangup_parameters: HangupParameters,
+        call_id: CallId,
+        received: signaling::ReceivedHangup,
     ) -> Result<()> {
-        handle_active_call_api!(
-            self,
-            CallManager::handle_received_hangup,
-            connection_id,
-            hangup_parameters
-        )
+        handle_active_call_api!(self, CallManager::handle_received_hangup, call_id, received)
     }
 
     /// Received busy message from application.
-    pub fn received_busy(&mut self, connection_id: ConnectionId) -> Result<()> {
-        handle_active_call_api!(self, CallManager::handle_received_busy, connection_id)
+    pub fn received_busy(
+        &mut self,
+        call_id: CallId,
+        received: signaling::ReceivedBusy,
+    ) -> Result<()> {
+        handle_active_call_api!(self, CallManager::handle_received_busy, call_id, received)
     }
 
     /// Request to reset the Call Manager.
@@ -465,14 +432,6 @@ where
             }
             None => Err(RingRtcError::NoActiveCall.into()),
         }
-    }
-
-    /// Return active connection ID
-    pub fn active_connection_id(&self) -> Result<ConnectionId> {
-        info!("active_connection_id():");
-        let active_call = self.active_call()?;
-        let active_device_id = active_call.active_device_id()?;
-        Ok(ConnectionId::new(active_call.call_id(), active_device_id))
     }
 
     /// Return active connection object.
@@ -653,35 +612,26 @@ where
         &mut self,
         call: Call<T>,
         call_id: CallId,
-        hangup_parameters: HangupParameters,
-        use_legacy_hangup_message: bool,
+        send: signaling::SendHangup,
     ) -> Result<()> {
         info!("send_hangup(): call_id: {}", call_id);
-
-        let connection_id = ConnectionId::new(call_id, 0);
 
         let hangup_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
                 RingBench::CM,
                 RingBench::App,
-                format!("send_hangup({})\t{}", hangup_parameters, connection_id)
+                format!("send_hangup({:?})\t{}", send.hangup, call_id)
             );
 
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_hangup(
-                &*remote_peer,
-                connection_id,
-                true,
-                hangup_parameters,
-                use_legacy_hangup_message,
-            )
+            platform.on_send_hangup(&*remote_peer, call_id, send)
         });
 
         let message_item = SignalingMessageItem {
-            call_id:         connection_id.call_id(),
-            message_type:    SignalingMessageType::Hangup,
+            call_id,
+            message_type: signaling::MessageType::Hangup,
             message_closure: hangup_closure,
         };
 
@@ -699,7 +649,7 @@ where
     fn conclude_call(
         &mut self,
         mut call: Call<T>,
-        hangup: Option<HangupParameters>,
+        hangup: Option<signaling::Hangup>,
         event: Option<ApplicationEvent>,
     ) -> Result<()> {
         let call_id = call.call_id();
@@ -713,9 +663,9 @@ where
             self.notify_application(&*remote_peer, event)?;
         }
 
-        if let Some(hangup_parameters) = hangup {
+        if let Some(hangup) = hangup {
             // All connections send hangup via data_channel.
-            call.inject_hangup(hangup_parameters)?;
+            call.inject_send_hangup_via_data_channel_to_all(hangup)?;
         }
 
         let mut call_manager = self.clone();
@@ -723,7 +673,7 @@ where
         let call_error = call.clone();
         let call_clone = call.clone();
         let future = lazy(move || {
-            if let Some(hangup_parameters) = hangup {
+            if let Some(hangup) = hangup {
                 // If we want to send a hangup message, be sure that
                 // the call actually should send one.
                 if call.should_send_hangup() {
@@ -732,8 +682,10 @@ where
                     call_manager.send_hangup(
                         call_clone,
                         call_id,
-                        hangup_parameters,
-                        USE_LEGACY_HANGUP_MESSAGE,
+                        signaling::SendHangup {
+                            hangup,
+                            use_legacy: true,
+                        },
                     )?;
                 }
             }
@@ -762,7 +714,7 @@ where
         self.clear_active_call()?;
 
         let hangup = if send_hangup {
-            Some(HangupParameters::normal())
+            Some(signaling::Hangup::Normal)
         } else {
             None
         };
@@ -827,7 +779,7 @@ where
     fn handle_conclude_active_call(
         &mut self,
         active_call: Call<T>,
-        hangup: Option<HangupParameters>,
+        hangup: Option<signaling::Hangup>,
         event: ApplicationEvent,
     ) -> Result<()> {
         self.clear_active_call()?;
@@ -899,7 +851,7 @@ where
         // Get the last sent message type and see if it was for Ice.
         let mut last_sent_message_ice = false;
         if let Ok(message_queue) = self.message_queue.lock() {
-            if message_queue.last_sent_message_type == SignalingMessageType::Ice {
+            if message_queue.last_sent_message_type == Some(signaling::MessageType::Ice) {
                 last_sent_message_ice = true
             }
         }
@@ -947,10 +899,9 @@ where
                         "handle_message_send_failure(): id: {}, concluding call",
                         call_id
                     );
-
                     self.conclude_call(
                         call,
-                        Some(HangupParameters::normal()),
+                        Some(signaling::Hangup::Normal),
                         Some(ApplicationEvent::EndedSignalingFailure),
                     )?;
                 }
@@ -981,7 +932,7 @@ where
 
         self.handle_conclude_active_call(
             active_call,
-            Some(HangupParameters::normal()),
+            Some(signaling::Hangup::Normal),
             ApplicationEvent::EndedLocalHangup,
         )
     }
@@ -990,30 +941,32 @@ where
     fn handle_received_offer(
         &mut self,
         remote_peer: <T as Platform>::AppRemotePeer,
-        connection_id: ConnectionId,
-        offer: OfferParameters,
+        call_id: CallId,
+        received: signaling::ReceivedOffer,
     ) -> Result<()> {
+        let sender_device_id = received.sender_device_id;
         ringbench!(
             RingBench::App,
             RingBench::CM,
             format!(
-                "received_offer()\t{}\tfeature={}\tprimary={}",
-                connection_id,
-                offer.remote_feature_level(),
-                offer.is_local_device_primary()
+                "received_offer()\t{}\t{}\tfeature={}\tprimary={}",
+                call_id,
+                received.sender_device_id,
+                received.sender_device_feature_level,
+                received.receiver_device_is_primary,
             )
         );
 
-        if offer.message_age_sec() > MAX_MESSAGE_AGE_SEC {
+        if received.age > Duration::from_secs(MAX_MESSAGE_AGE_SEC) {
             ringbenchx!(RingBench::CM, RingBench::App, "offer expired");
             self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
             // Notify application we are completely done with this remote.
-            self.notify_call_concluded(&remote_peer, connection_id.call_id())?;
+            self.notify_call_concluded(&remote_peer, call_id)?;
             return Ok(());
         }
 
-        if (offer.remote_feature_level() == FeatureLevel::Unspecified)
-            && !offer.is_local_device_primary()
+        if (received.sender_device_feature_level == FeatureLevel::Unspecified)
+            && !received.receiver_device_is_primary
         {
             ringbenchx!(
                 RingBench::CM,
@@ -1025,11 +978,9 @@ where
                 ApplicationEvent::EndedIgnoreCallsFromNonMultiringCallers,
             )?;
             // Notify application we are completely done with this remote.
-            self.notify_call_concluded(&remote_peer, connection_id.call_id())?;
+            self.notify_call_concluded(&remote_peer, call_id)?;
             return Ok(());
         }
-
-        let call_id = connection_id.call_id();
 
         if self.call_active()? {
             // Make a call object to ensure that the busy message can be sent
@@ -1039,8 +990,8 @@ where
                 remote_peer.clone(),
                 call_id,
                 CallDirection::InComing,
-                offer.call_media_type(),
-                offer.local_device_id(),
+                received.offer.call_media_type,
+                received.receiver_device_id,
                 0,
                 self.clone(),
             )?;
@@ -1049,8 +1000,8 @@ where
                 &remote_peer,
                 ApplicationEvent::EndedReceivedOfferWhileActive,
             )?;
-            self.send_busy(call, connection_id)?;
-            self.check_for_glare(&remote_peer, connection_id.remote_device())?;
+            self.send_busy(call)?;
+            self.check_for_glare(&remote_peer, sender_device_id)?;
             return Ok(());
         }
 
@@ -1062,8 +1013,8 @@ where
                     remote_peer,
                     call_id,
                     CallDirection::InComing,
-                    offer.call_media_type(),
-                    offer.local_device_id(),
+                    received.offer.call_media_type,
+                    received.receiver_device_id,
                     TIME_OUT_PERIOD_SEC,
                     self.clone(),
                 )?;
@@ -1071,7 +1022,7 @@ where
 
                 call_map.insert(call_id, call.clone());
                 *active_call_id = Some(call_id);
-                call.set_pending_call(connection_id.remote_device(), offer.sdp())?;
+                call.set_pending_call(received)?;
                 call.inject_start_call()
             }
         }
@@ -1080,90 +1031,100 @@ where
     /// Handle received_answer() API from application.
     fn handle_received_answer(
         &mut self,
-        connection_id: ConnectionId,
-        answer: AnswerParameters,
-    ) -> Result<()> {
-        ringbench!(
-            RingBench::App,
-            RingBench::CM,
-            format!("received_answer()\t{}", connection_id)
-        );
-
-        let mut active_call = check_active_call!(self, "handle_received_answer");
-        if active_call.call_id() != connection_id.call_id() {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
-            return Ok(());
-        }
-
-        active_call.inject_received_answer(connection_id, answer)
-    }
-
-    /// Handle received_ice_candidates() API from application.
-    fn handle_received_ice_candidates(
-        &mut self,
-        connection_id: ConnectionId,
-        ice_candidates: Vec<IceCandidate>,
+        call_id: CallId,
+        received: signaling::ReceivedAnswer,
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
             RingBench::CM,
             format!(
-                "received_ice_candidates({})\t{}",
-                ice_candidates.len(),
-                connection_id,
+                "received_answer()\t{}\t{}",
+                call_id, received.sender_device_id
             )
         );
 
-        let mut active_call = check_active_call!(self, "handle_received_ice_candidates");
-        if active_call.call_id() != connection_id.call_id() {
+        let mut active_call = check_active_call!(self, "handle_received_answer");
+        if active_call.call_id() != call_id {
             ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
-        active_call.inject_received_ice_candidates(connection_id, ice_candidates)
+        active_call.inject_received_answer(received)
+    }
+
+    /// Handle received_ice() API from application.
+    fn handle_received_ice(
+        &mut self,
+        call_id: CallId,
+        received: signaling::ReceivedIce,
+    ) -> Result<()> {
+        ringbench!(
+            RingBench::App,
+            RingBench::CM,
+            format!(
+                "received_ice_candidates({})\t{}\t{}",
+                received.ice.candidates_added.len(),
+                call_id,
+                received.sender_device_id,
+            )
+        );
+
+        let mut active_call = check_active_call!(self, "handle_received_ice");
+        if active_call.call_id() != call_id {
+            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            return Ok(());
+        }
+
+        active_call.inject_received_ice(received)
     }
 
     /// Handle received_hangup() API from application.
     fn handle_received_hangup(
         &mut self,
-        connection_id: ConnectionId,
-        hangup_parameters: HangupParameters,
+        call_id: CallId,
+        received: signaling::ReceivedHangup,
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
             RingBench::CM,
-            format!("received_hangup({})\t{}", hangup_parameters, connection_id)
+            format!(
+                "received_hangup({})\t{}\t{}",
+                received.hangup, call_id, received.sender_device_id
+            )
         );
 
         let mut active_call = check_active_call!(self, "handle_received_hangup");
-        if active_call.call_id() != connection_id.call_id() {
+        if active_call.call_id() != call_id {
             ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
-        active_call.inject_received_hangup(connection_id, hangup_parameters)
+        active_call.inject_received_hangup(received)
     }
 
     /// Handle received_busy() API from application.
-    fn handle_received_busy(&mut self, connection_id: ConnectionId) -> Result<()> {
+    fn handle_received_busy(
+        &mut self,
+        call_id: CallId,
+        received: signaling::ReceivedBusy,
+    ) -> Result<()> {
+        let sender_device_id = received.sender_device_id;
         ringbench!(
             RingBench::App,
             RingBench::CM,
-            format!("received_busy()\t{}", connection_id)
+            format!("received_busy()\t{}\t{}", call_id, sender_device_id)
         );
 
         let active_call = check_active_call!(self, "handle_received_busy");
-        if active_call.call_id() != connection_id.call_id() {
+        if active_call.call_id() != call_id {
             ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
         // Invoke hangup_other for the call, which will inject hangup/busy
         // to all connections, if any.
-        active_call.send_hangup_via_data_channel_to_all_except(HangupParameters::new(
-            HangupType::Busy,
-            Some(connection_id.remote_device()),
-        ))?;
+        let hangup = signaling::Hangup::BusyOnAnotherDevice(sender_device_id);
+        active_call.send_hangup_via_data_channel_to_all_except(hangup, sender_device_id)?;
 
         // Send out hangup/busy to all callees via signal messaging.
         // Use legacy signaling since the busy device, legacy or
@@ -1172,8 +1133,10 @@ where
         call_manager.send_hangup(
             active_call.clone(),
             active_call.call_id(),
-            HangupParameters::new(HangupType::Busy, Some(connection_id.remote_device())),
-            USE_LEGACY_HANGUP_MESSAGE,
+            signaling::SendHangup {
+                hangup,
+                use_legacy: true,
+            },
         )?;
 
         // Handle the normal processing of busy by concluding the call locally.
@@ -1200,7 +1163,7 @@ where
         // foreach call, conclude without notifying application
         for call in calls {
             info!("reset(): concluding call_id: {}", call.call_id());
-            let _ = self.conclude_call(call, Some(HangupParameters::normal()), None);
+            let _ = self.conclude_call(call, Some(signaling::Hangup::Normal), None);
         }
 
         self.clear_active_call()?;
@@ -1214,25 +1177,26 @@ where
         Ok(())
     }
 
-    fn send_busy(&mut self, call: Call<T>, connection_id: ConnectionId) -> Result<()> {
-        info!("send_busy(): id: {}", connection_id);
+    fn send_busy(&mut self, call: Call<T>) -> Result<()> {
+        let call_id = call.call_id();
+        info!("send_busy(): call_id: {}", call_id);
 
         let busy_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
                 RingBench::CM,
                 RingBench::App,
-                format!("send_busy()\t{}", connection_id)
+                format!("send_busy()\t{}", call_id)
             );
 
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_busy(&*remote_peer, connection_id, true)
+            platform.on_send_busy(&*remote_peer, call_id)
         });
 
         let message_item = SignalingMessageItem {
-            call_id:         connection_id.call_id(),
-            message_type:    SignalingMessageType::Busy,
+            call_id,
+            message_type: signaling::MessageType::Busy,
             message_closure: busy_closure,
         };
 
@@ -1273,7 +1237,7 @@ where
                         info!("check_for_glare(): peer device matches, hangup active call");
                         return self.handle_conclude_active_call(
                             active_call,
-                            Some(HangupParameters::normal()),
+                            Some(signaling::Hangup::Normal),
                             ApplicationEvent::EndedRemoteGlare,
                         );
                     }
@@ -1281,7 +1245,7 @@ where
                     info!("check_for_glare(): no active device, hangup active call");
                     return self.handle_conclude_active_call(
                         active_call,
-                        Some(HangupParameters::normal()),
+                        Some(signaling::Hangup::Normal),
                         ApplicationEvent::EndedRemoteGlare,
                     );
                 }
@@ -1405,7 +1369,7 @@ where
                                     message_queue.messages_in_flight = !assume_messages_sent;
 
                                     message_queue.last_sent_message_type =
-                                        message_item.message_type;
+                                        Some(message_item.message_type);
 
                                     return Ok(());
                                 }
@@ -1454,8 +1418,8 @@ where
         );
         mq.queue.retain(|x| {
             (x.call_id != call_id)
-                || (x.message_type == SignalingMessageType::Busy)
-                || (x.message_type == SignalingMessageType::Hangup)
+                || (x.message_type == signaling::MessageType::Busy)
+                || (x.message_type == signaling::MessageType::Hangup)
         });
         debug!("trim_messages(): end len: {}", mq.queue.len());
 
@@ -1611,92 +1575,84 @@ where
         }
     }
 
-    /// Send SDP offer to remote_peer via the application.
+    /// Send offer to remote_peer via the application.
     pub(super) fn send_offer(
         &mut self,
         call: Call<T>,
         connection: Connection<T>,
-        broadcast: bool,
-        offer: String,
-        call_media_type: CallMediaType,
+        offer: signaling::Offer,
     ) -> Result<()> {
-        let connection_id = connection.id();
-        info!("send_offer(): id: {}", connection_id);
+        let call_id = call.call_id();
+        info!("send_offer(): call_id: {}", call_id);
 
         let offer_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
                 RingBench::CM,
                 RingBench::App,
-                format!("send_offer()\t{}", connection_id)
+                format!("send_offer()\t{}", call_id)
             );
 
             info!(
-                "id: {}, TX SDP offer:\n{}",
-                connection_id,
-                redact_string(&offer)
+                "call_id: {}, TX SDP offer:\n{}",
+                call_id,
+                redact_string(&offer.sdp)
             );
 
             let remote_peer = call.remote_peer()?;
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_offer(
-                    &*remote_peer,
-                    connection_id,
-                    broadcast,
-                    offer.as_str(),
-                    call_media_type,
-                )
+                platform.on_send_offer(&*remote_peer, call_id, offer)
             } else {
                 Ok(())
             }
         });
 
         let message_item = SignalingMessageItem {
-            call_id:         connection_id.call_id(),
-            message_type:    SignalingMessageType::Offer,
+            call_id,
+            message_type: signaling::MessageType::Offer,
             message_closure: offer_closure,
         };
 
         self.send_next_message(Some(message_item))
     }
 
-    /// Send SDP answer to remote_peer via the application.
+    /// Send answer to remote_peer via the application.
     pub(super) fn send_answer(
         &mut self,
         call: Call<T>,
         connection: Connection<T>,
-        answer: String,
+        send: signaling::SendAnswer,
     ) -> Result<()> {
-        let connection_id = connection.id();
-        info!("send_answer(): id: {}", connection_id);
+        let call_id = call.call_id();
+        info!("send_answer(): call_id: {}", call_id);
 
         let answer_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
                 RingBench::CM,
                 RingBench::App,
-                format!("send_answer()\t{}", connection_id)
+                format!("send_answer()\t{}", call_id)
             );
 
             info!(
-                "id: {}, TX SDP answer:\n{}",
-                connection_id,
-                redact_string(&answer)
+                "call_id: {}, TX SDP answer:\n{}",
+                call_id,
+                redact_string(&send.answer.sdp)
             );
 
             let remote_peer = call.remote_peer()?;
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_answer(&*remote_peer, connection_id, false, answer.as_str())
+                platform.on_send_answer(&*remote_peer, call_id, send)
             } else {
                 Ok(())
             }
         });
 
         let message_item = SignalingMessageItem {
-            call_id:         connection_id.call_id(),
-            message_type:    SignalingMessageType::Answer,
+            call_id,
+            message_type: signaling::MessageType::Answer,
             message_closure: answer_closure,
         };
 
@@ -1704,19 +1660,19 @@ where
     }
 
     /// Send ICE candidates to remote_peer via the application.
-    pub(super) fn send_ice_candidates(
+    pub(super) fn send_buffered_local_ice_candidates(
         &mut self,
         call: Call<T>,
         connection: Connection<T>,
         broadcast: bool,
     ) -> Result<()> {
-        let connection_id = connection.id();
-        info!("send_ice_candidates(): id: {}", connection_id);
+        let call_id = call.call_id();
+        info!("send_ice_candidates(): call_id: {}", call_id);
 
         let ice_closure = Box::new(move |cm: &CallManager<T>| {
-            let candidates = connection.get_pending_ice_updates()?;
+            let local_candidates = connection.take_buffered_local_ice_candidates()?;
 
-            if candidates.is_empty() {
+            if local_candidates.is_empty() {
                 return Ok(());
             }
 
@@ -1725,20 +1681,33 @@ where
                 RingBench::App,
                 format!(
                     "send_ice_candidates({})\t{}",
-                    candidates.len(),
-                    connection_id,
+                    local_candidates.len(),
+                    call_id,
                 )
             );
 
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_ice_candidates(&*remote_peer, connection_id, broadcast, &*candidates)
+            platform.on_send_ice(
+                &*remote_peer,
+                call_id,
+                signaling::SendIce {
+                    receiver_device_id: if broadcast {
+                        None
+                    } else {
+                        Some(connection.remote_device_id())
+                    },
+                    ice:                signaling::Ice {
+                        candidates_added: local_candidates,
+                    },
+                },
+            )
         });
 
         let message_item = SignalingMessageItem {
-            call_id:         connection_id.call_id(),
-            message_type:    SignalingMessageType::Ice,
+            call_id,
+            message_type: signaling::MessageType::Ice,
             message_closure: ice_closure,
         };
 

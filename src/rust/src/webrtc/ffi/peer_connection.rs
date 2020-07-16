@@ -66,8 +66,6 @@ extern "C" {
 
     pub fn Rust_addIceCandidate(
         pc_interface: *const RffiPeerConnectionInterface,
-        sdp_mid: *const c_char,
-        sdp_mline_index: i32,
         sdp: *const c_char,
     ) -> bool;
 

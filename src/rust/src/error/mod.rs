@@ -94,11 +94,11 @@ pub enum RingRtcError {
     AddIceCandidate,
 
     // WebRTC / C++ offer / answer error codes
-    #[fail(display = "Unable to retrieve sdp description from offer")]
-    GetOfferDescription,
-    #[fail(display = "Unable to convert sdp answer string to SessionDescriptionInterface object")]
+    #[fail(display = "Unable to convert offer or answer to SDP")]
+    ToSdp,
+    #[fail(display = "Unable to convert sdp to answer")]
     ConvertSdpAnswer,
-    #[fail(display = "Unable to convert sdp offer string to SessionDescriptionInterface object")]
+    #[fail(display = "Unable to convert sdp to offer")]
     ConvertSdpOffer,
 
     // DataChannel error codes

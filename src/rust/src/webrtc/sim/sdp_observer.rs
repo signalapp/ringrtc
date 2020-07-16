@@ -70,28 +70,22 @@ pub unsafe fn Rust_createCreateSessionDescriptionObserver(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getOfferDescription(
-    offer: *const RffiSessionDescriptionInterface,
-) -> *const c_char {
-    info!("Rust_getOfferDescription(): ");
-    match CString::new(*offer) {
+pub unsafe fn Rust_toSdp(sdi: *const RffiSessionDescriptionInterface) -> *const c_char {
+    info!("Rust_toSdp(): ");
+    match CString::new(*sdi) {
         Ok(cstr) => strdup(cstr.as_ptr()),
         Err(_) => ptr::null(),
     }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_createSessionDescriptionAnswer(
-    _description: *const c_char,
-) -> *const RffiSessionDescriptionInterface {
-    info!("Rust_createSessionDescriptionAnswer(): ");
+pub unsafe fn Rust_offerFromSdp(_sdp: *const c_char) -> *const RffiSessionDescriptionInterface {
+    info!("Rust_offerFromSdp(): ");
     &FAKE_SDP_ANSWER
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_createSessionDescriptionOffer(
-    _description: *const c_char,
-) -> *const RffiSessionDescriptionInterface {
-    info!("Rust_createSessionDescriptionOffer(): ");
+pub unsafe fn Rust_answerFromSdp(_sdp: *const c_char) -> *const RffiSessionDescriptionInterface {
+    info!("Rust_answerFromSdp(): ");
     &FAKE_SDP_OFFER
 }

@@ -12,25 +12,13 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    ConnectionId,
-    DeviceId,
-    HangupParameters,
-    HangupType,
-    Result,
-    DATA_CHANNEL_NAME,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
+use crate::core::signaling;
 use crate::sim::error::SimError;
-use crate::webrtc::data_channel_observer::DataChannelObserver;
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::sim::peer_connection::RffiPeerConnectionInterface;
@@ -117,28 +105,21 @@ impl Platform for SimPlatform {
     fn create_connection(
         &mut self,
         call: &Call<Self>,
-        remote_device: DeviceId,
+        remote_device_id: DeviceId,
         connection_type: ConnectionType,
     ) -> Result<Connection<Self>> {
-        let connection_id = ConnectionId::new(call.call_id(), remote_device);
-
-        info!("create_connection(): {}", connection_id);
+        info!(
+            "create_connection(): call_id: {} remote_device_id: {}",
+            call.call_id(),
+            remote_device_id
+        );
 
         let fake_pc = RffiPeerConnectionInterface::new();
 
-        let connection = Connection::new(call.clone(), remote_device, connection_type).unwrap();
+        let connection = Connection::new(call.clone(), remote_device_id, connection_type).unwrap();
         connection.set_app_connection(fake_pc).unwrap();
 
         let pc_interface = PeerConnection::unowned(connection.app_connection_ptr_for_tests());
-
-        if let CallDirection::OutGoing = connection.direction() {
-            // Create data channel observer and data channel
-            let dc_observer = DataChannelObserver::new(connection.clone())?;
-            let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-            unsafe { data_channel.register_observer(dc_observer.rffi_interface())? };
-            connection.set_data_channel(data_channel)?;
-            connection.set_data_channel_observer(dc_observer)?;
-        }
 
         connection.set_pc_interface(pc_interface).unwrap();
 
@@ -180,14 +161,12 @@ impl Platform for SimPlatform {
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
-        _call_media_type: CallMediaType,
+        call_id: CallId,
+        offer: signaling::Offer,
     ) -> Result<()> {
         info!(
-            "on_send_offer(): remote_peer: {}, id: {}, broadcast: {}, offer: {}",
-            remote_peer, connection_id, broadcast, description
+            "on_send_offer(): remote_peer: {}, call_id: {}, offer SDP: {}",
+            remote_peer, call_id, offer.sdp
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
@@ -195,9 +174,9 @@ impl Platform for SimPlatform {
         } else {
             let _ = self.stats.offers_sent.fetch_add(1, Ordering::AcqRel);
             if self.force_internal_fault.load(Ordering::Acquire) {
-                self.message_send_failure(connection_id.call_id()).unwrap();
+                self.message_send_failure(call_id).unwrap();
             } else {
-                self.message_sent(connection_id.call_id()).unwrap();
+                self.message_sent(call_id).unwrap();
             }
             Ok(())
         }
@@ -206,13 +185,12 @@ impl Platform for SimPlatform {
     fn on_send_answer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
+        call_id: CallId,
+        send: signaling::SendAnswer,
     ) -> Result<()> {
         info!(
-            "on_send_answer(): remote_peer: {}, id: {}, broadcast: {}, answer: {}",
-            remote_peer, connection_id, broadcast, description
+            "on_send_answer(): remote_peer: {}, call_id: {}, receiver_device_id: {}, answer SDP: {}",
+            remote_peer, call_id, send.receiver_device_id, send.answer.sdp
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
@@ -220,24 +198,29 @@ impl Platform for SimPlatform {
         } else {
             let _ = self.stats.answers_sent.fetch_add(1, Ordering::AcqRel);
             if self.force_internal_fault.load(Ordering::Acquire) {
-                self.message_send_failure(connection_id.call_id()).unwrap();
+                self.message_send_failure(call_id).unwrap();
             } else {
-                self.message_sent(connection_id.call_id()).unwrap();
+                self.message_sent(call_id).unwrap();
             }
             Ok(())
         }
     }
 
-    fn on_send_ice_candidates(
+    fn on_send_ice(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        ice_candidates: &[IceCandidate],
+        call_id: CallId,
+        send: signaling::SendIce,
     ) -> Result<()> {
+        let (_broadcast, receiver_device_id) = match send.receiver_device_id {
+            // The DeviceId doesn't matter if we're broadcasting
+            None => (true, 0 as DeviceId),
+            Some(receiver_device_id) => (false, receiver_device_id),
+        };
+
         info!(
-            "on_send_ice_candidates(): remote_peer: {}, id: {}, broadcast: {}",
-            remote_peer, connection_id, broadcast
+            "on_send_ice_candidates(): remote_peer: {}, call_id: {}, receiver_device_id: {}",
+            remote_peer, call_id, receiver_device_id
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
@@ -246,13 +229,13 @@ impl Platform for SimPlatform {
             let _ = self
                 .stats
                 .ice_candidates_sent
-                .fetch_add(ice_candidates.len(), Ordering::AcqRel);
+                .fetch_add(send.ice.candidates_added.len(), Ordering::AcqRel);
             if self.force_internal_fault.load(Ordering::Acquire) {
                 if !self.no_auto_message_sent_for_ice.load(Ordering::Acquire) {
-                    self.message_send_failure(connection_id.call_id()).unwrap();
+                    self.message_send_failure(call_id).unwrap();
                 }
             } else if !self.no_auto_message_sent_for_ice.load(Ordering::Acquire) {
-                self.message_sent(connection_id.call_id()).unwrap();
+                self.message_sent(call_id).unwrap();
             }
             Ok(())
         }
@@ -261,42 +244,40 @@ impl Platform for SimPlatform {
     fn on_send_hangup(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        hangup_parameters: HangupParameters,
-        _use_legacy: bool,
+        call_id: CallId,
+        send: signaling::SendHangup,
     ) -> Result<()> {
         info!(
-            "on_send_hangup(): remote_peer: {}, id: {}, broadcast: {}",
-            remote_peer, connection_id, broadcast
+            "on_send_hangup(): remote_peer: {}, call_id: {}",
+            remote_peer, call_id
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
             Err(SimError::SendHangupError.into())
         } else {
-            match hangup_parameters.hangup_type() {
-                HangupType::Normal => {
+            match send.hangup {
+                signaling::Hangup::Normal => {
                     let _ = self
                         .stats
                         .normal_hangups_sent
                         .fetch_add(1, Ordering::AcqRel);
                 }
-                HangupType::Accepted => {
+                signaling::Hangup::AcceptedOnAnotherDevice(_) => {
                     let _ = self
                         .stats
                         .accepted_hangups_sent
                         .fetch_add(1, Ordering::AcqRel);
                 }
-                HangupType::Declined => {
+                signaling::Hangup::DeclinedOnAnotherDevice(_) => {
                     let _ = self
                         .stats
                         .declined_hangups_sent
                         .fetch_add(1, Ordering::AcqRel);
                 }
-                HangupType::Busy => {
+                signaling::Hangup::BusyOnAnotherDevice(_) => {
                     let _ = self.stats.busy_hangups_sent.fetch_add(1, Ordering::AcqRel);
                 }
-                HangupType::NeedPermission => {
+                signaling::Hangup::NeedPermission(_) => {
                     let _ = self
                         .stats
                         .need_permission_hangups_sent
@@ -304,23 +285,18 @@ impl Platform for SimPlatform {
                 }
             }
             if self.force_internal_fault.load(Ordering::Acquire) {
-                self.message_send_failure(connection_id.call_id()).unwrap();
+                self.message_send_failure(call_id).unwrap();
             } else {
-                self.message_sent(connection_id.call_id()).unwrap();
+                self.message_sent(call_id).unwrap();
             }
             Ok(())
         }
     }
 
-    fn on_send_busy(
-        &self,
-        remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-    ) -> Result<()> {
+    fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
         info!(
-            "on_send_busy(): remote_peer: {}, id: {}, broadcast: {}",
-            remote_peer, connection_id, broadcast
+            "on_send_busy(): remote_peer: {}, call_id: {}",
+            remote_peer, call_id
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
@@ -328,9 +304,9 @@ impl Platform for SimPlatform {
         } else {
             let _ = self.stats.busys_sent.fetch_add(1, Ordering::AcqRel);
             if self.force_internal_fault.load(Ordering::Acquire) {
-                self.message_send_failure(connection_id.call_id()).unwrap();
+                self.message_send_failure(call_id).unwrap();
             } else {
-                self.message_sent(connection_id.call_id()).unwrap();
+                self.message_sent(call_id).unwrap();
             }
             Ok(())
         }

@@ -13,20 +13,11 @@ use std::sync::Arc;
 
 use libc::size_t;
 
-use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    ConnectionId,
-    DeviceId,
-    HangupParameters,
-    Result,
-    DATA_CHANNEL_NAME,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
+use crate::core::signaling;
 use crate::ios::api::call_manager_interface::{
     AppCallContext,
     AppConnectionInterface,
@@ -39,8 +30,6 @@ use crate::ios::error::IOSError;
 use crate::ios::ios_media_stream::IOSMediaStream;
 use crate::ios::ios_util::*;
 
-use crate::webrtc::data_channel_observer::DataChannelObserver;
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnectionInterface};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
@@ -103,14 +92,16 @@ impl Platform for IOSPlatform {
     fn create_connection(
         &mut self,
         call: &Call<Self>,
-        remote_device: DeviceId,
+        remote_device_id: DeviceId,
         connection_type: ConnectionType,
     ) -> Result<Connection<Self>> {
-        let connection_id = ConnectionId::new(call.call_id(), remote_device);
+        info!(
+            "create_connection(): call_id: {} remote_device_id: {}",
+            call.call_id(),
+            remote_device_id
+        );
 
-        info!("create_connection(): {}", connection_id);
-
-        let connection = Connection::new(call.clone(), remote_device, connection_type)?;
+        let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
 
         let connection_ptr = connection.get_connection_ptr()?;
 
@@ -121,7 +112,7 @@ impl Platform for IOSPlatform {
         let app_connection_interface = (self.app_interface.onCreateConnectionInterface)(
             self.app_interface.object,
             pc_observer.rffi_interface() as *mut c_void,
-            remote_device,
+            remote_device_id,
             call.call_context()?.object,
         );
 
@@ -141,15 +132,6 @@ impl Platform for IOSPlatform {
         }
 
         let pc_interface = PeerConnection::unowned(rffi_pc_interface);
-
-        if let CallDirection::OutGoing = connection.direction() {
-            // Create data channel observer and data channel.
-            let dc_observer = DataChannelObserver::new(connection.clone())?;
-            let data_channel = pc_interface.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-            unsafe { data_channel.register_observer(dc_observer.rffi_interface())? };
-            connection.set_data_channel(data_channel)?;
-            connection.set_data_channel_observer(dc_observer)?;
-        }
 
         connection.set_pc_interface(pc_interface)?;
 
@@ -193,29 +175,29 @@ impl Platform for IOSPlatform {
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
-        call_media_type: CallMediaType,
+        call_id: CallId,
+        offer: signaling::Offer,
     ) -> Result<()> {
-        info!(
-            "on_send_offer(): id: {}, broadcast: {}",
-            connection_id, broadcast
-        );
+        // Offer messages are always broadcast
+        // TODO: Simplify Swift's onSendOffer method to assume broadcast
+        let broadcast = true;
+        let receiver_device_id = 0 as DeviceId;
 
-        let string_slice = AppByteSlice {
-            bytes: description.as_ptr(),
-            len:   description.len(),
+        info!("on_send_offer(): call_id: {}", call_id);
+
+        let sdp_slice = AppByteSlice {
+            bytes: offer.sdp.as_ptr(),
+            len:   offer.sdp.len(),
         };
 
         (self.app_interface.onSendOffer)(
             self.app_interface.object,
-            u64::from(connection_id.call_id()) as u64,
+            u64::from(call_id) as u64,
             remote_peer.ptr,
-            connection_id.remote_device(),
+            receiver_device_id,
             broadcast,
-            string_slice,
-            call_media_type as i32,
+            sdp_slice,
+            offer.call_media_type as i32,
         );
 
         Ok(())
@@ -224,86 +206,87 @@ impl Platform for IOSPlatform {
     fn on_send_answer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
+        call_id: CallId,
+        send: signaling::SendAnswer,
     ) -> Result<()> {
+        // Answers are never broadcast
+        // TODO: Simplify Swift's onSendAnswer method to assume no broadcast
+        let broadcast = false;
+        let receiver_device_id = send.receiver_device_id;
+
         info!(
-            "on_send_answer(): id: {}, broadcast: {}",
-            connection_id, broadcast
+            "on_send_answer(): call_id: {}, receiver_device_id: {}",
+            call_id, receiver_device_id
         );
 
-        let string_slice = AppByteSlice {
-            bytes: description.as_ptr(),
-            len:   description.len(),
+        let sdp_slice = AppByteSlice {
+            bytes: send.answer.sdp.as_ptr(),
+            len:   send.answer.sdp.len(),
         };
 
         (self.app_interface.onSendAnswer)(
             self.app_interface.object,
-            u64::from(connection_id.call_id()) as u64,
+            u64::from(call_id) as u64,
             remote_peer.ptr,
-            connection_id.remote_device(),
+            receiver_device_id,
             broadcast,
-            string_slice,
+            sdp_slice,
         );
 
         Ok(())
     }
 
-    fn on_send_ice_candidates(
+    fn on_send_ice(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        ice_candidates: &[IceCandidate],
+        call_id: CallId,
+        send: signaling::SendIce,
     ) -> Result<()> {
+        let (broadcast, receiver_device_id) = match send.receiver_device_id {
+            // The DeviceId doesn't matter if we're broadcasting
+            None => (true, 0 as DeviceId),
+            Some(receiver_device_id) => (false, receiver_device_id),
+        };
+
         info!(
-            "on_send_ice_candidates(): id: {}, broadcast: {}",
-            connection_id, broadcast
+            "on_send_ice(): call_id: {}, receiver_device_id: {}, broadcast: {}",
+            call_id, receiver_device_id, broadcast
         );
 
-        if ice_candidates.is_empty() {
+        if send.ice.candidates_added.is_empty() {
             return Ok(());
         }
 
         // The format of the IceCandidate structure is not enough for iOS,
         // so we will convert to a more appropriate structure.
-        let mut v: Vec<AppIceCandidate> = Vec::new();
+        let mut app_ice_candidates: Vec<AppIceCandidate> = Vec::new();
 
-        for candidate in ice_candidates {
-            let sdp_mid_slice = AppByteSlice {
-                bytes: candidate.sdp_mid.as_ptr(),
-                len:   candidate.sdp_mid.len() as size_t,
-            };
-
-            let sdp_slice = AppByteSlice {
+        // Take a reference here so that we don't take ownership of it
+        // and cause it to be dropped prematurely.
+        for candidate in &send.ice.candidates_added {
+            let sdp = AppByteSlice {
                 bytes: candidate.sdp.as_ptr(),
                 len:   candidate.sdp.len() as size_t,
             };
 
-            let ice_candidate = AppIceCandidate {
-                sdpMid:        sdp_mid_slice,
-                sdpMLineIndex: candidate.sdp_mline_index,
-                sdp:           sdp_slice,
-            };
+            let app_ice_candidate = AppIceCandidate { sdp };
 
-            v.push(ice_candidate);
+            app_ice_candidates.push(app_ice_candidate);
         }
 
-        let ice_candidates = AppIceCandidateArray {
-            candidates: v.as_ptr(),
-            count:      v.len(),
+        let app_ice_candidates_array = AppIceCandidateArray {
+            candidates: app_ice_candidates.as_ptr(),
+            count:      app_ice_candidates.len(),
         };
-
         // The ice_candidates array is passed up by reference and must
         // be consumed by the integration layer before returning.
         (self.app_interface.onSendIceCandidates)(
             self.app_interface.object,
-            u64::from(connection_id.call_id()) as u64,
+            u64::from(call_id) as u64,
             remote_peer.ptr,
-            connection_id.remote_device(),
+            receiver_device_id,
             broadcast,
-            &ice_candidates,
+            &app_ice_candidates_array,
         );
 
         Ok(())
@@ -312,53 +295,48 @@ impl Platform for IOSPlatform {
     fn on_send_hangup(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        hangup_parameters: HangupParameters,
-        use_legacy_hangup_message: bool,
+        call_id: CallId,
+        send: signaling::SendHangup,
     ) -> Result<()> {
-        info!(
-            "on_send_hangup(): id: {}, broadcast: {}",
-            connection_id, broadcast
-        );
+        // Hangups are always broadcast
+        // TODO: Simplify Swift's onSendHangup method to assume broadcast
+        let broadcast = true;
+        let receiver_device_id = 0 as DeviceId;
 
-        let device_id = match hangup_parameters.device_id() {
-            Some(d) => d,
-            // We set the device_id to 0 in case it is not defined. It will
-            // only be used for hangup types other than Normal.
-            None => 0,
-        };
+        info!("on_send_hangup(): call_id: {}", call_id);
+
+        let (hangup_type, hangup_device_id) = send.hangup.to_type_and_device_id();
+        // We set the device_id to 0 in case it is not defined. It will
+        // only be used for hangup types other than Normal.
+        let hangup_device_id = hangup_device_id.unwrap_or(0 as DeviceId);
 
         (self.app_interface.onSendHangup)(
             self.app_interface.object,
-            u64::from(connection_id.call_id()) as u64,
+            u64::from(call_id) as u64,
             remote_peer.ptr,
-            connection_id.remote_device(),
+            receiver_device_id,
             broadcast,
-            hangup_parameters.hangup_type() as i32,
-            device_id,
-            use_legacy_hangup_message,
+            hangup_type as i32,
+            hangup_device_id,
+            send.use_legacy,
         );
 
         Ok(())
     }
 
-    fn on_send_busy(
-        &self,
-        remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-    ) -> Result<()> {
-        info!(
-            "on_send_busy(): id: {}, broadcast: {}",
-            connection_id, broadcast
-        );
+    fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
+        // Busy messages are always broadcast
+        // TODO: Simplify Java's onSendBusy method to assume broadcast
+        let broadcast = true;
+        let receiver_device_id = 0 as DeviceId;
+
+        info!("on_send_busy(): call_id: {}", call_id);
 
         (self.app_interface.onSendBusy)(
             self.app_interface.object,
-            u64::from(connection_id.call_id()) as u64,
+            u64::from(call_id) as u64,
             remote_peer.ptr,
-            connection_id.remote_device(),
+            receiver_device_id,
             broadcast,
         );
 

@@ -10,30 +10,19 @@
 use std::ffi::c_void;
 use std::panic;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::ios::logging::{init_logging, IOSLogger};
 
 use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppObject};
 use crate::ios::ios_platform::IOSPlatform;
 
-use crate::common::{
-    AnswerParameters,
-    CallId,
-    CallMediaType,
-    ConnectionId,
-    DeviceId,
-    FeatureLevel,
-    HangupParameters,
-    HangupType,
-    OfferParameters,
-    Result,
-};
+use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, Result};
 
+use crate::core::signaling;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 
 use crate::core::call_manager::CallManager;
-
-use crate::webrtc::ice_candidate::IceCandidate;
 
 /// Public type for iOS CallManager
 pub type IOSCallManager = CallManager<IOSPlatform>;
@@ -122,91 +111,110 @@ pub fn hangup(call_manager: *mut IOSCallManager) -> Result<()> {
     call_manager.hangup()
 }
 
-/// Application notification of received SDP answer message
+/// Application notification of received answer message
 pub fn received_answer(
     call_manager: *mut IOSCallManager,
     call_id: u64,
-    remote_device: DeviceId,
-    app_answer: &str,
-    remote_feature_level: FeatureLevel,
+    sender_device_id: DeviceId,
+    sdp: &str,
+    sender_device_feature_level: FeatureLevel,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
+    let sdp = sdp.to_string();
 
-    info!("received_answer(): id: {}", connection_id);
+    info!(
+        "received_answer(): call_id: {} sender_device_id: {}",
+        call_id, sender_device_id
+    );
     call_manager.received_answer(
-        connection_id,
-        AnswerParameters::new(app_answer.to_string(), remote_feature_level),
+        call_id,
+        signaling::ReceivedAnswer {
+            answer: signaling::Answer::from_sdp(sdp),
+            sender_device_id,
+            sender_device_feature_level,
+        },
     )
 }
 
-/// Application notification of received SDP offer message
+/// Application notification of received offer message
 pub fn received_offer(
     call_manager: *mut IOSCallManager,
     call_id: u64,
-    app_remote: *const c_void,
-    remote_device: DeviceId,
-    app_offer: &str,
-    message_age_sec: u64,
+    remote_peer: *const c_void,
+    sender_device_id: DeviceId,
+    sdp: &str,
+    age_sec: u64,
     call_media_type: CallMediaType,
-    app_local_device: DeviceId,
-    remote_feature_level: FeatureLevel,
-    is_local_device_primary: bool,
+    receiver_device_id: DeviceId,
+    sender_device_feature_level: FeatureLevel,
+    receiver_device_is_primary: bool,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
+    let remote_peer = AppObject::from(remote_peer);
+    let sdp = sdp.to_string();
 
-    info!("received_offer(): id: {}", connection_id);
+    info!(
+        "received_offer(): call_id: {} remote_device_id: {}",
+        call_id, sender_device_id
+    );
 
     call_manager.received_offer(
-        AppObject::from(app_remote),
-        connection_id,
-        OfferParameters::new(
-            app_offer.to_string(),
-            message_age_sec,
-            call_media_type,
-            app_local_device,
-            remote_feature_level,
-            is_local_device_primary,
-        ),
+        remote_peer,
+        call_id,
+        signaling::ReceivedOffer {
+            offer: signaling::Offer::from_sdp(call_media_type, sdp),
+            age: Duration::from_secs(age_sec),
+            sender_device_id,
+            sender_device_feature_level,
+            receiver_device_id,
+            receiver_device_is_primary,
+        },
     )
 }
 
 /// Application notification to add ICE candidates to a Connection
-pub fn received_ice_candidates(
+pub fn received_ice(
     call_manager: *mut IOSCallManager,
     call_id: u64,
-    remote_device: DeviceId,
-    ice_candidates: Vec<IceCandidate>,
+    received: signaling::ReceivedIce,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
 
     info!(
-        "received_ice_candidates(): id: {} len: {}",
-        connection_id,
-        ice_candidates.len()
+        "received_ice(): call_id: {} sender_device_id: {} candidates len: {}",
+        call_id,
+        received.sender_device_id,
+        received.ice.candidates_added.len()
     );
 
-    call_manager.received_ice_candidates(connection_id, &ice_candidates)
+    call_manager.received_ice(call_id, received)
 }
 
 /// Application notification of received Hangup message
 pub fn received_hangup(
     call_manager: *mut IOSCallManager,
     call_id: u64,
-    remote_device: DeviceId,
-    hangup_type: HangupType,
-    device_id: DeviceId,
+    sender_device_id: DeviceId,
+    hangup_type: signaling::HangupType,
+    hangup_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
 
-    info!("received_hangup(): id: {}", connection_id);
+    info!(
+        "received_hangup(): call_id: {} sender device_id: {}",
+        call_id, sender_device_id
+    );
 
     call_manager.received_hangup(
-        connection_id,
-        HangupParameters::new(hangup_type, Some(device_id)),
+        call_id,
+        signaling::ReceivedHangup {
+            hangup: signaling::Hangup::from_type_and_device_id(hangup_type, hangup_device_id),
+            sender_device_id,
+        },
     )
 }
 
@@ -214,14 +222,17 @@ pub fn received_hangup(
 pub fn received_busy(
     call_manager: *mut IOSCallManager,
     call_id: u64,
-    remote_device: DeviceId,
+    sender_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let connection_id = ConnectionId::new(CallId::from(call_id), remote_device);
+    let call_id = CallId::from(call_id);
 
-    info!("received_busy(): id: {}", connection_id);
+    info!(
+        "received_busy(): call_id: {} sender device_id: {}",
+        call_id, sender_device_id
+    );
 
-    call_manager.received_busy(connection_id)
+    call_manager.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
 }
 
 /// Application notification to accept the incoming call

@@ -18,20 +18,11 @@ use jni::{JNIEnv, JavaVM};
 use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::webrtc_java_media_stream::JavaMediaStream;
-use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    ConnectionId,
-    DeviceId,
-    HangupParameters,
-    Result,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
-use crate::webrtc::ice_candidate::IceCandidate;
+use crate::core::signaling;
 use crate::webrtc::media::MediaStream;
 
 const RINGRTC_PACKAGE: &str = "org/signal/ringrtc";
@@ -199,18 +190,20 @@ impl Platform for AndroidPlatform {
     fn create_connection(
         &mut self,
         call: &Call<Self>,
-        remote_device: DeviceId,
+        remote_device_id: DeviceId,
         connection_type: ConnectionType,
     ) -> Result<Connection<Self>> {
-        let connection_id = ConnectionId::new(call.call_id(), remote_device);
+        info!(
+            "create_connection(): call_id: {} remote_device_id: {}",
+            call.call_id(),
+            remote_device_id
+        );
 
-        info!("create_connection(): {}", connection_id);
-
-        let connection = Connection::new(call.clone(), remote_device, connection_type)?;
+        let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
 
         let connection_ptr = connection.get_connection_ptr()?;
         let call_id_jlong = u64::from(call.call_id()) as jlong;
-        let jni_remote_device = remote_device as jint;
+        let jni_remote_device_id = remote_device_id as jint;
 
         // call into CMI to create webrtc PeerConnection
         let env = self.java_env()?;
@@ -224,7 +217,7 @@ impl Platform for AndroidPlatform {
         let args = [
             (connection_ptr as jlong).into(),
             call_id_jlong.into(),
-            jni_remote_device.into(),
+            jni_remote_device_id.into(),
             jni_call_context.as_obj().into(),
         ];
         let result = jni_call_method(
@@ -317,31 +310,32 @@ impl Platform for AndroidPlatform {
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
-        call_media_type: CallMediaType,
+        call_id: CallId,
+        offer: signaling::Offer,
     ) -> Result<()> {
-        info!(
-            "on_send_offer(): id: {}, broadcast: {}",
-            connection_id, broadcast
-        );
+        // Offers are always broadcast
+        // TODO: Simplify Java's onSendOffer method to assume broadcast
+        let broadcast = true;
+        let receiver_device_id = 0 as DeviceId;
+
+        info!("on_send_offer(): call_id: {}", call_id);
 
         let env = self.java_env()?;
         let jni_remote = remote_peer.as_obj();
         let jni_call_manager = self.jni_call_manager.as_obj();
-        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
-        let remote_device = connection_id.remote_device() as jint;
-        let jni_call_media_type = self.java_enum(&env, "CallMediaType", call_media_type as i32)?;
+        let call_id_jlong = u64::from(call_id) as jlong;
+        let receiver_device_id = receiver_device_id as jint;
+        let jni_call_media_type =
+            self.java_enum(&env, "CallMediaType", offer.call_media_type as i32)?;
         const SEND_OFFER_MESSAGE_METHOD: &str = "onSendOffer";
         const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;Lorg/signal/ringrtc/CallManager$CallMediaType;)V";
 
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
-            remote_device.into(),
+            receiver_device_id.into(),
             broadcast.into(),
-            JObject::from(env.new_string(description)?).into(),
+            JObject::from(env.new_string(offer.sdp)?).into(),
             jni_call_media_type.into(),
         ];
         let _ = jni_call_method(
@@ -357,20 +351,24 @@ impl Platform for AndroidPlatform {
     fn on_send_answer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        description: &str,
+        call_id: CallId,
+        send: signaling::SendAnswer,
     ) -> Result<()> {
+        // Answers are never broadcast
+        // TODO: Simplify Java's onSendAnswer method to assume no broadcast
+        let broadcast = false;
+        let receiver_device_id = send.receiver_device_id;
+
         info!(
-            "on_send_answer(): id: {}, broadcast: {}",
-            connection_id, broadcast
+            "on_send_answer(): call_id: {}, receiver_device_id: {}",
+            call_id, receiver_device_id
         );
 
         let env = self.java_env()?;
         let jni_remote = remote_peer.as_obj();
         let jni_call_manager = self.jni_call_manager.as_obj();
-        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
-        let remote_device = connection_id.remote_device() as jint;
+        let call_id_jlong = u64::from(call_id) as jlong;
+        let receiver_device_id = receiver_device_id as jint;
 
         const SEND_ANSWER_MESSAGE_METHOD: &str = "onSendAnswer";
         const SEND_ANSWER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;)V";
@@ -378,9 +376,9 @@ impl Platform for AndroidPlatform {
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
-            remote_device.into(),
+            receiver_device_id.into(),
             broadcast.into(),
-            JObject::from(env.new_string(description)?).into(),
+            JObject::from(env.new_string(send.answer.sdp)?).into(),
         ];
         let _ = jni_call_method(
             &env,
@@ -392,40 +390,45 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    fn on_send_ice_candidates(
+    fn on_send_ice(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        ice_candidates: &[IceCandidate],
+        call_id: CallId,
+        send: signaling::SendIce,
     ) -> Result<()> {
+        let (broadcast, receiver_device_id) = match send.receiver_device_id {
+            // The DeviceId doesn't matter if we're broadcasting
+            None => (true, 0 as DeviceId),
+            Some(receiver_device_id) => (false, receiver_device_id),
+        };
+
         info!(
-            "on_send_ice_candidates(): id: {}, broadcast: {}",
-            connection_id, broadcast
+            "on_send_ice(): call_id: {}, receiver_device_id: {}, broadcast: {}",
+            call_id, receiver_device_id, broadcast
         );
 
         let env = self.java_env()?;
         let jni_remote = remote_peer.as_obj();
         let jni_call_manager = self.jni_call_manager.as_obj();
-        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
-        let remote_device = connection_id.remote_device() as jint;
+        let call_id_jlong = u64::from(call_id) as jlong;
+        let receiver_device_id = receiver_device_id as jint;
 
         // create Java List<org.webrtc.IceCandidate>
         let ice_candidate_class = self.class_cache.get_class(ICE_CANDIDATE_CLASS)?;
         let ice_candidate_list = jni_new_linked_list(&env)?;
 
-        for candidate in ice_candidates {
+        for candidate in send.ice.candidates_added {
             const ICE_CANDIDATE_CTOR_SIG: &str = "(Ljava/lang/String;ILjava/lang/String;)V";
-            let sdp_mid = env.new_string(&candidate.sdp_mid)?;
+            let sdp_mid = env.new_string("")?;
             let sdp = env.new_string(&candidate.sdp)?;
             let args = [
                 JObject::from(sdp_mid).into(),
-                candidate.sdp_mline_index.into(),
+                0.into(),
                 JObject::from(sdp).into(),
             ];
-            let ice_update_message_obj =
+            let ice_message_obj =
                 env.new_object(ice_candidate_class, ICE_CANDIDATE_CTOR_SIG, &args)?;
-            ice_candidate_list.add(ice_update_message_obj)?;
+            ice_candidate_list.add(ice_message_obj)?;
         }
 
         const ON_SEND_ICE_CANDIDATES_METHOD: &str = "onSendIceCandidates";
@@ -435,7 +438,7 @@ impl Platform for AndroidPlatform {
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
-            remote_device.into(),
+            receiver_device_id.into(),
             broadcast.into(),
             JObject::from(ice_candidate_list).into(),
         ];
@@ -452,31 +455,27 @@ impl Platform for AndroidPlatform {
     fn on_send_hangup(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        hangup_parameters: HangupParameters,
-        use_legacy_hangup_message: bool,
+        call_id: CallId,
+        send: signaling::SendHangup,
     ) -> Result<()> {
-        info!(
-            "on_send_hangup(): id: {}, broadcast: {}",
-            connection_id, broadcast
-        );
+        // Hangups are always broadcast
+        // TODO: Simplify Java's onSendHangup method to assume broadcast
+        let broadcast = true;
+        let receiver_device_id = 0 as DeviceId;
+
+        info!("on_send_hangup(): call_id: {}", call_id);
 
         let env = self.java_env()?;
         let jni_remote = remote_peer.as_obj();
         let jni_call_manager = self.jni_call_manager.as_obj();
-        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
-        let remote_device = connection_id.remote_device() as jint;
+        let call_id_jlong = u64::from(call_id) as jlong;
+        let receiver_device_id = receiver_device_id as jint;
 
-        let device_id = match hangup_parameters.device_id() {
-            Some(d) => d,
-            // We set the device_id to 0 in case it is not defined. It will
-            // only be used for hangup types other than Normal.
-            None => 0,
-        } as jint;
-
-        let jni_hangup_type =
-            self.java_enum(&env, "HangupType", hangup_parameters.hangup_type() as i32)?;
+        let (hangup_type, hangup_device_id) = send.hangup.to_type_and_device_id();
+        // We set the device_id to 0 in case it is not defined. It will
+        // only be used for hangup types other than Normal.
+        let hangup_device_id = hangup_device_id.unwrap_or(0 as DeviceId) as jint;
+        let jni_hangup_type = self.java_enum(&env, "HangupType", hangup_type as i32)?;
 
         const SEND_HANGUP_MESSAGE_METHOD: &str = "onSendHangup";
         const SEND_HANGUP_MESSAGE_SIG: &str =
@@ -485,11 +484,11 @@ impl Platform for AndroidPlatform {
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
-            remote_device.into(),
+            receiver_device_id.into(),
             broadcast.into(),
             jni_hangup_type.into(),
-            device_id.into(),
-            use_legacy_hangup_message.into(),
+            hangup_device_id.into(),
+            send.use_legacy.into(),
         ];
         let _ = jni_call_method(
             &env,
@@ -501,22 +500,19 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    fn on_send_busy(
-        &self,
-        remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-    ) -> Result<()> {
-        info!(
-            "on_send_busy(): id: {}, broadcast: {}",
-            connection_id, broadcast
-        );
+    fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
+        // Busy messages are always broadcast
+        // TODO: Simplify Java's onSendBusy method to assume broadcast
+        let broadcast = true;
+        let receiver_device_id = 0 as DeviceId;
+
+        info!("on_send_busy(): call_id: {}", call_id);
 
         let env = self.java_env()?;
         let jni_remote = remote_peer.as_obj();
         let jni_call_manager = self.jni_call_manager.as_obj();
-        let call_id_jlong = u64::from(connection_id.call_id()) as jlong;
-        let remote_device = connection_id.remote_device() as jint;
+        let call_id_jlong = u64::from(call_id) as jlong;
+        let receiver_device_id = receiver_device_id as jint;
 
         const SEND_BUSY_MESSAGE_METHOD: &str = "onSendBusy";
         const SEND_BUSY_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZ)V";
@@ -524,7 +520,7 @@ impl Platform for AndroidPlatform {
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
-            remote_device.into(),
+            receiver_device_id.into(),
             broadcast.into(),
         ];
         let _ = jni_call_method(

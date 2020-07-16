@@ -23,8 +23,6 @@ typedef void* rust_object;
 
 /* Ice Update Message structure passed between Rust and c++ */
 typedef struct {
-  const char* sdp_mid;
-  int         sdp_mline_index;
   const char* sdp;
 } RustIceCandidate;
 

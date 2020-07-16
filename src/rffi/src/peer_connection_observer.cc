@@ -27,11 +27,8 @@ PeerConnectionObserverRffi::~PeerConnectionObserverRffi() {
 
 void PeerConnectionObserverRffi::OnIceCandidate(const IceCandidateInterface* candidate) {
   RustIceCandidate rust_candidate;
+
   std::string sdp;
-
-  rust_candidate.sdp_mid = candidate->sdp_mid().c_str();
-  rust_candidate.sdp_mline_index = candidate->sdp_mline_index();
-
   candidate->ToString(&sdp);
   rust_candidate.sdp = sdp.c_str();
 

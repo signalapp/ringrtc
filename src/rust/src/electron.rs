@@ -9,20 +9,11 @@ use lazy_static::lazy_static;
 use std::collections::VecDeque;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use crate::common::{
-    AnswerParameters,
-    CallId,
-    CallMediaType,
-    ConnectionId,
-    DeviceId,
-    FeatureLevel,
-    HangupParameters,
-    HangupType,
-    OfferParameters,
-    Result,
-};
+use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, Result};
 use crate::core::call_manager::CallManager;
+use crate::core::signaling;
 use crate::native::{
     CallState,
     CallStateHandler,
@@ -30,10 +21,8 @@ use crate::native::{
     NativeCallContext,
     NativePlatform,
     PeerId,
-    SignalingMessage,
     SignalingSender,
 };
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource};
 use crate::webrtc::peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory};
 
@@ -88,7 +77,7 @@ pub enum Event {
     // The JavaScript should send the following signaling message to the given
     // PeerId in context of the given CallId.  If the DeviceId is None, then
     // broadcast to all devices of that PeerId.
-    SendSignaling(PeerId, Option<DeviceId>, CallId, SignalingMessage),
+    SendSignaling(PeerId, Option<DeviceId>, CallId, signaling::Message),
     // The call with the given remote PeerId has changed state.
     // We assume only one call per remote PeerId at a time.
     CallState(PeerId, CallState),
@@ -101,19 +90,13 @@ impl SignalingSender for Sender<Event> {
     fn send_signaling(
         &self,
         recipient_id: &PeerId,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        msg: SignalingMessage,
+        call_id: CallId,
+        receiver_device_id: Option<DeviceId>,
+        msg: signaling::Message,
     ) -> Result<()> {
-        let device_id = if broadcast {
-            None
-        } else {
-            Some(connection_id.remote_device())
-        };
-        let call_id = connection_id.call_id();
         self.send(Event::SendSignaling(
             recipient_id.clone(),
-            device_id,
+            receiver_device_id,
             call_id,
             msg,
         ))?;
@@ -405,32 +388,36 @@ declare_types! {
 
         method receivedOffer(mut cx) {
             let peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
-            let peer_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
-            let local_device_id = cx.argument::<JsNumber>(2)?.value() as DeviceId;
-            let message_age_sec = cx.argument::<JsNumber>(3)?.value() as u64;
+            let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
+            let receiver_device_id = cx.argument::<JsNumber>(2)?.value() as DeviceId;
+            let age_sec = cx.argument::<JsNumber>(3)?.value() as u64;
             let call_id = get_call_id_arg(&mut cx, 4);
             let offer_type = cx.argument::<JsNumber>(5)?.value() as i32;
-            let remote_supports_multi_ring = cx.argument::<JsBoolean>(6)?.value();
-            let offer = cx.argument::<JsString>(7)?.value();
+            let sender_supports_multi_ring = cx.argument::<JsBoolean>(6)?.value();
+            let sdp = cx.argument::<JsString>(7)?.value();
 
-            let media_type = match offer_type {
+            let call_media_type = match offer_type {
                 1 => CallMediaType::Video,
                 _ => CallMediaType::Audio,  // TODO: Do something better.  Default matches are evil.
             };
-            let remote_feature_level = if remote_supports_multi_ring {
+            let sender_device_feature_level = if sender_supports_multi_ring {
                 FeatureLevel::MultiRing
             } else {
                 FeatureLevel::Unspecified
             };
-            debug!("JsCallManager.receivedOffer({}, {}, {}, {}, {}, {:?}, {})", peer_id, peer_device_id, call_id, local_device_id, media_type, remote_feature_level, offer);
+            debug!("JsCallManager.receivedOffer({}, {}, {}, {}, {}, {:?}, {})", peer_id, sender_device_id, call_id, receiver_device_id, call_media_type, sender_device_feature_level, sdp);
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                let connection_id = ConnectionId::new(call_id, peer_device_id);
-
-                // An electron client cannot be the primary device.
-                let local_is_primary_device = false;
-                cm.call_manager.received_offer(peer_id, connection_id, OfferParameters::new(offer, message_age_sec, media_type, local_device_id, remote_feature_level, local_is_primary_device))?;
+                cm.call_manager.received_offer(peer_id, call_id, signaling::ReceivedOffer {
+                    offer: signaling::Offer::from_sdp(call_media_type, sdp),
+                    age: Duration::from_secs(age_sec),
+                    sender_device_id,
+                    sender_device_feature_level,
+                    receiver_device_id,
+                    // An electron client cannot be the primary device.
+                    receiver_device_is_primary: false,
+                })?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -438,22 +425,24 @@ declare_types! {
 
         method receivedAnswer(mut cx) {
             let peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
-            let peer_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
+            let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = get_call_id_arg(&mut cx, 2);
-            let remote_supports_multi_ring = cx.argument::<JsBoolean>(3)?.value();
-            let answer = cx.argument::<JsString>(4)?.value();
-            let remote_feature_level = if remote_supports_multi_ring {
+            let sender_supports_multi_ring = cx.argument::<JsBoolean>(3)?.value();
+            let sdp = cx.argument::<JsString>(4)?.value();
+            let sender_device_feature_level = if sender_supports_multi_ring {
                 FeatureLevel::MultiRing
             } else {
                 FeatureLevel::Unspecified
             };
-            debug!("JsCallManager.receivedAnswer({}, {}, {}, {})", peer_id, peer_device_id, call_id, answer);
+            debug!("JsCallManager.receivedAnswer({}, {}, {}, {})", peer_id, sender_device_id, call_id, sdp);
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                let connection_id = ConnectionId::new(call_id, peer_device_id);
-
-                cm.call_manager.received_answer(connection_id, AnswerParameters::new(answer, remote_feature_level))?;
+                cm.call_manager.received_answer(call_id, signaling::ReceivedAnswer {
+                    answer: signaling::Answer::from_sdp(sdp),
+                    sender_device_id,
+                    sender_device_feature_level,
+                })?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -461,24 +450,26 @@ declare_types! {
 
         method receivedIceCandidates(mut cx) {
             let peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
-            let peer_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
+            let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = get_call_id_arg(&mut cx, 2);
             let js_candidate_sdps = *cx.argument::<JsArray>(3)?;
 
-            let mut ice_candidates = Vec::with_capacity(js_candidate_sdps.len() as usize);
+            let mut candidates = Vec::with_capacity(js_candidate_sdps.len() as usize);
             for i in 0..js_candidate_sdps.len() {
                 // An m-line index of 0 will always work if we are max-bundling, which we are.
-                let mline_index = 0;
-                let mid = String::from("");
                 let sdp: String = js_candidate_sdps.get(&mut cx, i as u32)?.downcast::<JsString>().expect("ICE candidates are strings").value();
-                ice_candidates.push(IceCandidate::new(mid, mline_index, sdp));
+                candidates.push(signaling::IceCandidate::from_sdp(sdp));
             }
-            debug!("JsCallManager.receivedIceCandidates({}, {}, {}, {})", peer_id, peer_device_id, call_id, ice_candidates.len());
+            debug!("JsCallManager.receivedIceCandidates({}, {}, {}, {})", peer_id, sender_device_id, call_id, candidates.len());
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                let connection_id = ConnectionId::new(call_id, peer_device_id);
-                cm.call_manager.received_ice_candidates(connection_id, &ice_candidates)?;
+                cm.call_manager.received_ice(call_id, signaling::ReceivedIce {
+                    ice: signaling::Ice {
+                        candidates_added: candidates,
+                    },
+                    sender_device_id,
+                })?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -486,31 +477,31 @@ declare_types! {
 
         method receivedHangup(mut cx) {
             let peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
-            let peer_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
+            let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = get_call_id_arg(&mut cx, 2);
             let hangup_type = cx.argument::<JsNumber>(3)?.value() as i32;
             let hangup_device_id = cx.argument::<JsValue>(4)?.as_value(&mut cx);
 
-            let hangup_type = match hangup_type {
-                1 => HangupType::Accepted,
-                2 => HangupType::Declined,
-                3 => HangupType::Busy,
-                4 => HangupType::NeedPermission,
-                _ => HangupType::Normal,  // TODO: Do something better.  Default matches are evil.
-            };
+            // TODO: Do something better when we don't know the hangup type
+            let hangup_type = signaling::HangupType::from_i32(hangup_type).unwrap_or(signaling::HangupType::Normal);
             let hangup_device_id = if hangup_device_id.is_a::<JsNull>() {
-                None
+                // This is kind of ugly, but the Android and iOS apps do the same
+                // and so from_type_and_device_id assumes it.
+                // See signaling.rs for more details.
+                0 as DeviceId
             } else {
-                Some(hangup_device_id.downcast::<JsNumber>().unwrap().value() as DeviceId)
+                hangup_device_id.downcast::<JsNumber>().unwrap().value() as DeviceId
             };
-            debug!("JsCallManager.receivedHangup({}, {}, {}, {}, {:?})", peer_id, peer_device_id, call_id, hangup_type, hangup_device_id);
-
+            debug!("JsCallManager.receivedHangup({}, {}, {}, {:?}, {:?})", peer_id, sender_device_id, call_id, hangup_type, hangup_device_id);
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                let connection_id = ConnectionId::new(call_id, peer_device_id);
-                let hangup_description = HangupParameters::new(hangup_type, hangup_device_id);
-                cm.call_manager.received_hangup(connection_id, hangup_description)?;
+                let hangup = signaling::Hangup::from_type_and_device_id(hangup_type, hangup_device_id);
+
+                cm.call_manager.received_hangup(call_id, signaling::ReceivedHangup {
+                    hangup,
+                    sender_device_id,
+                })?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -518,14 +509,15 @@ declare_types! {
 
         method receivedBusy(mut cx) {
             let peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
-            let peer_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
+            let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = get_call_id_arg(&mut cx, 2);
-            debug!("JsCallManager.receivedBusy({}, {}, {})", peer_id, peer_device_id, call_id);
+            debug!("JsCallManager.receivedBusy({}, {}, {})", peer_id, sender_device_id, call_id);
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                let connection_id = ConnectionId::new(call_id, peer_device_id);
-                cm.call_manager.received_busy(connection_id)?;
+                cm.call_manager.received_busy(call_id, signaling::ReceivedBusy{
+                    sender_device_id,
+                })?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -611,33 +603,37 @@ declare_types! {
                 match event {
                     Event::SendSignaling(peer_id, maybe_device_id, call_id, signal) => {
                         let (method_name, data1, data2) : (&str, Handle<JsValue>, Handle<JsValue>) = match signal {
-                            SignalingMessage::Offer(media_type, sdp) => ("onSendOffer", cx.number(media_type as i32).upcast(), cx.string(sdp).upcast()),
-                            SignalingMessage::Answer(sdp) => ("onSendAnswer", cx.string(sdp).upcast(), cx.undefined().upcast()),
-                            SignalingMessage::IceCandidates(candidates) => ("onSendIceCandidates", {
-                                let js_candidates = JsArray::new(&mut cx, candidates.len() as u32);
-                                for (i, candidate) in candidates.iter().enumerate() {
+                            signaling::Message::Offer(offer) => ("onSendOffer", cx.number(offer.call_media_type as i32).upcast(), cx.string(offer.sdp).upcast()),
+                            signaling::Message::Answer(answer) => ("onSendAnswer", cx.string(answer.sdp).upcast(), cx.undefined().upcast()),
+                            signaling::Message::Ice(ice) => ("onSendIceCandidates", {
+                                let js_candidates = JsArray::new(&mut cx, ice.candidates_added.len() as u32);
+                                for (i, candidate) in ice.candidates_added.iter().enumerate() {
                                     let js_candidate = cx.empty_object();
-                                    let js_mid = cx.string(candidate.sdp_mid.clone());
                                     let js_sdp = cx.string(candidate.sdp.clone());
-                                    js_candidate.set(&mut cx, "mid", js_mid)?;
                                     js_candidate.set(&mut cx, "sdp", js_sdp)?;
                                     js_candidates.set(&mut cx, i as u32, js_candidate)?;
                                 }
                                 js_candidates.upcast()
                             }, cx.undefined().upcast()),
-                            SignalingMessage::Hangup(hangup, use_legacy) => {
-                                let hangup_type = cx.number(hangup.hangup_type() as i32).upcast();
-                                let device_id = match hangup.device_id() {
+                            signaling::Message::Hangup(hangup) => {
+                                let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
+                                let hangup_type = cx.number(hangup_type as i32).upcast();
+                                let device_id = match hangup_device_id {
                                     Some(device_id) => cx.number(device_id).upcast(),
                                     None => cx.null().upcast(),
                                 };
-                                if use_legacy {
-                                    ("onSendLegacyHangup", hangup_type, device_id)
-                                } else {
-                                    ("onSendHangup", hangup_type, device_id)
-                                }
+                                ("onSendHangup", hangup_type, device_id)
+                            }
+                            signaling::Message::LegacyHangup(hangup) => {
+                                let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
+                                let hangup_type = cx.number(hangup_type as i32).upcast();
+                                let device_id = match hangup_device_id {
+                                    Some(device_id) => cx.number(device_id).upcast(),
+                                    None => cx.null().upcast(),
+                                };
+                                ("onSendLegacyHangup", hangup_type, device_id)
                             },
-                            SignalingMessage::Busy => ("onSendBusy", cx.undefined().upcast(), cx.undefined().upcast()),
+                            signaling::Message::Busy => ("onSendBusy", cx.undefined().upcast(), cx.undefined().upcast()),
                         };
                         let error_message = format!("{} is a function", method_name);
                         let method = *observer.get(&mut cx, method_name)?.downcast::<JsFunction>().expect(&error_message);

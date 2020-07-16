@@ -14,25 +14,21 @@ extern crate log;
 
 use std::ptr;
 use std::thread;
+use std::time::Duration;
 
 use ringrtc::common::{
-    AnswerParameters,
     ApplicationEvent,
     CallId,
     CallMediaType,
     CallState,
-    ConnectionId,
     ConnectionState,
     DeviceId,
     FeatureLevel,
-    HangupParameters,
-    HangupType,
-    OfferParameters,
 };
+use ringrtc::core::signaling;
 
 use ringrtc::sim::error::SimError;
 
-use ringrtc::webrtc::ice_candidate::IceCandidate;
 use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
@@ -145,24 +141,33 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
 
     // add a received answer for each remote
     for i in 1..(n_remotes + 1) {
-        let remote_id = ConnectionId::new(active_call.call_id(), i as DeviceId);
+        let call_id = active_call.call_id();
+        let sender_device_id = i as DeviceId;
         cm.received_answer(
-            remote_id,
-            AnswerParameters::new(
-                format!("ANSWER-{}-{}", i, PRNG.gen::<u16>()).to_owned(),
-                FeatureLevel::MultiRing,
-            ),
+            call_id,
+            signaling::ReceivedAnswer {
+                answer: signaling::Answer::from_sdp(
+                    format!("ANSWER-{}-{}", i, PRNG.gen::<u16>()).to_owned(),
+                ),
+                sender_device_id,
+                sender_device_feature_level: FeatureLevel::MultiRing,
+            },
         )
         .expect(error_line!());
 
         // add a received ICE candidate
-        let ice_candidate = IceCandidate::new(
-            "0".to_owned(),
-            1,
-            format!("ICE-{}", PRNG.gen::<u16>()).to_owned(),
-        );
-        cm.received_ice_candidates(remote_id, &[ice_candidate])
-            .expect(error_line!());
+        let ice_candidate =
+            signaling::IceCandidate::from_sdp(format!("ICE-{}", PRNG.gen::<u16>()).to_owned());
+        cm.received_ice(
+            call_id,
+            signaling::ReceivedIce {
+                ice: signaling::Ice {
+                    candidates_added: vec![ice_candidate],
+                },
+                sender_device_id,
+            },
+        )
+        .expect(error_line!());
 
         cm.synchronize().expect(error_line!());
         let connection = active_call
@@ -628,7 +633,7 @@ fn inject_local_ice_candidate() {
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
-    let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
     let force_send = true;
     active_connection
         .inject_local_ice_candidate(ice_candidate, force_send)
@@ -648,15 +653,19 @@ fn receive_remote_ice_candidate() {
     let active_call = context.active_call();
 
     // add a received ICE candidate
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
-    let ice_candidate = IceCandidate::new(
-        "0".to_owned(),
-        1,
-        format!("ICE-{}", PRNG.gen::<u16>()).to_owned(),
-    );
-    cm.received_ice_candidates(remote_id, &[ice_candidate])
-        .expect(error_line!());
-
+    let call_id = active_call.call_id();
+    let ice_candidate =
+        signaling::IceCandidate::from_sdp(format!("ICE-{}", PRNG.gen::<u16>()).to_owned());
+    cm.received_ice(
+        call_id,
+        signaling::ReceivedIce {
+            ice:              signaling::Ice {
+                candidates_added: vec![ice_candidate],
+            },
+            sender_device_id: 1 as DeviceId,
+        },
+    )
+    .expect("receive_ice");
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
@@ -673,10 +682,15 @@ fn received_remote_hangup_before_connection() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
     // Receiving a Hangup/Normal before connection implies the callee is declining.
-    cm.received_hangup(remote_id, HangupParameters::new(HangupType::Normal, None))
-        .expect(error_line!());
+    cm.received_hangup(
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::Normal,
+        },
+    )
+    .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
@@ -700,7 +714,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     // the subsequent Hangup message is queued until message_sent() is called.
     context.no_auto_message_sent_for_ice(true);
 
-    let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
     let force_send = true;
     parent_connection
         .unwrap()
@@ -711,10 +725,15 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ice_candidates_sent(), 1);
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
     // Receiving a Normal hangup before connection implies the callee is declining.
-    cm.received_hangup(remote_id, HangupParameters::new(HangupType::Normal, None))
-        .expect(error_line!());
+    cm.received_hangup(
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::Normal,
+        },
+    )
+    .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
@@ -741,12 +760,14 @@ fn received_remote_hangup_before_connection_for_permission() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
     // Receiving a Hangup/NeedPermission before connection implies the callee is indicating
     // that they need to obtain permission to handle the message.
     cm.received_hangup(
-        remote_id,
-        HangupParameters::new(HangupType::NeedPermission, Some(1)),
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::NeedPermission(Some(1 as DeviceId)),
+        },
     )
     .expect(error_line!());
 
@@ -776,7 +797,7 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     // the subsequent Hangup message is queued until message_sent() is called.
     context.no_auto_message_sent_for_ice(true);
 
-    let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
     let force_send = true;
     parent_connection
         .unwrap()
@@ -787,12 +808,14 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ice_candidates_sent(), 1);
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
     // Receiving a Hangup/NeedPermission before connection implies the callee is indicating
     // that they need to obtain permission to handle the message.
     cm.received_hangup(
-        remote_id,
-        HangupParameters::new(HangupType::NeedPermission, Some(1)),
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::NeedPermission(Some(1 as DeviceId)),
+        },
     )
     .expect(error_line!());
 
@@ -825,9 +848,14 @@ fn received_remote_hangup_after_connection() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
-    cm.received_hangup(remote_id, HangupParameters::new(HangupType::Normal, None))
-        .expect(error_line!());
+    cm.received_hangup(
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::Normal,
+        },
+    )
+    .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
@@ -844,10 +872,12 @@ fn received_remote_needs_permission() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
     cm.received_hangup(
-        remote_id,
-        HangupParameters::new(HangupType::NeedPermission, None),
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::NeedPermission(None),
+        },
     )
     .expect(error_line!());
 
@@ -1016,7 +1046,7 @@ fn local_ice_candidate_with_error() {
     // cause the sending of the ICE candidate to fail.
     context.force_internal_fault(true);
 
-    let ice_candidate = IceCandidate::new("fake_spd_mid".to_string(), 0, "fake_spd".to_string());
+    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
     let force_send = true;
     active_connection
         .inject_local_ice_candidate(ice_candidate, force_send)
@@ -1177,18 +1207,21 @@ fn glare_before_connect() {
     };
     info!("active remote_peer: {}", remote_peer);
 
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            0,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        signaling::ReceivedOffer {
+            offer:                       signaling::Offer::from_sdp(
+                CallMediaType::Audio,
+                format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            ),
+            age:                         Duration::from_secs(0),
+            sender_device_id:            1 as DeviceId,
+            sender_device_feature_level: FeatureLevel::MultiRing,
+            receiver_device_id:          1 as DeviceId,
+            receiver_device_is_primary:  true,
+        },
     )
     .expect(error_line!());
 
@@ -1224,18 +1257,21 @@ fn glare_after_connect() {
     };
     info!("active remote_peer: {}", remote_peer);
 
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            0,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        signaling::ReceivedOffer {
+            offer:                       signaling::Offer::from_sdp(
+                CallMediaType::Audio,
+                format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
+            ),
+            age:                         Duration::from_secs(0),
+            sender_device_id:            1 as DeviceId,
+            sender_device_feature_level: FeatureLevel::MultiRing,
+            receiver_device_id:          1 as DeviceId,
+            receiver_device_is_primary:  true,
+        },
     )
     .expect(error_line!());
 
@@ -1287,8 +1323,13 @@ fn start_outbound_receive_busy() {
     cm.synchronize().expect(error_line!());
 
     // Receive a busy message
-    let remote_id = ConnectionId::new(call_id, 1 as DeviceId);
-    cm.received_busy(remote_id).expect(error_line!());
+    cm.received_busy(
+        call_id,
+        signaling::ReceivedBusy {
+            sender_device_id: 1 as DeviceId,
+        },
+    )
+    .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 

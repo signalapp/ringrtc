@@ -7,18 +7,20 @@
 
 //! WebRTC Peer Connection Observer Interface.
 
+use std::ffi::CStr;
 use std::fmt;
 use std::marker::PhantomData;
+use std::os::raw::c_char;
 use std::ptr;
 use std::time::SystemTime;
 
 use crate::common::{Result, RingBench, DATA_CHANNEL_NAME};
 use crate::core::connection::Connection;
 use crate::core::platform::Platform;
+use crate::core::signaling;
 use crate::core::util::{ptr_as_mut, CppObject, RustObject};
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
-use crate::webrtc::ice_candidate::{CppIceCandidate, IceCandidate};
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::RffiMediaStreamInterface;
 use crate::webrtc::peer_connection::RffiDataChannelInterface;
@@ -85,19 +87,31 @@ enum IceConnectionState {
     Max,
 }
 
+/// Ice Candidate structure passed between Rust and C++.
+#[repr(C)]
+#[derive(Debug)]
+pub struct CppIceCandidate {
+    sdp: *const c_char,
+}
+
 /// PeerConnectionObserver OnIceCandidate() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceCandidate<T>(
     connection_ptr: *mut Connection<T>,
-    candidate: *const CppIceCandidate,
+    cpp_candidate: *const CppIceCandidate,
 ) where
     T: Platform,
 {
     let object = unsafe { ptr_as_mut(connection_ptr) };
     if let Ok(connection) = object {
         info!("pc_observer_OnIceCandidate: {}", connection.id());
-        if !candidate.is_null() {
-            let ice_candidate = IceCandidate::from(unsafe { &*candidate });
+        if !cpp_candidate.is_null() {
+            let sdp = unsafe {
+                CStr::from_ptr((*cpp_candidate).sdp)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            let ice_candidate = signaling::IceCandidate::from_sdp(sdp);
             let force_send = false;
             connection
                 .inject_local_ice_candidate(ice_candidate, force_send)

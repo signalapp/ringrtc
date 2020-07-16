@@ -5,21 +5,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    ConnectionId,
-    DeviceId,
-    Result,
-    DATA_CHANNEL_NAME,
-};
-use crate::common::{CallMediaType, HangupParameters};
+use crate::common::CallMediaType;
+use crate::common::{ApplicationEvent, CallDirection, CallId, DeviceId, Result};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
-use crate::webrtc::data_channel_observer::DataChannelObserver;
-use crate::webrtc::ice_candidate::IceCandidate;
+use crate::core::signaling;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::{AudioTrack, VideoSink, VideoSource};
 use crate::webrtc::peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory};
@@ -89,48 +80,15 @@ pub trait SignalingSender {
     fn send_signaling(
         &self,
         recipient_id: &PeerId,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        msg: SignalingMessage,
+        call_id: CallId,
+        receiver_device_id: Option<DeviceId>,
+        msg: signaling::Message,
     ) -> Result<()>;
 }
 
 pub trait CallStateHandler {
     fn handle_call_state(&self, remote_peer_id: &PeerId, state: CallState) -> Result<()>;
     fn handle_remote_video_state(&self, remote_peer_id: &PeerId, enabled: bool) -> Result<()>;
-}
-
-// These are the signaling messages native clients need to be able to send
-// and receive.  Closely tied to call_manager::SignalingMessageType.
-// TODO: Should unify this with SignalingMessageType?
-#[derive(Clone)]
-pub enum SignalingMessage {
-    Offer(CallMediaType, String),
-    Answer(String),
-    IceCandidates(Vec<IceCandidate>),
-    Hangup(HangupParameters, bool),
-    Busy,
-}
-
-impl fmt::Display for SignalingMessage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let display = match self {
-            SignalingMessage::Offer(media_type, _) => format!("Offer({:?}, ...)", media_type),
-            SignalingMessage::Answer(_) => format!("Answer(...)"),
-            SignalingMessage::IceCandidates(_) => format!("IceCandidates(...)"),
-            SignalingMessage::Hangup(parameters, use_legacy) => {
-                format!("Hangup({:?}, {:?})", parameters, use_legacy)
-            }
-            SignalingMessage::Busy => format!("Busy"),
-        };
-        write!(f, "({})", display)
-    }
-}
-
-impl fmt::Debug for SignalingMessage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
 }
 
 // These are the different states a call can be in.
@@ -261,12 +219,12 @@ impl NativePlatform {
     fn send_signaling(
         &self,
         recipient_id: &PeerId,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        msg: SignalingMessage,
+        call_id: CallId,
+        receiver_device_id: Option<DeviceId>,
+        msg: signaling::Message,
     ) -> Result<()> {
         self.signaling_sender
-            .send_signaling(recipient_id, connection_id, broadcast, msg)
+            .send_signaling(recipient_id, call_id, receiver_device_id, msg)
     }
 }
 
@@ -326,13 +284,6 @@ impl Platform for NativePlatform {
             context.outgoing_audio.clone(),
             context.outgoing_video.clone(),
         )?;
-        if call.direction() == CallDirection::OutGoing {
-            let dc_observer = DataChannelObserver::new(connection.clone())?;
-            let dc = pc.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-            unsafe { dc.register_observer(dc_observer.rffi_interface())? };
-            connection.set_data_channel(dc)?;
-            connection.set_data_channel_observer(dc_observer)?;
-        }
 
         connection.set_pc_interface(pc)?;
         Ok(connection)
@@ -484,20 +435,19 @@ impl Platform for NativePlatform {
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        offer: &str,
-        call_media_type: CallMediaType,
+        call_id: CallId,
+        offer: signaling::Offer,
     ) -> Result<()> {
         info!(
-            "NativePlatform::on_send_offer(): remote_peer: {}, connection_id: {}, broadcast: {}",
-            remote_peer, connection_id, broadcast
+            "NativePlatform::on_send_offer(): remote_peer: {}, call_id: {}",
+            remote_peer, call_id
         );
+        let receiver_device_id = None; // always broadcast
         self.send_signaling(
             remote_peer,
-            connection_id,
-            broadcast,
-            SignalingMessage::Offer(call_media_type, offer.to_string()),
+            call_id,
+            receiver_device_id,
+            signaling::Message::Offer(offer),
         )?;
         Ok(())
     }
@@ -505,39 +455,37 @@ impl Platform for NativePlatform {
     fn on_send_answer(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        answer: &str,
+        call_id: CallId,
+        send: signaling::SendAnswer,
     ) -> Result<()> {
         info!(
-            "NativePlatform::on_send_answer(): remote_peer: {}, connection_id: {}, broadcast: {}",
-            remote_peer, connection_id, broadcast
+            "NativePlatform::on_send_answer(): remote_peer: {}, call_id: {}",
+            remote_peer, call_id
         );
         self.send_signaling(
             remote_peer,
-            connection_id,
-            broadcast,
-            SignalingMessage::Answer(answer.to_string()),
+            call_id,
+            Some(send.receiver_device_id),
+            signaling::Message::Answer(send.answer),
         )?;
         Ok(())
     }
 
-    fn on_send_ice_candidates(
+    fn on_send_ice(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        ice_candidates: &[IceCandidate],
+        call_id: CallId,
+        send: signaling::SendIce,
     ) -> Result<()> {
         info!(
-            "NativePlatform::on_send_ice_candidates(): remote_peer: {}, connection_id: {}, broadcast: {}, candidates: {}",
-            remote_peer, connection_id, broadcast, ice_candidates.len()
+            "NativePlatform::on_send_ice(): remote_peer: {}, call_id: {}, receiver_device_id: {:?}, candidates: {}",
+            remote_peer, call_id, send.receiver_device_id, send.ice.candidates_added.len()
         );
         self.send_signaling(
             remote_peer,
-            connection_id,
-            broadcast,
-            SignalingMessage::IceCandidates(ice_candidates.to_vec()),
+            call_id,
+            send.receiver_device_id,
+            signaling::Message::Ice(send.ice),
         )?;
         Ok(())
     }
@@ -545,40 +493,35 @@ impl Platform for NativePlatform {
     fn on_send_hangup(
         &self,
         remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-        hangup_parameters: HangupParameters,
-        use_legacy_hangup_message: bool,
+        call_id: CallId,
+        send: signaling::SendHangup,
     ) -> Result<()> {
         info!(
-            "NativePlatform::on_send_hangup(): remote_peer: {}, connection_id: {}, broadcast: {}",
-            remote_peer, connection_id, broadcast
+            "NativePlatform::on_send_hangup(): remote_peer: {}, call_id: {}",
+            remote_peer, call_id
         );
-        self.send_signaling(
-            remote_peer,
-            connection_id,
-            broadcast,
-            SignalingMessage::Hangup(hangup_parameters, use_legacy_hangup_message),
-        )?;
+        let message = if send.use_legacy {
+            signaling::Message::LegacyHangup(send.hangup)
+        } else {
+            signaling::Message::Hangup(send.hangup)
+        };
+        let receiver_device_id = None; // always broadcast
+
+        self.send_signaling(remote_peer, call_id, receiver_device_id, message)?;
         Ok(())
     }
 
-    fn on_send_busy(
-        &self,
-        remote_peer: &Self::AppRemotePeer,
-        connection_id: ConnectionId,
-        broadcast: bool,
-    ) -> Result<()> {
+    fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
         info!(
-            "NativePlatform::on_send_busy(): remote_peer: {}, connection_id: {}, broadcast: {}",
-            remote_peer, connection_id, broadcast
+            "NativePlatform::on_send_busy(): remote_peer: {}, call_id: {} ",
+            remote_peer, call_id
         );
-
+        let receiver_device_id = None; // always broadcast
         self.send_signaling(
             remote_peer,
-            connection_id,
-            broadcast,
-            SignalingMessage::Busy,
+            call_id,
+            receiver_device_id,
+            signaling::Message::Busy,
         )?;
         Ok(())
     }

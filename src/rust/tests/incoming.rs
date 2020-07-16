@@ -13,23 +13,20 @@ extern crate ringrtc;
 extern crate log;
 
 use std::ptr;
+use std::time::Duration;
 
 use ringrtc::common::{
     ApplicationEvent,
     CallId,
     CallMediaType,
     CallState,
-    ConnectionId,
     ConnectionState,
     DeviceId,
     FeatureLevel,
-    HangupParameters,
-    HangupType,
-    OfferParameters,
 };
 
 use ringrtc::core::call_manager::MAX_MESSAGE_AGE_SEC;
-use ringrtc::webrtc::ice_candidate::IceCandidate;
+use ringrtc::core::signaling;
 use ringrtc::webrtc::media::MediaStream;
 
 use ringrtc::webrtc::data_channel::DataChannel;
@@ -37,6 +34,18 @@ use ringrtc::webrtc::data_channel::DataChannel;
 #[macro_use]
 mod common;
 use common::{test_init, TestContext, PRNG};
+
+fn random_received_offer_with_age(age: Duration) -> signaling::ReceivedOffer {
+    let sdp = format!("OFFER-{}", PRNG.gen::<u16>()).to_owned();
+    signaling::ReceivedOffer {
+        offer: signaling::Offer::from_sdp(CallMediaType::Audio, sdp),
+        age,
+        sender_device_id: 1 as DeviceId,
+        sender_device_feature_level: FeatureLevel::MultiRing,
+        receiver_device_id: 1 as DeviceId,
+        receiver_device_is_primary: true,
+    }
+}
 
 // Create an inbound call session up to the IceConnecting state.
 //
@@ -55,18 +64,11 @@ fn start_inbound_call() -> TestContext {
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            0,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        random_received_offer_with_age(Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -95,14 +97,18 @@ fn start_inbound_call() -> TestContext {
         .expect(error_line!());
 
     // add a received ICE candidate
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
-    let ice_candidate = IceCandidate::new(
-        "0".to_owned(),
-        1,
-        format!("ICE-{}", PRNG.gen::<u16>()).to_owned(),
-    );
-    cm.received_ice_candidates(remote_id, &[ice_candidate])
-        .expect(error_line!());
+    let ice_candidate =
+        signaling::IceCandidate::from_sdp(format!("ICE-{}", PRNG.gen::<u16>()).to_owned());
+    cm.received_ice(
+        active_call.call_id(),
+        signaling::ReceivedIce {
+            ice:              signaling::Ice {
+                candidates_added: vec![ice_candidate],
+            },
+            sender_device_id: 1 as DeviceId,
+        },
+    )
+    .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
     assert_eq!(
@@ -230,11 +236,12 @@ fn inbound_call_hangup_accepted() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
-    let acceptee = 2 as DeviceId;
     cm.received_hangup(
-        remote_id,
-        HangupParameters::new(HangupType::Accepted, Some(acceptee)),
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::AcceptedOnAnotherDevice(2 as DeviceId),
+        },
     )
     .expect(error_line!());
 
@@ -255,11 +262,12 @@ fn inbound_call_hangup_declined() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
-    let declinee = 2 as DeviceId;
     cm.received_hangup(
-        remote_id,
-        HangupParameters::new(HangupType::Declined, Some(declinee)),
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::DeclinedOnAnotherDevice(2 as DeviceId),
+        },
     )
     .expect(error_line!());
 
@@ -280,11 +288,12 @@ fn inbound_call_hangup_busy() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let remote_id = ConnectionId::new(active_call.call_id(), 1 as DeviceId);
-    let busyee = 2 as DeviceId;
     cm.received_hangup(
-        remote_id,
-        HangupParameters::new(HangupType::Busy, Some(busyee)),
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1 as DeviceId,
+            hangup:           signaling::Hangup::BusyOnAnotherDevice(2 as DeviceId),
+        },
     )
     .expect(error_line!());
 
@@ -305,18 +314,11 @@ fn start_inbound_call_with_error() {
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            0,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        random_received_offer_with_age(Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -370,18 +372,11 @@ fn receive_offer_while_active() {
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            0,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        random_received_offer_with_age(Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -403,20 +398,12 @@ fn receive_expired_offer() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    // create off way in the past
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            86400, // one day old
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        random_received_offer_with_age(Duration::from_secs(86400)), // one whole day
     )
     .expect(error_line!());
 
@@ -438,18 +425,11 @@ fn receive_offer_before_age_limit() {
 
     // create off way in the past
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            MAX_MESSAGE_AGE_SEC - 1,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        random_received_offer_with_age(Duration::from_secs(MAX_MESSAGE_AGE_SEC - 1)),
     )
     .expect(error_line!());
 
@@ -471,18 +451,11 @@ fn receive_offer_at_age_limit() {
 
     // create off way in the past
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            MAX_MESSAGE_AGE_SEC,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        random_received_offer_with_age(Duration::from_secs(MAX_MESSAGE_AGE_SEC)),
     )
     .expect(error_line!());
 
@@ -504,18 +477,11 @@ fn receive_expired_offer_after_age_limit() {
 
     // create off way in the past
     let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let connection_id = ConnectionId::new(CallId::new(PRNG.gen::<u64>()), 1 as DeviceId);
+    let call_id = CallId::new(PRNG.gen::<u64>());
     cm.received_offer(
         remote_peer,
-        connection_id,
-        OfferParameters::new(
-            format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            MAX_MESSAGE_AGE_SEC + 1,
-            CallMediaType::Audio,
-            1 as DeviceId,
-            FeatureLevel::MultiRing,
-            true,
-        ),
+        call_id,
+        random_received_offer_with_age(Duration::from_secs(MAX_MESSAGE_AGE_SEC + 1)),
     )
     .expect(error_line!());
 

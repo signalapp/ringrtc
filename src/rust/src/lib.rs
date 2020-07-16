@@ -39,6 +39,7 @@ pub mod core {
     pub mod connection;
     pub mod connection_fsm;
     pub mod platform;
+    pub mod signaling;
     pub mod util;
 }
 
@@ -88,7 +89,6 @@ pub mod native;
 pub mod webrtc {
     pub mod data_channel;
     pub mod data_channel_observer;
-    pub mod ice_candidate;
     pub mod ice_gatherer;
     #[cfg(feature = "simnet")]
     pub mod injectable_network;

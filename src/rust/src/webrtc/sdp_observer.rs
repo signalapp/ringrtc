@@ -56,22 +56,21 @@ impl SessionDescriptionInterface {
         self.sd_interface
     }
 
-    /// Return a string representation of this SessionDescriptionInterface.
-    pub fn get_description(&self) -> Result<String> {
-        let string_ptr = unsafe { sdp::Rust_getOfferDescription(self.sd_interface) };
-        if string_ptr.is_null() {
-            Err(RingRtcError::GetOfferDescription.into())
-        } else {
-            let description = unsafe { CStr::from_ptr(string_ptr).to_string_lossy().into_owned() };
-            unsafe { libc::free(string_ptr as *mut libc::c_void) };
-            Ok(description)
+    /// Return SDP representation of this SessionDescriptionInterface.
+    pub fn to_sdp(&self) -> Result<String> {
+        let sdp_ptr = unsafe { sdp::Rust_toSdp(self.sd_interface) };
+        if sdp_ptr.is_null() {
+            return Err(RingRtcError::ToSdp.into());
         }
+        let sdp = unsafe { CStr::from_ptr(sdp_ptr).to_string_lossy().into_owned() };
+        unsafe { libc::free(sdp_ptr as *mut libc::c_void) };
+        Ok(sdp)
     }
 
     /// Create a SDP answer from the session description string.
-    pub fn create_sdp_answer(session_desc: String) -> Result<Self> {
-        let sdp = CString::new(session_desc)?;
-        let answer = unsafe { sdp::Rust_createSessionDescriptionAnswer(sdp.as_ptr()) };
+    pub fn answer_from_sdp(sdp: String) -> Result<Self> {
+        let sdp = CString::new(sdp)?;
+        let answer = unsafe { sdp::Rust_answerFromSdp(sdp.as_ptr()) };
         if answer.is_null() {
             return Err(RingRtcError::ConvertSdpAnswer.into());
         }
@@ -79,9 +78,9 @@ impl SessionDescriptionInterface {
     }
 
     /// Create a SDP offer from the session description string.
-    pub fn create_sdp_offer(session_desc: String) -> Result<Self> {
-        let sdp = CString::new(session_desc)?;
-        let offer = unsafe { sdp::Rust_createSessionDescriptionOffer(sdp.as_ptr()) };
+    pub fn offer_from_sdp(sdp: String) -> Result<Self> {
+        let sdp = CString::new(sdp)?;
+        let offer = unsafe { sdp::Rust_offerFromSdp(sdp.as_ptr()) };
         if offer.is_null() {
             return Err(RingRtcError::ConvertSdpOffer.into());
         }

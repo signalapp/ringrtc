@@ -19,17 +19,14 @@ use tokio::runtime;
 use tokio::timer::Delay;
 
 use crate::common::{
-    AnswerParameters,
     ApplicationEvent,
     CallDirection,
     CallId,
     CallMediaType,
     CallState,
-    ConnectionId,
     DeviceId,
-    HangupParameters,
     Result,
-    USE_LEGACY_HANGUP_MESSAGE,
+    DATA_CHANNEL_NAME,
 };
 // use crate::core::call_connection_observer::ClientEvent;
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
@@ -37,8 +34,8 @@ use crate::core::call_manager::CallManager;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType, ObserverEvent};
 use crate::core::platform::Platform;
+use crate::core::signaling;
 use crate::error::RingRtcError;
-use crate::webrtc::ice_candidate::IceCandidate;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
 
@@ -85,13 +82,10 @@ impl FsmContext {
 /// Container for incoming call data, retained briefly while an
 /// underlying Connection object is created and initialized.
 struct PendingCall {
-    /// Pending offer
-    pub offer:          String,
-    /// Remote device that sent the offer
-    pub remote_device:  DeviceId,
+    pub received:       signaling::ReceivedOffer,
     /// Buffer to hold received ICE candidates before the Connection
     /// object is ready.
-    pub ice_candidates: Vec<IceCandidate>,
+    pub ice_candidates: Vec<signaling::IceCandidate>,
 }
 
 /// A mpsc::Sender for injecting CallEvents into the
@@ -112,7 +106,7 @@ where
 {
     parent_connection: Connection<T>,
     ice_gatherer:      IceGatherer,
-    shared_offer:      String,
+    offer:             signaling::Offer,
 }
 
 /// Represents the set of connections between a local client and
@@ -360,20 +354,19 @@ where
     /// holding the offer and ICE candidates sent by the remote side
     /// *before* the application has formally decided to accept the
     /// call.
-    pub fn set_pending_call(&self, remote_device: DeviceId, offer: String) -> Result<()> {
+    pub fn set_pending_call(&self, received: signaling::ReceivedOffer) -> Result<()> {
         let mut pending_call = self.pending_call.lock()?;
         match pending_call.as_ref() {
             Some(pending) => {
                 return Err(RingRtcError::PendingCallAlreadySet(
-                    pending.remote_device,
-                    pending.offer.clone(),
+                    pending.received.sender_device_id,
+                    pending.received.offer.sdp.clone(),
                 )
                 .into())
             }
             None => {
                 let pending_data = PendingCall {
-                    remote_device,
-                    offer,
+                    received,
                     ice_candidates: Vec::new(),
                 };
                 *pending_call = Some(pending_data);
@@ -462,15 +455,10 @@ where
         call_manager.internal_error(self.call_id, error)
     }
 
-    /// Send an SDP offer to the remote_peer.
+    /// Send an offer to the remote_peer.
     ///
     /// This is a pass through to the CallManager.
-    pub fn send_offer(
-        &self,
-        connection: Connection<T>,
-        offer: String,
-        broadcast: bool,
-    ) -> Result<()> {
+    pub fn send_offer(&self, connection: Connection<T>, offer: signaling::Offer) -> Result<()> {
         let state = self.state()?;
 
         info!("send_offer(): {}", state);
@@ -486,15 +474,19 @@ where
                 // We have handed at least one Offer message to the platform...
                 self.did_send_offer.store(true, Ordering::Release);
 
-                call_manager.send_offer(self.clone(), connection, broadcast, offer, self.media_type)
+                call_manager.send_offer(self.clone(), connection, offer)
             }
         }
     }
 
-    /// Send an SDP answer to the remote_peer.
+    /// Send an answer to the remote_peer.
     ///
     /// This is a pass through to the CallManager.
-    pub fn send_answer(&self, connection: Connection<T>, answer: String) -> Result<()> {
+    pub fn send_answer(
+        &self,
+        connection: Connection<T>,
+        send: signaling::SendAnswer,
+    ) -> Result<()> {
         let state = self.state()?;
 
         info!("send_answer(): {}", state);
@@ -507,28 +499,32 @@ where
             _ => {
                 let mut call_manager = self.call_manager()?;
 
-                call_manager.send_answer(self.clone(), connection, answer)
+                call_manager.send_answer(self.clone(), connection, send)
             }
         }
     }
 
-    /// Send ICE candidates to the remote_peer.
+    /// Take and send the buffered ICE candidates to the remote peer.
     ///
     /// This is a pass through to the CallManager.
-    pub fn send_ice_candidates(&self, connection: Connection<T>, broadcast: bool) -> Result<()> {
+    pub fn send_buffered_local_ice_candidates(
+        &self,
+        connection: Connection<T>,
+        broadcast: bool,
+    ) -> Result<()> {
         let state = self.state()?;
 
-        info!("send_ice_candidates(): {}", state);
+        info!("send_buffered_local_ice_candidates(): {}", state);
 
         match state {
             CallState::Terminating | CallState::Closed => {
-                info!("send_ice_candidates(): ignoring, terminating state");
+                info!("send_buffered_local_ice_candidates(): ignoring, terminating state");
                 Ok(())
             }
             _ => {
                 let mut call_manager = self.call_manager()?;
 
-                call_manager.send_ice_candidates(self.clone(), connection, broadcast)
+                call_manager.send_buffered_local_ice_candidates(self.clone(), connection, broadcast)
             }
         }
     }
@@ -577,31 +573,33 @@ where
             CallDirection::InComing => {
                 let mut pending_call = self.pending_call.lock()?;
                 if let Some(pending_call) = pending_call.take() {
-                    info!(
-                        "proceed(): incoming: remote_device: {}",
-                        pending_call.remote_device
-                    );
+                    let remote_device_id = pending_call.received.sender_device_id;
+                    info!("proceed(): incoming: remote_device: {}", remote_device_id);
 
                     let mut connection = call_manager.create_connection(
                         self,
-                        pending_call.remote_device,
+                        remote_device_id,
                         ConnectionType::Incoming,
                     )?;
-                    connection.inject_handle_offer(pending_call.offer)?;
+                    // We do not create a data channel here.  Instead we wait until the caller
+                    // creates a data channel and listen for OnDataChannel.
+                    connection.inject_received_offer(pending_call.received)?;
 
                     if !pending_call.ice_candidates.is_empty() {
                         info!(
                             "proceed(): incoming: adding ice_candidates, len: {}",
                             pending_call.ice_candidates.len()
                         );
-                        connection.inject_received_ice_candidates(pending_call.ice_candidates)?;
+                        connection.inject_received_ice(signaling::Ice {
+                            candidates_added: pending_call.ice_candidates,
+                        })?;
                     }
 
                     let mut connection_map = self.connection_map.lock()?;
-                    connection_map.insert(pending_call.remote_device, connection);
+                    connection_map.insert(remote_device_id, connection);
 
                     // For incoming calls we only have 1 connection and it is the active connection.
-                    self.set_active_device_id(pending_call.remote_device)?;
+                    self.set_active_device_id(remote_device_id)?;
                 } else {
                     return Err(RingRtcError::OptionValueNotSet(
                         "proceed()".to_owned(),
@@ -614,94 +612,104 @@ where
                 // Note: This causes the call to receive ICE candidates from the forking parent.
                 let mut parent_connection =
                     call_manager.create_connection(&self, 0, ConnectionType::OutgoingParent)?;
+                parent_connection.create_and_set_data_channel(DATA_CHANNEL_NAME.to_string())?;
+
                 let ice_gatherer = parent_connection.create_shared_ice_gatherer()?;
                 parent_connection.use_shared_ice_gatherer(&ice_gatherer)?;
-                let shared_offer = parent_connection.create_offer()?;
-                parent_connection.inject_send_offer(shared_offer.get_description()?)?;
+                let offer = signaling::Offer {
+                    call_media_type: self.media_type,
+                    sdp:             parent_connection.create_offer()?.to_sdp()?,
+                };
+                parent_connection.inject_set_local_description_and_send_offer(offer.clone())?;
                 // Keep around so that it's not closed until all the connections are closed.
-                let shared_offer = shared_offer.get_description()?;
                 *(self.forking.lock()?) = Some(ForkingState {
                     parent_connection,
                     ice_gatherer,
-                    shared_offer,
+                    offer,
                 });
             }
         }
         Ok(())
     }
 
-    /// Handle the received SDP answer.
-    pub fn received_answer(&self, remote_device: DeviceId, answer: AnswerParameters) -> Result<()> {
+    /// Handle the received answer.
+    pub fn received_answer(&self, received: signaling::ReceivedAnswer) -> Result<()> {
+        let sender_device_id = received.sender_device_id;
         info!(
             "received_answer(): id: {}",
-            self.call_id().format(remote_device)
+            self.call_id().format(sender_device_id)
         );
 
         let mut connection_map = self.connection_map.lock()?;
-        let connection = match connection_map.get_mut(&remote_device) {
+        let connection = match connection_map.get_mut(&sender_device_id) {
             Some(v) => v,
             None => {
                 if self.state()? == CallState::Connected || self.state()? == CallState::Reconnecting
                 {
-                    info!("received an answer from remote device {} when already connected, so ignore.", remote_device);
+                    info!(
+                        "received an answer from device {} when already connected, so ignore.",
+                        sender_device_id
+                    );
                     return Ok(());
                 }
                 let mut maybe_forking = self.forking.lock()?;
                 if let Some(forking) = maybe_forking.as_mut() {
-                    info!("recevied_answer from remote_device {}; forking enabled, so inject into connection_map.", remote_device);
+                    info!("recevied_answer from device {}; forking enabled, so inject into connection_map.", sender_device_id);
                     let call_manager = self.call_manager()?;
                     let mut child_connection = call_manager.create_connection(
                         &self,
-                        remote_device,
+                        sender_device_id,
                         ConnectionType::OutgoingChild,
                     )?;
+                    child_connection.create_and_set_data_channel(DATA_CHANNEL_NAME.to_string())?;
+
                     child_connection.use_shared_ice_gatherer(&forking.ice_gatherer)?;
                     // Note that this doesn't actually send an offer.  It just sets the local description and state
                     // as if it has sent an offer.
-                    child_connection.inject_send_offer(forking.shared_offer.clone())?;
-                    child_connection.inject_handle_answer(answer)?;
-                    connection_map.insert(remote_device, child_connection);
+                    child_connection
+                        .inject_set_local_description_and_send_offer(forking.offer.clone())?;
+                    child_connection.inject_received_answer(received)?;
+                    connection_map.insert(sender_device_id, child_connection);
                     return Ok(());
                 }
                 info!(
-                    "recevied_answer for new remote_device {}; forking not enabled, so fail.",
-                    remote_device
+                    "recevied_answer from new device {}; forking not enabled, so fail.",
+                    sender_device_id
                 );
-                return Err(RingRtcError::ConnectionNotFound(remote_device).into());
+                return Err(RingRtcError::ConnectionNotFound(sender_device_id).into());
             }
         };
-        connection.inject_handle_answer(answer)
+        connection.inject_received_answer(received)
     }
 
     /// Handle the received ICE candidates.
-    pub fn received_ice_candidates(
-        &self,
-        remote_device: DeviceId,
-        mut ice_candidates: Vec<IceCandidate>,
-    ) -> Result<()> {
+    pub fn received_ice(&self, mut received: signaling::ReceivedIce) -> Result<()> {
         info!(
-            "received_ice_candidates(): id: {}",
-            self.call_id().format(remote_device)
+            "received_ice()): id: {}",
+            self.call_id().format(received.sender_device_id)
         );
+        let sender_device_id = received.sender_device_id;
 
         let mut pending_call = self.pending_call.lock()?;
         if let Some(pending_call) = pending_call.as_mut() {
-            info!("received_ice_candidates(): storing in pending_call");
-            pending_call.ice_candidates.append(&mut ice_candidates);
+            info!("received_ice()): storing in pending_call");
+            pending_call
+                .ice_candidates
+                .append(&mut received.ice.candidates_added);
             Ok(())
         } else {
             let mut connection_map = self.connection_map.lock()?;
-            match connection_map.get_mut(&remote_device) {
-                Some(connection) => connection.inject_received_ice_candidates(ice_candidates),
+            match connection_map.get_mut(&sender_device_id) {
+                Some(connection) => connection.inject_received_ice(received.ice),
                 None => {
                     if self.state()? == CallState::Connected
                         || self.state()? == CallState::Reconnecting
                     {
                         // This can happen when call forking is enabled.
-                        info!("received_ice_candidates from unknown remote device {} when already connected, so ignore.", remote_device);
+                        info!("received_ice_ from unknown device {} when already connected, so ignore.", sender_device_id);
                         return Ok(());
                     }
-                    Err(RingRtcError::ConnectionNotFound(remote_device).into())
+                    Err(RingRtcError::ConnectionNotFound(sender_device_id).into())
                 }
             }
         }
@@ -720,82 +728,72 @@ where
         }
     }
 
-    /// Send Hangup for this Call.
-    ///
-    /// Sends a hangup to all underlying Connections via the data channel (if established).
-    pub fn send_hangup_via_data_channel_to_all(
-        &self,
-        hangup_parameters: HangupParameters,
-    ) -> Result<()> {
-        info!("send_hangup_via_data_channel_to_all(): {}", self.call_id());
+    /// Send a Hangup on all underlying Connections via the data channel
+    /// (if established).
+    pub fn send_hangup_via_data_channel_to_all(&self, hangup: signaling::Hangup) -> Result<()> {
+        info!(
+            "send_hangup_via_data_channel_to_all(): call_id: {}",
+            self.call_id()
+        );
 
         let mut connection_map = self.connection_map.lock()?;
         for connection in connection_map.values_mut() {
             info!(
-                "send_hangup_via_data_channel_to_all(): id: {}",
-                connection.id()
+                "send_hangup_via_data_channel_to_all(): call_id: {} remote_device_id: {}",
+                self.call_id(),
+                connection.remote_device_id()
             );
-            connection.inject_send_hangup_via_data_channel(hangup_parameters)?;
+            connection.inject_send_hangup_via_data_channel(hangup)?;
         }
         Ok(())
     }
 
-    /// Send Hangup for this Call.
-    ///
-    /// Sends a hangup (for the given HangupType) on all underlying Connections
-    /// via the data channel (if established) except for the given device_id.
+    /// Send a Hangup on all underlying Connections via the data channel
+    /// (if established) except for the given device_id (if).
     pub fn send_hangup_via_data_channel_to_all_except(
         &self,
-        hangup_parameters: HangupParameters,
+        hangup: signaling::Hangup,
+        excluded_remote_device_id: DeviceId,
     ) -> Result<()> {
         info!(
-            "send_hangup_via_data_channel_to_all_except(): {} hangup: {}",
+            "send_hangup_via_data_channel_to_all_except(): {} hangup: {:?} excluded remote_device_id: {}",
             self.call_id(),
-            hangup_parameters
+            hangup,
+            excluded_remote_device_id
         );
 
-        match hangup_parameters.device_id() {
-            Some(device_id) => {
-                let mut connection_map = self.connection_map.lock()?;
-                for connection in connection_map.values_mut() {
-                    if device_id != connection.id().remote_device() {
-                        info!(
-                            "send_hangup_via_data_channel_to_all_except(): id: {}",
-                            connection.id()
-                        );
-                        connection.inject_send_hangup_via_data_channel(hangup_parameters)?;
-                    }
-                }
-                Ok(())
-            }
-            None => {
-                // Shouldn't be possible.
-                error!("send_hangup_via_data_channel_to_all_except(): Missing device_id");
-                Ok(())
+        let mut connection_map = self.connection_map.lock()?;
+        for connection in connection_map.values_mut() {
+            let remote_device_id = connection.remote_device_id();
+            if excluded_remote_device_id != remote_device_id {
+                info!(
+                    "send_hangup_via_data_channel_to_all_except(): included remote_device_id: {}",
+                    remote_device_id
+                );
+                connection.inject_send_hangup_via_data_channel(hangup)?;
             }
         }
+        Ok(())
     }
 
     /// Convenience function to send a hangup using both the data channel to currently
     /// connected remotes and signaling to all as a backup.
-    pub fn send_hangup_via_data_channel_and_signaling(
+    pub fn send_hangup_via_data_channel_and_signaling_to_all_except(
         &self,
-        hangup_parameters: HangupParameters,
+        hangup: signaling::Hangup,
+        excluded_remote_device_id: DeviceId,
     ) -> Result<()> {
         // Send hangup via the data channel.
-        if hangup_parameters.device_id() == None {
-            self.send_hangup_via_data_channel_to_all(hangup_parameters)?;
-        } else {
-            // Exclude sending hangup to the given device_id (usually the decliner).
-            self.send_hangup_via_data_channel_to_all_except(hangup_parameters)?;
-        }
+        self.send_hangup_via_data_channel_to_all_except(hangup, excluded_remote_device_id)?;
 
         // Send hangup via signaling.
         self.call_manager()?.send_hangup(
             self.clone(),
             self.call_id(),
-            hangup_parameters,
-            USE_LEGACY_HANGUP_MESSAGE,
+            signaling::SendHangup {
+                hangup,
+                use_legacy: true,
+            },
         )
     }
 
@@ -862,7 +860,11 @@ where
         }
         let mut connection_map = self.connection_map.lock()?;
         for (_, mut connection) in connection_map.drain() {
-            info!("close_connections(): id: {}", connection.id());
+            info!(
+                "close_connections(): call_id: {} remote_device_id: {}",
+                self.call_id(),
+                connection.remote_device_id()
+            );
             // blocks as connection FSM shutsdown
             connection.close()?;
         }
@@ -872,20 +874,23 @@ where
 
     /// Close and shutdown Connections for all devices except the device
     /// that accepted the call.
-    pub fn close_connections_except_accepted(&mut self, accepted_device: DeviceId) -> Result<()> {
+    pub fn close_connections_except_accepted(
+        &mut self,
+        accepted_device_id: DeviceId,
+    ) -> Result<()> {
         let mut connection_map = self.connection_map.lock()?;
 
         info!("close_connections_except_accepted():");
 
         connection_map.retain(|_, connection| {
-            if connection.id().remote_device() != accepted_device {
+            if connection.remote_device_id() != accepted_device_id {
                 // blocks as connection FSM shutsdown
                 if let Err(e) = connection.close() {
                     error!("Error when closing {}", e)
                 }
             }
 
-            connection.id().remote_device() == accepted_device
+            connection.remote_device_id() == accepted_device_id
         });
 
         info!(
@@ -994,72 +999,58 @@ where
         self.inject_event(CallEvent::LocalAccept)
     }
 
-    /// Inject a local `HangUp` event into the FSM.
-    pub fn inject_hangup(&mut self, hangup_parameters: HangupParameters) -> Result<()> {
+    /// Inject a local `SendHangupViaDataChannelToAll` event into the FSM.
+    pub fn inject_send_hangup_via_data_channel_to_all(
+        &mut self,
+        hangup: signaling::Hangup,
+    ) -> Result<()> {
         self.set_state(CallState::Terminating)?;
-        self.inject_event(CallEvent::LocalHangup(hangup_parameters))
+        self.inject_event(CallEvent::SendHangupViaDataChannelToAll(hangup))
     }
 
     /// Inject a `ReceivedAnswer` event into the FSM
-    pub fn inject_received_answer(
-        &mut self,
-        connection_id: ConnectionId,
-        answer: AnswerParameters,
-    ) -> Result<()> {
-        let event = CallEvent::ReceivedAnswer(connection_id.remote_device(), answer);
-        self.inject_event(event)
+    pub fn inject_received_answer(&mut self, received: signaling::ReceivedAnswer) -> Result<()> {
+        self.inject_event(CallEvent::ReceivedAnswer(received))
     }
 
-    /// Inject a `ReceivedIceCandidates` event into the FSM
-    pub fn inject_received_ice_candidates(
-        &mut self,
-        connection_id: ConnectionId,
-        ice_candidates: Vec<IceCandidate>,
-    ) -> Result<()> {
-        let event = CallEvent::ReceivedIceCandidates(connection_id.remote_device(), ice_candidates);
-        self.inject_event(event)
+    /// Inject a `ReceivedIce` event into the FSM
+    pub fn inject_received_ice(&mut self, received: signaling::ReceivedIce) -> Result<()> {
+        self.inject_event(CallEvent::ReceivedIce(received))
     }
 
     /// Inject a `ReceivedHangup` event into the FSM
-    pub fn inject_received_hangup(
-        &mut self,
-        connection_id: ConnectionId,
-        hangup_parameters: HangupParameters,
-    ) -> Result<()> {
-        let event = CallEvent::ReceivedHangup(connection_id.remote_device(), hangup_parameters);
-        self.inject_event(event)
+    pub fn inject_received_hangup(&mut self, received: signaling::ReceivedHangup) -> Result<()> {
+        self.inject_event(CallEvent::ReceivedHangup(received))
     }
 
     /// Inject a Connection related event into the FSM
     pub fn on_connection_event(
         &mut self,
-        connection_id: ConnectionId,
+        remote_device_id: DeviceId,
         event: ObserverEvent,
     ) -> Result<()> {
         info!(
-            "on_connection_event(): id: {}, event: {}",
-            connection_id, event
+            "on_connection_event(): call_id: {}, remote_device_id: {}, event: {}",
+            self.call_id(),
+            remote_device_id,
+            event
         );
-        self.inject_event(CallEvent::ConnectionEvent(
-            event,
-            connection_id.remote_device(),
-        ))
+        self.inject_event(CallEvent::ConnectionEvent(event, remote_device_id))
     }
 
     /// Inject a Connection related error into the FSM
     pub fn on_connection_error(
         &mut self,
-        connection_id: ConnectionId,
+        remote_device_id: DeviceId,
         error: failure::Error,
     ) -> Result<()> {
         info!(
-            "on_connection_error(): id: {}, error: {}",
-            connection_id, error
+            "on_connection_error(): call_id: {}, remote_device_id: {} error: {}",
+            self.call_id(),
+            remote_device_id,
+            error
         );
-        self.inject_event(CallEvent::ConnectionError(
-            error,
-            connection_id.remote_device(),
-        ))
+        self.inject_event(CallEvent::ConnectionError(error, remote_device_id))
     }
 
     /// Inject a local `CallTimeout` event into the FSM.
@@ -1129,7 +1120,11 @@ where
         // Synchronize all connections in this call
         if let Ok(mut connection_map) = self.connection_map.lock() {
             for (_, connection) in connection_map.iter_mut() {
-                info!("synchronize(): id: {}", connection.id());
+                info!(
+                    "synchronize(): call_id: {} remote_device_id: {}",
+                    self.call_id(),
+                    connection.remote_device_id()
+                );
                 // blocks as connection FSM synchronizes
                 connection.synchronize()?;
             }

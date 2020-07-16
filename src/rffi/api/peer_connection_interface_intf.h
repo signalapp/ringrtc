@@ -31,13 +31,13 @@ Rust_setLocalDescription(webrtc::PeerConnectionInterface*                 pc_int
                          webrtc::SessionDescriptionInterface*             description);
 
 RUSTEXPORT const char*
-Rust_getOfferDescription(webrtc::SessionDescriptionInterface* offer);
+Rust_toSdp(webrtc::SessionDescriptionInterface* sdi);
 
 RUSTEXPORT webrtc::SessionDescriptionInterface*
-Rust_createSessionDescriptionAnswer(const char* description);
+Rust_answerFromSdp(const char* sdp);
 
 RUSTEXPORT webrtc::SessionDescriptionInterface*
-Rust_createSessionDescriptionOffer(const char* description);
+Rust_offerFromSdp(const char* sdp);
 
 RUSTEXPORT void
 Rust_createAnswer(webrtc::PeerConnectionInterface*                    pc_interface,
@@ -69,8 +69,6 @@ Rust_addRef(rtc::RefCountInterface* ref_counted_ptr);
 
 RUSTEXPORT bool
 Rust_addIceCandidate(webrtc::PeerConnectionInterface* pc_interface,
-                     const char*                      sdp_mid,
-                     int32_t                          sdp_mline_index,
                      const char*                      sdp);
 
 RUSTEXPORT webrtc::IceGathererInterface*

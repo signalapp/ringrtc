@@ -138,8 +138,6 @@ pub unsafe fn Rust_createDataChannel(
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_addIceCandidate(
     _pc_interface: *const RffiPeerConnectionInterface,
-    _sdp_mid: *const c_char,
-    _sdp_mline_index: i32,
     _sdp: *const c_char,
 ) -> bool {
     info!("Rust_addIceCandidate():");
