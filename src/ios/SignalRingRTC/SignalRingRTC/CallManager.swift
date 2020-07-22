@@ -418,10 +418,12 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             len: bytes.count)
 
         let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
+
         let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, offer, messageAgeSec, callMediaType.rawValue, localDevice, remoteSupportsMultiRing, isLocalDevicePrimary)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedOffer() function failure")
         }
+
         // Keep the call reference around until rust says we're done with the call.
         _ = unmanagedRemote.retain()
     }

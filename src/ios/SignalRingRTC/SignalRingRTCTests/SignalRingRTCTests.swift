@@ -1650,17 +1650,11 @@ class SignalRingRTCTests: XCTestCase {
         let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
 
-        // @temp Keep call object references alive. Need to solve why
-        // they are losing scope.
-        let callOutgoingAtoB = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
-        let callOutgoingBtoA = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
-        let callIncomingAtoB = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
-        let callIncomingBtoA = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
-
         // A starts to call B.
         do {
             Logger.debug("Test: A calls B...")
-            try callManagerA?.placeCall(call: callOutgoingAtoB, callMediaType: .audioCall, localDevice: localDevice)
+            let call = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
+            try callManagerA?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -1684,7 +1678,8 @@ class SignalRingRTCTests: XCTestCase {
         // B starts to call A.
         do {
             Logger.debug("Test:B calls A...")
-            try callManagerB?.placeCall(call: callOutgoingBtoA, callMediaType: .audioCall, localDevice: localDevice)
+            let call = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
+            try callManagerB?.placeCall(call: call, callMediaType: .audioCall, localDevice: localDevice)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -1711,7 +1706,8 @@ class SignalRingRTCTests: XCTestCase {
         // Give the offer from A to B.
         do {
             Logger.debug("Test: Invoking B.receivedOffer(A)...")
-            try callManagerB?.receivedOffer(call: callIncomingAtoB, sourceDevice: sourceDevice, callId: callIdAtoB, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            let call = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
+            try callManagerB?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdAtoB, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1753,7 +1749,8 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from B to A.
             do {
                 Logger.debug("Test: Invoking A.receivedOffer(B)...")
-                try callManagerA?.receivedOffer(call: callIncomingBtoA, sourceDevice: sourceDevice, callId: callIdBtoA, sdp: delegateB.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                let call = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
+                try callManagerA?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdBtoA, sdp: delegateB.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2004,11 +2001,6 @@ class SignalRingRTCTests: XCTestCase {
 
             expect(delegateCaller.shouldSendOfferInvoked).toEventually(equal(true), timeout: 1)
             delegateCaller.shouldSendOfferInvoked = false
-
-            // @temp We need a short delay here to prevent some issue when comparing
-            // remotes. Something, sometimes, is already gone when receiving the
-            // offers and hence needing the check for glare...
-            delay(interval: 1.0)
 
             // We sent the offer! Let's give it to our callees.
             do {
@@ -2315,8 +2307,7 @@ class SignalRingRTCTests: XCTestCase {
     }
 
     func testMultiRingBusy() {
-        // @temp Currently having issues running multiple times.
-        multiRingTesting(calleeDeviceCount: 1, loopIterations: 1, scenario: .calleeBusy)
+        multiRingTesting(calleeDeviceCount: 2, loopIterations: 2, scenario: .calleeBusy)
     }
 
     func testMultiRingAccepted() {
@@ -2372,23 +2363,11 @@ class SignalRingRTCTests: XCTestCase {
         let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
         let useTurnOnly = false
 
-        // @temp Keep call object references alive. Need to solve why
-        // they are losing scope.
-        let callOutgoingA1toB = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
-        let callIncomingA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-        let callIncomingA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-
-        let callOutgoingB1toA = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-        let callIncomingB1toA1 = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
-
-        let callOutgoingA2toB = OpaqueCallData(value: delegateA2.expectedValue, remote: bAddress)
-        let callIncomingA2toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-        let callIncomingA2toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-
         // A1 starts to call B.
         do {
             Logger.debug("Test: A1 calls B...")
-            try callManagerA1?.placeCall(call: callOutgoingA1toB, callMediaType: .audioCall, localDevice: a1Device)
+            let call = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
+            try callManagerA1?.placeCall(call: call, callMediaType: .audioCall, localDevice: a1Device)
         } catch {
             XCTFail("Call Manager call() failed: \(error)")
             return
@@ -2415,7 +2394,8 @@ class SignalRingRTCTests: XCTestCase {
             // B starts to call A.
             do {
                 Logger.debug("Test:B calls A...")
-                try callManagerB1?.placeCall(call: callOutgoingB1toA, callMediaType: .audioCall, localDevice: b1Device)
+                let call = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
+                try callManagerB1?.placeCall(call: call, callMediaType: .audioCall, localDevice: b1Device)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -2439,8 +2419,10 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from A1 to B1 & B2.
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
-                try callManagerB1?.receivedOffer(call: callIncomingA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-                try callManagerB2?.receivedOffer(call: callIncomingA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                let callA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
+                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                let callA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
+                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2450,7 +2432,8 @@ class SignalRingRTCTests: XCTestCase {
                 // Give the offer from B1 to A1.
                 do {
                     Logger.debug("Test: Invoking A1.receivedOffer(B1)...")
-                    try callManagerA1?.receivedOffer(call: callIncomingB1toA1, sourceDevice: b1Device, callId: callIdB1toA, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                    let call = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
+                    try callManagerA1?.receivedOffer(call: call, sourceDevice: b1Device, callId: callIdB1toA, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
                 } catch {
                     XCTFail("Call Manager receivedOffer() failed: \(error)")
                     return
@@ -2581,8 +2564,10 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from A1 to B1 & B2.
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
-                try callManagerB1?.receivedOffer(call: callIncomingA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-                try callManagerB2?.receivedOffer(call: callIncomingA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                let callA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
+                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                let callA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
+                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toB, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2675,7 +2660,8 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: A2 calls B...")
-                try callManagerA2?.placeCall(call: callOutgoingA2toB, callMediaType: .audioCall, localDevice: a2Device)
+                let call = OpaqueCallData(value: delegateA2.expectedValue, remote: bAddress)
+                try callManagerA2?.placeCall(call: call, callMediaType: .audioCall, localDevice: a2Device)
             } catch {
                 XCTFail("Call Manager call() failed: \(error)")
                 return
@@ -2699,8 +2685,10 @@ class SignalRingRTCTests: XCTestCase {
             // Give the offer from A2 to B1 & B2.
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A2)...")
-                try callManagerB1?.receivedOffer(call: callIncomingA2toB1, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-                try callManagerB2?.receivedOffer(call: callIncomingA2toB2, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                let callA2toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
+                try callManagerB1?.receivedOffer(call: callA2toB1, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                let callA2toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
+                try callManagerB2?.receivedOffer(call: callA2toB2, sourceDevice: a2Device, callId: callIdA2toB, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return

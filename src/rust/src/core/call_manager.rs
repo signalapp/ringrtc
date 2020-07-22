@@ -1000,8 +1000,13 @@ where
                 &remote_peer,
                 ApplicationEvent::EndedReceivedOfferWhileActive,
             )?;
-            self.send_busy(call)?;
+
             self.check_for_glare(&remote_peer, sender_device_id)?;
+
+            // Send busy out after checking for glare to ensure that the call
+            // object and the application's remote are still valid during the
+            // glare check (and not concluded).
+            self.send_busy(call)?;
             return Ok(());
         }
 
