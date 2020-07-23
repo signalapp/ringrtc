@@ -11,7 +11,7 @@
 //! org.signal.ringrtc.CallManager objects.
 
 use jni::objects::{JClass, JObject, JString};
-use jni::sys::{jboolean, jint, jlong, jobject};
+use jni::sys::{jboolean, jbyteArray, jint, jlong, jobject};
 use jni::JNIEnv;
 
 use crate::android::android_platform::AndroidPlatform;
@@ -73,6 +73,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
     native_connection: jlong,
     jni_rtc_config: JObject,
     jni_media_constraints: JObject,
+    enable_dtls: bool,
+    enable_rtp_data_channel: bool,
 ) -> jlong {
     match call_manager::create_peer_connection(
         &env,
@@ -80,6 +82,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
         native_connection as *mut Connection<AndroidPlatform>,
         jni_rtc_config,
         jni_media_constraints,
+        enable_dtls,
+        enable_rtp_data_channel,
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -190,7 +194,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
     call_manager: jlong,
     call_id: jlong,
     remote_device: jint,
-    jni_answer: JString,
+    opaque: jbyteArray,
+    sdp: JString,
     remote_supports_multi_ring: jboolean,
 ) {
     let remote_feature_level = if remote_supports_multi_ring == jni::sys::JNI_TRUE {
@@ -204,7 +209,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
         call_manager as *mut AndroidCallManager,
         call_id,
         remote_device as DeviceId,
-        jni_answer,
+        opaque,
+        sdp,
         remote_feature_level,
     ) {
         Ok(v) => v,
@@ -223,7 +229,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     call_id: jlong,
     jni_remote: JObject,
     remote_device: jint,
-    jni_sdp: JString,
+    opaque: jbyteArray,
+    sdp: JString,
     message_age_sec: jlong,
     call_media_type: jint,
     local_device: jint,
@@ -242,7 +249,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
         call_id,
         jni_remote,
         remote_device as DeviceId,
-        jni_sdp,
+        opaque,
+        sdp,
         message_age_sec as u64,
         CallMediaType::from_i32(call_media_type),
         local_device as DeviceId,

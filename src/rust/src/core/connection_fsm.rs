@@ -64,26 +64,17 @@ use crate::webrtc::media::MediaStream;
 
 /// The different types of Connection Events.
 pub enum ConnectionEvent {
-    /// Set the local description and send SDP offer to remote peer (caller only).
-    SetLocalDescriptionAndSendOffer(signaling::Offer),
-    /// Received answer from remote peer (caller only).
-    ReceivedAnswer(signaling::ReceivedAnswer),
-    /// Received offer from remote peer (callee only).
-    ReceivedOffer(signaling::ReceivedOffer),
-    /// Receive ICE update message from remote peer.
     ReceivedIce(signaling::Ice),
     /// Receive hangup from remote peer.
     ReceivedHangup(CallId, signaling::Hangup),
     /// Event from client application to send hangup via the data channel.
     SendHangupViaDataChannel(signaling::Hangup),
-    /// Connection has both the offer and answer, meaning
-    HaveOfferAndAnswer,
     /// Accept incoming call (callee only).
     AcceptCall,
     /// Receive call connected from remote peer.
     RemoteConnected(CallId),
     /// Receive video streaming status change from remote peer.
-    RemoteVideoStatus(CallId, bool),
+    RemoteVideoStatus(CallId, bool, Option<u64>),
     /// Local video streaming status change from client application.
     LocalVideoStatus(bool),
     /// Local ICE candidate ready, from WebRTC observer.
@@ -109,20 +100,15 @@ pub enum ConnectionEvent {
 impl fmt::Display for ConnectionEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            ConnectionEvent::SetLocalDescriptionAndSendOffer(_) => {
-                "SetLocalDescriptionAndSendOffer".to_string()
-            }
-            ConnectionEvent::ReceivedAnswer(_) => "ReceivedAnswer".to_string(),
-            ConnectionEvent::ReceivedOffer(_) => "ReceivedOffer".to_string(),
-            ConnectionEvent::HaveOfferAndAnswer => "HaveOfferAndAnswer".to_string(),
             ConnectionEvent::AcceptCall => "AcceptCall".to_string(),
             ConnectionEvent::ReceivedHangup(call_id, hangup) => {
                 format!("RemoteHangup, call_id: {} hangup: {}", call_id, hangup)
             }
             ConnectionEvent::RemoteConnected(id) => format!("RemoteConnected, call_id: {}", id),
-            ConnectionEvent::RemoteVideoStatus(id, enabled) => {
-                format!("RemoteVideoStatus, call_id: {}, enabled: {}", id, enabled)
-            }
+            ConnectionEvent::RemoteVideoStatus(id, enabled, sequence_number) => format!(
+                "RemoteVideoStatus, call_id: {}, enabled: {}, seqnum: {:?}",
+                id, enabled, sequence_number
+            ),
             ConnectionEvent::ReceivedIce(_) => "RemoteIceCandidates".to_string(),
             ConnectionEvent::SendHangupViaDataChannel(hangup) => {
                 format!("SendHangupViaDataChannel, hangup: {}", hangup)
@@ -170,11 +156,14 @@ where
     T: Platform,
 {
     /// Receiving end of EventPump.
-    event_stream:   EventStream<T>,
+    event_stream:                             EventStream<T>,
     /// Runtime for processing long running requests.
-    worker_runtime: Option<runtime::Runtime>,
+    worker_runtime:                           Option<runtime::Runtime>,
     /// Runtime for processing observer notification events.
-    notify_runtime: Option<runtime::Runtime>,
+    notify_runtime:                           Option<runtime::Runtime>,
+    /// The sequence number of the last received remote video status
+    /// We process remote video status messages larger than this value.
+    last_remote_video_status_sequence_number: Option<u64>,
 }
 
 impl<T> fmt::Display for ConnectionStateMachine<T>
@@ -202,7 +191,17 @@ where
             {
                 Some((cc, event)) => {
                     let state = cc.state()?;
-                    info!("state: {}, event: {}", state, event);
+                    match (state, &event) {
+                        (
+                            ConnectionState::CallConnected,
+                            ConnectionEvent::RemoteVideoStatus(_, _, _),
+                        )
+                        | (ConnectionState::CallConnected, ConnectionEvent::RemoteConnected(_)) => {
+                            // Don't log periodic, ignored events at high verbosity
+                            debug!("state: {}, event: {}", state, event)
+                        }
+                        _ => info!("state: {}, event: {}", state, event),
+                    };
                     if let Err(e) = self.handle_event(cc, state, event) {
                         error!("Handling event failed: {:?}", e);
                     }
@@ -239,6 +238,7 @@ where
                     .name_prefix("notify-")
                     .build()?,
             ),
+            last_remote_video_status_sequence_number: None,
         };
 
         if let Some(worker_runtime) = &mut fsm.worker_runtime {
@@ -337,27 +337,15 @@ where
         }
 
         match event {
-            ConnectionEvent::SetLocalDescriptionAndSendOffer(offer) => {
-                self.handle_set_local_description_and_send_offer(connection, state, offer)
-            }
-            ConnectionEvent::ReceivedOffer(offer) => {
-                self.handle_received_offer(connection, state, offer)
-            }
-            ConnectionEvent::ReceivedAnswer(answer) => {
-                self.handle_received_answer(connection, state, answer)
-            }
             ConnectionEvent::ReceivedHangup(call_id, hangup) => {
                 self.handle_received_hangup(connection, state, call_id, hangup)
-            }
-            ConnectionEvent::HaveOfferAndAnswer => {
-                self.handle_have_offer_and_answer(connection, state)
             }
             ConnectionEvent::AcceptCall => self.handle_accept_call(connection, state),
             ConnectionEvent::RemoteConnected(id) => {
                 self.handle_remote_connected(connection, state, id)
             }
-            ConnectionEvent::RemoteVideoStatus(id, enable) => {
-                self.handle_remote_video_status(connection, state, id, enable)
+            ConnectionEvent::RemoteVideoStatus(id, enable, sequence_number) => {
+                self.handle_remote_video_status(connection, state, id, enable, sequence_number)
             }
             ConnectionEvent::ReceivedIce(ice) => self.handle_received_ice(connection, state, ice),
             ConnectionEvent::LocalVideoStatus(enabled) => {
@@ -384,115 +372,6 @@ where
             ConnectionEvent::Synchronize(_) => Ok(()),
             ConnectionEvent::EndCall => Ok(()),
         }
-    }
-
-    fn handle_set_local_description_and_send_offer(
-        &mut self,
-        connection: Connection<T>,
-        state: ConnectionState,
-        offer: signaling::Offer,
-    ) -> Result<()> {
-        if let ConnectionState::Idle = state {
-            connection.set_state(ConnectionState::SendingOffer)?;
-
-            let mut err_connection = connection.clone();
-            let future = lazy(move || {
-                if connection.terminating()? {
-                    return Ok(());
-                }
-                connection.set_local_description_and_send_offer(offer)?;
-                Ok(())
-            })
-            .map_err(move |err| {
-                err_connection
-                    .inject_internal_error(err, "SetLocalDescriptionAndSendOfferFuture failed")
-            });
-
-            self.worker_spawn(future);
-        } else {
-            self.unexpected_state(state, "SetLocalDescriptionAndSendOffer");
-        }
-        Ok(())
-    }
-
-    fn handle_received_answer(
-        &mut self,
-        mut connection: Connection<T>,
-        state: ConnectionState,
-        received: signaling::ReceivedAnswer,
-    ) -> Result<()> {
-        if let ConnectionState::SendingOffer = state {
-            connection.set_state(ConnectionState::IceConnecting(false))?;
-            connection.set_remote_feature_level(received.sender_device_feature_level)?;
-
-            let mut err_connection = connection.clone();
-            let received_answer_future = lazy(move || {
-                if connection.terminating()? {
-                    return Ok(());
-                }
-                connection.received_answer(received)
-            })
-            .map_err(move |err| {
-                err_connection.inject_internal_error(err, "ReceivedAnswerFuture failed")
-            });
-
-            self.worker_spawn(received_answer_future);
-        } else {
-            self.unexpected_state(state, "ReceivedAnswer");
-        }
-        Ok(())
-    }
-
-    fn handle_received_offer(
-        &mut self,
-        mut connection: Connection<T>,
-        state: ConnectionState,
-        received: signaling::ReceivedOffer,
-    ) -> Result<()> {
-        if let ConnectionState::Idle = state {
-            connection.set_state(ConnectionState::IceConnecting(false))?;
-
-            let mut err_connection = connection.clone();
-            let received_offer_future = lazy(move || {
-                if connection.terminating()? {
-                    return Ok(());
-                }
-                connection.received_offer(received)
-            })
-            .map_err(move |err| {
-                err_connection.inject_internal_error(err, "ReceivedOfferFuture failed")
-            });
-
-            self.worker_spawn(received_offer_future);
-        } else {
-            self.unexpected_state(state, "ReceivedOffer");
-        }
-        Ok(())
-    }
-
-    fn handle_have_offer_and_answer(
-        &mut self,
-        connection: Connection<T>,
-        state: ConnectionState,
-    ) -> Result<()> {
-        if let ConnectionState::IceConnecting(false) = state {
-            connection.set_state(ConnectionState::IceConnecting(true))?;
-            let mut err_connection = connection.clone();
-            let future = lazy(move || {
-                if connection.terminating()? {
-                    return Ok(());
-                }
-                connection.process_buffered_remote_ice_candidates()
-            })
-            .map_err(move |err| {
-                err_connection.inject_internal_error(err, "HaveOfferAndAnswerFuture failed")
-            });
-
-            self.worker_spawn(future);
-        } else {
-            self.unexpected_state(state, "HaveOfferAndAnswer");
-        }
-        Ok(())
     }
 
     fn notify_observer(&mut self, connection: Connection<T>, event: ObserverEvent) {
@@ -528,7 +407,7 @@ where
             return Ok(());
         }
         match state {
-            ConnectionState::IceConnecting(_)
+            ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
@@ -545,16 +424,19 @@ where
         state: ConnectionState,
         call_id: CallId,
     ) -> Result<()> {
-        ringbench!(RingBench::WebRTC, RingBench::Conn, "dc(connected)");
-
         if connection.call_id() != call_id {
             warn!("Remote connected for non-active call");
             return Ok(());
         }
         match state {
-            ConnectionState::IceConnecting(_) | ConnectionState::IceConnected => {
+            ConnectionState::IceConnecting | ConnectionState::IceConnected => {
+                ringbench!(RingBench::WebRTC, RingBench::Conn, "dc(connected)");
                 connection.set_state(ConnectionState::CallConnected)?;
                 self.notify_observer(connection, ObserverEvent::RemoteConnected);
+            }
+            ConnectionState::CallConnected => {
+                // Ignore Connected notifications in already-connected state. These may arise
+                // because of expected data channel retransmissions.
             }
             _ => self.unexpected_state(state, "RemoteConnected"),
         }
@@ -567,14 +449,47 @@ where
         state: ConnectionState,
         call_id: CallId,
         enable: bool,
+        sequence_number: Option<u64>,
     ) -> Result<()> {
+        debug!(
+            "handle_remote_video_status(): enable: {}, sequence_number: {:?}",
+            enable, sequence_number
+        );
+
         if connection.call_id() != call_id {
             warn!("Remote video status change for non-active call");
             return Ok(());
         }
 
+        let out_of_order = match (
+            sequence_number,
+            self.last_remote_video_status_sequence_number,
+        ) {
+            // If no sequence number was sent, we assume this is a legacy client that is only
+            // using ordered delivery.
+            (None, _) => false,
+            // This is the first sequence number
+            (Some(_), None) => false,
+            // If they are equal, we treat it as out of order as well.
+            (Some(seqnum), Some(last_seqnum)) => {
+                if seqnum < last_seqnum {
+                    // Warn only when packets arrive out of order, but not on expected retransmits with the same
+                    // sequence number.
+                    warn!("Dropped remote video status message because it arrived out of order.");
+                };
+                seqnum <= last_seqnum
+            }
+        };
+        if out_of_order {
+            // Just ignore out of order status messages.
+            return Ok(());
+        }
+        if sequence_number.is_some() {
+            self.last_remote_video_status_sequence_number = sequence_number;
+        }
+
         match state {
-            ConnectionState::IceConnecting(_)
+            ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
@@ -591,20 +506,17 @@ where
         state: ConnectionState,
         ice: signaling::Ice,
     ) -> Result<()> {
-        if let ConnectionState::Idle = state {
-            warn!("State is now idle, ignoring remote ICE candidates...");
+        if let ConnectionState::NotYetStarted = state {
+            warn!("Connection has not yet started, so ignoring remote ICE candidates...");
             return Ok(());
         }
 
-        connection.buffer_remote_ice_candidates(ice.candidates_added)?;
-
         match state {
-            ConnectionState::IceConnecting(false) => {}
-            ConnectionState::IceConnecting(true)
+            ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
-                connection.process_buffered_remote_ice_candidates()?
+                connection.add_remote_ice_candidates(&ice.candidates_added)?
             }
             _ => self.unexpected_state(state, "RemoteIceCandidate"),
         }
@@ -618,7 +530,7 @@ where
         state: ConnectionState,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting(_)
+            ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected => {
                 // notify the peer via a data channel message.
@@ -648,7 +560,9 @@ where
         hangup: signaling::Hangup,
     ) -> Result<()> {
         match state {
-            ConnectionState::Idle => self.unexpected_state(state, "SendHangupViaDataChannel"),
+            ConnectionState::NotYetStarted => {
+                self.unexpected_state(state, "SendHangupViaDataChannel")
+            }
             _ => {
                 let mut err_connection = connection.clone();
                 let hangup_future = lazy(move || connection.send_hangup_via_data_channel(hangup))
@@ -669,7 +583,7 @@ where
         enabled: bool,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting(_)
+            ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
@@ -705,7 +619,9 @@ where
         );
 
         match state {
-            ConnectionState::Idle | ConnectionState::Terminating | ConnectionState::Closed => {
+            ConnectionState::NotYetStarted
+            | ConnectionState::Terminating
+            | ConnectionState::Closed => {
                 warn!("State is now idle or terminating, ignoring local ICE candidate...");
             }
             _ => {
@@ -732,14 +648,20 @@ where
         state: ConnectionState,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting(_) => {
+            ConnectionState::IceConnecting => {
                 connection.set_state(ConnectionState::IceConnected)?;
-                // When ICE connects for the first time (or
-                // reconnects before the call was completely
-                // connected), notify only the *caller* about the
-                // ringing event.
-                if let CallDirection::OutGoing = connection.direction() {
-                    self.notify_observer(connection, ObserverEvent::ConnectionRinging);
+                match connection.direction() {
+                    CallDirection::OutGoing => {
+                        // For outgoing calls, beging ringing the moment ICE is connected.
+                        self.notify_observer(connection, ObserverEvent::ConnectionRinging);
+                    }
+                    CallDirection::InComing => {
+                        // Incoming calls don't start ringing until both ICE is connected,
+                        // and a data channel is available to send the acceptance request.
+                        if connection.has_data_channel()? {
+                            self.notify_observer(connection, ObserverEvent::ConnectionRinging);
+                        }
+                    }
                 }
             }
             ConnectionState::IceReconnecting => {
@@ -760,7 +682,7 @@ where
         state: ConnectionState,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting(_)
+            ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
@@ -780,11 +702,11 @@ where
         state: ConnectionState,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting(_) | ConnectionState::IceConnected => {
+            ConnectionState::IceConnected => {
                 // ICE disconnected *before* the call was
                 // connected, so simply go back to the
                 // IceConnecting state.
-                connection.set_state(ConnectionState::IceConnecting(true))?;
+                connection.set_state(ConnectionState::IceConnecting)?;
             }
             ConnectionState::CallConnected => {
                 // ICE disconnected *after* the call was
@@ -824,7 +746,14 @@ where
         stream: MediaStream,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting(_)
+            // We allow adding the stream to the connection while we are starting because this gets fired
+            // when we call set_remote_description inside of the start_XXX methods.
+            // This ends up being called between when we call set_remote_description and when we get the result.
+            // This is a little subtle, but seems to work.
+            // In the long-term, we should probably not handle this event and instead iterate over the
+            // RtpReceivers after calling set_remote_description.
+            ConnectionState::Starting
+            | ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
@@ -855,7 +784,16 @@ where
         ringbench!(RingBench::WebRTC, RingBench::Conn, "on_data_channel()");
 
         match state {
-            ConnectionState::IceConnected | ConnectionState::CallConnected => {
+            // We allow adding the data channel to the connection while we are starting because this gets fired
+            // when we call set_remote_description inside of the start_XXX methods (when using the RTP data channel).
+            // This ends up being called between when we call set_remote_description and when we get the result.
+            // This is a little subtle, but seems to work.
+            // In the long-term, we should probably not handle this event and instead
+            // change WebRTC so we can call create_data_channel on both sides with the same SSRC
+            // and not rely on the signaling of SSRCs.
+            ConnectionState::Starting
+            | ConnectionState::IceConnected
+            | ConnectionState::CallConnected => {
                 let notify_handle = connection.clone();
                 debug_assert_eq!(
                     CallDirection::InComing,
@@ -863,7 +801,11 @@ where
                     "onDataChannel should only happen for incoming calls"
                 );
                 connection.set_data_channel(data_channel)?;
-                self.notify_observer(notify_handle, ObserverEvent::ConnectionRinging);
+                if state == ConnectionState::IceConnected {
+                    // Incoming calls don't start ringing until both ICE is connected,
+                    // and a data channel is available to send the acceptance request.
+                    self.notify_observer(notify_handle, ObserverEvent::ConnectionRinging);
+                }
             }
             _ => self.unexpected_state(state, "OnDataChannel"),
         }

@@ -10,6 +10,23 @@ extension AppByteSlice {
     }
 
     func asString(encoding: String.Encoding = String.Encoding.utf8) -> String? {
+        if self.bytes == nil {
+            return nil
+        }
         return String(bytes: asUnsafeBufferPointer(), encoding: encoding)
+    }
+
+    func asBytes() -> [UInt8]? {
+        if self.bytes == nil {
+            return nil
+        }
+        return Array(asUnsafeBufferPointer())
+    }
+
+    func asData() -> Data? {
+        if self.bytes == nil {
+            return nil
+        }
+        return Data(asUnsafeBufferPointer())
     }
 }

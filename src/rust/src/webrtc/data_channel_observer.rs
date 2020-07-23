@@ -50,14 +50,11 @@ where
 #[allow(non_snake_case)]
 extern "C" fn dc_observer_OnBufferedAmountChange<T>(
     _connection: *mut Connection<T>,
-    previous_amount: u64,
+    _previous_amount: u64,
 ) where
     T: Platform,
 {
-    info!(
-        "dc_observer_OnBufferedAmountChange(): previous_amount: {}",
-        previous_amount
-    );
+    // Nothing to do here.
 }
 
 /// DataChannelObserver OnMessage() callback.
@@ -85,7 +82,7 @@ extern "C" fn dc_observer_OnMessage<T>(
         return;
     }
 
-    info!(
+    debug!(
         "dc_observer_OnMessage(): length: {}, binary: {}",
         length, binary
     );
@@ -100,7 +97,7 @@ extern "C" fn dc_observer_OnMessage<T>(
         }
     };
 
-    info!("Received data channel message: {:?}", message);
+    debug!("Received data channel message: {:?}", message);
 
     let cc = match unsafe { ptr_as_mut(connection) } {
         Ok(v) => v,
@@ -110,6 +107,8 @@ extern "C" fn dc_observer_OnMessage<T>(
         }
     };
 
+    let mut message_handled = false;
+    let original_message = message.clone();
     if let Some(connected) = message.connected {
         if let CallDirection::OutGoing = cc.direction() {
             cc.inject_remote_connected(CallId::new(connected.id()))
@@ -126,8 +125,10 @@ extern "C" fn dc_observer_OnMessage<T>(
                 .into(),
                 "",
             );
-        }
-    } else if let Some(hangup) = message.hangup {
+        };
+        message_handled = true;
+    };
+    if let Some(hangup) = message.hangup {
         cc.inject_received_hangup(
             CallId::new(hangup.id()),
             signaling::Hangup::from_type_and_device_id(
@@ -137,11 +138,19 @@ extern "C" fn dc_observer_OnMessage<T>(
             ),
         )
         .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));
-    } else if let Some(video_status) = message.video_streaming_status {
-        cc.inject_remote_video_status(CallId::new(video_status.id()), video_status.enabled())
-            .unwrap_or_else(|e| warn!("unable to inject remote video status event: {}", e));
-    } else {
-        info!("Unhandled data channel message: {:?}", message);
+        message_handled = true;
+    };
+    if let Some(video_status) = message.video_streaming_status {
+        cc.inject_remote_video_status(
+            CallId::new(video_status.id()),
+            video_status.enabled(),
+            message.sequence_number,
+        )
+        .unwrap_or_else(|e| warn!("unable to inject remote video status event: {}", e));
+        message_handled = true;
+    };
+    if !message_handled {
+        info!("Unhandled data channel message: {:?}", original_message);
     }
 }
 

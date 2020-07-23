@@ -33,4 +33,6 @@ extern "C" {
 
     pub fn Rust_dataChannelGetLabel(dc_interface: *const RffiDataChannelInterface)
         -> *const c_char;
+
+    pub fn Rust_dataChannelIsReliable(dc_interface: *const RffiDataChannelInterface) -> bool;
 }

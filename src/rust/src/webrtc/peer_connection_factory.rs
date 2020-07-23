@@ -181,6 +181,7 @@ impl PeerConnectionFactory {
         Some(InjectableNetwork::new(rffi, self))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_peer_connection<T: Platform>(
         &self,
         observer: PeerConnectionObserver<T>,
@@ -189,6 +190,8 @@ impl PeerConnectionFactory {
         ice_servers: &IceServer,
         outgoing_audio: AudioTrack,
         outgoing_video: VideoSource,
+        enable_dtls: bool,
+        enable_rtp_data_channel: bool,
     ) -> Result<PeerConnection> {
         debug!(
             "PeerConnectionFactory::create_peer_connection() {}",
@@ -203,6 +206,8 @@ impl PeerConnectionFactory {
                 ice_servers.rffi(),
                 outgoing_audio.rffi(),
                 outgoing_video.rffi(),
+                enable_dtls,
+                enable_rtp_data_channel,
             )
         };
         debug!(

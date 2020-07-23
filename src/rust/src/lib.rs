@@ -46,6 +46,7 @@ pub mod core {
 /// Protobuf Definitions.
 mod protobuf {
     pub mod data_channel;
+    pub mod signaling;
 }
 
 #[cfg(target_os = "android")]

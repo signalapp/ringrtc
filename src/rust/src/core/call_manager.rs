@@ -36,11 +36,9 @@ use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::error::RingRtcError;
 
-use crate::core::util::redact_string;
 use crate::webrtc::media::MediaStream;
 
 const TIME_OUT_PERIOD_SEC: u64 = 120;
-pub const STATS_PERIOD_SEC: u64 = 10;
 pub const MAX_MESSAGE_AGE_SEC: u64 = 120;
 
 /// Spawns a task on the worker runtime thread to handle an API
@@ -949,11 +947,12 @@ where
             RingBench::App,
             RingBench::CM,
             format!(
-                "received_offer()\t{}\t{}\tfeature={}\tprimary={}",
+                "received_offer()\t{}\t{}\tfeature={}\tprimary={}\t{}",
                 call_id,
                 received.sender_device_id,
                 received.sender_device_feature_level,
                 received.receiver_device_is_primary,
+                received.offer.to_info_string(),
             )
         );
 
@@ -1027,7 +1026,7 @@ where
 
                 call_map.insert(call_id, call.clone());
                 *active_call_id = Some(call_id);
-                call.set_pending_call(received)?;
+                call.handle_received_offer(received)?;
                 call.inject_start_call()
             }
         }
@@ -1043,8 +1042,10 @@ where
             RingBench::App,
             RingBench::CM,
             format!(
-                "received_answer()\t{}\t{}",
-                call_id, received.sender_device_id
+                "received_answer()\t{}\t{}\t{}",
+                call_id,
+                received.sender_device_id,
+                received.answer.to_info_string(),
             )
         );
 
@@ -1471,9 +1472,10 @@ where
         call: &Call<T>,
         device_id: DeviceId,
         connection_type: ConnectionType,
+        signaling_version: signaling::Version,
     ) -> Result<Connection<T>> {
         let mut platform = self.platform.lock()?;
-        platform.create_connection(call, device_id, connection_type)
+        platform.create_connection(call, device_id, connection_type, signaling_version)
     }
 
     /// Create a new application specific media stream
@@ -1594,13 +1596,13 @@ where
             ringbench!(
                 RingBench::CM,
                 RingBench::App,
-                format!("send_offer()\t{}", call_id)
+                format!("send_offer()\t{}\t{}", call_id, offer.to_info_string())
             );
 
             info!(
-                "call_id: {}, TX SDP offer:\n{}",
+                "call_id: {}, TX offer:\n{}",
                 call_id,
-                redact_string(&offer.sdp)
+                offer.to_redacted_string()
             );
 
             let remote_peer = call.remote_peer()?;
@@ -1636,13 +1638,17 @@ where
             ringbench!(
                 RingBench::CM,
                 RingBench::App,
-                format!("send_answer()\t{}", call_id)
+                format!(
+                    "send_answer()\t{}\t{}",
+                    call_id,
+                    send.answer.to_info_string()
+                )
             );
 
             info!(
-                "call_id: {}, TX SDP answer:\n{}",
+                "call_id: {}, TX answer:\n{}",
                 call_id,
-                redact_string(&send.answer.sdp)
+                send.answer.to_redacted_string(),
             );
 
             let remote_peer = call.remote_peer()?;

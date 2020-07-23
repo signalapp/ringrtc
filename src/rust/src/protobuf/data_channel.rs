@@ -1,10 +1,3 @@
-//
-// Copyright (C) 2020 Signal Messenger, LLC.
-// All rights reserved.
-//
-// SPDX-License-Identifier: GPL-3.0-only
-//
-
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Connected {
     #[prost(uint64, optional, tag="1")]
@@ -45,4 +38,10 @@ pub struct Data {
     pub hangup: ::std::option::Option<Hangup>,
     #[prost(message, optional, tag="3")]
     pub video_streaming_status: ::std::option::Option<VideoStreamingStatus>,
+    /// If set, a larger value means a later message than a smaller value.
+    /// Can be used to detect that messages are out of order.
+    /// Useful when sending over transports that don't have ordering
+    /// (or when sending over more than one transport)
+    #[prost(uint64, optional, tag="4")]
+    pub sequence_number: ::std::option::Option<u64>,
 }

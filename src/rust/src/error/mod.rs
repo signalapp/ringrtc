@@ -100,6 +100,10 @@ pub enum RingRtcError {
     ConvertSdpAnswer,
     #[fail(display = "Unable to convert sdp to offer")]
     ConvertSdpOffer,
+    #[fail(display = "Unable to munge SDP")]
+    MungeSdp,
+    #[fail(display = "Unknown signaled protocol version")]
+    UnknownSignaledProtocolVersion,
 
     // DataChannel error codes
     #[fail(display = "Unable to send data channel message")]

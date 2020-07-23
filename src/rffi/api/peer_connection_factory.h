@@ -61,7 +61,9 @@ RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   bool hide_ip,
   RffiIceServer ice_server,
   webrtc::AudioTrackInterface*,
-  webrtc::VideoTrackSourceInterface*);
+  webrtc::VideoTrackSourceInterface*,
+  bool enable_dtls,
+  bool enable_rtp_data_channel);
 RUSTEXPORT webrtc::AudioTrackInterface* Rust_createAudioTrack(webrtc::PeerConnectionFactoryOwner*);
 RUSTEXPORT webrtc::VideoTrackSourceInterface* Rust_createVideoSource(webrtc::PeerConnectionFactoryOwner*);
 RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate();

@@ -32,6 +32,10 @@ Rust_dataChannelGetLabel(DataChannelInterface* data_channel) {
   return strdup(&label[0u]);
 }
 
+RUSTEXPORT bool
+Rust_dataChannelIsReliable(DataChannelInterface* data_channel) {
+  return data_channel->reliable();
+}
 
 } // namespace rffi
 } // namespace webrtc

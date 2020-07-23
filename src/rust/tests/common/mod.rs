@@ -11,7 +11,7 @@
 
 use std::env;
 use std::sync::Mutex;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use lazy_static::lazy_static;
 use log::LevelFilter;
@@ -21,10 +21,11 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use simplelog::{Config, ConfigBuilder, SimpleLogger};
 
-use ringrtc::common::{ApplicationEvent, DeviceId};
+use ringrtc::common::{ApplicationEvent, CallMediaType, DeviceId, FeatureLevel};
 use ringrtc::core::call::Call;
 use ringrtc::core::call_manager::CallManager;
 use ringrtc::core::connection::Connection;
+use ringrtc::core::signaling;
 use ringrtc::sim::sim_platform::SimPlatform;
 
 /*
@@ -252,5 +253,76 @@ impl TestContext {
     pub fn call_concluded_count(&self) -> usize {
         let platform = self.call_manager.platform().unwrap();
         platform.call_concluded_count()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum SignalingType {
+    Legacy,              // SDP only
+    BackwardsCompatible, // SDP and Opaque
+    LegacyFree,          // Only Opaque
+}
+
+pub fn random_received_offer(
+    signaling_type: SignalingType,
+    age: Duration,
+) -> signaling::ReceivedOffer {
+    let sdp = format!("OFFER-{}", PRNG.gen::<u16>()).to_owned();
+    let offer =
+        signaling::Offer::from_v2_and_v1_sdp(CallMediaType::Audio, sdp.clone(), sdp).unwrap();
+    let (opaque, sdp) = match signaling_type {
+        SignalingType::Legacy => (None, offer.sdp),
+        SignalingType::BackwardsCompatible => (offer.opaque, offer.sdp),
+        SignalingType::LegacyFree => (offer.opaque, None),
+    };
+    let offer = signaling::Offer::from_opaque_or_sdp(offer.call_media_type, opaque, sdp);
+    signaling::ReceivedOffer {
+        offer,
+        age,
+        sender_device_id: 1 as DeviceId,
+        sender_device_feature_level: FeatureLevel::MultiRing,
+        receiver_device_id: 1 as DeviceId,
+        receiver_device_is_primary: true,
+    }
+}
+
+// Not sure why this is needed.  It is used...
+#[allow(dead_code)]
+pub fn random_received_answer(
+    signaling_type: SignalingType,
+    sender_device_id: DeviceId,
+) -> signaling::ReceivedAnswer {
+    let sdp = format!("ANSWER-{}", PRNG.gen::<u16>()).to_owned();
+    let answer = match signaling_type {
+        SignalingType::Legacy => signaling::Answer::from_v1_sdp(sdp),
+        SignalingType::BackwardsCompatible => signaling::Answer::from_v2_sdp(sdp).unwrap(),
+        SignalingType::LegacyFree => signaling::Answer::from_v1_sdp(sdp),
+    };
+    signaling::ReceivedAnswer {
+        answer,
+        sender_device_id,
+        sender_device_feature_level: FeatureLevel::MultiRing,
+    }
+}
+
+pub fn random_ice_candidate(signaling_type: SignalingType) -> signaling::IceCandidate {
+    let sdp = format!("ICE-CANDIDATE-{}", PRNG.gen::<u16>()).to_owned();
+    // V1 and V2 are the same for ICE candidates
+    let ice_candidate = signaling::IceCandidate::from_v2_sdp(sdp).unwrap();
+    let (opaque, sdp) = match signaling_type {
+        SignalingType::Legacy => (None, ice_candidate.sdp),
+        SignalingType::BackwardsCompatible => (ice_candidate.opaque, ice_candidate.sdp),
+        SignalingType::LegacyFree => (ice_candidate.opaque, None),
+    };
+    signaling::IceCandidate::from_opaque_or_sdp(opaque, sdp)
+}
+
+pub fn random_received_ice_candidate(signaling_type: SignalingType) -> signaling::ReceivedIce {
+    let candidate = random_ice_candidate(signaling_type);
+    signaling::ReceivedIce {
+        ice:              signaling::Ice {
+            candidates_added: vec![candidate],
+        },
+        sender_device_id: 1 as DeviceId,
     }
 }

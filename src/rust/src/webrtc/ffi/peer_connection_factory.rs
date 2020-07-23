@@ -32,6 +32,7 @@ extern "C" {
     pub fn Rust_getInjectableNetwork(
         factory: *const RffiPeerConnectionFactoryInterface,
     ) -> *const RffiInjectableNetwork;
+    #[allow(clippy::too_many_arguments)]
     pub fn Rust_createPeerConnection(
         factory: *const RffiPeerConnectionFactoryInterface,
         observer: *const RffiPeerConnectionObserverInterface,
@@ -40,6 +41,8 @@ extern "C" {
         ice_server: RffiIceServer,
         outgoing_audio: *const RffiAudioTrackInterface,
         outgoing_video: *const RffiVideoTrackSourceInterface,
+        enable_dtls: bool,
+        enable_rtp_data_channel: bool,
     ) -> *const RffiPeerConnectionInterface;
     pub fn Rust_createAudioTrack(
         factory: *const RffiPeerConnectionFactoryInterface,

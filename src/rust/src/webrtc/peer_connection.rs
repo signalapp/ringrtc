@@ -108,7 +108,7 @@ impl PeerConnection {
             return Err(RingRtcError::CreateDataChannel(data_channel_label.into_string()?).into());
         }
 
-        let data_channel = DataChannel::new(rffi_data_channel);
+        let data_channel = unsafe { DataChannel::new(rffi_data_channel) };
 
         Ok(data_channel)
     }
@@ -167,9 +167,10 @@ impl PeerConnection {
 
     /// Rust wrapper around C++ PeerConnectionInterface::AddIceCandidate().
     pub fn add_ice_candidate(&self, candidate: &signaling::IceCandidate) -> Result<()> {
-        let clone = candidate.clone();
-        let sdp = CString::new(clone.sdp)?;
-        let add_ok = unsafe { pc::Rust_addIceCandidate(self.rffi_pc_interface, sdp.as_ptr()) };
+        // ICE candidates are the same for V1 and V2, so this works for V1 as well.
+        let v2_sdp = candidate.to_v2_sdp()?;
+        let v2_sdp_c = CString::new(v2_sdp)?;
+        let add_ok = unsafe { pc::Rust_addIceCandidate(self.rffi_pc_interface, v2_sdp_c.as_ptr()) };
         if add_ok {
             Ok(())
         } else {

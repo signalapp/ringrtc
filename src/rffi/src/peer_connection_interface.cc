@@ -11,6 +11,7 @@
 #include "api/ice_gatherer_interface.h"
 #include "api/ice_transport_interface.h"
 #include "api/peer_connection_interface.h"
+#include "pc/session_description.h"
 #include "sdk/media_constraints.h"
 #include "rffi/api/peer_connection_interface_intf.h"
 #include "rffi/src/sdp_observer.h"
@@ -75,6 +76,40 @@ RUSTEXPORT SessionDescriptionInterface*
 Rust_offerFromSdp(const char* sdp) {
   return createSessionDescriptionInterface(SdpType::kOffer, sdp);
 }
+
+RUSTEXPORT bool 
+Rust_replaceRtpDataChannelsWithSctp(webrtc::SessionDescriptionInterface* sdi) {
+  if (!sdi) {
+    return false;
+  }
+
+  std::string rtp_data_mid;
+  cricket::SessionDescription* description = sdi->description();
+  for (const cricket::ContentInfo& content : description->contents()) {
+    if (content.type == cricket::MediaProtocolType::kRtp && 
+        content.media_description() && content.media_description()->type() == cricket::MEDIA_TYPE_DATA) {
+      rtp_data_mid = content.mid();
+      break;
+    }
+  }
+  if (rtp_data_mid.empty()) {
+    // Couldn't find any RTP data channel, so nothing to change.
+    return false;
+  }
+
+  description->RemoveContentByName(rtp_data_mid);
+
+  // Mirror MediaSessionDescriptionFactory::AddSctpDataContentForOffer
+  auto sctp = std::make_unique<cricket::SctpDataContentDescription>();
+  sctp->set_protocol(cricket::kMediaProtocolUdpDtlsSctp);
+  sctp->set_use_sctpmap(false);
+  sctp->set_max_message_size(256 * 1024);
+  // This shouldn't really be necessary, but just in case...
+  sctp->set_rtcp_mux(true);
+  description->AddContent(rtp_data_mid, cricket::MediaProtocolType::kSctp, std::move(sctp));
+  return true;
+}
+
 
 RUSTEXPORT void
 Rust_createAnswer(PeerConnectionInterface*              pc_interface,

@@ -174,12 +174,14 @@ export class RingRTCType {
     callId: CallId,
     broadcast: boolean,
     offerType: OfferType,
-    sdp: string
+    opaque?: ArrayBuffer,
+    sdp?: string
   ): void {
     const message = new CallingMessage();
     message.offer = new OfferMessage();
     message.offer.callId = callId;
     message.offer.type = offerType;
+    message.offer.opaque = opaque;
     message.offer.sdp = sdp;
     this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
@@ -190,11 +192,13 @@ export class RingRTCType {
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    sdp: string
+    opaque?: ArrayBuffer,
+    sdp?: string
   ): void {
     const message = new CallingMessage();
     message.answer = new AnswerMessage();
     message.answer.callId = callId;
+    message.answer.opaque = opaque;
     message.answer.sdp = sdp;
     this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
@@ -212,8 +216,10 @@ export class RingRTCType {
     for (const candidate of candidates) {
       const copy = new IceCandidateMessage();
       copy.callId = callId;
-      copy.mid = "";
-      copy.midIndex = 0;
+      // TODO: Remove this once all old clients are gone (along with .sdp below)
+      copy.mid = "audio";
+      copy.line = 0;
+      copy.opaque = candidate.opaque;
       copy.sdp = candidate.sdp;
       message.iceCandidates.push(copy);
     }
@@ -321,8 +327,9 @@ export class RingRTCType {
       return;
     }
 
-    if (message.offer && message.offer.callId && message.offer.sdp) {
+    if (message.offer && message.offer.callId) {
       const callId = message.offer.callId;
+      const opaque = to_array_buffer(message.offer.opaque);
       const sdp = message.offer.sdp;
       const offerType = message.offer.type || OfferType.AudioCall;
       this.callManager.receivedOffer(
@@ -333,35 +340,45 @@ export class RingRTCType {
         callId,
         offerType,
         remoteSupportsMultiRing,
+        opaque,
         sdp
       );
     }
-    if (message.answer && message.answer.callId && message.answer.sdp) {
+    if (message.answer && message.answer.callId) {
       const callId = message.answer.callId;
+      const opaque = to_array_buffer(message.answer.opaque);
       const sdp = message.answer.sdp;
       this.callManager.receivedAnswer(
         remoteUserId,
         remoteDeviceId,
         callId,
         remoteSupportsMultiRing,
+        opaque,
         sdp
       );
     }
     if (message.iceCandidates && message.iceCandidates.length > 0) {
-      let callId = null;
-      const candidateSdps: Array<string> = [];
+      // We assume they all have the same .callId
+      let callId = message.iceCandidates[0].callId;
+      // We have to copy them to do the .toArrayBuffer() thing.
+      const candidates: Array<IceCandidateMessage> = [];
       for (const candidate of message.iceCandidates) {
-        // We assume they all have the same .callId
-        callId = candidate.callId;
-        if (!!candidate.sdp) {
-          candidateSdps.push(candidate.sdp);
-        }
+        const copy = new IceCandidateMessage();
+        // TODO: Remove this once all old clients are gone (along with .sdp below)
+        // Actually, I don't think we need this at all, but it's safer just to leave it
+        // temporariliy.
+        copy.mid = "audio";
+        copy.line = 0;
+        copy.opaque = to_array_buffer(candidate.opaque);
+        copy.sdp = candidate.sdp;
+        candidates.push(copy);
       }
+
       this.callManager.receivedIceCandidates(
         remoteUserId,
         remoteDeviceId,
         callId,
-        candidateSdps
+        candidates,
       );
     }
     if (message.hangup && message.hangup.callId) {
@@ -735,6 +752,20 @@ export class Call {
   }
 }
 
+// When sending, we just set an ArrayBuffer.
+// When receiving, we call .toArrayBuffer().
+type ProtobufArrayBuffer = ArrayBuffer | {toArrayBuffer: () => ArrayBuffer};
+
+function to_array_buffer(pbab: ProtobufArrayBuffer | undefined): ArrayBuffer | undefined {
+  if (!pbab) {
+    return pbab;
+  }
+  if (pbab instanceof ArrayBuffer) {
+    return pbab;
+  }
+  return pbab.toArrayBuffer();
+}
+
 export type UserId = string;
 
 export type DeviceId = number;
@@ -755,6 +786,7 @@ export class CallingMessage {
 export class OfferMessage {
   callId?: CallId;
   type?: OfferType;
+  opaque?: ProtobufArrayBuffer;
   sdp?: string;
 }
 
@@ -765,13 +797,15 @@ export enum OfferType {
 
 export class AnswerMessage {
   callId?: CallId;
+  opaque?: ProtobufArrayBuffer;
   sdp?: string;
 }
 
 export class IceCandidateMessage {
   callId?: CallId;
   mid?: string;
-  midIndex?: number;
+  line?: number;
+  opaque?: ProtobufArrayBuffer;
   sdp?: string;
 }
 
@@ -819,20 +853,22 @@ export interface CallManager {
     offerType: OfferType,
     localDeviceId: DeviceId,
     remoteSupportsMultiRing: boolean,
-    sdp: string
+    opaque?: ArrayBuffer,
+    sdp?: string
   ): void;
   receivedAnswer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     remoteSupportsMultiRing: boolean,
-    sdp: string
+    opaque?: ArrayBuffer,
+    sdp?: string
   ): void;
   receivedIceCandidates(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
-    candiateSdps: Array<string>
+    candiates: Array<IceCandidateMessage>
   ): void;
   receivedHangup(
     remoteUserId: UserId,
@@ -861,14 +897,16 @@ export interface CallManagerCallbacks {
     callId: CallId,
     broadcast: boolean,
     mediaType: number,
-    sdp: string
+    opaque?: ArrayBuffer,
+    sdp?: string
   ): void;
   onSendAnswer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    sdp: string
+    opaque?: ArrayBuffer,
+    sdp?: string
   ): void;
   onSendIceCandidates(
     remoteUserId: UserId,

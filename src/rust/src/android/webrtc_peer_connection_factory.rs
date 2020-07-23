@@ -8,7 +8,7 @@
 //! Re-exports WebRTC JNI interfaces
 
 use jni::objects::{JClass, JObject};
-use jni::sys::jlong;
+use jni::sys::{jboolean, jlong};
 use jni::JNIEnv;
 
 use crate::webrtc::peer_connection::RffiPeerConnectionInterface;
@@ -24,6 +24,8 @@ extern "C" {
         constraints: JObject,
         nativeObserver: jlong,
         sslCertificateVerifier: JObject,
+        enable_dtls: jboolean,
+        enable_rtp_data_channel: jboolean,
     ) -> jlong;
 }
 

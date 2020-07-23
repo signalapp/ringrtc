@@ -264,10 +264,11 @@ impl Platform for NativePlatform {
         call: &Call<Self>,
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
+        signaling_version: signaling::Version,
     ) -> Result<Connection<Self>> {
         info!(
-            "NativePlatform::create_connection(): call: {} remote_device_id: {}",
-            call, remote_device_id
+            "NativePlatform::create_connection(): call: {} remote_device_id: {} signaling_version: {:?}",
+            call, remote_device_id, signaling_version
         );
 
         // Like AndroidPlatform::create_connection
@@ -283,6 +284,8 @@ impl Platform for NativePlatform {
             &context.ice_server,
             context.outgoing_audio.clone(),
             context.outgoing_video.clone(),
+            signaling_version.enable_dtls(),
+            signaling_version.enable_rtp_data_channel(),
         )?;
 
         connection.set_pc_interface(pc)?;

@@ -107,11 +107,13 @@ impl Platform for SimPlatform {
         call: &Call<Self>,
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
+        signaling_version: signaling::Version,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {}",
+            "create_connection(): call_id: {} remote_device_id: {}, signaling_version: {:?}",
             call.call_id(),
-            remote_device_id
+            remote_device_id,
+            signaling_version,
         );
 
         let fake_pc = RffiPeerConnectionInterface::new();
@@ -165,8 +167,8 @@ impl Platform for SimPlatform {
         offer: signaling::Offer,
     ) -> Result<()> {
         info!(
-            "on_send_offer(): remote_peer: {}, call_id: {}, offer SDP: {}",
-            remote_peer, call_id, offer.sdp
+            "on_send_offer(): remote_peer: {}, call_id: {}, offer: {}",
+            remote_peer, call_id, offer
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
@@ -189,8 +191,8 @@ impl Platform for SimPlatform {
         send: signaling::SendAnswer,
     ) -> Result<()> {
         info!(
-            "on_send_answer(): remote_peer: {}, call_id: {}, receiver_device_id: {}, answer SDP: {}",
-            remote_peer, call_id, send.receiver_device_id, send.answer.sdp
+            "on_send_answer(): remote_peer: {}, call_id: {}, receiver_device_id: {}, answer: {}",
+            remote_peer, call_id, send.receiver_device_id, send.answer
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {

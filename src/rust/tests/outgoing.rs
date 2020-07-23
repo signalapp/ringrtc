@@ -23,7 +23,6 @@ use ringrtc::common::{
     CallState,
     ConnectionState,
     DeviceId,
-    FeatureLevel,
 };
 use ringrtc::core::signaling;
 
@@ -33,7 +32,16 @@ use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
 mod common;
-use common::{test_init, TestContext, PRNG};
+use common::{
+    random_ice_candidate,
+    random_received_answer,
+    random_received_ice_candidate,
+    random_received_offer,
+    test_init,
+    SignalingType,
+    TestContext,
+    PRNG,
+};
 
 // Simple test that:
 // -- creates a call manager
@@ -104,11 +112,11 @@ fn start_outbound_and_proceed() -> TestContext {
 // - call proceed()
 // - add received answer for each remote
 // - add received ice candidate for each remote
-// - check underlying Connection is in IceConnecting(true) state
+// - check underlying Connection is in IceConnecting state
 // - check call is in Connecting state
 //
 // Now in the Connecting state.
-fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
+fn start_outbound_n_remote_call(signaling_type: SignalingType, n_remotes: u16) -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
@@ -142,32 +150,14 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     // add a received answer for each remote
     for i in 1..(n_remotes + 1) {
         let call_id = active_call.call_id();
-        let sender_device_id = i as DeviceId;
         cm.received_answer(
             call_id,
-            signaling::ReceivedAnswer {
-                answer: signaling::Answer::from_sdp(
-                    format!("ANSWER-{}-{}", i, PRNG.gen::<u16>()).to_owned(),
-                ),
-                sender_device_id,
-                sender_device_feature_level: FeatureLevel::MultiRing,
-            },
+            random_received_answer(signaling_type, i as DeviceId),
         )
         .expect(error_line!());
 
-        // add a received ICE candidate
-        let ice_candidate =
-            signaling::IceCandidate::from_sdp(format!("ICE-{}", PRNG.gen::<u16>()).to_owned());
-        cm.received_ice(
-            call_id,
-            signaling::ReceivedIce {
-                ice: signaling::Ice {
-                    candidates_added: vec![ice_candidate],
-                },
-                sender_device_id,
-            },
-        )
-        .expect(error_line!());
+        cm.received_ice(call_id, random_received_ice_candidate(signaling_type))
+            .expect(error_line!());
 
         cm.synchronize().expect(error_line!());
         let connection = active_call
@@ -175,7 +165,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
             .expect(error_line!());
         assert_eq!(
             connection.state().expect(error_line!()),
-            ConnectionState::IceConnecting(true)
+            ConnectionState::IceConnecting
         );
     }
 
@@ -199,12 +189,12 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
 // - call proceed()
 // - add received answer
 // - add received ice candidate
-// - check underlying Connection is in IceConnecting(true) state
+// - check underlying Connection is in IceConnecting state
 // - check call is in Connecting state
 //
 // Now in the Connecting state.
-fn start_outbound_call() -> TestContext {
-    start_outbound_n_remote_call(1)
+fn start_outbound_call(signaling_type: SignalingType) -> TestContext {
+    start_outbound_n_remote_call(signaling_type, 1)
 }
 
 // Create an outbound call session up to the CallConnected state.
@@ -219,7 +209,7 @@ fn start_outbound_call() -> TestContext {
 // Now in the CallConnected state.
 
 fn connect_outbound_call() -> TestContext {
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -276,7 +266,9 @@ fn connect_outbound_call() -> TestContext {
 fn outbound_receive_answer() {
     test_init();
 
-    let _ = start_outbound_call();
+    let _ = start_outbound_call(SignalingType::Legacy);
+    let _ = start_outbound_call(SignalingType::BackwardsCompatible);
+    let _ = start_outbound_call(SignalingType::LegacyFree);
 }
 
 #[test]
@@ -290,7 +282,7 @@ fn outbound_call_connected() {
 fn outbound_local_hang_up() {
     test_init();
 
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -312,7 +304,7 @@ fn outbound_local_hang_up() {
 fn outbound_ice_failed() {
     test_init();
 
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -341,7 +333,7 @@ fn outbound_ice_failed() {
 fn outbound_ice_disconnected_before_call_connected() {
     test_init();
 
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -376,7 +368,7 @@ fn outbound_ice_disconnected_before_call_connected() {
     // should return to the IceConnecting state.
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceConnecting(true)
+        ConnectionState::IceConnecting
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -386,7 +378,7 @@ fn outbound_ice_disconnected_before_call_connected() {
 fn outbound_call_connected_with_stale_call_id() {
     test_init();
 
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -633,7 +625,7 @@ fn inject_local_ice_candidate() {
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
-    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
+    let ice_candidate = random_ice_candidate(SignalingType::Legacy);
     let force_send = true;
     active_connection
         .inject_local_ice_candidate(ice_candidate, force_send)
@@ -654,16 +646,9 @@ fn receive_remote_ice_candidate() {
 
     // add a received ICE candidate
     let call_id = active_call.call_id();
-    let ice_candidate =
-        signaling::IceCandidate::from_sdp(format!("ICE-{}", PRNG.gen::<u16>()).to_owned());
     cm.received_ice(
         call_id,
-        signaling::ReceivedIce {
-            ice:              signaling::Ice {
-                candidates_added: vec![ice_candidate],
-            },
-            sender_device_id: 1 as DeviceId,
-        },
+        random_received_ice_candidate(SignalingType::Legacy),
     )
     .expect("receive_ice");
     cm.synchronize().expect(error_line!());
@@ -714,7 +699,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     // the subsequent Hangup message is queued until message_sent() is called.
     context.no_auto_message_sent_for_ice(true);
 
-    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
+    let ice_candidate = random_ice_candidate(SignalingType::Legacy);
     let force_send = true;
     parent_connection
         .unwrap()
@@ -797,7 +782,7 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     // the subsequent Hangup message is queued until message_sent() is called.
     context.no_auto_message_sent_for_ice(true);
 
-    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
+    let ice_candidate = random_ice_candidate(SignalingType::Legacy);
     let force_send = true;
     parent_connection
         .unwrap()
@@ -868,7 +853,7 @@ fn received_remote_hangup_after_connection() {
 fn received_remote_needs_permission() {
     test_init();
 
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -901,11 +886,11 @@ fn received_remote_video_status() {
 
     let mut enable_count = 0;
     let mut disable_count = 0;
-    for _i in 0..20 {
+    for i in 0..20 {
         let enable = PRNG.gen::<bool>();
 
         active_connection
-            .inject_remote_video_status(active_call.call_id(), enable)
+            .inject_remote_video_status(active_call.call_id(), enable, Some(i))
             .expect(error_line!());
         cm.synchronize().expect(error_line!());
 
@@ -925,13 +910,32 @@ fn received_remote_video_status() {
             disable_count
         );
     }
+
+    // Ignore old ones
+    active_connection
+        .inject_remote_video_status(active_call.call_id(), true, Some(1))
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    active_connection
+        .inject_remote_video_status(active_call.call_id(), false, Some(2))
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteVideoEnable),
+        enable_count
+    );
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteVideoDisable),
+        disable_count
+    );
 }
 
 #[test]
 fn call_timeout_before_connect() {
     test_init();
 
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let mut active_call = context.active_call();
 
@@ -1046,7 +1050,7 @@ fn local_ice_candidate_with_error() {
     // cause the sending of the ICE candidate to fail.
     context.force_internal_fault(true);
 
-    let ice_candidate = signaling::IceCandidate::from_sdp("fake_spd".to_string());
+    let ice_candidate = random_ice_candidate(SignalingType::Legacy);
     let force_send = true;
     active_connection
         .inject_local_ice_candidate(ice_candidate, force_send)
@@ -1066,12 +1070,12 @@ fn local_ice_candidate_with_error() {
     assert_eq!(context.ice_candidates_sent(), 0);
 }
 
-fn outbound_multiple_remote_devices() {
+fn outbound_multiple_remote_devices(signaling_type: SignalingType) {
     test_init();
 
     // With 5, we hit "too many files open" on Linux.
     let n_remotes: u16 = 3;
-    let context = start_outbound_n_remote_call(n_remotes);
+    let context = start_outbound_n_remote_call(signaling_type, n_remotes);
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -1168,15 +1172,19 @@ fn outbound_multiple_remote_devices() {
 fn outbound_multiple_call_managers() {
     test_init();
 
-    // 5 seems too many for Linux
-    let n_call_manager = 3;
-
     let mut thread_vec = Vec::new();
-    for i in 0..n_call_manager {
+    for (i, signaling_type) in [
+        SignalingType::Legacy,
+        SignalingType::BackwardsCompatible,
+        SignalingType::LegacyFree,
+    ]
+    .iter()
+    .enumerate()
+    {
         info!("test:{}: creating call manager", i);
 
         let child = thread::spawn(move || {
-            outbound_multiple_remote_devices();
+            outbound_multiple_remote_devices(*signaling_type);
         });
 
         thread_vec.push(child);
@@ -1195,7 +1203,7 @@ fn outbound_multiple_call_managers() {
 fn glare_before_connect() {
     test_init();
 
-    let context = start_outbound_call();
+    let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
 
     // Create incoming call with same remote
@@ -1211,17 +1219,7 @@ fn glare_before_connect() {
     cm.received_offer(
         remote_peer,
         call_id,
-        signaling::ReceivedOffer {
-            offer:                       signaling::Offer::from_sdp(
-                CallMediaType::Audio,
-                format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            ),
-            age:                         Duration::from_secs(0),
-            sender_device_id:            1 as DeviceId,
-            sender_device_feature_level: FeatureLevel::MultiRing,
-            receiver_device_id:          1 as DeviceId,
-            receiver_device_is_primary:  true,
-        },
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -1261,17 +1259,7 @@ fn glare_after_connect() {
     cm.received_offer(
         remote_peer,
         call_id,
-        signaling::ReceivedOffer {
-            offer:                       signaling::Offer::from_sdp(
-                CallMediaType::Audio,
-                format!("OFFER-{}", PRNG.gen::<u16>()).to_owned(),
-            ),
-            age:                         Duration::from_secs(0),
-            sender_device_id:            1 as DeviceId,
-            sender_device_feature_level: FeatureLevel::MultiRing,
-            receiver_device_id:          1 as DeviceId,
-            receiver_device_is_primary:  true,
-        },
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
     )
     .expect(error_line!());
 

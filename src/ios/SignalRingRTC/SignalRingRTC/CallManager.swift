@@ -89,9 +89,11 @@ public enum HangupType: Int32 {
 // Call Service doesn't need a direct WebRTC dependency and
 // we don't need the SSKProtoCallMessageIce dependency.
 public class CallManagerIceCandidate {
-    public let sdp: String
+    public let opaque: Data?
+    public let sdp: String?
 
-    public init(sdp: String) {
+    public init(opaque: Data?, sdp: String?) {
+        self.opaque = opaque
         self.sdp = sdp
     }
 }
@@ -117,14 +119,14 @@ public protocol CallManagerDelegate: class {
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendOffer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, sdp: String, callMediaType: CallMediaType)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendOffer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?, callMediaType: CallMediaType)
 
     /**
      * An Answer message should be sent to the given remote.
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendAnswer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, sdp: String)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendAnswer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?)
 
     /**
      * An Ice Candidate message should be sent to the given remote.
@@ -408,18 +410,27 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Signaling API
 
-    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, sdp: String, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, remoteSupportsMultiRing: Bool, isLocalDevicePrimary: Bool) throws {
+    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data?, sdp: String?, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, remoteSupportsMultiRing: Bool, isLocalDevicePrimary: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedOffer")
 
-        let bytes = Array(sdp.utf8)
-        let offer = AppByteSlice(
-            bytes: bytes,
-            len: bytes.count)
+        let opaque_slice = allocatedAppByteSliceFromData(maybe_data: opaque)
+        let sdp_slice = allocatedAppByteSliceFromString(maybe_string: sdp)
+
+        // Make sure to release the allocated memory when the function exists,
+        // to ensure that the pointers are still valid when used in the RingRTC
+        // API function.
+        defer {
+            if opaque_slice.bytes != nil {
+                 opaque_slice.bytes.deallocate()
+            }
+            if sdp_slice.bytes != nil {
+                sdp_slice.bytes.deallocate()
+            }
+        }
 
         let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-
-        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, offer, messageAgeSec, callMediaType.rawValue, localDevice, remoteSupportsMultiRing, isLocalDevicePrimary)
+        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaque_slice, sdp_slice, messageAgeSec, callMediaType.rawValue, localDevice, remoteSupportsMultiRing, isLocalDevicePrimary)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedOffer() function failure")
         }
@@ -428,16 +439,26 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         _ = unmanagedRemote.retain()
     }
 
-    public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, sdp: String, remoteSupportsMultiRing: Bool) throws {
+    public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, opaque: Data?, sdp: String?, remoteSupportsMultiRing: Bool) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedAnswer")
 
-        let bytes = Array(sdp.utf8)
-        let answer = AppByteSlice(
-            bytes: bytes,
-            len: bytes.count)
+        let opaque_slice = allocatedAppByteSliceFromData(maybe_data: opaque)
+        let sdp_slice = allocatedAppByteSliceFromString(maybe_string: sdp)
 
-        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, sourceDevice, answer, remoteSupportsMultiRing)
+        // Make sure to release the allocated memory when the function exists,
+        // to ensure that the pointers are still valid when used in the RingRTC
+        // API function.
+        defer {
+            if opaque_slice.bytes != nil {
+                 opaque_slice.bytes.deallocate()
+            }
+            if sdp_slice.bytes != nil {
+                sdp_slice.bytes.deallocate()
+            }
+        }
+
+        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, sourceDevice, opaque_slice, sdp_slice, remoteSupportsMultiRing)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedAnswer() function failure")
         }
@@ -448,14 +469,10 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         Logger.debug("receivedIceCandidates")
 
         let appIceCandidates: [AppIceCandidate] = candidates.map { candidate in
-            var count = candidate.sdp.utf8.count
-            let sdpPtr = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
-            sdpPtr.initialize(from: Array(candidate.sdp.utf8), count: count)
-            let sdp = AppByteSlice(
-                bytes: sdpPtr,
-                len: count)
+            let opaque_slice = allocatedAppByteSliceFromData(maybe_data: candidate.opaque)
+            let sdp_slice = allocatedAppByteSliceFromString(maybe_string: candidate.sdp)
 
-            return AppIceCandidate(sdp: sdp)
+            return AppIceCandidate(opaque: opaque_slice, sdp: sdp_slice)
         }
 
         // Make sure to release the allocated memory when the function exists,
@@ -463,14 +480,21 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // API function.
         defer {
             for appIceCandidate in appIceCandidates {
-                appIceCandidate.sdp.bytes.deallocate()
+                if appIceCandidate.opaque.bytes != nil {
+                    appIceCandidate.opaque.bytes.deallocate()
+                }
+                if appIceCandidate.sdp.bytes != nil {
+                    appIceCandidate.sdp.bytes.deallocate()
+                }
             }
         }
 
-        var appIceCandidateArray = AppIceCandidateArray(
-            candidates: appIceCandidates,
-            count: candidates.count
-        )
+        var appIceCandidateArray = appIceCandidates.withUnsafeBufferPointer { appIceCandidatesBytes in
+            return AppIceCandidateArray(
+                candidates: appIceCandidatesBytes.baseAddress,
+                count: candidates.count
+            )
+        }
 
         let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, sourceDevice, &appIceCandidateArray)
         if retPtr == nil {
@@ -528,7 +552,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Signaling Observers
 
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, offer: String, callMediaType: CallMediaType) {
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?, callMediaType: CallMediaType) {
         Logger.debug("onSendOffer")
 
         DispatchQueue.main.async {
@@ -537,11 +561,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendOffer: callId, call: callReference, destinationDeviceId: destinationDeviceId, sdp: offer, callMediaType: callMediaType)
+            delegate.callManager(self, shouldSendOffer: callId, call: callReference, destinationDeviceId: destinationDeviceId, opaque: opaque, sdp: sdp, callMediaType: callMediaType)
         }
     }
 
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, answer: String) {
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?) {
         Logger.debug("onSendAnswer")
 
         DispatchQueue.main.async {
@@ -550,7 +574,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendAnswer: callId, call: callReference, destinationDeviceId: destinationDeviceId, sdp: answer)
+            delegate.callManager(self, shouldSendAnswer: callId, call: callReference, destinationDeviceId: destinationDeviceId, opaque: opaque, sdp: sdp)
         }
     }
 
@@ -595,7 +619,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Utility Observers
 
-    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
+    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
         Logger.debug("onCreateConnection")
 
         // We create default configuration settings here as per
@@ -619,6 +643,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         if appCallContext.hideIp {
             configuration.iceTransportPolicy = .relay
         }
+
+        configuration.enableDtlsSrtp = enableDtls;
+        configuration.enableRtpDataChannel = enableRtpDataChannel;
 
         // Create the default media constraints.
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: ["DtlsSrtpKeyAgreement": "true"])
@@ -698,4 +725,27 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     var videoHeight: Int32 {
         return 400
     }
+}
+
+func allocatedAppByteSliceFromArray(maybe_bytes: [UInt8]?) -> AppByteSlice {
+    guard let bytes = maybe_bytes else {
+        return AppByteSlice(bytes: nil, len: 0)
+    }
+    let ptr = UnsafeMutablePointer<UInt8>.allocate(capacity: bytes.count)
+    ptr.initialize(from: bytes, count: bytes.count)
+    return AppByteSlice(bytes: ptr, len: bytes.count)
+}
+
+func allocatedAppByteSliceFromString(maybe_string: String?) -> AppByteSlice {
+    guard let string = maybe_string else {
+        return allocatedAppByteSliceFromArray(maybe_bytes: nil)
+    }
+    return allocatedAppByteSliceFromArray(maybe_bytes: Array(string.utf8))
+}
+
+func allocatedAppByteSliceFromData(maybe_data: Data?) -> AppByteSlice {
+    guard let data = maybe_data else {
+        return allocatedAppByteSliceFromArray(maybe_bytes: nil)
+    }
+    return allocatedAppByteSliceFromArray(maybe_bytes: Array(data))
 }

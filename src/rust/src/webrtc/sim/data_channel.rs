@@ -53,3 +53,9 @@ pub unsafe fn Rust_dataChannelGetLabel(
         Err(_) => ptr::null(),
     }
 }
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_dataChannelIsReliable(_dc_interface: *const RffiDataChannelInterface) -> bool {
+    info!("Rust_dataChannelIsReliable(): ");
+    false
+}

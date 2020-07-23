@@ -111,11 +111,16 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
                     .to_string_lossy()
                     .into_owned()
             };
-            let ice_candidate = signaling::IceCandidate::from_sdp(sdp);
-            let force_send = false;
-            connection
-                .inject_local_ice_candidate(ice_candidate, force_send)
-                .unwrap_or_else(|e| error!("Problems adding ice canddiate to fsm: {}", e));
+            // ICE candidates are the same for V1 and V2, so this works for V1 as well.
+            let ice_candidate = signaling::IceCandidate::from_v2_sdp(sdp);
+            if let Ok(ice_candidate) = ice_candidate {
+                let force_send = false;
+                connection
+                    .inject_local_ice_candidate(ice_candidate, force_send)
+                    .unwrap_or_else(|e| error!("Problems adding ice canddiate to fsm: {}", e));
+            } else {
+                warn!("Failed to handle local ICE candidate SDP");
+            }
         } else {
             warn!("Ignoring null IceCandidate pointer");
         }
@@ -312,7 +317,7 @@ extern "C" fn pc_observer_OnDataChannel<T>(
     let object = unsafe { ptr_as_mut(connection_ptr) };
     if let Ok(connection) = object {
         info!("pc_observer_OnDataChannel(): {}", connection.id());
-        let data_channel = DataChannel::new(rffi_dc_interface);
+        let data_channel = unsafe { DataChannel::new(rffi_dc_interface) };
         let label = data_channel.get_label();
         if label == DATA_CHANNEL_NAME {
             connection

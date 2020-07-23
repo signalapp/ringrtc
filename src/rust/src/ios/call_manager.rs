@@ -116,12 +116,12 @@ pub fn received_answer(
     call_manager: *mut IOSCallManager,
     call_id: u64,
     sender_device_id: DeviceId,
-    sdp: &str,
+    opaque: Option<Vec<u8>>,
+    sdp: Option<String>,
     sender_device_feature_level: FeatureLevel,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let sdp = sdp.to_string();
 
     info!(
         "received_answer(): call_id: {} sender_device_id: {}",
@@ -130,7 +130,7 @@ pub fn received_answer(
     call_manager.received_answer(
         call_id,
         signaling::ReceivedAnswer {
-            answer: signaling::Answer::from_sdp(sdp),
+            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp),
             sender_device_id,
             sender_device_feature_level,
         },
@@ -143,7 +143,8 @@ pub fn received_offer(
     call_id: u64,
     remote_peer: *const c_void,
     sender_device_id: DeviceId,
-    sdp: &str,
+    opaque: Option<Vec<u8>>,
+    sdp: Option<String>,
     age_sec: u64,
     call_media_type: CallMediaType,
     receiver_device_id: DeviceId,
@@ -153,7 +154,6 @@ pub fn received_offer(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
     let remote_peer = AppObject::from(remote_peer);
-    let sdp = sdp.to_string();
 
     info!(
         "received_offer(): call_id: {} remote_device_id: {}",
@@ -164,7 +164,7 @@ pub fn received_offer(
         remote_peer,
         call_id,
         signaling::ReceivedOffer {
-            offer: signaling::Offer::from_sdp(call_media_type, sdp),
+            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp),
             age: Duration::from_secs(age_sec),
             sender_device_id,
             sender_device_feature_level,

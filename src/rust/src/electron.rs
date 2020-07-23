@@ -394,7 +394,17 @@ declare_types! {
             let call_id = get_call_id_arg(&mut cx, 4);
             let offer_type = cx.argument::<JsNumber>(5)?.value() as i32;
             let sender_supports_multi_ring = cx.argument::<JsBoolean>(6)?.value();
-            let sdp = cx.argument::<JsString>(7)?.value();
+            let opaque = cx.argument::<JsValue>(7)?.as_value(&mut cx);
+            let sdp = cx.argument::<JsValue>(8)?.as_value(&mut cx);
+
+            let opaque = match opaque.downcast::<JsArrayBuffer>() {
+                Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
+                Err(_) => None,
+            };
+            let sdp = match sdp.downcast::<JsString>() {
+                Ok(handle) => Some(handle.value()),
+                Err(_) => None,
+            };
 
             let call_media_type = match offer_type {
                 1 => CallMediaType::Video,
@@ -405,12 +415,13 @@ declare_types! {
             } else {
                 FeatureLevel::Unspecified
             };
-            debug!("JsCallManager.receivedOffer({}, {}, {}, {}, {}, {:?}, {})", peer_id, sender_device_id, call_id, receiver_device_id, call_media_type, sender_device_feature_level, sdp);
+            let offer = signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp);
+            debug!("JsCallManager.receivedOffer({}, {}, {}, {}, {}, {:?}, {})", peer_id, sender_device_id, call_id, receiver_device_id, call_media_type, sender_device_feature_level, offer.to_redacted_string());
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
                 cm.call_manager.received_offer(peer_id, call_id, signaling::ReceivedOffer {
-                    offer: signaling::Offer::from_sdp(call_media_type, sdp),
+                    offer,
                     age: Duration::from_secs(age_sec),
                     sender_device_id,
                     sender_device_feature_level,
@@ -428,18 +439,30 @@ declare_types! {
             let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = get_call_id_arg(&mut cx, 2);
             let sender_supports_multi_ring = cx.argument::<JsBoolean>(3)?.value();
-            let sdp = cx.argument::<JsString>(4)?.value();
+            let opaque = cx.argument::<JsValue>(4)?.as_value(&mut cx);
+            let sdp = cx.argument::<JsValue>(5)?.as_value(&mut cx);
+
+            let opaque = match opaque.downcast::<JsArrayBuffer>() {
+                Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
+                Err(_) => None,
+            };
+            let sdp = match sdp.downcast::<JsString>() {
+                Ok(handle) => Some(handle.value()),
+                Err(_) => None,
+            };
+
             let sender_device_feature_level = if sender_supports_multi_ring {
                 FeatureLevel::MultiRing
             } else {
                 FeatureLevel::Unspecified
             };
-            debug!("JsCallManager.receivedAnswer({}, {}, {}, {})", peer_id, sender_device_id, call_id, sdp);
+            let answer = signaling::Answer::from_opaque_or_sdp(opaque, sdp);
+            debug!("JsCallManager.receivedAnswer({}, {}, {}, {})", peer_id, sender_device_id, call_id, answer.to_redacted_string());
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
                 cm.call_manager.received_answer(call_id, signaling::ReceivedAnswer {
-                    answer: signaling::Answer::from_sdp(sdp),
+                    answer,
                     sender_device_id,
                     sender_device_feature_level,
                 })?;
@@ -452,13 +475,20 @@ declare_types! {
             let peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
             let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = get_call_id_arg(&mut cx, 2);
-            let js_candidate_sdps = *cx.argument::<JsArray>(3)?;
+            let js_candidates = *cx.argument::<JsArray>(3)?;
 
-            let mut candidates = Vec::with_capacity(js_candidate_sdps.len() as usize);
-            for i in 0..js_candidate_sdps.len() {
-                // An m-line index of 0 will always work if we are max-bundling, which we are.
-                let sdp: String = js_candidate_sdps.get(&mut cx, i as u32)?.downcast::<JsString>().expect("ICE candidates are strings").value();
-                candidates.push(signaling::IceCandidate::from_sdp(sdp));
+            let mut candidates = Vec::with_capacity(js_candidates.len() as usize);
+            for i in 0..js_candidates.len() {
+                let js_candidate = js_candidates.get(&mut cx, i as u32)?.downcast::<JsObject>().expect("ICE candidates");
+                let opaque = match js_candidate.get(&mut cx, "opaque")?.downcast::<JsArrayBuffer>() {
+                    Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
+                    Err(_) => None,
+                };
+                let sdp = match js_candidate.get(&mut cx, "sdp")?.downcast::<JsString>() {
+                    Ok(handle) => Some(handle.value()),
+                    Err(_) => None,
+                };
+                candidates.push(signaling::IceCandidate::from_opaque_or_sdp(opaque, sdp));
             }
             debug!("JsCallManager.receivedIceCandidates({}, {}, {}, {})", peer_id, sender_device_id, call_id, candidates.len());
 
@@ -602,19 +632,67 @@ declare_types! {
             for event in events {
                 match event {
                     Event::SendSignaling(peer_id, maybe_device_id, call_id, signal) => {
-                        let (method_name, data1, data2) : (&str, Handle<JsValue>, Handle<JsValue>) = match signal {
-                            signaling::Message::Offer(offer) => ("onSendOffer", cx.number(offer.call_media_type as i32).upcast(), cx.string(offer.sdp).upcast()),
-                            signaling::Message::Answer(answer) => ("onSendAnswer", cx.string(answer.sdp).upcast(), cx.undefined().upcast()),
-                            signaling::Message::Ice(ice) => ("onSendIceCandidates", {
+                        let (method_name, data1, data2, data3) : (&str, Handle<JsValue>, Handle<JsValue>, Handle<JsValue>) = match signal {
+                            signaling::Message::Offer(offer) => {
+                                let opaque = match offer.opaque {
+                                    None => cx.undefined().upcast(),
+                                    Some(opaque) => {
+                                        let mut js_opaque = cx.array_buffer(opaque.len() as u32)?;
+                                        cx.borrow_mut(&mut js_opaque, |handle| {
+                                            handle.as_mut_slice().copy_from_slice(&opaque);
+                                        });
+                                        js_opaque.upcast()
+                                    }
+                                };
+                                let sdp = match offer.sdp {
+                                    None => cx.undefined().upcast(),
+                                    Some(sdp) => cx.string(sdp).upcast(),
+                                };
+                                ("onSendOffer", cx.number(offer.call_media_type as i32).upcast(), opaque, sdp)
+                            },
+                            signaling::Message::Answer(answer) => {
+                                let opaque = match answer.opaque {
+                                    None => cx.undefined().upcast(),
+                                    Some(opaque) => {
+                                        let mut js_opaque = cx.array_buffer(opaque.len() as u32)?;
+                                        cx.borrow_mut(&mut js_opaque, |handle| {
+                                            handle.as_mut_slice().copy_from_slice(&opaque);
+                                        });
+                                        js_opaque.upcast()
+                                    }
+                                };
+                                let sdp = match answer.sdp {
+                                    None => cx.undefined().upcast(),
+                                    Some(sdp) => cx.string(sdp).upcast(),
+                                };
+
+                                ("onSendAnswer", opaque, sdp, cx.undefined().upcast())
+                            },
+                            signaling::Message::Ice(ice) => {
                                 let js_candidates = JsArray::new(&mut cx, ice.candidates_added.len() as u32);
                                 for (i, candidate) in ice.candidates_added.iter().enumerate() {
+                                    let opaque: neon::handle::Handle<JsValue> = match &candidate.opaque {
+                                        None => cx.undefined().upcast(),
+                                        Some(opaque) => {
+                                            let mut js_opaque = cx.array_buffer(opaque.len() as u32)?;
+                                            cx.borrow_mut(&mut js_opaque, |handle| {
+                                                handle.as_mut_slice().copy_from_slice(opaque);
+                                            });
+                                            js_opaque.upcast()
+                                        },
+                                    };
+                                    let sdp: neon::handle::Handle<JsValue> = match &candidate.sdp {
+                                        None => cx.undefined().upcast(),
+                                        Some(sdp) => cx.string(sdp).upcast(),
+                                    };
+
                                     let js_candidate = cx.empty_object();
-                                    let js_sdp = cx.string(candidate.sdp.clone());
-                                    js_candidate.set(&mut cx, "sdp", js_sdp)?;
+                                    js_candidate.set(&mut cx, "opaque", opaque)?;
+                                    js_candidate.set(&mut cx, "sdp", sdp)?;
                                     js_candidates.set(&mut cx, i as u32, js_candidate)?;
                                 }
-                                js_candidates.upcast()
-                            }, cx.undefined().upcast()),
+                                ("onSendIceCandidates", js_candidates.upcast(), cx.undefined().upcast(), cx.undefined().upcast())
+                            }
                             signaling::Message::Hangup(hangup) => {
                                 let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
                                 let hangup_type = cx.number(hangup_type as i32).upcast();
@@ -622,7 +700,7 @@ declare_types! {
                                     Some(device_id) => cx.number(device_id).upcast(),
                                     None => cx.null().upcast(),
                                 };
-                                ("onSendHangup", hangup_type, device_id)
+                                ("onSendHangup", hangup_type, device_id, cx.undefined().upcast())
                             }
                             signaling::Message::LegacyHangup(hangup) => {
                                 let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
@@ -631,9 +709,11 @@ declare_types! {
                                     Some(device_id) => cx.number(device_id).upcast(),
                                     None => cx.null().upcast(),
                                 };
-                                ("onSendLegacyHangup", hangup_type, device_id)
+                                ("onSendLegacyHangup", hangup_type, device_id, cx.undefined().upcast())
                             },
-                            signaling::Message::Busy => ("onSendBusy", cx.undefined().upcast(), cx.undefined().upcast()),
+                            signaling::Message::Busy => {
+                                ("onSendBusy", cx.undefined().upcast(), cx.undefined().upcast(), cx.undefined().upcast())
+                            }
                         };
                         let error_message = format!("{} is a function", method_name);
                         let method = *observer.get(&mut cx, method_name)?.downcast::<JsFunction>().expect(&error_message);
@@ -644,12 +724,13 @@ declare_types! {
                             cx.boolean(maybe_device_id.is_none()).upcast(),
                             data1,
                             data2,
+                            data3,
                         ];
                         method.call(&mut cx, observer, args)?;
                         // // TODO: Only call this once it's really sent.  This may be too early.
                         // let mut this = cx.this();
                         // cx.borrow_mut(&mut this, |mut cm| {
-                        //   // %%%% TODO: handle errors
+                        //   // TODO: handle errors
                         //   let _ = cm.call_manager.message_sent(call_id);
                         // });
                     },

@@ -38,6 +38,7 @@ if (is_android) {
       "api/org/signal/ringrtc/CallManager.java",
       "api/org/signal/ringrtc/CameraControl.java",
       "api/org/signal/ringrtc/Connection.java",
+      "api/org/signal/ringrtc/IceCandidate.java",
       "api/org/signal/ringrtc/Log.java",
       "api/org/signal/ringrtc/Remote.java",
       "api/org/signal/ringrtc/Testing.java",

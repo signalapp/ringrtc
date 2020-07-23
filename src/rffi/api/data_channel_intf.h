@@ -56,4 +56,7 @@ Rust_dataChannelSend(webrtc::DataChannelInterface* data_channel,
 RUSTEXPORT const char*
 Rust_dataChannelGetLabel(webrtc::DataChannelInterface* data_channel);
 
+RUSTEXPORT bool
+Rust_dataChannelIsReliable(webrtc::DataChannelInterface* data_channel);
+
 #endif /* RFFI_API_DATA_CHANNEL_OBSERVER_INTF_H__ */

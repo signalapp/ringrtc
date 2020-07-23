@@ -86,6 +86,15 @@ impl SessionDescriptionInterface {
         }
         Ok(SessionDescriptionInterface::new(offer))
     }
+
+    pub fn replace_rtp_data_channels_with_sctp(&mut self) -> Result<()> {
+        let success = unsafe { sdp::Rust_replaceRtpDataChannelsWithSctp(self.sd_interface) };
+        if success {
+            Ok(())
+        } else {
+            Err(RingRtcError::MungeSdp.into())
+        }
+    }
 }
 
 #[cfg(not(feature = "sim"))]

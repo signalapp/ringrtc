@@ -15,15 +15,7 @@ extern crate log;
 use std::ptr;
 use std::time::Duration;
 
-use ringrtc::common::{
-    ApplicationEvent,
-    CallId,
-    CallMediaType,
-    CallState,
-    ConnectionState,
-    DeviceId,
-    FeatureLevel,
-};
+use ringrtc::common::{ApplicationEvent, CallId, CallState, ConnectionState, DeviceId};
 
 use ringrtc::core::call_manager::MAX_MESSAGE_AGE_SEC;
 use ringrtc::core::signaling;
@@ -33,19 +25,14 @@ use ringrtc::webrtc::data_channel::DataChannel;
 
 #[macro_use]
 mod common;
-use common::{test_init, TestContext, PRNG};
-
-fn random_received_offer_with_age(age: Duration) -> signaling::ReceivedOffer {
-    let sdp = format!("OFFER-{}", PRNG.gen::<u16>()).to_owned();
-    signaling::ReceivedOffer {
-        offer: signaling::Offer::from_sdp(CallMediaType::Audio, sdp),
-        age,
-        sender_device_id: 1 as DeviceId,
-        sender_device_feature_level: FeatureLevel::MultiRing,
-        receiver_device_id: 1 as DeviceId,
-        receiver_device_is_primary: true,
-    }
-}
+use common::{
+    random_received_ice_candidate,
+    random_received_offer,
+    test_init,
+    SignalingType,
+    TestContext,
+    PRNG,
+};
 
 // Create an inbound call session up to the IceConnecting state.
 //
@@ -55,11 +42,11 @@ fn random_received_offer_with_age(age: Duration) -> signaling::ReceivedOffer {
 // - check active call exists
 // - call proceed()
 // - add received ice candidate
-// - check underlying Connection is in IceConnecting(true) state
+// - check underlying Connection is in IceConnecting state
 // - check call is in Connecting state
 // - check answer sent
 // Now in the Connecting state.
-fn start_inbound_call() -> TestContext {
+fn start_inbound_call(signaling_type: SignalingType) -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
@@ -68,7 +55,7 @@ fn start_inbound_call() -> TestContext {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer_with_age(Duration::from_secs(0)),
+        random_received_offer(signaling_type, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -96,24 +83,16 @@ fn start_inbound_call() -> TestContext {
         .get_connection(1 as DeviceId)
         .expect(error_line!());
 
-    // add a received ICE candidate
-    let ice_candidate =
-        signaling::IceCandidate::from_sdp(format!("ICE-{}", PRNG.gen::<u16>()).to_owned());
     cm.received_ice(
         active_call.call_id(),
-        signaling::ReceivedIce {
-            ice:              signaling::Ice {
-                candidates_added: vec![ice_candidate],
-            },
-            sender_device_id: 1 as DeviceId,
-        },
+        random_received_ice_candidate(signaling_type),
     )
     .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
     assert_eq!(
         connection.state().expect(error_line!()),
-        ConnectionState::IceConnecting(true)
+        ConnectionState::IceConnecting
     );
 
     assert_eq!(context.answers_sent(), 1);
@@ -131,7 +110,9 @@ fn start_inbound_call() -> TestContext {
 fn inbound_ice_connecting() {
     test_init();
 
-    let _ = start_inbound_call();
+    let _ = start_inbound_call(SignalingType::Legacy);
+    let _ = start_inbound_call(SignalingType::BackwardsCompatible);
+    let _ = start_inbound_call(SignalingType::LegacyFree);
 }
 
 // Create an inbound call session up to the CallConnected state.
@@ -144,7 +125,7 @@ fn inbound_ice_connecting() {
 // Now in the CallConnected state.
 
 fn connect_inbound_call() -> TestContext {
-    let context = start_inbound_call();
+    let context = start_inbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -162,7 +143,7 @@ fn connect_inbound_call() -> TestContext {
     );
 
     info!("test: injecting data channel connected");
-    let data_channel = DataChannel::new(ptr::null());
+    let data_channel = unsafe { DataChannel::new(ptr::null()) };
     active_connection
         .inject_on_data_channel(data_channel)
         .expect(error_line!());
@@ -318,7 +299,7 @@ fn start_inbound_call_with_error() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer_with_age(Duration::from_secs(0)),
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -376,7 +357,7 @@ fn receive_offer_while_active() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer_with_age(Duration::from_secs(0)),
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -403,7 +384,7 @@ fn receive_expired_offer() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer_with_age(Duration::from_secs(86400)), // one whole day
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(86400)), // one whole day
     )
     .expect(error_line!());
 
@@ -429,7 +410,10 @@ fn receive_offer_before_age_limit() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer_with_age(Duration::from_secs(MAX_MESSAGE_AGE_SEC - 1)),
+        random_received_offer(
+            SignalingType::Legacy,
+            Duration::from_secs(MAX_MESSAGE_AGE_SEC - 1),
+        ),
     )
     .expect(error_line!());
 
@@ -455,7 +439,10 @@ fn receive_offer_at_age_limit() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer_with_age(Duration::from_secs(MAX_MESSAGE_AGE_SEC)),
+        random_received_offer(
+            SignalingType::Legacy,
+            Duration::from_secs(MAX_MESSAGE_AGE_SEC),
+        ),
     )
     .expect(error_line!());
 
@@ -481,7 +468,10 @@ fn receive_expired_offer_after_age_limit() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer_with_age(Duration::from_secs(MAX_MESSAGE_AGE_SEC + 1)),
+        random_received_offer(
+            SignalingType::Legacy,
+            Duration::from_secs(MAX_MESSAGE_AGE_SEC + 1),
+        ),
     )
     .expect(error_line!());
 

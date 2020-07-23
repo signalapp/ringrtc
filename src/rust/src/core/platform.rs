@@ -42,6 +42,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         call: &Call<Self>,
         remote_device: DeviceId,
         connection_type: ConnectionType,
+        signaling_version: signaling::Version,
     ) -> Result<Connection<Self>>;
 
     /// Inform the client application that a call should be started.

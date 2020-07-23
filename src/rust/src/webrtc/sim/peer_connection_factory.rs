@@ -31,7 +31,7 @@ pub unsafe fn Rust_createPeerConnectionFactory(
     &FAKE_PEER_CONNECTION_FACTORY
 }
 
-#[allow(non_snake_case, clippy::missing_safety_doc)]
+#[allow(non_snake_case, clippy::missing_safety_doc, clippy::too_many_arguments)]
 pub unsafe fn Rust_createPeerConnection(
     _factory: *const RffiPeerConnectionFactoryInterface,
     _observer: *const RffiPeerConnectionObserverInterface,
@@ -40,6 +40,8 @@ pub unsafe fn Rust_createPeerConnection(
     _ice_server: RffiIceServer,
     _outgoing_audio: *const RffiAudioTrackInterface,
     _outgoing_video: *const RffiVideoTrackSourceInterface,
+    _enable_dtls: bool,
+    _enable_rtp_data_channel: bool,
 ) -> *const RffiPeerConnectionInterface {
     info!("Rust_createPeerConnection()");
     &RffiPeerConnectionInterface::new()

@@ -1,0 +1,39 @@
+/*
+ *
+ *  Copyright (C) 2019 Signal Messenger, LLC.
+ *  All rights reserved.
+ *
+ *  SPDX-License-Identifier: GPL-3.0-only
+ *
+ */
+
+syntax = "proto2";
+
+// Messages sent over the signaling channel
+
+package signaling;
+
+// A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
+// For future compatibility, we can add new slots (v2, v3, v4 ....)
+message Offer {
+  optional ConnectionParametersV2 v2 = 2;
+}
+
+// A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
+message Answer {
+  optional ConnectionParametersV2 v2 = 2;
+}
+
+// A serialized one these goes in the "opaque" field of the CallingMessage::Ice in SignalService.proto
+message IceCandidate {
+  optional IceCandidateV2 v2 = 2;
+}
+
+// The V2 protocol uses SDP, DTLS, but not SCTP.
+message ConnectionParametersV2 {
+  optional string sdp = 1;
+}
+
+message IceCandidateV2 {
+  optional string sdp = 1;
+}

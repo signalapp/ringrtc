@@ -11,8 +11,6 @@ use std::ffi::c_void;
 use std::fmt;
 use std::sync::Arc;
 
-use libc::size_t;
-
 use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
@@ -94,11 +92,13 @@ impl Platform for IOSPlatform {
         call: &Call<Self>,
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
+        signaling_version: signaling::Version,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {}",
+            "create_connection(): call_id: {} remote_device_id: {}, signaling_version: {:?}",
             call.call_id(),
-            remote_device_id
+            remote_device_id,
+            signaling_version
         );
 
         let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
@@ -114,6 +114,8 @@ impl Platform for IOSPlatform {
             pc_observer.rffi_interface() as *mut c_void,
             remote_device_id,
             call.call_context()?.object,
+            signaling_version.enable_dtls(),
+            signaling_version.enable_rtp_data_channel(),
         );
 
         if app_connection_interface.object.is_null() || app_connection_interface.pc.is_null() {
@@ -185,18 +187,14 @@ impl Platform for IOSPlatform {
 
         info!("on_send_offer(): call_id: {}", call_id);
 
-        let sdp_slice = AppByteSlice {
-            bytes: offer.sdp.as_ptr(),
-            len:   offer.sdp.len(),
-        };
-
         (self.app_interface.onSendOffer)(
             self.app_interface.object,
             u64::from(call_id) as u64,
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
-            sdp_slice,
+            app_slice_from_bytes(offer.opaque.as_ref()),
+            app_slice_from_str(offer.sdp.as_ref()),
             offer.call_media_type as i32,
         );
 
@@ -219,18 +217,14 @@ impl Platform for IOSPlatform {
             call_id, receiver_device_id
         );
 
-        let sdp_slice = AppByteSlice {
-            bytes: send.answer.sdp.as_ptr(),
-            len:   send.answer.sdp.len(),
-        };
-
         (self.app_interface.onSendAnswer)(
             self.app_interface.object,
             u64::from(call_id) as u64,
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
-            sdp_slice,
+            app_slice_from_bytes(send.answer.opaque.as_ref()),
+            app_slice_from_str(send.answer.sdp.as_ref()),
         );
 
         Ok(())
@@ -264,12 +258,10 @@ impl Platform for IOSPlatform {
         // Take a reference here so that we don't take ownership of it
         // and cause it to be dropped prematurely.
         for candidate in &send.ice.candidates_added {
-            let sdp = AppByteSlice {
-                bytes: candidate.sdp.as_ptr(),
-                len:   candidate.sdp.len() as size_t,
+            let app_ice_candidate = AppIceCandidate {
+                opaque: app_slice_from_bytes(candidate.opaque.as_ref()),
+                sdp:    app_slice_from_str(candidate.sdp.as_ref()),
             };
-
-            let app_ice_candidate = AppIceCandidate { sdp };
 
             app_ice_candidates.push(app_ice_candidate);
         }
@@ -425,5 +417,31 @@ impl IOSPlatform {
         );
 
         Ok(Self { app_interface })
+    }
+}
+
+fn app_slice_from_bytes(bytes: Option<&Vec<u8>>) -> AppByteSlice {
+    match bytes {
+        None => AppByteSlice {
+            bytes: std::ptr::null(),
+            len:   0,
+        },
+        Some(bytes) => AppByteSlice {
+            bytes: bytes.as_ptr(),
+            len:   bytes.len(),
+        },
+    }
+}
+
+fn app_slice_from_str(s: Option<&String>) -> AppByteSlice {
+    match s {
+        None => AppByteSlice {
+            bytes: std::ptr::null(),
+            len:   0,
+        },
+        Some(s) => AppByteSlice {
+            bytes: s.as_ptr(),
+            len:   s.len(),
+        },
     }
 }

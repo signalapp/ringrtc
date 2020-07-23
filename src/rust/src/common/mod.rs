@@ -193,17 +193,28 @@ impl fmt::Display for ApplicationEvent {
 /// Tracks the state of a connection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ConnectionState {
-    /// No call in progress.
-    Idle,
+    /// The connection has been created but not started
+    /// (via start_outgoing_parent, start_outgoing_child, or start_incoming)
+    NotYetStarted,
 
-    /// Outgoing call is sending an offer.
-    SendingOffer,
+    /// The connection has been started, but the start method has not completed.
+    /// After a connection is started, it will transition to either
+    /// IceGathering (in the case of outgoing parent)
+    /// or IceConnecting (in the case of outgoing child or incoming)
+    Starting,
 
-    /// Call is connecting ICE.  The `bool` is `true` if this end of
-    /// the call has set both the local and remote (offer and answer).
-    IceConnecting(bool),
+    /// The connection is gathering and sending ICE candidates
+    /// (only for outgoing parent).
+    /// It has a local description but not a remote description.
+    /// This can only transition to Terminating/Closed
+    IceGathering,
 
-    /// ICE is connected.
+    /// ICE is attempting to connect, but has not yet.
+    /// It has both the local and remote descriptions.
+    /// This can transition to IceConnected or IceConnectionFailed
+    IceConnecting,
+
+    /// ICE has connected.
     IceConnected,
 
     /// ICE failed to connect.

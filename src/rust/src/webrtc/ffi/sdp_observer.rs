@@ -46,4 +46,7 @@ extern "C" {
     pub fn Rust_answerFromSdp(sdp: *const c_char) -> *const RffiSessionDescriptionInterface;
 
     pub fn Rust_offerFromSdp(sdp: *const c_char) -> *const RffiSessionDescriptionInterface;
+
+    pub fn Rust_replaceRtpDataChannelsWithSctp(sdi: *const RffiSessionDescriptionInterface)
+        -> bool;
 }

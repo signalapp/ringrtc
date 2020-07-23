@@ -8,13 +8,17 @@
 //! WebRTC Data Channel Interface.
 
 use std::ffi::{CStr, CString};
+use std::fmt;
+use std::fmt::Debug;
 use std::os::raw::{c_char, c_int};
 use std::ptr;
+use std::sync::Arc;
 
 use bytes::BytesMut;
 use prost::Message;
 
 use crate::common::{CallId, Result};
+use crate::core::call_mutex::CallMutex;
 use crate::core::signaling;
 use crate::core::util::CppObject;
 use crate::error::RingRtcError;
@@ -90,9 +94,16 @@ impl RffiDataChannelInit {
 }
 
 /// Rust wrapper around WebRTC C++ DataChannel object.
-#[derive(Debug)]
 pub struct DataChannel {
-    dc_interface: *const RffiDataChannelInterface,
+    dc_interface:      *const RffiDataChannelInterface,
+    reliable:          bool,
+    accumulated_state: Arc<CallMutex<Data>>,
+}
+
+impl Debug for DataChannel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.dc_interface.fmt(f)
+    }
 }
 
 // Implementing Sync and Sync required to share raw *const pointer
@@ -107,9 +118,17 @@ impl Drop for DataChannel {
 }
 
 impl DataChannel {
+    /// # Safety
+    ///
     /// Create a new Rust DataChannel object from a WebRTC C++ DataChannel object.
-    pub fn new(dc_interface: *const RffiDataChannelInterface) -> Self {
-        Self { dc_interface }
+    pub unsafe fn new(dc_interface: *const RffiDataChannelInterface) -> Self {
+        let reliable = dc::Rust_dataChannelIsReliable(dc_interface);
+        info!("data channel is reliable: {}", reliable);
+        Self {
+            dc_interface,
+            reliable,
+            accumulated_state: Arc::new(CallMutex::new(Data::default(), "accumulated_state")),
+        }
     }
 
     /// Free resources related to the DataChannel object.
@@ -172,6 +191,7 @@ impl DataChannel {
 
         let buffer: *const u8 = bytes.as_ptr();
 
+        // Setting Binary to true relies on a custom change in WebRTC.
         let result =
             unsafe { dc::Rust_dataChannelSend(self.dc_interface, buffer, bytes.len(), true) };
 
@@ -182,6 +202,28 @@ impl DataChannel {
         }
     }
 
+    /// Populates a data channel message using the supplied closure and sends it via the DataChannel.
+    fn update_and_send<F>(&self, populate: F) -> Result<()>
+    where
+        F: FnOnce(&mut Data),
+    {
+        let message = if self.reliable {
+            // Just send this one message by itself
+            let mut single = Data::default();
+            populate(&mut single);
+            single
+        } else {
+            // Merge this message into accumulated_state and send out the latest version.
+            let mut state = self.accumulated_state.lock()?;
+            populate(&mut state);
+            state.sequence_number = Some(state.sequence_number.unwrap_or(0) + 1);
+            state.clone()
+        };
+
+        info!("Sending data channel message: {:?}", message);
+        self.send_data(&message)
+    }
+
     /// Send `Hangup` message via the DataChannel.
     pub fn send_hangup(&self, call_id: CallId, hangup: signaling::Hangup) -> Result<()> {
         let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
@@ -190,20 +232,16 @@ impl DataChannel {
         hangup.id = Some(u64::from(call_id));
         hangup.r#type = Some(hangup_type as i32);
         hangup.device_id = hangup_device_id;
-        let mut data = Data::default();
-        data.hangup = Some(hangup);
 
-        self.send_data(&data)
+        self.update_and_send(move |data| data.hangup = Some(hangup))
     }
 
     /// Send `Call Connected` message via the DataChannel.
     pub fn send_connected(&self, call_id: CallId) -> Result<()> {
         let mut connected = Connected::default();
         connected.id = Some(u64::from(call_id));
-        let mut data = Data::default();
-        data.connected = Some(connected);
 
-        self.send_data(&data)
+        self.update_and_send(move |data| data.connected = Some(connected))
     }
 
     /// Send `VideoStatus` message via the DataChannel.
@@ -212,9 +250,22 @@ impl DataChannel {
         video_status.id = Some(u64::from(call_id));
         video_status.enabled = Some(enabled);
 
-        let mut data = Data::default();
-        data.video_streaming_status = Some(video_status);
+        self.update_and_send(move |data| data.video_streaming_status = Some(video_status))
+    }
 
-        self.send_data(&data)
+    /// Sends the current accumulated state of the call.
+    pub fn send_latest_state(&self) -> Result<()> {
+        if self.reliable {
+            // Reliable data channels handle retransmissions internally.
+            Ok(())
+        } else {
+            let data = self.accumulated_state.lock()?;
+            if *data != Data::default() {
+                self.send_data(&data)
+            } else {
+                // Don't send empty messages
+                Ok(())
+            }
+        }
     }
 }

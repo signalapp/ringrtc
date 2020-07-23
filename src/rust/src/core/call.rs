@@ -26,7 +26,6 @@ use crate::common::{
     CallState,
     DeviceId,
     Result,
-    DATA_CHANNEL_NAME,
 };
 // use crate::core::call_connection_observer::ClientEvent;
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
@@ -354,13 +353,19 @@ where
     /// holding the offer and ICE candidates sent by the remote side
     /// *before* the application has formally decided to accept the
     /// call.
-    pub fn set_pending_call(&self, received: signaling::ReceivedOffer) -> Result<()> {
+    pub fn handle_received_offer(&self, received: signaling::ReceivedOffer) -> Result<()> {
+        info!(
+            "id: {}, RX offer:\n{}",
+            self.call_id.format(received.sender_device_id),
+            received.offer.to_redacted_string()
+        );
+
         let mut pending_call = self.pending_call.lock()?;
         match pending_call.as_ref() {
             Some(pending) => {
                 return Err(RingRtcError::PendingCallAlreadySet(
                     pending.received.sender_device_id,
-                    pending.received.offer.sdp.clone(),
+                    pending.received.offer.to_redacted_string(),
                 )
                 .into())
             }
@@ -455,55 +460,6 @@ where
         call_manager.internal_error(self.call_id, error)
     }
 
-    /// Send an offer to the remote_peer.
-    ///
-    /// This is a pass through to the CallManager.
-    pub fn send_offer(&self, connection: Connection<T>, offer: signaling::Offer) -> Result<()> {
-        let state = self.state()?;
-
-        info!("send_offer(): {}", state);
-
-        match state {
-            CallState::Terminating | CallState::Closed => {
-                info!("send_offer(): ignoring, terminating state");
-                Ok(())
-            }
-            _ => {
-                let mut call_manager = self.call_manager()?;
-
-                // We have handed at least one Offer message to the platform...
-                self.did_send_offer.store(true, Ordering::Release);
-
-                call_manager.send_offer(self.clone(), connection, offer)
-            }
-        }
-    }
-
-    /// Send an answer to the remote_peer.
-    ///
-    /// This is a pass through to the CallManager.
-    pub fn send_answer(
-        &self,
-        connection: Connection<T>,
-        send: signaling::SendAnswer,
-    ) -> Result<()> {
-        let state = self.state()?;
-
-        info!("send_answer(): {}", state);
-
-        match state {
-            CallState::Terminating | CallState::Closed => {
-                info!("send_answer(): ignoring, terminating state");
-                Ok(())
-            }
-            _ => {
-                let mut call_manager = self.call_manager()?;
-
-                call_manager.send_answer(self.clone(), connection, send)
-            }
-        }
-    }
-
     /// Take and send the buffered ICE candidates to the remote peer.
     ///
     /// This is a pass through to the CallManager.
@@ -567,33 +523,32 @@ where
     pub fn proceed(&mut self) -> Result<()> {
         info!("proceed():");
 
-        let call_manager = self.call_manager()?;
+        let mut call_manager = self.call_manager()?;
 
         match self.direction {
+            // This happens after received_offer and an offer is put in self.pending_call.
             CallDirection::InComing => {
                 let mut pending_call = self.pending_call.lock()?;
                 if let Some(pending_call) = pending_call.take() {
                     let remote_device_id = pending_call.received.sender_device_id;
                     info!("proceed(): incoming: remote_device: {}", remote_device_id);
 
-                    let mut connection = call_manager.create_connection(
+                    let connection = call_manager.create_connection(
                         self,
                         remote_device_id,
                         ConnectionType::Incoming,
+                        pending_call.received.offer.latest_version(),
                     )?;
-                    // We do not create a data channel here.  Instead we wait until the caller
-                    // creates a data channel and listen for OnDataChannel.
-                    connection.inject_received_offer(pending_call.received)?;
-
-                    if !pending_call.ice_candidates.is_empty() {
-                        info!(
-                            "proceed(): incoming: adding ice_candidates, len: {}",
-                            pending_call.ice_candidates.len()
-                        );
-                        connection.inject_received_ice(signaling::Ice {
-                            candidates_added: pending_call.ice_candidates,
-                        })?;
-                    }
+                    let answer = connection
+                        .start_incoming(pending_call.received, pending_call.ice_candidates)?;
+                    call_manager.send_answer(
+                        self.clone(),
+                        connection.clone(),
+                        signaling::SendAnswer {
+                            receiver_device_id: remote_device_id,
+                            answer,
+                        },
+                    )?;
 
                     let mut connection_map = self.connection_map.lock()?;
                     connection_map.insert(remote_device_id, connection);
@@ -609,24 +564,25 @@ where
                 }
             }
             CallDirection::OutGoing => {
-                // Note: This causes the call to receive ICE candidates from the forking parent.
-                let mut parent_connection =
-                    call_manager.create_connection(&self, 0, ConnectionType::OutgoingParent)?;
-                parent_connection.create_and_set_data_channel(DATA_CHANNEL_NAME.to_string())?;
+                let parent_connection = call_manager.create_connection(
+                    &self,
+                    0,
+                    ConnectionType::OutgoingParent,
+                    signaling::Version::V2,
+                )?;
+                let (ice_gatherer, offer) =
+                    parent_connection.start_outgoing_parent(self.media_type)?;
 
-                let ice_gatherer = parent_connection.create_shared_ice_gatherer()?;
-                parent_connection.use_shared_ice_gatherer(&ice_gatherer)?;
-                let offer = signaling::Offer {
-                    call_media_type: self.media_type,
-                    sdp:             parent_connection.create_offer()?.to_sdp()?,
-                };
-                parent_connection.inject_set_local_description_and_send_offer(offer.clone())?;
                 // Keep around so that it's not closed until all the connections are closed.
                 *(self.forking.lock()?) = Some(ForkingState {
-                    parent_connection,
+                    parent_connection: parent_connection.clone(),
                     ice_gatherer,
-                    offer,
+                    offer: offer.clone(),
                 });
+
+                call_manager.send_offer(self.clone(), parent_connection, offer)?;
+                // If we don't do this, then hangups won't be sent.
+                self.did_send_offer.store(true, Ordering::Release);
             }
         }
         Ok(())
@@ -636,50 +592,45 @@ where
     pub fn received_answer(&self, received: signaling::ReceivedAnswer) -> Result<()> {
         let sender_device_id = received.sender_device_id;
         info!(
-            "received_answer(): id: {}",
-            self.call_id().format(sender_device_id)
+            "id: {}, RX answer:\n{}",
+            self.call_id().format(sender_device_id),
+            received.answer.to_redacted_string()
         );
 
         let mut connection_map = self.connection_map.lock()?;
-        let connection = match connection_map.get_mut(&sender_device_id) {
-            Some(v) => v,
-            None => {
-                if self.state()? == CallState::Connected || self.state()? == CallState::Reconnecting
-                {
-                    info!(
-                        "received an answer from device {} when already connected, so ignore.",
-                        sender_device_id
-                    );
-                    return Ok(());
-                }
-                let mut maybe_forking = self.forking.lock()?;
-                if let Some(forking) = maybe_forking.as_mut() {
-                    info!("recevied_answer from device {}; forking enabled, so inject into connection_map.", sender_device_id);
-                    let call_manager = self.call_manager()?;
-                    let mut child_connection = call_manager.create_connection(
-                        &self,
-                        sender_device_id,
-                        ConnectionType::OutgoingChild,
-                    )?;
-                    child_connection.create_and_set_data_channel(DATA_CHANNEL_NAME.to_string())?;
-
-                    child_connection.use_shared_ice_gatherer(&forking.ice_gatherer)?;
-                    // Note that this doesn't actually send an offer.  It just sets the local description and state
-                    // as if it has sent an offer.
-                    child_connection
-                        .inject_set_local_description_and_send_offer(forking.offer.clone())?;
-                    child_connection.inject_received_answer(received)?;
-                    connection_map.insert(sender_device_id, child_connection);
-                    return Ok(());
-                }
+        if !connection_map.contains_key(&sender_device_id) {
+            if self.state()? == CallState::Connected || self.state()? == CallState::Reconnecting {
                 info!(
-                    "recevied_answer from new device {}; forking not enabled, so fail.",
+                    "received an answer from device {} when already connected, so ignore.",
                     sender_device_id
                 );
-                return Err(RingRtcError::ConnectionNotFound(sender_device_id).into());
+                return Ok(());
             }
+            let mut maybe_forking = self.forking.lock()?;
+            if let Some(forking) = maybe_forking.as_mut() {
+                info!("recevied_answer from device {}; forking enabled, so inject into connection_map.", sender_device_id);
+                let call_manager = self.call_manager()?;
+                let child_connection = call_manager.create_connection(
+                    &self,
+                    sender_device_id,
+                    ConnectionType::OutgoingChild,
+                    received.answer.latest_version(),
+                )?;
+                child_connection.start_outgoing_child(
+                    &forking.ice_gatherer,
+                    &forking.offer,
+                    &received,
+                )?;
+                connection_map.insert(sender_device_id, child_connection);
+                return Ok(());
+            }
+            info!(
+                "recevied_answer from new device {}; forking not enabled, so fail.",
+                sender_device_id
+            );
+            return Err(RingRtcError::ConnectionNotFound(sender_device_id).into());
         };
-        connection.inject_received_answer(received)
+        Ok(())
     }
 
     /// Handle the received ICE candidates.

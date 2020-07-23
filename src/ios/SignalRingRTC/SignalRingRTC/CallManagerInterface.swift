@@ -9,12 +9,12 @@ import SignalCoreKit
 protocol CallManagerInterfaceDelegate: class {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, offer: String, callMediaType: CallMediaType)
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, answer: String)
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?, callMediaType: CallMediaType)
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?)
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate])
     func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool)
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
-    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
+    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
     func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool
     func onCallConcluded(remote: UnsafeRawPointer)
@@ -76,20 +76,20 @@ class CallManagerInterface {
         }
     }
 
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, offer: String, callMediaType: CallMediaType) {
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?, callMediaType: CallMediaType) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, offer: offer, callMediaType: callMediaType)
+        delegate.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque, sdp: sdp, callMediaType: callMediaType)
     }
 
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, answer: String) {
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, answer: answer)
+        delegate.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque, sdp: sdp)
     }
 
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
@@ -116,12 +116,12 @@ class CallManagerInterface {
         delegate.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
     }
 
-    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
+    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
         guard let delegate = self.callManagerObserverDelegate else {
             return nil
         }
 
-        return delegate.onCreateConnection(pcObserver: pcObserver, deviceId: deviceId, appCallContext: appCallContext)
+        return delegate.onCreateConnection(pcObserver: pcObserver, deviceId: deviceId, appCallContext: appCallContext, enableDtls: enableDtls, enableRtpDataChannel: enableRtpDataChannel)
     }
 
     func onConnectedMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream) {
@@ -198,7 +198,7 @@ func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: U
     obj.onEvent(remote: remote, event: event)
 }
 
-func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, offer: AppByteSlice, mediaType: Int32) {
+func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, sdp: AppByteSlice, mediaType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -207,11 +207,6 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
 
     guard let remote = remote else {
         owsFailDebug("remote was unexpectedly nil")
-        return
-    }
-
-    guard let string = offer.asString() else {
-        owsFailDebug("unexpected offer string")
         return
     }
 
@@ -229,10 +224,10 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
         return
     }
 
-    obj.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, offer: string, callMediaType: callMediaType)
+    obj.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque.asData(), sdp: sdp.asString(), callMediaType: callMediaType)
 }
 
-func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, answer: AppByteSlice) {
+func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, sdp: AppByteSlice) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -244,18 +239,13 @@ func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: 
         return
     }
 
-    guard let string = answer.asString() else {
-        owsFailDebug("unexpected answer string")
-        return
-    }
-
     // If we will broadcast this message, ignore the deviceId.
     var destinationDeviceId: UInt32? = destinationDeviceId
     if broadcast {
         destinationDeviceId = nil
     }
 
-    obj.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, answer: string)
+    obj.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque.asData(), sdp: sdp.asString())
 }
 
 func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, candidates: UnsafePointer<AppIceCandidateArray>?) {
@@ -284,15 +274,7 @@ func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, c
 
     for index in 0..<count {
         let iceCandidate = iceCandidates.pointee.candidates[index]
-
-        guard let sdpString = iceCandidate.sdp.asString() else {
-            owsFailDebug("unexpected string")
-
-            // @note We prefer to ignore this array item.
-            continue
-        }
-
-        finalCandidates.append(CallManagerIceCandidate(sdp: sdpString))
+        finalCandidates.append(CallManagerIceCandidate(opaque: iceCandidate.opaque.asData(), sdp: iceCandidate.sdp.asString()))
     }
 
     // If we will broadcast this message, ignore the deviceId.
@@ -354,7 +336,7 @@ func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UI
     obj.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
 }
 
-func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, observer: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?) -> AppConnectionInterface {
+func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, observer: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?, enableDtls: Bool, enableRtpDataChannel: Bool) -> AppConnectionInterface {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
 
@@ -383,7 +365,7 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
 
     let appCallContext: CallContext = Unmanaged.fromOpaque(callContext).takeUnretainedValue()
 
-    if let connectionDetails = obj.onCreateConnection(pcObserver: observer, deviceId: deviceId, appCallContext: appCallContext) {
+    if let connectionDetails = obj.onCreateConnection(pcObserver: observer, deviceId: deviceId, appCallContext: appCallContext, enableDtls: enableDtls, enableRtpDataChannel: enableRtpDataChannel) {
         return connectionDetails.connection.getWrapper(pc: connectionDetails.pc)
     } else {
         // Swift was problematic to pass back some nullable structure, so we
@@ -408,7 +390,7 @@ func callManagerInterfaceOnCreateMediaStreamInterface(object: UnsafeMutableRawPo
             createMediaStream: nil)
     }
 
-    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+    let _: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let appConnection = connection else {
         owsFailDebug("appConnection was unexpectedly nil")
@@ -421,10 +403,9 @@ func callManagerInterfaceOnCreateMediaStreamInterface(object: UnsafeMutableRawPo
             createMediaStream: nil)
     }
 
-    // @todo Maybe take the retained value and give it to the appMediaStream?
     let connection: Connection = Unmanaged.fromOpaque(appConnection).takeUnretainedValue()
 
-    // @note For this function, we don't need the Call Manager object to anything, so we
+    // For this function, we don't need the Call Manager object to anything, so we
     // will directly create a ConnectionMediaStream object and return it.
 
     let appMediaStream = ConnectionMediaStream(connection: connection)

@@ -134,11 +134,12 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     bool hide_ip,
     RffiIceServer ice_server,
     webrtc::AudioTrackInterface* outgoing_audio_track,
-    webrtc::VideoTrackSourceInterface* outgoing_video_source) {
+    webrtc::VideoTrackSourceInterface* outgoing_video_source,
+    bool enable_dtls,
+    bool enable_rtp_data_channel) {
   auto factory = factory_owner->peer_connection_factory();
 
   PeerConnectionInterface::RTCConfiguration config;
-  config.enable_dtls_srtp = true;
   config.bundle_policy = PeerConnectionInterface::kBundlePolicyMaxBundle;
   config.rtcp_mux_policy = PeerConnectionInterface::kRtcpMuxPolicyRequire;
   config.tcp_candidate_policy = PeerConnectionInterface::kTcpCandidatePolicyDisabled;
@@ -155,6 +156,9 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     }
     config.servers.push_back(rtc_ice_server);
   }
+
+  config.enable_dtls_srtp = enable_dtls;
+  config.enable_rtp_data_channel = enable_rtp_data_channel;
 
   PeerConnectionDependencies deps(observer);
   if (factory_owner->injectable_network()) {

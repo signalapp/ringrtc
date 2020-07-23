@@ -75,7 +75,27 @@ impl From<*const c_void> for AppObject {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppIceCandidate {
-    pub sdp: AppByteSlice,
+    pub opaque: AppByteSlice,
+    pub sdp:    AppByteSlice,
+}
+
+fn byte_vec_from_app_slice(app_slice: &AppByteSlice) -> Option<Vec<u8>> {
+    if app_slice.bytes.is_null() {
+        return None;
+    }
+    let slice = unsafe { slice::from_raw_parts(app_slice.bytes, app_slice.len as usize) };
+    Some(slice.to_vec())
+}
+
+fn string_from_app_slice(app_slice: &AppByteSlice) -> Option<String> {
+    if app_slice.bytes.is_null() {
+        return None;
+    }
+    let slice = unsafe { slice::from_raw_parts(app_slice.bytes, app_slice.len as usize) };
+    match str::from_utf8(slice) {
+        Ok(s) => Some(s.to_string()),
+        Err(_) => None,
+    }
 }
 
 /// Structure for passing multiple Ice Candidates to Swift.
@@ -207,7 +227,8 @@ pub struct AppInterface {
         remote: *const c_void,
         destinationDeviceId: u32,
         broadcast: bool,
-        offer: AppByteSlice,
+        opaque: AppByteSlice,
+        sdp: AppByteSlice,
         callMediaType: i32,
     ),
     ///
@@ -217,7 +238,8 @@ pub struct AppInterface {
         remote: *const c_void,
         destinationDeviceId: u32,
         broadcast: bool,
-        answer: AppByteSlice,
+        opaque: AppByteSlice,
+        sdp: AppByteSlice,
     ),
     ///
     pub onSendIceCandidates: extern "C" fn(
@@ -253,6 +275,8 @@ pub struct AppInterface {
         observer: *mut c_void,
         deviceId: u32,
         context: *mut c_void,
+        enable_dtls: bool,
+        enable_rtp_data_channel: bool,
     ) -> AppConnectionInterface,
     /// Request that the application create an application Media Stream object
     /// associated with the given application Connection object.
@@ -390,32 +414,26 @@ pub extern "C" fn ringrtcReceivedAnswer(
     callManager: *mut c_void,
     callId: u64,
     senderDeviceId: u32,
+    opaque: AppByteSlice,
     sdp: AppByteSlice,
     senderSupportsMultiRing: bool,
 ) -> *mut c_void {
-    // Build the Rust string.
-    let sdp_bytes = unsafe { slice::from_raw_parts(sdp.bytes, sdp.len as usize) };
-
     let sender_device_feature_level = match senderSupportsMultiRing {
         true => FeatureLevel::MultiRing,
         false => FeatureLevel::Unspecified,
     };
 
-    match str::from_utf8(sdp_bytes) {
-        Ok(sdp) => {
-            match call_manager::received_answer(
-                callManager as *mut IOSCallManager,
-                callId,
-                senderDeviceId as DeviceId,
-                sdp,
-                sender_device_feature_level,
-            ) {
-                Ok(_v) => {
-                    // Return the object reference back as indication of success.
-                    callManager
-                }
-                Err(_e) => ptr::null_mut(),
-            }
+    match call_manager::received_answer(
+        callManager as *mut IOSCallManager,
+        callId,
+        senderDeviceId as DeviceId,
+        byte_vec_from_app_slice(&opaque),
+        string_from_app_slice(&sdp),
+        sender_device_feature_level,
+    ) {
+        Ok(_v) => {
+            // Return the object reference back as indication of success.
+            callManager
         }
         Err(_e) => ptr::null_mut(),
     }
@@ -428,6 +446,7 @@ pub extern "C" fn ringrtcReceivedOffer(
     callId: u64,
     remotePeer: *const c_void,
     senderDeviceId: u32,
+    opaque: AppByteSlice,
     sdp: AppByteSlice,
     messageAgeSec: u64,
     callMediaType: i32,
@@ -435,34 +454,27 @@ pub extern "C" fn ringrtcReceivedOffer(
     senderSupportsMultiRing: bool,
     receiverDeviceIsPrimary: bool,
 ) -> *mut c_void {
-    // Build the Rust string.
-    let sdp_bytes = unsafe { slice::from_raw_parts(sdp.bytes, sdp.len as usize) };
-
     let sender_device_feature_level = match senderSupportsMultiRing {
         true => FeatureLevel::MultiRing,
         false => FeatureLevel::Unspecified,
     };
 
-    match str::from_utf8(sdp_bytes) {
-        Ok(sdp) => {
-            match call_manager::received_offer(
-                callManager as *mut IOSCallManager,
-                callId,
-                remotePeer,
-                senderDeviceId as DeviceId,
-                sdp,
-                messageAgeSec,
-                CallMediaType::from_i32(callMediaType),
-                recevierDeviceId as DeviceId,
-                sender_device_feature_level,
-                receiverDeviceIsPrimary,
-            ) {
-                Ok(_v) => {
-                    // Return the object reference back as indication of success.
-                    callManager
-                }
-                Err(_e) => ptr::null_mut(),
-            }
+    match call_manager::received_offer(
+        callManager as *mut IOSCallManager,
+        callId,
+        remotePeer,
+        senderDeviceId as DeviceId,
+        byte_vec_from_app_slice(&opaque),
+        string_from_app_slice(&sdp),
+        messageAgeSec,
+        CallMediaType::from_i32(callMediaType),
+        recevierDeviceId as DeviceId,
+        sender_device_feature_level,
+        receiverDeviceIsPrimary,
+    ) {
+        Ok(_v) => {
+            // Return the object reference back as indication of success.
+            callManager
         }
         Err(_e) => ptr::null_mut(),
     }
@@ -483,22 +495,10 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
     let mut ice_candidates = Vec::new();
 
     for app_ice_candidate in app_ice_candidates {
-        // Build the Rust strings.
-        let sdp_bytes = unsafe {
-            slice::from_raw_parts(
-                app_ice_candidate.sdp.bytes,
-                app_ice_candidate.sdp.len as usize,
-            )
-        };
-
-        let sdp = str::from_utf8(sdp_bytes).unwrap_or("");
-
-        if sdp.is_empty() {
-            warn!("ringrtcReceivedIceCandidates(): Candidate not valid!");
-            continue;
-        }
-
-        ice_candidates.push(signaling::IceCandidate::from_sdp(sdp.to_string()));
+        ice_candidates.push(signaling::IceCandidate::from_opaque_or_sdp(
+            byte_vec_from_app_slice(&app_ice_candidate.opaque),
+            string_from_app_slice(&app_ice_candidate.sdp),
+        ));
     }
 
     match call_manager::received_ice(

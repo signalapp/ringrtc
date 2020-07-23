@@ -39,6 +39,9 @@ Rust_answerFromSdp(const char* sdp);
 RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_offerFromSdp(const char* sdp);
 
+RUSTEXPORT bool
+Rust_replaceRtpDataChannelsWithSctp(webrtc::SessionDescriptionInterface* sdi);
+
 RUSTEXPORT void
 Rust_createAnswer(webrtc::PeerConnectionInterface*                    pc_interface,
                   webrtc::rffi::CreateSessionDescriptionObserverRffi* csd_observer);

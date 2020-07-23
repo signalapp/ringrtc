@@ -27,7 +27,7 @@ use crate::webrtc::media::MediaStream;
 
 const RINGRTC_PACKAGE: &str = "org/signal/ringrtc";
 const CALL_MANAGER_CLASS: &str = "CallManager";
-const ICE_CANDIDATE_CLASS: &str = "org/webrtc/IceCandidate";
+const ICE_CANDIDATE_CLASS: &str = "org/signal/ringrtc/IceCandidate";
 
 /// Android implmentation for platform::Platform::AppMediaStream
 pub type AndroidMediaStream = JavaMediaStream;
@@ -192,11 +192,13 @@ impl Platform for AndroidPlatform {
         call: &Call<Self>,
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
+        signaling_version: signaling::Version,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {}",
+            "create_connection(): call_id: {} remote_device_id: {} signaling_version: {:?}",
             call.call_id(),
-            remote_device_id
+            remote_device_id,
+            signaling_version
         );
 
         let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
@@ -213,12 +215,14 @@ impl Platform for AndroidPlatform {
 
         const CREATE_CONNECTION_METHOD: &str = "createConnection";
         const CREATE_CONNECTION_SIG: &str =
-            "(JJILorg/signal/ringrtc/CallManager$CallContext;)Lorg/signal/ringrtc/Connection;";
+            "(JJILorg/signal/ringrtc/CallManager$CallContext;ZZ)Lorg/signal/ringrtc/Connection;";
         let args = [
             (connection_ptr as jlong).into(),
             call_id_jlong.into(),
             jni_remote_device_id.into(),
             jni_call_context.as_obj().into(),
+            signaling_version.enable_dtls().into(),
+            signaling_version.enable_rtp_data_channel().into(),
         ];
         let result = jni_call_method(
             &env,
@@ -325,17 +329,26 @@ impl Platform for AndroidPlatform {
         let jni_call_manager = self.jni_call_manager.as_obj();
         let call_id_jlong = u64::from(call_id) as jlong;
         let receiver_device_id = receiver_device_id as jint;
+        let jni_opaque = match offer.opaque {
+            None => JObject::null(),
+            Some(opaque) => JObject::from(env.byte_array_from_slice(&opaque)?),
+        };
+        let jni_sdp = match offer.sdp {
+            None => JObject::null(),
+            Some(sdp) => JObject::from(env.new_string(sdp)?),
+        };
         let jni_call_media_type =
             self.java_enum(&env, "CallMediaType", offer.call_media_type as i32)?;
         const SEND_OFFER_MESSAGE_METHOD: &str = "onSendOffer";
-        const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;Lorg/signal/ringrtc/CallManager$CallMediaType;)V";
+        const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZ[BLjava/lang/String;Lorg/signal/ringrtc/CallManager$CallMediaType;)V";
 
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
             receiver_device_id.into(),
             broadcast.into(),
-            JObject::from(env.new_string(offer.sdp)?).into(),
+            jni_opaque.into(),
+            jni_sdp.into(),
             jni_call_media_type.into(),
         ];
         let _ = jni_call_method(
@@ -369,16 +382,26 @@ impl Platform for AndroidPlatform {
         let jni_call_manager = self.jni_call_manager.as_obj();
         let call_id_jlong = u64::from(call_id) as jlong;
         let receiver_device_id = receiver_device_id as jint;
+        let jni_opaque = match send.answer.opaque {
+            None => JObject::null(),
+            Some(opaque) => JObject::from(env.byte_array_from_slice(&opaque)?),
+        };
+        let jni_sdp = match send.answer.sdp {
+            None => JObject::null(),
+            Some(sdp) => JObject::from(env.new_string(sdp)?),
+        };
 
         const SEND_ANSWER_MESSAGE_METHOD: &str = "onSendAnswer";
-        const SEND_ANSWER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZLjava/lang/String;)V";
+        const SEND_ANSWER_MESSAGE_SIG: &str =
+            "(JLorg/signal/ringrtc/Remote;IZ[BLjava/lang/String;)V";
 
         let args = [
             call_id_jlong.into(),
             jni_remote.into(),
             receiver_device_id.into(),
             broadcast.into(),
-            JObject::from(env.new_string(send.answer.sdp)?).into(),
+            jni_opaque.into(),
+            jni_sdp.into(),
         ];
         let _ = jni_call_method(
             &env,
@@ -418,14 +441,17 @@ impl Platform for AndroidPlatform {
         let ice_candidate_list = jni_new_linked_list(&env)?;
 
         for candidate in send.ice.candidates_added {
-            const ICE_CANDIDATE_CTOR_SIG: &str = "(Ljava/lang/String;ILjava/lang/String;)V";
-            let sdp_mid = env.new_string("")?;
-            let sdp = env.new_string(&candidate.sdp)?;
-            let args = [
-                JObject::from(sdp_mid).into(),
-                0.into(),
-                JObject::from(sdp).into(),
-            ];
+            const ICE_CANDIDATE_CTOR_SIG: &str = "([BLjava/lang/String;)V";
+            let jni_opaque = match candidate.opaque {
+                None => JObject::null(),
+                Some(opaque) => JObject::from(env.byte_array_from_slice(&opaque)?),
+            };
+            let jni_sdp = match candidate.sdp {
+                None => JObject::null(),
+                Some(sdp) => JObject::from(env.new_string(sdp)?),
+            };
+
+            let args = [jni_opaque.into(), jni_sdp.into()];
             let ice_message_obj =
                 env.new_object(ice_candidate_class, ICE_CANDIDATE_CTOR_SIG, &args)?;
             ice_candidate_list.add(ice_message_obj)?;

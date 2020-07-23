@@ -89,3 +89,11 @@ pub unsafe fn Rust_answerFromSdp(_sdp: *const c_char) -> *const RffiSessionDescr
     info!("Rust_answerFromSdp(): ");
     &FAKE_SDP_OFFER
 }
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_replaceRtpDataChannelsWithSctp(
+    _sdi: *const RffiSessionDescriptionInterface,
+) -> bool {
+    info!("Rust_replaceRtpDataChannelsWithSctp(): ");
+    true
+}

@@ -5,11 +5,40 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
+use bytes::{Bytes, BytesMut};
+use prost::Message as _;
 /// The messages we send over the signaling channel to establish a call.
 use std::fmt;
 use std::time::Duration;
 
-use crate::common::{CallMediaType, DeviceId, FeatureLevel};
+use crate::common::{CallMediaType, DeviceId, FeatureLevel, Result};
+use crate::core::util::redact_string;
+use crate::error::RingRtcError;
+use crate::protobuf;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Version {
+    // The V1 protocol uses SDP, DTLS, and SCTP.
+    V1,
+    // The V2 protocol does not use SCTP.  It uses RTP data channels.
+    // It uses SDP, but embedded in a protobuf.
+    V2,
+}
+
+impl Version {
+    pub fn enable_dtls(self) -> bool {
+        // We expect V3 will not use DTLS
+        true
+    }
+
+    pub fn enable_rtp_data_channel(self) -> bool {
+        match self {
+            Self::V1 => false,
+            // This disables SCTP
+            Self::V2 => true,
+        }
+    }
+}
 
 /// An enum representing the different types of signaling messages that
 /// can be sent and received.
@@ -72,15 +101,125 @@ pub enum MessageType {
 #[derive(Clone)]
 pub struct Offer {
     pub call_media_type: CallMediaType,
-    pub sdp:             String,
+    // While we are transitioning, we should send *both* of these
+    // and receive *either* of these.  Eventually, we'll drop to
+    // only sending an receving the opaque value.
+    pub opaque:          Option<Vec<u8>>,
+    pub sdp:             Option<String>,
 }
 
 impl Offer {
-    pub fn from_sdp(call_media_type: CallMediaType, sdp: String) -> Self {
+    pub fn from_opaque_or_sdp(
+        call_media_type: CallMediaType,
+        opaque: Option<Vec<u8>>,
+        sdp: Option<String>,
+    ) -> Self {
         Self {
             call_media_type,
             sdp,
+            opaque,
         }
+    }
+
+    pub fn latest_version(&self) -> Version {
+        if self.opaque.is_some() {
+            // Assume it's V2.  Don't bother decoding it.
+            Version::V2
+        } else {
+            Version::V1
+        }
+    }
+
+    pub fn from_v2_and_v1_sdp(
+        call_media_type: CallMediaType,
+        v2_sdp: String,
+        v1_sdp: String,
+    ) -> Result<Self> {
+        let mut offer_proto_v2 = protobuf::signaling::ConnectionParametersV2::default();
+        offer_proto_v2.sdp = Some(v2_sdp);
+
+        let mut offer_proto = protobuf::signaling::Offer::default();
+        offer_proto.v2 = Some(offer_proto_v2);
+
+        let mut opaque = BytesMut::with_capacity(offer_proto.encoded_len());
+        offer_proto.encode(&mut opaque)?;
+
+        Ok(Self::from_opaque_or_sdp(
+            call_media_type,
+            Some(opaque.to_vec()),
+            Some(v1_sdp),
+        ))
+    }
+
+    pub fn to_v2_sdp(&self) -> Result<String> {
+        match self {
+            // Prefer opaque over SDP
+            Self {
+                opaque: Some(opaque),
+                ..
+            } => match protobuf::signaling::Offer::decode(Bytes::from(opaque.clone()))? {
+                protobuf::signaling::Offer {
+                    v2: Some(protobuf::signaling::ConnectionParametersV2 { sdp: Some(v2_sdp) }),
+                } => Ok(v2_sdp),
+                _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+            },
+            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+        }
+    }
+
+    pub fn to_v1_sdp(&self) -> Result<String> {
+        match self {
+            Self {
+                sdp: Some(v1_sdp), ..
+            } => Ok(v1_sdp.clone()),
+            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+        }
+    }
+
+    // First return value means "is_v2"
+    pub fn to_v2_or_v1_sdp(&self) -> Result<(bool, String)> {
+        match self {
+            // Prefer opaque over SDP
+            Self {
+                opaque: Some(opaque),
+                ..
+            } => match protobuf::signaling::Offer::decode(Bytes::from(opaque.clone()))? {
+                protobuf::signaling::Offer {
+                    v2: Some(protobuf::signaling::ConnectionParametersV2 { sdp: Some(v2_sdp) }),
+                } => Ok((true, v2_sdp)),
+                _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+            },
+            Self {
+                opaque: None,
+                sdp: Some(v1_sdp),
+                ..
+            } => Ok((false, v1_sdp.clone())),
+            Self {
+                opaque: None,
+                sdp: None,
+                ..
+            } => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+        }
+    }
+
+    pub fn to_info_string(&self) -> String {
+        to_info_string(self.opaque.as_ref(), self.sdp.as_ref())
+    }
+
+    pub fn to_redacted_string(&self) -> String {
+        redacted_string_from_opaque_or_sdp(self.opaque.as_ref(), self.sdp.as_ref())
+    }
+}
+
+impl fmt::Display for Offer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_redacted_string())
+    }
+}
+
+impl fmt::Debug for Offer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_redacted_string())
     }
 }
 
@@ -88,12 +227,89 @@ impl Offer {
 /// the call.
 #[derive(Clone)]
 pub struct Answer {
-    pub sdp: String,
+    // While we are transitioning, we send and receive *either* one of these
+    // but not both.  It might be cleaner to use an enum here, but eventually
+    // we will do away with sdp and just have opaque and go back to not
+    // being an enum.  And it's more consistent with ICE and Offer messages
+    // that can have both the SDP and opaque values.
+    pub opaque: Option<Vec<u8>>,
+    pub sdp:    Option<String>,
 }
 
 impl Answer {
-    pub fn from_sdp(sdp: String) -> Self {
-        Self { sdp }
+    pub fn from_opaque_or_sdp(opaque: Option<Vec<u8>>, sdp: Option<String>) -> Self {
+        Self { sdp, opaque }
+    }
+
+    pub fn to_info_string(&self) -> String {
+        to_info_string(self.opaque.as_ref(), self.sdp.as_ref())
+    }
+
+    pub fn to_redacted_string(&self) -> String {
+        redacted_string_from_opaque_or_sdp(self.opaque.as_ref(), self.sdp.as_ref())
+    }
+
+    pub fn latest_version(&self) -> Version {
+        if self.opaque.is_some() {
+            // Assume it's V2.  Don't bother decoding it.
+            Version::V2
+        } else {
+            Version::V1
+        }
+    }
+
+    pub fn from_v2_sdp(v2_sdp: String) -> Result<Self> {
+        let mut answer_proto_v2 = protobuf::signaling::ConnectionParametersV2::default();
+        answer_proto_v2.sdp = Some(v2_sdp);
+
+        let mut answer_proto = protobuf::signaling::Answer::default();
+        answer_proto.v2 = Some(answer_proto_v2);
+
+        let mut opaque = BytesMut::with_capacity(answer_proto.encoded_len());
+        answer_proto.encode(&mut opaque)?;
+
+        let v1_sdp = None;
+        Ok(Self::from_opaque_or_sdp(Some(opaque.to_vec()), v1_sdp))
+    }
+
+    pub fn from_v1_sdp(v1_sdp: String) -> Self {
+        Self::from_opaque_or_sdp(None, Some(v1_sdp))
+    }
+
+    // First return value means "is_v2"
+    pub fn to_v2_or_v1_sdp(&self) -> Result<(bool, String)> {
+        match self {
+            // Prefer opaque over SDP
+            Self {
+                opaque: Some(opaque),
+                ..
+            } => match protobuf::signaling::Answer::decode(Bytes::from(opaque.clone()))? {
+                protobuf::signaling::Answer {
+                    v2: Some(protobuf::signaling::ConnectionParametersV2 { sdp: Some(v2_sdp) }),
+                } => Ok((true, v2_sdp)),
+                _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+            },
+            Self {
+                opaque: None,
+                sdp: Some(v1_sdp),
+            } => Ok((false, v1_sdp.clone())),
+            Self {
+                opaque: None,
+                sdp: None,
+            } => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+        }
+    }
+}
+
+impl fmt::Display for Answer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_redacted_string())
+    }
+}
+
+impl fmt::Debug for Answer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_redacted_string())
     }
 }
 
@@ -107,26 +323,82 @@ pub struct Ice {
 /// Each side sends these to setup an ICE connection
 #[derive(Clone)]
 pub struct IceCandidate {
-    // We assume sdp_mline_index to be 0, in which case sdp_mid doesn't matter.
-    pub sdp: String,
+    // While we are transitioning, we should send *both* of these
+    // and receive *either* of these.  Eventually, we'll drop to
+    // only sending an receving the opaque value.
+    pub opaque: Option<Vec<u8>>,
+    pub sdp:    Option<String>,
 }
 
 impl IceCandidate {
-    pub fn from_sdp(sdp: String) -> Self {
-        Self { sdp }
+    pub fn from_opaque_or_sdp(opaque: Option<Vec<u8>>, sdp: Option<String>) -> Self {
+        Self { sdp, opaque }
+    }
+
+    pub fn to_info_string(&self) -> String {
+        to_info_string(self.opaque.as_ref(), self.sdp.as_ref())
+    }
+
+    pub fn to_redacted_string(&self) -> String {
+        redacted_string_from_opaque_or_sdp(self.opaque.as_ref(), self.sdp.as_ref())
+    }
+
+    // ICE candiates are the same for V1 and V2, so this works for V1 as well.
+    pub fn from_v2_sdp(sdp: String) -> Result<Self> {
+        let mut ice_candidate_proto_v2 = protobuf::signaling::IceCandidateV2::default();
+        ice_candidate_proto_v2.sdp = Some(sdp.clone());
+
+        let mut ice_candidate_proto = protobuf::signaling::IceCandidate::default();
+        ice_candidate_proto.v2 = Some(ice_candidate_proto_v2);
+
+        let mut opaque = BytesMut::with_capacity(ice_candidate_proto.encoded_len());
+        ice_candidate_proto.encode(&mut opaque)?;
+
+        Ok(Self::from_opaque_or_sdp(Some(opaque.to_vec()), Some(sdp)))
+    }
+
+    // ICE candiates are the same for V1 and V2, so this works for V1 as well.
+    pub fn to_v2_sdp(&self) -> Result<String> {
+        match self {
+            // Prefer opaque over SDP
+            Self {
+                opaque: Some(opaque),
+                ..
+            } => match protobuf::signaling::IceCandidate::decode(Bytes::from(opaque.clone()))? {
+                protobuf::signaling::IceCandidate {
+                    v2: Some(protobuf::signaling::IceCandidateV2 { sdp: Some(sdp) }),
+                } => Ok(sdp),
+                _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+            },
+            Self {
+                opaque: None,
+                sdp: Some(sdp),
+            } => Ok(sdp.clone()),
+            Self {
+                opaque: None,
+                sdp: None,
+            } => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+        }
     }
 }
 
-impl fmt::Display for IceCandidate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let text = format!("sdp: {}", self.sdp);
-        write!(f, "{}", crate::core::util::redact_string(&text))
+fn to_info_string(opaque: Option<&Vec<u8>>, sdp: Option<&String>) -> String {
+    match (opaque, sdp) {
+        (Some(opaque), Some(sdp)) => {
+            format!("opaque=true/{}; sdp=true/{}", opaque.len(), sdp.len())
+        }
+        (Some(opaque), None) => format!("opaque=true/{}; sdp=false", opaque.len()),
+        (None, Some(sdp)) => format!("opaque=false; sdp=true/{}", sdp.len()),
+        (None, None) => "opaque=false; sdp=false".to_string(),
     }
 }
 
-impl fmt::Debug for IceCandidate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+fn redacted_string_from_opaque_or_sdp(opaque: Option<&Vec<u8>>, sdp: Option<&String>) -> String {
+    match (opaque, sdp) {
+        (Some(_), Some(sdp)) => format!("opaque: ...; sdp: {}", redact_string(sdp)),
+        (Some(_), None) => "opaque: ...".to_string(),
+        (None, Some(sdp)) => format!("sdp: {}", redact_string(sdp)),
+        (None, None) => "Neither opaque nor SDP!  This shouldn't happen".to_string(),
     }
 }
 

@@ -11,7 +11,7 @@ use std::panic;
 use std::time::Duration;
 
 use jni::objects::{JClass, JObject, JString};
-use jni::sys::{jlong, jobject};
+use jni::sys::{jboolean, jbyteArray, jlong, jobject};
 use jni::JNIEnv;
 use log::Level;
 
@@ -82,6 +82,8 @@ pub fn create_peer_connection(
     native_connection: *mut Connection<AndroidPlatform>,
     jni_rtc_config: JObject,
     jni_media_constraints: JObject,
+    enable_dtls: bool,
+    enable_rtp_data_channel: bool,
 ) -> Result<jlong> {
     // native_connection is an un-boxed Connection<AndroidPlatform> on the heap.
     // pass ownership of it to the PeerConnectionObserver.
@@ -98,6 +100,8 @@ pub fn create_peer_connection(
             jni_media_constraints,
             pc_observer.rffi_interface() as jlong,
             JObject::null(),
+            enable_dtls as jboolean,
+            enable_rtp_data_channel as jboolean,
         )
     };
     info!("jni_owned_pc: {}", jni_owned_pc);
@@ -189,12 +193,22 @@ pub fn received_answer(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     sender_device_id: DeviceId,
+    opaque: jbyteArray,
     sdp: JString,
     sender_device_feature_level: FeatureLevel,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let sdp: String = env.get_string(sdp)?.into();
+    let opaque = if opaque.is_null() {
+        None
+    } else {
+        Some(env.convert_byte_array(opaque)?)
+    };
+    let sdp = if sdp.is_null() {
+        None
+    } else {
+        Some(env.get_string(sdp)?.into())
+    };
 
     info!(
         "received_answer(): call_id: {} sender_device_id: {}",
@@ -203,7 +217,7 @@ pub fn received_answer(
     call_manager.received_answer(
         call_id,
         signaling::ReceivedAnswer {
-            answer: signaling::Answer::from_sdp(sdp),
+            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp),
             sender_device_id,
             sender_device_feature_level,
         },
@@ -218,6 +232,7 @@ pub fn received_offer(
     call_id: jlong,
     remote_peer: JObject,
     sender_device_id: DeviceId,
+    opaque: jbyteArray,
     sdp: JString,
     age_sec: u64,
     call_media_type: CallMediaType,
@@ -228,7 +243,16 @@ pub fn received_offer(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
     let remote_peer = env.new_global_ref(remote_peer)?;
-    let sdp: String = env.get_string(sdp)?.into();
+    let opaque = if opaque.is_null() {
+        None
+    } else {
+        Some(env.convert_byte_array(opaque)?)
+    };
+    let sdp = if sdp.is_null() {
+        None
+    } else {
+        Some(env.get_string(sdp)?.into())
+    };
 
     info!(
         "received_offer(): call_id: {} sender_device_id: {}",
@@ -239,7 +263,7 @@ pub fn received_offer(
         remote_peer,
         call_id,
         signaling::ReceivedOffer {
-            offer: signaling::Offer::from_sdp(call_media_type, sdp),
+            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp),
             age: Duration::from_secs(age_sec),
             sender_device_id,
             sender_device_feature_level,
@@ -260,16 +284,29 @@ pub fn received_ice(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
 
-    // Convert Java list of org.webrtc.IceCandidate into Rust Vector of IceCandidate
+    // Convert Java list of IceCandidate into Rust Vector of IceCandidate
     let jni_candidate_list = env.get_list(jni_candidates)?;
     let mut signaling_candidates = Vec::new();
     for jni_candidate in jni_candidate_list.iter()? {
+        const OPAQUE_FIELD: &str = "opaque";
+        const BYTES_TYPE: &str = "[B";
+        let opaque = jni_get_field(&env, jni_candidate, OPAQUE_FIELD, BYTES_TYPE)?.l()?;
+        let opaque = if opaque.is_null() {
+            None
+        } else {
+            Some(env.convert_byte_array(opaque.into_inner())?)
+        };
+
         const SDP_FIELD: &str = "sdp";
         const STRING_TYPE: &str = "Ljava/lang/String;";
         let sdp = jni_get_field(&env, jni_candidate, SDP_FIELD, STRING_TYPE)?.l()?;
-        let sdp = env.get_string(JString::from(sdp))?.into();
+        let sdp = if sdp.is_null() {
+            None
+        } else {
+            Some(env.get_string(JString::from(sdp))?.into())
+        };
 
-        signaling_candidates.push(signaling::IceCandidate::from_sdp(sdp));
+        signaling_candidates.push(signaling::IceCandidate::from_opaque_or_sdp(opaque, sdp));
     }
 
     info!(

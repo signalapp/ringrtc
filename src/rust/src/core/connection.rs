@@ -21,18 +21,20 @@ use tokio::timer::Interval;
 use crate::common::{
     CallDirection,
     CallId,
+    CallMediaType,
     ConnectionState,
     DeviceId,
     FeatureLevel,
     Result,
     RingBench,
+    DATA_CHANNEL_NAME,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
 use crate::core::platform::Platform;
 use crate::core::signaling;
-use crate::core::util::{ptr_as_box, redact_string};
+use crate::core::util::ptr_as_box;
 
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
@@ -46,6 +48,12 @@ use crate::webrtc::sdp_observer::{
     SessionDescriptionInterface,
 };
 use crate::webrtc::stats_observer::{create_stats_observer, StatsObserver};
+
+/// The periodic tick interval. Used to generate stats and to retransmit data channel messages.
+pub const TICK_PERIOD_SEC: u64 = 1;
+
+/// The stats period, how often to get and log them. Assumes tick period is 1 second.
+pub const STATS_PERIOD_SEC: u64 = 10;
 
 /// Connection observer status notification types
 ///
@@ -235,6 +243,24 @@ impl ConnectionId {
     }
 }
 
+/// Encapsulates the tick timer and runtime.
+struct TickContext {
+    /// Tokio runtime for background task execution of periodic ticks.
+    runtime:       Option<runtime::Runtime>,
+    /// Periodic tick counter.
+    ticks_elapsed: u64,
+}
+
+impl TickContext {
+    /// Create a new TickContext.
+    pub fn new() -> Self {
+        Self {
+            runtime:       None,
+            ticks_elapsed: 0,
+        }
+    }
+}
+
 /// Represents the connection between a local client and one remote
 /// peer.
 ///
@@ -269,8 +295,8 @@ where
     terminate_condvar:              Arc<(Mutex<bool>, Condvar)>,
     /// This is write-once configuration and will not change.
     connection_type:                ConnectionType,
-    /// Tokio runtime for background task execution of stats collection.
-    stats_runtime:                  Arc<CallMutex<Option<runtime::Runtime>>>,
+    /// Execution context for the connection periodic timer tick
+    tick_context:                   Arc<CallMutex<TickContext>>,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -346,7 +372,7 @@ where
             buffered_remote_ice_candidates: Arc::clone(&self.buffered_remote_ice_candidates),
             terminate_condvar:              Arc::clone(&self.terminate_condvar),
             connection_type:                self.connection_type,
-            stats_runtime:                  Arc::clone(&self.stats_runtime),
+            tick_context:                   Arc::clone(&self.tick_context),
         }
     }
 }
@@ -393,7 +419,7 @@ where
             direction,
             connection_id: ConnectionId::new(call_id, remote_device),
             call: Arc::new(CallMutex::new(call, "call")),
-            state: Arc::new(CallMutex::new(ConnectionState::Idle, "state")),
+            state: Arc::new(CallMutex::new(ConnectionState::NotYetStarted, "state")),
             context: Arc::new(CallMutex::new(context, "context")),
             webrtc: Arc::new(CallMutex::new(webrtc, "webrtc")),
             buffered_local_ice_candidates: Arc::new(CallMutex::new(
@@ -406,12 +432,183 @@ where
             )),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             connection_type,
-            stats_runtime: Arc::new(CallMutex::new(None, "stats_runtime")),
+            tick_context: Arc::new(CallMutex::new(TickContext::new(), "tick_context")),
         };
 
         connection.init_connection_ptr()?;
 
         Ok(connection)
+    }
+
+    // An outgoing parent is responsible for:
+    // 1. Creating ICE gatherer that can be used multiple times (ICE forking)
+    // 2. Creating an offer that can be used multiple times (call forking)
+    // 3. Creating an offer that is backwards compatible between old and new clients
+    // It does not need to fully configure the PeerConnection.
+    pub fn start_outgoing_parent(
+        &self,
+        call_media_type: CallMediaType,
+    ) -> Result<(IceGatherer, signaling::Offer)> {
+        self.set_state(ConnectionState::Starting)?;
+
+        let webrtc = self.webrtc.lock()?;
+        let peer_connection = webrtc.pc_interface()?;
+
+        // We have to create and use the IceGatherer before calling
+        // create_offer to make sure the ICE parameters are correct.
+        let ice_gatherer = peer_connection.create_shared_ice_gatherer()?;
+        peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
+
+        // We have to create the DataChannel before calling create_offer to make sure the
+        // data channel parameters are correct.  But we don't need to observe it.
+        let _data_channel = peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
+
+        let observer = create_csd_observer();
+        peer_connection.create_offer(observer.as_ref());
+        // This must be kept in sync with call.rs where it passes in V2 into create_connection.
+        let mut offer_sdi = observer.get_result()?;
+
+        // The only purpose of this is to start gathering ICE candidates.
+        // But we need to call set_local_description before we munge it.
+        // Otherwise there will be a data channel type mismatch.
+        let observer = create_ssd_observer();
+        peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
+        observer.get_result()?;
+
+        let v2_offer_sdp = offer_sdi.to_sdp()?;
+        offer_sdi.replace_rtp_data_channels_with_sctp()?;
+        let v1_offer_sdp = offer_sdi.to_sdp()?;
+
+        let offer =
+            signaling::Offer::from_v2_and_v1_sdp(call_media_type, v2_offer_sdp, v1_offer_sdp)?;
+
+        self.set_state(ConnectionState::IceGathering)?;
+        Ok((ice_gatherer, offer))
+    }
+
+    // An outgoing child is responsible for:
+    // 1. Using the ICE gatherer from the outgoing parent.
+    // 2. Combining the offer from the parent and the answer from the remote peer
+    //    to configure PeerConnection correctly.
+    pub fn start_outgoing_child(
+        &self,
+        ice_gatherer: &IceGatherer,
+        offer: &signaling::Offer,
+        received: &signaling::ReceivedAnswer,
+    ) -> Result<()> {
+        self.set_state(ConnectionState::Starting)?;
+
+        self.set_remote_feature_level(received.sender_device_feature_level)?;
+
+        let mut webrtc = self.webrtc.lock()?;
+
+        // Create a stats observer object.
+        let stats_observer = create_stats_observer();
+        webrtc.stats_observer = Some(stats_observer);
+
+        let peer_connection = webrtc.pc_interface()?;
+
+        peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
+
+        // The caller is responsible for creating the data channel (the callee listens for it).
+        // Both sides will observe it.
+        let data_channel = peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
+        let data_channel_observer = DataChannelObserver::new(self.clone())?;
+        unsafe { data_channel.register_observer(data_channel_observer.rffi_interface())? };
+
+        let (answer_is_v2, answer_sdp) = received.answer.to_v2_or_v1_sdp()?;
+        let offer_sdp = if answer_is_v2 {
+            offer.to_v2_sdp()?
+        } else {
+            offer.to_v1_sdp()?
+        };
+        let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+        let answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
+
+        let observer = create_ssd_observer();
+        peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
+        observer.get_result()?;
+
+        let observer = create_ssd_observer();
+        peer_connection.set_remote_description(observer.as_ref(), &answer_sdi);
+        // This is subtle: on_data_channel and on_add_stream can fire between when we call
+        // set_remote_description and getting the result.
+        // It's a little weird, but it works.
+        // In the long-term, we should probably not handle those events and instead
+        // deal with the streams and data channels synchronously rather than as event callbacks.
+        observer.get_result()?;
+
+        // Don't enable until the call is accepted.
+        peer_connection.set_outgoing_audio_enabled(false);
+
+        // We have to do this once we're done with peer_connection because
+        // it holds a ref to peer_connection as well.
+        webrtc.data_channel = Some(data_channel);
+        webrtc.data_channel_observer = Some(data_channel_observer);
+        self.set_state(ConnectionState::IceConnecting)?;
+        Ok(())
+    }
+
+    // An incoming connection is responsible for:
+    // 1. Creating an answer to send back to the caller
+    // 2. Configuring the PeerConnection with the offer and the answer,
+    //    and any remote ICE candidates that came that have arrived.
+    pub fn start_incoming(
+        &self,
+        received: signaling::ReceivedOffer,
+        remote_ice_candidates: Vec<signaling::IceCandidate>,
+    ) -> Result<signaling::Answer> {
+        self.set_state(ConnectionState::Starting)?;
+
+        let mut webrtc = self.webrtc.lock()?;
+
+        // Create a stats observer object.
+        let stats_observer = create_stats_observer();
+        webrtc.stats_observer = Some(stats_observer);
+
+        let peer_connection = webrtc.pc_interface()?;
+
+        let (offer_is_v2, offer_sdp) = received.offer.to_v2_or_v1_sdp()?;
+        let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+
+        let observer = create_ssd_observer();
+        peer_connection.set_remote_description(observer.as_ref(), &offer_sdi);
+        // This is subtle: on_data_channel and on_add_stream can fire between when we call
+        // set_remote_description and getting the result.
+        // It's a little weird, but it works.
+        // In the long-term, we should probably not handle those events and instead
+        // deal with the streams and data channels synchronously rather than as event callbacks.
+        observer.get_result()?;
+
+        let observer = create_csd_observer();
+        peer_connection.create_answer(observer.as_ref());
+        let answer_sdi = observer.get_result()?;
+        // Get the answer here before it is mutated with candidates by set_local_description.
+        let answer_sdp = answer_sdi.to_sdp()?;
+        let answer = if offer_is_v2 {
+            signaling::Answer::from_v2_sdp(answer_sdp)?
+        } else {
+            signaling::Answer::from_v1_sdp(answer_sdp)
+        };
+
+        let observer = create_ssd_observer();
+        peer_connection.set_local_description(observer.as_ref(), &answer_sdi);
+        observer.get_result()?;
+
+        // Don't enable until call is accepted.
+        peer_connection.set_outgoing_audio_enabled(false);
+
+        ringbench!(
+            RingBench::Conn,
+            RingBench::WebRTC,
+            format!("ice_candidates({})", remote_ice_candidates.len())
+        );
+        for remote_ice_candidate in remote_ice_candidates {
+            peer_connection.add_ice_candidate(&remote_ice_candidate)?;
+        }
+
+        self.set_state(ConnectionState::IceConnecting)?;
+        Ok(answer)
     }
 
     /// Return the Call identifier.
@@ -474,16 +671,13 @@ where
         Ok(())
     }
 
-    /// Create a DataChannel and set it along with a DataChannelObserver
-    pub fn create_and_set_data_channel(&self, name: String) -> Result<()> {
-        let mut webrtc = self.webrtc.lock()?;
-        let dc = webrtc.pc_interface()?.create_data_channel(name)?;
-
-        let observer = DataChannelObserver::new(self.clone())?;
-        unsafe { dc.register_observer(observer.rffi_interface())? };
-        webrtc.data_channel = Some(dc);
-        webrtc.data_channel_observer = Some(observer);
-        Ok(())
+    /// Return whether the connection has a data channel.
+    pub fn has_data_channel(&self) -> Result<bool> {
+        let webrtc = self.webrtc.lock()?;
+        match webrtc.data_channel {
+            Some(_) => Ok(true),
+            None => Ok(false),
+        }
     }
 
     /// Update the DataChannel and DataChannelObserver
@@ -590,124 +784,59 @@ where
         Arc::strong_count(&self.webrtc)
     }
 
-    pub fn create_shared_ice_gatherer(&self) -> Result<IceGatherer> {
-        let webrtc = self.webrtc.lock()?;
-        webrtc.pc_interface()?.create_shared_ice_gatherer()
-    }
-
-    pub fn use_shared_ice_gatherer(&self, ice_gatherer: &IceGatherer) -> Result<()> {
-        let webrtc = self.webrtc.lock()?;
-        webrtc.pc_interface()?.use_shared_ice_gatherer(ice_gatherer)
-    }
-
     /// Creates a runtime for statistics to run a timer for the given interval
     /// duration to invoke PeerConnection::GetStats which will pass specific stats
     /// to StatsObserver::on_stats_complete.
-    pub fn start_stats(&self, duration: Duration) -> Result<()> {
-        if duration.as_secs() == 0 {
-            return Ok(());
-        }
+    pub fn start_tick(&self) -> Result<()> {
+        let duration = Duration::from_secs(TICK_PERIOD_SEC);
 
         // Define the future for stats logging.
-        let connection = self.clone();
-        let stats_future = Interval::new_interval(duration)
-            .map_err(|e| error!("Connection stats Interval failed: {:?}", e))
+        let mut connection = self.clone();
+        let tick_future = Interval::new_interval(duration)
+            .map_err(|e| error!("Connection tick Interval failed: {:?}", e))
             .for_each(move |_| {
-                connection.get_stats().unwrap();
+                connection.tick().unwrap();
                 Ok(())
             });
 
-        // Create a stats observer object.
-        let stats_observer = create_stats_observer();
-
-        // Store it with the webrtc object.
-        let mut webrtc = self.webrtc.lock()?;
-        webrtc.stats_observer = Some(stats_observer);
-
-        debug!("start_stats(): starting the stats runtime");
-        let mut stats_runtime = self.stats_runtime.lock()?;
-        match *stats_runtime {
-            Some(_) => warn!("start_stats(): stats timer already running"),
+        debug!("start_tick(): starting the tick runtime");
+        let mut tick_context = self.tick_context.lock()?;
+        match tick_context.runtime {
+            Some(_) => warn!("start_tick(): tick timer already running"),
             None => {
-                // Start the stats runtime.
+                // Start the tick runtime.
                 let mut runtime = runtime::Builder::new()
                     .core_threads(1)
-                    .name_prefix("stats-")
+                    .name_prefix("tick-")
                     .build()?;
 
-                runtime.spawn(stats_future);
+                runtime.spawn(tick_future);
 
-                *stats_runtime = Some(runtime);
+                tick_context.runtime = Some(runtime);
             }
         }
 
         Ok(())
     }
 
-    pub fn get_stats(&self) -> Result<()> {
+    pub fn tick(&mut self) -> Result<()> {
+        let mut tick_context = self.tick_context.lock()?;
+        tick_context.ticks_elapsed += 1;
+
         let webrtc = self.webrtc.lock()?;
-        match webrtc.stats_observer.as_ref() {
-            Some(collector) => webrtc.pc_interface()?.get_stats(collector),
-            None => {
-                // Just log this, it shouldn't affect overall call state.
-                warn!("get_stats(): No stats_collector found");
-                Ok(())
+
+        if let Ok(data_channel) = webrtc.data_channel() {
+            let _ = data_channel.send_latest_state();
+        }
+
+        if tick_context.ticks_elapsed % STATS_PERIOD_SEC == 0 {
+            if let Some(observer) = webrtc.stats_observer.as_ref() {
+                let _ = webrtc.pc_interface()?.get_stats(observer);
+            } else {
+                warn!("tick(): No stats_observer found");
             }
         }
-    }
 
-    /// Create an offer message.
-    pub fn create_offer(&self) -> Result<SessionDescriptionInterface> {
-        let csd_observer = create_csd_observer();
-
-        let webrtc = self.webrtc.lock()?;
-        webrtc.pc_interface()?.create_offer(csd_observer.as_ref());
-        csd_observer.get_result()
-    }
-
-    /// Create an answer message.
-    fn create_answer(&self) -> Result<SessionDescriptionInterface> {
-        let csd_observer = create_csd_observer();
-
-        let webrtc = self.webrtc.lock()?;
-        webrtc.pc_interface()?.create_answer(csd_observer.as_ref());
-        csd_observer.get_result()
-    }
-
-    /// Set the local SPD decription in the PeerConnection interface.
-    fn set_local_description(&self, desc: &SessionDescriptionInterface) -> Result<()> {
-        let ssd_observer = create_ssd_observer();
-
-        let webrtc = self.webrtc.lock()?;
-        webrtc
-            .pc_interface()?
-            .set_local_description(ssd_observer.as_ref(), desc);
-        ssd_observer.get_result()
-    }
-
-    /// Set the remote SPD decription in the PeerConnection interface.
-    fn set_remote_description(&self, desc: &SessionDescriptionInterface) -> Result<()> {
-        let ssd_observer = create_ssd_observer();
-
-        let webrtc = self.webrtc.lock()?;
-        webrtc
-            .pc_interface()?
-            .set_remote_description(ssd_observer.as_ref(), desc);
-        ssd_observer.get_result()
-    }
-
-    /// Set the local description and send offer to the remote peer via the signaling
-    /// channel.
-    pub fn set_local_description_and_send_offer(&self, offer: signaling::Offer) -> Result<()> {
-        if self.connection_type == ConnectionType::OutgoingChild {
-            let local_sdi = SessionDescriptionInterface::offer_from_sdp(offer.sdp)?;
-            self.set_local_description(&local_sdi)?;
-            return Ok(()); // It was already sent by the parent.
-        }
-        let local_sdi = SessionDescriptionInterface::offer_from_sdp(offer.sdp.clone())?;
-        self.set_local_description(&local_sdi)?;
-        let call = self.call()?;
-        call.send_offer(self.clone(), offer)?;
         Ok(())
     }
 
@@ -725,37 +854,6 @@ where
         }
     }
 
-    /// Handle an incoming answer message.
-    pub fn received_answer(&mut self, received: signaling::ReceivedAnswer) -> Result<()> {
-        let remote_sdi = SessionDescriptionInterface::answer_from_sdp(received.answer.sdp)?;
-        self.set_remote_description(&remote_sdi)?;
-        self.set_outgoing_audio_enabled(false)?;
-        self.inject_have_offer_and_answer()
-    }
-
-    /// Handle an incoming offer message.
-    pub fn received_offer(&mut self, received: signaling::ReceivedOffer) -> Result<()> {
-        let remote_sdi = SessionDescriptionInterface::offer_from_sdp(received.offer.sdp)?;
-        self.set_remote_description(&remote_sdi)?;
-
-        let local_sdi = self.create_answer()?;
-
-        // Get the answer string here before it is mutated with candidates.
-        let send = signaling::SendAnswer {
-            receiver_device_id: received.sender_device_id,
-            answer:             signaling::Answer {
-                sdp: local_sdi.to_sdp()?,
-            },
-        };
-
-        self.set_local_description(&local_sdi)?;
-        self.set_outgoing_audio_enabled(false)?;
-        self.inject_have_offer_and_answer()?;
-
-        let call = self.call()?;
-        call.send_answer(self.clone(), send)
-    }
-
     pub fn set_outgoing_audio_enabled(&self, enabled: bool) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
         webrtc.pc_interface()?.set_outgoing_audio_enabled(enabled);
@@ -764,7 +862,11 @@ where
 
     /// Buffer local ICE candidates, and maybe send them immediately
     pub fn buffer_local_ice_candidate(&self, candidate: signaling::IceCandidate) -> Result<()> {
-        info!("Local ICE candidate: {}", candidate);
+        info!(
+            "Local ICE candidate: {}; {}",
+            candidate.to_info_string(),
+            candidate.to_redacted_string()
+        );
 
         let num_ice_candidates = {
             let mut buffered_local_ice_candidates = self.buffered_local_ice_candidates.lock()?;
@@ -791,7 +893,11 @@ where
     ) -> Result<()> {
         let mut pending_ice_candidates = self.buffered_remote_ice_candidates.lock()?;
         for ice_candidate in ice_candidates {
-            info!("Remote ICE candidates: {}", ice_candidate);
+            info!(
+                "Remote ICE candidate: {}; {}",
+                ice_candidate.to_info_string(),
+                ice_candidate.to_redacted_string()
+            );
             pending_ice_candidates.push(ice_candidate);
         }
         Ok(())
@@ -814,26 +920,22 @@ where
         Ok(copy_candidates)
     }
 
-    /// Add any remote ICE candidates to the PeerConnection interface.
-    pub fn process_buffered_remote_ice_candidates(&self) -> Result<()> {
-        let mut remote_candidates = self.buffered_remote_ice_candidates.lock()?;
-
-        if remote_candidates.is_empty() {
-            return Ok(());
-        }
-
+    pub fn add_remote_ice_candidates(
+        &self,
+        remote_ice_candidates: &[signaling::IceCandidate],
+    ) -> Result<()> {
         ringbench!(
             RingBench::Conn,
             RingBench::WebRTC,
-            format!("ice_candidates({})", remote_candidates.len())
+            format!("ice_candidates({})", remote_ice_candidates.len())
         );
 
         let webrtc = self.webrtc.lock()?;
-        for remote_candidate in &(*remote_candidates) {
-            webrtc.pc_interface()?.add_ice_candidate(remote_candidate)?;
+        for remote_ice_candidate in remote_ice_candidates {
+            webrtc
+                .pc_interface()?
+                .add_ice_candidate(remote_ice_candidate)?;
         }
-        remote_candidates.clear();
-
         Ok(())
     }
 
@@ -964,13 +1066,13 @@ where
         self.set_state(ConnectionState::Closed)?;
 
         // Stop the timer runtime, if any.
-        let mut stats_runtime = self.stats_runtime.lock()?;
-        if let Some(stats_runtime) = stats_runtime.take() {
-            info!("close(): stopping the stats runtime");
-            let _ = stats_runtime
+        let mut tick_context = self.tick_context.lock()?;
+        if let Some(runtime) = tick_context.runtime.take() {
+            info!("close(): stopping the tick runtime");
+            let _ = runtime
                 .shutdown_now()
                 .wait()
-                .map_err(|_| warn!("Problems shutting down the stats runtime"));
+                .map_err(|_| warn!("Problems shutting down the tick runtime"));
         }
 
         // Free up webrtc related resources.
@@ -1062,46 +1164,6 @@ where
         }
     }
 
-    /// Inject a `SetLocalDescriptionAndSendOffer` event into the FSM.
-    pub fn inject_set_local_description_and_send_offer(
-        &mut self,
-        offer: signaling::Offer,
-    ) -> Result<()> {
-        self.inject_event(ConnectionEvent::SetLocalDescriptionAndSendOffer(offer))
-    }
-
-    /// Inject a `ReceivedAnswer` event into the FSM
-    ///
-    /// `Called By:` Local application.
-    pub fn inject_received_answer(&mut self, received: signaling::ReceivedAnswer) -> Result<()> {
-        info!(
-            "id: {}, RX SDP answer:\n{}",
-            self.id(),
-            redact_string(&received.answer.sdp)
-        );
-        self.inject_event(ConnectionEvent::ReceivedAnswer(received))
-    }
-
-    /// Inject an `ReceivedOffer` event into the FSM.
-    ///
-    /// `Called By:` Local application.
-    pub fn inject_received_offer(&mut self, received: signaling::ReceivedOffer) -> Result<()> {
-        info!(
-            "id: {}, RX SDP offer:\n{}",
-            self.id(),
-            redact_string(&received.offer.sdp)
-        );
-        self.inject_event(ConnectionEvent::ReceivedOffer(received))
-    }
-
-    /// Inject a `ConnectionEvent::HaveOfferAndAnswer` event into the FSM.
-    ///
-    /// `Called By:` received_offer() and received_answer().
-    pub fn inject_have_offer_and_answer(&mut self) -> Result<()> {
-        let event = ConnectionEvent::HaveOfferAndAnswer;
-        self.inject_event(event)
-    }
-
     /// Inject a `LocalIceCandidate` event into the FSM.
     ///
     /// `Called By:` WebRTC `PeerConnectionObserver` call back thread.
@@ -1190,8 +1252,17 @@ where
     ///
     /// * `call_id` - Call ID from the remote peer.
     /// * `enabled` - `true` if the remote peer is streaming video.
-    pub fn inject_remote_video_status(&mut self, call_id: CallId, enabled: bool) -> Result<()> {
-        self.inject_event(ConnectionEvent::RemoteVideoStatus(call_id, enabled))
+    pub fn inject_remote_video_status(
+        &mut self,
+        call_id: CallId,
+        enabled: bool,
+        sequence_number: Option<u64>,
+    ) -> Result<()> {
+        self.inject_event(ConnectionEvent::RemoteVideoStatus(
+            call_id,
+            enabled,
+            sequence_number,
+        ))
     }
 
     /// Inject a `SendHangupViaDataChannel event into the FSM.
