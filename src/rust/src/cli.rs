@@ -36,8 +36,13 @@ use std::{collections::HashMap, thread, time::Duration};
 fn main() {
     log::set_logger(&LOG).expect("set logger");
     log::set_max_level(log::LevelFilter::Debug);
-    // For detailed logs, uncomment this line.
+
+    // Show WebRTC logs via application Logger while debugging.
+    #[cfg(debug_assertions)]
     ringrtc::webrtc::logging::set_logger(log::LevelFilter::Debug);
+
+    #[cfg(not(debug_assertions))]
+    ringrtc::webrtc::logging::set_logger(log::LevelFilter::Warn);
 
     let hide_ip = false;
     // TODO: Real STUN/TURN servers.

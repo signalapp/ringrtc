@@ -80,11 +80,12 @@ public class CallManager {
         .setNativeLibraryLoader(new NoOpLoader());
 
       BuildInfo buildInfo = ringrtcGetBuildInfo();
+      Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build)");
+
       if (buildInfo.debug) {
-        // Log WebRtc internals via application Logger.
+        // Show WebRTC logs via application Logger while debugging.
         builder.setInjectableLogger(new WebRtcLogger(), Severity.LS_INFO);
       }
-      Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build)");
 
       PeerConnectionFactory.initialize(builder.createInitializationOptions());
       ringrtcInitialize();

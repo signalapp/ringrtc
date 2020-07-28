@@ -249,9 +249,15 @@ declare_types! {
     pub class JsCallManager for CallEndpoint {
         init(mut cx) {
             if ENABLE_LOGGING {
-              log::set_logger(&LOG).expect("set logger");
-              log::set_max_level(log::LevelFilter::Info);
-              crate::webrtc::logging::set_logger(log::LevelFilter::Warn);
+                log::set_logger(&LOG).expect("set logger");
+                log::set_max_level(log::LevelFilter::Info);
+
+                // Show WebRTC logs via application Logger while debugging.
+                #[cfg(debug_assertions)]
+                crate::webrtc::logging::set_logger(log::LevelFilter::Debug);
+
+                #[cfg(not(debug_assertions))]
+                crate::webrtc::logging::set_logger(log::LevelFilter::Off);
             }
 
             debug!("JsCallManager.init()");
