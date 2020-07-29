@@ -13,7 +13,9 @@ public class CallManagerGlobal {
     // CallManagerGlobal is a singleton.
     static let shared = CallManagerGlobal()
 
+    #if DEBUG
     let webRtcLogger: RTCCallbackLogger
+    #endif
 
     // MARK: Object Lifetime
 
@@ -83,7 +85,9 @@ public class CallManagerGlobal {
     }
 
     deinit {
+        #if DEBUG
         webRtcLogger.stop()
+        #endif
 
         Logger.debug("object! CallManagerGlobal destroyed. \(ObjectIdentifier(self))")
     }
