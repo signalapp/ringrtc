@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.4.0
+
+- Reference signalapp/webrtc@4147b
+
+- Implement data channel support over RTP; deprecate SCTP
+
+- Add audio statistics logging
+
+- Minor fixes and improvements
+
 ## v2.3.1
 
 - Fix for call request support
