@@ -671,7 +671,7 @@ where
                 connection.set_state(ConnectionState::CallConnected)?;
                 self.notify_observer(connection, ObserverEvent::ConnectionReconnected);
             }
-            _ => (),
+            _ => self.unexpected_state(state, "IceConnected"),
         }
         Ok(())
     }
@@ -746,14 +746,7 @@ where
         stream: MediaStream,
     ) -> Result<()> {
         match state {
-            // We allow adding the stream to the connection while we are starting because this gets fired
-            // when we call set_remote_description inside of the start_XXX methods.
-            // This ends up being called between when we call set_remote_description and when we get the result.
-            // This is a little subtle, but seems to work.
-            // In the long-term, we should probably not handle this event and instead iterate over the
-            // RtpReceivers after calling set_remote_description.
-            ConnectionState::Starting
-            | ConnectionState::IceConnecting
+            ConnectionState::IceConnecting
             | ConnectionState::IceReconnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
@@ -784,14 +777,7 @@ where
         ringbench!(RingBench::WebRTC, RingBench::Conn, "on_data_channel()");
 
         match state {
-            // We allow adding the data channel to the connection while we are starting because this gets fired
-            // when we call set_remote_description inside of the start_XXX methods (when using the RTP data channel).
-            // This ends up being called between when we call set_remote_description and when we get the result.
-            // This is a little subtle, but seems to work.
-            // In the long-term, we should probably not handle this event and instead
-            // change WebRTC so we can call create_data_channel on both sides with the same SSRC
-            // and not rely on the signaling of SSRCs.
-            ConnectionState::Starting
+            ConnectionState::IceConnecting
             | ConnectionState::IceConnected
             | ConnectionState::CallConnected => {
                 let notify_handle = connection.clone();

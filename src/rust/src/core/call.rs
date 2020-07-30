@@ -533,7 +533,7 @@ where
                     let remote_device_id = pending_call.received.sender_device_id;
                     info!("proceed(): incoming: remote_device: {}", remote_device_id);
 
-                    let connection = call_manager.create_connection(
+                    let mut connection = call_manager.create_connection(
                         self,
                         remote_device_id,
                         ConnectionType::Incoming,
@@ -564,7 +564,7 @@ where
                 }
             }
             CallDirection::OutGoing => {
-                let parent_connection = call_manager.create_connection(
+                let mut parent_connection = call_manager.create_connection(
                     &self,
                     0,
                     ConnectionType::OutgoingParent,
@@ -610,7 +610,7 @@ where
             if let Some(forking) = maybe_forking.as_mut() {
                 info!("recevied_answer from device {}; forking enabled, so inject into connection_map.", sender_device_id);
                 let call_manager = self.call_manager()?;
-                let child_connection = call_manager.create_connection(
+                let mut child_connection = call_manager.create_connection(
                     &self,
                     sender_device_id,
                     ConnectionType::OutgoingChild,

@@ -188,13 +188,6 @@ impl Context {
     }
 }
 
-/// A mpsc::Sender for injecting ConnectionEvents into the
-/// [ConnectionStateMachine](../call_fsm/struct.CallStateMachine.html)
-///
-/// The event pump injects the tuple (Connection, ConnectionEvent)
-/// into the FSM.
-type EventPump<T> = Sender<(Connection<T>, ConnectionEvent)>;
-
 /// A mpsc::Receiver for receiving ConnectionEvents in the
 /// [ConnectionStateMachine](../call_fsm/struct.CallStateMachine.html)
 ///
@@ -272,7 +265,10 @@ where
     /// The parent Call object of this connection.
     call:                           Arc<CallMutex<Call<T>>>,
     /// Injects events into the [ConnectionStateMachine](../call_fsm/struct.CallStateMachine.html).
-    event_pump:                     EventPump<T>,
+    fsm_sender:                     Sender<(Connection<T>, ConnectionEvent)>,
+    /// Kept around between new() and start() so we can delay the starting of the FSM
+    /// but queue events that happen while starting.
+    fsm_receiver:                   Option<Receiver<(Connection<T>, ConnectionEvent)>>,
     /// Unique 64-bit number identifying the call.
     call_id:                        CallId,
     /// Device ID of the remote device.
@@ -360,7 +356,11 @@ where
     fn clone(&self) -> Self {
         Connection {
             call:                           Arc::clone(&self.call),
-            event_pump:                     self.event_pump.clone(),
+            fsm_sender:                     self.fsm_sender.clone(),
+            // Clones shouldn't need the Receiver because it's only used
+            // for the one reference that is used by the creator between
+            // creation and starting.
+            fsm_receiver:                   None,
             call_id:                        self.call_id,
             remote_feature_level:           Arc::clone(&self.remote_feature_level),
             connection_id:                  self.connection_id,
@@ -388,12 +388,9 @@ where
         remote_device: DeviceId,
         connection_type: ConnectionType,
     ) -> Result<Self> {
-        // create a FSM runtime for this connection
-        let mut context = Context::new()?;
-        let (event_pump, receiver) = futures::sync::mpsc::channel(256);
-        let call_fsm = ConnectionStateMachine::new(receiver)?
-            .map_err(|e| info!("call state machine returned error: {}", e));
-        context.worker_runtime.spawn(call_fsm);
+        // Create a FSM runtime for this connection.
+        let context = Context::new()?;
+        let (fsm_sender, fsm_receiver) = futures::sync::mpsc::channel(256);
 
         let call_id = call.call_id();
         let direction = call.direction();
@@ -409,7 +406,8 @@ where
         };
 
         let connection = Self {
-            event_pump,
+            fsm_sender,
+            fsm_receiver: Some(fsm_receiver),
             call_id,
             // Until otherwise detected, remotes are assumed to be multi-ring capable.
             remote_feature_level: Arc::new(CallMutex::new(
@@ -440,50 +438,74 @@ where
         Ok(connection)
     }
 
+    fn start_fsm(&mut self) -> Result<()> {
+        let mut context = self.context.lock()?;
+        if let Some(fsm_receiver) = self.fsm_receiver.take() {
+            info!("Starting Connection FSM for {}", self.connection_id);
+            let connection_fsm = ConnectionStateMachine::new(fsm_receiver)?
+                .map_err(|e| info!("connection state machine returned error: {}", e));
+            context.worker_runtime.spawn(connection_fsm);
+        } else {
+            warn!(
+                "Starting Connection FSM for {} more than once",
+                self.connection_id
+            );
+        }
+        Ok(())
+    }
+
     // An outgoing parent is responsible for:
     // 1. Creating ICE gatherer that can be used multiple times (ICE forking)
     // 2. Creating an offer that can be used multiple times (call forking)
     // 3. Creating an offer that is backwards compatible between old and new clients
     // It does not need to fully configure the PeerConnection.
     pub fn start_outgoing_parent(
-        &self,
+        &mut self,
         call_media_type: CallMediaType,
     ) -> Result<(IceGatherer, signaling::Offer)> {
-        self.set_state(ConnectionState::Starting)?;
+        let result = (|| {
+            self.set_state(ConnectionState::Starting)?;
 
-        let webrtc = self.webrtc.lock()?;
-        let peer_connection = webrtc.pc_interface()?;
+            let webrtc = self.webrtc.lock()?;
+            let peer_connection = webrtc.pc_interface()?;
 
-        // We have to create and use the IceGatherer before calling
-        // create_offer to make sure the ICE parameters are correct.
-        let ice_gatherer = peer_connection.create_shared_ice_gatherer()?;
-        peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
+            // We have to create and use the IceGatherer before calling
+            // create_offer to make sure the ICE parameters are correct.
+            let ice_gatherer = peer_connection.create_shared_ice_gatherer()?;
+            peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
 
-        // We have to create the DataChannel before calling create_offer to make sure the
-        // data channel parameters are correct.  But we don't need to observe it.
-        let _data_channel = peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
+            // We have to create the DataChannel before calling create_offer to make sure the
+            // data channel parameters are correct.  But we don't need to observe it.
+            let _data_channel =
+                peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
 
-        let observer = create_csd_observer();
-        peer_connection.create_offer(observer.as_ref());
-        // This must be kept in sync with call.rs where it passes in V2 into create_connection.
-        let mut offer_sdi = observer.get_result()?;
+            let observer = create_csd_observer();
+            peer_connection.create_offer(observer.as_ref());
+            // This must be kept in sync with call.rs where it passes in V2 into create_connection.
+            let mut offer_sdi = observer.get_result()?;
 
-        // The only purpose of this is to start gathering ICE candidates.
-        // But we need to call set_local_description before we munge it.
-        // Otherwise there will be a data channel type mismatch.
-        let observer = create_ssd_observer();
-        peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
-        observer.get_result()?;
+            // The only purpose of this is to start gathering ICE candidates.
+            // But we need to call set_local_description before we munge it.
+            // Otherwise there will be a data channel type mismatch.
+            let observer = create_ssd_observer();
+            peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
+            observer.get_result()?;
 
-        let v2_offer_sdp = offer_sdi.to_sdp()?;
-        offer_sdi.replace_rtp_data_channels_with_sctp()?;
-        let v1_offer_sdp = offer_sdi.to_sdp()?;
+            let v2_offer_sdp = offer_sdi.to_sdp()?;
+            offer_sdi.replace_rtp_data_channels_with_sctp()?;
+            let v1_offer_sdp = offer_sdi.to_sdp()?;
 
-        let offer =
-            signaling::Offer::from_v2_and_v1_sdp(call_media_type, v2_offer_sdp, v1_offer_sdp)?;
+            let offer =
+                signaling::Offer::from_v2_and_v1_sdp(call_media_type, v2_offer_sdp, v1_offer_sdp)?;
 
-        self.set_state(ConnectionState::IceGathering)?;
-        Ok((ice_gatherer, offer))
+            self.set_state(ConnectionState::IceGathering)?;
+            Ok((ice_gatherer, offer))
+        })();
+
+        // Always start the FSM no matter what happened above because
+        // close() relies on it running.
+        self.start_fsm()?;
+        result
     }
 
     // An outgoing child is responsible for:
@@ -491,62 +513,71 @@ where
     // 2. Combining the offer from the parent and the answer from the remote peer
     //    to configure PeerConnection correctly.
     pub fn start_outgoing_child(
-        &self,
+        &mut self,
         ice_gatherer: &IceGatherer,
         offer: &signaling::Offer,
         received: &signaling::ReceivedAnswer,
     ) -> Result<()> {
-        self.set_state(ConnectionState::Starting)?;
+        let result = (|| {
+            self.set_state(ConnectionState::Starting)?;
 
-        self.set_remote_feature_level(received.sender_device_feature_level)?;
+            self.set_remote_feature_level(received.sender_device_feature_level)?;
 
-        let mut webrtc = self.webrtc.lock()?;
+            let mut webrtc = self.webrtc.lock()?;
 
-        // Create a stats observer object.
-        let stats_observer = create_stats_observer();
-        webrtc.stats_observer = Some(stats_observer);
+            // Create a stats observer object.
+            let stats_observer = create_stats_observer();
+            webrtc.stats_observer = Some(stats_observer);
 
-        let peer_connection = webrtc.pc_interface()?;
+            let peer_connection = webrtc.pc_interface()?;
 
-        peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
+            peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
 
-        // The caller is responsible for creating the data channel (the callee listens for it).
-        // Both sides will observe it.
-        let data_channel = peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-        let data_channel_observer = DataChannelObserver::new(self.clone())?;
-        unsafe { data_channel.register_observer(data_channel_observer.rffi_interface())? };
+            // The caller is responsible for creating the data channel (the callee listens for it).
+            // Both sides will observe it.
+            let data_channel =
+                peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
+            let data_channel_observer = DataChannelObserver::new(self.clone())?;
+            unsafe { data_channel.register_observer(data_channel_observer.rffi_interface())? };
 
-        let (answer_is_v2, answer_sdp) = received.answer.to_v2_or_v1_sdp()?;
-        let offer_sdp = if answer_is_v2 {
-            offer.to_v2_sdp()?
-        } else {
-            offer.to_v1_sdp()?
-        };
-        let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
-        let answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
+            let (answer_is_v2, answer_sdp) = received.answer.to_v2_or_v1_sdp()?;
+            let offer_sdp = if answer_is_v2 {
+                offer.to_v2_sdp()?
+            } else {
+                offer.to_v1_sdp()?
+            };
+            let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+            let answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
 
-        let observer = create_ssd_observer();
-        peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
-        observer.get_result()?;
+            let observer = create_ssd_observer();
+            peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
+            observer.get_result()?;
 
-        let observer = create_ssd_observer();
-        peer_connection.set_remote_description(observer.as_ref(), &answer_sdi);
-        // This is subtle: on_data_channel and on_add_stream can fire between when we call
-        // set_remote_description and getting the result.
-        // It's a little weird, but it works.
-        // In the long-term, we should probably not handle those events and instead
-        // deal with the streams and data channels synchronously rather than as event callbacks.
-        observer.get_result()?;
+            let observer = create_ssd_observer();
+            peer_connection.set_remote_description(observer.as_ref(), &answer_sdi);
+            // on_data_channel and on_add_stream and on_ice_connected can all happen while
+            // SetRemoteDescription is happening.  But none of those will be processed
+            // until start_fsm() is called below.
+            observer.get_result()?;
 
-        // Don't enable until the call is accepted.
-        peer_connection.set_outgoing_audio_enabled(false);
+            // Don't enable until the call is accepted.
+            peer_connection.set_outgoing_audio_enabled(false);
 
-        // We have to do this once we're done with peer_connection because
-        // it holds a ref to peer_connection as well.
-        webrtc.data_channel = Some(data_channel);
-        webrtc.data_channel_observer = Some(data_channel_observer);
-        self.set_state(ConnectionState::IceConnecting)?;
-        Ok(())
+            // We have to do this once we're done with peer_connection because
+            // it holds a ref to peer_connection as well.
+            webrtc.data_channel = Some(data_channel);
+            webrtc.data_channel_observer = Some(data_channel_observer);
+            self.set_state(ConnectionState::IceConnecting)?;
+            Ok(())
+        })();
+
+        // Make sure we start the FSM after setting the state because the FSM
+        // checks the state and because we don't want to do things (like
+        // handle ICE connected events) until after everything is set up.
+        // Always start the FSM no matter what happened above because
+        // close() relies on it running.
+        self.start_fsm()?;
+        result
     }
 
     // An incoming connection is responsible for:
@@ -554,61 +585,71 @@ where
     // 2. Configuring the PeerConnection with the offer and the answer,
     //    and any remote ICE candidates that came that have arrived.
     pub fn start_incoming(
-        &self,
+        &mut self,
         received: signaling::ReceivedOffer,
         remote_ice_candidates: Vec<signaling::IceCandidate>,
     ) -> Result<signaling::Answer> {
-        self.set_state(ConnectionState::Starting)?;
+        let result = (|| {
+            self.set_state(ConnectionState::Starting)?;
 
-        let mut webrtc = self.webrtc.lock()?;
+            let mut webrtc = self.webrtc.lock()?;
 
-        // Create a stats observer object.
-        let stats_observer = create_stats_observer();
-        webrtc.stats_observer = Some(stats_observer);
+            // Create a stats observer object.
+            let stats_observer = create_stats_observer();
+            webrtc.stats_observer = Some(stats_observer);
 
-        let peer_connection = webrtc.pc_interface()?;
+            let peer_connection = webrtc.pc_interface()?;
 
-        let (offer_is_v2, offer_sdp) = received.offer.to_v2_or_v1_sdp()?;
-        let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+            let (offer_is_v2, offer_sdp) = received.offer.to_v2_or_v1_sdp()?;
+            let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
 
-        let observer = create_ssd_observer();
-        peer_connection.set_remote_description(observer.as_ref(), &offer_sdi);
-        // This is subtle: on_data_channel and on_add_stream can fire between when we call
-        // set_remote_description and getting the result.
-        // It's a little weird, but it works.
-        // In the long-term, we should probably not handle those events and instead
-        // deal with the streams and data channels synchronously rather than as event callbacks.
-        observer.get_result()?;
+            let observer = create_ssd_observer();
+            peer_connection.set_remote_description(observer.as_ref(), &offer_sdi);
+            // on_data_channel and on_add_stream can happen while SetRemoteDescription
+            // is happening.  But they won't be processed until start_fsm() is called
+            // below.
+            observer.get_result()?;
 
-        let observer = create_csd_observer();
-        peer_connection.create_answer(observer.as_ref());
-        let answer_sdi = observer.get_result()?;
-        // Get the answer here before it is mutated with candidates by set_local_description.
-        let answer_sdp = answer_sdi.to_sdp()?;
-        let answer = if offer_is_v2 {
-            signaling::Answer::from_v2_sdp(answer_sdp)?
-        } else {
-            signaling::Answer::from_v1_sdp(answer_sdp)
-        };
+            let observer = create_csd_observer();
+            peer_connection.create_answer(observer.as_ref());
+            let answer_sdi = observer.get_result()?;
+            // Get the answer here before it is mutated with candidates by set_local_description.
+            let answer_sdp = answer_sdi.to_sdp()?;
+            let answer = if offer_is_v2 {
+                signaling::Answer::from_v2_sdp(answer_sdp)?
+            } else {
+                signaling::Answer::from_v1_sdp(answer_sdp)
+            };
 
-        let observer = create_ssd_observer();
-        peer_connection.set_local_description(observer.as_ref(), &answer_sdi);
-        observer.get_result()?;
+            let observer = create_ssd_observer();
+            peer_connection.set_local_description(observer.as_ref(), &answer_sdi);
+            // on_ice_connected can happen while SetLocalDescription is happening.
+            // But it won't be processed until start_fsm() is called below.
+            observer.get_result()?;
 
-        // Don't enable until call is accepted.
-        peer_connection.set_outgoing_audio_enabled(false);
+            // Don't enable until call is accepted.
+            peer_connection.set_outgoing_audio_enabled(false);
 
-        ringbench!(
-            RingBench::Conn,
-            RingBench::WebRTC,
-            format!("ice_candidates({})", remote_ice_candidates.len())
-        );
-        for remote_ice_candidate in remote_ice_candidates {
-            peer_connection.add_ice_candidate(&remote_ice_candidate)?;
-        }
+            ringbench!(
+                RingBench::Conn,
+                RingBench::WebRTC,
+                format!("ice_candidates({})", remote_ice_candidates.len())
+            );
+            for remote_ice_candidate in remote_ice_candidates {
+                peer_connection.add_ice_candidate(&remote_ice_candidate)?;
+            }
 
-        self.set_state(ConnectionState::IceConnecting)?;
-        Ok(answer)
+            self.set_state(ConnectionState::IceConnecting)?;
+            Ok(answer)
+        })();
+
+        // Make sure we start the FSM after setting the state because the FSM
+        // checks the state and because we don't want to do things (like
+        // handle ICE connected events) until after everything is set up.
+        // Always start the FSM no matter what happened above because
+        // close() relies on it running.
+        self.start_fsm()?;
+        result
     }
 
     /// Return the Call identifier.
@@ -1034,10 +1075,8 @@ where
     }
 
     /// Send a ConnectionEvent to the internal FSM.
-    ///
-    /// Using the `EventPump` send a ConnectionEvent to the internal FSM.
     fn inject_event(&mut self, event: ConnectionEvent) -> Result<()> {
-        if self.event_pump.is_closed() {
+        if self.fsm_sender.is_closed() {
             // The stream is closed, just eat the request
             debug!(
                 "cc.inject_event(): stream is closed while sending: {}",
@@ -1045,7 +1084,7 @@ where
             );
             return Ok(());
         }
-        self.event_pump.try_send((self.clone(), event))?;
+        self.fsm_sender.try_send((self.clone(), event))?;
         Ok(())
     }
 
