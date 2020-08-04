@@ -34,7 +34,7 @@ use common::{
     PRNG,
 };
 
-// Create an inbound call session up to the IceConnecting state.
+// Create an inbound call session up to the ConnectingBeforeAccepted state.
 //
 // - create call manager
 // - receive offer
@@ -42,7 +42,7 @@ use common::{
 // - check active call exists
 // - call proceed()
 // - add received ice candidate
-// - check underlying Connection is in IceConnecting state
+// - check underlying Connection is in ConnectingBeforeAccepted state
 // - check call is in Connecting state
 // - check answer sent
 // Now in the Connecting state.
@@ -68,7 +68,7 @@ fn start_inbound_call(signaling_type: SignalingType) -> TestContext {
     let active_call = context.active_call();
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Starting
+        CallState::WaitingToProceed
     );
 
     cm.proceed(
@@ -92,13 +92,13 @@ fn start_inbound_call(signaling_type: SignalingType) -> TestContext {
     cm.synchronize().expect(error_line!());
     assert_eq!(
         connection.state().expect(error_line!()),
-        ConnectionState::IceConnecting
+        ConnectionState::ConnectingBeforeAccepted
     );
 
     assert_eq!(context.answers_sent(), 1);
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connecting
+        CallState::ConnectingBeforeAccepted
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -115,14 +115,14 @@ fn inbound_ice_connecting() {
     let _ = start_inbound_call(SignalingType::LegacyFree);
 }
 
-// Create an inbound call session up to the CallConnected state.
+// Create an inbound call session up to the ConnectedAndAccepted state.
 //
 // 1. receive an offer
 // 2. ice connected
 // 3. on data channel
 // 4. local accept call
 //
-// Now in the CallConnected state.
+// Now in the ConnectedAndAccepted state.
 
 fn connect_inbound_call() -> TestContext {
     let context = start_inbound_call(SignalingType::Legacy);
@@ -139,24 +139,24 @@ fn connect_inbound_call() -> TestContext {
 
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connecting
+        CallState::ConnectingBeforeAccepted
     );
 
     info!("test: injecting data channel connected");
     let data_channel = unsafe { DataChannel::new(ptr::null()) };
     active_connection
-        .inject_on_data_channel(data_channel)
+        .inject_received_data_channel(data_channel)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceConnected
+        ConnectionState::ConnectedBeforeAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Ringing
+        CallState::ConnectedWithDataChannelBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::LocalRinging), 1);
     assert_eq!(context.error_count(), 0);
@@ -171,7 +171,7 @@ fn connect_inbound_call() -> TestContext {
 
     info!("test: add media stream");
     active_connection
-        .on_add_stream(MediaStream::new(ptr::null()))
+        .handle_received_incoming_media(MediaStream::new(ptr::null()))
         .expect(error_line!());
 
     info!("test: accepting call");
@@ -181,13 +181,13 @@ fn connect_inbound_call() -> TestContext {
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::CallConnected
+        ConnectionState::ConnectedAndAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connected
+        CallState::ConnectedAndAccepted
     );
-    assert_eq!(context.event_count(ApplicationEvent::LocalConnected), 1);
+    assert_eq!(context.event_count(ApplicationEvent::LocalAccepted), 1);
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -312,7 +312,7 @@ fn start_inbound_call_with_error() {
     let active_call = context.active_call();
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Starting
+        CallState::WaitingToProceed
     );
 
     // cause the sending of the answer to fail.
@@ -342,7 +342,10 @@ fn start_inbound_call_with_error() {
     assert_eq!(context.error_count(), 2);
     assert_eq!(context.ended_count(), 2);
     assert_eq!(context.answers_sent(), 0);
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
 }
 
 #[test]

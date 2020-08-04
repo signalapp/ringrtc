@@ -32,7 +32,7 @@ use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnectionInterface};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
 
-/// Concrete type for iOS AppMediaStream objects.
+/// Concrete type for iOS AppIncomingMedia objects.
 impl PlatformItem for IOSMediaStream {}
 
 /// Concrete type for iOS AppConnection objects.
@@ -82,7 +82,7 @@ impl Drop for IOSPlatform {
 }
 
 impl Platform for IOSPlatform {
-    type AppMediaStream = IOSMediaStream;
+    type AppIncomingMedia = IOSMediaStream;
     type AppRemotePeer = AppObject;
     type AppConnection = AppConnectionX;
     type AppCallContext = AppCallContextX;
@@ -335,12 +335,12 @@ impl Platform for IOSPlatform {
         Ok(())
     }
 
-    fn create_media_stream(
+    fn create_incoming_media(
         &self,
         connection: &Connection<Self>,
-        stream: MediaStream,
-    ) -> Result<Self::AppMediaStream> {
-        info!("create_media_stream():");
+        incoming_media: MediaStream,
+    ) -> Result<Self::AppIncomingMedia> {
+        info!("create_incoming_media():");
 
         let app_connection_interface = connection.app_connection()?;
 
@@ -356,18 +356,18 @@ impl Platform for IOSPlatform {
         }
 
         // Pass this object and give ownership to a new IOSMediaStream object.
-        IOSMediaStream::new(app_media_stream_interface, stream)
+        IOSMediaStream::new(app_media_stream_interface, incoming_media)
     }
 
-    fn on_connect_media(
+    fn connect_incoming_media(
         &self,
         remote_peer: &Self::AppRemotePeer,
         app_call_context: &Self::AppCallContext,
-        media_stream: &Self::AppMediaStream,
+        incoming_media: &Self::AppIncomingMedia,
     ) -> Result<()> {
-        info!("on_connect_media():");
+        info!("connect_incoming_media():");
 
-        let ios_media_stream = media_stream as &IOSMediaStream;
+        let ios_media_stream = incoming_media as &IOSMediaStream;
         let app_media_stream = ios_media_stream.get_ref()?;
 
         (self.app_interface.onConnectMedia)(

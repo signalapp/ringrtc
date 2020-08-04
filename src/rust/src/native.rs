@@ -66,7 +66,7 @@ pub struct NativeConnection;
 
 impl PlatformItem for NativeConnection {}
 
-// This serves as the Platform::AppMediaStream
+// This serves as the Platform::AppIncomingMedia
 // But since native MediaStreams are just MediaStreams,
 // we don't need anything here.
 type NativeMediaStream = MediaStream;
@@ -244,7 +244,7 @@ impl Platform for NativePlatform {
     type AppRemotePeer = PeerId;
     type AppCallContext = NativeCallContext;
     type AppConnection = NativeConnection;
-    type AppMediaStream = NativeMediaStream;
+    type AppIncomingMedia = NativeMediaStream;
 
     fn compare_remotes(
         &self,
@@ -292,23 +292,24 @@ impl Platform for NativePlatform {
         Ok(connection)
     }
 
-    fn create_media_stream(
+    fn create_incoming_media(
         &self,
         _connection: &Connection<Self>,
-        stream: MediaStream,
-    ) -> Result<Self::AppMediaStream> {
-        info!("NativePlatform::create_media_stream()");
-        Ok(stream)
+        incoming_media: MediaStream,
+    ) -> Result<Self::AppIncomingMedia> {
+        info!("NativePlatform::create_incoming_media()");
+        Ok(incoming_media)
     }
 
-    fn on_connect_media(
+    fn connect_incoming_media(
         &self,
         _remote_peer: &Self::AppRemotePeer,
         _call_context: &Self::AppCallContext,
-        media_stream: &Self::AppMediaStream,
+        incoming_media: &Self::AppIncomingMedia,
     ) -> Result<()> {
-        info!("NativePlatform::on_connect_media()");
-        if let Some(incoming_video_track) = media_stream.incoming_video_track() {
+        info!("NativePlatform::connect_incoming_media()");
+        // %%% rename incoming_video_track()
+        if let Some(incoming_video_track) = incoming_media.incoming_video_track() {
             self.incoming_video_sink.set_enabled(true);
             // Note: this is passing an unsafe reference that must outlive
             // the VideoTrack/MediaStream.
@@ -317,8 +318,8 @@ impl Platform for NativePlatform {
         Ok(())
     }
 
-    fn on_close_media(&self, _app_call_context: &Self::AppCallContext) -> Result<()> {
-        info!("NativePlatform::on_close_media()");
+    fn disconnect_incoming_media(&self, _app_call_context: &Self::AppCallContext) -> Result<()> {
+        info!("NativePlatform::disconnect_incoming_media()");
         self.incoming_video_sink.set_enabled(false);
         Ok(())
     }
@@ -354,8 +355,8 @@ impl Platform for NativePlatform {
             ApplicationEvent::LocalRinging | ApplicationEvent::RemoteRinging => {
                 self.send_state(remote_peer, CallState::Ringing)
             }
-            ApplicationEvent::LocalConnected
-            | ApplicationEvent::RemoteConnected
+            ApplicationEvent::LocalAccepted
+            | ApplicationEvent::RemoteAccepted
             | ApplicationEvent::Reconnected => self.send_state(remote_peer, CallState::Connected),
             ApplicationEvent::Reconnecting => self.send_state(remote_peer, CallState::Connecting),
             ApplicationEvent::EndedLocalHangup => {

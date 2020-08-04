@@ -68,29 +68,34 @@ pub type DeviceId = u32;
 /// Tracks the state of a call.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CallState {
-    /// No call in progress.
-    Idle,
+    /// The call has been created, but not yet stated.
+    NotYetStarted,
 
-    /// Notifying app that a call is starting.
-    Starting,
+    /// The call has been started (via start_call() or handle_received_offer())
+    /// but is waiting for the app to call proceed().
+    /// Should transition to ConnectingBeforeAccepted when the app calls proceed().
+    WaitingToProceed,
 
-    /// Call is connecting (signaling) with the remote peer.
-    Connecting,
+    /// Call is connecting (signaling and ICE) with the remote peer.
+    /// We don't ring until we're connected with ICE and have a data
+    /// channel to send an "accepted" message.
+    ConnectingBeforeAccepted,
 
-    /// ICE is negotiated.
-    Ringing,
+    /// ICE is connected and there is a data channel available,
+    /// But the the callee has not yet accepted.
+    ConnectedWithDataChannelBeforeAccepted,
 
-    /// Incoming/Outgoing, the call is established.
-    Connected,
+    /// ICE is connected and the callee has accepted.
+    ConnectedAndAccepted,
 
-    /// Incoming/Outgoing, the call is reconnecting.
-    Reconnecting,
+    /// After ConnectedAndAccepted, has gone disconnected temporarily and is trying to reconnect.
+    ReconnectingAfterAccepted,
 
     /// The call is in the process of terminating (hanging up).
     Terminating,
 
-    /// The call is completely closed.
-    Closed,
+    /// The call is completely terminated.
+    Terminated,
 }
 
 impl fmt::Display for CallState {
@@ -111,11 +116,11 @@ pub enum ApplicationEvent {
     /// Outbound call only: The call signaling (ICE) is complete.
     RemoteRinging,
 
-    /// The local side has accepted and connected the call.
-    LocalConnected,
+    /// The local side has accepted the call.
+    LocalAccepted,
 
-    /// The remote side has accepted and connected the call.
-    RemoteConnected,
+    /// The remote side has accepted the call.
+    RemoteAccepted,
 
     /// The call ended because of a local hangup.
     EndedLocalHangup,
@@ -200,7 +205,7 @@ pub enum ConnectionState {
     /// The connection has been started, but the start method has not completed.
     /// After a connection is started, it will transition to either
     /// IceGathering (in the case of outgoing parent)
-    /// or IceConnecting (in the case of outgoing child or incoming)
+    /// or ConnectingBeforeAccepted (in the case of outgoing child or incoming)
     Starting,
 
     /// The connection is gathering and sending ICE candidates
@@ -211,26 +216,26 @@ pub enum ConnectionState {
 
     /// ICE is attempting to connect, but has not yet.
     /// It has both the local and remote descriptions.
-    /// This can transition to IceConnected or IceConnectionFailed
-    IceConnecting,
+    /// This can transition to ConnectedBeforeAccepted or IceFailed
+    ConnectingBeforeAccepted,
 
-    /// ICE has connected.
-    IceConnected,
+    /// ICE has connected, but the call hasn't been accepted yet.
+    ConnectedBeforeAccepted,
 
     /// ICE failed to connect.
-    IceConnectionFailed,
-
-    /// ICE is reconnecting after an ICE disconnect event.
-    IceReconnecting,
+    IceFailed,
 
     /// The callee has accepted the call and the call is connected.
-    CallConnected,
+    ConnectedAndAccepted,
 
-    /// The call is in the process of shutting down.
+    /// ICE is disconnected/reconnecting after the call is accepted.
+    ReconnectingAfterAccepted,
+
+    /// The connection is in the process of terminaing
     Terminating,
 
-    /// The call is completely closed.
-    Closed,
+    /// The connection is completely terminated
+    Terminated,
 }
 
 impl fmt::Display for ConnectionState {

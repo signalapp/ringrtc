@@ -56,40 +56,41 @@ pub const TICK_PERIOD_SEC: u64 = 1;
 pub const STATS_PERIOD_SEC: u64 = 10;
 
 /// Connection observer status notification types
-///
+/// Sent from the Connection to the parent Call object
 #[derive(Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ObserverEvent {
-    /// ICE negotiation is complete and in the case of incoming calls
-    /// the Data Channel is also ready, so both sides can begin
-    /// communicating.
-    ConnectionRinging,
+pub enum ConnectionObserverEvent {
+    /// ICE negotiation is complete and a DataChannel is also ready.
+    /// The Call uses this to know when it should transition to the
+    /// Ringing state.
+    ConnectedWithDataChannelBeforeAccepted,
 
-    /// The remote side has connected the call.
-    RemoteConnected,
+    /// The remote side sent an accepted message via the data channel.
+    ReceivedAcceptedViaDataChannel,
 
-    /// The remote video status.
-    RemoteVideoStatus(bool),
+    /// The remote side sent a video status message via the data channel.
+    ReceivedVideoStatusViaDataChannel(bool),
 
-    /// The remote side has hungup.
+    /// The remote side sent a hangup message via the data channel
+    /// or via signaling.
     ReceivedHangup(signaling::Hangup),
 
     /// The call failed to connect during ICE negotiation.
-    ConnectionFailed,
+    IceFailed,
 
-    /// The call dropped while connected and is now reconnecting.
-    ConnectionReconnecting,
+    /// The connection temporarily disconnected and it attempting to reconnect.
+    ReconnectingAfterAccepted,
 
-    /// The call dropped while connected and is now reconnected.
-    ConnectionReconnected,
+    /// The connection temporarily disconnected and has now reconnecting.
+    ReconnectedAfterAccepted,
 }
 
-impl Clone for ObserverEvent {
+impl Clone for ConnectionObserverEvent {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl fmt::Display for ObserverEvent {
+impl fmt::Display for ConnectionObserverEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -109,8 +110,8 @@ where
     data_channel_observer: Option<DataChannelObserver<T>>,
     /// Raw pointer to Connection object for PeerConnectionObserver
     connection_ptr:        Option<*mut Connection<T>>,
-    /// Application specific media stream
-    app_media_stream:      Option<<T as Platform>::AppMediaStream>,
+    /// Application-specific incoming media
+    incoming_media:        Option<<T as Platform>::AppIncomingMedia>,
     /// Application specific peer connection
     app_connection:        Option<<T as Platform>::AppConnection>,
     /// Boxed copy of the stats collector object shared for callbacks.
@@ -400,7 +401,7 @@ where
             data_channel:          None,
             data_channel_observer: None,
             connection_ptr:        None,
-            app_media_stream:      None,
+            incoming_media:        None,
             app_connection:        None,
             stats_observer:        None,
         };
@@ -567,7 +568,7 @@ where
             // it holds a ref to peer_connection as well.
             webrtc.data_channel = Some(data_channel);
             webrtc.data_channel_observer = Some(data_channel_observer);
-            self.set_state(ConnectionState::IceConnecting)?;
+            self.set_state(ConnectionState::ConnectingBeforeAccepted)?;
             Ok(())
         })();
 
@@ -639,7 +640,7 @@ where
                 peer_connection.add_ice_candidate(&remote_ice_candidate)?;
             }
 
-            self.set_state(ConnectionState::IceConnecting)?;
+            self.set_state(ConnectionState::ConnectingBeforeAccepted)?;
             Ok(answer)
         })();
 
@@ -686,7 +687,7 @@ where
     pub fn set_state(&self, new_state: ConnectionState) -> Result<()> {
         let mut state = self.state.lock()?;
         *state = new_state;
-        if new_state == ConnectionState::CallConnected {
+        if new_state == ConnectionState::ConnectedAndAccepted {
             self.set_outgoing_audio_enabled(true)?;
         }
         Ok(())
@@ -732,20 +733,20 @@ where
         Ok(())
     }
 
-    /// Update the media stream.
-    pub fn set_app_media_stream(
+    /// Set the incoming media.
+    pub fn set_incoming_media(
         &self,
-        app_media_stream: <T as Platform>::AppMediaStream,
+        incoming_media: <T as Platform>::AppIncomingMedia,
     ) -> Result<()> {
-        // In the current application we only expect one media stream
+        // In the current application we only expect one incoming stream
         // per connection.
         let mut webrtc = self.webrtc.lock()?;
-        match webrtc.app_media_stream {
+        match webrtc.incoming_media {
             Some(_) => {
                 Err(RingRtcError::ActiveMediaStreamAlreadySet(self.remote_device_id()).into())
             }
             None => {
-                webrtc.app_media_stream = Some(app_media_stream);
+                webrtc.incoming_media = Some(incoming_media);
                 Ok(())
             }
         }
@@ -888,7 +889,7 @@ where
 
         match state_result {
             Ok(state) => match state {
-                ConnectionState::Terminating | ConnectionState::Closed => false,
+                ConnectionState::Terminating | ConnectionState::Terminated => false,
                 _ => true,
             },
             Err(_) => false,
@@ -1003,17 +1004,17 @@ where
         Ok(())
     }
 
-    /// Send a call connected message to the remote peer via the
+    /// Send an accepted message to the remote peer via the
     /// PeerConnection DataChannel.
-    pub fn send_connected(&self) -> Result<()> {
+    pub fn send_accepted_via_data_channel(&self) -> Result<()> {
         ringbench!(
             RingBench::Conn,
             RingBench::WebRTC,
-            format!("dc(connected)\t{}", self.connection_id)
+            format!("dc(accepted)\t{}", self.connection_id)
         );
 
         let webrtc = self.webrtc.lock()?;
-        webrtc.data_channel()?.send_connected(self.call_id)?;
+        webrtc.data_channel()?.send_accepted(self.call_id)?;
         Ok(())
     }
 
@@ -1024,7 +1025,7 @@ where
     ///
     /// * `enabled` - `true` when the local side is streaming video,
     /// otherwise `false`.
-    pub fn send_video_status(&self, enabled: bool) -> Result<()> {
+    pub fn send_video_status_via_data_channel(&self, enabled: bool) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
 
         webrtc
@@ -1033,45 +1034,48 @@ where
     }
 
     /// Notify the parent call observer about an event.
-    pub fn notify_observer(&self, event: ObserverEvent) -> Result<()> {
+    pub fn notify_observer(&self, event: ConnectionObserverEvent) -> Result<()> {
         let mut call = self.call.lock()?;
-        call.on_connection_event(self.remote_device_id(), event)
+        call.on_connection_observer_event(self.remote_device_id(), event)
     }
 
     /// Notify the parent call observer about an internal error.
     pub fn internal_error(&self, error: failure::Error) -> Result<()> {
         let mut call = self.call.lock()?;
-        call.on_connection_error(self.remote_device_id(), error)
+        call.on_connection_observer_error(self.remote_device_id(), error)
     }
 
-    /// Create an application specific MediaStream object and store it
-    /// for later.
-    pub fn on_add_stream(&mut self, stream: MediaStream) -> Result<()> {
-        info!("on_add_stream(): id: {}", self.connection_id);
+    /// Create an application-specific IncomingMedia object and store it
+    /// for connect_incoming_media later.
+    pub fn handle_received_incoming_media(&mut self, stream: MediaStream) -> Result<()> {
+        info!(
+            "handle_received_incoming_media(): id: {}",
+            self.connection_id
+        );
 
         let call = self.call.lock()?;
-        let app_media_stream = call.create_media_stream(self, stream)?;
-        self.set_app_media_stream(app_media_stream)
+        let incoming_media = call.create_incoming_media(self, stream)?;
+        self.set_incoming_media(incoming_media)
     }
 
-    /// Connect our media stream to the application connection
-    pub fn connect_media(&self) -> Result<()> {
-        info!("connect_media(): id: {}", self.connection_id);
+    /// Connect incoming media (stored by handle_incoming_media) to the application connection
+    pub fn connect_incoming_media(&self) -> Result<()> {
+        info!("connect_incoming_media(): id: {}", self.connection_id);
 
         let webrtc = self.webrtc.lock()?;
-        let app_media_stream = match webrtc.app_media_stream.as_ref() {
+        let incoming_media = match webrtc.incoming_media.as_ref() {
             Some(v) => v,
             None => {
                 return Err(RingRtcError::OptionValueNotSet(
-                    String::from("connect_media()"),
-                    String::from("app_media_stream"),
+                    String::from("connect_incoming_media()"),
+                    String::from("incoming_media"),
                 )
                 .into())
             }
         };
 
         let call = self.call()?;
-        call.connect_media(app_media_stream)
+        call.connect_incoming_media(incoming_media)
     }
 
     /// Send a ConnectionEvent to the internal FSM.
@@ -1088,21 +1092,21 @@ where
         Ok(())
     }
 
-    /// Shutdown the connection.
+    /// Terminate the connection.
     ///
-    /// Notify the internal FSM to shutdown.
+    /// Notify the internal FSM to terminate.
     ///
     /// `Note:` The current thread is blocked while waiting for the
-    /// FSM to signal that shutdown is complete.
-    pub fn close(&mut self) -> Result<()> {
-        info!("close(): ref_count: {}", self.ref_count());
+    /// FSM to signal that termination is complete.
+    pub fn terminate(&mut self) -> Result<()> {
+        info!("terminate(): ref_count: {}", self.ref_count());
 
         self.set_state(ConnectionState::Terminating)?;
 
-        self.inject_event(ConnectionEvent::EndCall)?;
+        self.inject_event(ConnectionEvent::Terminate)?;
         self.wait_for_terminate()?;
 
-        self.set_state(ConnectionState::Closed)?;
+        self.set_state(ConnectionState::Terminated)?;
 
         // Stop the timer runtime, if any.
         let mut tick_context = self.tick_context.lock()?;
@@ -1117,8 +1121,8 @@ where
         // Free up webrtc related resources.
         let mut webrtc = self.webrtc.lock()?;
 
-        // dispose of the media stream
-        let _ = webrtc.app_media_stream.take();
+        // dispose of the incoming media
+        let _ = webrtc.incoming_media.take();
 
         // dispose of the stats observer
         let _ = webrtc.stats_observer.take();
@@ -1229,18 +1233,18 @@ where
         self.inject_event(ConnectionEvent::IceConnected)
     }
 
-    /// Inject an `IceConnectionFailed` event into the FSM.
+    /// Inject an `IceFailed` event into the FSM.
     ///
     /// `Called By:` WebRTC `PeerConnectionObserver` call back thread.
-    pub fn inject_ice_connection_failed(&mut self) -> Result<()> {
-        self.inject_event(ConnectionEvent::IceConnectionFailed)
+    pub fn inject_ice_failed(&mut self) -> Result<()> {
+        self.inject_event(ConnectionEvent::IceFailed)
     }
 
-    /// Inject an `IceConnectionDisconnected` event into the FSM.
+    /// Inject an `IceDisconnected` event into the FSM.
     ///
     /// `Called By:` WebRTC `PeerConnectionObserver` call back thread.
-    pub fn inject_ice_connection_disconnected(&mut self) -> Result<()> {
-        self.inject_event(ConnectionEvent::IceConnectionDisconnected)
+    pub fn inject_ice_disconnected(&mut self) -> Result<()> {
+        self.inject_event(ConnectionEvent::IceDisconnected)
     }
 
     /// Inject a `InternalError` event into the FSM.
@@ -1257,15 +1261,15 @@ where
         let _ = self.inject_event(ConnectionEvent::InternalError(error));
     }
 
-    /// Inject a `RemoteConnected` event into the FSM.
+    /// Inject a `ReceivedAcceptedViaDataChannel` event into the FSM.
     ///
     /// `Called By:` WebRTC `DataChannelObserver` call back thread.
     ///
     /// # Arguments
     ///
     /// * `call_id` - Call ID from the remote peer.
-    pub fn inject_remote_connected(&mut self, call_id: CallId) -> Result<()> {
-        self.inject_event(ConnectionEvent::RemoteConnected(call_id))
+    pub fn inject_received_accepted_via_data_channel(&mut self, call_id: CallId) -> Result<()> {
+        self.inject_event(ConnectionEvent::ReceivedAcceptedViaDataChannel(call_id))
     }
 
     /// Inject a `ReceivedHangup` event into the FSM.
@@ -1283,7 +1287,7 @@ where
         self.inject_event(ConnectionEvent::ReceivedHangup(call_id, hangup))
     }
 
-    /// Inject a `RemoteVideoStatus` event into the FSM.
+    /// Inject a `ReceivedVideoStatusViaDataChannel` event into the FSM.
     ///
     /// `Called By:` WebRTC `DataChannelObserver` call back thread.
     ///
@@ -1291,13 +1295,13 @@ where
     ///
     /// * `call_id` - Call ID from the remote peer.
     /// * `enabled` - `true` if the remote peer is streaming video.
-    pub fn inject_remote_video_status(
+    pub fn inject_received_video_status_via_data_channel(
         &mut self,
         call_id: CallId,
         enabled: bool,
         sequence_number: Option<u64>,
     ) -> Result<()> {
-        self.inject_event(ConnectionEvent::RemoteVideoStatus(
+        self.inject_event(ConnectionEvent::ReceivedVideoStatusViaDataChannel(
             call_id,
             enabled,
             sequence_number,
@@ -1310,11 +1314,11 @@ where
         self.inject_event(ConnectionEvent::SendHangupViaDataChannel(hangup))
     }
 
-    /// Inject a local `AcceptCall` event into the FSM.
+    /// Inject a local `Accept` event into the FSM.
     ///
     /// `Called By:` Local application.
-    pub fn inject_accept_call(&mut self) -> Result<()> {
-        self.inject_event(ConnectionEvent::AcceptCall)
+    pub fn inject_accept(&mut self) -> Result<()> {
+        self.inject_event(ConnectionEvent::Accept)
     }
 
     /// Inject a `LocalVideoStatus` event into the FSM.
@@ -1322,8 +1326,8 @@ where
     /// `Called By:` Local application.
     ///
     /// * `enabled` - `true` if the local peer is streaming video.
-    pub fn inject_local_video_status(&mut self, enabled: bool) -> Result<()> {
-        self.inject_event(ConnectionEvent::LocalVideoStatus(enabled))
+    pub fn inject_send_video_status_via_data_channel(&mut self, enabled: bool) -> Result<()> {
+        self.inject_event(ConnectionEvent::SendVideoStatusViaDataChannel(enabled))
     }
 
     /// Inject a `ReceivedIce` event into the FSM.
@@ -1333,27 +1337,27 @@ where
         self.inject_event(ConnectionEvent::ReceivedIce(ice))
     }
 
-    /// Inject an `OnAddStream` event into the FSM.
+    /// Inject an `ReceivedIncomingMedia` event into the FSM.
     ///
     /// `Called By:` WebRTC `PeerConnectionObserver` back thread.
     ///
     /// # Arguments
     ///
     /// * `stream` - WebRTC C++ MediaStream object.
-    pub fn inject_on_add_stream(&mut self, stream: MediaStream) -> Result<()> {
-        let event = ConnectionEvent::OnAddStream(stream);
+    pub fn inject_received_incoming_media(&mut self, stream: MediaStream) -> Result<()> {
+        let event = ConnectionEvent::ReceivedIncomingMedia(stream);
         self.inject_event(event)
     }
 
-    /// Inject an `OnDataChannel` event into the FSM.
+    /// Inject an `ReceivedDataChannel` event into the FSM.
     ///
     /// `Called By:` WebRTC `PeerConnectionObserver` back thread.
     ///
     /// # Arguments
     ///
     /// * `data_channel` - WebRTC C++ `DataChannel` object.
-    pub fn inject_on_data_channel(&mut self, data_channel: DataChannel) -> Result<()> {
-        let event = ConnectionEvent::OnDataChannel(data_channel);
+    pub fn inject_received_data_channel(&mut self, data_channel: DataChannel) -> Result<()> {
+        let event = ConnectionEvent::ReceivedDataChannel(data_channel);
         self.inject_event(event)
     }
 
@@ -1368,7 +1372,7 @@ where
     #[cfg(feature = "sim")]
     fn inject_synchronize(&mut self) -> Result<()> {
         match self.state()? {
-            ConnectionState::Closed | ConnectionState::Terminating => {
+            ConnectionState::Terminated | ConnectionState::Terminating => {
                 info!(
                     "connection-synchronize(): skipping synchronize while terminating or closed..."
                 );

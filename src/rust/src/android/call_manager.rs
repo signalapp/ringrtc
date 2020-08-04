@@ -407,7 +407,7 @@ pub fn set_video_enable(call_manager: *mut AndroidCallManager, enable: bool) -> 
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
-    active_connection.inject_local_video_status(enable)
+    active_connection.inject_send_video_status_via_data_channel(enable)
 }
 
 /// CMI request to drop the active call

@@ -592,17 +592,18 @@ where
         Ok(())
     }
 
-    /// Disposes of a Call and optionally notifies application of the reason why.
-    fn dispose_call(&mut self, call_id: CallId) -> Result<()> {
-        info!("dispose_call(): call_id: {}", call_id);
+    /// Terminates Call and optionally notifies application of the reason why.
+    /// Also removes/drops it from the map.
+    fn terminate_and_drop_call(&mut self, call_id: CallId) -> Result<()> {
+        info!("terminate_call(): call_id: {}", call_id);
 
         let mut call = match self.call_map.lock()?.remove(&call_id) {
             Some(v) => v,
             None => return Err(RingRtcError::CallIdNotFound(call_id).into()),
         };
 
-        // blocks while call FSM shuts down.
-        call.close()
+        // blocks while call FSM terminates
+        call.terminate()
     }
 
     /// Sends a hangup message to a remote_peer via the application.
@@ -644,7 +645,7 @@ where
     /// - closing down Call object
     /// - [optional] sending hangup on all connection data channels
     /// - [optional] sending Signal hangup message
-    fn conclude_call(
+    fn terminate_call(
         &mut self,
         mut call: Call<T>,
         hangup: Option<signaling::Hangup>,
@@ -687,7 +688,7 @@ where
                     )?;
                 }
             }
-            call_manager.dispose_call(call_id)
+            call_manager.terminate_and_drop_call(call_id)
         })
         .map_err(move |err| {
             error!("Conclude call future failed: {}", err);
@@ -699,12 +700,12 @@ where
         self.worker_spawn(future)
     }
 
-    /// Concludes the active call.
-    fn conclude_active_call(&mut self, send_hangup: bool, event: ApplicationEvent) -> Result<()> {
-        info!("conclude_active_call():");
+    /// Terminates the active call.
+    fn terminate_active_call(&mut self, send_hangup: bool, event: ApplicationEvent) -> Result<()> {
+        info!("terminate_active_call():");
 
         if !self.call_active()? {
-            info!("conclude_active_call(): skipping, no active call");
+            info!("terminate_active_call(): skipping, no active call");
             return Ok(());
         }
 
@@ -717,7 +718,7 @@ where
             None
         };
 
-        self.conclude_call(call, hangup, Some(event))
+        self.terminate_call(call, hangup, Some(event))
     }
 
     /// Handle call() API from application.
@@ -774,14 +775,14 @@ where
         active_call.inject_accept_call()
     }
 
-    fn handle_conclude_active_call(
+    fn handle_terminate_active_call(
         &mut self,
         active_call: Call<T>,
         hangup: Option<signaling::Hangup>,
         event: ApplicationEvent,
     ) -> Result<()> {
         self.clear_active_call()?;
-        self.conclude_call(active_call, hangup, Some(event))
+        self.terminate_call(active_call, hangup, Some(event))
     }
 
     /// Handle drop_call() API from application.
@@ -798,7 +799,7 @@ where
             return Ok(());
         }
 
-        self.handle_conclude_active_call(active_call, None, ApplicationEvent::EndedAppDroppedCall)
+        self.handle_terminate_active_call(active_call, None, ApplicationEvent::EndedAppDroppedCall)
     }
 
     /// Handle proceed() API from application.
@@ -860,7 +861,9 @@ where
                 handle_active_call = true;
                 if let Ok(state) = active_call.state() {
                     match state {
-                        CallState::Ringing | CallState::Connected | CallState::Reconnecting => {
+                        CallState::ConnectedWithDataChannelBeforeAccepted
+                        | CallState::ConnectedAndAccepted
+                        | CallState::ReconnectingAfterAccepted => {
                             // We are in some connected state, ignore if the failed message
                             // was an Ice message.
                             if last_sent_message_ice {
@@ -879,7 +882,7 @@ where
                 call_id
             );
 
-            let _ = self.conclude_active_call(true, ApplicationEvent::EndedSignalingFailure);
+            let _ = self.terminate_active_call(true, ApplicationEvent::EndedSignalingFailure);
         } else {
             // See if the associated call is in the call map.
             let mut call = None;
@@ -897,7 +900,7 @@ where
                         "handle_message_send_failure(): id: {}, concluding call",
                         call_id
                     );
-                    self.conclude_call(
+                    self.terminate_call(
                         call,
                         Some(signaling::Hangup::Normal),
                         Some(ApplicationEvent::EndedSignalingFailure),
@@ -928,7 +931,7 @@ where
 
         let active_call = check_active_call!(self, "handle_hangup");
 
-        self.handle_conclude_active_call(
+        self.handle_terminate_active_call(
             active_call,
             Some(signaling::Hangup::Normal),
             ApplicationEvent::EndedLocalHangup,
@@ -1146,7 +1149,7 @@ where
         )?;
 
         // Handle the normal processing of busy by concluding the call locally.
-        self.handle_conclude_active_call(
+        self.handle_terminate_active_call(
             active_call.clone(),
             None,
             ApplicationEvent::EndedRemoteBusy,
@@ -1155,7 +1158,7 @@ where
 
     /// Handle reset() API from application.
     ///
-    /// Conclude all calls and clear active callId.  Do not notify the
+    /// Terminate all calls and clear active callId.  Do not notify the
     /// application at the conclusion.
     fn handle_reset(&mut self) -> Result<()> {
         info!("handle_reset():");
@@ -1166,10 +1169,10 @@ where
             call_map.values().cloned().collect()
         };
 
-        // foreach call, conclude without notifying application
+        // foreach call, termiante without notifying application
         for call in calls {
-            info!("reset(): concluding call_id: {}", call.call_id());
-            let _ = self.conclude_call(call, Some(signaling::Hangup::Normal), None);
+            info!("reset(): termianting call_id: {}", call.call_id());
+            let _ = self.terminate_call(call, Some(signaling::Hangup::Normal), None);
         }
 
         self.clear_active_call()?;
@@ -1241,7 +1244,7 @@ where
                     info!("check_for_glare(): active device exists");
                     if remote_device_id == active_device_id {
                         info!("check_for_glare(): peer device matches, hangup active call");
-                        return self.handle_conclude_active_call(
+                        return self.handle_terminate_active_call(
                             active_call,
                             Some(signaling::Hangup::Normal),
                             ApplicationEvent::EndedRemoteGlare,
@@ -1249,7 +1252,7 @@ where
                     }
                 } else {
                     info!("check_for_glare(): no active device, hangup active call");
-                    return self.handle_conclude_active_call(
+                    return self.handle_terminate_active_call(
                         active_call,
                         Some(signaling::Hangup::Normal),
                         ApplicationEvent::EndedRemoteGlare,
@@ -1479,33 +1482,33 @@ where
     }
 
     /// Create a new application specific media stream
-    pub(super) fn create_media_stream(
+    pub(super) fn create_incoming_media(
         &self,
         connection: &Connection<T>,
-        stream: MediaStream,
-    ) -> Result<<T as Platform>::AppMediaStream> {
+        incoming_media: MediaStream,
+    ) -> Result<<T as Platform>::AppIncomingMedia> {
         let platform = self.platform.lock()?;
-        platform.create_media_stream(connection, stream)
+        platform.create_incoming_media(connection, incoming_media)
     }
 
-    /// Connect a media stream to the application connection.
-    pub(super) fn connect_media(
+    /// Connect incoming media
+    pub(super) fn connect_incoming_media(
         &self,
         remote_peer: &<T as Platform>::AppRemotePeer,
         app_call_context: &<T as Platform>::AppCallContext,
-        app_media_stream: &<T as Platform>::AppMediaStream,
+        incoming_media: &<T as Platform>::AppIncomingMedia,
     ) -> Result<()> {
         let platform = self.platform.lock()?;
-        platform.on_connect_media(remote_peer, app_call_context, app_media_stream)
+        platform.connect_incoming_media(remote_peer, app_call_context, incoming_media)
     }
 
-    /// Close the media associated with the call
-    pub(super) fn close_media(
+    /// Disconnect incoming media
+    pub(super) fn disconnect_incoming_media(
         &self,
         app_call_context: &<T as Platform>::AppCallContext,
     ) -> Result<()> {
         let platform = self.platform.lock()?;
-        platform.on_close_media(app_call_context)
+        platform.disconnect_incoming_media(app_call_context)
     }
 
     /// Received hangup from remote for the active call.
@@ -1518,8 +1521,8 @@ where
 
         if self.call_is_active(call_id)? {
             match app_event_override {
-                Some(event) => self.conclude_active_call(false, event),
-                None => self.conclude_active_call(false, ApplicationEvent::EndedRemoteHangup),
+                Some(event) => self.terminate_active_call(false, event),
+                None => self.terminate_active_call(false, ApplicationEvent::EndedRemoteHangup),
             }
         } else {
             info!("remote_hangup(): ignoring for inactive call");
@@ -1548,7 +1551,7 @@ where
         info!("timeout(): call_id: {}", call_id);
 
         if self.call_is_active(call_id)? {
-            self.conclude_active_call(true, ApplicationEvent::EndedTimeout)
+            self.terminate_active_call(true, ApplicationEvent::EndedTimeout)
         } else {
             info!("timeout(): ignoring for inactive call");
             Ok(())
@@ -1560,7 +1563,7 @@ where
         info!("call_failed(): call_id: {}", call_id);
 
         if self.call_is_active(call_id)? {
-            self.conclude_active_call(true, ApplicationEvent::EndedConnectionFailure)
+            self.terminate_active_call(true, ApplicationEvent::EndedConnectionFailure)
         } else {
             info!("call_failed(): ignoring for inactive call");
             Ok(())
@@ -1575,7 +1578,7 @@ where
         info!("internal_error(): call_id: {}, error: {}", call_id, error);
 
         if self.call_is_active(call_id)? {
-            self.conclude_active_call(true, ApplicationEvent::EndedInternalFailure)
+            self.terminate_active_call(true, ApplicationEvent::EndedInternalFailure)
         } else {
             info!("internal_error(): ignoring for inactive call");
             Ok(())

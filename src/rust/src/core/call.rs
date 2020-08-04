@@ -31,7 +31,7 @@ use crate::common::{
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
 use crate::core::call_manager::CallManager;
 use crate::core::call_mutex::CallMutex;
-use crate::core::connection::{Connection, ConnectionType, ObserverEvent};
+use crate::core::connection::{Connection, ConnectionObserverEvent, ConnectionType};
 use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::error::RingRtcError;
@@ -262,7 +262,7 @@ where
             local_device_id,
             app_remote_peer: Arc::new(CallMutex::new(app_remote_peer, "app_remote_peer")),
             app_call_context: Arc::new(CallMutex::new(None, "app_call_context")),
-            state: Arc::new(CallMutex::new(CallState::Idle, "state")),
+            state: Arc::new(CallMutex::new(CallState::NotYetStarted, "state")),
             active_device_id: Arc::new(CallMutex::new(None, "active_device_id")),
             pending_call: Arc::new(CallMutex::new(None, "pending_call")),
             event_pump,
@@ -473,7 +473,7 @@ where
         info!("send_buffered_local_ice_candidates(): {}", state);
 
         match state {
-            CallState::Terminating | CallState::Closed => {
+            CallState::Terminating | CallState::Terminated => {
                 info!("send_buffered_local_ice_candidates(): ignoring, terminating state");
                 Ok(())
             }
@@ -488,24 +488,27 @@ where
     /// Associate a MediaStream with a Connection.
     ///
     /// This is a pass through to the CallManager.
-    pub fn create_media_stream(
+    pub fn create_incoming_media(
         &self,
         connection: &Connection<T>,
-        stream: MediaStream,
-    ) -> Result<<T as Platform>::AppMediaStream> {
+        incoming_media: MediaStream,
+    ) -> Result<<T as Platform>::AppIncomingMedia> {
         let call_manager = self.call_manager()?;
 
-        call_manager.create_media_stream(connection, stream)
+        call_manager.create_incoming_media(connection, incoming_media)
     }
 
-    /// Associate a MediaStream with a Connection.
+    /// Connect incoming media
     ///
     /// This is a pass through to the CallManager.
-    pub fn connect_media(&self, app_media_stream: &<T as Platform>::AppMediaStream) -> Result<()> {
+    pub fn connect_incoming_media(
+        &self,
+        incoming_media: &<T as Platform>::AppIncomingMedia,
+    ) -> Result<()> {
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.connect_media(&*remote_peer, &self.call_context()?, app_media_stream)
+        call_manager.connect_incoming_media(&*remote_peer, &self.call_context()?, incoming_media)
     }
 
     /// Proceed with the current call.
@@ -599,9 +602,11 @@ where
 
         let mut connection_map = self.connection_map.lock()?;
         if !connection_map.contains_key(&sender_device_id) {
-            if self.state()? == CallState::Connected || self.state()? == CallState::Reconnecting {
+            if self.state()? == CallState::ConnectedAndAccepted
+                || self.state()? == CallState::ReconnectingAfterAccepted
+            {
                 info!(
-                    "received an answer from device {} when already connected, so ignore.",
+                    "received an answer from device {} when already accepted, so ignore.",
                     sender_device_id
                 );
                 return Ok(());
@@ -653,11 +658,14 @@ where
             match connection_map.get_mut(&sender_device_id) {
                 Some(connection) => connection.inject_received_ice(received.ice),
                 None => {
-                    if self.state()? == CallState::Connected
-                        || self.state()? == CallState::Reconnecting
+                    if self.state()? == CallState::ConnectedAndAccepted
+                        || self.state()? == CallState::ReconnectingAfterAccepted
                     {
                         // This can happen when call forking is enabled.
-                        info!("received_ice_ from unknown device {} when already connected, so ignore.", sender_device_id);
+                        info!(
+                            "received_ice from unknown device {} when already accepted, so ignore.",
+                            sender_device_id
+                        );
                         return Ok(());
                     }
                     Err(RingRtcError::ConnectionNotFound(sender_device_id).into())
@@ -748,34 +756,30 @@ where
         )
     }
 
-    /// A connection failed to connect ICE.
-    ///
-    pub fn connection_failed(&mut self, remote_device: DeviceId) -> Result<()> {
-        info!(
-            "connection_failed(): id: {}",
-            self.call_id().format(remote_device)
-        );
+    /// ICE failed for a specific connection
+    pub fn handle_ice_failed(&mut self, remote_device: DeviceId) -> Result<()> {
+        info!("ice_failed(): id: {}", self.call_id().format(remote_device));
 
         if let Ok(active_device_id) = self.active_device_id() {
             // There is an active connection.
             if active_device_id == remote_device {
                 // The active connection failed, close the call.
-                info!("connection_failed(): active connection");
+                info!("ice_failed(): active connection");
                 let mut call_manager = self.call_manager()?;
                 call_manager.connection_failure(self.call_id)?;
             }
         } else if self.connection_map.lock()?.len() == 1 {
             // Only one connection left for this call and it just
             // failed.
-            info!("connection_failed(): last connection");
+            info!("ice_failed(): last connection");
             let mut call_manager = self.call_manager()?;
             call_manager.connection_failure(self.call_id)?;
         } else {
             // Close this connection and remove it from the map
             let mut connection_map = self.connection_map.lock()?;
             if let Some(mut connection) = connection_map.remove(&remote_device) {
-                info!("connection_failed(): closing inactive connection");
-                connection.close()?;
+                info!("ice_failed(): terminating inactive connection");
+                connection.terminate()?;
             }
         }
 
@@ -798,45 +802,45 @@ where
         Ok(())
     }
 
-    /// Close and shutdown all internal Connections for this Call.
-    fn close_connections(&mut self) -> Result<()> {
+    /// Terminate Connections for this Call.
+    fn terminate_connections(&mut self) -> Result<()> {
         // close any application specific resources
         if let Ok(call_context) = self.call_context() {
             let call_manager = self.call_manager()?;
-            call_manager.close_media(&call_context)?;
+            call_manager.disconnect_incoming_media(&call_context)?;
         }
 
         if let Some(mut forking) = self.forking.lock()?.take() {
-            forking.parent_connection.close()?;
+            forking.parent_connection.terminate()?;
         }
         let mut connection_map = self.connection_map.lock()?;
         for (_, mut connection) in connection_map.drain() {
             info!(
-                "close_connections(): call_id: {} remote_device_id: {}",
+                "terminate_connections(): call_id: {} remote_device_id: {}",
                 self.call_id(),
                 connection.remote_device_id()
             );
             // blocks as connection FSM shutsdown
-            connection.close()?;
+            connection.terminate()?;
         }
         connection_map.clear();
         Ok(())
     }
 
-    /// Close and shutdown Connections for all devices except the device
+    /// Termiante Connections for all devices except the device
     /// that accepted the call.
-    pub fn close_connections_except_accepted(
+    pub fn terminate_connections_except_accepted(
         &mut self,
         accepted_device_id: DeviceId,
     ) -> Result<()> {
         let mut connection_map = self.connection_map.lock()?;
 
-        info!("close_connections_except_accepted():");
+        info!("terminate_connections_except_accepted():");
 
         connection_map.retain(|_, connection| {
             if connection.remote_device_id() != accepted_device_id {
                 // blocks as connection FSM shutsdown
-                if let Err(e) = connection.close() {
+                if let Err(e) = connection.terminate() {
                     error!("Error when closing {}", e)
                 }
             }
@@ -845,34 +849,34 @@ where
         });
 
         info!(
-            "close_connections_except_accepted(): len: {}.",
+            "terminate_connections_except_accepted(): len: {}.",
             connection_map.len()
         );
 
         Ok(())
     }
 
-    /// Shutdown this Call.
+    /// Terminate this Call.
     ///
-    /// Notify the internal FSM to shutdown.
+    /// Notify the internal FSM to terminate.
     ///
     /// `Note:` The current thread is blocked while waiting for the
-    /// FSM to signal that shutdown is complete.
-    pub fn close(&mut self) -> Result<()> {
+    /// FSM to signal that termination is complete.
+    pub fn terminate(&mut self) -> Result<()> {
         let start_ref_count = self.ref_count();
-        info!("close(): ref_count: {}", start_ref_count);
+        info!("terminate(): ref_count: {}", start_ref_count);
 
         self.set_state(CallState::Terminating)?;
-        self.inject_event(CallEvent::EndCall)?;
+        self.inject_event(CallEvent::Terminate)?;
         self.wait_for_terminate()?;
 
-        self.close_connections()?;
+        self.terminate_connections()?;
 
         // close down the FSM context
         let mut fsm_context = self.fsm_context.lock()?;
         fsm_context.close();
 
-        self.set_state(CallState::Closed)?;
+        self.set_state(CallState::Terminated)?;
 
         Ok(())
     }
@@ -947,7 +951,7 @@ where
 
     /// Inject an Accept Call event into the FSM.
     pub fn inject_accept_call(&mut self) -> Result<()> {
-        self.inject_event(CallEvent::LocalAccept)
+        self.inject_event(CallEvent::AcceptCall)
     }
 
     /// Inject a local `SendHangupViaDataChannelToAll` event into the FSM.
@@ -974,34 +978,34 @@ where
         self.inject_event(CallEvent::ReceivedHangup(received))
     }
 
-    /// Inject a Connection related event into the FSM
-    pub fn on_connection_event(
+    /// Inject a Connection Observer event into the FSM
+    pub fn on_connection_observer_event(
         &mut self,
         remote_device_id: DeviceId,
-        event: ObserverEvent,
+        event: ConnectionObserverEvent,
     ) -> Result<()> {
         info!(
-            "on_connection_event(): call_id: {}, remote_device_id: {}, event: {}",
+            "on_connection_observer_event(): call_id: {}, remote_device_id: {}, event: {}",
             self.call_id(),
             remote_device_id,
             event
         );
-        self.inject_event(CallEvent::ConnectionEvent(event, remote_device_id))
+        self.inject_event(CallEvent::ConnectionObserverEvent(event, remote_device_id))
     }
 
-    /// Inject a Connection related error into the FSM
-    pub fn on_connection_error(
+    /// Inject a Connection Observer error into the FSM
+    pub fn on_connection_observer_error(
         &mut self,
         remote_device_id: DeviceId,
         error: failure::Error,
     ) -> Result<()> {
         info!(
-            "on_connection_error(): call_id: {}, remote_device_id: {} error: {}",
+            "on_connection_observer_error(): call_id: {}, remote_device_id: {} error: {}",
             self.call_id(),
             remote_device_id,
             error
         );
-        self.inject_event(CallEvent::ConnectionError(error, remote_device_id))
+        self.inject_event(CallEvent::ConnectionObserverError(error, remote_device_id))
     }
 
     /// Inject a local `CallTimeout` event into the FSM.
@@ -1024,8 +1028,10 @@ where
     #[cfg(feature = "sim")]
     fn inject_synchronize(&mut self) -> Result<()> {
         match self.state()? {
-            CallState::Closed | CallState::Terminating => {
-                info!("call-synchronize(): skipping synchronize while terminating or closed...");
+            CallState::Terminated | CallState::Terminating => {
+                info!(
+                    "call-synchronize(): skipping synchronize while terminating or terminated..."
+                );
                 return Ok(());
             }
             _ => {}

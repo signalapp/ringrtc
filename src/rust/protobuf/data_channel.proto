@@ -14,7 +14,7 @@ syntax = "proto2";
 
 package data_channel;
 
-message Connected {
+message Accepted {
   optional uint64 id = 1;
 }
 
@@ -38,7 +38,7 @@ message VideoStreamingStatus {
 }
 
 message Data {
-  optional Connected            connected            = 1;
+  optional Accepted             accepted             = 1;
   optional Hangup               hangup               = 2;
   optional VideoStreamingStatus videoStreamingStatus = 3;
   // If set, a larger value means a later message than a smaller value.

@@ -23,7 +23,7 @@ use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::sim::peer_connection::RffiPeerConnectionInterface;
 
-/// Simulation implmentation for platform::Platform::{AppMediaStream,
+/// Simulation implmentation for platform::Platform::{AppIncomingMedia,
 /// AppRemotePeer, AppCallContext}
 type SimPlatformItem = String;
 impl PlatformItem for SimPlatformItem {}
@@ -70,8 +70,8 @@ pub struct SimPlatform {
     force_signaling_fault:        Arc<AtomicBool>,
     /// Track event frequencies
     event_map:                    Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
-    /// Track whether close media happened
-    close_media:                  Arc<AtomicBool>,
+    /// Track whether disconnecting of incoming media happened
+    incoming_media_disconnected:  Arc<AtomicBool>,
     /// Call Manager
     call_manager:                 Arc<Mutex<Option<CallManager<Self>>>>,
     /// True to manually require message_sent() to be invoked for Ice messages.
@@ -97,7 +97,7 @@ impl Drop for SimPlatform {
 }
 
 impl Platform for SimPlatform {
-    type AppMediaStream = SimPlatformItem;
+    type AppIncomingMedia = SimPlatformItem;
     type AppRemotePeer = SimPlatformItem;
     type AppConnection = RffiPeerConnectionInterface;
     type AppCallContext = SimPlatformItem;
@@ -314,22 +314,22 @@ impl Platform for SimPlatform {
         }
     }
 
-    fn create_media_stream(
+    fn create_incoming_media(
         &self,
         _connection: &Connection<Self>,
-        _stream: MediaStream,
-    ) -> Result<Self::AppMediaStream> {
+        _incoming_media: MediaStream,
+    ) -> Result<Self::AppIncomingMedia> {
         Ok("MediaStream".to_owned())
     }
 
-    fn on_connect_media(
+    fn connect_incoming_media(
         &self,
         remote_peer: &Self::AppRemotePeer,
         app_call_context: &Self::AppCallContext,
-        _media_stream: &Self::AppMediaStream,
+        _incoming_media: &Self::AppIncomingMedia,
     ) -> Result<()> {
         info!(
-            "on_connect_media(): remote_peer: {}, call_context: {}",
+            "connect_incoming_media(): remote_peer: {}, call_context: {}",
             remote_peer, app_call_context
         );
 
@@ -341,13 +341,17 @@ impl Platform for SimPlatform {
         }
     }
 
-    fn on_close_media(&self, app_call_context: &Self::AppCallContext) -> Result<()> {
-        info!("on_close_media(): call_context: {}", app_call_context);
+    fn disconnect_incoming_media(&self, app_call_context: &Self::AppCallContext) -> Result<()> {
+        info!(
+            "disconnect_incoming_media(): call_context: {}",
+            app_call_context
+        );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
             Err(SimError::CloseMediaError.into())
         } else {
-            self.close_media.store(true, Ordering::Release);
+            self.incoming_media_disconnected
+                .store(true, Ordering::Release);
             Ok(())
         }
     }
@@ -499,8 +503,8 @@ impl SimPlatform {
         self.stats.stream_count.load(Ordering::Acquire)
     }
 
-    pub fn media_closed(&self) -> bool {
-        self.close_media.load(Ordering::Acquire)
+    pub fn incoming_media_disconnected(&self) -> bool {
+        self.incoming_media_disconnected.load(Ordering::Acquire)
     }
 
     pub fn start_outgoing_count(&self) -> usize {

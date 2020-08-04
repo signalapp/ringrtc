@@ -78,7 +78,7 @@ fn start_outbound_and_proceed() -> TestContext {
     let active_call = context.active_call();
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Starting
+        CallState::WaitingToProceed
     );
 
     let mut remote_devices = Vec::<DeviceId>::new();
@@ -95,7 +95,7 @@ fn start_outbound_and_proceed() -> TestContext {
     assert_eq!(context.offers_sent(), 1);
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connecting
+        CallState::ConnectingBeforeAccepted
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -103,7 +103,7 @@ fn start_outbound_and_proceed() -> TestContext {
     context
 }
 
-// Create an outbound N-remote call session up to the IceConnecting state.
+// Create an outbound N-remote call session up to the ConnectingBeforeAccepted state.
 //
 // - create call manager
 // - create an outbound call with N remote devices
@@ -112,7 +112,7 @@ fn start_outbound_and_proceed() -> TestContext {
 // - call proceed()
 // - add received answer for each remote
 // - add received ice candidate for each remote
-// - check underlying Connection is in IceConnecting state
+// - check underlying Connection is in ConnectingBeforeAccepted state
 // - check call is in Connecting state
 //
 // Now in the Connecting state.
@@ -136,7 +136,7 @@ fn start_outbound_n_remote_call(signaling_type: SignalingType, n_remotes: u16) -
     let active_call = context.active_call();
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Starting
+        CallState::WaitingToProceed
     );
 
     cm.proceed(
@@ -165,14 +165,14 @@ fn start_outbound_n_remote_call(signaling_type: SignalingType, n_remotes: u16) -
             .expect(error_line!());
         assert_eq!(
             connection.state().expect(error_line!()),
-            ConnectionState::IceConnecting
+            ConnectionState::ConnectingBeforeAccepted
         );
     }
 
     assert_eq!(context.offers_sent(), 1,);
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connecting
+        CallState::ConnectingBeforeAccepted
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -180,7 +180,7 @@ fn start_outbound_n_remote_call(signaling_type: SignalingType, n_remotes: u16) -
     context
 }
 
-// Create an outbound call session up to the IceConnecting state.
+// Create an outbound call session up to the ConnectingBeforeAccepted state.
 //
 // - create call manager
 // - create an outbound call
@@ -189,7 +189,7 @@ fn start_outbound_n_remote_call(signaling_type: SignalingType, n_remotes: u16) -
 // - call proceed()
 // - add received answer
 // - add received ice candidate
-// - check underlying Connection is in IceConnecting state
+// - check underlying Connection is in ConnectingBeforeAccepted state
 // - check call is in Connecting state
 //
 // Now in the Connecting state.
@@ -197,16 +197,16 @@ fn start_outbound_call(signaling_type: SignalingType) -> TestContext {
     start_outbound_n_remote_call(signaling_type, 1)
 }
 
-// Create an outbound call session up to the CallConnected state.
+// Create an outbound call session up to the Accepted state.
 //
 // - create an offer
 // - send offer
 // - receive answer
 // - ice connected
 // - media stream added
-// - call connected
+// - call accepted
 //
-// Now in the CallConnected state.
+// Now in the Accepted state.
 
 fn connect_outbound_call() -> TestContext {
     let context = start_outbound_call(SignalingType::Legacy);
@@ -223,38 +223,38 @@ fn connect_outbound_call() -> TestContext {
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceConnected
+        ConnectionState::ConnectedBeforeAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Ringing
+        CallState::ConnectedWithDataChannelBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
 
-    info!("test: add media stream");
+    info!("test: inject incoming stream");
     active_connection
-        .on_add_stream(MediaStream::new(ptr::null()))
+        .inject_received_incoming_media(MediaStream::new(ptr::null()))
         .expect(error_line!());
 
-    info!("test: injecting call connected");
+    info!("test: injecting accepted");
     active_connection
-        .inject_remote_connected(active_call.call_id())
+        .inject_received_accepted_via_data_channel(active_call.call_id())
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::CallConnected
+        ConnectionState::ConnectedAndAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connected
+        CallState::ConnectedAndAccepted
     );
 
-    assert_eq!(context.event_count(ApplicationEvent::RemoteConnected), 1);
+    assert_eq!(context.event_count(ApplicationEvent::RemoteAccepted), 1);
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -291,7 +291,10 @@ fn outbound_local_hang_up() {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
@@ -309,17 +312,18 @@ fn outbound_ice_failed() {
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
 
-    info!("test: injecting ice connection failed");
-    active_connection
-        .inject_ice_connection_failed()
-        .expect(error_line!());
+    info!("test: injecting ice failed");
+    active_connection.inject_ice_failed().expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::Closed
+        ConnectionState::Terminated
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
@@ -330,7 +334,7 @@ fn outbound_ice_failed() {
 }
 
 #[test]
-fn outbound_ice_disconnected_before_call_connected() {
+fn outbound_ice_disconnected_before_call_accepted() {
     test_init();
 
     let context = start_outbound_call(SignalingType::Legacy);
@@ -347,11 +351,11 @@ fn outbound_ice_disconnected_before_call_connected() {
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceConnected
+        ConnectionState::ConnectedBeforeAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Ringing
+        CallState::ConnectedWithDataChannelBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
@@ -359,23 +363,23 @@ fn outbound_ice_disconnected_before_call_connected() {
 
     info!("test: injecting ice disconnected");
     active_connection
-        .inject_ice_connection_disconnected()
+        .inject_ice_disconnected()
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     // When ICE disconnects before the call is connected, the connection
-    // should return to the IceConnecting state.
+    // should return to the ConnectingBeforeAccepted state.
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceConnecting
+        ConnectionState::ConnectingBeforeAccepted
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
 }
 
 #[test]
-fn outbound_call_connected_with_stale_call_id() {
+fn outbound_call_accepted_with_stale_call_id() {
     test_init();
 
     let context = start_outbound_call(SignalingType::Legacy);
@@ -392,20 +396,20 @@ fn outbound_call_connected_with_stale_call_id() {
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceConnected
+        ConnectionState::ConnectedBeforeAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Ringing
+        CallState::ConnectedWithDataChannelBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
 
-    info!("test: injecting stale call connected");
+    info!("test: injecting stale accepted message");
     let call_id = u64::from(active_call.call_id());
     active_connection
-        .inject_remote_connected(CallId::new(call_id + 1))
+        .inject_received_accepted_via_data_channel(CallId::new(call_id + 1))
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -413,11 +417,11 @@ fn outbound_call_connected_with_stale_call_id() {
     // verify bogus connect is simply dropped, with no state change.
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceConnected
+        ConnectionState::ConnectedBeforeAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Ringing
+        CallState::ConnectedWithDataChannelBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
@@ -434,17 +438,18 @@ fn outbound_call_connected_ice_failed() {
     let mut active_connection = context.active_connection();
 
     info!("test: injecting ice connection failed");
-    active_connection
-        .inject_ice_connection_failed()
-        .expect(error_line!());
+    active_connection.inject_ice_failed().expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::Closed
+        ConnectionState::Terminated
     );
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
     assert_eq!(context.error_count(), 0);
     assert_eq!(
         context.event_count(ApplicationEvent::EndedConnectionFailure),
@@ -466,7 +471,10 @@ fn outbound_call_connected_local_hangup() {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
@@ -486,20 +494,20 @@ fn outbound_ice_disconnected_after_call_connected_and_reconnect() {
 
     info!("test: injecting ice disconnected");
     active_connection
-        .inject_ice_connection_disconnected()
+        .inject_ice_disconnected()
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     // When ICE disconnects after the call is connected, the system
-    // should move to the IceReconnecting state.
+    // should move to the ReconnectingAfterAccepted state.
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceReconnecting
+        ConnectionState::ReconnectingAfterAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Reconnecting
+        CallState::ReconnectingAfterAccepted
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -511,11 +519,11 @@ fn outbound_ice_disconnected_after_call_connected_and_reconnect() {
 
     cm.synchronize().expect(error_line!());
 
-    // When ICE reconnects after the call is connected, the system
-    // should move to the Connected state.
+    // When ICE reconnects after the call is accepted, the system
+    // should move to the ConnectedAndAccepted state.
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connected
+        CallState::ConnectedAndAccepted
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -533,20 +541,20 @@ fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
 
     info!("test: injecting ice disconnected");
     active_connection
-        .inject_ice_connection_disconnected()
+        .inject_ice_disconnected()
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     // When ICE disconnects after the call is connected, the system
-    // should move to the IceReconnecting state.
+    // should move to the ReconnectingAfterAccepted state.
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::IceReconnecting
+        ConnectionState::ReconnectingAfterAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Reconnecting
+        CallState::ReconnectingAfterAccepted
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -556,7 +564,10 @@ fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
@@ -600,7 +611,7 @@ fn inject_call_error() {
 }
 
 #[test]
-fn inject_local_video_status() {
+fn inject_send_video_status_via_data_channel() {
     test_init();
 
     let context = connect_outbound_call();
@@ -608,7 +619,7 @@ fn inject_local_video_status() {
     let mut active_connection = context.active_connection();
 
     active_connection
-        .inject_local_video_status(false)
+        .inject_send_video_status_via_data_channel(false)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -890,7 +901,7 @@ fn received_remote_video_status() {
         let enable = PRNG.gen::<bool>();
 
         active_connection
-            .inject_remote_video_status(active_call.call_id(), enable, Some(i))
+            .inject_received_video_status_via_data_channel(active_call.call_id(), enable, Some(i))
             .expect(error_line!());
         cm.synchronize().expect(error_line!());
 
@@ -913,11 +924,11 @@ fn received_remote_video_status() {
 
     // Ignore old ones
     active_connection
-        .inject_remote_video_status(active_call.call_id(), true, Some(1))
+        .inject_received_video_status_via_data_channel(active_call.call_id(), true, Some(1))
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     active_connection
-        .inject_remote_video_status(active_call.call_id(), false, Some(2))
+        .inject_received_video_status_via_data_channel(active_call.call_id(), false, Some(2))
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -984,7 +995,7 @@ fn outbound_proceed_with_error() {
     let active_call = context.active_call();
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Starting
+        CallState::WaitingToProceed
     );
 
     // cause the sending of the offer to fail.
@@ -999,7 +1010,10 @@ fn outbound_proceed_with_error() {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
 
     // Two errors -- one from the failed send_offer and another from
     // the failed send_hangup, sent as part of the error clean up.
@@ -1029,7 +1043,10 @@ fn outbound_call_connected_local_hangup_with_error() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 1);
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
     assert_eq!(context.ended_count(), 2);
     assert_eq!(
         context.event_count(ApplicationEvent::EndedInternalFailure),
@@ -1091,11 +1108,11 @@ fn outbound_multiple_remote_devices(signaling_type: SignalingType) {
 
         assert_eq!(
             connection.state().expect(error_line!()),
-            ConnectionState::IceConnected
+            ConnectionState::ConnectedBeforeAccepted
         );
         assert_eq!(
             active_call.state().expect(error_line!()),
-            CallState::Ringing
+            CallState::ConnectedWithDataChannelBeforeAccepted
         );
         assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
         assert_eq!(context.error_count(), 0);
@@ -1103,7 +1120,7 @@ fn outbound_multiple_remote_devices(signaling_type: SignalingType) {
 
         info!("test:{}: add media stream", i);
         connection
-            .on_add_stream(MediaStream::new(ptr::null()))
+            .handle_received_incoming_media(MediaStream::new(ptr::null()))
             .expect(error_line!());
     }
 
@@ -1125,18 +1142,18 @@ fn outbound_multiple_remote_devices(signaling_type: SignalingType) {
             .outgoing_audio_enabled(),
     );
     active_connection
-        .inject_remote_connected(active_call.call_id())
+        .inject_received_accepted_via_data_channel(active_call.call_id())
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(
         active_connection.state().expect(error_line!()),
-        ConnectionState::CallConnected
+        ConnectionState::ConnectedAndAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::Connected
+        CallState::ConnectedAndAccepted
     );
     assert_eq!(
         true,
@@ -1146,7 +1163,7 @@ fn outbound_multiple_remote_devices(signaling_type: SignalingType) {
             .outgoing_audio_enabled(),
     );
 
-    assert_eq!(context.event_count(ApplicationEvent::RemoteConnected), 1);
+    assert_eq!(context.event_count(ApplicationEvent::RemoteAccepted), 1);
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
@@ -1156,7 +1173,10 @@ fn outbound_multiple_remote_devices(signaling_type: SignalingType) {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(active_call.state().expect(error_line!()), CallState::Closed);
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
@@ -1300,7 +1320,7 @@ fn start_outbound_receive_busy() {
         let active_call = context.active_call();
         assert_eq!(
             active_call.state().expect(error_line!()),
-            CallState::Starting
+            CallState::WaitingToProceed
         );
         active_call.call_id()
     };

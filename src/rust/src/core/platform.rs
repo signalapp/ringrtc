@@ -24,8 +24,8 @@ pub trait PlatformItem: Sync + Send + 'static {}
 /// A trait describing the interface an operating system platform must
 /// implement for calling.
 pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
-    /// Opaque application specific media stream.
-    type AppMediaStream: PlatformItem;
+    /// Opaque application specific incoming media object.
+    type AppIncomingMedia: PlatformItem;
 
     /// Opaque application specific remote peer.
     type AppRemotePeer: PlatformItem + Clone;
@@ -99,22 +99,22 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
 
     /// Create a platform dependent media stream from the base WebRTC
     /// MediaStream.
-    fn create_media_stream(
+    fn create_incoming_media(
         &self,
         connection: &Connection<Self>,
-        stream: MediaStream,
-    ) -> Result<Self::AppMediaStream>;
+        incoming_media: MediaStream,
+    ) -> Result<Self::AppIncomingMedia>;
 
-    /// Connect the media stream to the application.
-    fn on_connect_media(
+    /// Connect incoming media to the application.
+    fn connect_incoming_media(
         &self,
         remote_peer: &Self::AppRemotePeer,
         app_call_context: &Self::AppCallContext,
-        app_media_stream: &Self::AppMediaStream,
+        incoming_media: &Self::AppIncomingMedia,
     ) -> Result<()>;
 
     /// Close the media associated with the call.
-    fn on_close_media(&self, _app_call_context: &Self::AppCallContext) -> Result<()> {
+    fn disconnect_incoming_media(&self, _app_call_context: &Self::AppCallContext) -> Result<()> {
         Ok(())
     }
 

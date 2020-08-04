@@ -22,7 +22,7 @@ use crate::core::call_mutex::CallMutex;
 use crate::core::signaling;
 use crate::core::util::CppObject;
 use crate::error::RingRtcError;
-use crate::protobuf::data_channel::{Connected, Data, Hangup, VideoStreamingStatus};
+use crate::protobuf::data_channel::{Accepted, Data, Hangup, VideoStreamingStatus};
 use crate::webrtc::data_channel_observer::RffiDataChannelObserverInterface;
 
 #[cfg(not(feature = "sim"))]
@@ -236,12 +236,12 @@ impl DataChannel {
         self.update_and_send(move |data| data.hangup = Some(hangup))
     }
 
-    /// Send `Call Connected` message via the DataChannel.
-    pub fn send_connected(&self, call_id: CallId) -> Result<()> {
-        let mut connected = Connected::default();
-        connected.id = Some(u64::from(call_id));
+    /// Send `accepted` message via the DataChannel.
+    pub fn send_accepted(&self, call_id: CallId) -> Result<()> {
+        let mut accepted = Accepted::default();
+        accepted.id = Some(u64::from(call_id));
 
-        self.update_and_send(move |data| data.connected = Some(connected))
+        self.update_and_send(move |data| data.accepted = Some(accepted))
     }
 
     /// Send `VideoStatus` message via the DataChannel.

@@ -109,18 +109,15 @@ extern "C" fn dc_observer_OnMessage<T>(
 
     let mut message_handled = false;
     let original_message = message.clone();
-    if let Some(connected) = message.connected {
+    if let Some(accepted) = message.accepted {
         if let CallDirection::OutGoing = cc.direction() {
-            cc.inject_remote_connected(CallId::new(connected.id()))
-                .unwrap_or_else(|e| warn!("unable to inject remote connected event: {}", e));
+            cc.inject_received_accepted_via_data_channel(CallId::new(accepted.id()))
+                .unwrap_or_else(|e| warn!("unable to inject remote accepted event: {}", e));
         } else {
-            warn!(
-                "Unexpected incoming call connected message: {:?}",
-                connected
-            );
+            warn!("Unexpected incoming accepted message: {:?}", accepted);
             cc.inject_internal_error(
                 RingRtcError::DataChannelProtocol(
-                    "Received 'Connected' for inbound call".to_string(),
+                    "Received 'accepted' for inbound call".to_string(),
                 )
                 .into(),
                 "",
@@ -141,7 +138,7 @@ extern "C" fn dc_observer_OnMessage<T>(
         message_handled = true;
     };
     if let Some(video_status) = message.video_streaming_status {
-        cc.inject_remote_video_status(
+        cc.inject_received_video_status_via_data_channel(
             CallId::new(video_status.id()),
             video_status.enabled(),
             message.sequence_number,

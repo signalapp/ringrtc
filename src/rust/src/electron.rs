@@ -386,7 +386,7 @@ declare_types! {
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |cm| {
                 let mut active_connection = cm.call_manager.active_connection()?;
-                active_connection.inject_local_video_status(enabled)?;
+                active_connection.inject_send_video_status_via_data_channel(enabled)?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())

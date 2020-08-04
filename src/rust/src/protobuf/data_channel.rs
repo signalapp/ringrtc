@@ -1,5 +1,5 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Connected {
+pub struct Accepted {
     #[prost(uint64, optional, tag="1")]
     pub id: ::std::option::Option<u64>,
 }
@@ -33,7 +33,7 @@ pub struct VideoStreamingStatus {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Data {
     #[prost(message, optional, tag="1")]
-    pub connected: ::std::option::Option<Connected>,
+    pub accepted: ::std::option::Option<Accepted>,
     #[prost(message, optional, tag="2")]
     pub hangup: ::std::option::Option<Hangup>,
     #[prost(message, optional, tag="3")]

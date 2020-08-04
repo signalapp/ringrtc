@@ -192,17 +192,13 @@ extern "C" fn pc_observer_OnIceConnectionChange<T>(
             }
             Failed => {
                 connection
-                    .inject_ice_connection_failed()
-                    .unwrap_or_else(|e| {
-                        error!("Problems adding ice_connection_failed to fsm: {}", e)
-                    });
+                    .inject_ice_failed()
+                    .unwrap_or_else(|e| error!("Problems adding ice_failed to fsm: {}", e));
             }
             Disconnected => {
                 connection
-                    .inject_ice_connection_disconnected()
-                    .unwrap_or_else(|e| {
-                        error!("Problems adding ice_connection_disconnected to fsm: {}", e)
-                    });
+                    .inject_ice_disconnected()
+                    .unwrap_or_else(|e| error!("Problems adding ice_disconnected to fsm: {}", e));
             }
             _ => {}
         }
@@ -285,8 +281,8 @@ extern "C" fn pc_observer_OnAddStream<T>(
         );
         let stream = MediaStream::new(native_stream);
         connection
-            .inject_on_add_stream(stream)
-            .unwrap_or_else(|e| error!("Problems adding on_add_stream event to fsm: {}", e));
+            .inject_received_incoming_media(stream)
+            .unwrap_or_else(|e| error!("Problems adding incoming media event to fsm: {}", e));
     } else {
         warn!("pc_observer_OnAddStream(): ptr_as_mut() failed.");
     }
@@ -321,7 +317,7 @@ extern "C" fn pc_observer_OnDataChannel<T>(
         let label = data_channel.get_label();
         if label == DATA_CHANNEL_NAME {
             connection
-                .inject_on_data_channel(data_channel)
+                .inject_received_data_channel(data_channel)
                 .unwrap_or_else(|e| error!("Problems adding on_data_channel event to fsm: {}", e));
         } else {
             warn!(

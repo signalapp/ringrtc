@@ -29,7 +29,7 @@ const RINGRTC_PACKAGE: &str = "org/signal/ringrtc";
 const CALL_MANAGER_CLASS: &str = "CallManager";
 const ICE_CANDIDATE_CLASS: &str = "org/signal/ringrtc/IceCandidate";
 
-/// Android implmentation for platform::Platform::AppMediaStream
+/// Android implmentation for platform::Platform::AppIncomingMedia
 pub type AndroidMediaStream = JavaMediaStream;
 impl PlatformItem for AndroidMediaStream {}
 
@@ -182,7 +182,7 @@ impl Drop for AndroidPlatform {
 }
 
 impl Platform for AndroidPlatform {
-    type AppMediaStream = AndroidMediaStream;
+    type AppIncomingMedia = AndroidMediaStream;
     type AppRemotePeer = AndroidGlobalRef;
     type AppConnection = AndroidConnection;
     type AppCallContext = AndroidCallContext;
@@ -559,26 +559,26 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    fn create_media_stream(
+    fn create_incoming_media(
         &self,
         _connection: &Connection<Self>,
-        stream: MediaStream,
-    ) -> Result<Self::AppMediaStream> {
-        JavaMediaStream::new(stream)
+        incoming_media: MediaStream,
+    ) -> Result<Self::AppIncomingMedia> {
+        JavaMediaStream::new(incoming_media)
     }
 
-    fn on_connect_media(
+    fn connect_incoming_media(
         &self,
         _remote_peer: &Self::AppRemotePeer,
         app_call_context: &Self::AppCallContext,
-        media_stream: &Self::AppMediaStream,
+        incoming_media: &Self::AppIncomingMedia,
     ) -> Result<()> {
-        info!("on_connect_media():");
+        info!("connect_incoming_media():");
 
         let env = self.java_env()?;
         let jni_call_manager = self.jni_call_manager.as_obj();
         let jni_call_context = app_call_context.to_jni();
-        let jni_media_stream = media_stream.global_ref(&env)?;
+        let jni_media_stream = incoming_media.global_ref(&env)?;
 
         const CONNECT_MEDIA_METHOD: &str = "onConnectMedia";
         const CONNECT_MEDIA_SIG: &str =
@@ -598,8 +598,8 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    fn on_close_media(&self, app_call_context: &Self::AppCallContext) -> Result<()> {
-        info!("on_close_media():");
+    fn disconnect_incoming_media(&self, app_call_context: &Self::AppCallContext) -> Result<()> {
+        info!("disconnect_incoming_media():");
 
         let env = self.java_env()?;
         let jni_call_manager = self.jni_call_manager.as_obj();

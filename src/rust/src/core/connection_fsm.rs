@@ -21,28 +21,28 @@
 //! - AcceptOffer
 //! - AnswerCall
 //! - LocalHangup
-//! - LocalVideoStatus
+//! - SendVideoStatusViaDataChannel
 //! - SendBusy
-//! - RemoteIceCandidate
-//! - RemoteHangup
+//! - ReceivedIce
+//! - ReceivedHangup
 //!
 //! ## From WebRTC observer interfaces
 //!
 //! - LocalIceCandidate
-//! - IceConnected
-//! - IceConnectionFailed
-//! - IceConnectionDisconnected
-//! - OnAddStream
-//! - OnDataChannel
-//! - RemoteConnected
-//! - RemoteVideoStatus
-//! - RemoteHangup
+//! - ConnectedBeforeAccepted
+//! - IceFailed
+//! - IceDisconnected
+//! - ReceivedIncomingMedia
+//! - ReceivedDataChannel
+//! - ReceivedAcceptedViaDataChannel
+//! - ReceivedVideoStatusViaDataChannel
+//! - ReceivedHangup
 //!
 //! # Asynchronous Outputs:
 //!
 //! ## To Call observer
 //!
-//! - [ObserverEvents](../connection/enum.ObserverEvent.html)
+//! - [ConnectionObserverEvents](../connection/enum.ConnectionObserverEvent.html)
 //! - ObserverErrors
 
 use std::fmt;
@@ -55,7 +55,7 @@ use futures::{Async, Future, Poll, Stream};
 use tokio::runtime;
 
 use crate::common::{CallDirection, CallId, ConnectionState, Result, RingBench};
-use crate::core::connection::{Connection, EventStream, ObserverEvent};
+use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
 use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::error::RingRtcError;
@@ -64,67 +64,108 @@ use crate::webrtc::media::MediaStream;
 
 /// The different types of Connection Events.
 pub enum ConnectionEvent {
+    /// Receive ICE candidates from remote peer.
+    /// Source: signaling
+    /// Action: Add candidate to PeerConnection.
     ReceivedIce(signaling::Ice),
     /// Receive hangup from remote peer.
+    /// Source: signaling or data channel (PeerConnection)
+    /// Action: Bubble up to the Call, which then terminates.
     ReceivedHangup(CallId, signaling::Hangup),
-    /// Event from client application to send hangup via the data channel.
+    /// Event from client application to send hangup message via the data channel.
+    /// Source: app or internal decision to terminate call
+    /// Action: Send a hangup message over the data channel.
     SendHangupViaDataChannel(signaling::Hangup),
     /// Accept incoming call (callee only).
-    AcceptCall,
-    /// Receive call connected from remote peer.
-    RemoteConnected(CallId),
+    /// Source: app (user action)
+    /// Action: got to "accepted" state and send accept message over the data channel
+    Accept,
+    /// Receive accepted message from remote peer.
+    /// Source: data channel (PeerConnection)
+    /// Action: bubble up to Call and tranisition states
+    ReceivedAcceptedViaDataChannel(CallId),
     /// Receive video streaming status change from remote peer.
-    RemoteVideoStatus(CallId, bool, Option<u64>),
-    /// Local video streaming status change from client application.
-    LocalVideoStatus(bool),
-    /// Local ICE candidate ready, from WebRTC observer.
+    /// Source: data channel (PeerConnection)
+    /// Action: Bubble up to app, which should change the "in call" screen.
+    ReceivedVideoStatusViaDataChannel(CallId, bool, Option<u64>),
+    /// Send video status message via the data channel
+    /// Source: app (user action)
+    /// Action: Send a video status message over the data channel.
+    SendVideoStatusViaDataChannel(bool),
+    /// Local ICE candidate from PeerConnection
+    /// Source: PeerConnection
+    /// Action: Send ICE candiate over signaling.
     LocalIceCandidate(signaling::IceCandidate),
-    /// Local ICE status is connected, from WebRTC observer.
+    /// ICE state changed.
+    /// Source: PeerConnection
+    /// Action: Bubble up to Connection and Call objects.
     IceConnected,
-    /// Local ICE connection failed, from WebRTC observer.
-    IceConnectionFailed,
-    /// Local ICE connection disconnected, from WebRTC observer.
-    IceConnectionDisconnected,
+    /// ICE state changed.
+    /// Source: PeerConnection
+    /// Action: Bubble up to Connection and Call objects.
+    IceFailed,
+    /// ICE state changed.
+    /// Source: PeerConnection
+    /// Action: Bubble up to Connection and Call objects.
+    IceDisconnected,
     /// Send the observer an internal error message.
+    /// Source: all kinds of things that can go wrong internally
+    /// Action: Terminate the call.
     InternalError(failure::Error),
-    /// Receive local media stream from WebRTC observer.
-    OnAddStream(MediaStream),
-    /// Receive new available data channel from WebRTC observer (callee).
-    OnDataChannel(DataChannel),
+    /// Receive incoming media from PeerConnection
+    /// Source: PeerConnection (OnAddStream)
+    /// Action: remember the MediaStream so we can "connect" to it after the call is accepted
+    ReceivedIncomingMedia(MediaStream),
+    /// Received data channel from PeerConnection
+    /// Source: PeerConnection
+    /// Action: Use the DataChannel to send and receive messages.
+    ReceivedDataChannel(DataChannel),
     /// Synchronize the FSM.
+    /// Only used by unit tests
     Synchronize(Arc<(Mutex<bool>, Condvar)>),
-    /// Shutdown the call.
-    EndCall,
+
+    /// Terminate the connection.
+    /// Source: Termination of the call or reponse to ICE failed
+    /// Action: Drain threads of tasks and wait for them
+    Terminate,
 }
 
 impl fmt::Display for ConnectionEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            ConnectionEvent::AcceptCall => "AcceptCall".to_string(),
+            ConnectionEvent::Accept => "Accept".to_string(),
             ConnectionEvent::ReceivedHangup(call_id, hangup) => {
                 format!("RemoteHangup, call_id: {} hangup: {}", call_id, hangup)
             }
-            ConnectionEvent::RemoteConnected(id) => format!("RemoteConnected, call_id: {}", id),
-            ConnectionEvent::RemoteVideoStatus(id, enabled, sequence_number) => format!(
-                "RemoteVideoStatus, call_id: {}, enabled: {}, seqnum: {:?}",
-                id, enabled, sequence_number
-            ),
+            ConnectionEvent::ReceivedAcceptedViaDataChannel(id) => {
+                format!("ReceivedAcceptedViaDataChannel, call_id: {}", id)
+            }
+            ConnectionEvent::ReceivedVideoStatusViaDataChannel(id, enabled, sequence_number) => {
+                format!(
+                    "ReceivedVideoStatusViaDataChannel, call_id: {}, enabled: {}, seqnum: {:?}",
+                    id, enabled, sequence_number
+                )
+            }
             ConnectionEvent::ReceivedIce(_) => "RemoteIceCandidates".to_string(),
             ConnectionEvent::SendHangupViaDataChannel(hangup) => {
                 format!("SendHangupViaDataChannel, hangup: {}", hangup)
             }
-            ConnectionEvent::LocalVideoStatus(enabled) => {
-                format!("LocalVideoStatus, enabled: {}", enabled)
+            ConnectionEvent::SendVideoStatusViaDataChannel(enabled) => {
+                format!("SendVideoStatusViaDataChannel, enabled: {}", enabled)
             }
             ConnectionEvent::LocalIceCandidate(_) => "LocalIceCandidate".to_string(),
             ConnectionEvent::IceConnected => "IceConnected".to_string(),
-            ConnectionEvent::IceConnectionFailed => "IceConnectionFailed".to_string(),
-            ConnectionEvent::IceConnectionDisconnected => "IceConnectionDisconnected".to_string(),
+            ConnectionEvent::IceFailed => "IceConnectionFailed".to_string(),
+            ConnectionEvent::IceDisconnected => "IceDisconnected".to_string(),
             ConnectionEvent::InternalError(e) => format!("InternalError: {}", e),
-            ConnectionEvent::OnAddStream(stream) => format!("OnAddStream, stream: {:}", stream),
-            ConnectionEvent::OnDataChannel(dc) => format!("OnDataChannel, dc: {:?}", dc),
+            ConnectionEvent::ReceivedIncomingMedia(stream) => {
+                format!("ReceivedIncomingMedia, stream: {:}", stream)
+            }
+            ConnectionEvent::ReceivedDataChannel(dc) => {
+                format!("ReceivedDataChannel, dc: {:?}", dc)
+            }
             ConnectionEvent::Synchronize(_) => "Synchronize".to_string(),
-            ConnectionEvent::EndCall => "EndCall".to_string(),
+            ConnectionEvent::Terminate => "Terminate".to_string(),
         };
         write!(f, "({})", display)
     }
@@ -193,10 +234,13 @@ where
                     let state = cc.state()?;
                     match (state, &event) {
                         (
-                            ConnectionState::CallConnected,
-                            ConnectionEvent::RemoteVideoStatus(_, _, _),
+                            ConnectionState::ConnectedAndAccepted,
+                            ConnectionEvent::ReceivedVideoStatusViaDataChannel(_, _, _),
                         )
-                        | (ConnectionState::CallConnected, ConnectionEvent::RemoteConnected(_)) => {
+                        | (
+                            ConnectionState::ConnectedAndAccepted,
+                            ConnectionEvent::ReceivedAcceptedViaDataChannel(_),
+                        ) => {
                             // Don't log periodic, ignored events at high verbosity
                             debug!("state: {}, event: {}", state, event)
                         }
@@ -321,7 +365,7 @@ where
             ConnectionEvent::SendHangupViaDataChannel(hangup) => {
                 return self.handle_send_hangup_via_data_channel(connection, state, hangup)
             }
-            ConnectionEvent::EndCall => return self.handle_end_call(connection),
+            ConnectionEvent::Terminate => return self.handle_terminate(connection),
             ConnectionEvent::Synchronize(sync) => return self.handle_synchronize(sync),
             _ => {}
         }
@@ -329,7 +373,7 @@ where
         // If in the process of terminating the call, drop all other
         // events.
         match state {
-            ConnectionState::Terminating | ConnectionState::Closed => {
+            ConnectionState::Terminating | ConnectionState::Terminated => {
                 debug!("handle_event(): dropping event {} while terminating", event);
                 return Ok(());
             }
@@ -340,41 +384,42 @@ where
             ConnectionEvent::ReceivedHangup(call_id, hangup) => {
                 self.handle_received_hangup(connection, state, call_id, hangup)
             }
-            ConnectionEvent::AcceptCall => self.handle_accept_call(connection, state),
-            ConnectionEvent::RemoteConnected(id) => {
-                self.handle_remote_connected(connection, state, id)
+            ConnectionEvent::Accept => self.handle_accept(connection, state),
+            ConnectionEvent::ReceivedAcceptedViaDataChannel(id) => {
+                self.handle_received_accepted_via_data_channel(connection, state, id)
             }
-            ConnectionEvent::RemoteVideoStatus(id, enable, sequence_number) => {
-                self.handle_remote_video_status(connection, state, id, enable, sequence_number)
-            }
+            ConnectionEvent::ReceivedVideoStatusViaDataChannel(id, enable, sequence_number) => self
+                .handle_received_video_status_via_data_channel(
+                    connection,
+                    state,
+                    id,
+                    enable,
+                    sequence_number,
+                ),
             ConnectionEvent::ReceivedIce(ice) => self.handle_received_ice(connection, state, ice),
-            ConnectionEvent::LocalVideoStatus(enabled) => {
-                self.handle_local_video_status(connection, state, enabled)
+            ConnectionEvent::SendVideoStatusViaDataChannel(enabled) => {
+                self.handle_send_video_status_via_data_channel(connection, state, enabled)
             }
             ConnectionEvent::LocalIceCandidate(candidate) => {
                 self.handle_local_ice_candidate(connection, state, candidate)
             }
             ConnectionEvent::IceConnected => self.handle_ice_connected(connection, state),
-            ConnectionEvent::IceConnectionFailed => {
-                self.handle_ice_connection_failed(connection, state)
-            }
-            ConnectionEvent::IceConnectionDisconnected => {
-                self.handle_ice_connection_disconnected(connection, state)
-            }
+            ConnectionEvent::IceFailed => self.handle_ice_failed(connection, state),
+            ConnectionEvent::IceDisconnected => self.handle_ice_disconnected(connection, state),
             ConnectionEvent::InternalError(error) => self.handle_internal_error(connection, error),
-            ConnectionEvent::OnAddStream(stream) => {
-                self.handle_on_add_stream(connection, state, stream)
+            ConnectionEvent::ReceivedIncomingMedia(stream) => {
+                self.handle_received_incoming_media(connection, state, stream)
             }
-            ConnectionEvent::OnDataChannel(dc) => {
-                self.handle_on_data_channel(connection, state, dc)
+            ConnectionEvent::ReceivedDataChannel(dc) => {
+                self.handle_received_data_channel(connection, state, dc)
             }
             ConnectionEvent::SendHangupViaDataChannel(_) => Ok(()),
             ConnectionEvent::Synchronize(_) => Ok(()),
-            ConnectionEvent::EndCall => Ok(()),
+            ConnectionEvent::Terminate => Ok(()),
         }
     }
 
-    fn notify_observer(&mut self, connection: Connection<T>, event: ObserverEvent) {
+    fn notify_observer(&mut self, connection: Connection<T>, event: ConnectionObserverEvent) {
         let mut err_connection = connection.clone();
         let notify_observer_future = lazy(move || {
             if connection.terminating()? {
@@ -407,18 +452,18 @@ where
             return Ok(());
         }
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceReconnecting
-            | ConnectionState::IceConnected
-            | ConnectionState::CallConnected => {
-                self.notify_observer(connection, ObserverEvent::ReceivedHangup(hangup))
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
+                self.notify_observer(connection, ConnectionObserverEvent::ReceivedHangup(hangup))
             }
             _ => self.unexpected_state(state, "RemoteHangup"),
         };
         Ok(())
     }
 
-    fn handle_remote_connected(
+    fn handle_received_accepted_via_data_channel(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
@@ -429,31 +474,35 @@ where
             return Ok(());
         }
         match state {
-            ConnectionState::IceConnecting | ConnectionState::IceConnected => {
-                ringbench!(RingBench::WebRTC, RingBench::Conn, "dc(connected)");
-                connection.set_state(ConnectionState::CallConnected)?;
-                self.notify_observer(connection, ObserverEvent::RemoteConnected);
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ConnectedBeforeAccepted => {
+                ringbench!(RingBench::WebRTC, RingBench::Conn, "dc(accepted)");
+                connection.set_state(ConnectionState::ConnectedAndAccepted)?;
+                self.notify_observer(
+                    connection,
+                    ConnectionObserverEvent::ReceivedAcceptedViaDataChannel,
+                );
             }
-            ConnectionState::CallConnected => {
-                // Ignore Connected notifications in already-connected state. These may arise
+            ConnectionState::ConnectedAndAccepted => {
+                // Ignore Accepted notifications in already-accepted state. These may arise
                 // because of expected data channel retransmissions.
             }
-            _ => self.unexpected_state(state, "RemoteConnected"),
+            _ => self.unexpected_state(state, "ReceivedAcceptedViaDataChannel"),
         }
         Ok(())
     }
 
-    fn handle_remote_video_status(
+    fn handle_received_video_status_via_data_channel(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
         call_id: CallId,
-        enable: bool,
+        enabled: bool,
         sequence_number: Option<u64>,
     ) -> Result<()> {
         debug!(
-            "handle_remote_video_status(): enable: {}, sequence_number: {:?}",
-            enable, sequence_number
+            "handle_received_video_status_via_data_channel(): enabled: {}, sequence_number: {:?}",
+            enabled, sequence_number
         );
 
         if connection.call_id() != call_id {
@@ -489,13 +538,14 @@ where
         }
 
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceReconnecting
-            | ConnectionState::IceConnected
-            | ConnectionState::CallConnected => {
-                self.notify_observer(connection, ObserverEvent::RemoteVideoStatus(enable))
-            }
-            _ => self.unexpected_state(state, "RemoteVideoStatus"),
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => self.notify_observer(
+                connection,
+                ConnectionObserverEvent::ReceivedVideoStatusViaDataChannel(enabled),
+            ),
+            _ => self.unexpected_state(state, "ReceivedVideoStatusViaDataChannel"),
         };
         Ok(())
     }
@@ -512,10 +562,10 @@ where
         }
 
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceReconnecting
-            | ConnectionState::IceConnected
-            | ConnectionState::CallConnected => {
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
                 connection.add_remote_ice_candidates(&ice.candidates_added)?
             }
             _ => self.unexpected_state(state, "RemoteIceCandidate"),
@@ -524,23 +574,19 @@ where
         Ok(())
     }
 
-    fn handle_accept_call(
-        &mut self,
-        connection: Connection<T>,
-        state: ConnectionState,
-    ) -> Result<()> {
+    fn handle_accept(&mut self, connection: Connection<T>, state: ConnectionState) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceReconnecting
-            | ConnectionState::IceConnected => {
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted => {
                 // notify the peer via a data channel message.
                 let mut err_connection = connection.clone();
                 let connected_future = lazy(move || {
                     if connection.terminating()? {
                         return Ok(());
                     }
-                    connection.send_connected()?;
-                    connection.set_state(ConnectionState::CallConnected)
+                    connection.send_accepted_via_data_channel()?;
+                    connection.set_state(ConnectionState::ConnectedAndAccepted)
                 })
                 .map_err(move |err| {
                     err_connection.inject_internal_error(err, "Sending Connected failed")
@@ -576,32 +622,32 @@ where
         Ok(())
     }
 
-    fn handle_local_video_status(
+    fn handle_send_video_status_via_data_channel(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
         enabled: bool,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceReconnecting
-            | ConnectionState::IceConnected
-            | ConnectionState::CallConnected => {
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
                 // notify the peer via a data channel message.
                 let mut err_connection = connection.clone();
-                let local_video_status_future = lazy(move || {
+                let send_video_status_future = lazy(move || {
                     if connection.terminating()? {
                         return Ok(());
                     }
-                    connection.send_video_status(enabled)
+                    connection.send_video_status_via_data_channel(enabled)
                 })
                 .map_err(move |err| {
                     err_connection.inject_internal_error(err, "Sending local video status failed")
                 });
 
-                self.worker_spawn(local_video_status_future);
+                self.worker_spawn(send_video_status_future);
             }
-            _ => self.unexpected_state(state, "LocalVideoStatus"),
+            _ => self.unexpected_state(state, "SendVideoStatusViaDataChannel"),
         };
         Ok(())
     }
@@ -621,7 +667,7 @@ where
         match state {
             ConnectionState::NotYetStarted
             | ConnectionState::Terminating
-            | ConnectionState::Closed => {
+            | ConnectionState::Terminated => {
                 warn!("State is now idle or terminating, ignoring local ICE candidate...");
             }
             _ => {
@@ -648,73 +694,78 @@ where
         state: ConnectionState,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting => {
-                connection.set_state(ConnectionState::IceConnected)?;
+            ConnectionState::ConnectingBeforeAccepted => {
+                connection.set_state(ConnectionState::ConnectedBeforeAccepted)?;
                 match connection.direction() {
                     CallDirection::OutGoing => {
-                        // For outgoing calls, beging ringing the moment ICE is connected.
-                        self.notify_observer(connection, ObserverEvent::ConnectionRinging);
+                        // For outgoing calls, we assume we have a data channel.
+                        self.notify_observer(
+                            connection,
+                            ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted,
+                        );
                     }
                     CallDirection::InComing => {
-                        // Incoming calls don't start ringing until both ICE is connected,
-                        // and a data channel is available to send the acceptance request.
                         if connection.has_data_channel()? {
-                            self.notify_observer(connection, ObserverEvent::ConnectionRinging);
+                            self.notify_observer(
+                                connection,
+                                ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted,
+                            );
                         }
                     }
                 }
             }
-            ConnectionState::IceReconnecting => {
+            ConnectionState::ReconnectingAfterAccepted => {
                 // ICE has reconnected after the call was
-                // previously connected.  Return to that state
+                // previously accepted (and connected).  Return to that state
                 // now.
-                connection.set_state(ConnectionState::CallConnected)?;
-                self.notify_observer(connection, ObserverEvent::ConnectionReconnected);
+                connection.set_state(ConnectionState::ConnectedAndAccepted)?;
+                self.notify_observer(
+                    connection,
+                    ConnectionObserverEvent::ReconnectedAfterAccepted,
+                );
             }
             _ => self.unexpected_state(state, "IceConnected"),
         }
         Ok(())
     }
 
-    fn handle_ice_connection_failed(
+    fn handle_ice_failed(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceReconnecting
-            | ConnectionState::IceConnected
-            | ConnectionState::CallConnected => {
-                connection.set_state(ConnectionState::IceConnectionFailed)?;
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
+                connection.set_state(ConnectionState::IceFailed)?;
                 // For callee -- the call was disconnected while answering/local_ringing
                 // For caller -- the recipient was unreachable
-                self.notify_observer(connection, ObserverEvent::ConnectionFailed);
+                self.notify_observer(connection, ConnectionObserverEvent::IceFailed);
             }
-            _ => self.unexpected_state(state, "IceConnectionFailed"),
+            _ => self.unexpected_state(state, "IceFailed"),
         };
         Ok(())
     }
 
-    fn handle_ice_connection_disconnected(
+    fn handle_ice_disconnected(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnected => {
-                // ICE disconnected *before* the call was
-                // connected, so simply go back to the
-                // IceConnecting state.
-                connection.set_state(ConnectionState::IceConnecting)?;
+            ConnectionState::ConnectedBeforeAccepted => {
+                connection.set_state(ConnectionState::ConnectingBeforeAccepted)?;
             }
-            ConnectionState::CallConnected => {
-                // ICE disconnected *after* the call was
-                // connected, go to IceReconnecting state.
-                connection.set_state(ConnectionState::IceReconnecting)?;
-                self.notify_observer(connection, ObserverEvent::ConnectionReconnecting);
+            ConnectionState::ConnectedAndAccepted => {
+                connection.set_state(ConnectionState::ReconnectingAfterAccepted)?;
+                self.notify_observer(
+                    connection,
+                    ConnectionObserverEvent::ReconnectingAfterAccepted,
+                );
             }
-            _ => self.unexpected_state(state, "IceConnectionDisconnected"),
+            _ => self.unexpected_state(state, "IceDisconnected"),
         };
         Ok(())
     }
@@ -739,23 +790,23 @@ where
         Ok(())
     }
 
-    fn handle_on_add_stream(
+    fn handle_received_incoming_media(
         &mut self,
         mut connection: Connection<T>,
         state: ConnectionState,
         stream: MediaStream,
     ) -> Result<()> {
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceReconnecting
-            | ConnectionState::IceConnected
-            | ConnectionState::CallConnected => {
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ReconnectingAfterAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
                 let mut err_connection = connection.clone();
                 let add_stream_future = lazy(move || {
                     if connection.terminating()? {
                         return Ok(());
                     }
-                    connection.on_add_stream(stream)
+                    connection.handle_received_incoming_media(stream)
                 })
                 .map_err(move |err| {
                     err_connection.inject_internal_error(err, "Add Media Stream Future failed")
@@ -763,12 +814,12 @@ where
 
                 self.worker_spawn(add_stream_future);
             }
-            _ => self.unexpected_state(state, "OnAddStream"),
+            _ => self.unexpected_state(state, "ReceivedIncomingMedia"),
         }
         Ok(())
     }
 
-    fn handle_on_data_channel(
+    fn handle_received_data_channel(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
@@ -777,23 +828,24 @@ where
         ringbench!(RingBench::WebRTC, RingBench::Conn, "on_data_channel()");
 
         match state {
-            ConnectionState::IceConnecting
-            | ConnectionState::IceConnected
-            | ConnectionState::CallConnected => {
+            ConnectionState::ConnectingBeforeAccepted
+            | ConnectionState::ConnectedBeforeAccepted
+            | ConnectionState::ConnectedAndAccepted => {
                 let notify_handle = connection.clone();
                 debug_assert_eq!(
                     CallDirection::InComing,
                     connection.direction(),
-                    "onDataChannel should only happen for incoming calls"
+                    "ReceivedDataChannel should only happen for incoming calls"
                 );
                 connection.set_data_channel(data_channel)?;
-                if state == ConnectionState::IceConnected {
-                    // Incoming calls don't start ringing until both ICE is connected,
-                    // and a data channel is available to send the acceptance request.
-                    self.notify_observer(notify_handle, ObserverEvent::ConnectionRinging);
+                if state == ConnectionState::ConnectedBeforeAccepted {
+                    self.notify_observer(
+                        notify_handle,
+                        ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted,
+                    );
                 }
             }
-            _ => self.unexpected_state(state, "OnDataChannel"),
+            _ => self.unexpected_state(state, "ReceivedDataChannel"),
         }
         Ok(())
     }
@@ -819,7 +871,7 @@ where
         }
     }
 
-    fn handle_end_call(&mut self, mut connection: Connection<T>) -> Result<()> {
+    fn handle_terminate(&mut self, mut connection: Connection<T>) -> Result<()> {
         self.event_stream.close();
         self.drain_worker_thread();
         self.drain_notify_thread();

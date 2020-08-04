@@ -30,7 +30,7 @@
 //! - RemoteVideoEnabled
 //! - RemoteVideoDisabled
 //! - RemoteHangup
-//! - ConnectionFailed
+//! - IceFailed
 //! - Timeout
 //! - Reconnecting
 //!
@@ -65,7 +65,7 @@ use crate::common::{
 };
 
 use crate::core::call::{Call, EventStream};
-use crate::core::connection::ObserverEvent;
+use crate::core::connection::ConnectionObserverEvent;
 use crate::core::platform::Platform;
 use crate::core::signaling;
 
@@ -75,7 +75,7 @@ pub enum CallEvent {
     /// Start a call (call struct has the direction attribute).
     StartCall,
     /// Accept incoming call (callee only).
-    LocalAccept,
+    AcceptCall,
     /// Send Hangup
     SendHangupViaDataChannelToAll(signaling::Hangup),
 
@@ -92,9 +92,9 @@ pub enum CallEvent {
     ReceivedHangup(signaling::ReceivedHangup),
 
     /// Connection observer event
-    ConnectionEvent(ObserverEvent, DeviceId),
+    ConnectionObserverEvent(ConnectionObserverEvent, DeviceId),
     /// Connection observer error
-    ConnectionError(failure::Error, DeviceId),
+    ConnectionObserverError(failure::Error, DeviceId),
 
     // Internally generated events
     /// Notify the call manager of an internal error condition.
@@ -103,15 +103,15 @@ pub enum CallEvent {
     CallTimeout,
     /// Synchronize the FSM.
     Synchronize(Arc<(Mutex<bool>, Condvar)>),
-    /// Shutdown the call.
-    EndCall,
+    /// Terminate the call.
+    Terminate,
 }
 
 impl fmt::Display for CallEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
             CallEvent::StartCall => "StartCall".to_string(),
-            CallEvent::LocalAccept => "LocalAccept".to_string(),
+            CallEvent::AcceptCall => "AcceptCall".to_string(),
             CallEvent::SendHangupViaDataChannelToAll(hangup) => {
                 format!("SendHangupViaDataChannelToAll, hangup: {}", hangup)
             }
@@ -127,16 +127,16 @@ impl fmt::Display for CallEvent {
                 "ReceivedHangup, device: {} hangup: {}",
                 received.sender_device_id, received.hangup
             ),
-            CallEvent::ConnectionEvent(e, d) => {
-                format!("ConnectionEvent, event: {}, device: {}", e, d)
+            CallEvent::ConnectionObserverEvent(e, d) => {
+                format!("ConnectionObserverEvent, event: {}, device: {}", e, d)
             }
-            CallEvent::ConnectionError(e, d) => {
-                format!("ConnectionError, error: {}, device: {}", e, d)
+            CallEvent::ConnectionObserverError(e, d) => {
+                format!("ConnectionObserverError, error: {}, device: {}", e, d)
             }
             CallEvent::InternalError(e) => format!("InternalError: {}", e),
             CallEvent::CallTimeout => "CallTimeout".to_string(),
             CallEvent::Synchronize(_) => "Synchronize".to_string(),
-            CallEvent::EndCall => "EndCall".to_string(),
+            CallEvent::Terminate => "Terminate".to_string(),
         };
         write!(f, "({})", display)
     }
@@ -325,7 +325,7 @@ where
             CallEvent::SendHangupViaDataChannelToAll(hangup) => {
                 return self.handle_send_hangup_via_data_channel_to_all(call, state, hangup)
             }
-            CallEvent::EndCall => return self.handle_end_call(call),
+            CallEvent::Terminate => return self.handle_terminate(call),
             CallEvent::Synchronize(sync) => return self.handle_synchronize(sync),
             _ => {}
         }
@@ -333,7 +333,7 @@ where
         // If in the process of terminating the call, drop all other
         // events.
         match state {
-            CallState::Terminating | CallState::Closed => {
+            CallState::Terminating | CallState::Terminated => {
                 debug!("handle_event(): dropping event {} while terminating", event);
                 return Ok(());
             }
@@ -343,7 +343,7 @@ where
         match event {
             CallEvent::StartCall => self.handle_start_call(call, state),
             CallEvent::Proceed => self.handle_proceed(call, state),
-            CallEvent::LocalAccept => self.handle_local_accept(call, state),
+            CallEvent::AcceptCall => self.handle_accept_call(call, state),
             CallEvent::ReceivedAnswer(received) => {
                 self.handle_received_answer(call, state, received)
             }
@@ -351,17 +351,18 @@ where
             CallEvent::ReceivedHangup(received) => {
                 self.handle_received_hangup(call, state, received)
             }
-            CallEvent::ConnectionEvent(event, remote_device_id) => {
-                self.handle_connection_event(call, state, event, remote_device_id)
+            CallEvent::ConnectionObserverEvent(event, remote_device_id) => {
+                self.handle_connection_observer_event(call, state, event, remote_device_id)
             }
-            CallEvent::ConnectionError(error, remote_device) => {
-                self.handle_connection_error(call, error, remote_device)
+            CallEvent::ConnectionObserverError(error, remote_device) => {
+                self.handle_connection_observer_error(call, error, remote_device)
             }
             CallEvent::InternalError(error) => self.handle_internal_error(call, error),
             CallEvent::CallTimeout => self.handle_call_timeout(call, state),
+            // Handled above
             CallEvent::SendHangupViaDataChannelToAll(_) => Ok(()),
             CallEvent::Synchronize(_) => Ok(()),
-            CallEvent::EndCall => Ok(()),
+            CallEvent::Terminate => Ok(()),
         }
     }
 
@@ -383,8 +384,8 @@ where
     fn handle_start_call(&mut self, call: Call<T>, state: CallState) -> Result<()> {
         info!("handle_start_call():");
 
-        if let CallState::Idle = state {
-            call.set_state(CallState::Starting)?;
+        if let CallState::NotYetStarted = state {
+            call.set_state(CallState::WaitingToProceed)?;
             call.handle_start_call()
         } else {
             self.unexpected_state(state, "StartCall");
@@ -396,8 +397,8 @@ where
     fn handle_proceed(&mut self, mut call: Call<T>, state: CallState) -> Result<()> {
         info!("handle_proceed():");
 
-        if let CallState::Starting = state {
-            call.set_state(CallState::Connecting)?;
+        if let CallState::WaitingToProceed = state {
+            call.set_state(CallState::ConnectingBeforeAccepted)?;
 
             let mut err_call = call.clone();
             let proceed_future = lazy(move || {
@@ -423,7 +424,9 @@ where
         received: signaling::ReceivedAnswer,
     ) -> Result<()> {
         // Accept answers when we are ringing so we can get answers for more than one connection.
-        if state == CallState::Connecting || state == CallState::Ringing {
+        if state == CallState::ConnectingBeforeAccepted
+            || state == CallState::ConnectedWithDataChannelBeforeAccepted
+        {
             let mut err_call = call.clone();
             let received_answer_future = lazy(move || {
                 if call.terminating()? {
@@ -449,11 +452,11 @@ where
         received: signaling::ReceivedIce,
     ) -> Result<()> {
         match state {
-            CallState::Starting
-            | CallState::Connecting
-            | CallState::Ringing
-            | CallState::Connected
-            | CallState::Reconnecting => {
+            CallState::WaitingToProceed
+            | CallState::ConnectingBeforeAccepted
+            | CallState::ConnectedWithDataChannelBeforeAccepted
+            | CallState::ConnectedAndAccepted
+            | CallState::ReconnectingAfterAccepted => {
                 let mut err_call = call.clone();
                 let handle_received_ice_future = lazy(move || {
                     if call.terminating()? {
@@ -564,23 +567,26 @@ where
         }
 
         // Set the state to terminating here if not Idle | Terminating | Closed.
-        if let CallState::Starting
-        | CallState::Connecting
-        | CallState::Ringing
-        | CallState::Connected
-        | CallState::Reconnecting = state
+        if let CallState::WaitingToProceed
+        | CallState::ConnectingBeforeAccepted
+        | CallState::ConnectedWithDataChannelBeforeAccepted
+        | CallState::ConnectedAndAccepted
+        | CallState::ReconnectingAfterAccepted = state
         {
             call.set_state(CallState::Terminating)?;
         }
 
         // Only callers can propagate hangups to other callee devices.
         if let Some(hangup_to_propagate) = hangup_to_propagate {
-            // Don't propagate if we're already connected because because a
+            // Don't propagate if we're already accepted because a
             // Hangup/Accepted has been sent to the other callees.
-            // Don't propagate if we're already terminating or closed because
+            // Don't propagate if we're already terminating/terminated because
             // we already sent out a Hangup to the other callees.
-            // Not for Idle | Connected | Reconnecting | Terminating | Closed states:
-            if let CallState::Starting | CallState::Connecting | CallState::Ringing = state {
+            // Not for NotYetStarted | ConnectedAndAccepted | ReconnectingAfterAccepted | Terminating | Terminated states:
+            if let CallState::WaitingToProceed
+            | CallState::ConnectingBeforeAccepted
+            | CallState::ConnectedWithDataChannelBeforeAccepted = state
+            {
                 let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
                 let excluded_remote_device_id = hangup_device_id.unwrap_or(0 as DeviceId);
                 call.send_hangup_via_data_channel_and_signaling_to_all_except(
@@ -605,21 +611,21 @@ where
         Ok(())
     }
 
-    fn handle_local_accept(&mut self, call: Call<T>, state: CallState) -> Result<()> {
-        info!("handle_local_accept():");
+    fn handle_accept_call(&mut self, call: Call<T>, state: CallState) -> Result<()> {
+        info!("handle_accept_call():");
         match state {
-            CallState::Ringing => {
-                call.set_state(CallState::Connected)?;
+            CallState::ConnectedWithDataChannelBeforeAccepted => {
+                call.set_state(CallState::ConnectedAndAccepted)?;
                 let mut err_call = call.clone();
                 let accept_future = lazy(move || {
                     if call.terminating()? {
                         return Ok(());
                     }
                     let mut connection = call.active_connection()?;
-                    connection.inject_accept_call()?;
-                    connection.connect_media()?;
+                    connection.inject_accept()?;
+                    connection.connect_incoming_media()?;
                     connection.start_tick()?;
-                    call.notify_application(ApplicationEvent::LocalConnected)
+                    call.notify_application(ApplicationEvent::LocalAccepted)
                 })
                 .map_err(move |err| {
                     err_call.inject_internal_error(err, "Processing local accept request failed")
@@ -627,7 +633,7 @@ where
 
                 self.worker_spawn(accept_future);
             }
-            _ => self.unexpected_state(state, "LocalAccept"),
+            _ => self.unexpected_state(state, "AcceptCall"),
         }
         Ok(())
     }
@@ -640,7 +646,7 @@ where
     ) -> Result<()> {
         info!("handle_send_hangup_via_data_channel_to_all():");
         match state {
-            CallState::Idle => self.unexpected_state(state, "LocalHangup"),
+            CallState::NotYetStarted => self.unexpected_state(state, "LocalHangup"),
             _ => {
                 let mut err_call = call.clone();
                 let future = lazy(move || call.send_hangup_via_data_channel_to_all(hangup))
@@ -654,12 +660,12 @@ where
         Ok(())
     }
 
-    fn ignore_connection_event(
+    fn ignore_connection_observer_event(
         &self,
         call_id: CallId,
         remote_device_id: DeviceId,
         state: CallState,
-        event: ObserverEvent,
+        event: ConnectionObserverEvent,
     ) {
         info!(
             "call_id: {} remote_device_id: {} Ignoring event: {}, while in state: {}",
@@ -667,20 +673,22 @@ where
         );
     }
 
-    fn handle_connection_event(
+    fn handle_connection_observer_event(
         &mut self,
         mut call: Call<T>,
         state: CallState,
-        event: ObserverEvent,
+        event: ConnectionObserverEvent,
         remote_device_id: DeviceId,
     ) -> Result<()> {
         let call_id = call.call_id();
 
         match event {
-            ObserverEvent::ConnectionRinging => {
+            ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted => {
                 match state {
-                    CallState::Connecting => {
-                        call.set_state(CallState::Ringing)?;
+                    CallState::ConnectingBeforeAccepted => {
+                        // We use the fact that we are connected with a data channel
+                        // as a signal that the application should ring.
+                        call.set_state(CallState::ConnectedWithDataChannelBeforeAccepted)?;
                         if let CallDirection::InComing = call.direction() {
                             self.notify_application(call, ApplicationEvent::LocalRinging)
                         } else {
@@ -688,21 +696,26 @@ where
                         }
                     }
                     _ => {
-                        self.ignore_connection_event(call_id, remote_device_id, state, event);
+                        self.ignore_connection_observer_event(
+                            call_id,
+                            remote_device_id,
+                            state,
+                            event,
+                        );
                     }
                 }
                 Ok(())
             }
-            ObserverEvent::RemoteConnected => {
+            ConnectionObserverEvent::ReceivedAcceptedViaDataChannel => {
                 match call.direction() {
                     CallDirection::OutGoing => match state {
-                        CallState::Ringing => {
+                        CallState::ConnectedWithDataChannelBeforeAccepted => {
                             info!(
-                                "handle_connection_event(): Connection from {}",
+                                "handle_connection_observer_event(): Accepted from {}",
                                 remote_device_id
                             );
 
-                            call.set_state(CallState::Connected)?;
+                            call.set_state(CallState::ConnectedAndAccepted)?;
                             call.set_active_device_id(remote_device_id)?;
 
                             // Send out hangup/accepted to all via the data channel except to the accepter.
@@ -721,9 +734,9 @@ where
 
                                 // Get the media and application working for the first connection.
                                 let connection = call.active_connection()?;
-                                connection.connect_media()?;
+                                connection.connect_incoming_media()?;
                                 connection.start_tick()?;
-                                call.notify_application(ApplicationEvent::RemoteConnected)?;
+                                call.notify_application(ApplicationEvent::RemoteAccepted)?;
 
                                 // If the remote device of the active connection can support
                                 // multi-ring, we send a "legacy" Hangup message. The callee
@@ -750,27 +763,35 @@ where
 
                                 // Close all the other connections (this blocks).
                                 let mut call_clone = call.clone();
-                                call_clone.close_connections_except_accepted(remote_device_id)
+                                call_clone.terminate_connections_except_accepted(remote_device_id)
                             })
                             .map_err(move |err| {
                                 err_call.inject_internal_error(
                                     err,
-                                    "Processing connect_media request failed",
+                                    "Processing connect_incoming_media request failed",
                                 )
                             });
                             self.worker_spawn(connected_future);
                         }
                         _ => {
-                            self.ignore_connection_event(call_id, remote_device_id, state, event);
+                            self.ignore_connection_observer_event(
+                                call_id,
+                                remote_device_id,
+                                state,
+                                event,
+                            );
                         }
                     },
                     CallDirection::InComing => {
-                        warn!("Ignoring RemoteConnected for incoming call: {}", call_id);
+                        warn!(
+                            "Ignoring ReceivedAcceptedViaDataChannel for incoming call: {}",
+                            call_id
+                        );
                     }
                 }
                 Ok(())
             }
-            ObserverEvent::ReceivedHangup(hangup) => self.handle_received_hangup(
+            ConnectionObserverEvent::ReceivedHangup(hangup) => self.handle_received_hangup(
                 call,
                 state,
                 signaling::ReceivedHangup {
@@ -778,18 +799,23 @@ where
                     hangup,
                 },
             ),
-            ObserverEvent::RemoteVideoStatus(enable) => {
+            ConnectionObserverEvent::ReceivedVideoStatusViaDataChannel(enabled) => {
                 if call.active_device_id()? == remote_device_id {
                     match state {
-                        CallState::Connected => {
-                            if enable {
+                        CallState::ConnectedAndAccepted => {
+                            if enabled {
                                 self.notify_application(call, ApplicationEvent::RemoteVideoEnable)
                             } else {
                                 self.notify_application(call, ApplicationEvent::RemoteVideoDisable)
                             }
                         }
                         _ => {
-                            self.ignore_connection_event(call_id, remote_device_id, state, event);
+                            self.ignore_connection_observer_event(
+                                call_id,
+                                remote_device_id,
+                                state,
+                                event,
+                            );
                         }
                     }
                 } else {
@@ -800,15 +826,20 @@ where
                 }
                 Ok(())
             }
-            ObserverEvent::ConnectionReconnecting => {
+            ConnectionObserverEvent::ReconnectingAfterAccepted => {
                 if call.active_device_id()? == remote_device_id {
                     match state {
-                        CallState::Connected => {
-                            call.set_state(CallState::Reconnecting)?;
+                        CallState::ConnectedAndAccepted => {
+                            call.set_state(CallState::ReconnectingAfterAccepted)?;
                             self.notify_application(call, ApplicationEvent::Reconnecting)
                         }
                         _ => {
-                            self.ignore_connection_event(call_id, remote_device_id, state, event);
+                            self.ignore_connection_observer_event(
+                                call_id,
+                                remote_device_id,
+                                state,
+                                event,
+                            );
                         }
                     }
                 } else {
@@ -819,15 +850,20 @@ where
                 }
                 Ok(())
             }
-            ObserverEvent::ConnectionReconnected => {
+            ConnectionObserverEvent::ReconnectedAfterAccepted => {
                 if call.active_device_id()? == remote_device_id {
                     match state {
-                        CallState::Reconnecting => {
-                            call.set_state(CallState::Connected)?;
+                        CallState::ReconnectingAfterAccepted => {
+                            call.set_state(CallState::ConnectedAndAccepted)?;
                             self.notify_application(call, ApplicationEvent::Reconnected)
                         }
                         _ => {
-                            self.ignore_connection_event(call_id, remote_device_id, state, event);
+                            self.ignore_connection_observer_event(
+                                call_id,
+                                remote_device_id,
+                                state,
+                                event,
+                            );
                         }
                     }
                 } else {
@@ -838,13 +874,13 @@ where
                 }
                 Ok(())
             }
-            ObserverEvent::ConnectionFailed => {
+            ConnectionObserverEvent::IceFailed => {
                 let mut err_call = call.clone();
                 let future = lazy(move || {
                     if call.terminating()? {
                         return Ok(());
                     }
-                    call.connection_failed(remote_device_id)
+                    call.handle_ice_failed(remote_device_id)
                 })
                 .map_err(move |err| {
                     err_call
@@ -869,14 +905,14 @@ where
         Ok(())
     }
 
-    fn handle_connection_error(
+    fn handle_connection_observer_error(
         &mut self,
         call: Call<T>,
         error: failure::Error,
         remote_device_id: DeviceId,
     ) -> Result<()> {
         info!(
-            "handle_connection_error(): call_id: {} remote_device_id: {}",
+            "handle_connection_observer_error(): call_id: {} remote_device_id: {}",
             call.call_id(),
             remote_device_id
         );
@@ -890,7 +926,7 @@ where
         info!("handle_call_timeout():");
 
         match state {
-            CallState::Connected | CallState::Reconnecting => {} // Ok
+            CallState::ConnectedAndAccepted | CallState::ReconnectingAfterAccepted => {} // Ok
             _ => {
                 let mut err_call = call.clone();
                 let timeout_future = lazy(move || {
@@ -928,12 +964,12 @@ where
         }
     }
 
-    fn handle_end_call(&mut self, mut call: Call<T>) -> Result<()> {
+    fn handle_terminate(&mut self, mut call: Call<T>) -> Result<()> {
         self.event_stream.close();
         self.drain_worker_thread();
         self.drain_notify_thread();
 
-        call.set_state(CallState::Closed)?;
+        call.set_state(CallState::Terminated)?;
         call.terminate_complete()
     }
 
