@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.4.2
+
+- Reference signalapp/webrtc@4147d
+
 ## v2.4.1
 
 - Fixes for release
