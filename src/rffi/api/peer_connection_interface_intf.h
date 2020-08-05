@@ -55,6 +55,10 @@ RUSTEXPORT void
 Rust_setOutgoingAudioEnabled(webrtc::PeerConnectionInterface* pc_interface,
                              bool                             enabled);
 
+RUSTEXPORT bool
+Rust_setIncomingRtpEnabled(webrtc::PeerConnectionInterface* pc_interface,
+                           bool                             enabled);
+
 /*
  * NOTE: The object created with Rust_createDataChannel() must be
  * freed using Rust_releaseRef().

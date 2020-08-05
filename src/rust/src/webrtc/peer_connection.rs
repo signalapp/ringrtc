@@ -165,6 +165,12 @@ impl PeerConnection {
         }
     }
 
+    pub fn set_incoming_rtp_enabled(&self, enabled: bool) {
+        unsafe {
+            pc::Rust_setIncomingRtpEnabled(self.rffi_pc_interface, enabled);
+        }
+    }
+
     /// Rust wrapper around C++ PeerConnectionInterface::AddIceCandidate().
     pub fn add_ice_candidate(&self, candidate: &signaling::IceCandidate) -> Result<()> {
         // ICE candidates are the same for V1 and V2, so this works for V1 as well.

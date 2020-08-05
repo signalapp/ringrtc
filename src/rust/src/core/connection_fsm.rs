@@ -585,8 +585,8 @@ where
                     if connection.terminating()? {
                         return Ok(());
                     }
-                    connection.send_accepted_via_data_channel()?;
-                    connection.set_state(ConnectionState::ConnectedAndAccepted)
+                    connection.set_state(ConnectionState::ConnectedAndAccepted)?;
+                    connection.send_accepted_via_data_channel()
                 })
                 .map_err(move |err| {
                     err_connection.inject_internal_error(err, "Sending Connected failed")

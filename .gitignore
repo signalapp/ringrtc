@@ -7,6 +7,8 @@ cscope.*
 **/.vscode
 .idea
 src/webrtc/
+src/webrtc/.cipd
+src/webrtc/.gclient*
 src/jar.list
 .project
 .classpath

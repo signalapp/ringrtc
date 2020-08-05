@@ -58,6 +58,11 @@ extern "C" {
         enabled: bool,
     );
 
+    pub fn Rust_setIncomingRtpEnabled(
+        pc_interface: *const RffiPeerConnectionInterface,
+        enabled: bool,
+    ) -> bool;
+
     pub fn Rust_createDataChannel(
         pc_interface: *const RffiPeerConnectionInterface,
         label: *const c_char,

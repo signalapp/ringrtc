@@ -149,6 +149,13 @@ Rust_setOutgoingAudioEnabled(PeerConnectionInterface* pc_interface,
   RTC_LOG(LS_INFO) << "Rust_setOutgoingAudioEnabled(" << enabled << ") for " << encodings_changed << " audio encodings.";
 }
 
+RUSTEXPORT bool
+Rust_setIncomingRtpEnabled(PeerConnectionInterface* pc_interface,
+                           bool                     enabled) {
+  RTC_LOG(LS_INFO) << "Rust_setIncomingRtpEnabled(" << enabled << ")";
+  return pc_interface->SetIncomingRtpEnabled(enabled);
+}
+
 RUSTEXPORT DataChannelInterface*
 Rust_createDataChannel(PeerConnectionInterface*   pc_interface,
                        const char*                label,

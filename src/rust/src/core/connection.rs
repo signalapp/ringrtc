@@ -563,6 +563,9 @@ where
 
             // Don't enable until the call is accepted.
             peer_connection.set_outgoing_audio_enabled(false);
+            // But do start incoming RTP right away so we can receive the
+            // "accepted" message.
+            peer_connection.set_incoming_rtp_enabled(true);
 
             // We have to do this once we're done with peer_connection because
             // it holds a ref to peer_connection as well.
@@ -621,6 +624,11 @@ where
             } else {
                 signaling::Answer::from_v1_sdp(answer_sdp)
             };
+
+            // Don't enable incoming RTP until accepted.
+            // This should be done before we set local description to make sure
+            // we don't get ICE connected really fast and allow any packets through.
+            peer_connection.set_incoming_rtp_enabled(false);
 
             let observer = create_ssd_observer();
             peer_connection.set_local_description(observer.as_ref(), &answer_sdi);
@@ -688,7 +696,11 @@ where
         let mut state = self.state.lock()?;
         *state = new_state;
         if new_state == ConnectionState::ConnectedAndAccepted {
-            self.set_outgoing_audio_enabled(true)?;
+            // Now that we are accepted, we can enable outgoing audio and incoming RTP
+            let webrtc = self.webrtc.lock()?;
+            let pc = webrtc.pc_interface()?;
+            pc.set_outgoing_audio_enabled(true);
+            pc.set_incoming_rtp_enabled(true);
         }
         Ok(())
     }
