@@ -68,6 +68,12 @@ pub enum RingRtcError {
     #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to generate C++ RTCCertificate")]
     GenerateCertificate,
+    #[fail(display = "Unable to query Audio Devices")]
+    #[allow(dead_code)]
+    QueryAudioDevices,
+    #[allow(dead_code)]
+    #[fail(display = "Unable to set Audio Device")]
+    SetAudioDevice,
 
     // WebRTC / C++ session description error codes
     #[fail(

@@ -109,6 +109,7 @@ export class RingRTCType {
       // This is a silly way of causing a deadlock.
       // tslint:disable-next-line await-promise
       await 0;
+
       this.callManager.proceed(
         callId,
         settings.iceServer.username || '',
@@ -498,6 +499,48 @@ export class RingRTCType {
 
     call.videoRenderer = renderer;
   }
+
+  getAudioInputs() : AudioDevice[] {
+    return this.callManager.getAudioInputs();
+  }
+
+  setAudioInput(index: number) : void {
+    this.callManager.setAudioInput(index);
+  }
+
+  getAudioOutputs() : AudioDevice[] {
+    return this.callManager.getAudioOutputs();
+  }
+
+  setAudioOutput(index: number) : void {
+    this.callManager.setAudioOutput(index);
+  }
+
+  findBestMatchingDeviceIndex(preferred: AudioDevice | undefined, available: AudioDevice[]) : number | undefined {
+    if (!preferred) {
+      // No preference stored
+      return undefined;
+    }
+    // Match by UUID first, if available
+    if (preferred.unique_id) {
+      var match_index = available.findIndex(d => d.unique_id === preferred.unique_id);
+      if (match_index != -1) {
+        return match_index;
+      }
+    }
+
+    // Match by name second, and if there are multiple such names - by instance index.
+    var matching_names = available.filter(d => d.name === preferred.name);
+    if (matching_names.length > preferred.same_name_index) {
+      return matching_names[preferred.same_name_index].index;
+    }
+    if (matching_names.length > 0) {
+      return matching_names[0].index;
+    }
+
+    // Nothing matches.
+    return undefined;
+  }
 }
 
 export interface CallSettings {
@@ -509,6 +552,18 @@ interface IceServer {
   username?: string;
   password?: string;
   urls: Array<string>;
+}
+
+// Describes an audio input or output device.
+export interface AudioDevice {
+  // Name, present on every platform.
+  name: string;
+  // Index of this device, starting from 0.
+  index: number;
+  // Index of this device out of all devices sharing the same name.
+  same_name_index: number;
+  // If present, a unique and stable identifier of this device. Only available on WIndows.
+  unique_id?: string;
 }
 
 export interface VideoCapturer {
@@ -882,6 +937,10 @@ export interface CallManager {
     remoteDeviceId: DeviceId,
     callId: CallId
   ): void;
+  getAudioInputs() : AudioDevice[];
+  setAudioInput(index: number) : void;
+  getAudioOutputs() : AudioDevice[];
+  setAudioOutput(index: number): void;
   poll(callbacks: CallManagerCallbacks): void;
 }
 

@@ -308,8 +308,7 @@ impl Platform for NativePlatform {
         incoming_media: &Self::AppIncomingMedia,
     ) -> Result<()> {
         info!("NativePlatform::connect_incoming_media()");
-        // %%% rename incoming_video_track()
-        if let Some(incoming_video_track) = incoming_media.incoming_video_track() {
+        if let Some(incoming_video_track) = incoming_media.first_video_track() {
             self.incoming_video_sink.set_enabled(true);
             // Note: this is passing an unsafe reference that must outlive
             // the VideoTrack/MediaStream.

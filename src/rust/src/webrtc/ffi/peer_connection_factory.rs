@@ -11,6 +11,7 @@ use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserverInte
 #[cfg(feature = "simnet")]
 use crate::webrtc::injectable_network::RffiInjectableNetwork;
 use crate::webrtc::peer_connection_factory::RffiIceServer;
+use std::os::raw::c_char;
 
 /// Incomplete type for C++ PeerConnectionFactoryInterface.
 #[repr(C)]
@@ -51,4 +52,27 @@ extern "C" {
         factory: *const RffiPeerConnectionFactoryInterface,
     ) -> *const RffiVideoTrackSourceInterface;
     pub fn Rust_generateCertificate() -> *const RffiCertificate;
+    pub fn Rust_getAudioPlayoutDevices(factory: *const RffiPeerConnectionFactoryInterface) -> i16;
+    pub fn Rust_getAudioPlayoutDeviceName(
+        factory: *const RffiPeerConnectionFactoryInterface,
+        index: u16,
+        out_name: *mut c_char,
+        out_uuid: *mut c_char,
+    ) -> i32;
+    pub fn Rust_setAudioPlayoutDevice(
+        factory: *const RffiPeerConnectionFactoryInterface,
+        index: u16,
+    ) -> bool;
+    pub fn Rust_getAudioRecordingDevices(factory: *const RffiPeerConnectionFactoryInterface)
+        -> i16;
+    pub fn Rust_getAudioRecordingDeviceName(
+        factory: *const RffiPeerConnectionFactoryInterface,
+        index: u16,
+        out_name: *mut c_char,
+        out_uuid: *mut c_char,
+    ) -> i32;
+    pub fn Rust_setAudioRecordingDevice(
+        factory: *const RffiPeerConnectionFactoryInterface,
+        index: u16,
+    ) -> bool;
 }

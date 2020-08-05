@@ -34,6 +34,12 @@ namespace webrtc {
     virtual PeerConnectionFactoryInterface* peer_connection_factory() = 0;
     // If we are using an injectable network, this is it.
     virtual rffi::InjectableNetwork* injectable_network() = 0;
+    virtual int16_t AudioPlayoutDevices() = 0;
+    virtual int32_t AudioPlayoutDeviceName(uint16_t index, char *out_name, char *out_uuid) = 0;
+    virtual bool SetAudioPlayoutDevice(uint16_t index) = 0;
+    virtual int16_t AudioRecordingDevices() = 0;
+    virtual int32_t AudioRecordingDeviceName(uint16_t index, char *out_name, char *out_uuid) = 0;
+    virtual bool SetAudioRecordingDevice(uint16_t index) = 0;
   };
 }
 
@@ -66,6 +72,12 @@ RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   bool enable_rtp_data_channel);
 RUSTEXPORT webrtc::AudioTrackInterface* Rust_createAudioTrack(webrtc::PeerConnectionFactoryOwner*);
 RUSTEXPORT webrtc::VideoTrackSourceInterface* Rust_createVideoSource(webrtc::PeerConnectionFactoryOwner*);
+RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(webrtc::PeerConnectionFactoryOwner*);
+RUSTEXPORT int32_t Rust_getAudioPlayoutDeviceName(webrtc::PeerConnectionFactoryOwner*, uint16_t index, char *out_name, char *out_uuid);
+RUSTEXPORT bool Rust_setAudioPlayoutDevice(webrtc::PeerConnectionFactoryOwner*, uint16_t index);
+RUSTEXPORT int16_t Rust_getAudioRecordingDevices(webrtc::PeerConnectionFactoryOwner*);
+RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(webrtc::PeerConnectionFactoryOwner*, uint16_t index, char *out_name, char *out_uuid);
+RUSTEXPORT bool Rust_setAudioRecordingDevice(webrtc::PeerConnectionFactoryOwner*, uint16_t index);
 RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate();
 
 #endif /* RFFI_API_PEER_CONNECTION_FACTORY_H__ */

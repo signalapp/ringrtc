@@ -8,12 +8,16 @@
  */
 
 #include "api/create_peerconnection_factory.h"
+#include "api/call/call_factory_interface.h"
 #include "api/task_queue/default_task_queue_factory.h"
+#include "api/rtc_event_log/rtc_event_log_factory.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
+#include "media/engine/webrtc_media_engine.h"
 #include "modules/audio_mixer/audio_mixer_impl.h"
+#include "modules/audio_processing/include/audio_processing.h"
 #include "pc/peer_connection_factory.h"
 #include "rffi/api/media.h"
 #include "rffi/api/peer_connection_factory.h"
@@ -52,24 +56,40 @@ class PeerConnectionFactoryWithOwnedThreads
     if (use_injectable_network) {
       injectable_network = CreateInjectableNetwork(network_thread.get());
     }
-    auto factory = CreatePeerConnectionFactory(
-        network_thread.get(),
-        worker_thread.get(),
-        signaling_thread.get(),
-        nullptr,  // default_adm build if we don't set it
-        CreateBuiltinAudioEncoderFactory(),
-        CreateBuiltinAudioDecoderFactory(),
-        CreateBuiltinVideoEncoderFactory(),
-        CreateBuiltinVideoDecoderFactory(),
-        AudioMixerImpl::Create(),
-        nullptr  // audio_processing built if we don't set it
-    );
+
+    PeerConnectionFactoryDependencies dependencies;
+    dependencies.network_thread = network_thread.get();
+    dependencies.worker_thread = worker_thread.get();
+    dependencies.signaling_thread = signaling_thread.get();
+    dependencies.task_queue_factory = CreateDefaultTaskQueueFactory();
+    dependencies.call_factory = CreateCallFactory();
+    dependencies.event_log_factory = std::make_unique<RtcEventLogFactory>(dependencies.task_queue_factory.get());
+
+    cricket::MediaEngineDependencies media_dependencies;
+    media_dependencies.task_queue_factory = dependencies.task_queue_factory.get();
+
+    // The audio device module must be created (and destroyed) on the _worker_ thread.
+    // It is safe to release the reference on this thread, however, because the PeerConectionFactory keeps its own reference.
+    rtc::scoped_refptr<AudioDeviceModule> adm = worker_thread->Invoke<rtc::scoped_refptr<AudioDeviceModule>>(RTC_FROM_HERE, [&]() {
+      return AudioDeviceModule::Create(
+        AudioDeviceModule::kPlatformDefaultAudio, dependencies.task_queue_factory.get());
+    });
+    media_dependencies.adm = adm;
+    media_dependencies.audio_encoder_factory = CreateBuiltinAudioEncoderFactory();
+    media_dependencies.audio_decoder_factory = CreateBuiltinAudioDecoderFactory();
+    media_dependencies.audio_processing = AudioProcessingBuilder().Create();
+    media_dependencies.audio_mixer = AudioMixerImpl::Create();
+    media_dependencies.video_encoder_factory = CreateBuiltinVideoEncoderFactory();
+    media_dependencies.video_decoder_factory = CreateBuiltinVideoDecoderFactory();
+    dependencies.media_engine = cricket::CreateMediaEngine(std::move(media_dependencies));
+    auto factory = CreateModularPeerConnectionFactory(std::move(dependencies));
     auto owner = new rtc::RefCountedObject<PeerConnectionFactoryWithOwnedThreads>(
         std::move(factory),
         std::move(network_thread),
         std::move(worker_thread),
         std::move(signaling_thread),
-        std::move(injectable_network));
+        std::move(injectable_network),
+        adm);
     owner->AddRef();
     return owner;
   }
@@ -86,17 +106,97 @@ class PeerConnectionFactoryWithOwnedThreads
     return injectable_network_.get();
   }
 
+  int16_t AudioPlayoutDevices() override {
+    return owned_worker_thread_->Invoke<int16_t>(RTC_FROM_HERE, [&]() {
+      return audio_device_module_->PlayoutDevices();
+    });
+  }
+
+  int32_t AudioPlayoutDeviceName(uint16_t index, char *out_name, char *out_uuid) override {
+    return owned_worker_thread_->Invoke<int32_t>(RTC_FROM_HERE, [&]() {
+      return audio_device_module_->PlayoutDeviceName(index, out_name, out_uuid);
+    });
+  }
+
+  bool SetAudioPlayoutDevice(uint16_t index) override {
+    return owned_worker_thread_->Invoke<bool>(RTC_FROM_HERE, [&]() {
+      // We need to stop and restart playout if it's already in progress.
+      bool was_initialized = audio_device_module_->PlayoutIsInitialized();
+      bool was_playing = audio_device_module_->Playing();
+      if (was_initialized) {
+        if (audio_device_module_->StopPlayout() != 0) {
+          return false;
+        }
+      }
+      if (audio_device_module_->SetPlayoutDevice(index) != 0) {
+        return false;
+      }
+      if (was_initialized) {
+        if (audio_device_module_->InitPlayout() != 0) {
+          return false;
+        }
+      }
+      if (was_playing) {
+        if (audio_device_module_->StartPlayout() != 0) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  int16_t AudioRecordingDevices() override {
+    return owned_worker_thread_->Invoke<int16_t>(RTC_FROM_HERE, [&]() {
+      return audio_device_module_->RecordingDevices();
+    });
+  }
+
+  int32_t AudioRecordingDeviceName(uint16_t index, char *out_name, char *out_uuid) override {
+    return owned_worker_thread_->Invoke<int32_t>(RTC_FROM_HERE, [&]() {
+      return audio_device_module_->RecordingDeviceName(index, out_name, out_uuid);
+    });
+  }
+
+  bool SetAudioRecordingDevice(uint16_t index) override {
+    return owned_worker_thread_->Invoke<bool>(RTC_FROM_HERE, [&]() {
+      // We need to stop and restart recording if it is already in progress.
+      bool was_initialized = audio_device_module_->RecordingIsInitialized();
+      bool was_recording = audio_device_module_->Recording();
+      if (was_initialized) {
+        if (audio_device_module_->StopRecording() != 0) {
+          return false;
+        }
+      }
+      if (audio_device_module_->SetRecordingDevice(index) != 0) {
+        return false;
+      }
+      if (was_initialized) {
+        if (audio_device_module_->InitRecording() != 0) {
+          return false;
+        }
+      }
+      if (was_recording) {
+        if (audio_device_module_->StartRecording() != 0) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
  protected:
   PeerConnectionFactoryWithOwnedThreads(
       rtc::scoped_refptr<PeerConnectionFactoryInterface> factory,
       std::unique_ptr<rtc::Thread> owned_network_thread,
       std::unique_ptr<rtc::Thread> owned_worker_thread,
       std::unique_ptr<rtc::Thread> owned_signaling_thread,
-      std::unique_ptr<rffi::InjectableNetwork> injectable_network) :
+      std::unique_ptr<rffi::InjectableNetwork> injectable_network,
+      AudioDeviceModule* audio_device_module) :
     owned_network_thread_(std::move(owned_network_thread)),
     owned_worker_thread_(std::move(owned_worker_thread)),
     owned_signaling_thread_(std::move(owned_signaling_thread)),
     injectable_network_(std::move(injectable_network)),
+    audio_device_module_(audio_device_module),
     factory_(std::move(factory)) {
   }
 
@@ -119,6 +219,7 @@ class PeerConnectionFactoryWithOwnedThreads
   const std::unique_ptr<rtc::Thread> owned_worker_thread_;
   const std::unique_ptr<rtc::Thread> owned_signaling_thread_;
   std::unique_ptr<rffi::InjectableNetwork> injectable_network_;
+  webrtc::AudioDeviceModule* audio_device_module_;
   const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
 };
 
@@ -197,7 +298,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
 
 RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
     PeerConnectionFactoryOwner* factory_owner) {
-  return factory_owner->injectable_network(); 
+  return factory_owner->injectable_network();
 }
 
 RUSTEXPORT AudioTrackInterface* Rust_createAudioTrack(
@@ -224,6 +325,34 @@ RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate() {
   absl::optional<uint64_t> expires_ms;  // default is to never expire?
   auto cert = rtc::RTCCertificateGenerator::GenerateCertificate(params, expires_ms);
   return cert.release();
+}
+
+RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(
+    PeerConnectionFactoryOwner* factory_owner) {
+  return factory_owner->AudioPlayoutDevices();
+}
+
+RUSTEXPORT int32_t Rust_getAudioPlayoutDeviceName(webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index, char *out_name, char *out_uuid) {
+  return factory_owner->AudioPlayoutDeviceName(index, out_name, out_uuid);
+}
+
+RUSTEXPORT bool Rust_setAudioPlayoutDevice(
+  webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index) {
+  return factory_owner->SetAudioPlayoutDevice(index);
+}
+
+RUSTEXPORT int16_t Rust_getAudioRecordingDevices(
+    PeerConnectionFactoryOwner* factory_owner) {
+  return factory_owner->AudioRecordingDevices();
+}
+
+RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index, char *out_name, char *out_uuid) {
+  return factory_owner->AudioRecordingDeviceName(index, out_name, out_uuid);
+}
+
+RUSTEXPORT bool Rust_setAudioRecordingDevice(
+  webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index) {
+  return factory_owner->SetAudioRecordingDevice(index);
 }
 
 } // namespace rffi

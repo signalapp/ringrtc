@@ -32,7 +32,7 @@ pub unsafe fn Rust_setAudioTrackEnabled(_track: *const RffiAudioTrackInterface, 
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getVideoTrack(
+pub unsafe fn Rust_getFisrtVideoTrack(
     _stream: *const RffiMediaStreamInterface,
 ) -> *const RffiVideoTrackInterface {
     info!("Rust_setAudioTrackEnabled()");

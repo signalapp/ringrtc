@@ -46,7 +46,7 @@ pub struct RffiVideoFrameBuffer {
 #[cfg(feature = "native")]
 extern "C" {
     pub fn Rust_setAudioTrackEnabled(track: *const RffiAudioTrackInterface, enabled: bool);
-    pub fn Rust_getVideoTrack(
+    pub fn Rust_getFirstVideoTrack(
         stream: *const RffiMediaStreamInterface,
     ) -> *const RffiVideoTrackInterface;
     pub fn Rust_addVideoSink(track: *const RffiVideoTrackInterface, obj: RustObject, cb: CppObject);

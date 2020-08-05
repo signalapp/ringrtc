@@ -176,6 +176,8 @@ pub struct CallEndpoint {
     outgoing_video:   VideoSource,
     // Pulled out by receiveVideoFrame
     unrendered_frame: OneFrameBuffer,
+
+    peer_connection_factory: PeerConnectionFactory,
 }
 
 impl CallEndpoint {
@@ -189,7 +191,7 @@ impl CallEndpoint {
         let unrendered_frame = OneFrameBuffer::new();
         let platform = NativePlatform::new(
             false, // Use async notification from app to send next message.
-            peer_connection_factory,
+            peer_connection_factory.clone(),
             // All the things get pumped into the same event channel,
             // but the NativePlatform doesn't know that.
             Box::new(events_sender.clone()),
@@ -204,6 +206,7 @@ impl CallEndpoint {
             outgoing_audio,
             outgoing_video,
             unrendered_frame,
+            peer_connection_factory,
         })
     }
 }
@@ -612,6 +615,70 @@ declare_types! {
             } else {
                 Ok(cx.undefined().upcast())
             }
+        }
+
+        method getAudioInputs(mut cx) {
+            let mut this = cx.this();
+            let devices = cx.borrow_mut(&mut this, |cm| {
+                cm.peer_connection_factory.get_audio_recording_devices()
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+
+            let js_devices = JsArray::new(&mut cx, devices.len() as u32);
+            for (i, device) in devices.iter().enumerate() {
+                let js_device = JsObject::new(&mut cx);
+                let name = cx.string(device.name.clone());
+                js_device.set(&mut cx, "name", name)?;
+                let unique_id = cx.string(device.unique_id.clone());
+                js_device.set(&mut cx, "unique_id", unique_id)?;
+                let index = cx.number(i as f64);
+                js_device.set(&mut cx, "index", index)?;
+                let same_name_index = cx.number(device.same_name_index);
+                js_device.set(&mut cx, "same_name_index", same_name_index)?;
+                js_devices.set(&mut cx, i as u32, js_device)?;
+            }
+            Ok(js_devices.upcast())
+        }
+
+        method setAudioInput(mut cx) {
+            let index = cx.argument::<JsNumber>(0)?;
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |cm| {
+                cm.peer_connection_factory.set_audio_recording_device(index.value() as u16)
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+
+            Ok(cx.undefined().upcast())
+        }
+
+        method getAudioOutputs(mut cx) {
+            let mut this = cx.this();
+            let devices = cx.borrow_mut(&mut this, |cm| {
+                cm.peer_connection_factory.get_audio_playout_devices()
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+
+            let js_devices = JsArray::new(&mut cx, devices.len() as u32);
+            for (i, device) in devices.iter().enumerate() {
+                let js_device = JsObject::new(&mut cx);
+                let name = cx.string(device.name.clone());
+                js_device.set(&mut cx, "name", name)?;
+                let unique_id = cx.string(device.unique_id.clone());
+                js_device.set(&mut cx, "unique_id", unique_id)?;
+                let index = cx.number(i as f64);
+                js_device.set(&mut cx, "index", index)?;
+                let same_name_index = cx.number(device.same_name_index);
+                js_device.set(&mut cx, "same_name_index", same_name_index)?;
+                js_devices.set(&mut cx, i as u32, js_device)?;
+            }
+            Ok(js_devices.upcast())
+        }
+
+        method setAudioOutput(mut cx) {
+            let index = cx.argument::<JsNumber>(0)?;
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |cm| {
+                cm.peer_connection_factory.set_audio_playout_device(index.value() as u16)
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+
+            Ok(cx.undefined().upcast())
         }
 
         method poll(mut cx) {

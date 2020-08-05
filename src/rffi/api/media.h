@@ -68,7 +68,7 @@ class VideoSource : public VideoTrackSource {
 RUSTEXPORT void Rust_setAudioTrackEnabled(webrtc::AudioTrackInterface*, bool);
 
 // Gets the first video track from the stream, or nullptr if there is none.
-RUSTEXPORT webrtc::VideoTrackInterface* Rust_getVideoTrack(
+RUSTEXPORT webrtc::VideoTrackInterface* Rust_getFistVideoTrack(
     webrtc::MediaStreamInterface*);
 
 // Creates an VideoSink to the given track and attaches it to the track to

@@ -16,20 +16,24 @@ export class GumVideoCapturer {
   private readonly maxWidth: number;
   private readonly maxHeight: number;
   private readonly maxFramerate: number;
-  private readonly localPreview: Ref<HTMLVideoElement>;
+  private localPreview?: Ref<HTMLVideoElement>;
   private capturing: boolean;
   private call?: Call;
   private mediaStream?: MediaStream;
   private canvas?: OffscreenCanvas;
   private canvasContext?: OffscreenCanvasRenderingContext2D;
   private intervalId?: any;
+  private preferredDeviceId?: string;
 
-  constructor(maxWidth: number, maxHeight: number, maxFramerate: number, localPreview: Ref<HTMLVideoElement>) {
+  constructor(maxWidth: number, maxHeight: number, maxFramerate: number) {
     this.maxWidth = maxWidth;
     this.maxHeight = maxHeight;
     this.maxFramerate = maxFramerate;
-    this.localPreview = localPreview;
     this.capturing =  false;
+  }
+
+  setLocalPreview(localPreview: Ref<HTMLVideoElement> | undefined) {
+    this.localPreview = localPreview;
   }
 
   enableCapture(): void {
@@ -48,21 +52,47 @@ export class GumVideoCapturer {
     this.stopSending();
   }
 
+  async setPreferredDevice(deviceId: string): Promise<void> {
+    this.preferredDeviceId = deviceId;
+    if (this.capturing) {
+      // Restart capturing to start using the new device
+      await this.stopCapturing();
+      await this.startCapturing();
+    }
+  }
+
+  async enumerateDevices(): Promise<MediaDeviceInfo[]> {
+    const devices = await window.navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter(d => d.kind == "videoinput");
+    return cameras;
+  }
+
+  async getPreferredDeviceId(): Promise<string | undefined> {
+    const devices = await this.enumerateDevices();
+    const matchingId = devices.filter(d => d.deviceId === this.preferredDeviceId);
+    const nonInfrared = devices.filter(d => !d.label.includes("IR Camera"));
+
+    /// By default, pick the first non-IR camera (but allow the user to pick the infrared if they so desire)
+    if (matchingId.length > 0) {
+      return matchingId[0].deviceId;
+    } else if (nonInfrared.length > 0) {
+      return nonInfrared[0].deviceId;
+    } else {
+      return undefined;
+    }
+  }
+
   private async startCapturing(): Promise<void> {
     if (this.capturing) {
       return;
     }
     this.capturing = true;
     try {
-      const devices = await window.navigator.mediaDevices.enumerateDevices();
-      const filteredVideoInputDevices = devices.filter((device) => {
-        return (device.kind == "videoinput" && !device.label.includes("IR Camera"));
-      });
-      const videoDeviceId = filteredVideoInputDevices.length == 0 ? undefined : filteredVideoInputDevices[0].deviceId;
+      const preferredDeviceId = await this.getPreferredDeviceId();
       const mediaStream = await window.navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
-          deviceId: videoDeviceId,
+          deviceId: preferredDeviceId,
           width: {
             max: this.maxWidth,
           },
@@ -84,7 +114,7 @@ export class GumVideoCapturer {
         return;
       }
 
-      if (!!this.localPreview.current && !!mediaStream) {
+      if (this.localPreview && !!this.localPreview.current && !!mediaStream) {
         this.setLocalPreviewSourceObject(mediaStream);
       }
       this.mediaStream = mediaStream;
@@ -105,7 +135,7 @@ export class GumVideoCapturer {
       }
       this.mediaStream = undefined;
     }
-    if (!!this.localPreview.current) {
+    if (this.localPreview && !!this.localPreview.current) {
       this.localPreview.current.srcObject = null;
     }
   }
@@ -134,6 +164,9 @@ export class GumVideoCapturer {
   }
 
   private setLocalPreviewSourceObject(mediaStream: MediaStream): void {
+    if (!this.localPreview) {
+      return;
+    }
     const localPreview = this.localPreview.current;
     if (!localPreview) {
       return;
@@ -150,7 +183,7 @@ export class GumVideoCapturer {
   }
 
   private captureAndSendOneVideoFrame(): void {
-    if (!this.localPreview.current) {
+    if (!this.localPreview || !this.localPreview.current) {
       return;
     }
     if (!this.localPreview.current.srcObject && !!this.mediaStream) {
@@ -176,15 +209,18 @@ export class GumVideoCapturer {
 }
 
 export class CanvasVideoRenderer {
-  private readonly canvas: Ref<HTMLCanvasElement>;
+  private canvas?: Ref<HTMLCanvasElement>;
   private buffer: ArrayBuffer;
   private call?: Call;
   private rafId?: any;
 
-  constructor(canvas: Ref<HTMLCanvasElement>) {
-    this.canvas = canvas;
+  constructor() {
     // The max size video frame we'll support (in RGBA)
     this.buffer = new ArrayBuffer(1920 * 1080 * 4);
+  }
+
+  setCanvas(canvas: Ref<HTMLCanvasElement> | undefined) {
+    this.canvas = canvas;
   }
 
   enable(call: Call): void {
@@ -209,6 +245,9 @@ export class CanvasVideoRenderer {
   }
 
   private renderBlack() {
+    if (!this.canvas) {
+      return;
+    }
     const canvas = this.canvas.current;
     if (!canvas) {
       return;
@@ -222,7 +261,7 @@ export class CanvasVideoRenderer {
   }
 
   private renderVideoFrame() {
-    if (!this.call) {
+    if (!this.call || !this.canvas) {
       return;
     }
     const canvas = this.canvas.current;

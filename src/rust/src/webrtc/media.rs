@@ -82,8 +82,8 @@ impl MediaStream {
     }
 
     #[cfg(feature = "native")]
-    pub fn incoming_video_track(&self) -> Option<VideoTrack> {
-        let track_rffi = unsafe { media::Rust_getVideoTrack(self.rffi_ms_interface) };
+    pub fn first_video_track(&self) -> Option<VideoTrack> {
+        let track_rffi = unsafe { media::Rust_getFirstVideoTrack(self.rffi_ms_interface) };
         if track_rffi.is_null() {
             return None;
         }

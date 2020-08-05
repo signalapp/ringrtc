@@ -31,6 +31,9 @@ use crate::webrtc::sim::peer_connection_factory as pcf;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::ref_count;
 
+const ADM_MAX_DEVICE_NAME_SIZE: usize = 128;
+const ADM_MAX_DEVICE_UUID_SIZE: usize = 128;
+
 /// Rust wrapper around WebRTC C++ RTCCertificate object.
 pub struct Certificate {
     rffi: *const pcf::RffiCertificate,
@@ -128,6 +131,17 @@ impl IceServer {
             urls_size: self.url_ptrs.len(),
         }
     }
+}
+
+/// Describes an audio input or output device.
+#[derive(Clone, Debug)]
+pub struct AudioDevice {
+    /// Name of the device
+    pub name:            String,
+    /// Unique ID - only available on Windows; empty string on all other platforms.
+    pub unique_id:       String,
+    /// Which of multiple devices with the same name this is.
+    pub same_name_index: u16,
 }
 
 /// Rust wrapper around WebRTC C++ PeerConnectionFactoryInterface object.
@@ -236,6 +250,103 @@ impl PeerConnectionFactory {
             return Err(RingRtcError::CreateVideoSource.into());
         }
         Ok(VideoSource::new(rffi))
+    }
+
+    pub fn get_audio_playout_devices(&self) -> Result<Vec<AudioDevice>> {
+        debug!("PeerConnectionFactory::get_audio_playout_devices");
+        let device_count = unsafe { pcf::Rust_getAudioPlayoutDevices(self.rffi) };
+        let mut devices = Vec::<AudioDevice>::new();
+
+        if device_count < 0 {
+            return Err(RingRtcError::QueryAudioDevices.into());
+        }
+        let device_count = device_count as u16;
+        for i in 0..device_count {
+            let (name, unique_id, rc) = unsafe {
+                let name =
+                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
+                let unique_id =
+                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
+                let rc = pcf::Rust_getAudioPlayoutDeviceName(self.rffi, i, name, unique_id);
+                // Take back ownership of the raw pointers before checking for errors.
+                let name = CString::from_raw(name);
+                let unique_id = CString::from_raw(unique_id);
+                (name, unique_id, rc)
+            };
+            if rc != 0 {
+                return Err(RingRtcError::QueryAudioDevices.into());
+            }
+            let name = name.into_string()?;
+            let unique_id = unique_id.into_string()?;
+            let same_name_index = devices.iter().filter(|d| d.name == name).count() as u16;
+            devices.push(AudioDevice {
+                name,
+                unique_id,
+                same_name_index,
+            })
+        }
+        Ok(devices)
+    }
+
+    pub fn set_audio_playout_device(&self, index: u16) -> Result<()> {
+        info!(
+            "PeerConnectionFactory::set_audio_playout_device({:?})",
+            index
+        );
+        let ok = unsafe { pcf::Rust_setAudioPlayoutDevice(self.rffi, index) };
+        match ok {
+            true => Ok(()),
+            false => Err(RingRtcError::SetAudioDevice.into()),
+        }
+    }
+
+    pub fn get_audio_recording_devices(&self) -> Result<Vec<AudioDevice>> {
+        debug!("PeerConnectionFactory::get_audio_recording_devices");
+        let device_count = unsafe { pcf::Rust_getAudioRecordingDevices(self.rffi) };
+        let mut devices = Vec::<AudioDevice>::new();
+
+        if device_count < 0 {
+            return Err(RingRtcError::QueryAudioDevices.into());
+        }
+        let device_count = device_count as u16;
+
+        for i in 0..device_count {
+            let (name, unique_id, rc) = unsafe {
+                let name =
+                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
+                let unique_id =
+                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
+                let rc = pcf::Rust_getAudioRecordingDeviceName(self.rffi, i, name, unique_id);
+                // Take back ownership of the raw pointers before checking for errors.
+                let name = CString::from_raw(name);
+                let unique_id = CString::from_raw(unique_id);
+                (name, unique_id, rc)
+            };
+            if rc != 0 {
+                return Err(RingRtcError::QueryAudioDevices.into());
+            }
+            let name = name.into_string()?;
+            let unique_id = unique_id.into_string()?;
+            let same_name_index = devices.iter().filter(|d| d.name == name).count() as u16;
+            devices.push(AudioDevice {
+                name,
+                unique_id,
+                same_name_index,
+            })
+        }
+        Ok(devices)
+    }
+
+    pub fn set_audio_recording_device(&self, index: u16) -> Result<()> {
+        info!(
+            "PeerConnectionFactory::set_audio_recording_device({:?})",
+            index
+        );
+        let ok = unsafe { pcf::Rust_setAudioRecordingDevice(self.rffi, index) };
+        match ok {
+            true => Ok(()),
+            false => Err(RingRtcError::SetAudioDevice.into()),
+        }
     }
 }
 

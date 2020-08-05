@@ -246,6 +246,15 @@ impl CallEndpoint {
                 let use_injectable_network = true;
                 let pcf = PeerConnectionFactory::new(use_injectable_network)
                     .expect("create PeerConnectionFactory");
+                info!(
+                    "Audio playout devices: {:?}",
+                    pcf.get_audio_playout_devices()
+                );
+                info!(
+                    "Audio recording devices: {:?}",
+                    pcf.get_audio_recording_devices()
+                );
+
                 let network = pcf.injectable_network().expect("get Injectable Network");
                 let router_as_sender = router.clone();
                 network.set_sender(Box::new(move |packet: injectable_network::Packet| {

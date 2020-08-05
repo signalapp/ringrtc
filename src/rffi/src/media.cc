@@ -61,7 +61,7 @@ RUSTEXPORT void Rust_setAudioTrackEnabled(
   track->set_enabled(enabled);
 }
 
-RUSTEXPORT VideoTrackInterface* Rust_getVideoTrack(MediaStreamInterface* stream) {
+RUSTEXPORT VideoTrackInterface* Rust_getFirstVideoTrack(MediaStreamInterface* stream) {
   auto tracks = stream->GetVideoTracks();
   if (tracks.empty()) {
     return nullptr;
