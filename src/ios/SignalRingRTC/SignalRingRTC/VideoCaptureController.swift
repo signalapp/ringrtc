@@ -5,14 +5,16 @@
 import WebRTC
 import SignalCoreKit
 
-protocol VideoCaptureDelegate: class {
-    var videoWidth: Int32 { get }
-    var videoHeight: Int32 { get }
-}
+public class VideoCaptureController {
+    static let outputSizeWidth: Int32 = 1280
+    static let outputSizeHeight: Int32 = 720
+    static let outputFrameRate: Int32 = 30
 
-class VideoCaptureController {
-    private let capturer: RTCCameraVideoCapturer
-    private weak var settingsDelegate: VideoCaptureDelegate?
+    private let capturer = RTCCameraVideoCapturer()
+    var capturerDelegate: RTCVideoCapturerDelegate? {
+        set { capturer.delegate = newValue }
+        get { capturer.delegate }
+    }
     private let serialQueue = DispatchQueue(label: "org.signal.videoCaptureController")
     private var isUsingFrontCamera: Bool = true
     private var isCapturing: Bool = false
@@ -21,16 +23,16 @@ class VideoCaptureController {
         return capturer.captureSession
     }
 
-    public init(capturer: RTCCameraVideoCapturer, settingsDelegate: VideoCaptureDelegate) {
-        self.capturer = capturer
-        self.settingsDelegate = settingsDelegate
-    }
+    public init() {}
 
     public func startCapture() {
         serialQueue.sync { [weak self] in
             guard let strongSelf = self else {
                 return
             }
+
+            // Don't call startCapture if we're actively capturing.
+            guard !strongSelf.isCapturing else { return }
 
             strongSelf.startCaptureSync()
         }
@@ -103,8 +105,14 @@ class VideoCaptureController {
 
     private func format(device: AVCaptureDevice) -> AVCaptureDevice.Format? {
         let formats = RTCCameraVideoCapturer.supportedFormats(for: device)
-        let targetWidth = settingsDelegate?.videoWidth ?? 0
-        let targetHeight = settingsDelegate?.videoHeight ?? 0
+
+        // For rendering, find a format that most closely matches the display size.
+        // The local camera capture may be rendered full screen. However, make sure
+        // the camera capture is at least our output size, which should be available
+        // on all devices the client supports.
+        let screenSize = UIScreen.main.nativeBounds.size
+        let targetWidth = max(Int32(screenSize.width), Self.outputSizeWidth)
+        let targetHeight = max(Int32(screenSize.height), Self.outputSizeHeight)
 
         var selectedFormat: AVCaptureDevice.Format?
         var currentDiff: Int32 = Int32.max
