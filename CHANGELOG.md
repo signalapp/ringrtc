@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.4.3
+
+- iOS: Update video support
+
 ## v2.4.2
 
 - Reference signalapp/webrtc@4147d
