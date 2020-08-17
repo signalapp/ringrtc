@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		38205E6B231845CF00B4BAFD /* Pods_SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */; };
 		383347EC23AA952F00D53B63 /* CallManagerLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E423AA952F00D53B63 /* CallManagerLogger.swift */; };
-		383347ED23AA952F00D53B63 /* CallManagerVideoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E523AA952F00D53B63 /* CallManagerVideoCapture.swift */; };
 		383347EE23AA952F00D53B63 /* CallManagerInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E623AA952F00D53B63 /* CallManagerInterface.swift */; };
 		383347EF23AA952F00D53B63 /* CallManagerUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E723AA952F00D53B63 /* CallManagerUtil.swift */; };
 		383347F023AA952F00D53B63 /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E823AA952F00D53B63 /* Connection.swift */; };
@@ -17,6 +16,7 @@
 		383347F223AA952F00D53B63 /* ConnectionMediaStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */; };
 		383347F323AA952F00D53B63 /* CallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EB23AA952F00D53B63 /* CallManager.swift */; };
 		383347F723AA985F00D53B63 /* WebRTC.framework in CopyFiles */ = {isa = PBXBuildFile; fileRef = 388AC0FC22FB403800BEC609 /* WebRTC.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		387059A724EB276700916F99 /* VideoCaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387059A624EB276700916F99 /* VideoCaptureController.swift */; };
 		388AC0D122FA8B2D00BEC609 /* SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */; };
 		388AC0D622FA8B2D00BEC609 /* SignalRingRTCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388AC0D522FA8B2D00BEC609 /* SignalRingRTCTests.swift */; };
 		388AC0D822FA8B2D00BEC609 /* SignalRingRTC.h in Headers */ = {isa = PBXBuildFile; fileRef = 388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -55,7 +55,6 @@
 		356D59CC1462BF3E3314D693 /* Pods-SignalRingRTCTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTCTests.release.xcconfig"; path = "Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests.release.xcconfig"; sourceTree = "<group>"; };
 		38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Pods_SignalRingRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		383347E423AA952F00D53B63 /* CallManagerLogger.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallManagerLogger.swift; sourceTree = "<group>"; };
-		383347E523AA952F00D53B63 /* CallManagerVideoCapture.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallManagerVideoCapture.swift; sourceTree = "<group>"; };
 		383347E623AA952F00D53B63 /* CallManagerInterface.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallManagerInterface.swift; sourceTree = "<group>"; };
 		383347E723AA952F00D53B63 /* CallManagerUtil.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallManagerUtil.swift; sourceTree = "<group>"; };
 		383347E823AA952F00D53B63 /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
@@ -63,6 +62,7 @@
 		383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConnectionMediaStream.swift; sourceTree = "<group>"; };
 		383347EB23AA952F00D53B63 /* CallManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallManager.swift; sourceTree = "<group>"; };
 		383347F423AA973300D53B63 /* Nimble.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Nimble.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		387059A624EB276700916F99 /* VideoCaptureController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VideoCaptureController.swift; sourceTree = "<group>"; };
 		388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SignalRingRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SignalRingRTC.h; sourceTree = "<group>"; };
 		388AC0CB22FA8B2D00BEC609 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -132,13 +132,13 @@
 				383347E623AA952F00D53B63 /* CallManagerInterface.swift */,
 				383347E423AA952F00D53B63 /* CallManagerLogger.swift */,
 				383347E723AA952F00D53B63 /* CallManagerUtil.swift */,
-				383347E523AA952F00D53B63 /* CallManagerVideoCapture.swift */,
 				383347E823AA952F00D53B63 /* Connection.swift */,
 				383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */,
 				388AC0CB22FA8B2D00BEC609 /* Info.plist */,
 				388AC0F222FA8F1600BEC609 /* libringrtc */,
 				388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */,
 				38B4DB352331D29200015A3F /* SignalRingRTC.modulemap */,
+				387059A624EB276700916F99 /* VideoCaptureController.swift */,
 			);
 			path = SignalRingRTC;
 			sourceTree = "<group>";
@@ -363,7 +363,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				383347ED23AA952F00D53B63 /* CallManagerVideoCapture.swift in Sources */,
+				387059A724EB276700916F99 /* VideoCaptureController.swift in Sources */,
 				383347EF23AA952F00D53B63 /* CallManagerUtil.swift in Sources */,
 				383347F123AA952F00D53B63 /* CallManagerGlobal.swift in Sources */,
 				383347F323AA952F00D53B63 /* CallManager.swift in Sources */,

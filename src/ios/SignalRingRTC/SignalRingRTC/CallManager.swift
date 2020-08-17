@@ -174,7 +174,7 @@ public protocol CallManagerDelegate: class {
 public protocol CallManagerCallReference: AnyObject { }
 
 // Implementation of the Call Manager for iOS.
-public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfaceDelegate, VideoCaptureDelegate where CallManagerDelegateType: CallManagerDelegate, CallManagerDelegateType.CallManagerDelegateCallType == CallType {
+public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfaceDelegate where CallManagerDelegateType: CallManagerDelegate, CallManagerDelegateType.CallManagerDelegateCallType == CallType {
 
     public weak var delegate: CallManagerDelegateType?
 
@@ -268,7 +268,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - callId: The callId as provided by the shouldStartCall delegate
     ///   - iceServers: A list of RTC Ice Servers to be provided to WebRTC
     ///   - hideIp: A flag used to hide the IP of the user by using relay (TURN) servers only
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool) throws {
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController) throws {
         AssertIsOnMainThread()
         Logger.debug("proceed")
 
@@ -282,8 +282,15 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let videoTrack = self.factory!.videoTrack(with: videoSource, trackId: "ARDAMSv0")
         videoTrack.isEnabled = false
 
-        let capturer = RTCCameraVideoCapturer(delegate: videoSource)
-        let videoCaptureController = VideoCaptureController(capturer: capturer, settingsDelegate: self)
+        // Define output video size.
+        videoSource.adaptOutputFormat(
+            toWidth: VideoCaptureController.outputSizeWidth,
+            height: VideoCaptureController.outputSizeHeight,
+            fps: VideoCaptureController.outputFrameRate
+        )
+
+        videoCaptureController.capturerDelegate = videoSource
+
         // This defaults to ECDSA, which should be fast.
         let certificate = RTCCertificate.generate(withParams: [:])!
 
@@ -391,21 +398,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
                 }
             }
         }
-    }
-
-    public func setCameraSource(isUsingFrontCamera: Bool) {
-        AssertIsOnMainThread()
-        Logger.debug("setCameraSource(\(isUsingFrontCamera))")
-
-        let retPtr = ringrtcGetActiveCallContext(ringRtcCallManager)
-        guard let callContext = retPtr else {
-            Logger.debug("Can't set the camera on non-existent context")
-            return
-        }
-
-        let appCallContext: CallContext = Unmanaged.fromOpaque(callContext).takeUnretainedValue()
-
-        appCallContext.setCameraSource(isUsingFrontCamera: isUsingFrontCamera)
     }
 
     // MARK: - Signaling API
@@ -714,16 +706,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             // rust lib has signaled that it's done with the call reference
             unmanagedRemote.release()
         }
-    }
-
-    // MARK: - Video Capture Observers
-
-    var videoWidth: Int32 {
-        return 400
-    }
-
-    var videoHeight: Int32 {
-        return 400
     }
 }
 
