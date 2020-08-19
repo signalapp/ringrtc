@@ -606,14 +606,14 @@ where
                 || self.state()? == CallState::ReconnectingAfterAccepted
             {
                 info!(
-                    "received an answer from device {} when already accepted, so ignore.",
+                    "received_answer from device {} when already accepted, so ignore",
                     sender_device_id
                 );
                 return Ok(());
             }
             let mut maybe_forking = self.forking.lock()?;
             if let Some(forking) = maybe_forking.as_mut() {
-                info!("recevied_answer from device {}; forking enabled, so inject into connection_map.", sender_device_id);
+                info!("received_answer from device {}; forking enabled, so inject into connection_map", sender_device_id);
                 let call_manager = self.call_manager()?;
                 let mut child_connection = call_manager.create_connection(
                     &self,
@@ -630,7 +630,7 @@ where
                 return Ok(());
             }
             info!(
-                "recevied_answer from new device {}; forking not enabled, so fail.",
+                "received_answer from new device {}; forking not enabled, so fail",
                 sender_device_id
             );
             return Err(RingRtcError::ConnectionNotFound(sender_device_id).into());
@@ -641,14 +641,14 @@ where
     /// Handle the received ICE candidates.
     pub fn received_ice(&self, mut received: signaling::ReceivedIce) -> Result<()> {
         info!(
-            "received_ice()): id: {}",
+            "received_ice(): id: {}",
             self.call_id().format(received.sender_device_id)
         );
         let sender_device_id = received.sender_device_id;
 
         let mut pending_call = self.pending_call.lock()?;
         if let Some(pending_call) = pending_call.as_mut() {
-            info!("received_ice()): storing in pending_call");
+            info!("received_ice(): storing in pending_call");
             pending_call
                 .ice_candidates
                 .append(&mut received.ice.candidates_added);
@@ -663,7 +663,7 @@ where
                     {
                         // This can happen when call forking is enabled.
                         info!(
-                            "received_ice from unknown device {} when already accepted, so ignore.",
+                            "received_ice from device {} when already accepted, so ignore",
                             sender_device_id
                         );
                         return Ok(());
@@ -849,7 +849,7 @@ where
         });
 
         info!(
-            "terminate_connections_except_accepted(): len: {}.",
+            "terminate_connections_except_accepted(): len: {}",
             connection_map.len()
         );
 

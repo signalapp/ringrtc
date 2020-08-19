@@ -238,6 +238,11 @@ where
 
     /// Create a new CallManager.
     pub fn new(platform: T) -> Result<Self> {
+        info!(
+            "RingRTC v{}",
+            option_env!("CARGO_PKG_VERSION").unwrap_or("unknown")
+        );
+
         Ok(Self {
             platform:       Arc::new(CallMutex::new(platform, "platform")),
             call_map:       Arc::new(CallMutex::new(HashMap::new(), "hash_map")),
