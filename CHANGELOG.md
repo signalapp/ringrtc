@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.5.0
+
+- Disable processing of incoming RTP before incoming call is accepted
+
+- Electron: A/V device selection support
+
+- Implement low bandwidth mode support
+
+## v2.4.3
+
+- iOS: Update video support
+
+## v2.4.2
+
+- Reference signalapp/webrtc@4147d
+
 ## v2.4.1
 
 - Fixes for release
