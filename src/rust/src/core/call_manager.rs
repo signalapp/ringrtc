@@ -113,8 +113,10 @@ where
     call_id:         CallId,
     /// The type of message the item corresponds to.
     message_type:    signaling::MessageType,
-    /// The closure to be called which will send the message.
-    message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<()> + Send>,
+    /// The closure to be called which will send the message. Returns Ok(true)
+    /// if messages should be considered to be in-flight otherwise it can be
+    /// assumed that messages weren't sent.
+    message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<bool> + Send>,
 }
 
 /// A structure implementing a message queue used to control the
@@ -630,7 +632,9 @@ where
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_hangup(&*remote_peer, call_id, send)
+            platform.on_send_hangup(&*remote_peer, call_id, send)?;
+
+            Ok(true)
         });
 
         let message_item = SignalingMessageItem {
@@ -755,8 +759,12 @@ where
                     self.clone(),
                 )?;
 
+                // Whenever there is a new call, ensure that messages can flow.
+                self.reset_messages_in_flight()?;
+
                 let mut call_map = self.call_map.lock()?;
                 call_map.insert(call_id, call.clone());
+
                 *active_call_id = Some(call_id);
                 call.inject_start_call()
             }
@@ -837,16 +845,7 @@ where
             format!("message_sent()\t{}", call_id)
         );
 
-        match self.message_queue.lock() {
-            Ok(mut message_queue) => {
-                message_queue.messages_in_flight = false;
-            }
-            Err(e) => {
-                error!("Could not lock the message queue: {}", e);
-                return Err(e);
-            }
-        }
-
+        self.reset_messages_in_flight()?;
         self.send_next_message(None)
     }
 
@@ -1030,9 +1029,13 @@ where
                     TIME_OUT_PERIOD_SEC,
                     self.clone(),
                 )?;
-                let mut call_map = self.call_map.lock()?;
 
+                // Whenever there is a new call, ensure that messages can flow.
+                self.reset_messages_in_flight()?;
+
+                let mut call_map = self.call_map.lock()?;
                 call_map.insert(call_id, call.clone());
+
                 *active_call_id = Some(call_id);
                 call.handle_received_offer(received)?;
                 call.inject_start_call()
@@ -1205,7 +1208,9 @@ where
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_busy(&*remote_peer, call_id)
+            platform.on_send_busy(&*remote_peer, call_id)?;
+
+            Ok(true)
         });
 
         let message_item = SignalingMessageItem {
@@ -1327,6 +1332,19 @@ where
         }
     }
 
+    fn reset_messages_in_flight(&self) -> Result<()> {
+        match self.message_queue.lock() {
+            Ok(mut message_queue) => {
+                message_queue.messages_in_flight = false;
+                Ok(())
+            }
+            Err(e) => {
+                error!("Could not lock the message queue: {}", e);
+                Err(e)
+            }
+        }
+    }
+
     /// Push the given message and send the next message in
     /// the queue if no other message is currently in the
     /// process of being sent (in flight).
@@ -1356,8 +1374,7 @@ where
         // Loop in case a sending error is encountered and jump to the next
         // message item if so.
         loop {
-            let closure_error: Option<failure::Error>;
-            let closure_call_id: CallId;
+            let mut closure_error: Option<(failure::Error, CallId)> = None;
 
             match self.message_queue.lock() {
                 Ok(mut message_queue) => {
@@ -1375,22 +1392,26 @@ where
 
                             // Execute the closure and match its return value.
                             match (message_item.message_closure)(self) {
-                                Ok(()) => {
-                                    // We have delivered the message to the app, set the
-                                    // in flight flag.
-                                    // But the platform can override that and prevent messages
-                                    // from being queued.
-                                    message_queue.messages_in_flight = !assume_messages_sent;
+                                Ok(message_is_in_flight) => {
+                                    // We have attempted to deliver the message. If a message
+                                    // is actually in flight, set the in flight flag. But
+                                    // check to see if the platform overrides it (in which
+                                    // case the platform doesn't want messages to be queued).
+                                    message_queue.messages_in_flight =
+                                        message_is_in_flight && !assume_messages_sent;
 
                                     message_queue.last_sent_message_type =
                                         Some(message_item.message_type);
 
-                                    return Ok(());
+                                    if message_queue.messages_in_flight {
+                                        // If there are messages in flight, exit the loop and
+                                        // wait for confirmation that they actually got sent.
+                                        return Ok(());
+                                    }
                                 }
                                 Err(e) => {
                                     error!("send_next_message(): closure failed {}", e);
-                                    closure_error = Some(e);
-                                    closure_call_id = message_item.call_id;
+                                    closure_error = Some((e, message_item.call_id));
                                 }
                             }
                         }
@@ -1405,10 +1426,10 @@ where
                 }
             }
 
-            if let Some(e) = closure_error {
+            if let Some((error, call_id)) = closure_error {
                 // Generate an error on the active call (if any) and
                 // continue trying to send the next message.
-                if let Err(e) = self.internal_error(closure_call_id, e) {
+                if let Err(e) = self.internal_error(call_id, error) {
                     error!("send_next_message(): unrecoverable {}", e);
                     return Err(e);
                 }
@@ -1617,9 +1638,10 @@ where
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_offer(&*remote_peer, call_id, offer)
+                platform.on_send_offer(&*remote_peer, call_id, offer)?;
+                Ok(true)
             } else {
-                Ok(())
+                Ok(false)
             }
         });
 
@@ -1663,9 +1685,10 @@ where
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_answer(&*remote_peer, call_id, send)
+                platform.on_send_answer(&*remote_peer, call_id, send)?;
+                Ok(true)
             } else {
-                Ok(())
+                Ok(false)
             }
         });
 
@@ -1692,7 +1715,7 @@ where
             let local_candidates = connection.take_buffered_local_ice_candidates()?;
 
             if local_candidates.is_empty() {
-                return Ok(());
+                return Ok(false);
             }
 
             ringbench!(
@@ -1721,7 +1744,8 @@ where
                         candidates_added: local_candidates,
                     },
                 },
-            )
+            )?;
+            Ok(true)
         });
 
         let message_item = SignalingMessageItem {
