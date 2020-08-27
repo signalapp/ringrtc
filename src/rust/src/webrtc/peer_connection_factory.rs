@@ -31,6 +31,8 @@ use crate::webrtc::sim::peer_connection_factory as pcf;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::ref_count;
 
+#[cfg(target_os = "windows")]
+const DEFAULT_COMMUNICATION_DEVICE_INDEX: u16 = 0xFFFF;
 const ADM_MAX_DEVICE_NAME_SIZE: usize = 128;
 const ADM_MAX_DEVICE_UUID_SIZE: usize = 128;
 
@@ -134,14 +136,24 @@ impl IceServer {
 }
 
 /// Describes an audio input or output device.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AudioDevice {
     /// Name of the device
-    pub name:            String,
-    /// Unique ID - only available on Windows; empty string on all other platforms.
-    pub unique_id:       String,
-    /// Which of multiple devices with the same name this is.
-    pub same_name_index: u16,
+    pub name:      String,
+    /// Unique ID - truly unique on Windows, best effort on other platforms.
+    pub unique_id: String,
+    /// If the name requires translation, the translated string identifier.
+    pub i18n_key:  String,
+}
+
+impl AudioDevice {
+    fn default() -> AudioDevice {
+        AudioDevice {
+            name:      "Default".to_string(),
+            unique_id: "Default".to_string(),
+            i18n_key:  "default_communication_device".to_string(),
+        }
+    }
 }
 
 /// Rust wrapper around WebRTC C++ PeerConnectionFactoryInterface object.
@@ -252,6 +264,29 @@ impl PeerConnectionFactory {
         Ok(VideoSource::new(rffi))
     }
 
+    fn get_audio_playout_device(&self, index: u16) -> Result<AudioDevice> {
+        let (name, unique_id, rc) = unsafe {
+            let name = CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
+            let unique_id =
+                CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
+            let rc = pcf::Rust_getAudioPlayoutDeviceName(self.rffi, index, name, unique_id);
+            // Take back ownership of the raw pointers before checking for errors.
+            let name = CString::from_raw(name);
+            let unique_id = CString::from_raw(unique_id);
+            (name, unique_id, rc)
+        };
+        if rc != 0 {
+            return Err(RingRtcError::QueryAudioDevices.into());
+        }
+        let name = name.into_string()?;
+        let unique_id = unique_id.into_string()?;
+        Ok(AudioDevice {
+            name,
+            unique_id,
+            i18n_key: "".to_string(),
+        })
+    }
+
     pub fn get_audio_playout_devices(&self) -> Result<Vec<AudioDevice>> {
         debug!("PeerConnectionFactory::get_audio_playout_devices");
         let device_count = unsafe { pcf::Rust_getAudioPlayoutDevices(self.rffi) };
@@ -261,31 +296,35 @@ impl PeerConnectionFactory {
             return Err(RingRtcError::QueryAudioDevices.into());
         }
         let device_count = device_count as u16;
-        for i in 0..device_count {
-            let (name, unique_id, rc) = unsafe {
-                let name =
-                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
-                let unique_id =
-                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
-                let rc = pcf::Rust_getAudioPlayoutDeviceName(self.rffi, i, name, unique_id);
-                // Take back ownership of the raw pointers before checking for errors.
-                let name = CString::from_raw(name);
-                let unique_id = CString::from_raw(unique_id);
-                (name, unique_id, rc)
-            };
-            if rc != 0 {
-                return Err(RingRtcError::QueryAudioDevices.into());
-            }
-            let name = name.into_string()?;
-            let unique_id = unique_id.into_string()?;
-            let same_name_index = devices.iter().filter(|d| d.name == name).count() as u16;
-            devices.push(AudioDevice {
-                name,
-                unique_id,
-                same_name_index,
-            })
+        if cfg!(target_os = "windows") {
+            devices.push(AudioDevice::default());
         }
+        for i in 0..device_count {
+            devices.push(self.get_audio_playout_device(i)?);
+        }
+        // For devices missing unique_id, populate them with name + index
+        for i in 0..devices.len() {
+            if devices[i].unique_id.is_empty() {
+                let same_name_count = devices[..i]
+                    .iter()
+                    .filter(|d| d.name == devices[i].name)
+                    .count() as u16;
+                devices[i].unique_id = format!("{}-{}", devices[i].name, same_name_count);
+            }
+        }
+
         Ok(devices)
+    }
+
+    #[cfg(target_os = "windows")]
+    fn get_default_playout_device_index(&self) -> Result<u16> {
+        let default_device = self.get_audio_playout_device(DEFAULT_COMMUNICATION_DEVICE_INDEX)?;
+        let all_devices = self.get_audio_playout_devices()?;
+        if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
+            Ok((index - 1) as u16)
+        } else {
+            Err(RingRtcError::QueryAudioDevices.into())
+        }
     }
 
     pub fn set_audio_playout_device(&self, index: u16) -> Result<()> {
@@ -293,11 +332,50 @@ impl PeerConnectionFactory {
             "PeerConnectionFactory::set_audio_playout_device({:?})",
             index
         );
+        #[cfg(target_os = "windows")]
+        let index = if index == 0 {
+            if let Ok(default_device) = self.get_default_playout_device_index() {
+                info!(
+                    "Picking default communication device (index {})",
+                    default_device
+                );
+                default_device
+            } else {
+                0
+            }
+        } else {
+            // Account for device 0 being the synthetic "Default"
+            index - 1
+        };
+
         let ok = unsafe { pcf::Rust_setAudioPlayoutDevice(self.rffi, index) };
         match ok {
             true => Ok(()),
             false => Err(RingRtcError::SetAudioDevice.into()),
         }
+    }
+
+    fn get_audio_recording_device(&self, index: u16) -> Result<AudioDevice> {
+        let (name, unique_id, rc) = unsafe {
+            let name = CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
+            let unique_id =
+                CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
+            let rc = pcf::Rust_getAudioRecordingDeviceName(self.rffi, index, name, unique_id);
+            // Take back ownership of the raw pointers before checking for errors.
+            let name = CString::from_raw(name);
+            let unique_id = CString::from_raw(unique_id);
+            (name, unique_id, rc)
+        };
+        if rc != 0 {
+            return Err(RingRtcError::QueryAudioDevices.into());
+        }
+        let name = name.into_string()?;
+        let unique_id = unique_id.into_string()?;
+        Ok(AudioDevice {
+            name,
+            unique_id,
+            i18n_key: "".to_string(),
+        })
     }
 
     pub fn get_audio_recording_devices(&self) -> Result<Vec<AudioDevice>> {
@@ -309,32 +387,34 @@ impl PeerConnectionFactory {
             return Err(RingRtcError::QueryAudioDevices.into());
         }
         let device_count = device_count as u16;
-
+        if cfg!(target_os = "windows") {
+            devices.push(AudioDevice::default());
+        }
         for i in 0..device_count {
-            let (name, unique_id, rc) = unsafe {
-                let name =
-                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
-                let unique_id =
-                    CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
-                let rc = pcf::Rust_getAudioRecordingDeviceName(self.rffi, i, name, unique_id);
-                // Take back ownership of the raw pointers before checking for errors.
-                let name = CString::from_raw(name);
-                let unique_id = CString::from_raw(unique_id);
-                (name, unique_id, rc)
-            };
-            if rc != 0 {
-                return Err(RingRtcError::QueryAudioDevices.into());
+            devices.push(self.get_audio_recording_device(i)?);
+        }
+        // For devices missing unique_id, populate them with name + index
+        for i in 0..devices.len() {
+            if devices[i].unique_id.is_empty() {
+                let same_name_count = devices[..i]
+                    .iter()
+                    .filter(|d| d.name == devices[i].name)
+                    .count() as u16;
+                devices[i].unique_id = format!("{}-{}", devices[i].name, same_name_count);
             }
-            let name = name.into_string()?;
-            let unique_id = unique_id.into_string()?;
-            let same_name_index = devices.iter().filter(|d| d.name == name).count() as u16;
-            devices.push(AudioDevice {
-                name,
-                unique_id,
-                same_name_index,
-            })
         }
         Ok(devices)
+    }
+
+    #[cfg(target_os = "windows")]
+    fn get_default_recording_device_index(&self) -> Result<u16> {
+        let default_device = self.get_audio_recording_device(DEFAULT_COMMUNICATION_DEVICE_INDEX)?;
+        let all_devices = self.get_audio_recording_devices()?;
+        if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
+            Ok((index - 1) as u16)
+        } else {
+            Err(RingRtcError::QueryAudioDevices.into())
+        }
     }
 
     pub fn set_audio_recording_device(&self, index: u16) -> Result<()> {
@@ -342,6 +422,22 @@ impl PeerConnectionFactory {
             "PeerConnectionFactory::set_audio_recording_device({:?})",
             index
         );
+        #[cfg(target_os = "windows")]
+        let index = if index == 0 {
+            if let Ok(default_device) = self.get_default_recording_device_index() {
+                info!(
+                    "Picking default communication device (index {})",
+                    default_device
+                );
+                default_device
+            } else {
+                0
+            }
+        } else {
+            // Account for device 0 being the synthetic "Default"
+            index - 1
+        };
+
         let ok = unsafe { pcf::Rust_setAudioRecordingDevice(self.rffi, index) };
         match ok {
             true => Ok(()),

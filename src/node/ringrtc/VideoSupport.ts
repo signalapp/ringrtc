@@ -67,32 +67,16 @@ export class GumVideoCapturer {
     return cameras;
   }
 
-  async getPreferredDeviceId(): Promise<string | undefined> {
-    const devices = await this.enumerateDevices();
-    const matchingId = devices.filter(d => d.deviceId === this.preferredDeviceId);
-    const nonInfrared = devices.filter(d => !d.label.includes("IR Camera"));
-
-    /// By default, pick the first non-IR camera (but allow the user to pick the infrared if they so desire)
-    if (matchingId.length > 0) {
-      return matchingId[0].deviceId;
-    } else if (nonInfrared.length > 0) {
-      return nonInfrared[0].deviceId;
-    } else {
-      return undefined;
-    }
-  }
-
   private async startCapturing(): Promise<void> {
     if (this.capturing) {
       return;
     }
     this.capturing = true;
     try {
-      const preferredDeviceId = await this.getPreferredDeviceId();
       const mediaStream = await window.navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
-          deviceId: preferredDeviceId,
+          deviceId: this.preferredDeviceId,
           width: {
             max: this.maxWidth,
           },

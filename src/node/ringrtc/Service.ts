@@ -515,32 +515,6 @@ export class RingRTCType {
   setAudioOutput(index: number) : void {
     this.callManager.setAudioOutput(index);
   }
-
-  findBestMatchingDeviceIndex(preferred: AudioDevice | undefined, available: AudioDevice[]) : number | undefined {
-    if (!preferred) {
-      // No preference stored
-      return undefined;
-    }
-    // Match by UUID first, if available
-    if (preferred.unique_id) {
-      var match_index = available.findIndex(d => d.unique_id === preferred.unique_id);
-      if (match_index != -1) {
-        return match_index;
-      }
-    }
-
-    // Match by name second, and if there are multiple such names - by instance index.
-    var matching_names = available.filter(d => d.name === preferred.name);
-    if (matching_names.length > preferred.same_name_index) {
-      return matching_names[preferred.same_name_index].index;
-    }
-    if (matching_names.length > 0) {
-      return matching_names[0].index;
-    }
-
-    // Nothing matches.
-    return undefined;
-  }
 }
 
 export interface CallSettings {
@@ -556,14 +530,14 @@ interface IceServer {
 
 // Describes an audio input or output device.
 export interface AudioDevice {
-  // Name, present on every platform.
+  // Device name.
   name: string;
   // Index of this device, starting from 0.
   index: number;
-  // Index of this device out of all devices sharing the same name.
-  same_name_index: number;
-  // If present, a unique and stable identifier of this device. Only available on WIndows.
-  unique_id?: string;
+  // A unique and somewhat stable identifier of this device.
+  uniqueId: string;
+  // If present, the identifier of a localized string to substitute for the device name.
+  i18nKey?: string;
 }
 
 export interface VideoCapturer {

@@ -648,11 +648,13 @@ declare_types! {
                 let name = cx.string(device.name.clone());
                 js_device.set(&mut cx, "name", name)?;
                 let unique_id = cx.string(device.unique_id.clone());
-                js_device.set(&mut cx, "unique_id", unique_id)?;
+                js_device.set(&mut cx, "uniqueId", unique_id)?;
                 let index = cx.number(i as f64);
                 js_device.set(&mut cx, "index", index)?;
-                let same_name_index = cx.number(device.same_name_index);
-                js_device.set(&mut cx, "same_name_index", same_name_index)?;
+                if !device.i18n_key.is_empty() {
+                    let i18n_key = cx.string(device.i18n_key.clone());
+                    js_device.set(&mut cx, "i18nKey", i18n_key)?;
+                }
                 js_devices.set(&mut cx, i as u32, js_device)?;
             }
             Ok(js_devices.upcast())
@@ -680,11 +682,13 @@ declare_types! {
                 let name = cx.string(device.name.clone());
                 js_device.set(&mut cx, "name", name)?;
                 let unique_id = cx.string(device.unique_id.clone());
-                js_device.set(&mut cx, "unique_id", unique_id)?;
+                js_device.set(&mut cx, "uniqueId", unique_id)?;
                 let index = cx.number(i as f64);
                 js_device.set(&mut cx, "index", index)?;
-                let same_name_index = cx.number(device.same_name_index);
-                js_device.set(&mut cx, "same_name_index", same_name_index)?;
+                if !device.i18n_key.is_empty() {
+                    let i18n_key = cx.string(device.i18n_key.clone());
+                    js_device.set(&mut cx, "i18nKey", i18n_key)?;
+                }
                 js_devices.set(&mut cx, i as u32, js_device)?;
             }
             Ok(js_devices.upcast())
