@@ -39,17 +39,17 @@ use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
 
 /// Encapsulates the FSM and runtime upon which a Call runs.
-struct FsmContext {
+struct Context {
     /// Runtime upon which the CallStateMachine runs.
-    pub fsm_runtime:     runtime::Runtime,
+    pub worker_runtime:  runtime::Runtime,
     /// Runtime that manages timing out a call.
     pub timeout_runtime: Option<runtime::Runtime>,
 }
 
-impl FsmContext {
+impl Context {
     fn new(enable_timeout: bool) -> Result<Self> {
         Ok(Self {
-            fsm_runtime:     runtime::Builder::new()
+            worker_runtime:  runtime::Builder::new()
                 .core_threads(1)
                 .name_prefix("fsm".to_string())
                 .build()?,
@@ -86,12 +86,6 @@ struct PendingCall {
     /// object is ready.
     pub ice_candidates: Vec<signaling::IceCandidate>,
 }
-
-/// A mpsc::Sender for injecting CallEvents into the
-/// [CallStateMachine](../call_fsm/struct.CallStateMachine.html)
-///
-/// The event pump injects the tuple (Call, CallEvent) into the FSM.
-type EventPump<T> = Sender<(Call<T>, CallEvent)>;
 
 /// A mpsc::Receiver for receiving CallEvents in the
 /// [CallStateMachine](../call_fsm/struct.CallStateMachine.html)
@@ -135,9 +129,9 @@ where
     /// Pending remote offer and associated data.  Incoming calls only.
     pending_call:      Arc<CallMutex<Option<PendingCall>>>,
     /// Injects events into the [CallStateMachine](../call_fsm/struct.CallStateMachine.html).
-    event_pump:        EventPump<T>,
+    fsm_sender:        Sender<(Call<T>, CallEvent)>,
     /// Execution context for the call FSM
-    fsm_context:       Arc<CallMutex<FsmContext>>,
+    fsm_context:       Arc<CallMutex<Context>>,
     /// Collection of connections for this call
     connection_map:    Arc<CallMutex<HashMap<DeviceId, Connection<T>>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
@@ -220,7 +214,7 @@ where
             state:             Arc::clone(&self.state),
             active_device_id:  Arc::clone(&self.active_device_id),
             pending_call:      Arc::clone(&self.pending_call),
-            event_pump:        self.event_pump.clone(),
+            fsm_sender:        self.fsm_sender.clone(),
             fsm_context:       Arc::clone(&self.fsm_context),
             connection_map:    Arc::clone(&self.connection_map),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
@@ -248,11 +242,11 @@ where
         info!("new(): call_id: {}", call_id);
 
         // create a FSM runtime for this connection
-        let mut fsm_context = FsmContext::new(time_out_period > 0)?;
-        let (event_pump, receiver) = futures::sync::mpsc::channel(256);
-        let call_fsm = CallStateMachine::new(receiver)?
+        let mut fsm_context = Context::new(time_out_period > 0)?;
+        let (fsm_sender, fsm_receiver) = futures::sync::mpsc::channel(256);
+        let call_fsm = CallStateMachine::new(fsm_receiver)?
             .map_err(|e| info!("call state machine returned error: {}", e));
-        fsm_context.fsm_runtime.spawn(call_fsm);
+        fsm_context.worker_runtime.spawn(call_fsm);
 
         let call = Self {
             call_manager: Arc::new(CallMutex::new(call_manager, "call_manager")),
@@ -265,7 +259,7 @@ where
             state: Arc::new(CallMutex::new(CallState::NotYetStarted, "state")),
             active_device_id: Arc::new(CallMutex::new(None, "active_device_id")),
             pending_call: Arc::new(CallMutex::new(None, "pending_call")),
-            event_pump,
+            fsm_sender,
             fsm_context: Arc::new(CallMutex::new(fsm_context, "fsm_context")),
             connection_map: Arc::new(CallMutex::new(HashMap::new(), "connection_map")),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
@@ -790,7 +784,7 @@ where
     ///
     /// Using the `EventPump` send a CallEvent to the internal FSM.
     fn inject_event(&mut self, event: CallEvent) -> Result<()> {
-        if self.event_pump.is_closed() {
+        if self.fsm_sender.is_closed() {
             // The stream is closed, just eat the request
             debug!(
                 "cc.inject_event(): stream is closed while sending: {}",
@@ -798,7 +792,7 @@ where
             );
             return Ok(());
         }
-        self.event_pump.try_send((self.clone(), event))?;
+        self.fsm_sender.try_send((self.clone(), event))?;
         Ok(())
     }
 

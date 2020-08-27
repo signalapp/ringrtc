@@ -349,9 +349,10 @@ impl PeerConnectionFactory {
         };
 
         let ok = unsafe { pcf::Rust_setAudioPlayoutDevice(self.rffi, index) };
-        match ok {
-            true => Ok(()),
-            false => Err(RingRtcError::SetAudioDevice.into()),
+        if ok {
+            Ok(())
+        } else {
+            Err(RingRtcError::SetAudioDevice.into())
         }
     }
 
@@ -439,9 +440,10 @@ impl PeerConnectionFactory {
         };
 
         let ok = unsafe { pcf::Rust_setAudioRecordingDevice(self.rffi, index) };
-        match ok {
-            true => Ok(()),
-            false => Err(RingRtcError::SetAudioDevice.into()),
+        if ok {
+            Ok(())
+        } else {
+            Err(RingRtcError::SetAudioDevice.into())
         }
     }
 }

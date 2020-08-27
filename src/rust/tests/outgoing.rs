@@ -649,7 +649,7 @@ fn set_bandwidth_mode_normal() {
 }
 
 #[test]
-fn set_bandwidth_mode_Low() {
+fn set_bandwidth_mode_low() {
     test_init();
 
     let context = connect_outbound_call();
