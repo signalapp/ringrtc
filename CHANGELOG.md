@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.5.1
+
+- Electron: Improve device selection on Windows
+
+- Fix message queue issue
+
 ## v2.5.0
 
 - Disable processing of incoming RTP before incoming call is accepted
