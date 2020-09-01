@@ -26,7 +26,7 @@ VideoSink::~VideoSink() {
 }
 
 void VideoSink::OnFrame(const webrtc::VideoFrame& frame) {
-  VideoFrameMetadata metadata = {};
+  RffiVideoFrameMetadata metadata = {};
   metadata.width = frame.width();
   metadata.height = frame.height();
   metadata.rotation = frame.rotation();

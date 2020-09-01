@@ -19,11 +19,11 @@ typedef struct {
   uint32_t width;
   uint32_t height;
   webrtc::VideoRotation rotation;
-} VideoFrameMetadata;
+} RffiVideoFrameMetadata;
 
 typedef struct {
   // Passes ownership of the buffer
-  void (*onVideoFrame)(rust_object, VideoFrameMetadata, webrtc::VideoFrameBuffer*);
+  void (*onVideoFrame)(rust_object, RffiVideoFrameMetadata, webrtc::VideoFrameBuffer*);
 } VideoSinkCallbacks;
 
 namespace webrtc {
