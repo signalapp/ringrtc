@@ -42,9 +42,10 @@ impl CallId {
     pub fn new(id: u64) -> Self {
         Self { id }
     }
-
+ 
     pub fn random() -> Self {
-        Self::new(rand::random())
+        let max = 18446744073709551;  
+        Self::new(rand::random::<u64>() % (max + 1))
     }
 
     pub fn format(self, device_id: DeviceId) -> String {
