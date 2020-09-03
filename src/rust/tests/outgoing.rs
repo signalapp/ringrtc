@@ -1257,16 +1257,17 @@ fn outbound_multiple_call_managers() {
     }
 }
 
-// Two users call each other at the same time
+// Two users call each other at the same time, offer received before the
+// outgoing call gets an ICE connection. The winning side will continue
+// with the outgoing call and end the incoming call.
 #[test]
-fn glare_before_connect() {
+fn glare_before_connect_winner() {
     test_init();
 
     let context = start_outbound_call(SignalingType::Legacy);
     let mut cm = context.cm();
 
     // Create incoming call with same remote
-
     let remote_peer = {
         let active_call = context.active_call();
         let remote_peer = active_call.remote_peer().expect(error_line!());
@@ -1274,7 +1275,13 @@ fn glare_before_connect() {
     };
     info!("active remote_peer: {}", remote_peer);
 
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    // The incoming offer's call_id will be less than the active call_id.
+    assert!(
+        context.active_call().call_id().as_u64() > 0,
+        "Test case not valid if incoming call-id can't be smaller than the active call-id."
+    );
+
+    let call_id = CallId::new(context.active_call().call_id().as_u64() - 1);
     cm.received_offer(
         remote_peer,
         call_id,
@@ -1284,22 +1291,109 @@ fn glare_before_connect() {
 
     cm.synchronize().expect(error_line!());
 
-    // glare case should send a busy to the new caller and conclude
-    // the current call.  So two conclude call events.
-
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedReceivedOfferWhileActive),
+        context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
+        1
+    );
+    assert_eq!(context.busys_sent(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 0);
+    assert_eq!(context.call_concluded_count(), 1);
+}
+
+// Two users call each other at the same time, offer received before the
+// outgoing call gets an ICE connection. The losing side will end the
+// outgoing call and start handling the incoming call.
+#[test]
+fn glare_before_connect_loser() {
+    test_init();
+
+    let context = start_outbound_call(SignalingType::Legacy);
+    let mut cm = context.cm();
+
+    // Create incoming call with same remote
+    let remote_peer = {
+        let active_call = context.active_call();
+        let remote_peer = active_call.remote_peer().expect(error_line!());
+        remote_peer.to_owned()
+    };
+    info!("active remote_peer: {}", remote_peer);
+
+    // The incoming offer's call_id will be greater than the active call_id.
+    assert!(
+        context.active_call().call_id().as_u64() < std::u64::MAX,
+        "Test case not valid if incoming call-id can't be greater than the active call-id."
+    );
+
+    let call_id = CallId::new(context.active_call().call_id().as_u64() + 1);
+    cm.received_offer(
+        remote_peer,
+        call_id,
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
+    assert_eq!(
+        context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
+        0
+    );
+    assert_eq!(context.busys_sent(), 0);
+    assert_eq!(context.call_concluded_count(), 1);
+}
+
+// Two users call each other at the same time, offer received before the
+// outgoing call gets an ICE connection. Call-ids are unexpectedly equal.
+#[test]
+fn glare_before_connect_equal() {
+    test_init();
+
+    let context = start_outbound_call(SignalingType::Legacy);
+    let mut cm = context.cm();
+
+    // Create incoming call with same remote
+    let remote_peer = {
+        let active_call = context.active_call();
+        let remote_peer = active_call.remote_peer().expect(error_line!());
+        remote_peer.to_owned()
+    };
+    info!("active remote_peer: {}", remote_peer);
+
+    // The incoming offer's call_id will be equal to the active call_id.
+    let call_id = CallId::new(context.active_call().call_id().as_u64());
+    cm.received_offer(
+        remote_peer,
+        call_id,
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
+    assert_eq!(
+        context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
+        0
+    );
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
         1
     );
     assert_eq!(context.busys_sent(), 1);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
     assert_eq!(context.call_concluded_count(), 2);
 }
 
-// Two users call each other at the same time
+// Two users call each other at the same time, offer received after the
+// outgoing call gets an ICE connection. The winning side will continue
+// with the outgoing call and end the incoming call.
 #[test]
-fn glare_after_connect() {
+fn glare_after_connect_winner() {
     test_init();
 
     let context = connect_outbound_call();
@@ -1314,7 +1408,13 @@ fn glare_after_connect() {
     };
     info!("active remote_peer: {}", remote_peer);
 
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    // The incoming offer's call_id will be less than the active call_id.
+    assert!(
+        context.active_call().call_id().as_u64() > 0,
+        "Test case not valid if incoming call-id can't be smaller than the active call-id."
+    );
+
+    let call_id = CallId::new(context.active_call().call_id().as_u64() - 1);
     cm.received_offer(
         remote_peer,
         call_id,
@@ -1324,16 +1424,103 @@ fn glare_after_connect() {
 
     cm.synchronize().expect(error_line!());
 
-    // glare case should send a busy to the new caller and conclude
-    // the current call.  So two conclude call events.
-
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedReceivedOfferWhileActive),
+        context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
+        1
+    );
+    assert_eq!(context.busys_sent(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 0);
+    assert_eq!(context.call_concluded_count(), 1);
+}
+
+// Two users call each other at the same time, offer received after the
+// outgoing call gets an ICE connection. The losing side will end the
+// outgoing call and start handling the incoming call.
+#[test]
+fn glare_after_connect_loser() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+
+    // Create incoming call with same remote
+
+    let remote_peer = {
+        let active_call = context.active_call();
+        let remote_peer = active_call.remote_peer().expect(error_line!());
+        remote_peer.to_owned()
+    };
+    info!("active remote_peer: {}", remote_peer);
+
+    // The incoming offer's call_id will be greater than the active call_id.
+    assert!(
+        context.active_call().call_id().as_u64() < std::u64::MAX,
+        "Test case not valid if incoming call-id can't be greater than the active call-id."
+    );
+
+    let call_id = CallId::new(context.active_call().call_id().as_u64() + 1);
+    cm.received_offer(
+        remote_peer,
+        call_id,
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
+    assert_eq!(
+        context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
+        0
+    );
+    assert_eq!(context.busys_sent(), 0);
+    assert_eq!(context.call_concluded_count(), 1);
+}
+
+// Two users call each other at the same time, offer received before the
+// outgoing call gets an ICE connection. Call-ids are unexpectedly equal.
+#[test]
+fn glare_after_connect_equal() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+
+    // Create incoming call with same remote
+
+    let remote_peer = {
+        let active_call = context.active_call();
+        let remote_peer = active_call.remote_peer().expect(error_line!());
+        remote_peer.to_owned()
+    };
+    info!("active remote_peer: {}", remote_peer);
+
+    // The incoming offer's call_id will be equal to the active call_id.
+    let call_id = CallId::new(context.active_call().call_id().as_u64());
+    cm.received_offer(
+        remote_peer,
+        call_id,
+        random_received_offer(SignalingType::Legacy, Duration::from_secs(0)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.normal_hangups_sent(), 1);
+    assert_eq!(
+        context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
+        0
+    );
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
         1
     );
     assert_eq!(context.busys_sent(), 1);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
     assert_eq!(context.call_concluded_count(), 2);
 }
 

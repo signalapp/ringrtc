@@ -176,13 +176,17 @@ pub enum ApplicationEvent {
     Reconnected,
 
     /// The received offer is expired.
-    EndedReceivedOfferExpired,
+    ReceivedOfferExpired,
 
     /// Received an offer while already handling an active call.
-    EndedReceivedOfferWhileActive,
+    ReceivedOfferWhileActive,
+
+    /// Received an offer while already handling an active call and glare
+    /// was detected.
+    ReceivedOfferWithGlare,
 
     /// Received an offer on a linked device from one that doesn't support multi-ring.
-    EndedIgnoreCallsFromNonMultiringCallers,
+    IgnoreCallsFromNonMultiringCallers,
 }
 
 impl Clone for ApplicationEvent {

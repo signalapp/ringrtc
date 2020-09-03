@@ -988,13 +988,16 @@ public class CallManager {
     RECONNECTED,
 
     /** The received offer is expired. */
-    ENDED_RECEIVED_OFFER_EXPIRED,
+    RECEIVED_OFFER_EXPIRED,
 
     /** Received an offer while already handling an active call. */
-    ENDED_RECEIVED_OFFER_WHILE_ACTIVE,
+    RECEIVED_OFFER_WHILE_ACTIVE,
+
+    /** Received an offer while already handling an active call and glare was detected. */
+    RECEIVED_OFFER_WITH_GLARE,
 
     /** Received an offer on a linked device from one that doesn't support multi-ring. */
-    ENDED_IGNORE_CALLS_FROM_NON_MULTIRING_CALLERS;
+    IGNORE_CALLS_FROM_NON_MULTIRING_CALLERS;
 
     @CalledByNative
     static CallEvent fromNativeIndex(int nativeIndex) {

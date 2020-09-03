@@ -7,6 +7,7 @@
 
 //! The main Call Manager object defitions.
 
+use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::stringify;
@@ -755,7 +756,6 @@ where
                     CallDirection::OutGoing,
                     call_media_type,
                     local_device_id,
-                    TIME_OUT_PERIOD_SEC,
                     self.clone(),
                 )?;
 
@@ -766,6 +766,7 @@ where
                 call_map.insert(call_id, call.clone());
 
                 *active_call_id = Some(call_id);
+                call.start_timeout_timer(TIME_OUT_PERIOD_SEC)?;
                 call.inject_start_call()
             }
         }
@@ -946,16 +947,15 @@ where
     fn handle_received_offer(
         &mut self,
         remote_peer: <T as Platform>::AppRemotePeer,
-        call_id: CallId,
+        incoming_call_id: CallId,
         received: signaling::ReceivedOffer,
     ) -> Result<()> {
-        let sender_device_id = received.sender_device_id;
         ringbench!(
             RingBench::App,
             RingBench::CM,
             format!(
                 "received_offer()\t{}\t{}\tfeature={}\tprimary={}\t{}",
-                call_id,
+                incoming_call_id,
                 received.sender_device_id,
                 received.sender_device_feature_level,
                 received.receiver_device_is_primary,
@@ -965,9 +965,9 @@ where
 
         if received.age > Duration::from_secs(MAX_MESSAGE_AGE_SEC) {
             ringbenchx!(RingBench::CM, RingBench::App, "offer expired");
-            self.notify_application(&remote_peer, ApplicationEvent::EndedReceivedOfferExpired)?;
+            self.notify_application(&remote_peer, ApplicationEvent::ReceivedOfferExpired)?;
             // Notify application we are completely done with this remote.
-            self.notify_call_concluded(&remote_peer, call_id)?;
+            self.notify_call_concluded(&remote_peer, incoming_call_id)?;
             return Ok(());
         }
 
@@ -981,66 +981,154 @@ where
             );
             self.notify_application(
                 &remote_peer,
-                ApplicationEvent::EndedIgnoreCallsFromNonMultiringCallers,
+                ApplicationEvent::IgnoreCallsFromNonMultiringCallers,
             )?;
             // Notify application we are completely done with this remote.
-            self.notify_call_concluded(&remote_peer, call_id)?;
+            self.notify_call_concluded(&remote_peer, incoming_call_id)?;
             return Ok(());
         }
 
-        if self.call_active()? {
-            // Make a call object to ensure that the busy message can be sent
-            // in the future. It does not go into the call map and should not
-            // start a timeout timer.
-            let call = Call::new(
-                remote_peer.clone(),
-                call_id,
-                CallDirection::InComing,
-                received.offer.call_media_type,
-                received.receiver_device_id,
-                0,
-                self.clone(),
-            )?;
+        // Don't use self.active_call() because we need to know the active_call_id and active_call separately
+        // to handle the case where the active_call_id is set but there is no active call in the map.
+        let (active_call_id, active_call): (Option<CallId>, Option<Call<T>>) = {
+            let active_call_id = self.active_call_id.lock()?;
+            match *active_call_id {
+                None => (None, None),
+                Some(active_call_id) => {
+                    let call_map = self.call_map.lock()?;
+                    let active_call = call_map.get(&active_call_id).cloned();
+                    (Some(active_call_id), active_call)
+                }
+            }
+        };
 
-            self.notify_application(
-                &remote_peer,
-                ApplicationEvent::EndedReceivedOfferWhileActive,
-            )?;
+        // Create the call object so that it will either be used as the
+        // active call or properly concluded if dropped.
+        let mut incoming_call = Call::new(
+            remote_peer.clone(),
+            incoming_call_id,
+            CallDirection::InComing,
+            received.offer.call_media_type,
+            received.receiver_device_id,
+            self.clone(),
+        )?;
 
-            self.check_for_glare(&remote_peer, sender_device_id)?;
-
-            // Send busy out after checking for glare to ensure that the call
-            // object and the application's remote are still valid during the
-            // glare check (and not concluded).
-            self.send_busy(call)?;
-            return Ok(());
+        enum Collision {
+            None,        // No active call, so we can proceed normally
+            Busy,        // An active call with a different user, so act busy
+            Winner, // An active call with the same user, but we win so ignore the incoming call
+            Loser,  // An active call with the same user, but we lose so drop our call
+            DoubleLoser, // An active call with the same user, but we both lose and drop both calls
         }
 
-        let mut active_call_id = self.active_call_id.lock()?;
-        match *active_call_id {
-            Some(v) => Err(RingRtcError::CallAlreadyInProgress(v).into()),
-            None => {
-                let mut call = Call::new(
-                    remote_peer,
-                    call_id,
-                    CallDirection::InComing,
-                    received.offer.call_media_type,
-                    received.receiver_device_id,
-                    TIME_OUT_PERIOD_SEC,
-                    self.clone(),
+        let collision = match (active_call_id, &active_call) {
+            (None, None) => Collision::None,
+            (_, Some(active_call)) => {
+                info!("handle_received_offer(): active call detected");
+                let glare =
+                    self.check_for_glare(&active_call, &remote_peer, received.sender_device_id);
+                if !glare {
+                    info!("handle_received_offer(): normal busy");
+                    Collision::Busy
+                } else {
+                    info!("handle_received_offer(): glare detected");
+                    // Let the highest call_id keep the active call and be the caller, and
+                    // let the other side end the active call and become a callee.
+                    match active_call
+                        .call_id()
+                        .as_u64()
+                        .cmp(&incoming_call_id.as_u64())
+                    {
+                        Ordering::Greater => {
+                            info!("handle_received_offer(): keep the active call");
+                            Collision::Winner
+                        }
+                        Ordering::Less => {
+                            info!("handle_received_offer(): end the active call");
+                            Collision::Loser
+                        }
+                        Ordering::Equal => {
+                            warn!("handle_received_offer(): unexpected call_id match");
+                            Collision::DoubleLoser
+                        }
+                    }
+                }
+            }
+            (Some(_), None) => {
+                warn!("handle_received_offer(): we have an active call ID without an active call, so we can't detect glare");
+                Collision::Busy
+            }
+        };
+
+        enum ActiveCallAction {
+            DontTerminate,
+            Terminate(ApplicationEvent),
+        }
+
+        enum IncomingCallAction {
+            Ignore(ApplicationEvent),
+            RejectAsBusy(ApplicationEvent),
+            Start,
+        }
+
+        let (active_call_action, incoming_call_action) = match collision {
+            Collision::None => (ActiveCallAction::DontTerminate, IncomingCallAction::Start),
+            Collision::Busy => (
+                ActiveCallAction::DontTerminate,
+                IncomingCallAction::RejectAsBusy(ApplicationEvent::ReceivedOfferWhileActive),
+            ),
+            Collision::Winner => (
+                ActiveCallAction::DontTerminate,
+                IncomingCallAction::Ignore(ApplicationEvent::ReceivedOfferWithGlare),
+            ),
+            Collision::Loser => (
+                ActiveCallAction::Terminate(ApplicationEvent::EndedRemoteGlare),
+                IncomingCallAction::Start,
+            ),
+            Collision::DoubleLoser => (
+                ActiveCallAction::Terminate(ApplicationEvent::EndedRemoteGlare),
+                IncomingCallAction::RejectAsBusy(ApplicationEvent::EndedSignalingFailure),
+            ),
+        };
+
+        match active_call_action {
+            ActiveCallAction::DontTerminate => {}
+            ActiveCallAction::Terminate(app_event) => {
+                self.handle_terminate_active_call(
+                    active_call.unwrap(),
+                    Some(signaling::Hangup::Normal),
+                    app_event,
                 )?;
+            }
+        }
+
+        match incoming_call_action {
+            IncomingCallAction::Ignore(app_event) => {
+                self.notify_application(&remote_peer, app_event)?;
+            }
+            IncomingCallAction::RejectAsBusy(app_event) => {
+                self.notify_application(&remote_peer, app_event)?;
+                self.send_busy(incoming_call)?;
+            }
+            IncomingCallAction::Start => {
+                let mut active_call_id = self.active_call_id.lock()?;
+                if let Some(active_call_id) = *active_call_id {
+                    return Err(RingRtcError::CallAlreadyInProgress(active_call_id).into());
+                }
 
                 // Whenever there is a new call, ensure that messages can flow.
                 self.reset_messages_in_flight()?;
 
                 let mut call_map = self.call_map.lock()?;
-                call_map.insert(call_id, call.clone());
+                call_map.insert(incoming_call_id, incoming_call.clone());
 
-                *active_call_id = Some(call_id);
-                call.handle_received_offer(received)?;
-                call.inject_start_call()
+                *active_call_id = Some(incoming_call_id);
+                incoming_call.start_timeout_timer(TIME_OUT_PERIOD_SEC)?;
+                incoming_call.handle_received_offer(received)?;
+                incoming_call.inject_start_call()?
             }
         }
+        Ok(())
     }
 
     /// Handle received_answer() API from application.
@@ -1238,39 +1326,27 @@ where
     ///   from one of their other devices. The incoming call will get
     ///   a busy but here we ensure that the active call isn't ended.
     ///
-    /// If glare is detected, the active call will be concluded. It is
-    /// assumed that a busy message would have already been sent to
-    /// reject the incoming offer.
     fn check_for_glare(
         &mut self,
+        active_call: &Call<T>,
         remote_peer: &<T as Platform>::AppRemotePeer,
         remote_device_id: DeviceId,
-    ) -> Result<()> {
-        if let Ok(active_call) = self.active_call() {
-            info!("check_for_glare(): active call detected");
-            if self.remote_peer_equals_active(&active_call, remote_peer) {
-                info!("check_for_glare(): remote peers match");
-                if let Ok(active_device_id) = active_call.active_device_id() {
-                    info!("check_for_glare(): active device exists");
-                    if remote_device_id == active_device_id {
-                        info!("check_for_glare(): peer device matches, hangup active call");
-                        return self.handle_terminate_active_call(
-                            active_call,
-                            Some(signaling::Hangup::Normal),
-                            ApplicationEvent::EndedRemoteGlare,
-                        );
-                    }
-                } else {
-                    info!("check_for_glare(): no active device, hangup active call");
-                    return self.handle_terminate_active_call(
-                        active_call,
-                        Some(signaling::Hangup::Normal),
-                        ApplicationEvent::EndedRemoteGlare,
-                    );
+    ) -> bool {
+        if self.remote_peer_equals_active(&active_call, remote_peer) {
+            info!("check_for_glare(): remote peers match");
+            if let Ok(active_device_id) = active_call.active_device_id() {
+                info!("check_for_glare(): active device exists");
+                if remote_device_id == active_device_id {
+                    info!("check_for_glare(): peer device matches");
+                    return true;
                 }
+            } else {
+                info!("check_for_glare(): no active device yet");
+                return true;
             }
         }
-        Ok(())
+
+        false
     }
 
     /// Check if the remote_peer matches the remote_peer in the active

@@ -367,12 +367,12 @@ fn receive_offer_while_active() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.call_concluded_count(), 1);
-    assert_eq!(context.busys_sent(), 1);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedReceivedOfferWhileActive),
+        context.event_count(ApplicationEvent::ReceivedOfferWhileActive),
         1
     );
+    assert_eq!(context.busys_sent(), 1);
+    assert_eq!(context.call_concluded_count(), 1);
 }
 
 #[test]
@@ -395,7 +395,7 @@ fn receive_expired_offer() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedReceivedOfferExpired),
+        context.event_count(ApplicationEvent::ReceivedOfferExpired),
         1
     );
 }
@@ -424,7 +424,7 @@ fn receive_offer_before_age_limit() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedReceivedOfferExpired),
+        context.event_count(ApplicationEvent::ReceivedOfferExpired),
         0
     );
 }
@@ -453,7 +453,7 @@ fn receive_offer_at_age_limit() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedReceivedOfferExpired),
+        context.event_count(ApplicationEvent::ReceivedOfferExpired),
         0
     );
 }
@@ -482,7 +482,7 @@ fn receive_expired_offer_after_age_limit() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedReceivedOfferExpired),
+        context.event_count(ApplicationEvent::ReceivedOfferExpired),
         1
     );
 }

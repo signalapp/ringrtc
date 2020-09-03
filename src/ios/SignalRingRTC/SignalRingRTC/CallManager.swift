@@ -56,11 +56,13 @@ public enum CallManagerEvent: Int32 {
     /// The call dropped while connected and is now reconnected.
     case reconnected = 20
     /// The received offer is expired.
-    case endedReceivedOfferExpired = 21
+    case receivedOfferExpired = 21
     /// Received an offer while already handling an active call.
-    case endedReceivedOfferWhileActive = 22
+    case receivedOfferWhileActive = 22
+    /// Received an offer while already handling an active call and glare was detected.
+    case receivedOfferWithGlare = 23
     /// Received an offer on a linked device from one that doesn't support multi-ring.
-    case endedIgnoreCallsFromNonMultiringCallers = 23
+    case ignoreCallsFromNonMultiringCallers = 24
 }
 
 /// Type of media for call at time of origination.

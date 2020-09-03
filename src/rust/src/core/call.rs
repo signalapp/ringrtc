@@ -47,22 +47,13 @@ struct Context {
 }
 
 impl Context {
-    fn new(enable_timeout: bool) -> Result<Self> {
+    fn new() -> Result<Self> {
         Ok(Self {
             worker_runtime:  runtime::Builder::new()
                 .core_threads(1)
                 .name_prefix("fsm".to_string())
                 .build()?,
-            timeout_runtime: if enable_timeout {
-                Some(
-                    runtime::Builder::new()
-                        .core_threads(1)
-                        .name_prefix("timeout".to_string())
-                        .build()?,
-                )
-            } else {
-                None
-            },
+            timeout_runtime: None,
         })
     }
 
@@ -236,13 +227,12 @@ where
         direction: CallDirection,
         media_type: CallMediaType,
         local_device_id: DeviceId,
-        time_out_period: u64,
         call_manager: CallManager<T>,
     ) -> Result<Self> {
         info!("new(): call_id: {}", call_id);
 
         // create a FSM runtime for this connection
-        let mut fsm_context = Context::new(time_out_period > 0)?;
+        let mut fsm_context = Context::new()?;
         let (fsm_sender, fsm_receiver) = futures::sync::mpsc::channel(256);
         let call_fsm = CallStateMachine::new(fsm_receiver)?
             .map_err(|e| info!("call state machine returned error: {}", e));
@@ -267,27 +257,34 @@ where
             forking: Arc::new(CallMutex::new(None, "forking")),
         };
 
-        if time_out_period > 0 {
-            // Create a two minute call setup timeout thread
-            let mut call_clone = call.clone();
-            let when = Instant::now() + Duration::from_secs(time_out_period);
-            let call_timeout_future = Delay::new(when)
-                .map_err(|e| error!("Call timeout Delay failed: {:?}", e))
-                .and_then(move |_| {
-                    call_clone
-                        .inject_call_timeout()
-                        .map_err(|e| error!("Inject call timeout failed: {:?}", e))
-                });
+        Ok(call)
+    }
 
-            debug!("new(): spawning call timeout task");
-            if let Ok(mut fsm_context) = call.fsm_context.lock() {
-                if let Some(timeout_runtime) = &mut fsm_context.timeout_runtime {
-                    timeout_runtime.spawn(call_timeout_future);
-                }
+    /// Start a timer to terminate the call if setup takes too long.
+    pub fn start_timeout_timer(&self, time_out_period: u64) -> Result<()> {
+        if time_out_period > 0 {
+            if let Ok(mut fsm_context) = self.fsm_context.lock() {
+                let mut timeout_runtime = runtime::Builder::new()
+                    .core_threads(1)
+                    .name_prefix("timeout".to_string())
+                    .build()?;
+
+                let mut call_clone = self.clone();
+                let when = Instant::now() + Duration::from_secs(time_out_period);
+                let call_timeout_future = Delay::new(when)
+                    .map_err(|e| error!("Call timeout Delay failed: {:?}", e))
+                    .and_then(move |_| {
+                        call_clone
+                            .inject_call_timeout()
+                            .map_err(|e| error!("Inject call timeout failed: {:?}", e))
+                    });
+
+                timeout_runtime.spawn(call_timeout_future);
+                fsm_context.timeout_runtime = Some(timeout_runtime);
             }
         }
 
-        Ok(call)
+        Ok(())
     }
 
     /// Return the Call identifier.

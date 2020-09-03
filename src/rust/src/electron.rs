@@ -861,6 +861,7 @@ declare_types! {
                             EndReason::Glare => "Glare",
                             EndReason::ReceivedOfferExpired => "ReceivedOfferExpired",
                             EndReason::ReceivedOfferWhileActive => "ReceivedOfferWhileActive",
+                            EndReason::ReceivedOfferWithGlare => "ReceivedOfferWithGlare",
                             EndReason::SignalingFailure => "SignalingFailure",
                             EndReason::ConnectionFailure => "ConnectionFailure",
                             EndReason::InternalFailure => "InternalFailure",

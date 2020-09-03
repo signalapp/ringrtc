@@ -142,6 +142,7 @@ pub enum EndReason {
     Glare,
     ReceivedOfferExpired,
     ReceivedOfferWhileActive,
+    ReceivedOfferWithGlare,
     SignalingFailure,
     ConnectionFailure,
     InternalFailure,
@@ -163,6 +164,7 @@ impl fmt::Display for EndReason {
             EndReason::Glare => "Glare",
             EndReason::ReceivedOfferExpired => "ReceivedOfferExpired",
             EndReason::ReceivedOfferWhileActive => "ReceivedOfferWhileActive",
+            EndReason::ReceivedOfferWithGlare => "ReceivedOfferWithGlare",
             EndReason::SignalingFailure => "SignalingFailure",
             EndReason::ConnectionFailure => "ConnectionFailure",
             EndReason::InternalFailure => "InternalFailure",
@@ -389,13 +391,17 @@ impl Platform for NativePlatform {
             ApplicationEvent::EndedAppDroppedCall => {
                 self.send_state(remote_peer, CallState::Ended(EndReason::Declined))
             }
-            ApplicationEvent::EndedReceivedOfferExpired => self.send_state(
+            ApplicationEvent::ReceivedOfferExpired => self.send_state(
                 remote_peer,
                 CallState::Ended(EndReason::ReceivedOfferExpired),
             ),
-            ApplicationEvent::EndedReceivedOfferWhileActive => self.send_state(
+            ApplicationEvent::ReceivedOfferWhileActive => self.send_state(
                 remote_peer,
                 CallState::Ended(EndReason::ReceivedOfferWhileActive),
+            ),
+            ApplicationEvent::ReceivedOfferWithGlare => self.send_state(
+                remote_peer,
+                CallState::Ended(EndReason::ReceivedOfferWithGlare),
             ),
             ApplicationEvent::EndedRemoteHangupAccepted => self.send_state(
                 remote_peer,
@@ -409,7 +415,7 @@ impl Platform for NativePlatform {
                 remote_peer,
                 CallState::Ended(EndReason::BusyOnAnotherDevice),
             ),
-            ApplicationEvent::EndedIgnoreCallsFromNonMultiringCallers => self.send_state(
+            ApplicationEvent::IgnoreCallsFromNonMultiringCallers => self.send_state(
                 remote_peer,
                 CallState::Ended(EndReason::CallerIsNotMultiring),
             ),

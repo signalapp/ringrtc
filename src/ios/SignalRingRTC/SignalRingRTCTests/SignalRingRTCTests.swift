@@ -41,7 +41,7 @@ final class TestDelegate: CallManagerDelegate {
 
     // Setup hooks.
     var doAutomaticProceed = false
-    var videoCaptureController: VideoCaptureController? = nil
+    var videoCaptureController: VideoCaptureController?
     var iceServers: [RTCIceServer] = []
     var useTurnOnly = false
     var localDevice: UInt32 = 1
@@ -81,8 +81,9 @@ final class TestDelegate: CallManagerDelegate {
     var eventEndedRemoteBusy = false
     var eventEndedRemoteGlare = false
     var eventEndedSignalingFailure = false
-    var eventEndedReceivedOfferWhileActive = false
-    var eventEndedIgnoreCallsFromNonMultiringCallers = false
+    var eventReceivedOfferWhileActive = false
+    var eventReceivedOfferWithGlare = false
+    var eventIgnoreCallsFromNonMultiringCallers = false
 
     var eventGeneralEnded = false
 
@@ -148,7 +149,7 @@ final class TestDelegate: CallManagerDelegate {
                     guard let videoCaptureController = self.videoCaptureController else {
                         return
                     }
-                    
+
 //                    // We will only call proceed if we haven't concluded the call.
 //                    if !callData.concluded {
                         do {
@@ -258,15 +259,18 @@ final class TestDelegate: CallManagerDelegate {
             Logger.debug("TestDelegate:reconnecting")
         case .reconnected:
             Logger.debug("TestDelegate:reconnected")
-        case .endedReceivedOfferExpired:
-            Logger.debug("TestDelegate:endedReceivedOfferExpired")
-        case .endedReceivedOfferWhileActive:
-            Logger.debug("TestDelegate:endedReceivedOfferWhileActive")
-            eventEndedReceivedOfferWhileActive = true
-
-        case .endedIgnoreCallsFromNonMultiringCallers:
-            Logger.debug("TestDelegate:endedIgnoreCallsFromNonMultiringCallers")
-            eventEndedIgnoreCallsFromNonMultiringCallers = true
+        case .receivedOfferExpired:
+            Logger.debug("TestDelegate:receivedOfferExpired")
+        case .receivedOfferWhileActive:
+            Logger.debug("TestDelegate:receivedOfferWhileActive")
+            eventReceivedOfferWhileActive = true
+        case .receivedOfferWithGlare:
+            Logger.debug("TestDelegate:receivedOfferWithGlare")
+            eventReceivedOfferWithGlare = true
+        
+        case .ignoreCallsFromNonMultiringCallers:
+            Logger.debug("TestDelegate:ignoreCallsFromNonMultiringCallers")
+            eventIgnoreCallsFromNonMultiringCallers = true
         }
     }
 
@@ -649,7 +653,7 @@ class SignalRingRTCTests: XCTestCase {
         delegate.expectedValue = 1111
 
         let localDevice: UInt32 = 1
-        
+
         let videoCaptureController = VideoCaptureController()
 
         do {
@@ -928,7 +932,7 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        expect(delegate.eventEndedIgnoreCallsFromNonMultiringCallers).toEventually(equal(true), timeout: 1)
+        expect(delegate.eventIgnoreCallsFromNonMultiringCallers).toEventually(equal(true), timeout: 1)
 
         // Release the Call Manager.
         callManager = nil
@@ -1411,7 +1415,7 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegateCallee.expectedValue, remote: callerAddress)
 
-                var opaque: Data? = nil
+                var opaque: Data?
                 if enable_opaque {
                     opaque = delegateCallee.sentOfferOpaque
                 }
@@ -1449,7 +1453,7 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking receivedAnswer()...")
 
-                var opaque: Data? = nil
+                var opaque: Data?
                 if enable_opaque {
                     opaque = delegateCallee.sentAnswerOpaque
                 }
@@ -1506,7 +1510,7 @@ class SignalRingRTCTests: XCTestCase {
 
         Logger.debug("Test: Exiting test function...")
     }
-    
+
     func testMultiCall() {
         multiCallTesting(loopIterations: 2, enable_opaque: false)
     }
@@ -1514,7 +1518,7 @@ class SignalRingRTCTests: XCTestCase {
     func testMultiCallOpaque() {
         multiCallTesting(loopIterations: 1, enable_opaque: true)
     }
-    
+
     func testMultiCallFastIceCheck() {
         Logger.debug("Test: MultiCall check that immediate ICE message is handled...")
 
@@ -1664,7 +1668,13 @@ class SignalRingRTCTests: XCTestCase {
         case afterProceed
     }
 
-    func glareTesting(scenario: GlareScenario) {
+    enum GlareCondition {
+        case winner
+        case loser
+        case equal
+    }
+
+    func glareTesting(scenario: GlareScenario, condition: GlareCondition) {
         Logger.debug("Test: Testing glare for scenario: \(scenario)...")
 
         let delegateA = TestDelegate()
@@ -1750,122 +1760,68 @@ class SignalRingRTCTests: XCTestCase {
             delegateB.shouldSendOfferInvoked = false
         }
 
+        // What condition should B be in?
+        let callIdAtoBOverride: UInt64
+        switch condition {
+        case .winner:
+            expect(callIdBtoA).to(beGreaterThan(1), description: "Test case not valid if incoming call-id can't be smaller than the active call-id.")
+            callIdAtoBOverride = callIdBtoA - 1
+        case .loser:
+            expect(callIdAtoB).to(beLessThan(UINT64_MAX), description: "Test case not valid if incoming call-id can't be greater than the active call-id.")
+            callIdAtoBOverride = callIdBtoA + 1
+        case .equal:
+            callIdAtoBOverride = callIdBtoA
+        }
+
         // Give the offer from A to B.
         do {
             Logger.debug("Test: Invoking B.receivedOffer(A)...")
             let call = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
-            try callManagerB?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdAtoB, opaque: nil, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManagerB?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdAtoBOverride, opaque: nil, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
         }
 
-        expect(delegateB.eventEndedReceivedOfferWhileActive).toEventually(equal(true), timeout: 1)
-        delegateB.eventEndedReceivedOfferWhileActive = false
+        switch condition {
+        case .winner:
+            expect(delegateB.eventReceivedOfferWithGlare).toEventually(equal(true), timeout: 1)
+            delegateB.eventReceivedOfferWithGlare = false
 
-        expect(delegateB.shouldCompareCallsInvoked).toEventually(equal(true), timeout: 1)
-        delegateB.shouldCompareCallsInvoked = false
+            expect(delegateB.shouldSendBusyInvoked).to(equal(false))
+            expect(delegateB.eventEndedRemoteGlare).to(equal(false))
+        case .loser:
+            expect(delegateB.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
+            delegateB.eventEndedRemoteGlare = false
 
-        // Busy is for the incoming offer.
-        expect(delegateB.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
-        delegateB.shouldSendBusyInvoked = false
-
-        expect(delegateB.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
-        delegateB.eventEndedRemoteGlare = false
-
-        if scenario == .afterProceed {
-            // Hangup is for the outgoing offer.
-            expect(delegateB.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 1)
-            delegateB.shouldSendHangupNormalInvoked = false
-        }
-
-        // Give the ICE candidates from A to B (they should be ignored).
-        expect(delegateA.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
-
-        do {
-            Logger.debug("Test: Invoking B.receivedIceCandidates(A)...")
-            try callManagerB?.receivedIceCandidates(sourceDevice: sourceDevice, callId: callIdAtoB, candidates: delegateA.sentIceCandidates)
-        } catch {
-            XCTFail("Call Manager receivedIceCandidates() failed: \(error)")
-            return
-        }
-
-        // @todo Is there anything we should confirm here?
-
-        if scenario == .afterProceed {
-            // Give the offer from B to A.
-            do {
-                Logger.debug("Test: Invoking A.receivedOffer(B)...")
-                let call = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
-                try callManagerA?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdBtoA, opaque: nil, sdp: delegateB.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-            } catch {
-                XCTFail("Call Manager receivedOffer() failed: \(error)")
-                return
+            if scenario == .afterProceed {
+                // Hangup is for the outgoing offer.
+                expect(delegateB.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 1)
+                delegateB.shouldSendHangupNormalInvoked = false
             }
 
-            // Give the ICE candidates from B to A (they should be ignored).
-            expect(delegateB.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
+            expect(delegateB.eventReceivedOfferWhileActive).to(equal(false))
+            expect(delegateB.shouldSendBusyInvoked).to(equal(false))
+        case .equal:
+            expect(delegateB.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
+            delegateB.eventEndedRemoteGlare = false
 
-            do {
-                Logger.debug("Test: Invoking A.receivedIceCandidates(B)...")
-                try callManagerA?.receivedIceCandidates(sourceDevice: sourceDevice, callId: callIdBtoA, candidates: delegateB.sentIceCandidates)
-            } catch {
-                XCTFail("Call Manager receivedIceCandidates() failed: \(error)")
-                return
+            if scenario == .afterProceed {
+                // Hangup is for the outgoing offer.
+                expect(delegateB.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 1)
+                delegateB.shouldSendHangupNormalInvoked = false
             }
 
-            expect(delegateA.eventEndedReceivedOfferWhileActive).toEventually(equal(true), timeout: 1)
-            delegateA.eventEndedReceivedOfferWhileActive = false
+            expect(delegateB.eventEndedSignalingFailure).toEventually(equal(true), timeout: 1)
+            delegateB.eventEndedSignalingFailure = false
 
-            expect(delegateA.shouldCompareCallsInvoked).toEventually(equal(true), timeout: 1)
-            delegateA.shouldCompareCallsInvoked = false
+            expect(delegateB.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
+            delegateB.shouldSendBusyInvoked = false
 
-            // Busy is for the incoming offer.
-            expect(delegateA.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
-            delegateA.shouldSendBusyInvoked = false
-
-            expect(delegateA.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
-            delegateA.eventEndedRemoteGlare = false
-
-            // Hangup is for the outgoing offer.
-            expect(delegateA.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 1)
-            delegateA.shouldSendHangupNormalInvoked = false
+            expect(delegateB.eventReceivedOfferWhileActive).to(equal(false))
         }
 
-        // Deliver the Busy from B to A to make sure it is handled correctly.
-
-        do {
-            Logger.debug("Test: Invoking A.receivedBusy(B)...")
-            try callManagerA?.receivedBusy(sourceDevice: sourceDevice, callId: callIdAtoB)
-        } catch {
-            XCTFail("Call Manager receivedBusy() failed: \(error)")
-            return
-        }
-
-        if scenario == .afterProceed {
-            // The calls should already be cleaned up on the A side.
-            delay(interval: 0.5)
-            expect(delegateA.eventEndedRemoteBusy).toNot(equal(true))
-        } else {
-            expect(delegateA.eventEndedRemoteBusy).toEventually(equal(true), timeout: 1)
-            delegateA.eventEndedRemoteBusy = false
-        }
-
-        // Deliver the Hangup from B to A to make sure it is handled correctly.
-
-        do {
-            Logger.debug("Test: Invoking A.receivedHangup(B)...")
-            try callManagerA?.receivedHangup(sourceDevice: sourceDevice, callId: callIdAtoB, hangupType: .normal, deviceId: 0)
-        } catch {
-            XCTFail("Call Manager receivedHangup() failed: \(error)")
-            return
-        }
-
-        if scenario == .afterProceed {
-            // The calls should already be cleaned up on the A side.
-            delay(interval: 0.5)
-            expect(delegateA.eventEndedRemoteHangup).toNot(equal(true))
-        }
+        // Operation on B should be the same on A, no further testing required.
 
         // Release the Call Managers (but there still might be references in the delegates!).
         callManagerA = nil
@@ -1877,12 +1833,28 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
-    func testGlareBeforeProceed() {
-        glareTesting(scenario: .beforeProceed)
+    func testGlareWinnerBeforeProceed() {
+        glareTesting(scenario: .beforeProceed, condition: .winner)
     }
 
-    func testGlareAfterProceed() {
-        glareTesting(scenario: .afterProceed)
+    func testGlareWinnerAfterProceed() {
+        glareTesting(scenario: .afterProceed, condition: .winner)
+    }
+
+    func testGlareLoserBeforeProceed() {
+        glareTesting(scenario: .beforeProceed, condition: .loser)
+    }
+
+    func testGlareLoserAfterProceed() {
+        glareTesting(scenario: .afterProceed, condition: .loser)
+    }
+
+    func testGlareEqualBeforeProceed() {
+        glareTesting(scenario: .beforeProceed, condition: .equal)
+    }
+
+    func testGlareEqualAfterProceed() {
+        glareTesting(scenario: .afterProceed, condition: .equal)
     }
 
     enum MultiRingScenario {
@@ -1983,7 +1955,7 @@ class SignalRingRTCTests: XCTestCase {
 
                 try callManagerExtra?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
 
-                expect(delegateExtra.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 1)
+                expect(delegateExtra.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 2)
                 delegateExtra.shouldSendAnswerInvoked = false
                 expect(delegateExtra.recentCallId).to(equal(callId))
 
@@ -2142,7 +2114,7 @@ class SignalRingRTCTests: XCTestCase {
 
                 // Now make sure all the callees get to a ringing state.
                 for element in calleeDevices {
-                    expect(element.delegate.eventLocalRingingInvoked).toEventually(equal(true), timeout: 1)
+                    expect(element.delegate.eventLocalRingingInvoked).toEventually(equal(true), timeout: 2)
                     element.delegate.eventLocalRingingInvoked = false
                 }
             }
@@ -2200,7 +2172,7 @@ class SignalRingRTCTests: XCTestCase {
                 }
 
                 // The caller will send hangup/declined.
-                expect(delegateCaller.shouldSendHangupDeclinedInvoked).toEventually(equal(true), timeout: 1)
+                expect(delegateCaller.shouldSendHangupDeclinedInvoked).toEventually(equal(true), timeout: 2)
                 delegateCaller.shouldSendHangupDeclinedInvoked = false
 
                 // Since all callees are connected to the caller, the hangup should go
@@ -2212,7 +2184,7 @@ class SignalRingRTCTests: XCTestCase {
                 for element in calleeDevices {
                     // Skip over the declining callee...
                     if element.deviceId != decliningCallee.deviceId {
-                        expect(element.delegate.eventEndedRemoteHangupDeclined).toEventually(equal(true), timeout: 1)
+                        expect(element.delegate.eventEndedRemoteHangupDeclined).toEventually(equal(true), timeout: 2)
                         element.delegate.eventEndedRemoteHangupDeclined = false
                     }
                 }
@@ -2246,8 +2218,8 @@ class SignalRingRTCTests: XCTestCase {
                 for element in calleeDevices {
                     if element.deviceId == busyCallee.deviceId {
 
-                        expect(element.delegate.eventEndedReceivedOfferWhileActive).toEventually(equal(true), timeout: 2)
-                        element.delegate.eventEndedReceivedOfferWhileActive = false
+                        expect(element.delegate.eventReceivedOfferWhileActive).toEventually(equal(true), timeout: 2)
+                        element.delegate.eventReceivedOfferWhileActive = false
 
                         // The busy callee should not have ended their existing call.
                         expect(element.delegate.eventGeneralEnded).to(equal(false))
@@ -2364,9 +2336,10 @@ class SignalRingRTCTests: XCTestCase {
     }
 
     enum MultiRingGlareScenario {
-        case normalGlareOfferBeforeBusy  /// A1 calls B1 and B2; at the same time, B1 calls A1; B1 offer arrives before B1 busy
-        case normalGlareBusyBeforeOffer  /// A1 calls B1 and B2; at the same time, B1 calls A1; B1 busy arrives before B1 offer (rare in practice)
-        case differentDevice             /// A1 is in call with B1; A2 calls B, should ring on B2
+        case primaryWinner    /// A1 calls B1 and B2; at the same time, B1 calls A1; B1 is the winner
+        case primaryLoser     /// A1 calls B1 and B2; at the same time, B1 calls A1; B1 is the loser
+        case primaryEqual     /// A1 calls B1 and B2; at the same time, B1 calls A1; call-ids are equal, B1 failure case with busy, B2 ends too
+        case differentDevice  /// A1 is in call with B1; A2 calls B, should ring on B2
     }
 
     func multiRingGlareTesting(scenario: MultiRingGlareScenario) {
@@ -2436,13 +2409,13 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        expect(delegateA1.shouldSendOfferInvoked).toEventually(equal(true), timeout: 1)
+        expect(delegateA1.shouldSendOfferInvoked).toEventually(equal(true), timeout: 2)
         delegateA1.shouldSendOfferInvoked = false
 
-        if scenario == .normalGlareOfferBeforeBusy || scenario == .normalGlareBusyBeforeOffer {
+        if scenario == .primaryWinner || scenario == .primaryLoser || scenario == .primaryEqual {
             // @note Not using A2 for this case.
 
-            // B starts to call A.
+            // B1 starts to call A.
             do {
                 Logger.debug("Test:B calls A...")
                 let call = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
@@ -2467,64 +2440,56 @@ class SignalRingRTCTests: XCTestCase {
             expect(delegateB1.shouldSendOfferInvoked).toEventually(equal(true), timeout: 2)
             delegateB1.shouldSendOfferInvoked = false
 
+            // Override the call-id for B's perspective to follow the scenario.
+            var callIdA1toBOverride = callIdA1toB
+            var callIdB1toAOverride = callIdB1toA
+
+            if scenario == .primaryWinner {
+                // B1 should win.
+                if callIdB1toA <= callIdA1toB {
+                    // Make sure B wins on both sides.
+                    expect(callIdB1toA).to(beGreaterThan(1), description: "Test case not valid, try again.")
+                    callIdA1toBOverride = callIdB1toA - 1
+                    expect(callIdA1toB).to(beLessThan(UINT64_MAX), description: "Test case not valid, try again.")
+                    callIdB1toAOverride = callIdA1toB + 1
+                }
+            } else if scenario == .primaryLoser {
+                // B1 should lose.
+                if callIdB1toA >= callIdA1toB {
+                    // Make sure B loses on both sides.
+                    expect(callIdB1toA).to(beLessThan(UINT64_MAX), description: "Test case not valid, try again.")
+                    callIdA1toBOverride = callIdB1toA + 1
+                    expect(callIdA1toB).to(beGreaterThan(1), description: "Test case not valid, try again.")
+                    callIdB1toAOverride = callIdA1toB - 1
+                }
+            } else {
+                // When sending to B, set with the call-id B is actually using.
+                callIdA1toBOverride = callIdB1toA
+                // When sending to A, set with the call-id A is actually using.
+                callIdB1toAOverride = callIdA1toB
+            }
+
             // Give the offer from A1 to B1 & B2.
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
                 let callA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
                 let callA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
             }
 
-            if scenario == .normalGlareOfferBeforeBusy {
-                // Give the offer from B1 to A1.
-                do {
-                    Logger.debug("Test: Invoking A1.receivedOffer(B1)...")
-                    let call = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
-                    try callManagerA1?.receivedOffer(call: call, sourceDevice: b1Device, callId: callIdB1toA, opaque: nil, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
-                } catch {
-                    XCTFail("Call Manager receivedOffer() failed: \(error)")
-                    return
-                }
-
-                // A1 behavior:
-
-                expect(delegateA1.eventEndedReceivedOfferWhileActive).toEventually(equal(true), timeout: 1)
-                delegateA1.eventEndedReceivedOfferWhileActive = false
-
-                // Busy is for the incoming offer.
-                expect(delegateA1.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
-                delegateA1.shouldSendBusyInvoked = false
-
-                expect(delegateA1.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
-                delegateA1.eventEndedRemoteGlare = false
-
-                // Hangup is for the outgoing offer.
-                expect(delegateA1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 2)
-                delegateA1.shouldSendHangupNormalInvoked = false
+            // Give the offer from B1 to A1.
+            do {
+                Logger.debug("Test: Invoking A1.receivedOffer(B1)...")
+                let call = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
+                try callManagerA1?.receivedOffer(call: call, sourceDevice: b1Device, callId: callIdB1toAOverride, opaque: nil, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            } catch {
+                XCTFail("Call Manager receivedOffer() failed: \(error)")
+                return
             }
-
-            // B1 behavior:
-
-            expect(delegateB1.eventEndedReceivedOfferWhileActive).toEventually(equal(true), timeout: 1)
-            delegateB1.eventEndedReceivedOfferWhileActive = false
-
-            // Busy is for the incoming offer.
-            expect(delegateB1.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
-            delegateB1.shouldSendBusyInvoked = false
-
-            expect(delegateB1.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
-            delegateB1.eventEndedRemoteGlare = false
-
-            // Hangup is for the outgoing offer.
-            expect(delegateB1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 2)
-            delegateB1.shouldSendHangupNormalInvoked = false
-
-            // Reset B1 general detection (to check later).
-            delegateB1.generalInvocationDetected = false
 
             // B2 behavior:
 
@@ -2533,7 +2498,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB2?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerB2?.proceed(callId: callIdA1toBOverride, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2542,71 +2507,172 @@ class SignalRingRTCTests: XCTestCase {
             expect(delegateB2.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 2)
             delegateB2.shouldSendAnswerInvoked = false
 
-            // We won't move anything from B2 for this test.
+            // A1 behavior:
 
-            if scenario == .normalGlareOfferBeforeBusy {
-                // Hangup B because glare detection caused the normal hangup.
-                do {
-                    Logger.debug("Test: Invoking B*.receivedHangup(A1)...")
-                    try callManagerB1?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toB, hangupType: .normal, deviceId: 0)
-                    try callManagerB2?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toB, hangupType: .normal, deviceId: 0)
-                } catch {
-                    XCTFail("Call Manager receivedBusy() failed: \(error)")
-                    return
-                }
+            if scenario == .primaryWinner {
+                // A should lose.
+                expect(delegateA1.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
+                delegateA1.eventEndedRemoteGlare = false
 
-                expect(delegateB2.eventEndedRemoteHangup).toEventually(equal(true), timeout: 1)
-                delegateA1.eventEndedRemoteHangup = false
-            } else if scenario == .normalGlareBusyBeforeOffer {
-                // Deliver the Busy from B to A to make sure it is handled correctly.
+                // Hangup is for the outgoing offer.
+                expect(delegateA1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 1)
+                delegateA1.shouldSendHangupNormalInvoked = false
 
-                do {
-                    Logger.debug("Test: Invoking A1.receivedBusy(B1)...")
-                    try callManagerA1?.receivedBusy(sourceDevice: b1Device, callId: callIdA1toB)
-                } catch {
-                    XCTFail("Call Manager receivedBusy() failed: \(error)")
-                    return
-                }
+                expect(delegateA1.eventReceivedOfferWhileActive).to(equal(false))
+                expect(delegateA1.shouldSendBusyInvoked).to(equal(false))
+            } else if scenario == .primaryLoser {
+                // A should win.
+                expect(delegateA1.eventReceivedOfferWithGlare).toEventually(equal(true), timeout: 2)
+                delegateA1.eventReceivedOfferWithGlare = false
 
-                expect(delegateA1.eventEndedRemoteBusy).toEventually(equal(true), timeout: 1)
-                delegateA1.eventEndedRemoteBusy = false
+                expect(delegateA1.shouldSendBusyInvoked).to(equal(false))
+                expect(delegateA1.eventEndedRemoteGlare).to(equal(false))
+            } else {
+                expect(delegateA1.eventEndedRemoteGlare).toEventually(equal(true), timeout: 2)
+                delegateA1.eventEndedRemoteGlare = false
 
-                // Now the multi-ring calls should be cancelled with hangup/busy.
-                expect(delegateA1.shouldSendHangupBusyInvoked).toEventually(equal(true), timeout: 1)
-                delegateA1.shouldSendHangupBusyInvoked = false
-                expect(delegateA1.recentCallId).to(equal(callIdA1toB))
-                expect(delegateA1.hangupDeviceId).to(equal(b1Device))
+                // Hangup is for the outgoing offer.
+                expect(delegateA1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 1)
+                delegateA1.shouldSendHangupNormalInvoked = false
 
-                // Hangup B.
-                do {
-                    Logger.debug("Test: Invoking B*.receivedHangup(A1)...")
-                    try callManagerB1?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toB, hangupType: .busy, deviceId: delegateA1.hangupDeviceId ?? 0)
-                    try callManagerB2?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toB, hangupType: .busy, deviceId: delegateA1.hangupDeviceId ?? 0)
-                } catch {
-                    XCTFail("Call Manager receivedBusy() failed: \(error)")
-                    return
-                }
+                expect(delegateA1.eventEndedSignalingFailure).toEventually(equal(true), timeout: 1)
+                delegateA1.eventEndedSignalingFailure = false
 
-                expect(delegateB2.eventEndedRemoteHangupBusy).toEventually(equal(true), timeout: 1)
-                delegateA1.eventEndedRemoteHangupBusy = false
+                expect(delegateA1.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
+                delegateA1.shouldSendBusyInvoked = false
+
+                expect(delegateA1.eventReceivedOfferWhileActive).to(equal(false))
             }
 
-            // B1 shouldn't have done anything.
-            expect(delegateB1.generalInvocationDetected).to(equal(false))
+            // B1 behavior:
 
-            // Deliver the Hangup from B1 to A to make sure it is handled correctly.
+            if scenario == .primaryWinner {
+                expect(delegateB1.eventReceivedOfferWithGlare).toEventually(equal(true), timeout: 1)
+                delegateB1.eventReceivedOfferWithGlare = false
+
+                expect(delegateB1.shouldSendBusyInvoked).to(equal(false))
+                expect(delegateB1.eventEndedRemoteGlare).to(equal(false))
+            } else if scenario == .primaryLoser {
+                expect(delegateB1.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
+                delegateB1.eventEndedRemoteGlare = false
+
+                // Hangup is for the outgoing offer.
+                expect(delegateB1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 1)
+                delegateB1.shouldSendHangupNormalInvoked = false
+
+                expect(delegateB1.eventReceivedOfferWhileActive).to(equal(false))
+                expect(delegateB1.shouldSendBusyInvoked).to(equal(false))
+            } else {
+                expect(delegateB1.eventEndedRemoteGlare).toEventually(equal(true), timeout: 1)
+                delegateB1.eventEndedRemoteGlare = false
+
+                // Hangup is for the outgoing offer.
+                expect(delegateB1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 2)
+                delegateB1.shouldSendHangupNormalInvoked = false
+
+                expect(delegateB1.eventEndedSignalingFailure).toEventually(equal(true), timeout: 1)
+                delegateB1.eventEndedSignalingFailure = false
+
+                expect(delegateB1.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
+                delegateB1.shouldSendBusyInvoked = false
+
+                expect(delegateB1.eventReceivedOfferWhileActive).to(equal(false))
+            }
+
+            // Reset A1 general detection (to check later).
             delegateA1.generalInvocationDetected = false
 
-            do {
-                Logger.debug("Test: Invoking A1.receivedHangup(B1)...")
-                try callManagerA1?.receivedHangup(sourceDevice: b1Device, callId: callIdB1toA, hangupType: .normal, deviceId: 0)
-            } catch {
-                XCTFail("Call Manager receivedHangup() failed: \(error)")
-                return
-            }
+            // Reset B1 general detection (to check later).
+            delegateB1.generalInvocationDetected = false
 
-            // A1 shouldn't have done anything.
-            expect(delegateA1.generalInvocationDetected).to(equal(false))
+            // Now look at consequences and proper cleanup.
+
+            if scenario == .primaryWinner {
+                // Deliver Hangup from A1 to B.
+                delegateB2.eventEndedRemoteHangup = false
+
+                do {
+                    Logger.debug("Test: Invoking B*.receivedHangup(A1)...")
+                    try callManagerB1?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toBOverride, hangupType: .normal, deviceId: 0)
+                    try callManagerB2?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toBOverride, hangupType: .normal, deviceId: 0)
+                } catch {
+                    XCTFail("Call Manager receivedHangup() failed: \(error)")
+                    return
+                }
+
+                expect(delegateB2.eventEndedRemoteHangup).toEventually(equal(true), timeout: 2)
+                delegateB2.eventEndedRemoteHangup = false
+
+                // B1 shouldn't have done anything.
+                expect(delegateB1.generalInvocationDetected).to(equal(false))
+            } else if scenario == .primaryLoser {
+                // Deliver Hangup from B1 to A.
+                do {
+                    Logger.debug("Test: Invoking A1.receivedHangup(B1)...")
+                    try callManagerA1?.receivedHangup(sourceDevice: b1Device, callId: callIdB1toAOverride, hangupType: .normal, deviceId: 0)
+                } catch {
+                    XCTFail("Call Manager receivedHangup() failed: \(error)")
+                    return
+                }
+
+                // A1 shouldn't have done anything.
+                expect(delegateA1.generalInvocationDetected).to(equal(false))
+            } else {
+                // Deliver Hangup from A1 to B.
+                delegateB2.eventEndedRemoteHangup = false
+
+                do {
+                    Logger.debug("Test: Invoking B*.receivedHangup(A1)...")
+                    try callManagerB1?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toBOverride, hangupType: .normal, deviceId: 0)
+                    try callManagerB2?.receivedHangup(sourceDevice: a1Device, callId: callIdA1toBOverride, hangupType: .normal, deviceId: 0)
+                } catch {
+                    XCTFail("Call Manager receivedHangup() failed: \(error)")
+                    return
+                }
+
+                expect(delegateB2.eventEndedRemoteHangup).toEventually(equal(true), timeout: 2)
+                delegateB2.eventEndedRemoteHangup = false
+
+                // Reset B2 general detection (to check later).
+                delegateB2.generalInvocationDetected = false
+
+                // Deliver Busy from A1 to B.
+                do {
+                    Logger.debug("Test: Invoking B*.receivedBusy(A1)...")
+                    try callManagerB1?.receivedBusy(sourceDevice: a1Device, callId: callIdB1toA)
+                    try callManagerB2?.receivedBusy(sourceDevice: a1Device, callId: callIdB1toA)
+                } catch {
+                    XCTFail("Call Manager receivedBusy() failed: \(error)")
+                    return
+                }
+
+                // Deliver Hangup from B1 to A.
+                do {
+                    Logger.debug("Test: Invoking A1.receivedHangup(B1)...")
+                    try callManagerA1?.receivedHangup(sourceDevice: b1Device, callId: callIdB1toAOverride, hangupType: .normal, deviceId: 0)
+                } catch {
+                    XCTFail("Call Manager receivedHangup() failed: \(error)")
+                    return
+                }
+
+                // Deliver Busy from B1 to A.
+                do {
+                    Logger.debug("Test: Invoking A*.receivedBusy(B1)...")
+                    try callManagerA1?.receivedBusy(sourceDevice: a1Device, callId: callIdA1toB)
+                } catch {
+                    XCTFail("Call Manager receivedBusy() failed: \(error)")
+                    return
+                }
+
+                // A1 shouldn't have done anything.
+                expect(delegateA1.generalInvocationDetected).to(equal(false))
+
+                // B1 shouldn't have done anything.
+                expect(delegateB1.generalInvocationDetected).to(equal(false))
+
+                // B2 shouldn't have done anything.
+                expect(delegateB2.generalInvocationDetected).to(equal(false))
+            }
         } else if scenario == .differentDevice {
             // @todo Place A/B connection establishment code in its own class.
 
@@ -2639,7 +2705,7 @@ class SignalRingRTCTests: XCTestCase {
                 return
             }
 
-            expect(delegateB1.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 1)
+            expect(delegateB1.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 2)
             delegateB1.shouldSendAnswerInvoked = false
             expect(delegateB2.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 1)
             delegateB2.shouldSendAnswerInvoked = false
@@ -2662,7 +2728,7 @@ class SignalRingRTCTests: XCTestCase {
             }
 
             // Should get to ringing.
-            expect(delegateA1.eventRemoteRingingInvoked).toEventually(equal(true), timeout: 1)
+            expect(delegateA1.eventRemoteRingingInvoked).toEventually(equal(true), timeout: 2)
             delegateA1.eventRemoteRingingInvoked = false
             expect(delegateB1.eventLocalRingingInvoked).toEventually(equal(true), timeout: 1)
             delegateB1.eventLocalRingingInvoked = false
@@ -2677,7 +2743,7 @@ class SignalRingRTCTests: XCTestCase {
             }
 
             // Should get connected.
-            expect(delegateA1.eventRemoteConnectedInvoked).toEventually(equal(true), timeout: 1)
+            expect(delegateA1.eventRemoteConnectedInvoked).toEventually(equal(true), timeout: 2)
             delegateA1.eventRemoteConnectedInvoked = false
             expect(delegateB1.eventLocalConnectedInvoked).toEventually(equal(true), timeout: 1)
             delegateB1.eventLocalConnectedInvoked = false
@@ -2730,7 +2796,7 @@ class SignalRingRTCTests: XCTestCase {
                 return
             }
 
-            expect(delegateA2.shouldSendOfferInvoked).toEventually(equal(true), timeout: 1)
+            expect(delegateA2.shouldSendOfferInvoked).toEventually(equal(true), timeout: 2)
             delegateA2.shouldSendOfferInvoked = false
 
             // Give the offer from A2 to B1 & B2.
@@ -2747,11 +2813,11 @@ class SignalRingRTCTests: XCTestCase {
 
             // B1 behavior:
 
-            expect(delegateB1.eventEndedReceivedOfferWhileActive).toEventually(equal(true), timeout: 1)
-            delegateB1.eventEndedReceivedOfferWhileActive = false
+            expect(delegateB1.eventReceivedOfferWhileActive).toEventually(equal(true), timeout: 2)
+            delegateB1.eventReceivedOfferWhileActive = false
 
             // Busy is for the incoming offer.
-            expect(delegateB1.shouldSendBusyInvoked).toEventually(equal(true), timeout: 1)
+            expect(delegateB1.shouldSendBusyInvoked).toEventually(equal(true), timeout: 2)
             delegateB1.shouldSendBusyInvoked = false
 
             // B2 behavior:
@@ -2805,12 +2871,16 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
-    func testMultiRingGlareNormalOfferFirst() {
-        multiRingGlareTesting(scenario: .normalGlareOfferBeforeBusy)
+    func testMultiRingGlarePrimaryWinner() {
+        multiRingGlareTesting(scenario: .primaryWinner)
     }
 
-    func testMultiRingGlareNormalBusyFirst() {
-        multiRingGlareTesting(scenario: .normalGlareBusyBeforeOffer)
+    func testMultiRingGlarePrimaryLoser() {
+        multiRingGlareTesting(scenario: .primaryLoser)
+    }
+
+    func testMultiRingGlarePrimaryEqual() {
+        multiRingGlareTesting(scenario: .primaryEqual)
     }
 
     func testMultiRingGlareDifferentDevice() {

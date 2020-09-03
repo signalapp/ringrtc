@@ -73,6 +73,15 @@ export class RingRTCType {
 
   // Called by Rust
   onStartIncomingCall(remoteUserId: UserId, callId: CallId, isVideoCall: boolean): void {
+    // Temporary: Force hangup in all glare scenarios until handled gracefully.
+    // In case of a glare loser, an incoming call will be generated right
+    // after the outgoing call is ended. In that case, ignore it once.
+    if (this._call && this._call.endedReason === CallEndedReason.Glare) {
+      this._call.endedReason = undefined;
+      this.ignore(callId);
+      return;
+    }
+
     const isIncoming = true;
     const call = new Call(
       this.callManager,
@@ -132,7 +141,20 @@ export class RingRTCType {
   // Called by Rust
   onCallEnded(remoteUserId: UserId, reason: CallEndedReason) {
     const call = this._call;
-    if (!call || call.remoteUserId !== remoteUserId) {
+
+    // Temporary: Force hangup in all glare scenarios until handled gracefully.
+    if (call && (reason === CallEndedReason.ReceivedOfferWithGlare || reason === CallEndedReason.Glare)) {
+      call.hangup();
+    }
+
+    // If there is no call or the remoteUserId doesn't match that of
+    // the current call, or if one of the "receive offer while alread
+    // in a call" reasons are provided, don't end the current call, 
+    // just update the call history.
+    if (!call ||
+        (call.remoteUserId !== remoteUserId) ||
+        (reason === CallEndedReason.ReceivedOfferWhileActive) ||
+        (reason === CallEndedReason.ReceivedOfferExpired)) {
       if (this.handleAutoEndedIncomingCallRequest) {
         this.handleAutoEndedIncomingCallRequest(remoteUserId, reason);
       }
@@ -1011,6 +1033,7 @@ export enum CallEndedReason {
   Glare = "Glare",
   ReceivedOfferExpired = "ReceivedOfferExpired",
   ReceivedOfferWhileActive = "ReceivedOfferWhileActive",
+  ReceivedOfferWithGlare = "ReceivedOfferWithGlare",
   SignalingFailure = "SignalingFailure",
   ConnectionFailure = "ConnectionFailure",
   InternalFailure = "InternalFailure",
