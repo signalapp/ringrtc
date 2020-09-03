@@ -19,6 +19,11 @@ use tokio::prelude::*;
 use tokio::runtime;
 use tokio::timer::Interval;
 
+use hkdf::Hkdf;
+use rand::rngs::OsRng;
+use sha2::Sha256;
+use x25519_dalek::{PublicKey, StaticSecret};
+
 use crate::common::{
     units::DataRate,
     BandwidthMode,
@@ -49,6 +54,8 @@ use crate::webrtc::sdp_observer::{
     create_csd_observer,
     create_ssd_observer,
     SessionDescriptionInterface,
+    SrtpCryptoSuite,
+    SrtpKey,
 };
 use crate::webrtc::stats_observer::{create_stats_observer, StatsObserver};
 
@@ -474,7 +481,7 @@ where
     pub fn start_outgoing_parent(
         &mut self,
         call_media_type: CallMediaType,
-    ) -> Result<(IceGatherer, signaling::Offer)> {
+    ) -> Result<(StaticSecret, IceGatherer, signaling::Offer)> {
         let result = (|| {
             self.set_state(ConnectionState::Starting)?;
 
@@ -507,11 +514,16 @@ where
             offer_sdi.replace_rtp_data_channels_with_sctp()?;
             let v1_offer_sdp = offer_sdi.to_sdp()?;
 
-            let offer =
-                signaling::Offer::from_v2_and_v1_sdp(call_media_type, v2_offer_sdp, v1_offer_sdp)?;
+            let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
+            let offer = signaling::Offer::from_v3_and_v2_and_v1_sdp(
+                call_media_type,
+                local_public_key.as_bytes().to_vec(),
+                v2_offer_sdp,
+                v1_offer_sdp,
+            )?;
 
             self.set_state(ConnectionState::IceGathering)?;
-            Ok((ice_gatherer, offer))
+            Ok((local_secret, ice_gatherer, offer))
         })();
 
         // Always start the FSM no matter what happened above because
@@ -526,6 +538,7 @@ where
     //    to configure PeerConnection correctly.
     pub fn start_outgoing_child(
         &mut self,
+        local_secret: &StaticSecret,
         ice_gatherer: &IceGatherer,
         offer: &signaling::Offer,
         received: &signaling::ReceivedAnswer,
@@ -552,14 +565,31 @@ where
             let data_channel_observer = DataChannelObserver::new(self.clone())?;
             unsafe { data_channel.register_observer(data_channel_observer.rffi_interface())? };
 
-            let (answer_is_v2, answer_sdp) = received.answer.to_v2_or_v1_sdp()?;
-            let offer_sdp = if answer_is_v2 {
-                offer.to_v2_sdp()?
+            let (answer_is_v3_or_v2, answer_sdp, remote_public_key) =
+                received.answer.to_v3_or_v2_or_v1_sdp()?;
+            let offer_sdp = if answer_is_v3_or_v2 {
+                offer.to_v3_or_v2_sdp()?
             } else {
                 offer.to_v1_sdp()?
             };
-            let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
-            let answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
+            let mut offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+            let mut answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
+
+            if let Some(remote_public_key) = remote_public_key {
+                let callee_identity_key = &received.sender_identity_key;
+                let caller_identity_key = &received.receiver_identity_key;
+                let NegotiatedSrtpKeys {
+                    offer_key,
+                    answer_key,
+                } = negotiate_srtp_keys(
+                    &local_secret,
+                    &remote_public_key,
+                    caller_identity_key,
+                    callee_identity_key,
+                )?;
+                offer_sdi.disable_dtls_and_set_srtp_key(&offer_key)?;
+                answer_sdi.disable_dtls_and_set_srtp_key(&answer_key)?;
+            }
 
             let observer = create_ssd_observer();
             peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
@@ -615,8 +645,29 @@ where
 
             let peer_connection = webrtc.pc_interface()?;
 
-            let (offer_is_v2, offer_sdp) = received.offer.to_v2_or_v1_sdp()?;
-            let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+            let (offer_is_v3_or_v2, offer_sdp, remote_public_key) =
+                received.offer.to_v3_or_v2_or_v1_sdp()?;
+            let mut offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+
+            let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
+            let answer_key = match remote_public_key {
+                None => None,
+                Some(remote_public_key) => {
+                    let caller_identity_key = &received.sender_identity_key;
+                    let callee_identity_key = &received.receiver_identity_key;
+                    let NegotiatedSrtpKeys {
+                        offer_key,
+                        answer_key,
+                    } = negotiate_srtp_keys(
+                        &local_secret,
+                        &remote_public_key,
+                        caller_identity_key,
+                        callee_identity_key,
+                    )?;
+                    offer_sdi.disable_dtls_and_set_srtp_key(&offer_key)?;
+                    Some(answer_key)
+                }
+            };
 
             let observer = create_ssd_observer();
             peer_connection.set_remote_description(observer.as_ref(), &offer_sdi);
@@ -627,13 +678,20 @@ where
 
             let observer = create_csd_observer();
             peer_connection.create_answer(observer.as_ref());
-            let answer_sdi = observer.get_result()?;
+            let mut answer_sdi = observer.get_result()?;
+            if let Some(answer_key) = answer_key {
+                answer_sdi.disable_dtls_and_set_srtp_key(&answer_key)?;
+            }
+
             // Get the answer here before it is mutated with candidates by set_local_description.
             let answer_sdp = answer_sdi.to_sdp()?;
-            let answer = if offer_is_v2 {
-                signaling::Answer::from_v2_sdp(answer_sdp)?
+            let answer = if offer_is_v3_or_v2 {
+                signaling::Answer::from_v3_and_v2_sdp(
+                    local_public_key.as_bytes().to_vec(),
+                    answer_sdp,
+                )?
             } else {
-                signaling::Answer::from_v1_sdp(answer_sdp)
+                signaling::Answer::from_v1_sdp(answer_sdp)?
             };
 
             // Don't enable incoming RTP until accepted.
@@ -1553,7 +1611,69 @@ where
     }
 }
 
-#[inline]
+fn generate_local_secret_and_public_key() -> Result<(StaticSecret, PublicKey)> {
+    let secret = StaticSecret::new(&mut OsRng);
+    let public = PublicKey::from(&secret);
+    Ok((secret, public))
+}
+
+struct NegotiatedSrtpKeys {
+    pub offer_key:  SrtpKey,
+    pub answer_key: SrtpKey,
+}
+
+fn negotiate_srtp_keys(
+    local_secret: &StaticSecret,
+    remote_public_key: &[u8],
+    caller_identity_key: &[u8],
+    callee_identity_key: &[u8],
+) -> Result<NegotiatedSrtpKeys> {
+    info!("Negotiating SRTP keys using local_public_key: {:?}, remote_public_key: {:?}, caller_identity_key: {:?}, callee_identity_key: {:?}",
+        PublicKey::from(local_secret).as_bytes(), remote_public_key, caller_identity_key, callee_identity_key);
+
+    let remote_public_key = {
+        let mut array = [0u8; 32];
+        array.copy_from_slice(remote_public_key);
+        PublicKey::from(array)
+    };
+
+    let shared_secret = local_secret.diffie_hellman(&remote_public_key);
+
+    let hkdf_salt = vec![0u8; 32];
+    let hkdf_info_prefix = "Signal_Calling_20200807_SignallingDH_SRTPKey_KDF";
+    let mut hkdf_info = Vec::with_capacity(
+        hkdf_info_prefix.len() + caller_identity_key.len() + callee_identity_key.len(),
+    );
+    hkdf_info.extend_from_slice(hkdf_info_prefix.as_bytes());
+    hkdf_info.extend_from_slice(caller_identity_key);
+    hkdf_info.extend_from_slice(callee_identity_key);
+    let hkdf = Hkdf::<Sha256>::new(Some(&hkdf_salt), shared_secret.as_bytes());
+
+    const SUITE: SrtpCryptoSuite = SrtpCryptoSuite::AeadAes256Gcm;
+    const KEY_SIZE: usize = 32;
+    const SALT_SIZE: usize = 12;
+    let mut okm = vec![0; KEY_SIZE + SALT_SIZE + KEY_SIZE + SALT_SIZE];
+    hkdf.expand(&hkdf_info, &mut okm)
+        .map_err(|_| RingRtcError::SrtpKeyNegotiationFailure)?;
+    let (offer_key, okm) = okm.split_at(KEY_SIZE);
+    let (offer_salt, okm) = okm.split_at(SALT_SIZE);
+    let (answer_key, okm) = okm.split_at(KEY_SIZE);
+    let (answer_salt, _) = okm.split_at(SALT_SIZE);
+
+    Ok(NegotiatedSrtpKeys {
+        offer_key:  SrtpKey {
+            suite: SUITE,
+            key:   offer_key.to_vec(),
+            salt:  offer_salt.to_vec(),
+        },
+        answer_key: SrtpKey {
+            suite: SUITE,
+            key:   answer_key.to_vec(),
+            salt:  answer_salt.to_vec(),
+        },
+    })
+}
+
 pub fn clamp<T: PartialOrd>(val: T, min: T, max: T) -> T {
     if val < min {
         return min;

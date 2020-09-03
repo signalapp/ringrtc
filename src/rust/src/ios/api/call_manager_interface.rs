@@ -417,6 +417,8 @@ pub extern "C" fn ringrtcReceivedAnswer(
     opaque: AppByteSlice,
     sdp: AppByteSlice,
     senderSupportsMultiRing: bool,
+    senderIdentityKey: AppByteSlice,
+    receiverIdentityKey: AppByteSlice,
 ) -> *mut c_void {
     let sender_device_feature_level = match senderSupportsMultiRing {
         true => FeatureLevel::MultiRing,
@@ -430,12 +432,17 @@ pub extern "C" fn ringrtcReceivedAnswer(
         byte_vec_from_app_slice(&opaque),
         string_from_app_slice(&sdp),
         sender_device_feature_level,
+        byte_vec_from_app_slice(&senderIdentityKey),
+        byte_vec_from_app_slice(&receiverIdentityKey),
     ) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
         }
-        Err(_e) => ptr::null_mut(),
+        Err(e) => {
+            error!("{}", e);
+            ptr::null_mut()
+        }
     }
 }
 
@@ -450,9 +457,11 @@ pub extern "C" fn ringrtcReceivedOffer(
     sdp: AppByteSlice,
     messageAgeSec: u64,
     callMediaType: i32,
-    recevierDeviceId: u32,
+    receiverDeviceId: u32,
     senderSupportsMultiRing: bool,
     receiverDeviceIsPrimary: bool,
+    senderIdentityKey: AppByteSlice,
+    receiverIdentityKey: AppByteSlice,
 ) -> *mut c_void {
     let sender_device_feature_level = match senderSupportsMultiRing {
         true => FeatureLevel::MultiRing,
@@ -468,15 +477,20 @@ pub extern "C" fn ringrtcReceivedOffer(
         string_from_app_slice(&sdp),
         messageAgeSec,
         CallMediaType::from_i32(callMediaType),
-        recevierDeviceId as DeviceId,
+        receiverDeviceId as DeviceId,
         sender_device_feature_level,
         receiverDeviceIsPrimary,
+        byte_vec_from_app_slice(&senderIdentityKey),
+        byte_vec_from_app_slice(&receiverIdentityKey),
     ) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
         }
-        Err(_e) => ptr::null_mut(),
+        Err(e) => {
+            error!("{}", e);
+            ptr::null_mut()
+        }
     }
 }
 

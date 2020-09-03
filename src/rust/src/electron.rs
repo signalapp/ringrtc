@@ -424,6 +424,8 @@ declare_types! {
             let sender_supports_multi_ring = cx.argument::<JsBoolean>(6)?.value();
             let opaque = cx.argument::<JsValue>(7)?.as_value(&mut cx);
             let sdp = cx.argument::<JsValue>(8)?.as_value(&mut cx);
+            let sender_identity_key = cx.argument::<JsArrayBuffer>(9)?;
+            let receiver_identity_key = cx.argument::<JsArrayBuffer>(10)?;
 
             let opaque = match opaque.downcast::<JsArrayBuffer>() {
                 Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
@@ -433,6 +435,8 @@ declare_types! {
                 Ok(handle) => Some(handle.value()),
                 Err(_) => None,
             };
+            let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
+            let receiver_identity_key = cx.borrow(&receiver_identity_key, |handle| handle.as_slice().to_vec());
 
             let call_media_type = match offer_type {
                 1 => CallMediaType::Video,
@@ -443,11 +447,11 @@ declare_types! {
             } else {
                 FeatureLevel::Unspecified
             };
-            let offer = signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp);
-            debug!("JsCallManager.receivedOffer({}, {}, {}, {}, {}, {:?}, {})", peer_id, sender_device_id, call_id, receiver_device_id, call_media_type, sender_device_feature_level, offer.to_redacted_string());
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
+                let offer = signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp)?;
+
                 cm.call_manager.received_offer(peer_id, call_id, signaling::ReceivedOffer {
                     offer,
                     age: Duration::from_secs(age_sec),
@@ -456,6 +460,8 @@ declare_types! {
                     receiver_device_id,
                     // An electron client cannot be the primary device.
                     receiver_device_is_primary: false,
+                    sender_identity_key,
+                    receiver_identity_key,
                 })?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -463,12 +469,14 @@ declare_types! {
         }
 
         method receivedAnswer(mut cx) {
-            let peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
+            let _peer_id = cx.argument::<JsString>(0)?.value() as PeerId;
             let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = get_call_id_arg(&mut cx, 2);
             let sender_supports_multi_ring = cx.argument::<JsBoolean>(3)?.value();
             let opaque = cx.argument::<JsValue>(4)?.as_value(&mut cx);
             let sdp = cx.argument::<JsValue>(5)?.as_value(&mut cx);
+            let sender_identity_key = cx.argument::<JsArrayBuffer>(6)?;
+            let receiver_identity_key = cx.argument::<JsArrayBuffer>(7)?;
 
             let opaque = match opaque.downcast::<JsArrayBuffer>() {
                 Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
@@ -478,21 +486,24 @@ declare_types! {
                 Ok(handle) => Some(handle.value()),
                 Err(_) => None,
             };
+            let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
+            let receiver_identity_key = cx.borrow(&receiver_identity_key, |handle| handle.as_slice().to_vec());
 
             let sender_device_feature_level = if sender_supports_multi_ring {
                 FeatureLevel::MultiRing
             } else {
                 FeatureLevel::Unspecified
             };
-            let answer = signaling::Answer::from_opaque_or_sdp(opaque, sdp);
-            debug!("JsCallManager.receivedAnswer({}, {}, {}, {})", peer_id, sender_device_id, call_id, answer.to_redacted_string());
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
+                let answer = signaling::Answer::from_opaque_or_sdp(opaque, sdp)?;
                 cm.call_manager.received_answer(call_id, signaling::ReceivedAnswer {
                     answer,
                     sender_device_id,
                     sender_device_feature_level,
+                    sender_identity_key,
+                    receiver_identity_key,
                 })?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;

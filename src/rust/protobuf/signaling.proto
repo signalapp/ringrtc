@@ -16,24 +16,28 @@ package signaling;
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 // For future compatibility, we can add new slots (v2, v3, v4 ....)
 message Offer {
-  optional ConnectionParametersV2 v2 = 2;
+  optional ConnectionParametersV3OrV2 V3OrV2 = 2;
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 message Answer {
-  optional ConnectionParametersV2 v2 = 2;
+  optional ConnectionParametersV3OrV2 V3OrV2 = 2;
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Ice in SignalService.proto
 message IceCandidate {
-  optional IceCandidateV2 v2 = 2;
+  optional IceCandidateV3OrV2 V3OrV2 = 2;
 }
 
 // The V2 protocol uses SDP, DTLS, but not SCTP.
-message ConnectionParametersV2 {
+// The V3 protocol uses SDP, but not DTLS, but not SCTP.
+message ConnectionParametersV3OrV2 {
   optional string sdp = 1;
+  // V2 has this unset.
+  // V3 has this set
+  optional bytes public_key = 2;
 }
 
-message IceCandidateV2 {
+message IceCandidateV3OrV2 {
   optional string sdp = 1;
 }

@@ -112,7 +112,7 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
                     .into_owned()
             };
             // ICE candidates are the same for V1 and V2, so this works for V1 as well.
-            let ice_candidate = signaling::IceCandidate::from_v2_sdp(sdp);
+            let ice_candidate = signaling::IceCandidate::from_v3_and_v2_and_v1_sdp(sdp);
             if let Ok(ice_candidate) = ice_candidate {
                 let force_send = false;
                 connection

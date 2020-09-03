@@ -698,7 +698,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking receivedAnswer()...")
-            try callManager?.receivedAnswer(sourceDevice: 1, callId: callId, opaque: nil, sdp: answer, remoteSupportsMultiRing: true)
+            try callManager?.receivedAnswer(sourceDevice: 1, callId: callId, opaque: nil, sdp: answer, remoteSupportsMultiRing: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedAnswer() failed: \(error)")
             return
@@ -838,7 +838,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -926,7 +926,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: false, isLocalDevicePrimary: false)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: false, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1232,7 +1232,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1298,7 +1298,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1420,7 +1420,7 @@ class SignalRingRTCTests: XCTestCase {
                     opaque = delegateCallee.sentOfferOpaque
                 }
 
-                try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: opaque, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: opaque, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -1458,7 +1458,7 @@ class SignalRingRTCTests: XCTestCase {
                     opaque = delegateCallee.sentAnswerOpaque
                 }
 
-                try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: opaque, sdp: delegateCallee.sentAnswer, remoteSupportsMultiRing: true)
+                try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: opaque, sdp: delegateCallee.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedAnswer() failed: \(error)")
                 return
@@ -1595,7 +1595,7 @@ class SignalRingRTCTests: XCTestCase {
             let call = OpaqueCallData(value: delegateCallee.expectedValue, remote: delegateCallee.expectedValue)
 
             // Send the ICE candidates right after the offer.
-            try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             try callManagerCallee?.receivedIceCandidates(sourceDevice: sourceDevice, callId: callId, candidates: delegateCaller.sentIceCandidates)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
@@ -1624,7 +1624,7 @@ class SignalRingRTCTests: XCTestCase {
         do {
             Logger.debug("Test: Invoking receivedAnswer()...")
 
-            try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: delegateCallee.sentAnswer, remoteSupportsMultiRing: true)
+            try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: delegateCallee.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
         } catch {
             XCTFail("Call Manager receivedAnswer() failed: \(error)")
             return
@@ -1777,7 +1777,7 @@ class SignalRingRTCTests: XCTestCase {
         do {
             Logger.debug("Test: Invoking B.receivedOffer(A)...")
             let call = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
-            try callManagerB?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdAtoBOverride, opaque: nil, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+            try callManagerB?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdAtoBOverride, opaque: nil, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1944,7 +1944,7 @@ class SignalRingRTCTests: XCTestCase {
                 busyCallee.delegate.shouldSendOfferInvoked = false
 
                 let callExtra = OpaqueCallData(value: delegateExtra.expectedValue, remote: calleeAddress)
-                try callManagerExtra?.receivedOffer(call: callExtra, sourceDevice: busyCallee.deviceId, callId: callId, opaque: nil, sdp: busyCallee.delegate.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: extraDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerExtra?.receivedOffer(call: callExtra, sourceDevice: busyCallee.deviceId, callId: callId, opaque: nil, sdp: busyCallee.delegate.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: extraDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
 
                 expect(busyCallee.delegate.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
                 busyCallee.delegate.canSendICE = true
@@ -1959,7 +1959,7 @@ class SignalRingRTCTests: XCTestCase {
                 delegateExtra.shouldSendAnswerInvoked = false
                 expect(delegateExtra.recentCallId).to(equal(callId))
 
-                try busyCallee.callManager.receivedAnswer(sourceDevice: extraDevice, callId: callId, opaque: nil, sdp: delegateExtra.sentAnswer, remoteSupportsMultiRing: true)
+                try busyCallee.callManager.receivedAnswer(sourceDevice: extraDevice, callId: callId, opaque: nil, sdp: delegateExtra.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
 
                 expect(delegateExtra.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
 
@@ -2036,7 +2036,7 @@ class SignalRingRTCTests: XCTestCase {
 
                     // @note We are specifying multiple devices as primary, but it shouldn't
                     // matter for this type of testing.
-                    try element.callManager.receivedOffer(call: call, sourceDevice: callerDevice, callId: callId, opaque: nil, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: element.deviceId, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                    try element.callManager.receivedOffer(call: call, sourceDevice: callerDevice, callId: callId, opaque: nil, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: element.deviceId, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
                 }
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
@@ -2099,7 +2099,7 @@ class SignalRingRTCTests: XCTestCase {
                     expect(element.delegate.recentCallId).to(equal(callId))
 
                     Logger.debug("Test: Invoking receivedAnswer()...")
-                    try callManagerCaller?.receivedAnswer(sourceDevice: element.deviceId, callId: callId, opaque: nil, sdp: element.delegate.sentAnswer, remoteSupportsMultiRing: true)
+                    try callManagerCaller?.receivedAnswer(sourceDevice: element.deviceId, callId: callId, opaque: nil, sdp: element.delegate.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
                 }
             } catch {
                 XCTFail("Call Manager receivedAnswer() failed: \(error)")
@@ -2473,9 +2473,9 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
                 let callA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
                 let callA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2485,7 +2485,7 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking A1.receivedOffer(B1)...")
                 let call = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
-                try callManagerA1?.receivedOffer(call: call, sourceDevice: b1Device, callId: callIdB1toAOverride, opaque: nil, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerA1?.receivedOffer(call: call, sourceDevice: b1Device, callId: callIdB1toAOverride, opaque: nil, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2682,9 +2682,9 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
                 let callA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
                 let callA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2719,7 +2719,7 @@ class SignalRingRTCTests: XCTestCase {
             // Send answer and candidates between A1 and B1.
             do {
                 Logger.debug("Test: Invoking received*()...")
-                try callManagerA1?.receivedAnswer(sourceDevice: b1Device, callId: callIdA1toB, opaque: nil, sdp: delegateB1.sentAnswer, remoteSupportsMultiRing: true)
+                try callManagerA1?.receivedAnswer(sourceDevice: b1Device, callId: callIdA1toB, opaque: nil, sdp: delegateB1.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
                 try callManagerB1?.receivedIceCandidates(sourceDevice: a1Device, callId: callIdA1toB, candidates: delegateA1.sentIceCandidates)
                 try callManagerA1?.receivedIceCandidates(sourceDevice: b1Device, callId: callIdA1toB, candidates: delegateB1.sentIceCandidates)
             } catch {
@@ -2803,9 +2803,9 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A2)...")
                 let callA2toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-                try callManagerB1?.receivedOffer(call: callA2toB1, sourceDevice: a2Device, callId: callIdA2toB, opaque: nil, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true)
+                try callManagerB1?.receivedOffer(call: callA2toB1, sourceDevice: a2Device, callId: callIdA2toB, opaque: nil, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
                 let callA2toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-                try callManagerB2?.receivedOffer(call: callA2toB2, sourceDevice: a2Device, callId: callIdA2toB, opaque: nil, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false)
+                try callManagerB2?.receivedOffer(call: callA2toB2, sourceDevice: a2Device, callId: callIdA2toB, opaque: nil, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2926,4 +2926,7 @@ class SignalRingRTCTests: XCTestCase {
         "a=mid:data\r\n" +
         "a=sctp-port:5000\r\n" +
         "a=max-message-size:262144\r\n"
+
+    let dummyLocalIdentityKey = Data(_: [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
+    let dummyRemoteIdentityKey = Data(_: [0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f])
 }

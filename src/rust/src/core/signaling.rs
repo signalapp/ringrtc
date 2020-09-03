@@ -23,12 +23,19 @@ pub enum Version {
     // The V2 protocol does not use SCTP.  It uses RTP data channels.
     // It uses SDP, but embedded in a protobuf.
     V2,
+    // The V3 protocol does not use DTLS.  It uses a custom
+    // Diffie-Helman exchange to derive SRTP keys.
+    V3,
 }
 
 impl Version {
     pub fn enable_dtls(self) -> bool {
-        // We expect V3 will not use DTLS
-        true
+        match self {
+            Self::V1 => true,
+            Self::V2 => true,
+            // This disables DTLS
+            Self::V3 => false,
+        }
     }
 
     pub fn enable_rtp_data_channel(self) -> bool {
@@ -36,6 +43,7 @@ impl Version {
             Self::V1 => false,
             // This disables SCTP
             Self::V2 => true,
+            Self::V3 => true,
         }
     }
 }
@@ -106,6 +114,10 @@ pub struct Offer {
     // only sending an receving the opaque value.
     pub opaque:          Option<Vec<u8>>,
     pub sdp:             Option<String>,
+    // We cache a deserialized opaque value to avoid deserializing it repeatedly.
+    // If opaque is set, this should be set as well, and vice-versa.
+    // Once SDP is gone we can just remove all the Options here.
+    proto:               Option<protobuf::signaling::Offer>,
 }
 
 impl Offer {
@@ -113,56 +125,88 @@ impl Offer {
         call_media_type: CallMediaType,
         opaque: Option<Vec<u8>>,
         sdp: Option<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let proto = Self::deserialize_opaque(opaque.as_ref())?;
+        Ok(Self {
             call_media_type,
             sdp,
             opaque,
+            proto,
+        })
+    }
+
+    fn deserialize_opaque(opaque: Option<&Vec<u8>>) -> Result<Option<protobuf::signaling::Offer>> {
+        match opaque {
+            None => Ok(None),
+            Some(opaque) => Ok(Some(protobuf::signaling::Offer::decode(Bytes::from(
+                opaque.clone(),
+            ))?)),
         }
     }
 
     pub fn latest_version(&self) -> Version {
-        if self.opaque.is_some() {
-            // Assume it's V2.  Don't bother decoding it.
-            Version::V2
-        } else {
-            Version::V1
+        match self {
+            Self {
+                proto:
+                    Some(protobuf::signaling::Offer {
+                        v3_or_v2:
+                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
+                                public_key: Some(_),
+                                ..
+                            }),
+                    }),
+                ..
+            } => Version::V3,
+            Self {
+                proto:
+                    Some(protobuf::signaling::Offer {
+                        v3_or_v2:
+                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
+                                public_key: None,
+                                ..
+                            }),
+                    }),
+                ..
+            } => Version::V2,
+            _ => Version::V1,
         }
     }
 
-    pub fn from_v2_and_v1_sdp(
+    // V3 == V2 + public key
+    pub fn from_v3_and_v2_and_v1_sdp(
         call_media_type: CallMediaType,
-        v2_sdp: String,
+        public_key: Vec<u8>,
+        v3_or_v2_sdp: String,
         v1_sdp: String,
     ) -> Result<Self> {
-        let mut offer_proto_v2 = protobuf::signaling::ConnectionParametersV2::default();
-        offer_proto_v2.sdp = Some(v2_sdp);
+        let mut offer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2::default();
+        offer_proto_v3_or_v2.public_key = Some(public_key);
+        offer_proto_v3_or_v2.sdp = Some(v3_or_v2_sdp);
 
         let mut offer_proto = protobuf::signaling::Offer::default();
-        offer_proto.v2 = Some(offer_proto_v2);
+        offer_proto.v3_or_v2 = Some(offer_proto_v3_or_v2);
 
         let mut opaque = BytesMut::with_capacity(offer_proto.encoded_len());
         offer_proto.encode(&mut opaque)?;
 
-        Ok(Self::from_opaque_or_sdp(
-            call_media_type,
-            Some(opaque.to_vec()),
-            Some(v1_sdp),
-        ))
+        // Once SDP is gone, pass in the proto rather than deserializing it here.
+        Self::from_opaque_or_sdp(call_media_type, Some(opaque.to_vec()), Some(v1_sdp))
     }
 
-    pub fn to_v2_sdp(&self) -> Result<String> {
+    pub fn to_v3_or_v2_sdp(&self) -> Result<String> {
         match self {
-            // Prefer opaque over SDP
+            // Prefer opaque/proto over SDP
             Self {
-                opaque: Some(opaque),
+                proto:
+                    Some(protobuf::signaling::Offer {
+                        v3_or_v2:
+                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
+                                sdp: Some(v3_or_v2_sdp),
+                                ..
+                            }),
+                    }),
                 ..
-            } => match protobuf::signaling::Offer::decode(Bytes::from(opaque.clone()))? {
-                protobuf::signaling::Offer {
-                    v2: Some(protobuf::signaling::ConnectionParametersV2 { sdp: Some(v2_sdp) }),
-                } => Ok(v2_sdp),
-                _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
-            },
+            } => Ok(v3_or_v2_sdp.clone()),
             _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
         }
     }
@@ -176,29 +220,28 @@ impl Offer {
         }
     }
 
-    // First return value means "is_v2"
-    pub fn to_v2_or_v1_sdp(&self) -> Result<(bool, String)> {
+    // First return value means "is_v3_or_v2"
+    // V3 == V2 + public_key
+    pub fn to_v3_or_v2_or_v1_sdp(&self) -> Result<(bool, String, Option<Vec<u8>>)> {
         match self {
             // Prefer opaque over SDP
             Self {
-                opaque: Some(opaque),
+                proto:
+                    Some(protobuf::signaling::Offer {
+                        v3_or_v2:
+                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
+                                sdp: Some(v3_or_v2_sdp),
+                                public_key,
+                            }),
+                    }),
                 ..
-            } => match protobuf::signaling::Offer::decode(Bytes::from(opaque.clone()))? {
-                protobuf::signaling::Offer {
-                    v2: Some(protobuf::signaling::ConnectionParametersV2 { sdp: Some(v2_sdp) }),
-                } => Ok((true, v2_sdp)),
-                _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
-            },
+            } => Ok((true, v3_or_v2_sdp.clone(), public_key.clone())),
             Self {
-                opaque: None,
+                proto: None,
                 sdp: Some(v1_sdp),
                 ..
-            } => Ok((false, v1_sdp.clone())),
-            Self {
-                opaque: None,
-                sdp: None,
-                ..
-            } => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+            } => Ok((false, v1_sdp.clone(), None)),
+            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
         }
     }
 
@@ -234,11 +277,25 @@ pub struct Answer {
     // that can have both the SDP and opaque values.
     pub opaque: Option<Vec<u8>>,
     pub sdp:    Option<String>,
+    // We cache a deserialized opaque value to avoid deserializing it repeatedly.
+    // If opaque is set, this should be set as well, and vice-versa.
+    // Once SDP is gone we can just remove all the Options here.
+    proto:      Option<protobuf::signaling::Answer>,
 }
 
 impl Answer {
-    pub fn from_opaque_or_sdp(opaque: Option<Vec<u8>>, sdp: Option<String>) -> Self {
-        Self { sdp, opaque }
+    pub fn from_opaque_or_sdp(opaque: Option<Vec<u8>>, sdp: Option<String>) -> Result<Self> {
+        let proto = Self::deserialize_opaque(opaque.as_ref())?;
+        Ok(Self { sdp, opaque, proto })
+    }
+
+    fn deserialize_opaque(opaque: Option<&Vec<u8>>) -> Result<Option<protobuf::signaling::Answer>> {
+        match opaque {
+            None => Ok(None),
+            Some(opaque) => Ok(Some(protobuf::signaling::Answer::decode(Bytes::from(
+                opaque.clone(),
+            ))?)),
+        }
     }
 
     pub fn to_info_string(&self) -> String {
@@ -250,53 +307,76 @@ impl Answer {
     }
 
     pub fn latest_version(&self) -> Version {
-        if self.opaque.is_some() {
-            // Assume it's V2.  Don't bother decoding it.
-            Version::V2
-        } else {
-            Version::V1
+        match self {
+            Self {
+                proto:
+                    Some(protobuf::signaling::Answer {
+                        v3_or_v2:
+                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
+                                public_key: Some(_),
+                                ..
+                            }),
+                    }),
+                ..
+            } => Version::V3,
+            Self {
+                proto:
+                    Some(protobuf::signaling::Answer {
+                        v3_or_v2:
+                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
+                                public_key: None,
+                                ..
+                            }),
+                    }),
+                ..
+            } => Version::V2,
+            _ => Version::V1,
         }
     }
 
-    pub fn from_v2_sdp(v2_sdp: String) -> Result<Self> {
-        let mut answer_proto_v2 = protobuf::signaling::ConnectionParametersV2::default();
-        answer_proto_v2.sdp = Some(v2_sdp);
+    // V3 == V2 + public key
+    pub fn from_v3_and_v2_sdp(public_key: Vec<u8>, v3_and_v2_sdp: String) -> Result<Self> {
+        let mut answer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2::default();
+        answer_proto_v3_or_v2.public_key = Some(public_key);
+        answer_proto_v3_or_v2.sdp = Some(v3_and_v2_sdp);
 
         let mut answer_proto = protobuf::signaling::Answer::default();
-        answer_proto.v2 = Some(answer_proto_v2);
+        answer_proto.v3_or_v2 = Some(answer_proto_v3_or_v2);
 
         let mut opaque = BytesMut::with_capacity(answer_proto.encoded_len());
         answer_proto.encode(&mut opaque)?;
 
+        // Once SDP is gone, pass in the proto rather than deserializing it here.
         let v1_sdp = None;
-        Ok(Self::from_opaque_or_sdp(Some(opaque.to_vec()), v1_sdp))
+        Self::from_opaque_or_sdp(Some(opaque.to_vec()), v1_sdp)
     }
 
-    pub fn from_v1_sdp(v1_sdp: String) -> Self {
+    pub fn from_v1_sdp(v1_sdp: String) -> Result<Self> {
         Self::from_opaque_or_sdp(None, Some(v1_sdp))
     }
 
-    // First return value means "is_v2"
-    pub fn to_v2_or_v1_sdp(&self) -> Result<(bool, String)> {
+    // First return value means "is_v3_or_v2"
+    // V3 == V2 + public_key
+    pub fn to_v3_or_v2_or_v1_sdp(&self) -> Result<(bool, String, Option<Vec<u8>>)> {
         match self {
             // Prefer opaque over SDP
             Self {
-                opaque: Some(opaque),
+                proto:
+                    Some(protobuf::signaling::Answer {
+                        v3_or_v2:
+                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
+                                sdp: Some(v3_or_v2_sdp),
+                                public_key,
+                            }),
+                    }),
                 ..
-            } => match protobuf::signaling::Answer::decode(Bytes::from(opaque.clone()))? {
-                protobuf::signaling::Answer {
-                    v2: Some(protobuf::signaling::ConnectionParametersV2 { sdp: Some(v2_sdp) }),
-                } => Ok((true, v2_sdp)),
-                _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
-            },
+            } => Ok((true, v3_or_v2_sdp.clone(), public_key.clone())),
             Self {
-                opaque: None,
+                proto: None,
                 sdp: Some(v1_sdp),
-            } => Ok((false, v1_sdp.clone())),
-            Self {
-                opaque: None,
-                sdp: None,
-            } => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+                ..
+            } => Ok((false, v1_sdp.clone(), None)),
+            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
         }
     }
 }
@@ -343,13 +423,13 @@ impl IceCandidate {
         redacted_string_from_opaque_or_sdp(self.opaque.as_ref(), self.sdp.as_ref())
     }
 
-    // ICE candiates are the same for V1 and V2, so this works for V1 as well.
-    pub fn from_v2_sdp(sdp: String) -> Result<Self> {
-        let mut ice_candidate_proto_v2 = protobuf::signaling::IceCandidateV2::default();
-        ice_candidate_proto_v2.sdp = Some(sdp.clone());
+    // ICE candidates are the same for V1 and V2 and V3.
+    pub fn from_v3_and_v2_and_v1_sdp(sdp: String) -> Result<Self> {
+        let mut ice_candidate_proto_v3_or_v2 = protobuf::signaling::IceCandidateV3OrV2::default();
+        ice_candidate_proto_v3_or_v2.sdp = Some(sdp.clone());
 
         let mut ice_candidate_proto = protobuf::signaling::IceCandidate::default();
-        ice_candidate_proto.v2 = Some(ice_candidate_proto_v2);
+        ice_candidate_proto.v3_or_v2 = Some(ice_candidate_proto_v3_or_v2);
 
         let mut opaque = BytesMut::with_capacity(ice_candidate_proto.encoded_len());
         ice_candidate_proto.encode(&mut opaque)?;
@@ -357,8 +437,8 @@ impl IceCandidate {
         Ok(Self::from_opaque_or_sdp(Some(opaque.to_vec()), Some(sdp)))
     }
 
-    // ICE candiates are the same for V1 and V2, so this works for V1 as well.
-    pub fn to_v2_sdp(&self) -> Result<String> {
+    // ICE candidates are the same for V1 and V2 and V3.
+    pub fn to_v3_and_v2_and_v1_sdp(&self) -> Result<String> {
         match self {
             // Prefer opaque over SDP
             Self {
@@ -366,8 +446,11 @@ impl IceCandidate {
                 ..
             } => match protobuf::signaling::IceCandidate::decode(Bytes::from(opaque.clone()))? {
                 protobuf::signaling::IceCandidate {
-                    v2: Some(protobuf::signaling::IceCandidateV2 { sdp: Some(sdp) }),
-                } => Ok(sdp),
+                    v3_or_v2:
+                        Some(protobuf::signaling::IceCandidateV3OrV2 {
+                            sdp: Some(v3_or_v2_sdp),
+                        }),
+                } => Ok(v3_or_v2_sdp),
                 _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
             },
             Self {
@@ -517,6 +600,8 @@ pub struct ReceivedOffer {
     pub receiver_device_id:          DeviceId,
     /// If true, the receiver (local) device is the primary device, otherwise a linked device
     pub receiver_device_is_primary:  bool,
+    pub sender_identity_key:         Vec<u8>,
+    pub receiver_identity_key:       Vec<u8>,
 }
 
 /// An Answer with extra info specific to receiving
@@ -525,6 +610,8 @@ pub struct ReceivedAnswer {
     pub sender_device_id:            DeviceId,
     /// The feature level supported by the sender device
     pub sender_device_feature_level: FeatureLevel,
+    pub sender_identity_key:         Vec<u8>,
+    pub receiver_identity_key:       Vec<u8>,
 }
 
 /// An Ice message with extra info specific to receiving

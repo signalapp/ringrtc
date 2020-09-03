@@ -8,6 +8,7 @@
 //! WebRTC FFI Create / Set Session Description Interface.
 
 use crate::core::util::RustObject;
+use libc::size_t;
 use std::ffi::c_void;
 use std::os::raw::c_char;
 
@@ -49,4 +50,13 @@ extern "C" {
 
     pub fn Rust_replaceRtpDataChannelsWithSctp(sdi: *const RffiSessionDescriptionInterface)
         -> bool;
+
+    pub fn Rust_disableDtlsAndSetSrtpKey(
+        sdi: *const RffiSessionDescriptionInterface,
+        crypto_suite: crate::webrtc::sdp_observer::SrtpCryptoSuite,
+        key_ptr: *const u8,
+        key_len: size_t,
+        salt_ptr: *const u8,
+        salt_len: size_t,
+    ) -> bool;
 }

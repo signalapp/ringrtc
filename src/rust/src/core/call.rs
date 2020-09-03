@@ -17,6 +17,7 @@ use futures::sync::mpsc::{Receiver, Sender};
 use futures::Future;
 use tokio::runtime;
 use tokio::timer::Delay;
+use x25519_dalek::StaticSecret;
 
 use crate::common::{
     ApplicationEvent,
@@ -89,6 +90,9 @@ where
     T: Platform,
 {
     parent_connection: Connection<T>,
+    // Used to negotiate SRTP keys with
+    // the remote public key derived from the remote local secret.
+    local_secret:      StaticSecret,
     ice_gatherer:      IceGatherer,
     offer:             signaling::Offer,
 }
@@ -562,14 +566,18 @@ where
                     &self,
                     0,
                     ConnectionType::OutgoingParent,
+                    // This is V2 instead of V3 so that we can send out the same SDP in the offer
+                    // for V2 and V3, which has DTLS.
+                    // It's just that before we use the SDP for V3, we replace DTLS with SDES.
                     signaling::Version::V2,
                 )?;
-                let (ice_gatherer, offer) =
+                let (local_secret, ice_gatherer, offer) =
                     parent_connection.start_outgoing_parent(self.media_type)?;
 
                 // Keep around so that it's not closed until all the connections are closed.
                 *(self.forking.lock()?) = Some(ForkingState {
                     parent_connection: parent_connection.clone(),
+                    local_secret,
                     ice_gatherer,
                     offer: offer.clone(),
                 });
@@ -613,6 +621,7 @@ where
                     received.answer.latest_version(),
                 )?;
                 child_connection.start_outgoing_child(
+                    &forking.local_secret,
                     &forking.ice_gatherer,
                     &forking.offer,
                     &received,

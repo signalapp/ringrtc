@@ -126,4 +126,6 @@ pub enum RingRtcError {
     // Misc error codes
     #[fail(display = "Event stream polling failed")]
     FsmStreamPoll,
+    #[fail(display = "Failed to negotiate SRTP keys")]
+    SrtpKeyNegotiationFailure,
 }

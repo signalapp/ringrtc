@@ -73,7 +73,7 @@ macro_rules! check_active_call {
     ) => {
         match $s.active_call() {
             Ok(v) => {
-                info!("{}(): call_id: {}", $f, v.call_id());
+                info!("{}(): active call_id: {}", $f, v.call_id());
                 v
             }
             _ => {

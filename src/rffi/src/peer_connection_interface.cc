@@ -16,6 +16,7 @@
 #include "rffi/api/peer_connection_interface_intf.h"
 #include "rffi/src/sdp_observer.h"
 #include "rffi/src/stats_observer.h"
+#include "rtc_base/third_party/base64/base64.h"
 
 #include <string>
 
@@ -110,6 +111,48 @@ Rust_replaceRtpDataChannelsWithSctp(webrtc::SessionDescriptionInterface* sdi) {
   return true;
 }
 
+RUSTEXPORT bool
+Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* sdi,
+                              int                                  crypto_suite,
+                              const char*                          key_ptr,
+                              size_t                               key_len,
+                              const char*                          salt_ptr,
+                              size_t                               salt_len) {
+  if (!sdi) {
+    return false;
+  }
+
+  cricket::SessionDescription* session = sdi->description();
+  if (!session) {
+    return false;
+  }
+
+  cricket::CryptoParams crypto_params;
+  crypto_params.cipher_suite = rtc::SrtpCryptoSuiteToName(crypto_suite);
+
+  std::string key(key_ptr, key_len);
+  std::string salt(salt_ptr, salt_len);
+  crypto_params.key_params = "inline:" + rtc::Base64::Encode(key + salt);
+
+  // Disable DTLS
+  for (cricket::TransportInfo& transport : session->transport_infos()) {
+    transport.description.connection_role = cricket::CONNECTIONROLE_NONE;
+    transport.description.identity_fingerprint = nullptr;
+  }
+
+  // Set SRTP key
+  for (cricket::ContentInfo& content : session->contents()) {
+    cricket::MediaContentDescription* media = content.media_description();
+    if (media) {
+      media->set_protocol(cricket::kMediaProtocolSavpf);
+      std::vector<cricket::CryptoParams> cryptos;
+      cryptos.push_back(crypto_params);
+      media->set_cryptos(cryptos);
+    }
+  }
+
+  return true;
+}
 
 RUSTEXPORT void
 Rust_createAnswer(PeerConnectionInterface*              pc_interface,

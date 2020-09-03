@@ -226,7 +226,6 @@ public class CallManager {
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
                    callContext);
-
   }
 
   /**
@@ -318,6 +317,8 @@ public class CallManager {
    * @param localDevice              the local deviceId of the client
    * @param remoteSupportsMultiRing  if true, the remote device supports the multi-ring feature
    * @param isLocalDevicePrimary     if true, the local device is considered a primary device
+   * @param senderIdentityKey        the identity key of the remote client
+   * @param receiverIdentityKey      the identity key of the local client
    *
    * @throws CallException for native code failures
    *
@@ -331,7 +332,9 @@ public class CallManager {
                             CallMediaType    callMediaType,
                             Integer          localDevice,
                             boolean          remoteSupportsMultiRing,
-                            boolean          isLocalDevicePrimary)
+                            boolean          isLocalDevicePrimary,
+                            @NonNull byte[]  senderIdentityKey,
+                            @NonNull byte[]  receiverIdentityKey)
     throws CallException
   {
     checkCallManagerExists();
@@ -348,7 +351,9 @@ public class CallManager {
                          callMediaType.ordinal(),
                          localDevice,
                          remoteSupportsMultiRing,
-                         isLocalDevicePrimary);
+                         isLocalDevicePrimary,
+                         senderIdentityKey,
+                         receiverIdentityKey);
   }
 
   /**
@@ -360,6 +365,8 @@ public class CallManager {
    * @param opaque                   the opaque answer
    * @param sdp                      the SDP answer (depreacated/legacy)
    * @param remoteSupportsMultiRing  if true, the remote device supports the multi-ring feature
+   * @param senderIdentityKey        the identity key of the remote client
+   * @param receiverIdentityKey      the identity key of the local client
    *
    * @throws CallException for native code failures
    *
@@ -368,7 +375,9 @@ public class CallManager {
                              Integer          remoteDevice,
                              @Nullable byte[] opaque,
                              @Nullable String sdp,
-                             boolean          remoteSupportsMultiRing)
+                             boolean          remoteSupportsMultiRing,
+                             @NonNull byte[]  senderIdentityKey,
+                             @NonNull byte[]  receiverIdentityKey)
     throws CallException
   {
     checkCallManagerExists();
@@ -379,7 +388,9 @@ public class CallManager {
                           remoteDevice.intValue(),
                           opaque,
                           sdp,
-                          remoteSupportsMultiRing);
+                          remoteSupportsMultiRing,
+                          senderIdentityKey,
+                          receiverIdentityKey);
   }
 
   /**
@@ -604,7 +615,9 @@ public class CallManager {
     configuration.enableDtlsSrtp = enableDtls;
     configuration.enableRtpDataChannel = enableRtpDataChannel;
 
-    constraints.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
+    if (enableDtls) {
+      constraints.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
+    }
 
     PeerConnectionFactory factory       = callContext.peerConnectionFactory;
     CameraControl         cameraControl = callContext.cameraControl;
@@ -1226,7 +1239,9 @@ public class CallManager {
                                int              remoteDevice,
                                @Nullable byte[] opaque,
                                @Nullable String sdp,
-                               boolean          remoteSupportsMultiRing)
+                               boolean          remoteSupportsMultiRing,
+                               @NonNull byte[]  senderIdentityKey,
+                               @NonNull byte[]  receiverIdentityKey)
     throws CallException;
 
   private native
@@ -1240,7 +1255,9 @@ public class CallManager {
                               int              callMediaType,
                               int              localDevice,
                               boolean          remoteSupportsMultiRing,
-                              boolean          isLocalDevicePrimary)
+                              boolean          isLocalDevicePrimary,
+                              @NonNull byte[]  senderIdentityKey,
+                              @NonNull byte[]  receiverIdentityKey)
     throws CallException;
 
   private native

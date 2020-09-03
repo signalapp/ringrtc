@@ -268,14 +268,20 @@ pub fn random_received_offer(
     age: Duration,
 ) -> signaling::ReceivedOffer {
     let sdp = format!("OFFER-{}", PRNG.gen::<u16>()).to_owned();
-    let offer =
-        signaling::Offer::from_v2_and_v1_sdp(CallMediaType::Audio, sdp.clone(), sdp).unwrap();
+    let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+    let offer = signaling::Offer::from_v3_and_v2_and_v1_sdp(
+        CallMediaType::Audio,
+        local_public_key,
+        sdp.clone(),
+        sdp,
+    )
+    .unwrap();
     let (opaque, sdp) = match signaling_type {
         SignalingType::Legacy => (None, offer.sdp),
         SignalingType::BackwardsCompatible => (offer.opaque, offer.sdp),
         SignalingType::LegacyFree => (offer.opaque, None),
     };
-    let offer = signaling::Offer::from_opaque_or_sdp(offer.call_media_type, opaque, sdp);
+    let offer = signaling::Offer::from_opaque_or_sdp(offer.call_media_type, opaque, sdp).unwrap();
     signaling::ReceivedOffer {
         offer,
         age,
@@ -283,6 +289,8 @@ pub fn random_received_offer(
         sender_device_feature_level: FeatureLevel::MultiRing,
         receiver_device_id: 1 as DeviceId,
         receiver_device_is_primary: true,
+        sender_identity_key: Vec::new(),
+        receiver_identity_key: Vec::new(),
     }
 }
 
@@ -293,22 +301,27 @@ pub fn random_received_answer(
     sender_device_id: DeviceId,
 ) -> signaling::ReceivedAnswer {
     let sdp = format!("ANSWER-{}", PRNG.gen::<u16>()).to_owned();
+    let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
     let answer = match signaling_type {
-        SignalingType::Legacy => signaling::Answer::from_v1_sdp(sdp),
-        SignalingType::BackwardsCompatible => signaling::Answer::from_v2_sdp(sdp).unwrap(),
-        SignalingType::LegacyFree => signaling::Answer::from_v1_sdp(sdp),
+        SignalingType::Legacy => signaling::Answer::from_v1_sdp(sdp).unwrap(),
+        SignalingType::BackwardsCompatible => {
+            signaling::Answer::from_v3_and_v2_sdp(local_public_key, sdp).unwrap()
+        }
+        SignalingType::LegacyFree => signaling::Answer::from_v1_sdp(sdp).unwrap(),
     };
     signaling::ReceivedAnswer {
         answer,
         sender_device_id,
         sender_device_feature_level: FeatureLevel::MultiRing,
+        sender_identity_key: Vec::new(),
+        receiver_identity_key: Vec::new(),
     }
 }
 
 pub fn random_ice_candidate(signaling_type: SignalingType) -> signaling::IceCandidate {
     let sdp = format!("ICE-CANDIDATE-{}", PRNG.gen::<u16>()).to_owned();
     // V1 and V2 are the same for ICE candidates
-    let ice_candidate = signaling::IceCandidate::from_v2_sdp(sdp).unwrap();
+    let ice_candidate = signaling::IceCandidate::from_v3_and_v2_and_v1_sdp(sdp).unwrap();
     let (opaque, sdp) = match signaling_type {
         SignalingType::Legacy => (None, ice_candidate.sdp),
         SignalingType::BackwardsCompatible => (ice_candidate.opaque, ice_candidate.sdp),

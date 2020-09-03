@@ -27,6 +27,20 @@ use crate::webrtc::sim::sdp_observer as sdp;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::sdp_observer::RffiSessionDescriptionInterface;
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub enum SrtpCryptoSuite {
+    // Matches webrtc/rtc_base/ssl_stream_adapter.h
+    Aes128CmSha1  = 1, // 16-byte key; 14-byte salt
+    AeadAes128Gcm = 7, // 16-byte key; 12-byte salt
+    AeadAes256Gcm = 8, // 32-byte key; 12-byte salt
+}
+
+pub struct SrtpKey {
+    pub suite: SrtpCryptoSuite,
+    pub key:   Vec<u8>,
+    pub salt:  Vec<u8>,
+}
 /// Rust wrapper around WebRTC C++ SessionDescriptionInterface.
 pub struct SessionDescriptionInterface {
     /// Pointer to C++ SessionDescriptionInterface object.
@@ -89,6 +103,24 @@ impl SessionDescriptionInterface {
 
     pub fn replace_rtp_data_channels_with_sctp(&mut self) -> Result<()> {
         let success = unsafe { sdp::Rust_replaceRtpDataChannelsWithSctp(self.sd_interface) };
+        if success {
+            Ok(())
+        } else {
+            Err(RingRtcError::MungeSdp.into())
+        }
+    }
+
+    pub fn disable_dtls_and_set_srtp_key(&mut self, key: &SrtpKey) -> Result<()> {
+        let success = unsafe {
+            sdp::Rust_disableDtlsAndSetSrtpKey(
+                self.sd_interface,
+                key.suite,
+                key.key.as_ptr(),
+                key.key.len(),
+                key.salt.as_ptr(),
+                key.salt.len(),
+            )
+        };
         if success {
             Ok(())
         } else {

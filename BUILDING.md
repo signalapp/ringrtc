@@ -148,6 +148,15 @@ When the build is complete, the binary will be available at src/rust/target/debu
 The test tool establishes a call over simulated signaling and media channels. You
 should hear echo from the speakers while the tool is running.
 
+Tests might fail if the open file limit is too low. If this is the case, you can increase
+the limit in the terminal:
+
+    ulimit -a
+
+If the "open files" value is small, such as 256, try increasing it:
+
+    ulimit -n 2048
+
 ## Working with the Code
 
 ### Rebuilding
@@ -165,6 +174,9 @@ the dependencies, at least once:
     cd src/ios/SignalRingRTC
     bundle install
     bundle exec pod install
+
+Tests might fail if the open file limit is too low. If this is the case, be sure to
+increase the limit (generally, the default value of 256 on MacOS is not enough).
 
 ### Formatting
 

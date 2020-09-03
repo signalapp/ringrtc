@@ -341,7 +341,9 @@ export class RingRTCType {
     remoteDeviceId: DeviceId,
     localDeviceId: DeviceId,
     messageAgeSec: number,
-    message: CallingMessage
+    message: CallingMessage,
+    senderIdentityKey: ArrayBuffer,
+    receiverIdentityKey: ArrayBuffer,
   ): void {
     const remoteSupportsMultiRing = message.supportsMultiRing || false;
 
@@ -364,7 +366,9 @@ export class RingRTCType {
         offerType,
         remoteSupportsMultiRing,
         opaque,
-        sdp
+        sdp,
+        senderIdentityKey,
+        receiverIdentityKey
       );
     }
     if (message.answer && message.answer.callId) {
@@ -377,7 +381,9 @@ export class RingRTCType {
         callId,
         remoteSupportsMultiRing,
         opaque,
-        sdp
+        sdp,
+        senderIdentityKey,
+        receiverIdentityKey
       );
     }
     if (message.iceCandidates && message.iceCandidates.length > 0) {
@@ -920,22 +926,26 @@ export interface CallManager {
     offerType: OfferType,
     localDeviceId: DeviceId,
     remoteSupportsMultiRing: boolean,
-    opaque?: ArrayBuffer,
-    sdp?: string
+    opaque: ArrayBuffer | undefined,
+    sdp: string | undefined,
+    senderIdentityKey: ArrayBuffer,
+    receiverIdentityKey: ArrayBuffer
   ): void;
   receivedAnswer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     remoteSupportsMultiRing: boolean,
-    opaque?: ArrayBuffer,
-    sdp?: string
+    opaque: ArrayBuffer | undefined,
+    sdp: string | undefined,
+    senderIdentityKey: ArrayBuffer,
+    receiverIdentityKey: ArrayBuffer
   ): void;
   receivedIceCandidates(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
-    candiates: Array<IceCandidateMessage>
+    candidates: Array<IceCandidateMessage>
   ): void;
   receivedHangup(
     remoteUserId: UserId,

@@ -197,6 +197,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
     opaque: jbyteArray,
     sdp: JString,
     remote_supports_multi_ring: jboolean,
+    sender_identity_key: jbyteArray,
+    receiver_identity_key: jbyteArray,
 ) {
     let remote_feature_level = if remote_supports_multi_ring == jni::sys::JNI_TRUE {
         FeatureLevel::MultiRing
@@ -212,6 +214,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
         opaque,
         sdp,
         remote_feature_level,
+        sender_identity_key,
+        receiver_identity_key,
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -236,6 +240,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     local_device: jint,
     remote_supports_multi_ring: jboolean,
     jni_is_local_device_primary: jboolean,
+    sender_identity_key: jbyteArray,
+    receiver_identity_key: jbyteArray,
 ) {
     let remote_feature_level = if remote_supports_multi_ring == jni::sys::JNI_TRUE {
         FeatureLevel::MultiRing
@@ -256,6 +262,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
         local_device as DeviceId,
         remote_feature_level,
         jni_is_local_device_primary == jni::sys::JNI_TRUE,
+        sender_identity_key,
+        receiver_identity_key,
     ) {
         Ok(v) => v,
         Err(e) => {

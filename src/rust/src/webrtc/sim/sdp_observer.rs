@@ -11,7 +11,7 @@ use std::ffi::{c_void, CString};
 use std::os::raw::c_char;
 use std::ptr;
 
-use libc::strdup;
+use libc::{size_t, strdup};
 
 use crate::core::util::RustObject;
 use crate::webrtc::sdp_observer::{
@@ -19,6 +19,7 @@ use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserverCallbacks,
     SetSessionDescriptionObserver,
     SetSessionDescriptionObserverCallbacks,
+    SrtpCryptoSuite,
 };
 
 /// Simulation type for SessionDescriptionInterface.
@@ -95,5 +96,18 @@ pub unsafe fn Rust_replaceRtpDataChannelsWithSctp(
     _sdi: *const RffiSessionDescriptionInterface,
 ) -> bool {
     info!("Rust_replaceRtpDataChannelsWithSctp(): ");
+    true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
+    _sdi: *const RffiSessionDescriptionInterface,
+    _crypto_suite: SrtpCryptoSuite,
+    _key_ptr: *const u8,
+    _key_len: size_t,
+    _salt_ptr: *const u8,
+    _salt_len: size_t,
+) -> bool {
+    info!("Rust_disableDtlsAndSetSrtpKey(): ");
     true
 }

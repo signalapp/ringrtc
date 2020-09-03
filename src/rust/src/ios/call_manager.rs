@@ -23,6 +23,7 @@ use crate::core::signaling;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 
 use crate::core::call_manager::CallManager;
+use crate::error::RingRtcError;
 
 /// Public type for iOS CallManager
 pub type IOSCallManager = CallManager<IOSPlatform>;
@@ -119,6 +120,8 @@ pub fn received_answer(
     opaque: Option<Vec<u8>>,
     sdp: Option<String>,
     sender_device_feature_level: FeatureLevel,
+    sender_identity_key: Option<Vec<u8>>,
+    receiver_identity_key: Option<Vec<u8>>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -127,12 +130,37 @@ pub fn received_answer(
         "received_answer(): call_id: {} sender_device_id: {}",
         call_id, sender_device_id
     );
+
+    let sender_identity_key = match sender_identity_key {
+        Some(v) => v,
+        None => {
+            return Err(RingRtcError::OptionValueNotSet(
+                "received_answer()".to_owned(),
+                "sender_identity_key".to_owned(),
+            )
+            .into());
+        }
+    };
+
+    let receiver_identity_key = match receiver_identity_key {
+        Some(v) => v,
+        None => {
+            return Err(RingRtcError::OptionValueNotSet(
+                "received_answer()".to_owned(),
+                "receiver_identity_key".to_owned(),
+            )
+            .into());
+        }
+    };
+
     call_manager.received_answer(
         call_id,
         signaling::ReceivedAnswer {
-            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp),
+            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp)?,
             sender_device_id,
             sender_device_feature_level,
+            sender_identity_key,
+            receiver_identity_key,
         },
     )
 }
@@ -150,6 +178,8 @@ pub fn received_offer(
     receiver_device_id: DeviceId,
     sender_device_feature_level: FeatureLevel,
     receiver_device_is_primary: bool,
+    sender_identity_key: Option<Vec<u8>>,
+    receiver_identity_key: Option<Vec<u8>>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -160,16 +190,40 @@ pub fn received_offer(
         call_id, sender_device_id
     );
 
+    let sender_identity_key = match sender_identity_key {
+        Some(v) => v,
+        None => {
+            return Err(RingRtcError::OptionValueNotSet(
+                "received_offer()".to_owned(),
+                "sender_identity_key".to_owned(),
+            )
+            .into());
+        }
+    };
+
+    let receiver_identity_key = match receiver_identity_key {
+        Some(v) => v,
+        None => {
+            return Err(RingRtcError::OptionValueNotSet(
+                "received_offer()".to_owned(),
+                "receiver_identity_key".to_owned(),
+            )
+            .into());
+        }
+    };
+
     call_manager.received_offer(
         remote_peer,
         call_id,
         signaling::ReceivedOffer {
-            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp),
+            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp)?,
             age: Duration::from_secs(age_sec),
             sender_device_id,
             sender_device_feature_level,
             receiver_device_id,
             receiver_device_is_primary,
+            sender_identity_key,
+            receiver_identity_key,
         },
     )
 }

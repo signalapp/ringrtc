@@ -173,10 +173,9 @@ impl PeerConnection {
 
     /// Rust wrapper around C++ PeerConnectionInterface::AddIceCandidate().
     pub fn add_ice_candidate(&self, candidate: &signaling::IceCandidate) -> Result<()> {
-        // ICE candidates are the same for V1 and V2, so this works for V1 as well.
-        let v2_sdp = candidate.to_v2_sdp()?;
-        let v2_sdp_c = CString::new(v2_sdp)?;
-        let add_ok = unsafe { pc::Rust_addIceCandidate(self.rffi_pc_interface, v2_sdp_c.as_ptr()) };
+        let sdp = candidate.to_v3_and_v2_and_v1_sdp()?;
+        let sdp_c = CString::new(sdp)?;
+        let add_ok = unsafe { pc::Rust_addIceCandidate(self.rffi_pc_interface, sdp_c.as_ptr()) };
         if add_ok {
             Ok(())
         } else {

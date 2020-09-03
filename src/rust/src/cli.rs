@@ -407,6 +407,8 @@ impl CallEndpoint {
         // To send across threads
         let sender_id = sender_id.clone();
 
+        let sender_identity_key = sender_id.as_bytes().to_vec();
+        let receiver_identity_key = self.peer_id.as_bytes().to_vec();
         self.actor.send(move |state| {
             let cm = &mut state.call_manager;
             match msg {
@@ -421,6 +423,8 @@ impl CallEndpoint {
                             sender_device_feature_level: FeatureLevel::MultiRing,
                             receiver_device_id: state.device_id,
                             receiver_device_is_primary: (state.device_id == 1),
+                            sender_identity_key,
+                            receiver_identity_key,
                         },
                     )
                     .expect("receive offer");
@@ -432,6 +436,8 @@ impl CallEndpoint {
                             answer,
                             sender_device_id,
                             sender_device_feature_level: FeatureLevel::MultiRing,
+                            sender_identity_key,
+                            receiver_identity_key,
                         },
                     )
                     .expect("received answer");

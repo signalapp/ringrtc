@@ -188,6 +188,7 @@ pub fn hangup(call_manager: *mut AndroidCallManager) -> Result<()> {
 }
 
 /// Application notification of received answer message
+#[allow(clippy::too_many_arguments)]
 pub fn received_answer(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
@@ -196,6 +197,8 @@ pub fn received_answer(
     opaque: jbyteArray,
     sdp: JString,
     sender_device_feature_level: FeatureLevel,
+    sender_identity_key: jbyteArray,
+    receiver_identity_key: jbyteArray,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -214,12 +217,17 @@ pub fn received_answer(
         "received_answer(): call_id: {} sender_device_id: {}",
         call_id, sender_device_id
     );
+
+    let sender_identity_key = env.convert_byte_array(sender_identity_key)?;
+    let receiver_identity_key = env.convert_byte_array(receiver_identity_key)?;
     call_manager.received_answer(
         call_id,
         signaling::ReceivedAnswer {
-            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp),
+            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp)?,
             sender_device_id,
             sender_device_feature_level,
+            sender_identity_key,
+            receiver_identity_key,
         },
     )
 }
@@ -239,6 +247,8 @@ pub fn received_offer(
     receiver_device_id: DeviceId,
     sender_device_feature_level: FeatureLevel,
     receiver_device_is_primary: bool,
+    sender_identity_key: jbyteArray,
+    receiver_identity_key: jbyteArray,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -259,16 +269,20 @@ pub fn received_offer(
         call_id, sender_device_id
     );
 
+    let sender_identity_key = env.convert_byte_array(sender_identity_key)?;
+    let receiver_identity_key = env.convert_byte_array(receiver_identity_key)?;
     call_manager.received_offer(
         remote_peer,
         call_id,
         signaling::ReceivedOffer {
-            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp),
+            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp)?,
             age: Duration::from_secs(age_sec),
             sender_device_id,
             sender_device_feature_level,
             receiver_device_id,
             receiver_device_is_primary,
+            sender_identity_key,
+            receiver_identity_key,
         },
     )
 }
