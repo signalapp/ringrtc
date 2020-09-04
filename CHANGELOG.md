@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.5.2
+
+- Electron: Mac minimum sdk and os set to 10.10
+
 ## v2.5.1
 
 - Electron: Improve device selection on Windows
