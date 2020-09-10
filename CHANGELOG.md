@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.6.0
+
+- Reference signalapp/webrtc@4183
+
+- Implement "V3" protocol; deprecate DTLS
+
+- Fix offer-busy handling and support better glare experience
+
+- Electron: Fix issue when sending busy would end current call
+
 ## v2.5.2
 
 - Electron: Mac minimum sdk and os set to 10.10
