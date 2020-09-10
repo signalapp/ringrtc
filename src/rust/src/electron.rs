@@ -895,7 +895,9 @@ declare_types! {
                             CallState::Ringing => "ringing",
                             CallState::Connected => "connected",
                             CallState::Connecting => "connecting",
-                            CallState::Concluded => "ended",
+                            // Ignoring Concluded state since application should not treat
+                            // it as an 'ending' state transition.
+                            CallState::Concluded => return Ok(cx.undefined().upcast()),
                             // All covered above.
                             CallState::Incoming(_, _) => "incoming",
                             CallState::Outgoing(_, _) => "outgoing",
