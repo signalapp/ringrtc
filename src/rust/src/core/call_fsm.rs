@@ -44,13 +44,15 @@
 //! - InternalError
 
 use std::fmt;
+use std::pin::Pin;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
 use futures::future::lazy;
-use futures::{Async, Future, Poll, Stream};
-use tokio::runtime;
+use futures::future::TryFutureExt;
+use futures::task::Poll;
+use futures::{Future, Stream};
 
 use crate::error::RingRtcError;
 
@@ -69,6 +71,7 @@ use crate::core::call::{Call, EventStream};
 use crate::core::connection::ConnectionObserverEvent;
 use crate::core::platform::Platform;
 use crate::core::signaling;
+use crate::core::util::TaskQueueRuntime;
 
 /// The different types of CallEvents.
 pub enum CallEvent {
@@ -173,9 +176,9 @@ where
     /// Receiving end of EventPump.
     event_stream:   EventStream<T>,
     /// Runtime for processing long running requests.
-    worker_runtime: Option<runtime::Runtime>,
+    worker_runtime: Option<TaskQueueRuntime>,
     /// Runtime for processing client application notification events.
-    notify_runtime: Option<runtime::Runtime>,
+    notify_runtime: Option<TaskQueueRuntime>,
 }
 
 impl<T> fmt::Display for CallStateMachine<T>
@@ -200,16 +203,12 @@ impl<T> Future for CallStateMachine<T>
 where
     T: Platform,
 {
-    type Item = ();
-    type Error = failure::Error;
+    type Output = Result<()>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut futures::task::Context) -> Poll<Self::Output> {
         loop {
-            match try_ready!(self
-                .event_stream
-                .poll()
-                .map_err(|_| { RingRtcError::FsmStreamPoll }))
-            {
+            let pin_stream = Pin::new(&mut self.event_stream);
+            match ready!(pin_stream.poll_next(cx)) {
                 Some((call, event)) => {
                     let state = call.state()?;
                     info!("state: {}, event: {}", state, event);
@@ -225,7 +224,7 @@ where
         }
 
         // The event stream is closed and we are done
-        Ok(Async::Ready(()))
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -237,18 +236,8 @@ where
     pub fn new(event_stream: EventStream<T>) -> Result<CallStateMachine<T>> {
         let mut fsm = CallStateMachine {
             event_stream,
-            worker_runtime: Some(
-                runtime::Builder::new()
-                    .core_threads(1)
-                    .name_prefix("worker-")
-                    .build()?,
-            ),
-            notify_runtime: Some(
-                runtime::Builder::new()
-                    .core_threads(1)
-                    .name_prefix("notify-")
-                    .build()?,
-            ),
+            worker_runtime: Some(TaskQueueRuntime::new("call-worker")?),
+            notify_runtime: Some(TaskQueueRuntime::new("call-notify")?),
         };
 
         if let Some(worker_runtime) = &mut fsm.worker_runtime {
@@ -262,12 +251,11 @@ where
     }
 
     /// Synchronize a runtime with the main FSM thread.
-    fn sync_thread(label: &'static str, runtime: &mut runtime::Runtime) -> Result<()> {
+    fn sync_thread(label: &'static str, runtime: &mut TaskQueueRuntime) -> Result<()> {
         let (tx, rx) = mpsc::channel();
-        let future = lazy(move || {
+        let future = lazy(move |_| {
             info!("syncing {} thread: {:?}", label, thread::current().id());
             let _ = tx.send(true);
-            Ok(())
         });
         runtime.spawn(future);
         let _ = rx.recv_timeout(Duration::from_secs(2))?;
@@ -277,7 +265,7 @@ where
     /// Spawn a future on the worker runtime if enabled.
     fn worker_spawn<F>(&mut self, future: F)
     where
-        F: Future<Item = (), Error = ()> + Send + 'static,
+        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
     {
         if let Some(worker_runtime) = &mut self.worker_runtime {
             worker_runtime.spawn(future);
@@ -287,7 +275,7 @@ where
     /// Spawn a future on the notify runtime if enabled.
     fn notify_spawn<F>(&mut self, future: F)
     where
-        F: Future<Item = (), Error = ()> + Send + 'static,
+        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
     {
         if let Some(notify_runtime) = &mut self.notify_runtime {
             notify_runtime.spawn(future);
@@ -297,24 +285,14 @@ where
     /// Shutdown the worker runtime.
     fn drain_worker_thread(&mut self) {
         info!("draining worker thread");
-        if let Some(worker_runtime) = self.worker_runtime.take() {
-            let _ = worker_runtime
-                .shutdown_on_idle()
-                .wait()
-                .map_err(|_| warn!("Problems shutting down the worker runtime"));
-        }
+        self.worker_runtime.take();
         info!("draining worker thread: complete");
     }
 
     /// Shutdown the notify runtime.
     fn drain_notify_thread(&mut self) {
         info!("draining notify thread");
-        if let Some(notify_runtime) = self.notify_runtime.take() {
-            let _ = notify_runtime
-                .shutdown_on_idle()
-                .wait()
-                .map_err(|_| warn!("Problems shutting down the notify runtime"));
-        }
+        self.notify_runtime.take();
         info!("draining notify thread: complete");
     }
 
@@ -369,14 +347,14 @@ where
 
     fn notify_application(&mut self, call: Call<T>, event: ApplicationEvent) {
         let mut err_call = call.clone();
-        let notify_app_future = lazy(move || {
+        let notify_app_future = async move {
             if call.terminating()? {
                 return Ok(());
             }
             call.notify_application(event)
-        })
+        }
         .map_err(move |err| {
-            err_call.inject_internal_error(err, "Notify Application Future failed")
+            err_call.inject_internal_error(err, "Notify Application Future failed");
         });
 
         self.notify_spawn(notify_app_future);
@@ -402,13 +380,15 @@ where
             call.set_state(CallState::ConnectingBeforeAccepted)?;
 
             let mut err_call = call.clone();
-            let proceed_future = lazy(move || {
+            let proceed_future = async move {
                 if call.terminating()? {
                     return Ok(());
                 }
                 call.proceed()
-            })
-            .map_err(move |err| err_call.inject_internal_error(err, "Proceed Future failed"));
+            }
+            .map_err(move |err| {
+                err_call.inject_internal_error(err, "Proceed Future failed");
+            });
 
             self.worker_spawn(proceed_future);
         } else {
@@ -429,14 +409,14 @@ where
             || state == CallState::ConnectedWithDataChannelBeforeAccepted
         {
             let mut err_call = call.clone();
-            let received_answer_future = lazy(move || {
+            let received_answer_future = lazy(move |_| {
                 if call.terminating()? {
                     return Ok(());
                 }
                 call.received_answer(received)
             })
             .map_err(move |err| {
-                err_call.inject_internal_error(err, "Handle Received Answer Future failed")
+                err_call.inject_internal_error(err, "Handle Received Answer Future failed");
             });
 
             self.worker_spawn(received_answer_future);
@@ -459,14 +439,14 @@ where
             | CallState::ConnectedAndAccepted
             | CallState::ReconnectingAfterAccepted => {
                 let mut err_call = call.clone();
-                let handle_received_ice_future = lazy(move || {
+                let handle_received_ice_future = lazy(move |_| {
                     if call.terminating()? {
                         return Ok(());
                     }
                     call.received_ice(received)
                 })
                 .map_err(move |err| {
-                    err_call.inject_internal_error(err, "Handle Received Ice Future failed")
+                    err_call.inject_internal_error(err, "Handle Received Ice Future failed");
                 });
 
                 self.worker_spawn(handle_received_ice_future);
@@ -601,12 +581,12 @@ where
         // should always know.
         let mut err_call = call.clone();
         self.worker_spawn(
-            lazy(move || {
+            lazy(move |_| {
                 call.call_manager()?
                     .remote_hangup(call.call_id(), app_event_override)
             })
             .map_err(move |err| {
-                err_call.inject_internal_error(err, "Processing remote hangup event failed")
+                err_call.inject_internal_error(err, "Processing remote hangup event failed");
             }),
         );
         Ok(())
@@ -618,7 +598,7 @@ where
             CallState::ConnectedWithDataChannelBeforeAccepted => {
                 call.set_state(CallState::ConnectedAndAccepted)?;
                 let mut err_call = call.clone();
-                let accept_future = lazy(move || {
+                let accept_future = lazy(move |_| {
                     if call.terminating()? {
                         return Ok(());
                     }
@@ -630,7 +610,7 @@ where
                     call.notify_application(ApplicationEvent::LocalAccepted)
                 })
                 .map_err(move |err| {
-                    err_call.inject_internal_error(err, "Processing local accept request failed")
+                    err_call.inject_internal_error(err, "Processing local accept request failed");
                 });
 
                 self.worker_spawn(accept_future);
@@ -651,9 +631,9 @@ where
             CallState::NotYetStarted => self.unexpected_state(state, "LocalHangup"),
             _ => {
                 let mut err_call = call.clone();
-                let future = lazy(move || call.send_hangup_via_data_channel_to_all(hangup))
+                let future = lazy(move |_| call.send_hangup_via_data_channel_to_all(hangup))
                     .map_err(move |err| {
-                        err_call.inject_internal_error(err, "Send hangup request failed")
+                        err_call.inject_internal_error(err, "Send hangup request failed");
                     });
 
                 self.worker_spawn(future);
@@ -729,7 +709,7 @@ where
                             )?;
 
                             let mut err_call = call.clone();
-                            let connected_future = lazy(move || {
+                            let connected_future = lazy(move |_| {
                                 if call.terminating()? {
                                     return Ok(());
                                 }
@@ -774,7 +754,7 @@ where
                                 err_call.inject_internal_error(
                                     err,
                                     "Processing connect_incoming_media request failed",
-                                )
+                                );
                             });
                             self.worker_spawn(connected_future);
                         }
@@ -881,7 +861,7 @@ where
             }
             ConnectionObserverEvent::IceFailed => {
                 let mut err_call = call.clone();
-                let future = lazy(move || {
+                let future = lazy(move |_| {
                     if call.terminating()? {
                         return Ok(());
                     }
@@ -889,7 +869,7 @@ where
                 })
                 .map_err(move |err| {
                     err_call
-                        .inject_internal_error(err, "Processing connection_failed request failed")
+                        .inject_internal_error(err, "Processing connection_failed request failed");
                 });
                 self.worker_spawn(future);
                 Ok(())
@@ -901,9 +881,8 @@ where
         info!("handle_internal_error():");
 
         let internal_error_future =
-            lazy(move || call.internal_error(error)).map_err(move |err: failure::Error| {
+            lazy(move |_| call.internal_error(error)).map_err(move |err: failure::Error| {
                 error!("Processing internal error future failed: {}", err);
-                // Nothing else to do here
             });
 
         self.worker_spawn(internal_error_future);
@@ -934,12 +913,12 @@ where
             CallState::ConnectedAndAccepted | CallState::ReconnectingAfterAccepted => {} // Ok
             _ => {
                 let mut err_call = call.clone();
-                let timeout_future = lazy(move || {
+                let timeout_future = lazy(move |_| {
                     let mut call_manager = call.call_manager()?;
                     call_manager.timeout(call.call_id())
                 })
                 .map_err(move |err| {
-                    err_call.inject_internal_error(err, "Processing call timeout failed")
+                    err_call.inject_internal_error(err, "Processing call timeout failed");
                 });
 
                 self.worker_spawn(timeout_future);

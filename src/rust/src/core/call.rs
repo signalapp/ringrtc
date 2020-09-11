@@ -13,10 +13,8 @@ use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar, Mutex, Mutex
 use std::thread;
 use std::time::{Duration, Instant};
 
-use futures::sync::mpsc::{Receiver, Sender};
-use futures::Future;
-use tokio::runtime;
-use tokio::timer::Delay;
+use futures::channel::mpsc::{Receiver, Sender};
+use futures::future::TryFutureExt;
 use x25519_dalek::StaticSecret;
 
 use crate::common::{
@@ -35,6 +33,7 @@ use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionObserverEvent, ConnectionType};
 use crate::core::platform::Platform;
 use crate::core::signaling;
+use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
@@ -42,30 +41,22 @@ use crate::webrtc::media::MediaStream;
 /// Encapsulates the FSM and runtime upon which a Call runs.
 struct Context {
     /// Runtime upon which the CallStateMachine runs.
-    pub worker_runtime:  runtime::Runtime,
+    pub worker_runtime:  TaskQueueRuntime,
     /// Runtime that manages timing out a call.
-    pub timeout_runtime: Option<runtime::Runtime>,
+    pub timeout_runtime: Option<TaskQueueRuntime>,
 }
 
 impl Context {
     fn new() -> Result<Self> {
         Ok(Self {
-            worker_runtime:  runtime::Builder::new()
-                .core_threads(1)
-                .name_prefix("fsm".to_string())
-                .build()?,
+            worker_runtime:  TaskQueueRuntime::new("fsm-worker")?,
             timeout_runtime: None,
         })
     }
 
     fn close(&mut self) {
         info!("stopping timeout runtime");
-        if let Some(timeout_runtime) = self.timeout_runtime.take() {
-            let _ = timeout_runtime
-                .shutdown_now()
-                .wait()
-                .map_err(|_| warn!("Problems shutting down the timeout runtime"));
-        }
+        self.timeout_runtime.take();
         info!("stopping timeout runtime: complete");
     }
 }
@@ -236,8 +227,8 @@ where
         info!("new(): call_id: {}", call_id);
 
         // create a FSM runtime for this connection
-        let mut fsm_context = Context::new()?;
-        let (fsm_sender, fsm_receiver) = futures::sync::mpsc::channel(256);
+        let fsm_context = Context::new()?;
+        let (fsm_sender, fsm_receiver) = futures::channel::mpsc::channel(256);
         let call_fsm = CallStateMachine::new(fsm_receiver)?
             .map_err(|e| info!("call state machine returned error: {}", e));
         fsm_context.worker_runtime.spawn(call_fsm);
@@ -268,20 +259,17 @@ where
     pub fn start_timeout_timer(&self, time_out_period: u64) -> Result<()> {
         if time_out_period > 0 {
             if let Ok(mut fsm_context) = self.fsm_context.lock() {
-                let mut timeout_runtime = runtime::Builder::new()
-                    .core_threads(1)
-                    .name_prefix("timeout".to_string())
-                    .build()?;
+                let timeout_runtime = TaskQueueRuntime::new("fsm-timeout")?;
 
                 let mut call_clone = self.clone();
                 let when = Instant::now() + Duration::from_secs(time_out_period);
-                let call_timeout_future = Delay::new(when)
-                    .map_err(|e| error!("Call timeout Delay failed: {:?}", e))
-                    .and_then(move |_| {
-                        call_clone
-                            .inject_call_timeout()
-                            .map_err(|e| error!("Inject call timeout failed: {:?}", e))
-                    });
+                let call_timeout_future = async move {
+                    let delay = tokio::time::delay_until(tokio::time::Instant::from_std(when));
+                    delay.await;
+                    call_clone
+                        .inject_call_timeout()
+                        .map_err(|e| error!("Inject call timeout failed: {:?}", e))
+                };
 
                 timeout_runtime.spawn(call_timeout_future);
                 fsm_context.timeout_runtime = Some(timeout_runtime);

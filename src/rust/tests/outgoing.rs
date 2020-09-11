@@ -239,6 +239,8 @@ fn connect_outbound_call() -> TestContext {
         .inject_received_incoming_media(MediaStream::new(ptr::null()))
         .expect(error_line!());
 
+    cm.synchronize().expect(error_line!());
+
     info!("test: injecting accepted");
     active_connection
         .inject_received_accepted_via_data_channel(active_call.call_id())

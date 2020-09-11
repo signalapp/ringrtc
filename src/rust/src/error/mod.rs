@@ -124,8 +124,6 @@ pub enum RingRtcError {
     CreateIceGatherer,
 
     // Misc error codes
-    #[fail(display = "Event stream polling failed")]
-    FsmStreamPoll,
     #[fail(display = "Failed to negotiate SRTP keys")]
     SrtpKeyNegotiationFailure,
 }

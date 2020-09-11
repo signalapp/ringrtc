@@ -13,11 +13,9 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use futures::sync::mpsc::{Receiver, Sender};
-use futures::Future;
-use tokio::prelude::*;
-use tokio::runtime;
-use tokio::timer::Interval;
+use futures::channel::mpsc::{Receiver, Sender};
+use futures::channel::oneshot;
+use futures::future::{self, TryFutureExt};
 
 use hkdf::Hkdf;
 use rand::rngs::OsRng;
@@ -42,7 +40,7 @@ use crate::core::call_mutex::CallMutex;
 use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
 use crate::core::platform::Platform;
 use crate::core::signaling;
-use crate::core::util::ptr_as_box;
+use crate::core::util::{ptr_as_box, TaskQueueRuntime};
 use crate::error::RingRtcError;
 
 use crate::webrtc::data_channel::DataChannel;
@@ -191,16 +189,13 @@ where
 /// Encapsulates the FSM and runtime upon which a Connection runs.
 struct Context {
     /// Runtime upon which the ConnectionStateMachine runs.
-    pub worker_runtime: runtime::Runtime,
+    pub worker_runtime: TaskQueueRuntime,
 }
 
 impl Context {
     fn new() -> Result<Self> {
         Ok(Self {
-            worker_runtime: runtime::Builder::new()
-                .core_threads(1)
-                .name_prefix("worker".to_string())
-                .build()?,
+            worker_runtime: TaskQueueRuntime::new("connection-fsm-worker")?,
         })
     }
 }
@@ -256,9 +251,9 @@ impl ConnectionId {
 /// Encapsulates the tick timer and runtime.
 struct TickContext {
     /// Tokio runtime for background task execution of periodic ticks.
-    runtime:       Option<runtime::Runtime>,
-    /// Periodic tick counter.
-    ticks_elapsed: u64,
+    runtime:       Option<TaskQueueRuntime>,
+    /// Sender for the "cancel" event.
+    cancel_sender: Option<oneshot::Sender<()>>,
 }
 
 impl TickContext {
@@ -266,7 +261,7 @@ impl TickContext {
     pub fn new() -> Self {
         Self {
             runtime:       None,
-            ticks_elapsed: 0,
+            cancel_sender: None,
         }
     }
 }
@@ -407,7 +402,7 @@ where
     ) -> Result<Self> {
         // Create a FSM runtime for this connection.
         let context = Context::new()?;
-        let (fsm_sender, fsm_receiver) = futures::sync::mpsc::channel(256);
+        let (fsm_sender, fsm_receiver) = futures::channel::mpsc::channel(256);
 
         let call_id = call.call_id();
         let direction = call.direction();
@@ -458,7 +453,7 @@ where
     }
 
     fn start_fsm(&mut self) -> Result<()> {
-        let mut context = self.context.lock()?;
+        let context = self.context.lock()?;
         if let Some(fsm_receiver) = self.fsm_receiver.take() {
             info!("Starting Connection FSM for {}", self.connection_id);
             let connection_fsm = ConnectionStateMachine::new(fsm_receiver)?
@@ -981,48 +976,49 @@ where
     /// duration to invoke PeerConnection::GetStats which will pass specific stats
     /// to StatsObserver::on_stats_complete.
     pub fn start_tick(&self) -> Result<()> {
-        let duration = Duration::from_secs(TICK_PERIOD_SEC);
-
         // Define the future for stats logging.
         let mut connection = self.clone();
-        let tick_future = Interval::new_interval(duration)
-            .map_err(|e| error!("Connection tick Interval failed: {:?}", e))
-            .for_each(move |_| {
-                connection.tick().unwrap();
-                Ok(())
-            });
 
+        let (cancel_sender, cancel_receiver) = oneshot::channel::<()>();
+        let tick_forever = async move {
+            let duration = Duration::from_secs(TICK_PERIOD_SEC);
+            let mut interval = tokio::time::interval(duration);
+            let mut ticks_elapsed = 0u64;
+
+            loop {
+                interval.tick().await;
+                ticks_elapsed += 1;
+                connection.tick(ticks_elapsed).unwrap();
+            }
+        };
+        let tick_until_cancel = async move {
+            pin_mut!(tick_forever);
+            future::select(tick_forever, cancel_receiver).await;
+        };
         debug!("start_tick(): starting the tick runtime");
         let mut tick_context = self.tick_context.lock()?;
         match tick_context.runtime {
             Some(_) => warn!("start_tick(): tick timer already running"),
             None => {
                 // Start the tick runtime.
-                let mut runtime = runtime::Builder::new()
-                    .core_threads(1)
-                    .name_prefix("tick-")
-                    .build()?;
-
-                runtime.spawn(tick_future);
-
+                let runtime = TaskQueueRuntime::new("connection-tick")?;
+                runtime.spawn(tick_until_cancel);
                 tick_context.runtime = Some(runtime);
+                tick_context.cancel_sender = Some(cancel_sender);
             }
         }
 
         Ok(())
     }
 
-    pub fn tick(&mut self) -> Result<()> {
-        let mut tick_context = self.tick_context.lock()?;
-        tick_context.ticks_elapsed += 1;
-
+    pub fn tick(&mut self, ticks_elapsed: u64) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
 
         if let Ok(data_channel) = webrtc.data_channel() {
             let _ = data_channel.send_latest_state();
         }
 
-        if tick_context.ticks_elapsed % STATS_PERIOD_SEC == 0 {
+        if ticks_elapsed % STATS_PERIOD_SEC == 0 {
             if let Some(observer) = webrtc.stats_observer.as_ref() {
                 let _ = webrtc.pc_interface()?.get_stats(observer);
             } else {
@@ -1261,12 +1257,13 @@ where
 
         // Stop the timer runtime, if any.
         let mut tick_context = self.tick_context.lock()?;
-        if let Some(runtime) = tick_context.runtime.take() {
+        if let Some(rt) = tick_context.runtime.take() {
             info!("close(): stopping the tick runtime");
-            let _ = runtime
-                .shutdown_now()
-                .wait()
-                .map_err(|_| warn!("Problems shutting down the tick runtime"));
+            // Send the cancel event
+            let sender = tick_context.cancel_sender.take().unwrap();
+            let _ = sender.send(());
+            // Drop the runtime to shut it down
+            std::mem::drop(rt);
         }
 
         // Free up webrtc related resources.

@@ -48,13 +48,15 @@
 //! - ObserverErrors
 
 use std::fmt;
+use std::pin::Pin;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
 use futures::future::lazy;
-use futures::{Async, Future, Poll, Stream};
-use tokio::runtime;
+use futures::future::TryFutureExt;
+use futures::task::Poll;
+use futures::{Future, Stream};
 
 use crate::common::{
     units::DataRate,
@@ -68,6 +70,7 @@ use crate::common::{
 use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
 use crate::core::platform::Platform;
 use crate::core::signaling;
+use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::media::MediaStream;
@@ -228,9 +231,9 @@ where
     /// Receiving end of EventPump.
     event_stream: EventStream<T>,
     /// Runtime for processing long running requests.
-    worker_runtime: Option<runtime::Runtime>,
+    worker_runtime: Option<TaskQueueRuntime>,
     /// Runtime for processing observer notification events.
-    notify_runtime: Option<runtime::Runtime>,
+    notify_runtime: Option<TaskQueueRuntime>,
     /// The sequence number of the last received remote sender status
     /// We process remote sender status messages larger than this value.
     last_remote_sender_status_sequence_number: Option<u64>,
@@ -252,16 +255,12 @@ impl<T> Future for ConnectionStateMachine<T>
 where
     T: Platform,
 {
-    type Item = ();
-    type Error = failure::Error;
+    type Output = Result<()>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut futures::task::Context) -> Poll<Self::Output> {
         loop {
-            match try_ready!(self
-                .event_stream
-                .poll()
-                .map_err(|_| { RingRtcError::FsmStreamPoll }))
-            {
+            let pin_stream = Pin::new(&mut self.event_stream);
+            match ready!(pin_stream.poll_next(cx)) {
                 Some((cc, event)) => {
                     let state = cc.state()?;
                     match (state, &event) {
@@ -294,7 +293,7 @@ where
         }
 
         // The event stream is closed and we are done
-        Ok(Async::Ready(()))
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -306,18 +305,8 @@ where
     pub fn new(event_stream: EventStream<T>) -> Result<ConnectionStateMachine<T>> {
         let mut fsm = ConnectionStateMachine {
             event_stream,
-            worker_runtime: Some(
-                runtime::Builder::new()
-                    .core_threads(1)
-                    .name_prefix("worker-")
-                    .build()?,
-            ),
-            notify_runtime: Some(
-                runtime::Builder::new()
-                    .core_threads(1)
-                    .name_prefix("notify-")
-                    .build()?,
-            ),
+            worker_runtime: Some(TaskQueueRuntime::new("connection-fsm-worker")?),
+            notify_runtime: Some(TaskQueueRuntime::new("connection-fsm-notify")?),
             last_remote_sender_status_sequence_number: None,
             last_remote_receiver_status_sequence_number: None,
         };
@@ -333,12 +322,11 @@ where
     }
 
     /// Synchronize a runtime with the main FSM thread.
-    fn sync_thread(label: &'static str, runtime: &mut runtime::Runtime) -> Result<()> {
+    fn sync_thread(label: &'static str, runtime: &mut TaskQueueRuntime) -> Result<()> {
         let (tx, rx) = mpsc::channel();
-        let future = lazy(move || {
+        let future = lazy(move |_| {
             info!("syncing {} thread: {:?}", label, thread::current().id());
             let _ = tx.send(true);
-            Ok(())
         });
         runtime.spawn(future);
         let _ = rx.recv_timeout(Duration::from_secs(2))?;
@@ -348,7 +336,7 @@ where
     /// Spawn a future on the worker runtime if enabled.
     fn worker_spawn<F>(&mut self, future: F)
     where
-        F: Future<Item = (), Error = ()> + Send + 'static,
+        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
     {
         if let Some(worker_runtime) = &mut self.worker_runtime {
             worker_runtime.spawn(future);
@@ -358,7 +346,7 @@ where
     /// Spawn a future on the notify runtime if enabled.
     fn notify_spawn<F>(&mut self, future: F)
     where
-        F: Future<Item = (), Error = ()> + Send + 'static,
+        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
     {
         if let Some(notify_runtime) = &mut self.notify_runtime {
             notify_runtime.spawn(future);
@@ -368,24 +356,14 @@ where
     /// Shutdown the worker runtime.
     fn drain_worker_thread(&mut self) {
         info!("draining worker thread");
-        if let Some(worker_runtime) = self.worker_runtime.take() {
-            let _ = worker_runtime
-                .shutdown_on_idle()
-                .wait()
-                .map_err(|_| warn!("Problems shutting down the worker runtime"));
-        }
+        self.worker_runtime.take();
         info!("draining worker thread: complete");
     }
 
     /// Shutdown the notify runtime.
     fn drain_notify_thread(&mut self) {
         info!("draining notify thread");
-        if let Some(notify_runtime) = self.notify_runtime.take() {
-            let _ = notify_runtime
-                .shutdown_on_idle()
-                .wait()
-                .map_err(|_| warn!("Problems shutting down the notify runtime"));
-        }
+        self.notify_runtime.take();
         info!("draining notify thread: complete");
     }
 
@@ -475,14 +453,14 @@ where
 
     fn notify_observer(&mut self, connection: Connection<T>, event: ConnectionObserverEvent) {
         let mut err_connection = connection.clone();
-        let notify_observer_future = lazy(move || {
+        let notify_observer_future = lazy(move |_| {
             if connection.terminating()? {
                 return Ok(());
             }
             connection.notify_observer(event)
         })
         .map_err(move |err| {
-            err_connection.inject_internal_error(err, "Notify Observer Future failed")
+            err_connection.inject_internal_error(err, "Notify Observer Future failed");
         });
 
         self.notify_spawn(notify_observer_future);
@@ -694,7 +672,7 @@ where
             | ConnectionState::ConnectedBeforeAccepted => {
                 // notify the peer via a data channel message.
                 let mut err_connection = connection.clone();
-                let connected_future = lazy(move || {
+                let connected_future = lazy(move |_| {
                     if connection.terminating()? {
                         return Ok(());
                     }
@@ -702,7 +680,7 @@ where
                     connection.send_accepted_via_data_channel()
                 })
                 .map_err(move |err| {
-                    err_connection.inject_internal_error(err, "Sending Connected failed")
+                    err_connection.inject_internal_error(err, "Sending Connected failed");
                 });
 
                 self.worker_spawn(connected_future);
@@ -724,9 +702,9 @@ where
             }
             _ => {
                 let mut err_connection = connection.clone();
-                let hangup_future = lazy(move || connection.send_hangup_via_data_channel(hangup))
+                let hangup_future = lazy(move |_| connection.send_hangup_via_data_channel(hangup))
                     .map_err(move |err| {
-                        err_connection.inject_internal_error(err, "Sending Hangup failed")
+                        err_connection.inject_internal_error(err, "Sending Hangup failed");
                     });
 
                 self.worker_spawn(hangup_future);
@@ -748,14 +726,14 @@ where
             | ConnectionState::ConnectedAndAccepted => {
                 // notify the peer via a data channel message.
                 let mut err_connection = connection.clone();
-                let send_sender_status_future = lazy(move || {
+                let send_sender_status_future = lazy(move |_| {
                     if connection.terminating()? {
                         return Ok(());
                     }
                     connection.send_sender_status_via_data_channel(video_enabled)
                 })
                 .map_err(move |err| {
-                    err_connection.inject_internal_error(err, "Sending local sender status failed")
+                    err_connection.inject_internal_error(err, "Sending local sender status failed");
                 });
 
                 self.worker_spawn(send_sender_status_future);
@@ -777,7 +755,7 @@ where
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => {
                 let mut err_connection = connection.clone();
-                let set_bandwidth_mode_future = lazy(move || {
+                let set_bandwidth_mode_future = lazy(move |_| {
                     if connection.terminating()? {
                         return Ok(());
                     }
@@ -785,7 +763,7 @@ where
                     connection.set_local_max_bitrate(mode.max_bitrate())
                 })
                 .map_err(move |err| {
-                    err_connection.inject_internal_error(err, "Setting low bandwidth mode failed")
+                    err_connection.inject_internal_error(err, "Setting low bandwidth mode failed");
                 });
 
                 self.worker_spawn(set_bandwidth_mode_future);
@@ -817,13 +795,15 @@ where
                 // send signal message to the other side with the ICE
                 // candidate.
                 let mut err_connection = connection.clone();
-                let ice_future = lazy(move || {
+                let ice_future = lazy(move |_| {
                     if connection.terminating()? {
                         return Ok(());
                     }
                     connection.buffer_local_ice_candidate(candidate)
                 })
-                .map_err(move |err| err_connection.inject_internal_error(err, "IceFuture failed"));
+                .map_err(move |err| {
+                    err_connection.inject_internal_error(err, "IceFuture failed");
+                });
 
                 self.worker_spawn(ice_future);
             }
@@ -918,7 +898,7 @@ where
         connection: Connection<T>,
         error: failure::Error,
     ) -> Result<()> {
-        let notify_error_future = lazy(move || {
+        let notify_error_future = lazy(move |_| {
             if connection.terminating()? {
                 return Ok(());
             }
@@ -945,14 +925,14 @@ where
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => {
                 let mut err_connection = connection.clone();
-                let add_stream_future = lazy(move || {
+                let add_stream_future = lazy(move |_| {
                     if connection.terminating()? {
                         return Ok(());
                     }
                     connection.handle_received_incoming_media(stream)
                 })
                 .map_err(move |err| {
-                    err_connection.inject_internal_error(err, "Add Media Stream Future failed")
+                    err_connection.inject_internal_error(err, "Add Media Stream Future failed");
                 });
 
                 self.worker_spawn(add_stream_future);

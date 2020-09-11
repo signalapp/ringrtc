@@ -16,8 +16,8 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 use futures::future::lazy;
+use futures::future::TryFutureExt;
 use futures::Future;
-use tokio::runtime;
 
 use crate::common::{
     ApplicationEvent,
@@ -35,6 +35,7 @@ use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::Platform;
 use crate::core::signaling;
+use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
 
 use crate::webrtc::media::MediaStream;
@@ -58,7 +59,7 @@ macro_rules! handle_active_call_api {
         info!("API:{}():", stringify!($f));
         let mut call_manager = $s.clone();
         let mut cm_error = $s.clone();
-        let future = lazy(move || $f(&mut call_manager $( , $a)*)).map_err(move |err| {
+        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).map_err(move |err| {
             error!("Future {} failed: {}", stringify!($f), err);
             let _ = cm_error.internal_api_error( err);
         });
@@ -98,7 +99,7 @@ macro_rules! handle_api {
     ) => {{
         let mut call_manager = $s.clone();
         info!("API:{}():", stringify!($f));
-        let future = lazy(move || $f(&mut call_manager $( , $a)*)).map_err(move |err| {
+        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).map_err(move |err| {
             error!("Future {} failed: {}", stringify!($f), err);
         });
         $s.worker_spawn(future)
@@ -164,7 +165,7 @@ where
     /// CallId of the active call.
     active_call_id: Arc<CallMutex<Option<CallId>>>,
     /// Tokio runtime for back ground task execution.
-    worker_runtime: Arc<CallMutex<Option<runtime::Runtime>>>,
+    worker_runtime: Arc<CallMutex<Option<TaskQueueRuntime>>>,
     /// Signaling message queue.
     message_queue:  Arc<CallMutex<SignalingMessageQueue<T>>>,
 }
@@ -251,12 +252,7 @@ where
             call_map:       Arc::new(CallMutex::new(HashMap::new(), "hash_map")),
             active_call_id: Arc::new(CallMutex::new(None, "active_call_id")),
             worker_runtime: Arc::new(CallMutex::new(
-                Some(
-                    runtime::Builder::new()
-                        .core_threads(1)
-                        .name_prefix("worker-")
-                        .build()?,
-                ),
+                Some(TaskQueueRuntime::new("call-manager-worker")?),
                 "worker_runtime",
             )),
             message_queue:  Arc::new(CallMutex::new(
@@ -291,7 +287,7 @@ where
         let mut call_manager = self.clone();
         let mut cm_error = self.clone();
         let remote_peer_error = remote_peer.clone();
-        let future = lazy(move || {
+        let future = lazy(move |_| {
             call_manager.handle_call(remote_peer, call_id, call_media_type, local_device_id)
         })
         .map_err(move |err| {
@@ -348,7 +344,7 @@ where
         let mut cm_error = self.clone();
         let remote_peer_error = remote_peer.clone();
         let future =
-            lazy(move || call_manager.handle_received_offer(remote_peer, call_id, received))
+            lazy(move |_| call_manager.handle_received_offer(remote_peer, call_id, received))
                 .map_err(move |err| {
                     error!("Handle received offer failed: {}", err);
                     cm_error.internal_create_api_error(&remote_peer_error, call_id, err);
@@ -478,9 +474,9 @@ where
 
         self.sync_runtime()?;
 
-        // sync twice, as simulated error injection can put more
+        // sync several times, as simulated error injection can put more
         // events on the FSMs.
-        for i in 0..2 {
+        for i in 0..3 {
             info!("synchronize(): pass: {}", i);
             let mut map_clone = self.call_map.lock()?.clone();
             for (_, call) in map_clone.iter_mut() {
@@ -507,7 +503,7 @@ where
     /// Spawn a future on the worker runtime if enabled.
     fn worker_spawn<F>(&mut self, future: F) -> Result<()>
     where
-        F: Future<Item = (), Error = ()> + Send + 'static,
+        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
     {
         let mut worker_runtime = self.worker_runtime.lock()?;
         if let Some(worker_runtime) = &mut *worker_runtime {
@@ -519,7 +515,7 @@ where
     }
 
     fn runtime_start_sync(&mut self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
-        let future = lazy(move || {
+        let future = lazy(move |_| {
             // signal the condvar
             info!("sync_runtime(): syncing runtime");
             let (mutex, condvar) = &*sync_condvar;
@@ -576,16 +572,13 @@ where
     fn close_runtime(&mut self) -> Result<()> {
         info!("stopping worker runtime");
 
-        let result: Option<runtime::Runtime> = {
+        let result: Option<TaskQueueRuntime> = {
             let mut worker_runtime = self.worker_runtime.lock()?;
             worker_runtime.take()
         };
 
-        if let Some(worker_runtime) = result {
-            let _ = worker_runtime
-                .shutdown_now()
-                .wait()
-                .map_err(|_| warn!("Problems shutting down the worker runtime"));
+        if result.is_some() {
+            // Dropping the runtime causes it to shut down.
         } else {
             error!("close_runtime(): worker_runtime is unavailable");
         }
@@ -681,7 +674,7 @@ where
         let cm_error = self.clone();
         let call_error = call.clone();
         let call_clone = call.clone();
-        let future = lazy(move || {
+        let future = lazy(move |_| {
             if let Some(hangup) = hangup {
                 // If we want to send a hangup message, be sure that
                 // the call actually should send one.
