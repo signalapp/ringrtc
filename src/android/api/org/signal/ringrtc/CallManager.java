@@ -643,7 +643,8 @@ public class CallManager {
 
       audioConstraints.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
       AudioSource audioSource = factory.createAudioSource(audioConstraints);
-      AudioTrack  audioTrack  = factory.createAudioTrack("ARDAMSa0", audioSource);
+      // Note: This must stay "audio1" to stay in sync with V4 signaling.
+      AudioTrack  audioTrack  = factory.createAudioTrack("audio1", audioSource);
       audioTrack.setEnabled(false);
       mediaStream.addTrack(audioTrack);
 
@@ -883,7 +884,8 @@ public class CallManager {
       // connection objects.  It must be disposed manually.
       if (cameraControl.hasCapturer()) {
         this.videoSource = peerConnectionFactory.createVideoSource(false);
-        this.videoTrack  = peerConnectionFactory.createVideoTrack("ARDAMSv0", videoSource);
+        // Note: This must stay "video1" to stay in sync with V4 signaling.
+        this.videoTrack  = peerConnectionFactory.createVideoTrack("video1", videoSource);
         videoTrack.setEnabled(false);
 
         // Connect camera as the local video source.

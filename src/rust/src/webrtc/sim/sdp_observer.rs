@@ -17,6 +17,7 @@ use crate::core::util::RustObject;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver,
     CreateSessionDescriptionObserverCallbacks,
+    RffiConnectionParametersV4,
     SetSessionDescriptionObserver,
     SetSessionDescriptionObserverCallbacks,
     SrtpCryptoSuite,
@@ -110,4 +111,35 @@ pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
 ) -> bool {
     info!("Rust_disableDtlsAndSetSrtpKey(): ");
     true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_sessionDescriptionToV4(
+    _sdi: *const RffiSessionDescriptionInterface,
+) -> *mut RffiConnectionParametersV4 {
+    info!("Rust_sessionDescriptionToV4(): ");
+    Box::leak(Box::new(RffiConnectionParametersV4 {
+        ice_ufrag:                 std::ptr::null(),
+        ice_pwd:                   std::ptr::null(),
+        receive_video_codecs:      std::ptr::null(),
+        receive_video_codecs_size: 0,
+    }))
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_releaseV4(_v4: *mut RffiConnectionParametersV4) {
+    info!("Rust_releaseV4(): ");
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_sessionDescriptionFromV4(
+    offer: bool,
+    _v4: *const RffiConnectionParametersV4,
+) -> *const RffiSessionDescriptionInterface {
+    info!("Rust_sessionDescriptionFromV4(): ");
+    if offer {
+        &FAKE_SDP_OFFER
+    } else {
+        &FAKE_SDP_ANSWER
+    }
 }

@@ -42,6 +42,7 @@ use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::core::util::{ptr_as_box, TaskQueueRuntime};
 use crate::error::RingRtcError;
+use crate::protobuf;
 
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::data_channel_observer::DataChannelObserver;
@@ -510,9 +511,17 @@ where
             let v1_offer_sdp = offer_sdi.to_sdp()?;
 
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
-            let offer = signaling::Offer::from_v3_and_v2_and_v1_sdp(
+            let v4_offer = offer_sdi.to_v4(local_public_key.as_bytes().to_vec())?;
+            info!(
+                "Using V4 signaling for outgoing connection offer: {:?} SDP: {} original SDP: {}",
+                v4_offer,
+                v4_to_sdp_without_srtp_keys(&v4_offer)?,
+                v2_offer_sdp
+            );
+            let offer = signaling::Offer::from_v4_and_v3_and_v2_and_v1(
                 call_media_type,
                 local_public_key.as_bytes().to_vec(),
+                Some(v4_offer),
                 v2_offer_sdp,
                 v1_offer_sdp,
             )?;
@@ -560,15 +569,29 @@ where
             let data_channel_observer = DataChannelObserver::new(self.clone())?;
             unsafe { data_channel.register_observer(data_channel_observer.rffi_interface())? };
 
-            let (answer_is_v3_or_v2, answer_sdp, remote_public_key) =
-                received.answer.to_v3_or_v2_or_v1_sdp()?;
-            let offer_sdp = if answer_is_v3_or_v2 {
-                offer.to_v3_or_v2_sdp()?
-            } else {
-                offer.to_v1_sdp()?
-            };
-            let mut offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
-            let mut answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
+            let (mut offer_sdi, mut answer_sdi, remote_public_key) =
+                if let (Some(v4_offer), Some(v4_answer)) = (offer.to_v4(), received.answer.to_v4())
+                {
+                    let offer_sdi = SessionDescriptionInterface::offer_from_v4(&v4_offer)?;
+                    let answer_sdi = SessionDescriptionInterface::answer_from_v4(&v4_answer)?;
+                    info!(
+                        "Using V4 signaling for outgoing connection answer: {:?} SDP: {}",
+                        v4_answer,
+                        v4_to_sdp_without_srtp_keys(&v4_answer)?
+                    );
+                    (offer_sdi, answer_sdi, v4_answer.public_key)
+                } else {
+                    let (answer_is_v3_or_v2, answer_sdp, remote_public_key) =
+                        received.answer.to_v3_or_v2_or_v1_sdp()?;
+                    let offer_sdp = if answer_is_v3_or_v2 {
+                        offer.to_v3_or_v2_sdp()?
+                    } else {
+                        offer.to_v1_sdp()?
+                    };
+                    let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+                    let answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
+                    (offer_sdi, answer_sdi, remote_public_key)
+                };
 
             if let Some(remote_public_key) = remote_public_key {
                 let callee_identity_key = &received.sender_identity_key;
@@ -640,9 +663,23 @@ where
 
             let peer_connection = webrtc.pc_interface()?;
 
-            let (offer_is_v3_or_v2, offer_sdp, remote_public_key) =
-                received.offer.to_v3_or_v2_or_v1_sdp()?;
-            let mut offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+            let v4_offer = received.offer.to_v4();
+            let (mut offer_sdi, offer_is_v3_or_v2, remote_public_key) =
+                if let Some(v4_offer) = v4_offer.as_ref() {
+                    info!(
+                        "Using V4 signaling for incoming connection offer: {:?} SDP: {}",
+                        v4_offer,
+                        v4_to_sdp_without_srtp_keys(&v4_offer)?
+                    );
+                    let offer_is_v3_or_v2 = false;
+                    let offer_sdi = SessionDescriptionInterface::offer_from_v4(&v4_offer)?;
+                    (offer_sdi, offer_is_v3_or_v2, v4_offer.public_key.clone())
+                } else {
+                    let (offer_is_v3_or_v2, offer_sdp, remote_public_key) =
+                        received.offer.to_v3_or_v2_or_v1_sdp()?;
+                    let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
+                    (offer_sdi, offer_is_v3_or_v2, remote_public_key)
+                };
 
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
             let answer_key = match remote_public_key {
@@ -674,18 +711,33 @@ where
             let observer = create_csd_observer();
             peer_connection.create_answer(observer.as_ref());
             let mut answer_sdi = observer.get_result()?;
-            if let Some(answer_key) = answer_key {
-                answer_sdi.disable_dtls_and_set_srtp_key(&answer_key)?;
+            if let Some(answer_key) = &answer_key {
+                answer_sdi.disable_dtls_and_set_srtp_key(answer_key)?;
             }
 
-            // Get the answer here before it is mutated with candidates by set_local_description.
-            let answer_sdp = answer_sdi.to_sdp()?;
-            let answer = if offer_is_v3_or_v2 {
+            let answer = if v4_offer.is_some() {
+                let v4_answer = answer_sdi.to_v4(local_public_key.as_bytes().to_vec())?;
+                info!(
+                    "Using V4 signaling for incoming connection answer: {:?} SDP: {}",
+                    v4_answer,
+                    v4_to_sdp_without_srtp_keys(&v4_answer)?
+                );
+
+                // We have to change the local answer to match what we send back
+                answer_sdi = SessionDescriptionInterface::answer_from_v4(&v4_answer)?;
+                // And we have to make sure to do this again since answer_from_v4 doesn't do it.
+                if let Some(answer_key) = &answer_key {
+                    answer_sdi.disable_dtls_and_set_srtp_key(answer_key)?;
+                }
+                signaling::Answer::from_v4(v4_answer)?
+            } else if offer_is_v3_or_v2 {
+                let answer_sdp = answer_sdi.to_sdp()?;
                 signaling::Answer::from_v3_and_v2_sdp(
                     local_public_key.as_bytes().to_vec(),
                     answer_sdp,
                 )?
             } else {
+                let answer_sdp = answer_sdi.to_sdp()?;
                 signaling::Answer::from_v1_sdp(answer_sdp)?
             };
 
@@ -1625,8 +1677,8 @@ fn negotiate_srtp_keys(
     caller_identity_key: &[u8],
     callee_identity_key: &[u8],
 ) -> Result<NegotiatedSrtpKeys> {
-    info!("Negotiating SRTP keys using local_public_key: {:?}, remote_public_key: {:?}, caller_identity_key: {:?}, callee_identity_key: {:?}",
-        PublicKey::from(local_secret).as_bytes(), remote_public_key, caller_identity_key, callee_identity_key);
+    // info!("Negotiating SRTP keys using local_public_key: {:?}, remote_public_key: {:?}, caller_identity_key: {:?}, callee_identity_key: {:?}",
+    //     PublicKey::from(local_secret).as_bytes(), remote_public_key, caller_identity_key, callee_identity_key);
 
     let remote_public_key = {
         let mut array = [0u8; 32];
@@ -1679,4 +1731,17 @@ pub fn clamp<T: PartialOrd>(val: T, min: T, max: T) -> T {
         return max;
     }
     val
+}
+
+fn v4_to_sdp_without_srtp_keys(v4: &protobuf::signaling::ConnectionParametersV4) -> Result<String> {
+    let mut sdi = SessionDescriptionInterface::offer_from_v4(&v4)?;
+    // Clearing the keys isn't necessary because offer_from_v4 doesn't set them anyway.
+    // So we're being really overly careful here clearing something that shouldn't be there.
+    let key = SrtpKey {
+        suite: SrtpCryptoSuite::AeadAes256Gcm,
+        key:   Vec::new(),
+        salt:  Vec::new(),
+    };
+    sdi.disable_dtls_and_set_srtp_key(&key)?;
+    Ok(sdi.to_sdp()?)
 }

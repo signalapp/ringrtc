@@ -16,6 +16,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use crate::common::Result;
 use crate::core::util::{ptr_as_ref, FutureResult, RustObject};
 use crate::error::RingRtcError;
+use crate::protobuf;
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::sdp_observer as sdp;
@@ -57,6 +58,29 @@ impl fmt::Debug for SessionDescriptionInterface {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub enum RffiVideoCodecType {
+    Vp8                     = 8,
+    H264ConstrainedHigh     = 46,
+    H264ConstrainedBaseline = 40,
+}
+
+/// cbindgen:field-names=[type, level]
+#[repr(C)]
+pub struct RffiVideoCodec {
+    r#type: RffiVideoCodecType,
+    level:  u32,
+}
+
+#[repr(C)]
+pub struct RffiConnectionParametersV4 {
+    pub ice_ufrag:                 *const c_char,
+    pub ice_pwd:                   *const c_char,
+    pub receive_video_codecs:      *const RffiVideoCodec,
+    pub receive_video_codecs_size: usize,
 }
 
 impl SessionDescriptionInterface {
@@ -126,6 +150,125 @@ impl SessionDescriptionInterface {
         } else {
             Err(RingRtcError::MungeSdp.into())
         }
+    }
+
+    pub fn to_v4(
+        &self,
+        public_key: Vec<u8>,
+    ) -> Result<protobuf::signaling::ConnectionParametersV4> {
+        let rffi_v4_ptr = unsafe { sdp::Rust_sessionDescriptionToV4(self.sd_interface) };
+
+        if rffi_v4_ptr.is_null() {
+            return Err(RingRtcError::MungeSdp.into());
+        }
+
+        let rffi_v4 = unsafe { &*rffi_v4_ptr };
+        let ice_ufrag = from_cstr(rffi_v4.ice_ufrag);
+        let ice_pwd = from_cstr(rffi_v4.ice_pwd);
+        let receive_video_codecs: Vec<protobuf::signaling::VideoCodec> = unsafe {
+            std::slice::from_raw_parts(
+                rffi_v4.receive_video_codecs,
+                rffi_v4.receive_video_codecs_size,
+            )
+        }
+        .iter()
+        .map(|rffi_codec| {
+            let r#type = match rffi_codec.r#type {
+                RffiVideoCodecType::Vp8 => protobuf::signaling::VideoCodecType::Vp8,
+                RffiVideoCodecType::H264ConstrainedHigh => {
+                    protobuf::signaling::VideoCodecType::H264ConstrainedHigh
+                }
+                RffiVideoCodecType::H264ConstrainedBaseline => {
+                    protobuf::signaling::VideoCodecType::H264ConstrainedBaseline
+                }
+            };
+            let level = if rffi_codec.level > 0 {
+                Some(rffi_codec.level)
+            } else {
+                None
+            };
+            protobuf::signaling::VideoCodec {
+                r#type: Some(r#type as i32),
+                level,
+            }
+        })
+        .collect();
+
+        unsafe { sdp::Rust_releaseV4(rffi_v4_ptr) };
+
+        Ok(protobuf::signaling::ConnectionParametersV4 {
+            public_key: Some(public_key),
+            ice_ufrag: Some(ice_ufrag),
+            ice_pwd: Some(ice_pwd),
+            receive_video_codecs,
+        })
+    }
+
+    pub fn offer_from_v4(v4: &protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
+        Self::from_v4(true, v4)
+    }
+
+    pub fn answer_from_v4(v4: &protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
+        Self::from_v4(false, v4)
+    }
+
+    fn from_v4(offer: bool, v4: &protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
+        let rffi_ice_ufrag = to_cstring(&v4.ice_ufrag)?;
+        let rffi_ice_pwd = to_cstring(&v4.ice_pwd)?;
+        let mut rffi_video_codecs: Vec<RffiVideoCodec> = Vec::new();
+        for codec in &v4.receive_video_codecs {
+            if let protobuf::signaling::VideoCodec {
+                r#type: Some(r#type),
+                level,
+            } = codec
+            {
+                const VP8: i32 = protobuf::signaling::VideoCodecType::Vp8 as i32;
+                const H264_CHP: i32 =
+                    protobuf::signaling::VideoCodecType::H264ConstrainedHigh as i32;
+                const H264_CBP: i32 =
+                    protobuf::signaling::VideoCodecType::H264ConstrainedBaseline as i32;
+                let rffi_type = match *r#type {
+                    VP8 => Some(RffiVideoCodecType::Vp8),
+                    H264_CHP => Some(RffiVideoCodecType::H264ConstrainedHigh),
+                    H264_CBP => Some(RffiVideoCodecType::H264ConstrainedBaseline),
+                    _ => None,
+                };
+                let rffi_level = level.unwrap_or(0);
+                if let Some(rffi_type) = rffi_type {
+                    rffi_video_codecs.push(RffiVideoCodec {
+                        r#type: rffi_type,
+                        level:  rffi_level,
+                    });
+                }
+            }
+        }
+        let rffi_v4 = RffiConnectionParametersV4 {
+            ice_ufrag:                 rffi_ice_ufrag.as_ptr(),
+            ice_pwd:                   rffi_ice_pwd.as_ptr(),
+            receive_video_codecs:      rffi_video_codecs.as_ptr(),
+            receive_video_codecs_size: rffi_video_codecs.len(),
+        };
+        let sdi = unsafe { sdp::Rust_sessionDescriptionFromV4(offer, &rffi_v4) };
+        if sdi.is_null() {
+            return Err(RingRtcError::MungeSdp.into());
+        }
+        Ok(Self::new(sdi))
+    }
+}
+
+fn to_cstring(s: &Option<String>) -> Result<CString> {
+    Ok(if let Some(s) = s.as_ref() {
+        CString::new(s.as_bytes())?
+    } else {
+        CString::new("")?
+    })
+}
+
+fn from_cstr(c: *const c_char) -> String {
+    if c.is_null() {
+        "".to_string()
+    } else {
+        unsafe { CStr::from_ptr(c) }.to_string_lossy().into_owned()
     }
 }
 

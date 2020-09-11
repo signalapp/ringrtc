@@ -26,6 +26,8 @@ pub enum Version {
     // The V3 protocol does not use DTLS.  It uses a custom
     // Diffie-Helman exchange to derive SRTP keys.
     V3,
+    // Same as V3 except without any SDP.
+    V4,
 }
 
 impl Version {
@@ -35,6 +37,7 @@ impl Version {
             Self::V2 => true,
             // This disables DTLS
             Self::V3 => false,
+            Self::V4 => false,
         }
     }
 
@@ -44,6 +47,7 @@ impl Version {
             // This disables SCTP
             Self::V2 => true,
             Self::V3 => true,
+            Self::V4 => true,
         }
     }
 }
@@ -51,6 +55,7 @@ impl Version {
 /// An enum representing the different types of signaling messages that
 /// can be sent and received.
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Message {
     Offer(Offer),
     Answer(Answer),
@@ -147,6 +152,10 @@ impl Offer {
     pub fn latest_version(&self) -> Version {
         match self {
             Self {
+                proto: Some(protobuf::signaling::Offer { v4: Some(_), .. }),
+                ..
+            } => Version::V4,
+            Self {
                 proto:
                     Some(protobuf::signaling::Offer {
                         v3_or_v2:
@@ -154,6 +163,7 @@ impl Offer {
                                 public_key: Some(_),
                                 ..
                             }),
+                        ..
                     }),
                 ..
             } => Version::V3,
@@ -165,6 +175,7 @@ impl Offer {
                                 public_key: None,
                                 ..
                             }),
+                        ..
                     }),
                 ..
             } => Version::V2,
@@ -172,10 +183,11 @@ impl Offer {
         }
     }
 
-    // V3 == V2 + public key
-    pub fn from_v3_and_v2_and_v1_sdp(
+    // V4 == V3 w/o SDP; V3 == V2 + public key
+    pub fn from_v4_and_v3_and_v2_and_v1(
         call_media_type: CallMediaType,
         public_key: Vec<u8>,
+        v4: Option<protobuf::signaling::ConnectionParametersV4>,
         v3_or_v2_sdp: String,
         v1_sdp: String,
     ) -> Result<Self> {
@@ -186,11 +198,24 @@ impl Offer {
         let mut offer_proto = protobuf::signaling::Offer::default();
         offer_proto.v3_or_v2 = Some(offer_proto_v3_or_v2);
 
+        offer_proto.v4 = v4;
+
         let mut opaque = BytesMut::with_capacity(offer_proto.encoded_len());
         offer_proto.encode(&mut opaque)?;
 
         // Once SDP is gone, pass in the proto rather than deserializing it here.
         Self::from_opaque_or_sdp(call_media_type, Some(opaque.to_vec()), Some(v1_sdp))
+    }
+
+    // V4 == V3 + non-SDP
+    pub fn to_v4(&self) -> Option<protobuf::signaling::ConnectionParametersV4> {
+        match self {
+            Self {
+                proto: Some(protobuf::signaling::Offer { v4: Some(v4), .. }),
+                ..
+            } => Some(v4.clone()),
+            _ => None,
+        }
     }
 
     pub fn to_v3_or_v2_sdp(&self) -> Result<String> {
@@ -204,6 +229,7 @@ impl Offer {
                                 sdp: Some(v3_or_v2_sdp),
                                 ..
                             }),
+                        ..
                     }),
                 ..
             } => Ok(v3_or_v2_sdp.clone()),
@@ -233,6 +259,7 @@ impl Offer {
                                 sdp: Some(v3_or_v2_sdp),
                                 public_key,
                             }),
+                        ..
                     }),
                 ..
             } => Ok((true, v3_or_v2_sdp.clone(), public_key.clone())),
@@ -309,6 +336,10 @@ impl Answer {
     pub fn latest_version(&self) -> Version {
         match self {
             Self {
+                proto: Some(protobuf::signaling::Answer { v4: Some(_), .. }),
+                ..
+            } => Version::V4,
+            Self {
                 proto:
                     Some(protobuf::signaling::Answer {
                         v3_or_v2:
@@ -316,6 +347,7 @@ impl Answer {
                                 public_key: Some(_),
                                 ..
                             }),
+                        ..
                     }),
                 ..
             } => Version::V3,
@@ -327,11 +359,23 @@ impl Answer {
                                 public_key: None,
                                 ..
                             }),
+                        ..
                     }),
                 ..
             } => Version::V2,
             _ => Version::V1,
         }
+    }
+
+    // V4 == V3 + non-SDP; V3 == V2 + public key
+    pub fn from_v4(v4: protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
+        let mut proto = protobuf::signaling::Answer::default();
+        proto.v4 = Some(v4);
+
+        let mut opaque = BytesMut::with_capacity(proto.encoded_len());
+        proto.encode(&mut opaque)?;
+
+        Self::from_opaque_or_sdp(Some(opaque.to_vec()), None)
     }
 
     // V3 == V2 + public key
@@ -355,6 +399,18 @@ impl Answer {
         Self::from_opaque_or_sdp(None, Some(v1_sdp))
     }
 
+    // V4 == V3 + non-SDP; V3 == V2 + public key
+    pub fn to_v4(&self) -> Option<protobuf::signaling::ConnectionParametersV4> {
+        match self {
+            // Prefer opaque over SDP
+            Self {
+                proto: Some(protobuf::signaling::Answer { v4: Some(v4), .. }),
+                ..
+            } => Some(v4.clone()),
+            _ => None,
+        }
+    }
+
     // First return value means "is_v3_or_v2"
     // V3 == V2 + public_key
     pub fn to_v3_or_v2_or_v1_sdp(&self) -> Result<(bool, String, Option<Vec<u8>>)> {
@@ -368,6 +424,7 @@ impl Answer {
                                 sdp: Some(v3_or_v2_sdp),
                                 public_key,
                             }),
+                        ..
                     }),
                 ..
             } => Ok((true, v3_or_v2_sdp.clone(), public_key.clone())),

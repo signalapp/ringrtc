@@ -281,8 +281,9 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   }
 
   if (outgoing_video_source) {
+    // Note: This must stay "video1" to stay in sync with V4 signaling.
     auto outgoing_video_track =
-      factory->CreateVideoTrack("v", outgoing_video_source);
+      factory->CreateVideoTrack("video1", outgoing_video_source);
     if (outgoing_video_track) {
       auto result = pc->AddTrack(outgoing_video_track, stream_ids);
       if (!result.ok()) {
@@ -307,7 +308,8 @@ RUSTEXPORT AudioTrackInterface* Rust_createAudioTrack(
 
   cricket::AudioOptions options;
   auto source = factory->CreateAudioSource(options);
-  auto track = factory->CreateAudioTrack("a", source);
+  // Note: This must stay "audio1" to stay in sync with V4 signaling.
+  auto track = factory->CreateAudioTrack("audio1", source);
   return track.release();
 }
 

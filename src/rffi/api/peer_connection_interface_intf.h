@@ -50,6 +50,45 @@ Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* sdi,
                               const char*                          salt_ptr,
                               size_t                               salt_len);
 
+enum RffiVideoCodecType {
+    kRffiVideoCodecVp8 = 8,
+    kRffiVideoCodecH264ConstrainedHigh = 46,
+    kRffiVideoCodecH264ConstrainedBaseline = 40,
+};
+
+typedef struct {
+  RffiVideoCodecType type;
+  uint32_t level;
+} RffiVideoCodec;
+
+class ConnectionParametersV4 {
+ public:
+  std::string ice_ufrag;
+  std::string ice_pwd;
+  std::vector<RffiVideoCodec> receive_video_codecs;
+};
+
+typedef struct {
+  // These all just refer to the storage
+  const char* ice_ufrag;
+  const char* ice_pwd;
+  const RffiVideoCodec* receive_video_codecs;
+  size_t receive_video_codecs_size;
+
+  // When this is released, we must release the storage
+  ConnectionParametersV4* backing;
+} RffiConnectionParametersV4;
+
+// Must call Rust_releaseV4 once finished with the result
+RUSTEXPORT RffiConnectionParametersV4*
+Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* sdi);
+
+RUSTEXPORT void
+Rust_releaseV4(RffiConnectionParametersV4* v4);
+
+RUSTEXPORT webrtc::SessionDescriptionInterface*
+Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4);
+
 RUSTEXPORT void
 Rust_createAnswer(webrtc::PeerConnectionInterface*                    pc_interface,
                   webrtc::rffi::CreateSessionDescriptionObserverRffi* csd_observer);

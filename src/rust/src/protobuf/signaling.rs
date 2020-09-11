@@ -4,12 +4,16 @@
 pub struct Offer {
     #[prost(message, optional, tag="2")]
     pub v3_or_v2: ::std::option::Option<ConnectionParametersV3OrV2>,
+    #[prost(message, optional, tag="4")]
+    pub v4: ::std::option::Option<ConnectionParametersV4>,
 }
 /// A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Answer {
     #[prost(message, optional, tag="2")]
     pub v3_or_v2: ::std::option::Option<ConnectionParametersV3OrV2>,
+    #[prost(message, optional, tag="4")]
+    pub v4: ::std::option::Option<ConnectionParametersV4>,
 }
 /// A serialized one these goes in the "opaque" field of the CallingMessage::Ice in SignalService.proto
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -32,4 +36,31 @@ pub struct ConnectionParametersV3OrV2 {
 pub struct IceCandidateV3OrV2 {
     #[prost(string, optional, tag="1")]
     pub sdp: ::std::option::Option<std::string::String>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VideoCodec {
+    #[prost(enumeration="VideoCodecType", optional, tag="1")]
+    pub r#type: ::std::option::Option<i32>,
+    /// Used for H264; Not used for VP8
+    #[prost(uint32, optional, tag="2")]
+    pub level: ::std::option::Option<u32>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConnectionParametersV4 {
+    #[prost(bytes, optional, tag="1")]
+    pub public_key: ::std::option::Option<std::vec::Vec<u8>>,
+    #[prost(string, optional, tag="2")]
+    pub ice_ufrag: ::std::option::Option<std::string::String>,
+    #[prost(string, optional, tag="3")]
+    pub ice_pwd: ::std::option::Option<std::string::String>,
+    /// In other words, the video codecs the sender can receive.
+    #[prost(message, repeated, tag="4")]
+    pub receive_video_codecs: ::std::vec::Vec<VideoCodec>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VideoCodecType {
+    Vp8 = 8,
+    H264ConstrainedBaseline = 40,
+    H264ConstrainedHigh = 46,
 }

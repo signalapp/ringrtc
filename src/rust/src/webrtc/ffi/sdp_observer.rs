@@ -12,6 +12,8 @@ use libc::size_t;
 use std::ffi::c_void;
 use std::os::raw::c_char;
 
+use crate::webrtc::sdp_observer::RffiConnectionParametersV4;
+
 /// Incomplete type for SessionDescriptionInterface, used by
 /// CreateSessionDescriptionObserver callbacks.
 #[repr(C)]
@@ -59,4 +61,15 @@ extern "C" {
         salt_ptr: *const u8,
         salt_len: size_t,
     ) -> bool;
+
+    pub fn Rust_sessionDescriptionToV4(
+        sdi: *const RffiSessionDescriptionInterface,
+    ) -> *mut RffiConnectionParametersV4;
+
+    pub fn Rust_releaseV4(sdi: *mut RffiConnectionParametersV4);
+
+    pub fn Rust_sessionDescriptionFromV4(
+        offer: bool,
+        v4: *const RffiConnectionParametersV4,
+    ) -> *const RffiSessionDescriptionInterface;
 }

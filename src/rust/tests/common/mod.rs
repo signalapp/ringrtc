@@ -269,9 +269,10 @@ pub fn random_received_offer(
 ) -> signaling::ReceivedOffer {
     let sdp = format!("OFFER-{}", PRNG.gen::<u16>()).to_owned();
     let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
-    let offer = signaling::Offer::from_v3_and_v2_and_v1_sdp(
+    let offer = signaling::Offer::from_v4_and_v3_and_v2_and_v1(
         CallMediaType::Audio,
         local_public_key,
+        None,
         sdp.clone(),
         sdp,
     )

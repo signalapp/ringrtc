@@ -16,11 +16,13 @@ package signaling;
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 // For future compatibility, we can add new slots (v2, v3, v4 ....)
 message Offer {
+  optional ConnectionParametersV4 v4 = 1;
   optional ConnectionParametersV3OrV2 V3OrV2 = 2;
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 message Answer {
+  optional ConnectionParametersV4 v4 = 1;
   optional ConnectionParametersV3OrV2 V3OrV2 = 2;
 }
 
@@ -40,4 +42,24 @@ message ConnectionParametersV3OrV2 {
 
 message IceCandidateV3OrV2 {
   optional string sdp = 1;
+}
+
+enum VideoCodecType {
+  VP8 = 8;
+  H264_CONSTRAINED_BASELINE = 40;
+  H264_CONSTRAINED_HIGH = 46;
+}
+
+message VideoCodec {
+  optional VideoCodecType type = 1;
+  // Used for H264; Not used for VP8
+  optional uint32 level = 2;
+}
+
+message ConnectionParametersV4 {
+  optional bytes public_key = 1;
+  optional string ice_ufrag = 2;
+  optional string ice_pwd = 3;
+  // In other words, the video codecs the sender can receive.
+  repeated VideoCodec receive_video_codecs = 4;
 }

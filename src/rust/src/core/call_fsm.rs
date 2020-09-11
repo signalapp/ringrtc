@@ -74,6 +74,7 @@ use crate::core::signaling;
 use crate::core::util::TaskQueueRuntime;
 
 /// The different types of CallEvents.
+#[allow(clippy::large_enum_variant)]
 pub enum CallEvent {
     // Control events from client application
     /// Start a call (call struct has the direction attribute).

@@ -277,11 +277,13 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // Create a shared media sources.
         let audioConstraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         let audioSource = self.factory!.audioSource(with: audioConstraints)
-        let audioTrack = self.factory!.audioTrack(with: audioSource, trackId: "ARDAMSa0")
+        // Note: This must stay "audio1" to stay in sync with V4 signaling.
+        let audioTrack = self.factory!.audioTrack(with: audioSource, trackId: "audio1")
         audioTrack.isEnabled = false
 
         let videoSource = self.factory!.videoSource()
-        let videoTrack = self.factory!.videoTrack(with: videoSource, trackId: "ARDAMSv0")
+        // Note: This must stay "video1" to stay in sync with V4 signaling.
+        let videoTrack = self.factory!.videoTrack(with: videoSource, trackId: "video1")
         videoTrack.isEnabled = false
 
         // Define output video size.
