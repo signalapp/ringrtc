@@ -24,7 +24,12 @@ use crate::native::{
     SignalingSender,
 };
 use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource};
-use crate::webrtc::peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory};
+use crate::webrtc::peer_connection_factory::{
+    AudioDevice,
+    Certificate,
+    IceServer,
+    PeerConnectionFactory,
+};
 
 use neon::prelude::*;
 
@@ -651,7 +656,7 @@ declare_types! {
             let mut this = cx.this();
             let devices = cx.borrow_mut(&mut this, |cm| {
                 cm.peer_connection_factory.get_audio_recording_devices()
-            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            }).unwrap_or_else(|_| { Vec::<AudioDevice>::new()});
 
             let js_devices = JsArray::new(&mut cx, devices.len() as u32);
             for (i, device) in devices.iter().enumerate() {
@@ -674,9 +679,12 @@ declare_types! {
         method setAudioInput(mut cx) {
             let index = cx.argument::<JsNumber>(0)?;
             let mut this = cx.this();
-            cx.borrow_mut(&mut this, |cm| {
+            match cx.borrow_mut(&mut this, |cm| {
                 cm.peer_connection_factory.set_audio_recording_device(index.value() as u16)
-            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            }) {
+                Ok(_) => (),
+                Err(err) => error!("setAudioInput failed: {}", err) ,
+            };
 
             Ok(cx.undefined().upcast())
         }
@@ -685,7 +693,7 @@ declare_types! {
             let mut this = cx.this();
             let devices = cx.borrow_mut(&mut this, |cm| {
                 cm.peer_connection_factory.get_audio_playout_devices()
-            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            }).unwrap_or_else(|_| { Vec::<AudioDevice>::new()});
 
             let js_devices = JsArray::new(&mut cx, devices.len() as u32);
             for (i, device) in devices.iter().enumerate() {
@@ -708,9 +716,12 @@ declare_types! {
         method setAudioOutput(mut cx) {
             let index = cx.argument::<JsNumber>(0)?;
             let mut this = cx.this();
-            cx.borrow_mut(&mut this, |cm| {
+            match cx.borrow_mut(&mut this, |cm| {
                 cm.peer_connection_factory.set_audio_playout_device(index.value() as u16)
-            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            }) {
+                Ok(_) => (),
+                Err(err) => error!("setAudioOutput failed: {}", err),
+            };
 
             Ok(cx.undefined().upcast())
         }

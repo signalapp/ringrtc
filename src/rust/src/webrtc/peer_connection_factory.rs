@@ -276,6 +276,7 @@ impl PeerConnectionFactory {
             (name, unique_id, rc)
         };
         if rc != 0 {
+            error!("getAudioPlayoutDeviceName({}) failed: {}", index, rc);
             return Err(RingRtcError::QueryAudioDevices.into());
         }
         let name = name.into_string()?;
@@ -293,6 +294,7 @@ impl PeerConnectionFactory {
         let mut devices = Vec::<AudioDevice>::new();
 
         if device_count < 0 {
+            error!("getAudioPlayoutDevices() returned {}", device_count);
             return Err(RingRtcError::QueryAudioDevices.into());
         }
         let device_count = device_count as u16;
@@ -300,7 +302,13 @@ impl PeerConnectionFactory {
             devices.push(AudioDevice::default());
         }
         for i in 0..device_count {
-            devices.push(self.get_audio_playout_device(i)?);
+            match self.get_audio_playout_device(i) {
+                Ok(dev) => devices.push(dev),
+                Err(fail) => {
+                    error!("getAudioPlayoutDevice({}) failed: {}", i, fail);
+                    return Err(fail);
+                }
+            }
         }
         // For devices missing unique_id, populate them with name + index
         for i in 0..devices.len() {
@@ -323,6 +331,7 @@ impl PeerConnectionFactory {
         if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
             Ok((index - 1) as u16)
         } else {
+            error!("get_default_playout_device_index: Default communication device is not present in the list of all devices");
             Err(RingRtcError::QueryAudioDevices.into())
         }
     }
@@ -352,6 +361,7 @@ impl PeerConnectionFactory {
         if ok {
             Ok(())
         } else {
+            error!("setAudioPlayoutDevice({}) failed", index);
             Err(RingRtcError::SetAudioDevice.into())
         }
     }
@@ -368,6 +378,7 @@ impl PeerConnectionFactory {
             (name, unique_id, rc)
         };
         if rc != 0 {
+            error!("getAudioRecordingDeviceName({}) failed: {}", index, rc);
             return Err(RingRtcError::QueryAudioDevices.into());
         }
         let name = name.into_string()?;
@@ -385,6 +396,7 @@ impl PeerConnectionFactory {
         let mut devices = Vec::<AudioDevice>::new();
 
         if device_count < 0 {
+            error!("getAudioRecordingDevices() returned {}", device_count);
             return Err(RingRtcError::QueryAudioDevices.into());
         }
         let device_count = device_count as u16;
@@ -392,7 +404,13 @@ impl PeerConnectionFactory {
             devices.push(AudioDevice::default());
         }
         for i in 0..device_count {
-            devices.push(self.get_audio_recording_device(i)?);
+            match self.get_audio_recording_device(i) {
+                Ok(dev) => devices.push(dev),
+                Err(fail) => {
+                    error!("getAudioRecordingDevice({}) failed: {}", i, fail);
+                    return Err(fail);
+                }
+            }
         }
         // For devices missing unique_id, populate them with name + index
         for i in 0..devices.len() {
@@ -414,6 +432,7 @@ impl PeerConnectionFactory {
         if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
             Ok((index - 1) as u16)
         } else {
+            error!("get_default_recording_device_index: Default communication device is not present in the list of all devices");
             Err(RingRtcError::QueryAudioDevices.into())
         }
     }
@@ -443,6 +462,7 @@ impl PeerConnectionFactory {
         if ok {
             Ok(())
         } else {
+            error!("setAudioRecordingDevice({}) failed", index);
             Err(RingRtcError::SetAudioDevice.into())
         }
     }
