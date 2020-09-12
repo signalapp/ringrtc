@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.7.0
+
+- Update Rust dependencies
+
+- Implement "V4" protocol with protobufs; deprecate SDP
+
+- Electron: Improve logging and handling of device selection
+
 ## v2.6.0
 
 - Reference signalapp/webrtc@4183
