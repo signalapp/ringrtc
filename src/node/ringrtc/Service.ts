@@ -5,10 +5,11 @@
 
 /* tslint:disable max-classes-per-file */
 
-const os = require('os');
+import * as os from 'os';
+import * as process from 'process';
 
 // tslint:disable-next-line no-var-requires no-require-imports
-const Native = require('../../build/' + os.platform() + '/libringrtc.node');
+const Native = require('../../build/' + os.platform() + '/libringrtc-' + process.arch + '.node');
 
 // tslint:disable-next-line no-unnecessary-class
 class NativeCallManager {
