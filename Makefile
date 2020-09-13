@@ -23,6 +23,10 @@ ANDROID_TARGETS := $(foreach t, $(BUILD_TYPES),     \
 
 IOS_TARGETS := ios/release
 
+# This can be overriden on the command line, e.g. "make electron NODEJS_ARCH=ia32"
+# Note: make sure to only use NodeJS architectures here, like x64, ia32, arm64, etc.
+NODEJS_ARCH := x64
+
 help:
 	$(Q) echo "The following build targets are supported:"
 	$(Q) echo "  ios      -- download WebRTC and build for the iOS platform"
@@ -74,10 +78,10 @@ electron:
 	fi
 	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
 		echo "Electron: Debug build" ; \
-		./bin/build-electron -d ; \
+		TARGET_ARCH=$(NODEJS_ARCH) ./bin/build-electron -d ; \
 	else \
 		echo "Electron: Release build" ; \
-		./bin/build-electron -r ; \
+		TARGET_ARCH=$(NODEJS_ARCH) ./bin/build-electron -r ; \
 	fi
 	$(Q) (cd src/node && yarn install && yarn build)
 

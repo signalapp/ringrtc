@@ -157,18 +157,23 @@ Dynamic symbol files are also available in the `out/` directory for each framewo
 
 To build the Node.js module suitable for including in an Electron app, run:
 
-    make electron PLATFORM=<platform>
+    make electron PLATFORM=<platform> NODEJS_ARCH=<arch>
 
 where platform can be:
 - `mac` or `ios` (either of these can be used the MacOS)
 - `unix` or `android` (either of these can be used for Linux)
 - `windows`
 
-This will produce a release build for the host architecture (we don't support cross-compiling Electron builds at this time).
+and where the (optional) `NODEJS_ARCH` can be:
+- `x64`
+- `ia32`
+- `arm64`
+
+If no `NODEJS_ARCH` is provided, the build script will default to `x64`. Note that architectures other than `x64` are currently only supported through cross-compilation. That is, compiling for `arm64` on a `x64` machine works, but compiling for `arm64` on an `arm64` machine is not currently supported.
 
 When the build is complete, the library will be available here:
 
-    src/node/build/<platform>/libringrtc.node
+    src/node/build/<platform>/libringrtc-<arch>.node
 
 ### CLI test tool
 
