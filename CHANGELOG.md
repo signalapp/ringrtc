@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.7.1
+
+- Reference signalapp/webrtc@4183a
+  - Should prevent early microphone access
+
+- Electron: Do not stretch video if different resolution
+
 ## v2.7.0
 
 - Update Rust dependencies
