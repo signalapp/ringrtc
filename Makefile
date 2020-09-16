@@ -67,12 +67,18 @@ cli:
 PHONY += clean
 clean:
 	$(Q) ./bin/build-aar --clean
+	$(Q) ./bin/build-cli --clean
+	$(Q) ./bin/build-electron --clean
 	$(Q) ./bin/build-ios --clean
 	$(Q) rm -rf ./src/webrtc/src/out
 
 PHONY += distclean
 distclean:
 	$(Q) rm -rf ./out
+	$(Q) rm -rf ./src/rust/target
+	$(Q) rm -rf ./src/node/build
+	$(Q) rm -rf ./src/node/dist
+	$(Q) rm -rf ./src/node/node_modules
 	$(Q) rm -rf ./src/webrtc/src/out
 
 .PHONY: $(PHONY)

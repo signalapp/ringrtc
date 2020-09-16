@@ -24,7 +24,13 @@ usage()
 clean()
 {
     # Remove all possible artifact directories.
-    echo "Nothing yet to clean..."
+    rm -rf ./src/node/build
+    rm -rf ./src/node/dist
+    rm -rf ./src/node/node_modules
+    rm -rf ./src/rust/target/debug
+    rm -rf ./src/rust/target/release
+    rm -rf ./src/webrtc/src/out/debug
+    rm -rf ./src/webrtc/src/out/release
 }
 
 BUILD_TYPE=debug

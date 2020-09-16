@@ -52,7 +52,11 @@ clean()
   rm -r -f ${OUTPUT_DIR}/release
   rm -r -f ${OUTPUT_DIR}/WebRTC.framework
   rm -r -f ${OUTPUT_DIR}/WebRTC.framework.dSYM
-  rm -r -f ${RINGRTC_SRC_DIR}/rust/target
+  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/release
+  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/debug
+  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/universal
+  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/x86_64-apple-ios
+  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/aarch64-apple-ios
   rm -r -f ${OUTPUT_DIR}/libringrtc
   rm -r -f ${OUTPUT_DIR}/build
 }
