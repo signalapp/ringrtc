@@ -19,12 +19,18 @@ IOS_TARGETS := ios/release
 
 help:
 	$(Q) echo "The following build targets are supported:"
-	$(Q) echo "  ios     -- download WebRTC and build iOS platform products."
-	$(Q) echo "  android -- download WebRTC and build Android platform products."
+	$(Q) echo "  ios      -- download WebRTC and build for the iOS platform"
+	$(Q) echo "  android  -- download WebRTC and build for the Android platform"
+	$(Q) echo "  electron -- build an Electron library"
+	$(Q) echo "  cli      -- build the test cli"
+	$(Q) echo
+	$(Q) echo "For the electon/cli builds, you can specify an optional platform"
+	$(Q) echo "which will download WebRTC. For example:"
+	$(Q) echo "  $ make electron PLATFORM=unix"
 	$(Q) echo
 	$(Q) echo "The following clean targets are supported:"
-	$(Q) echo "  clean     -- remove all platform build products."
-	$(Q) echo "  distclean -- remove everything, including downloaded WebRTC dependencies."
+	$(Q) echo "  clean     -- remove all build artifacts"
+	$(Q) echo "  distclean -- remove everything"
 	$(Q) echo
 
 android: $(ANDROID_TARGETS)
@@ -56,13 +62,31 @@ ios/%: out/ios.env
 	fi
 
 electron:
-	# TODO ./bin/prepare-workspace
-	$(Q) ./bin/build-electron
+	$(Q) if [ "$(PLATFORM)" != "" ] ; then \
+		echo "Electron: Preparing workspace for $(PLATFORM)" ; \
+		./bin/prepare-workspace $(PLATFORM) ; \
+	fi
+	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
+		echo "Electron: Debug build" ; \
+		../bin/build-electron -d ; \
+	else \
+		echo "Electron: Release build" ; \
+		./bin/build-electron -r ; \
+	fi
 	$(Q) (cd src/node && yarn install && yarn build)
 
 cli:
-	# TODO: ./bin/prepare-workspace
-	$(Q) ./bin/build-cli
+	$(Q) if [ "$(PLATFORM)" != "" ] ; then \
+		echo "cli: Preparing workspace for $(PLATFORM)" ; \
+		./bin/prepare-workspace $(PLATFORM) ; \
+	fi
+	$(Q) if [ "$(TYPE)" = "release" ] ; then \
+		echo "cli: Release build" ; \
+		./bin/build-cli -r ; \
+	else \
+		echo "cli: Debug build" ; \
+		./bin/build-cli -d ; \
+	fi
 
 PHONY += clean
 clean:

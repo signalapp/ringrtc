@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.4.1 or later), and for the host platform as a Node.js module for use in Electron apps.
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.4.1), and for the host platform as a Node.js module for use in Electron apps.
 
 ## Prerequisites
 
@@ -43,29 +43,20 @@ Install additional components via `cargo`:
     cargo install cargo-lipo
     cargo install cbindgen
 
-#### Electron
+### Electron
 
-Install Node.js of the matching version. The current version can be found in src/node/.nvmrc;
-you can use NVM or just manually install the corresponding version.
+Usually the Rust installation installs the correct toolchain for your host. In the case of
+Windows, we recommend ensuring that the `msvc` toolchain is installed and used for builds.
 
-Install Yarn:
-
-    npm install --global yarn
-
-Install other Node.js dependencies with Yarn:
-
-    cd src/node
-    yarn install --frozen-lockfile
-
-### Other Android Dependencies
+### Other Dependencies
+#### Android Dependencies
 
 You might need some of these. Of course it is assumed that you have the Android SDK installed,
-along with the NDK, LLDB, and SDK Tools options. A properly configured JDK (such as openjdk-8-jdk)
-is also assumed. You may also need the following (on Ubuntu):
+along with the NDK, LLDB, and SDK Tools options. A properly configured JDK (such as openjdk-8-jdk) is also assumed. You may also need the following (on Ubuntu):
 
     sudo apt install libglib2.0-dev
 
-### Other iOS Dependencies
+#### iOS Dependencies
 
 You might need to change the location of the build tools (this depends on where Xcode is installed):
 
@@ -74,6 +65,38 @@ You might need to change the location of the build tools (this depends on where 
 You may also need coreutils if not yet installed:
 
     brew install coreutils
+
+#### Electron Dependencies
+
+Install the expected version of Node.jswhich can be found in src/node/.nvmrc. You can use [nvm](https://github.com/nvm-sh/nvm) or just manually install the corresponding version. Make sure you have node and npm installed.
+
+Then install Yarn (if not already):
+
+    npm install --global yarn
+
+##### MacOS
+
+Follow the iOS dependencies section above.
+
+##### Windows
+
+For Windows, follow the setup from [here](https://github.com/signalapp/Signal-Desktop-Private/blob/development/CONTRIBUTING.md). Here are some other things that might help with the builds:
+- Download and install [git](https://git-scm.com/download/win) (enable symbolic links) and use the Git Bash shell
+    - The git config should be:
+        - git config --global core.autocrlf false
+        - git config --global core.filemode false
+        - git config --global branch.autosetuprebase always
+        - git config --global core.symlinks true
+- Download and install [make](http://gnuwin32.sourceforge.net/packages/make.htm)
+- Download and install [Python 2.7](https://www.python.org/downloads/)
+    - Install it to a location without spaces (e.g. c:\python27)
+
+##### Linux
+
+We currently build using Ubuntu 18.04, but other distributions should work. Here are some other
+things that might help with the builds:
+- `sudo apt install build-essential git curl wget python python2.7`
+- In some cases: `sudo apt install pkg-config`
 
 ## Initial Checkout
 
@@ -92,6 +115,9 @@ You can then add the Signal repo to sync with upstream changes:
     git remote add upstream https://github.com/signalapp/ringrtc.git
 
 ## Building
+
+<i>Important: If building the for the first time, it will take a long time to download
+WebRTC dependencies and then a long time to build WebRTC and RingRTC.</i>
 
 ### Android
 
@@ -131,11 +157,17 @@ Dynamic symbol files are also available in the `out/` directory for each framewo
 
 To build the Node.js module suitable for including in an Electron app, run:
 
-    make electron
+    make electron PLATFORM=<platform>
 
-This will produce a release build for the host architecture.
+where platform can be:
+- `mac` or `ios` (either of these can be used the MacOS)
+- `unix` or `android` (either of these can be used for Linux)
+- `windows`
+
+This will produce a release build for the host architecture (we don't support cross-compiling Electron builds at this time).
 
 When the build is complete, the library will be available here:
+
     src/node/build/<platform>/libringrtc.node
 
 ### CLI test tool
