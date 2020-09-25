@@ -1,9 +1,13 @@
 # Changelog
 
+## v2.7.2
+
+- Electron: Expose more message types
+
 ## v2.7.1
 
 - Reference signalapp/webrtc@4183a
-  - Should prevent early microphone access
+  - Electron: Should prevent early microphone access
 
 - Electron: Do not stretch video if different resolution
 

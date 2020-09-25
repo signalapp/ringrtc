@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.7.1"
+version = "2.7.2"
 dependencies = [
  "bytes 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
