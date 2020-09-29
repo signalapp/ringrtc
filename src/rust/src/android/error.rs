@@ -98,8 +98,8 @@ pub enum AndroidError {
     // Android Misc error codes
     #[fail(display = "Creating JNI PeerConnection failed")]
     CreateJniPeerConnection,
-    #[fail(display = "Extracting native PeerConnectionInterface failed")]
-    ExtractNativePeerConnectionInterface,
+    #[fail(display = "Extracting native PeerConnection failed")]
+    ExtractNativePeerConnection,
     #[fail(display = "Creating JNI Connection failed")]
     CreateJniConnection,
 

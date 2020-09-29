@@ -29,7 +29,7 @@ use crate::ios::ios_media_stream::IOSMediaStream;
 use crate::ios::ios_util::*;
 
 use crate::webrtc::media::MediaStream;
-use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnectionInterface};
+use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnection};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
 
 /// Concrete type for iOS AppIncomingMedia objects.
@@ -111,7 +111,7 @@ impl Platform for IOSPlatform {
 
         let app_connection_interface = (self.app_interface.onCreateConnectionInterface)(
             self.app_interface.object,
-            pc_observer.rffi_interface() as *mut c_void,
+            pc_observer.rffi() as *mut c_void,
             remote_device_id,
             call.call_context()?.object,
             signaling_version.enable_dtls(),
@@ -126,16 +126,16 @@ impl Platform for IOSPlatform {
 
         // Finish up the connection creation...
 
-        // Retrieve the underlying PeerConnectionInterface object from the
+        // Retrieve the underlying PeerConnection object from the
         // application owned RTCPeerConnection object.
-        let rffi_pc_interface = app_connection_interface.pc as *const RffiPeerConnectionInterface;
-        if rffi_pc_interface.is_null() {
-            return Err(IOSError::ExtractNativePeerConnectionInterface.into());
+        let rffi_peer_connection = app_connection_interface.pc as *const RffiPeerConnection;
+        if rffi_peer_connection.is_null() {
+            return Err(IOSError::ExtractNativePeerConnection.into());
         }
 
-        let pc_interface = PeerConnection::unowned(rffi_pc_interface);
+        let peer_connection = PeerConnection::unowned(rffi_peer_connection, pc_observer.rffi());
 
-        connection.set_pc_interface(pc_interface)?;
+        connection.set_peer_connection(peer_connection)?;
 
         info!("connection: {:?}", connection);
 

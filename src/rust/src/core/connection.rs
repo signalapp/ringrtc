@@ -13,9 +13,14 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+use bytes::BytesMut;
+
 use futures::channel::mpsc::{Receiver, Sender};
 use futures::channel::oneshot;
 use futures::future::{self, TryFutureExt};
+
+use bytes::Bytes;
+use prost::Message;
 
 use hkdf::Hkdf;
 use rand::rngs::OsRng;
@@ -33,7 +38,6 @@ use crate::common::{
     FeatureLevel,
     Result,
     RingBench,
-    DATA_CHANNEL_NAME,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
@@ -45,14 +49,14 @@ use crate::error::RingRtcError;
 use crate::protobuf;
 
 use crate::webrtc::data_channel::DataChannel;
-use crate::webrtc::data_channel_observer::DataChannelObserver;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
+use crate::webrtc::peer_connection_observer::{IceConnectionState, PeerConnectionObserverTrait};
 use crate::webrtc::sdp_observer::{
     create_csd_observer,
     create_ssd_observer,
-    SessionDescriptionInterface,
+    SessionDescription,
     SrtpCryptoSuite,
     SrtpKey,
 };
@@ -112,23 +116,21 @@ where
     T: Platform,
 {
     /// PeerConnection object
-    pc_interface:          Option<PeerConnection>,
+    peer_connection:    Option<PeerConnection>,
     /// DataChannel object
-    data_channel:          Option<DataChannel>,
-    /// DataChannelObserver object
-    data_channel_observer: Option<DataChannelObserver<T>>,
+    data_channel:       Option<DataChannel>,
     /// Raw pointer to Connection object for PeerConnectionObserver
-    connection_ptr:        Option<*mut Connection<T>>,
+    connection_ptr:     Option<*mut Connection<T>>,
     /// Application-specific incoming media
-    incoming_media:        Option<<T as Platform>::AppIncomingMedia>,
+    incoming_media:     Option<<T as Platform>::AppIncomingMedia>,
     /// Application specific peer connection
-    app_connection:        Option<<T as Platform>::AppConnection>,
+    app_connection:     Option<<T as Platform>::AppConnection>,
     /// Boxed copy of the stats collector object shared for callbacks.
-    stats_observer:        Option<Box<StatsObserver>>,
+    stats_observer:     Option<Box<StatsObserver>>,
     /// The current maximum bitrate setting for the local endpoint.
-    local_max_bitrate:     DataRate,
+    local_max_bitrate:  DataRate,
     /// The current maximum bitrate setting for the remote endpoint.
-    remote_max_bitrate:    DataRate,
+    remote_max_bitrate: DataRate,
 }
 
 // Send and Sync needed to share *const pointer types across threads.
@@ -141,10 +143,9 @@ where
     T: Platform,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "pc_interface: {:?}, data_channel: {:?}, data_channel_observer: {:?}, connection_ptr: {:?}, local_max_bitrate: {:?}, remote_max_bitrate: {:?}",
-               self.pc_interface,
+        write!(f, "peer_connection: {:?}, data_channel: {:?}, connection_ptr: {:?}, local_max_bitrate: {:?}, remote_max_bitrate: {:?}",
+               self.peer_connection,
                self.data_channel,
-               self.data_channel_observer,
                self.connection_ptr,
                self.local_max_bitrate,
                self.remote_max_bitrate)
@@ -164,12 +165,12 @@ impl<T> WebRtcData<T>
 where
     T: Platform,
 {
-    fn pc_interface(&self) -> Result<&PeerConnection> {
-        match self.pc_interface.as_ref() {
+    fn peer_connection(&self) -> Result<&PeerConnection> {
+        match self.peer_connection.as_ref() {
             Some(v) => Ok(v),
             None => Err(RingRtcError::OptionValueNotSet(
-                "pc_interface".to_string(),
-                "pc_interface".to_string(),
+                "peer_connection".to_string(),
+                "peer_connection".to_string(),
             )
             .into()),
         }
@@ -306,6 +307,8 @@ where
     connection_type:                ConnectionType,
     /// Execution context for the connection periodic timer tick
     tick_context:                   Arc<CallMutex<TickContext>>,
+    /// The accumulated state of sending messages over the data channel
+    accumulated_dcm_state:          Arc<CallMutex<protobuf::data_channel::Data>>,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -386,6 +389,7 @@ where
             terminate_condvar:              Arc::clone(&self.terminate_condvar),
             connection_type:                self.connection_type,
             tick_context:                   Arc::clone(&self.tick_context),
+            accumulated_dcm_state:          Arc::clone(&self.accumulated_dcm_state),
         }
     }
 }
@@ -409,15 +413,14 @@ where
         let direction = call.direction();
 
         let webrtc = WebRtcData {
-            pc_interface:          None,
-            data_channel:          None,
-            data_channel_observer: None,
-            connection_ptr:        None,
-            incoming_media:        None,
-            app_connection:        None,
-            stats_observer:        None,
-            local_max_bitrate:     BandwidthMode::Normal.max_bitrate(),
-            remote_max_bitrate:    BandwidthMode::Normal.max_bitrate(),
+            peer_connection:    None,
+            data_channel:       None,
+            connection_ptr:     None,
+            incoming_media:     None,
+            app_connection:     None,
+            stats_observer:     None,
+            local_max_bitrate:  BandwidthMode::Normal.max_bitrate(),
+            remote_max_bitrate: BandwidthMode::Normal.max_bitrate(),
         };
 
         let connection = Self {
@@ -446,6 +449,10 @@ where
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             connection_type,
             tick_context: Arc::new(CallMutex::new(TickContext::new(), "tick_context")),
+            accumulated_dcm_state: Arc::new(CallMutex::new(
+                protobuf::data_channel::Data::default(),
+                "accumulated_dcm_state",
+            )),
         };
 
         connection.init_connection_ptr()?;
@@ -482,7 +489,7 @@ where
             self.set_state(ConnectionState::Starting)?;
 
             let webrtc = self.webrtc.lock()?;
-            let peer_connection = webrtc.pc_interface()?;
+            let peer_connection = webrtc.peer_connection()?;
 
             // We have to create and use the IceGatherer before calling
             // create_offer to make sure the ICE parameters are correct.
@@ -491,33 +498,32 @@ where
 
             // We have to create the DataChannel before calling create_offer to make sure the
             // data channel parameters are correct.  But we don't need to observe it.
-            let _data_channel =
-                peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
+            let _data_channel = peer_connection.create_signaling_data_channel()?;
 
             let observer = create_csd_observer();
             peer_connection.create_offer(observer.as_ref());
             // This must be kept in sync with call.rs where it passes in V2 into create_connection.
-            let mut offer_sdi = observer.get_result()?;
+            let offer = observer.get_result()?;
 
-            // The only purpose of this is to start gathering ICE candidates.
-            // But we need to call set_local_description before we munge it.
-            // Otherwise there will be a data channel type mismatch.
-            let observer = create_ssd_observer();
-            peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
-            observer.get_result()?;
-
-            let v2_offer_sdp = offer_sdi.to_sdp()?;
-            offer_sdi.replace_rtp_data_channels_with_sctp()?;
-            let v1_offer_sdp = offer_sdi.to_sdp()?;
-
+            // We have to do this before we pass ownership of offer_sdi into set_local_description.
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
-            let v4_offer = offer_sdi.to_v4(local_public_key.as_bytes().to_vec())?;
+            let v4_offer = offer.to_v4(local_public_key.as_bytes().to_vec())?;
+            let v2_offer_sdp = offer.to_sdp()?;
+            let v1_offer_sdp = offer.replace_rtp_data_channels_with_sctp()?.to_sdp()?;
             info!(
                 "Using V4 signaling for outgoing connection offer: {:?} SDP: {} original SDP: {}",
                 v4_offer,
                 v4_to_sdp_without_srtp_keys(&v4_offer)?,
                 v2_offer_sdp
             );
+
+            // The only purpose of this is to start gathering ICE candidates.
+            // But we need to call set_local_description before we munge it.
+            // Otherwise there will be a data channel type mismatch.
+            let observer = create_ssd_observer();
+            peer_connection.set_local_description(observer.as_ref(), offer);
+            observer.get_result()?;
+
             let offer = signaling::Offer::from_v4_and_v3_and_v2_and_v1(
                 call_media_type,
                 local_public_key.as_bytes().to_vec(),
@@ -558,28 +564,25 @@ where
             let stats_observer = create_stats_observer();
             webrtc.stats_observer = Some(stats_observer);
 
-            let peer_connection = webrtc.pc_interface()?;
+            let peer_connection = webrtc.peer_connection()?;
 
             peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
 
             // The caller is responsible for creating the data channel (the callee listens for it).
             // Both sides will observe it.
-            let data_channel =
-                peer_connection.create_data_channel(DATA_CHANNEL_NAME.to_string())?;
-            let data_channel_observer = DataChannelObserver::new(self.clone())?;
-            unsafe { data_channel.register_observer(data_channel_observer.rffi_interface())? };
+            let data_channel = peer_connection.create_signaling_data_channel()?;
 
-            let (mut offer_sdi, mut answer_sdi, remote_public_key) =
+            let (mut offer, mut answer, remote_public_key) =
                 if let (Some(v4_offer), Some(v4_answer)) = (offer.to_v4(), received.answer.to_v4())
                 {
-                    let offer_sdi = SessionDescriptionInterface::offer_from_v4(&v4_offer)?;
-                    let answer_sdi = SessionDescriptionInterface::answer_from_v4(&v4_answer)?;
+                    let offer = SessionDescription::offer_from_v4(&v4_offer)?;
+                    let answer = SessionDescription::answer_from_v4(&v4_answer)?;
                     info!(
                         "Using V4 signaling for outgoing connection answer: {:?} SDP: {}",
                         v4_answer,
                         v4_to_sdp_without_srtp_keys(&v4_answer)?
                     );
-                    (offer_sdi, answer_sdi, v4_answer.public_key)
+                    (offer, answer, v4_answer.public_key)
                 } else {
                     let (answer_is_v3_or_v2, answer_sdp, remote_public_key) =
                         received.answer.to_v3_or_v2_or_v1_sdp()?;
@@ -588,9 +591,9 @@ where
                     } else {
                         offer.to_v1_sdp()?
                     };
-                    let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
-                    let answer_sdi = SessionDescriptionInterface::answer_from_sdp(answer_sdp)?;
-                    (offer_sdi, answer_sdi, remote_public_key)
+                    let offer = SessionDescription::offer_from_sdp(offer_sdp)?;
+                    let answer = SessionDescription::answer_from_sdp(answer_sdp)?;
+                    (offer, answer, remote_public_key)
                 };
 
             if let Some(remote_public_key) = remote_public_key {
@@ -605,31 +608,30 @@ where
                     caller_identity_key,
                     callee_identity_key,
                 )?;
-                offer_sdi.disable_dtls_and_set_srtp_key(&offer_key)?;
-                answer_sdi.disable_dtls_and_set_srtp_key(&answer_key)?;
+                offer.disable_dtls_and_set_srtp_key(&offer_key)?;
+                answer.disable_dtls_and_set_srtp_key(&answer_key)?;
             }
 
             let observer = create_ssd_observer();
-            peer_connection.set_local_description(observer.as_ref(), &offer_sdi);
+            peer_connection.set_local_description(observer.as_ref(), offer);
             observer.get_result()?;
 
             let observer = create_ssd_observer();
-            peer_connection.set_remote_description(observer.as_ref(), &answer_sdi);
+            peer_connection.set_remote_description(observer.as_ref(), answer);
             // on_data_channel and on_add_stream and on_ice_connected can all happen while
             // SetRemoteDescription is happening.  But none of those will be processed
             // until start_fsm() is called below.
             observer.get_result()?;
 
             // Don't enable until the call is accepted.
-            peer_connection.set_outgoing_audio_enabled(false);
+            peer_connection.set_outgoing_media_enabled(false);
             // But do start incoming RTP right away so we can receive the
             // "accepted" message.
-            peer_connection.set_incoming_rtp_enabled(true);
+            peer_connection.set_incoming_media_enabled(true);
 
             // We have to do this once we're done with peer_connection because
             // it holds a ref to peer_connection as well.
             webrtc.data_channel = Some(data_channel);
-            webrtc.data_channel_observer = Some(data_channel_observer);
             self.set_state(ConnectionState::ConnectingBeforeAccepted)?;
             Ok(())
         })();
@@ -661,10 +663,10 @@ where
             let stats_observer = create_stats_observer();
             webrtc.stats_observer = Some(stats_observer);
 
-            let peer_connection = webrtc.pc_interface()?;
+            let peer_connection = webrtc.peer_connection()?;
 
             let v4_offer = received.offer.to_v4();
-            let (mut offer_sdi, offer_is_v3_or_v2, remote_public_key) =
+            let (mut offer, offer_is_v3_or_v2, remote_public_key) =
                 if let Some(v4_offer) = v4_offer.as_ref() {
                     info!(
                         "Using V4 signaling for incoming connection offer: {:?} SDP: {}",
@@ -672,13 +674,13 @@ where
                         v4_to_sdp_without_srtp_keys(&v4_offer)?
                     );
                     let offer_is_v3_or_v2 = false;
-                    let offer_sdi = SessionDescriptionInterface::offer_from_v4(&v4_offer)?;
-                    (offer_sdi, offer_is_v3_or_v2, v4_offer.public_key.clone())
+                    let offer = SessionDescription::offer_from_v4(&v4_offer)?;
+                    (offer, offer_is_v3_or_v2, v4_offer.public_key.clone())
                 } else {
                     let (offer_is_v3_or_v2, offer_sdp, remote_public_key) =
                         received.offer.to_v3_or_v2_or_v1_sdp()?;
-                    let offer_sdi = SessionDescriptionInterface::offer_from_sdp(offer_sdp)?;
-                    (offer_sdi, offer_is_v3_or_v2, remote_public_key)
+                    let offer = SessionDescription::offer_from_sdp(offer_sdp)?;
+                    (offer, offer_is_v3_or_v2, remote_public_key)
                 };
 
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
@@ -696,13 +698,13 @@ where
                         caller_identity_key,
                         callee_identity_key,
                     )?;
-                    offer_sdi.disable_dtls_and_set_srtp_key(&offer_key)?;
+                    offer.disable_dtls_and_set_srtp_key(&offer_key)?;
                     Some(answer_key)
                 }
             };
 
             let observer = create_ssd_observer();
-            peer_connection.set_remote_description(observer.as_ref(), &offer_sdi);
+            peer_connection.set_remote_description(observer.as_ref(), offer);
             // on_data_channel and on_add_stream can happen while SetRemoteDescription
             // is happening.  But they won't be processed until start_fsm() is called
             // below.
@@ -710,13 +712,13 @@ where
 
             let observer = create_csd_observer();
             peer_connection.create_answer(observer.as_ref());
-            let mut answer_sdi = observer.get_result()?;
+            let mut answer = observer.get_result()?;
             if let Some(answer_key) = &answer_key {
-                answer_sdi.disable_dtls_and_set_srtp_key(answer_key)?;
+                answer.disable_dtls_and_set_srtp_key(answer_key)?;
             }
 
-            let answer = if v4_offer.is_some() {
-                let v4_answer = answer_sdi.to_v4(local_public_key.as_bytes().to_vec())?;
+            let answer_to_send = if v4_offer.is_some() {
+                let v4_answer = answer.to_v4(local_public_key.as_bytes().to_vec())?;
                 info!(
                     "Using V4 signaling for incoming connection answer: {:?} SDP: {}",
                     v4_answer,
@@ -724,36 +726,36 @@ where
                 );
 
                 // We have to change the local answer to match what we send back
-                answer_sdi = SessionDescriptionInterface::answer_from_v4(&v4_answer)?;
+                answer = SessionDescription::answer_from_v4(&v4_answer)?;
                 // And we have to make sure to do this again since answer_from_v4 doesn't do it.
                 if let Some(answer_key) = &answer_key {
-                    answer_sdi.disable_dtls_and_set_srtp_key(answer_key)?;
+                    answer.disable_dtls_and_set_srtp_key(answer_key)?;
                 }
                 signaling::Answer::from_v4(v4_answer)?
             } else if offer_is_v3_or_v2 {
-                let answer_sdp = answer_sdi.to_sdp()?;
+                let answer_sdp = answer.to_sdp()?;
                 signaling::Answer::from_v3_and_v2_sdp(
                     local_public_key.as_bytes().to_vec(),
                     answer_sdp,
                 )?
             } else {
-                let answer_sdp = answer_sdi.to_sdp()?;
+                let answer_sdp = answer.to_sdp()?;
                 signaling::Answer::from_v1_sdp(answer_sdp)?
             };
 
             // Don't enable incoming RTP until accepted.
             // This should be done before we set local description to make sure
             // we don't get ICE connected really fast and allow any packets through.
-            peer_connection.set_incoming_rtp_enabled(false);
+            peer_connection.set_incoming_media_enabled(false);
 
             let observer = create_ssd_observer();
-            peer_connection.set_local_description(observer.as_ref(), &answer_sdi);
+            peer_connection.set_local_description(observer.as_ref(), answer);
             // on_ice_connected can happen while SetLocalDescription is happening.
             // But it won't be processed until start_fsm() is called below.
             observer.get_result()?;
 
             // Don't enable until call is accepted.
-            peer_connection.set_outgoing_audio_enabled(false);
+            peer_connection.set_outgoing_media_enabled(false);
 
             ringbench!(
                 RingBench::Conn,
@@ -765,7 +767,7 @@ where
             }
 
             self.set_state(ConnectionState::ConnectingBeforeAccepted)?;
-            Ok(answer)
+            Ok(answer_to_send)
         })();
 
         // Make sure we start the FSM after setting the state because the FSM
@@ -814,9 +816,9 @@ where
         if new_state == ConnectionState::ConnectedAndAccepted {
             // Now that we are accepted, we can enable outgoing audio and incoming RTP
             let webrtc = self.webrtc.lock()?;
-            let pc = webrtc.pc_interface()?;
-            pc.set_outgoing_audio_enabled(true);
-            pc.set_incoming_rtp_enabled(true);
+            let pc = webrtc.peer_connection()?;
+            pc.set_outgoing_media_enabled(true);
+            pc.set_incoming_media_enabled(true);
         }
         Ok(())
     }
@@ -834,10 +836,10 @@ where
         Ok(())
     }
 
-    /// Update the webrtc::PeerConnection interface.
-    pub fn set_pc_interface(&self, pc_interface: PeerConnection) -> Result<()> {
+    /// Update the PeerConnection.
+    pub fn set_peer_connection(&self, peer_connection: PeerConnection) -> Result<()> {
         let mut webrtc = self.webrtc.lock()?;
-        webrtc.pc_interface = Some(pc_interface);
+        webrtc.peer_connection = Some(peer_connection);
         Ok(())
     }
 
@@ -850,17 +852,13 @@ where
         }
     }
 
-    /// Update the DataChannel and DataChannelObserver
-    pub fn set_data_channel(&self, dc: DataChannel) -> Result<()> {
+    /// Update the DataChannel for sending signaling
+    pub fn set_signaling_data_channel(&self, dc: DataChannel) -> Result<()> {
         let mut webrtc = self.webrtc.lock()?;
 
-        let observer = DataChannelObserver::new(self.clone())?;
-        unsafe { dc.register_observer(observer.rffi_interface())? };
         webrtc.data_channel = Some(dc);
-        webrtc.data_channel_observer = Some(observer);
         Ok(())
     }
-
     /// Set the incoming media.
     pub fn set_incoming_media(
         &self,
@@ -963,7 +961,7 @@ where
 
         let mut webrtc = self.webrtc.lock()?;
         webrtc.local_max_bitrate = local_max;
-        webrtc.pc_interface()?.set_max_send_bitrate(local_max)
+        webrtc.peer_connection()?.set_max_send_bitrate(local_max)
     }
 
     /// Sets the maximum bitrate for all media combined.
@@ -987,13 +985,18 @@ where
             local_max, webrtc.remote_max_bitrate, combined_max
         );
 
-        webrtc.pc_interface()?.set_max_send_bitrate(combined_max)?;
-
-        // Send the remote peer the current receiver status via the
-        // PeerConnection DataChannel.
         webrtc
-            .data_channel()?
-            .send_receiver_status(self.call_id, local_max)
+            .peer_connection()?
+            .set_max_send_bitrate(combined_max)?;
+
+        let mut receiver_status = protobuf::data_channel::ReceiverStatus::default();
+        receiver_status.id = Some(u64::from(self.call_id));
+        receiver_status.max_bitrate_bps = Some(local_max.as_bps());
+
+        let data_channel = webrtc.data_channel().ok();
+        self.update_and_send_dcm_state_via_data_channel(data_channel, move |data| {
+            data.receiver_status = Some(receiver_status)
+        })
     }
 
     /// Sets the maximum sending bitrate for all media combined.
@@ -1021,7 +1024,7 @@ where
             webrtc.local_max_bitrate, remote_max, combined_max
         );
 
-        webrtc.pc_interface()?.set_max_send_bitrate(combined_max)
+        webrtc.peer_connection()?.set_max_send_bitrate(combined_max)
     }
 
     /// Creates a runtime for statistics to run a timer for the given interval
@@ -1065,14 +1068,13 @@ where
 
     pub fn tick(&mut self, ticks_elapsed: u64) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
+        let data_channel = webrtc.data_channel().ok();
 
-        if let Ok(data_channel) = webrtc.data_channel() {
-            let _ = data_channel.send_latest_state();
-        }
+        self.send_latest_dcm_state_via_data_channel(data_channel)?;
 
         if ticks_elapsed % STATS_PERIOD_SEC == 0 {
             if let Some(observer) = webrtc.stats_observer.as_ref() {
-                let _ = webrtc.pc_interface()?.get_stats(observer);
+                let _ = webrtc.peer_connection()?.get_stats(observer);
             } else {
                 warn!("tick(): No stats_observer found");
             }
@@ -1087,17 +1089,19 @@ where
         let state_result = self.state();
 
         match state_result {
-            Ok(state) => match state {
-                ConnectionState::Terminating | ConnectionState::Terminated => false,
-                _ => true,
-            },
+            Ok(state) => !matches!(
+                state,
+                ConnectionState::Terminating | ConnectionState::Terminated
+            ),
             Err(_) => false,
         }
     }
 
-    pub fn set_outgoing_audio_enabled(&self, enabled: bool) -> Result<()> {
+    pub fn set_outgoing_media_enabled(&self, enabled: bool) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
-        webrtc.pc_interface()?.set_outgoing_audio_enabled(enabled);
+        webrtc
+            .peer_connection()?
+            .set_outgoing_media_enabled(enabled);
         Ok(())
     }
 
@@ -1174,7 +1178,7 @@ where
         let webrtc = self.webrtc.lock()?;
         for remote_ice_candidate in remote_ice_candidates {
             webrtc
-                .pc_interface()?
+                .peer_connection()?
                 .add_ice_candidate(remote_ice_candidate)?;
         }
         Ok(())
@@ -1189,18 +1193,18 @@ where
             format!("dc(hangup/{})\t{}", hangup, self.connection_id)
         );
 
+        let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
+
+        let mut hangup = protobuf::data_channel::Hangup::default();
+        hangup.id = Some(u64::from(self.call_id));
+        hangup.r#type = Some(hangup_type as i32);
+        hangup.device_id = hangup_device_id;
+
         let webrtc = self.webrtc.lock()?;
-        if let Ok(data_channel) = webrtc.data_channel() {
-            if let Err(e) = data_channel.send_hangup(self.call_id, hangup) {
-                info!("data_channel.send_hang_up() failed: {}", e);
-            }
-        } else {
-            info!(
-                "send_hangup_via_data_channel(): id: {}, skipping, data_channel not present",
-                self.connection_id
-            );
-        }
-        Ok(())
+        let data_channel = webrtc.data_channel().ok();
+        self.update_and_send_dcm_state_via_data_channel(data_channel, move |data| {
+            data.hangup = Some(hangup)
+        })
     }
 
     /// Send an accepted message to the remote peer via the
@@ -1212,9 +1216,14 @@ where
             format!("dc(accepted)\t{}", self.connection_id)
         );
 
+        let mut accepted = protobuf::data_channel::Accepted::default();
+        accepted.id = Some(u64::from(self.call_id));
+
         let webrtc = self.webrtc.lock()?;
-        webrtc.data_channel()?.send_accepted(self.call_id)?;
-        Ok(())
+        let data_channel = webrtc.data_channel().ok();
+        self.update_and_send_dcm_state_via_data_channel(data_channel, move |data| {
+            data.accepted = Some(accepted)
+        })
     }
 
     /// Send the remote peer the current sender status via the
@@ -1225,11 +1234,79 @@ where
     /// * `video_enabled` - `true` when the local side is streaming video,
     /// otherwise `false`.
     pub fn send_sender_status_via_data_channel(&self, video_enabled: bool) -> Result<()> {
-        let webrtc = self.webrtc.lock()?;
+        let mut sender_status = protobuf::data_channel::SenderStatus::default();
+        sender_status.id = Some(u64::from(self.call_id));
+        sender_status.video_enabled = Some(video_enabled);
 
-        webrtc
-            .data_channel()?
-            .send_sender_status(self.call_id, video_enabled)
+        let webrtc = self.webrtc.lock()?;
+        let data_channel = webrtc.data_channel().ok();
+        self.update_and_send_dcm_state_via_data_channel(data_channel, move |data| {
+            data.sender_status = Some(sender_status)
+        })
+    }
+
+    /// Populates a data channel message using the supplied closure and sends it via the DataChannel.
+    fn update_and_send_dcm_state_via_data_channel<F>(
+        &self,
+        data_channel: Option<&DataChannel>,
+        populate: F,
+    ) -> Result<()>
+    where
+        F: FnOnce(&mut protobuf::data_channel::Data),
+    {
+        if let Some(data_channel) = data_channel {
+            let message = if data_channel.reliable() {
+                // Just send this one message by itself
+                let mut single = protobuf::data_channel::Data::default();
+                populate(&mut single);
+                single
+            } else {
+                // Merge this message into accumulated_state and send out the latest version.
+                let mut state = self.accumulated_dcm_state.lock()?;
+                populate(&mut state);
+                state.sequence_number = Some(state.sequence_number.unwrap_or(0) + 1);
+                state.clone()
+            };
+            info!("Sending data channel message: {:?}", message);
+            self.send_via_data_channel(data_channel, &message)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Sends the current accumulated state via the data channel
+    fn send_latest_dcm_state_via_data_channel(
+        &self,
+        data_channel: Option<&DataChannel>,
+    ) -> Result<()> {
+        if let Some(data_channel) = data_channel {
+            if data_channel.reliable() {
+                // Reliable data channels handle retransmissions internally.
+                Ok(())
+            } else {
+                let data = self.accumulated_dcm_state.lock()?;
+                if *data != protobuf::data_channel::Data::default() {
+                    self.send_via_data_channel(data_channel, &data)
+                } else {
+                    // Don't send empty messages
+                    Ok(())
+                }
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Send data via the DataChannel.
+    fn send_via_data_channel(
+        &self,
+        data_channel: &DataChannel,
+        data: &protobuf::data_channel::Data,
+    ) -> Result<()> {
+        let mut bytes = BytesMut::with_capacity(data.encoded_len());
+        data.encode(&mut bytes)?;
+
+        data_channel.send_data(&bytes)
     }
 
     /// Notify the parent call observer about an event.
@@ -1329,9 +1406,6 @@ where
 
         // unregister the data channel observer
         if let Some(data_channel) = webrtc.data_channel.take().as_mut() {
-            if let Some(dc_observer) = webrtc.data_channel_observer.take().as_mut() {
-                unsafe { data_channel.unregister_observer(dc_observer.rffi_interface()) };
-            }
             data_channel.dispose();
         }
 
@@ -1461,6 +1535,80 @@ where
         let _ = self.inject_event(ConnectionEvent::InternalError(error));
     }
 
+    pub fn inject_received_via_signaling_data_channel(&mut self, bytes: Bytes) {
+        if bytes.len() > (std::mem::size_of::<protobuf::data_channel::Data>() * 2) {
+            warn!("data channel message is excessively large: {}", bytes.len());
+            return;
+        }
+
+        if bytes.is_empty() {
+            warn!("data channel message has zero length");
+            return;
+        }
+
+        let message = match protobuf::data_channel::Data::decode(bytes) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("unable to parse rx protobuf: {}", e);
+                return;
+            }
+        };
+
+        debug!("Received data channel message: {:?}", message);
+
+        let mut message_handled = false;
+        let original_message = message.clone();
+        if let Some(accepted) = message.accepted {
+            if let CallDirection::OutGoing = self.direction() {
+                self.inject_received_accepted_via_data_channel(CallId::new(accepted.id()))
+                    .unwrap_or_else(|e| warn!("unable to inject remote accepted event: {}", e));
+            } else {
+                warn!("Unexpected incoming accepted message: {:?}", accepted);
+                self.inject_internal_error(
+                    RingRtcError::DataChannelProtocol(
+                        "Received 'accepted' for inbound call".to_string(),
+                    )
+                    .into(),
+                    "",
+                );
+            };
+            message_handled = true;
+        };
+        if let Some(hangup) = message.hangup {
+            self.inject_received_hangup(
+                CallId::new(hangup.id()),
+                signaling::Hangup::from_type_and_device_id(
+                    signaling::HangupType::from_i32(hangup.r#type() as i32)
+                        .unwrap_or(signaling::HangupType::Normal),
+                    hangup.device_id(),
+                ),
+            )
+            .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));
+            message_handled = true;
+        };
+        if let Some(sender_status) = message.sender_status {
+            self.inject_received_sender_status_via_data_channel(
+                CallId::new(sender_status.id()),
+                sender_status.video_enabled(),
+                message.sequence_number,
+            )
+            .unwrap_or_else(|e| warn!("unable to inject remote sender status event: {}", e));
+            message_handled = true;
+        };
+        if let Some(receiver_status) = message.receiver_status {
+            self.inject_received_receiver_status_via_data_channel(
+                CallId::new(receiver_status.id()),
+                DataRate::from_bps(receiver_status.max_bitrate_bps()),
+                message.sequence_number,
+            )
+            .unwrap_or_else(|e| warn!("unable to inject remote receiver status event: {}", e));
+            message_handled = true;
+        };
+        if !message_handled {
+            info!("Unhandled data channel message: {:?}", original_message);
+        }
+    }
+
     /// Inject a `ReceivedAcceptedViaDataChannel` event into the FSM.
     ///
     /// `Called By:` WebRTC `DataChannelObserver` call back thread.
@@ -1479,11 +1627,7 @@ where
     /// # Arguments
     ///
     /// * `call_id` - Call ID from the remote peer.
-    pub fn inject_received_hangup(
-        &mut self,
-        call_id: CallId,
-        hangup: signaling::Hangup,
-    ) -> Result<()> {
+    fn inject_received_hangup(&mut self, call_id: CallId, hangup: signaling::Hangup) -> Result<()> {
         self.inject_event(ConnectionEvent::ReceivedHangup(call_id, hangup))
     }
 
@@ -1517,7 +1661,7 @@ where
     /// * `call_id` - Call ID from the remote peer.
     /// * `max_bitrate_bps` - the bitrate that the remote peer wants to use for
     /// the session.
-    pub fn inject_received_receiver_status_via_data_channel(
+    fn inject_received_receiver_status_via_data_channel(
         &mut self,
         call_id: CallId,
         max_bitrate: DataRate,
@@ -1585,15 +1729,18 @@ where
         self.inject_event(event)
     }
 
-    /// Inject an `ReceivedDataChannel` event into the FSM.
+    /// Inject an `ReceivedSignalingDataChannel` event into the FSM.
     ///
     /// `Called By:` WebRTC `PeerConnectionObserver` back thread.
     ///
     /// # Arguments
     ///
     /// * `data_channel` - WebRTC C++ `DataChannel` object.
-    pub fn inject_received_data_channel(&mut self, data_channel: DataChannel) -> Result<()> {
-        let event = ConnectionEvent::ReceivedDataChannel(data_channel);
+    pub fn inject_received_signaling_data_channel(
+        &mut self,
+        data_channel: DataChannel,
+    ) -> Result<()> {
+        let event = ConnectionEvent::ReceivedSignalingDataChannel(data_channel);
         self.inject_event(event)
     }
 
@@ -1657,6 +1804,46 @@ where
         // The second sync flushes out any error event(s) that might
         // have happened during the first sync.
         self.inject_synchronize()
+    }
+}
+
+impl<T> PeerConnectionObserverTrait for Connection<T>
+where
+    T: Platform,
+{
+    fn log_id(&self) -> &dyn std::fmt::Display {
+        &self.connection_id
+    }
+
+    fn handle_ice_candidate_gathered(
+        &mut self,
+        ice_candidate: signaling::IceCandidate,
+    ) -> Result<()> {
+        let force_send = false;
+        self.inject_local_ice_candidate(ice_candidate, force_send)
+    }
+
+    fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()> {
+        match new_state {
+            IceConnectionState::Completed | IceConnectionState::Connected => {
+                self.inject_ice_connected()
+            }
+            IceConnectionState::Failed => self.inject_ice_failed(),
+            IceConnectionState::Disconnected => self.inject_ice_disconnected(),
+            _ => Ok(()),
+        }
+    }
+
+    fn handle_incoming_media_added(&mut self, stream: MediaStream) -> Result<()> {
+        self.inject_received_incoming_media(stream)
+    }
+
+    fn handle_signaling_data_channel_connected(&mut self, data_channel: DataChannel) -> Result<()> {
+        self.inject_received_signaling_data_channel(data_channel)
+    }
+
+    fn handle_signaling_data_channel_message(&mut self, message: Bytes) {
+        self.inject_received_via_signaling_data_channel(message)
     }
 }
 
@@ -1734,7 +1921,7 @@ pub fn clamp<T: PartialOrd>(val: T, min: T, max: T) -> T {
 }
 
 fn v4_to_sdp_without_srtp_keys(v4: &protobuf::signaling::ConnectionParametersV4) -> Result<String> {
-    let mut sdi = SessionDescriptionInterface::offer_from_v4(&v4)?;
+    let mut session_description = SessionDescription::offer_from_v4(&v4)?;
     // Clearing the keys isn't necessary because offer_from_v4 doesn't set them anyway.
     // So we're being really overly careful here clearing something that shouldn't be there.
     let key = SrtpKey {
@@ -1742,6 +1929,6 @@ fn v4_to_sdp_without_srtp_keys(v4: &protobuf::signaling::ConnectionParametersV4)
         key:   Vec::new(),
         salt:  Vec::new(),
     };
-    sdi.disable_dtls_and_set_srtp_key(&key)?;
-    Ok(sdi.to_sdp()?)
+    session_description.disable_dtls_and_set_srtp_key(&key)?;
+    Ok(session_description.to_sdp()?)
 }

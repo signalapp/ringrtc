@@ -9,87 +9,82 @@
 
 use std::os::raw::c_char;
 
-use crate::webrtc::data_channel::RffiDataChannelInit;
-use crate::webrtc::ffi::ice_gatherer::RffiIceGathererInterface;
+use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
+use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
-    RffiSessionDescriptionInterface,
+    RffiSessionDescription,
     RffiSetSessionDescriptionObserver,
 };
 use crate::webrtc::stats_observer::RffiStatsObserver;
 
-/// Incomplete type for C++ PeerConnectionInterface.
+/// Incomplete type for C++ PeerConnection.
 #[repr(C)]
-pub struct RffiPeerConnectionInterface {
+pub struct RffiPeerConnection {
     _private: [u8; 0],
 }
 
 /// Incomplete type for C++ DataChannelInterface.
 #[repr(C)]
-pub struct RffiDataChannelInterface {
+pub struct RffiDataChannel {
     _private: [u8; 0],
 }
 
 extern "C" {
     pub fn Rust_createOffer(
-        pc_interface: *const RffiPeerConnectionInterface,
+        peer_connection: *const RffiPeerConnection,
         csd_observer: *const RffiCreateSessionDescriptionObserver,
     );
 
     pub fn Rust_setLocalDescription(
-        pc_interface: *const RffiPeerConnectionInterface,
+        peer_connection: *const RffiPeerConnection,
         ssd_observer: *const RffiSetSessionDescriptionObserver,
-        desc: *const RffiSessionDescriptionInterface,
+        local_description: *const RffiSessionDescription,
     );
 
     pub fn Rust_createAnswer(
-        pc_interface: *const RffiPeerConnectionInterface,
+        peer_connection: *const RffiPeerConnection,
         csd_observer: *const RffiCreateSessionDescriptionObserver,
     );
 
     pub fn Rust_setRemoteDescription(
-        pc_interface: *const RffiPeerConnectionInterface,
+        peer_connection: *const RffiPeerConnection,
         ssd_observer: *const RffiSetSessionDescriptionObserver,
-        desc: *const RffiSessionDescriptionInterface,
+        remote_description: *const RffiSessionDescription,
     );
 
-    pub fn Rust_setOutgoingAudioEnabled(
-        pc_interface: *const RffiPeerConnectionInterface,
-        enabled: bool,
-    );
+    pub fn Rust_setOutgoingMediaEnabled(peer_connection: *const RffiPeerConnection, enabled: bool);
 
-    pub fn Rust_setIncomingRtpEnabled(
-        pc_interface: *const RffiPeerConnectionInterface,
+    pub fn Rust_setIncomingMediaEnabled(
+        peer_connection: *const RffiPeerConnection,
         enabled: bool,
     ) -> bool;
 
-    pub fn Rust_createDataChannel(
-        pc_interface: *const RffiPeerConnectionInterface,
-        label: *const c_char,
-        config: *const RffiDataChannelInit,
-    ) -> *const RffiDataChannelInterface;
+    pub fn Rust_createSignalingDataChannel(
+        peer_connection: *const RffiPeerConnection,
+        pc_observer: *const RffiPeerConnectionObserver,
+    ) -> *const RffiDataChannel;
 
-    pub fn Rust_addIceCandidate(
-        pc_interface: *const RffiPeerConnectionInterface,
+    pub fn Rust_addIceCandidateFromSdp(
+        peer_connection: *const RffiPeerConnection,
         sdp: *const c_char,
     ) -> bool;
 
     pub fn Rust_createSharedIceGatherer(
-        pc_interface: *const RffiPeerConnectionInterface,
-    ) -> *const RffiIceGathererInterface;
+        peer_connection: *const RffiPeerConnection,
+    ) -> *const RffiIceGatherer;
 
     pub fn Rust_useSharedIceGatherer(
-        pc_interface: *const RffiPeerConnectionInterface,
-        ice_gatherer: *const RffiIceGathererInterface,
+        peer_connection: *const RffiPeerConnection,
+        ice_gatherer: *const RffiIceGatherer,
     ) -> bool;
 
     pub fn Rust_getStats(
-        pc_interface: *const RffiPeerConnectionInterface,
+        peer_connection: *const RffiPeerConnection,
         stats_observer: *const RffiStatsObserver,
     );
 
-    pub fn Rust_setMaxSendBitrate(
-        pc_interface: *const RffiPeerConnectionInterface,
-        max_bitrate_bps: i32,
-    );
+    pub fn Rust_setMaxSendBitrate(peer_connection: *const RffiPeerConnection, max_bitrate_bps: i32);
+
+    pub fn Rust_closePeerConnection(peer_connection: *const RffiPeerConnection);
 }

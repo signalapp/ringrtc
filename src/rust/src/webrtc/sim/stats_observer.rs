@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! WebRTC Simulation Create / Set Session Description Interface.
+//! WebRTC Simulation Create/Set SessionDescription
 
 use std::ffi::c_void;
 

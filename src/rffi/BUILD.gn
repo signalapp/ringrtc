@@ -8,8 +8,12 @@
 # C++ source files common to both Android and iOS
 common_sources = [
   "src/data_channel.cc",
-  "src/data_channel_observer.cc",
-  "src/peer_connection_interface.cc",
+  "src/injectable_network.cc",
+  "src/logging.cc",
+  "src/media.cc",
+  "src/network.cc",
+  "src/peer_connection_factory.cc",
+  "src/peer_connection.cc",
   "src/peer_connection_observer.cc",
   "src/ref_count.cc",
   "src/sdp_observer.cc",
@@ -38,7 +42,7 @@ if (is_android) {
     sources = [
       "${android_sdk}/src/jni/jni_onload.cc",
       "src/android/java_media_stream.cc",
-      "src/android/jni_peer_connection_interface.cc",
+      "src/android/jni_peer_connection.cc",
     ] + common_sources
 
     # suppressed_config and hide_all_but_jni taken from
@@ -52,6 +56,8 @@ if (is_android) {
     deps = [
       "${android_sdk}:libjingle_peerconnection_jni",
       "${android_sdk}:libjingle_peerconnection_metrics_default_jni",
+      "//api/video_codecs:builtin_video_encoder_factory",
+      "//api/video_codecs:builtin_video_decoder_factory",
       "//pc:libjingle_peerconnection",
       "//rtc_base:rtc_base",
     ]
@@ -76,6 +82,12 @@ if (is_ios) {
     sources = common_sources
 
     configs += [ ":ringrtc_rffi_config" ]
+
+    deps = [
+      "//api/video_codecs:builtin_video_encoder_factory",
+      "//api/video_codecs:builtin_video_decoder_factory",
+      "//third_party/libyuv",
+    ]
   }
 }
 

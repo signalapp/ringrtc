@@ -89,13 +89,13 @@ pub mod native;
 /// Foreign Function Interface (FFI) to WebRTC C++ library.
 pub mod webrtc {
     pub mod data_channel;
-    pub mod data_channel_observer;
     pub mod ice_gatherer;
     #[cfg(feature = "simnet")]
     pub mod injectable_network;
     #[cfg(feature = "native")]
     pub mod logging;
     pub mod media;
+    pub mod network;
     pub mod peer_connection;
     #[cfg(any(feature = "native", feature = "sim"))]
     pub mod peer_connection_factory;
@@ -105,7 +105,6 @@ pub mod webrtc {
     #[cfg(not(feature = "sim"))]
     mod ffi {
         pub mod data_channel;
-        pub mod data_channel_observer;
         pub mod ice_gatherer;
         pub mod logging;
         pub mod media;
@@ -120,7 +119,6 @@ pub mod webrtc {
     #[cfg(feature = "sim")]
     pub mod sim {
         pub mod data_channel;
-        pub mod data_channel_observer;
         pub mod ice_gatherer;
         pub mod media;
         pub mod peer_connection;
@@ -140,6 +138,5 @@ pub mod sim {
 
 #[cfg(feature = "simnet")]
 pub mod simnet {
-    pub mod actor;
     pub mod router;
 }

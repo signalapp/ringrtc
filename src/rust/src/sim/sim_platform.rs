@@ -21,7 +21,7 @@ use crate::core::signaling;
 use crate::sim::error::SimError;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::PeerConnection;
-use crate::webrtc::sim::peer_connection::RffiPeerConnectionInterface;
+use crate::webrtc::sim::peer_connection::RffiPeerConnection;
 
 /// Simulation implmentation for platform::Platform::{AppIncomingMedia,
 /// AppRemotePeer, AppCallContext}
@@ -99,7 +99,7 @@ impl Drop for SimPlatform {
 impl Platform for SimPlatform {
     type AppIncomingMedia = SimPlatformItem;
     type AppRemotePeer = SimPlatformItem;
-    type AppConnection = RffiPeerConnectionInterface;
+    type AppConnection = RffiPeerConnection;
     type AppCallContext = SimPlatformItem;
 
     fn create_connection(
@@ -116,14 +116,15 @@ impl Platform for SimPlatform {
             signaling_version,
         );
 
-        let fake_pc = RffiPeerConnectionInterface::new();
+        let fake_pc = RffiPeerConnection::new();
 
         let connection = Connection::new(call.clone(), remote_device_id, connection_type).unwrap();
         connection.set_app_connection(fake_pc).unwrap();
 
-        let pc_interface = PeerConnection::unowned(connection.app_connection_ptr_for_tests());
+        let peer_connection =
+            PeerConnection::unowned(connection.app_connection_ptr_for_tests(), std::ptr::null());
 
-        connection.set_pc_interface(pc_interface).unwrap();
+        connection.set_peer_connection(peer_connection).unwrap();
 
         Ok(connection)
     }

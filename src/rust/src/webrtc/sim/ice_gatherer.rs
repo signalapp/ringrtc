@@ -5,9 +5,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! WebRTC Simulation IceGatherer Interface.
+//! WebRTC Simulation IceGatherer
 
-/// Simulation type for DataChannelInterface.
-pub type RffiIceGathererInterface = u32;
+/// Simulation type for IceGatherer.
+pub type RffiIceGatherer = u32;
 
-pub static FAKE_ICE_GATHERER: RffiIceGathererInterface = 20;
+pub static FAKE_ICE_GATHERER: RffiIceGatherer = 20;

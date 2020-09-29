@@ -16,14 +16,14 @@ package signaling;
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 // For future compatibility, we can add new slots (v2, v3, v4 ....)
 message Offer {
-  optional ConnectionParametersV4 v4 = 1;
   optional ConnectionParametersV3OrV2 V3OrV2 = 2;
+  optional ConnectionParametersV4 v4 = 4;
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 message Answer {
-  optional ConnectionParametersV4 v4 = 1;
   optional ConnectionParametersV3OrV2 V3OrV2 = 2;
+  optional ConnectionParametersV4 v4 = 4;
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Ice in SignalService.proto

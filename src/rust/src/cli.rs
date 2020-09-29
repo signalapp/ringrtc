@@ -8,7 +8,15 @@
 use log::{debug, info};
 
 use ringrtc::{
-    common::{units::DataRate, CallId, CallMediaType, DeviceId, FeatureLevel, Result},
+    common::{
+        actor::{Actor, Stopper},
+        units::DataRate,
+        CallId,
+        CallMediaType,
+        DeviceId,
+        FeatureLevel,
+        Result,
+    },
     core::{call_manager::CallManager, signaling},
     native::{
         CallState,
@@ -19,14 +27,14 @@ use ringrtc::{
         SignalingSender,
     },
     simnet::{
-        actor::{Actor, Stopper},
         router,
         router::{LinkConfig, Router},
     },
     webrtc::{
         injectable_network,
-        injectable_network::{InjectableNetwork, NetworkInterfaceType},
+        injectable_network::InjectableNetwork,
         media::{VideoFrame, VideoSink, VideoSource},
+        network::NetworkInterfaceType,
         peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory},
     },
 };
@@ -51,8 +59,8 @@ fn main() {
         vec![],         //  vec!["stun:stun.l.google.com".to_string()],
     );
     let stopper = Stopper::new();
-    let signaling_server = SignalingServer::new(&stopper);
-    let router = Router::new(&stopper);
+    let signaling_server = SignalingServer::start(&stopper).expect("Start signaling server");
+    let router = Router::start(&stopper).expect("Start router");
     let good_link = LinkConfig {
         delay_min:                 Duration::from_millis(10),
         delay_max:                 Duration::from_millis(20),
@@ -70,7 +78,7 @@ fn main() {
         queue_size:                DataRate::from_kbps(256) * Duration::from_secs(500),
     };
 
-    let caller = CallEndpoint::new(
+    let caller = CallEndpoint::start(
         "caller",
         1 as DeviceId,
         hide_ip,
@@ -78,7 +86,8 @@ fn main() {
         &signaling_server,
         &router,
         &stopper,
-    );
+    )
+    .expect("Start caller");
     caller.add_network_interface(
         "cell",
         NetworkInterfaceType::Cellular,
@@ -96,7 +105,7 @@ fn main() {
     //     &good_link,
     // );
 
-    let callee = CallEndpoint::new(
+    let callee = CallEndpoint::start(
         "callee",
         1 as DeviceId,
         hide_ip,
@@ -104,7 +113,8 @@ fn main() {
         &signaling_server,
         &router,
         &stopper,
-    );
+    )
+    .expect("Start callee");
     callee.add_network_interface(
         "cell",
         NetworkInterfaceType::Cellular,
@@ -125,7 +135,7 @@ fn main() {
     // Callee devices that won't answer but will still ring.
     let _ignored_callees: Vec<CallEndpoint> = (2..=6)
         .map(|device_id| {
-            let callee = CallEndpoint::new(
+            let callee = CallEndpoint::start(
                 "callee",
                 device_id as DeviceId,
                 hide_ip,
@@ -133,7 +143,8 @@ fn main() {
                 &signaling_server,
                 &router,
                 &stopper,
-            );
+            )
+            .expect("Start ignored callee");
             callee.add_network_interface(
                 "cell",
                 NetworkInterfaceType::Cellular,
@@ -208,13 +219,13 @@ struct CallEndpointState {
     call_context:     NativeCallContext,
 
     // Keep a copy around to be able to schedule video frames
-    actor:          Actor<Self>,
+    actor:                 Actor<Self>,
     // Keep a copy around to be able to push out video frames
-    outgoing_video: VideoSource,
+    outgoing_video_source: VideoSource,
 }
 
 impl CallEndpoint {
-    pub fn new(
+    pub fn start(
         peer_id: &str,
         device_id: DeviceId,
         hide_ip: bool,
@@ -222,7 +233,7 @@ impl CallEndpoint {
         signaling_server: &SignalingServer,
         router: &Router,
         stopper: &Stopper,
-    ) -> Self {
+    ) -> Result<Self> {
         let peer_id = PeerId::from(peer_id);
 
         // To send across threads
@@ -230,10 +241,10 @@ impl CallEndpoint {
         let signaling_server: SignalingServer = signaling_server.clone();
         let router = router.clone();
 
-        Self::from_actor(
+        Ok(Self::from_actor(
             peer_id.clone(),
             device_id,
-            Actor::new(stopper.clone(), move |actor| {
+            Actor::start(stopper.clone(), move |actor| {
                 // Constructing this is a funny way of getting a clone of the CallEndpoint
                 // on the actor's thread so we can have it in the actor's state so we can
                 // pass it to the NativePlatform/CallManager.
@@ -243,8 +254,7 @@ impl CallEndpoint {
 
                 // Set up packet flow
                 let use_injectable_network = true;
-                let pcf = PeerConnectionFactory::new(use_injectable_network)
-                    .expect("create PeerConnectionFactory");
+                let pcf = PeerConnectionFactory::new(use_injectable_network)?;
                 info!(
                     "Audio playout devices: {:?}",
                     pcf.get_audio_playout_devices()
@@ -276,25 +286,23 @@ impl CallEndpoint {
                     signaling_sender,
                     incoming_video_sink,
                 );
-                let call_manager = CallManager::new(platform).expect("create CallManager");
+                let call_manager = CallManager::new(platform)?;
 
                 // And a CallContext.  We'll use the same context for each call.
-                let cert = Certificate::generate().expect("generate cert");
-                let outgoing_audio = pcf
-                    .create_outgoing_audio_track()
-                    .expect("create AudioTrack");
-                let outgoing_video = pcf
-                    .create_outgoing_video_source()
-                    .expect("create VideoSource");
+                let cert = Certificate::generate()?;
+                let outgoing_audio_track = pcf.create_outgoing_audio_track()?;
+                let outgoing_video_source = pcf.create_outgoing_video_source()?;
+                let outgoing_video_track =
+                    pcf.create_outgoing_video_track(&outgoing_video_source)?;
                 let call_context = NativeCallContext::new(
                     cert,
                     hide_ip,
                     ice_server,
-                    outgoing_audio,
-                    outgoing_video.clone(),
+                    outgoing_audio_track,
+                    outgoing_video_track,
                 );
 
-                CallEndpointState {
+                Ok(CallEndpointState {
                     peer_id,
                     device_id,
 
@@ -305,10 +313,10 @@ impl CallEndpoint {
                     call_context,
 
                     actor,
-                    outgoing_video,
-                }
-            }),
-        )
+                    outgoing_video_source,
+                })
+            })?,
+        ))
     }
 
     fn from_actor(peer_id: PeerId, device_id: DeviceId, actor: Actor<CallEndpointState>) -> Self {
@@ -343,18 +351,21 @@ impl CallEndpoint {
             // Passing in network.get_receiver() causes packets from the PeerConnections
             // to be routed through the router.
             let network_as_receiver = state.network.clone();
-            state.router.add_interface(
-                ip,
-                send_config,
-                receive_config,
-                Box::new(move |packet: router::Packet| {
-                    network_as_receiver.receive_udp(injectable_network::Packet {
-                        source: packet.source,
-                        dest:   packet.dest,
-                        data:   packet.data,
-                    });
-                }),
-            );
+            state
+                .router
+                .add_interface(
+                    ip,
+                    send_config,
+                    receive_config,
+                    Box::new(move |packet: router::Packet| {
+                        network_as_receiver.receive_udp(injectable_network::Packet {
+                            source: packet.source,
+                            dest:   packet.dest,
+                            data:   packet.data,
+                        });
+                    }),
+                )
+                .expect("Add router interface");
 
             debug!(
                 "Added an interface for {:?} to {:?}.{:?}",
@@ -479,7 +490,7 @@ impl CallEndpoint {
         ) {
             let rgba_data: Vec<u8> = (0..(width * height * 4)).map(|i: u32| i as u8).collect();
             state
-                .outgoing_video
+                .outgoing_video_source
                 .push_frame(VideoFrame::from_rgba(width, height, &rgba_data));
             state.actor.send_delayed(duration, move |state| {
                 send_one_frame_and_schedule_another(state, width, height, duration);
@@ -579,12 +590,14 @@ struct SignalingServerState {
 }
 
 impl SignalingServer {
-    fn new(stopper: &Stopper) -> Self {
-        Self {
-            actor: Actor::new(stopper.clone(), move |_actor| SignalingServerState {
-                endpoints_by_peer_id: HashMap::new(),
-            }),
-        }
+    fn start(stopper: &Stopper) -> Result<Self> {
+        Ok(Self {
+            actor: Actor::start(stopper.clone(), move |_actor| {
+                Ok(SignalingServerState {
+                    endpoints_by_peer_id: HashMap::new(),
+                })
+            })?,
+        })
     }
 
     fn add_endpoint(&self, endpoint: &CallEndpoint) {

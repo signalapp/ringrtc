@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! WebRTC Simulation Create / Set Session Description Interface.
+//! WebRTC Simulation Create/Set SessionDescription
 
 use std::ffi::{c_void, CString};
 use std::os::raw::c_char;
@@ -23,12 +23,12 @@ use crate::webrtc::sdp_observer::{
     SrtpCryptoSuite,
 };
 
-/// Simulation type for SessionDescriptionInterface.
-pub type RffiSessionDescriptionInterface = &'static str;
+/// Simulation type for SessionDescription.
+pub type RffiSessionDescription = &'static str;
 
-static FAKE_SDP: &str = "FAKE SDP";
-static FAKE_SDP_OFFER: &str = "FAKE SDP OFFER";
-static FAKE_SDP_ANSWER: &str = "FAKE SDP ANSWER";
+static mut FAKE_SDP: &str = "FAKE SDP";
+static mut FAKE_SDP_OFFER: &str = "FAKE SDP OFFER";
+static mut FAKE_SDP_ANSWER: &str = "FAKE SDP ANSWER";
 
 /// Simulation type for webrtc::rffi::CreateSessionDescriptionObserverRffi
 pub type RffiCreateSessionDescriptionObserver = u32;
@@ -65,44 +65,44 @@ pub unsafe fn Rust_createCreateSessionDescriptionObserver(
     let call_backs = csd_observer_cb as *const CreateSessionDescriptionObserverCallbacks;
     ((*call_backs).onSuccess)(
         csd_observer as *mut CreateSessionDescriptionObserver,
-        &FAKE_SDP,
+        &mut FAKE_SDP,
     );
 
     &FAKE_CSD_OBSERVER
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_toSdp(sdi: *const RffiSessionDescriptionInterface) -> *const c_char {
+pub unsafe fn Rust_toSdp(rffi: *const RffiSessionDescription) -> *const c_char {
     info!("Rust_toSdp(): ");
-    match CString::new(*sdi) {
+    match CString::new(*rffi) {
         Ok(cstr) => strdup(cstr.as_ptr()),
         Err(_) => ptr::null(),
     }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_offerFromSdp(_sdp: *const c_char) -> *const RffiSessionDescriptionInterface {
+pub unsafe fn Rust_offerFromSdp(_sdp: *const c_char) -> *mut RffiSessionDescription {
     info!("Rust_offerFromSdp(): ");
-    &FAKE_SDP_ANSWER
+    &mut FAKE_SDP_ANSWER
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_answerFromSdp(_sdp: *const c_char) -> *const RffiSessionDescriptionInterface {
+pub unsafe fn Rust_answerFromSdp(_sdp: *const c_char) -> *mut RffiSessionDescription {
     info!("Rust_answerFromSdp(): ");
-    &FAKE_SDP_OFFER
+    &mut FAKE_SDP_OFFER
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_replaceRtpDataChannelsWithSctp(
-    _sdi: *const RffiSessionDescriptionInterface,
-) -> bool {
+    _session_description: *const RffiSessionDescription,
+) -> *mut RffiSessionDescription {
     info!("Rust_replaceRtpDataChannelsWithSctp(): ");
-    true
+    &mut FAKE_SDP
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
-    _sdi: *const RffiSessionDescriptionInterface,
+    _session_description: *mut RffiSessionDescription,
     _crypto_suite: SrtpCryptoSuite,
     _key_ptr: *const u8,
     _key_len: size_t,
@@ -115,7 +115,7 @@ pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_sessionDescriptionToV4(
-    _sdi: *const RffiSessionDescriptionInterface,
+    _session_description: *const RffiSessionDescription,
 ) -> *mut RffiConnectionParametersV4 {
     info!("Rust_sessionDescriptionToV4(): ");
     Box::leak(Box::new(RffiConnectionParametersV4 {
@@ -135,11 +135,16 @@ pub unsafe fn Rust_releaseV4(_v4: *mut RffiConnectionParametersV4) {
 pub unsafe fn Rust_sessionDescriptionFromV4(
     offer: bool,
     _v4: *const RffiConnectionParametersV4,
-) -> *const RffiSessionDescriptionInterface {
+) -> *mut RffiSessionDescription {
     info!("Rust_sessionDescriptionFromV4(): ");
     if offer {
-        &FAKE_SDP_OFFER
+        &mut FAKE_SDP_OFFER
     } else {
-        &FAKE_SDP_ANSWER
+        &mut FAKE_SDP_ANSWER
     }
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_releaseSessionDescription(_sdi: *mut RffiSessionDescription) {
+    info!("Rust_releaseSessionDescription(): ");
 }

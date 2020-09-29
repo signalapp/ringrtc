@@ -65,7 +65,6 @@ if (is_android) {
     "src/core/util.rs",
     "src/error/mod.rs",
     "src/lib.rs",
-    "src/webrtc/data_channel_observer.rs",
     "src/webrtc/data_channel.rs",
     "src/webrtc/peer_connection.rs",
     "src/webrtc/peer_connection_observer.rs",

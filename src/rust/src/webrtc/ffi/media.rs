@@ -9,30 +9,30 @@
 use crate::core::util::{CppObject, RustObject};
 pub use crate::webrtc::media::VideoRotation;
 
-/// Incomplete type for WebRTC C++ MediaStreamInterface.
+/// Incomplete type for WebRTC C++ MediaStream.
 #[repr(C)]
-pub struct RffiMediaStreamInterface {
+pub struct RffiMediaStream {
     _private: [u8; 0],
 }
 
-/// Incomplete type for C++ AudioTrackInterface.
+/// Incomplete type for C++ AudioTrack.
 #[repr(C)]
-#[cfg(feature = "native")]
-pub struct RffiAudioTrackInterface {
+#[allow(dead_code)]
+pub struct RffiAudioTrack {
     _private: [u8; 0],
 }
 
-/// Incomplete type for C++ VideoTrackSourceInterface.
+/// Incomplete type for C++ VideoSource.
 #[repr(C)]
-#[cfg(feature = "native")]
-pub struct RffiVideoTrackSourceInterface {
+#[allow(dead_code)]
+pub struct RffiVideoSource {
     _private: [u8; 0],
 }
 
-/// Incomplete type for C++ VideoTrackInterface.
+/// Incomplete type for C++ VideoTrack.
 #[repr(C)]
-#[cfg(feature = "native")]
-pub struct RffiVideoTrackInterface {
+#[allow(dead_code)]
+pub struct RffiVideoTrack {
     _private: [u8; 0],
 }
 
@@ -45,15 +45,11 @@ pub struct RffiVideoFrameBuffer {
 
 #[cfg(feature = "native")]
 extern "C" {
-    pub fn Rust_setAudioTrackEnabled(track: *const RffiAudioTrackInterface, enabled: bool);
-    pub fn Rust_getFirstVideoTrack(
-        stream: *const RffiMediaStreamInterface,
-    ) -> *const RffiVideoTrackInterface;
-    pub fn Rust_addVideoSink(track: *const RffiVideoTrackInterface, obj: RustObject, cb: CppObject);
-    pub fn Rust_pushVideoFrame(
-        source: *const RffiVideoTrackSourceInterface,
-        buffer: *const RffiVideoFrameBuffer,
-    );
+    pub fn Rust_setAudioTrackEnabled(track: *const RffiAudioTrack, enabled: bool);
+    pub fn Rust_getFirstVideoTrack(stream: *const RffiMediaStream) -> *const RffiVideoTrack;
+    #[cfg(feature = "native")]
+    pub fn Rust_addVideoSink(track: *const RffiVideoTrack, obj: RustObject, cb: CppObject);
+    pub fn Rust_pushVideoFrame(source: *const RffiVideoSource, buffer: *const RffiVideoFrameBuffer);
     pub fn Rust_createVideoFrameBufferFromRgba(
         width: u32,
         height: u32,

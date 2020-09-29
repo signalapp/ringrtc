@@ -15,9 +15,10 @@
 #include "media/base/h264_profile_level_id.h"
 #include "modules/rtp_rtcp/source/rtp_header_extensions.h"
 #include "pc/media_session.h"
+#include "pc/sdp_utils.h"
 #include "pc/session_description.h"
 #include "sdk/media_constraints.h"
-#include "rffi/api/peer_connection_interface_intf.h"
+#include "rffi/api/peer_connection_intf.h"
 #include "rffi/src/sdp_observer.h"
 #include "rffi/src/stats_observer.h"
 #include "rtc_base/third_party/base64/base64.h"
@@ -28,7 +29,7 @@ namespace webrtc {
 namespace rffi {
 
 RUSTEXPORT void
-Rust_createOffer(PeerConnectionInterface*              pc_interface,
+Rust_createOffer(PeerConnectionInterface*              peer_connection,
                  CreateSessionDescriptionObserverRffi* csd_observer) {
 
   // No constraints are set
@@ -36,21 +37,22 @@ Rust_createOffer(PeerConnectionInterface*              pc_interface,
   PeerConnectionInterface::RTCOfferAnswerOptions options;
 
   CopyConstraintsIntoOfferAnswerOptions(&constraints, &options);
-  pc_interface->CreateOffer(csd_observer, options);
+  peer_connection->CreateOffer(csd_observer, options);
 }
 
+// Warning!  This takes ownership of the local description
 RUSTEXPORT void
-Rust_setLocalDescription(PeerConnectionInterface*           pc_interface,
+Rust_setLocalDescription(PeerConnectionInterface*           peer_connection,
                          SetSessionDescriptionObserverRffi* ssd_observer,
-                         SessionDescriptionInterface*       description) {
-  pc_interface->SetLocalDescription(ssd_observer, description);
+                         SessionDescriptionInterface*       local_description) {
+  peer_connection->SetLocalDescription(ssd_observer, local_description);
 }
 
 RUSTEXPORT const char*
-Rust_toSdp(SessionDescriptionInterface* sdi) {
+Rust_toSdp(SessionDescriptionInterface* session_description) {
 
   std::string sdp;
-  if (sdi->ToString(&sdp)) {
+  if (session_description->ToString(&sdp)) {
     return strdup(&sdp[0u]);
   }
 
@@ -82,15 +84,17 @@ Rust_offerFromSdp(const char* sdp) {
   return createSessionDescriptionInterface(SdpType::kOffer, sdp);
 }
 
-RUSTEXPORT bool 
-Rust_replaceRtpDataChannelsWithSctp(webrtc::SessionDescriptionInterface* sdi) {
-  if (!sdi) {
-    return false;
+RUSTEXPORT webrtc::SessionDescriptionInterface* 
+Rust_replaceRtpDataChannelsWithSctp(const webrtc::SessionDescriptionInterface* session_description) {
+  if (!session_description) {
+    return nullptr;
   }
 
+  auto clone = CloneSessionDescription(session_description);
+
   std::string rtp_data_mid;
-  cricket::SessionDescription* description = sdi->description();
-  for (const cricket::ContentInfo& content : description->contents()) {
+  cricket::SessionDescription* session = clone->description();
+  for (const cricket::ContentInfo& content : session->contents()) {
     if (content.type == cricket::MediaProtocolType::kRtp && 
         content.media_description() && content.media_description()->type() == cricket::MEDIA_TYPE_DATA) {
       rtp_data_mid = content.mid();
@@ -99,10 +103,10 @@ Rust_replaceRtpDataChannelsWithSctp(webrtc::SessionDescriptionInterface* sdi) {
   }
   if (rtp_data_mid.empty()) {
     // Couldn't find any RTP data channel, so nothing to change.
-    return false;
+    return clone.release();
   }
 
-  description->RemoveContentByName(rtp_data_mid);
+  session->RemoveContentByName(rtp_data_mid);
 
   // Mirror MediaSessionDescriptionFactory::AddSctpDataContentForOffer
   auto sctp = std::make_unique<cricket::SctpDataContentDescription>();
@@ -111,22 +115,23 @@ Rust_replaceRtpDataChannelsWithSctp(webrtc::SessionDescriptionInterface* sdi) {
   sctp->set_max_message_size(256 * 1024);
   // This shouldn't really be necessary, but just in case...
   sctp->set_rtcp_mux(true);
-  description->AddContent(rtp_data_mid, cricket::MediaProtocolType::kSctp, std::move(sctp));
-  return true;
+  session->AddContent(rtp_data_mid, cricket::MediaProtocolType::kSctp, std::move(sctp));
+
+  return clone.release();
 }
 
 RUSTEXPORT bool
-Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* sdi,
+Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* session_description,
                               int                                  crypto_suite,
                               const char*                          key_ptr,
                               size_t                               key_len,
                               const char*                          salt_ptr,
                               size_t                               salt_len) {
-  if (!sdi) {
+  if (!session_description) {
     return false;
   }
 
-  cricket::SessionDescription* session = sdi->description();
+  cricket::SessionDescription* session = session_description->description();
   if (!session) {
     return false;
   }
@@ -159,12 +164,12 @@ Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* sdi,
 }
 
 RUSTEXPORT RffiConnectionParametersV4*
-Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* sdi) {
-  if (!sdi) {
+Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_description) {
+  if (!session_description) {
     return nullptr;
   }
 
-  const cricket::SessionDescription* session = sdi->description();
+  const cricket::SessionDescription* session = session_description->description();
   if (!session) {
     return nullptr;
   }
@@ -508,7 +513,7 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4) 
 }
 
 RUSTEXPORT void
-Rust_createAnswer(PeerConnectionInterface*              pc_interface,
+Rust_createAnswer(PeerConnectionInterface*              peer_connection,
                   CreateSessionDescriptionObserverRffi* csd_observer) {
 
   // No constraints are set
@@ -516,102 +521,101 @@ Rust_createAnswer(PeerConnectionInterface*              pc_interface,
   PeerConnectionInterface::RTCOfferAnswerOptions options;
 
   CopyConstraintsIntoOfferAnswerOptions(&constraints, &options);
-  pc_interface->CreateAnswer(csd_observer, options);
+  peer_connection->CreateAnswer(csd_observer, options);
 }
 
+// Warning!  This takes ownership of the remote description
 RUSTEXPORT void
-Rust_setRemoteDescription(PeerConnectionInterface*           pc_interface,
+Rust_setRemoteDescription(PeerConnectionInterface*           peer_connection,
                           SetSessionDescriptionObserverRffi* ssd_observer,
                           SessionDescriptionInterface*       description) {
-  pc_interface->SetRemoteDescription(ssd_observer, description);
+  peer_connection->SetRemoteDescription(ssd_observer, description);
 }
 
 RUSTEXPORT void
-Rust_setOutgoingAudioEnabled(PeerConnectionInterface* pc_interface,
+Rust_releaseSessionDescription(webrtc::SessionDescriptionInterface* description) {
+  delete description;
+}
+
+RUSTEXPORT void
+Rust_setOutgoingMediaEnabled(PeerConnectionInterface* peer_connection,
                              bool                     enabled) {
   // Note: calling SetAudioRecording(enabled) is deprecated and it's not clear
   // that it even does anything any more.
   int encodings_changed = 0;
-  for (auto& sender : pc_interface->GetSenders()) {
-    if (sender->media_type() == cricket::MediaType::MEDIA_TYPE_AUDIO) {
-      RtpParameters parameters = sender->GetParameters();
-      for (auto& encoding: parameters.encodings) {
-        encoding.active = enabled;
-        encodings_changed++;
-      }
-      sender->SetParameters(parameters);
+  for (auto& sender : peer_connection->GetSenders()) {
+    RtpParameters parameters = sender->GetParameters();
+    for (auto& encoding: parameters.encodings) {
+      encoding.active = enabled;
+      encodings_changed++;
     }
+    sender->SetParameters(parameters);
   }
-  RTC_LOG(LS_INFO) << "Rust_setOutgoingAudioEnabled(" << enabled << ") for " << encodings_changed << " audio encodings.";
+  RTC_LOG(LS_INFO) << "Rust_setOutgoingMediaEnabled(" << enabled << ") for " << encodings_changed << " encodings.";
 }
 
 RUSTEXPORT bool
-Rust_setIncomingRtpEnabled(PeerConnectionInterface* pc_interface,
+Rust_setIncomingMediaEnabled(PeerConnectionInterface* peer_connection,
                            bool                     enabled) {
-  RTC_LOG(LS_INFO) << "Rust_setIncomingRtpEnabled(" << enabled << ")";
-  return pc_interface->SetIncomingRtpEnabled(enabled);
+  RTC_LOG(LS_INFO) << "Rust_setIncomingMedianabled(" << enabled << ")";
+  return peer_connection->SetIncomingRtpEnabled(enabled);
 }
 
 RUSTEXPORT DataChannelInterface*
-Rust_createDataChannel(PeerConnectionInterface*   pc_interface,
-                       const char*                label,
-                       const RffiDataChannelInit* config) {
-
-  std::string dc_label = std::string(label);
-
+Rust_createSignalingDataChannel(PeerConnectionInterface* peer_connection,
+                                PeerConnectionObserver* pc_observer) {
   struct DataChannelInit dc_config;
+  rtc::scoped_refptr<DataChannelInterface> channel = peer_connection->CreateDataChannel("signaling", &dc_config);
 
-  dc_config.reliable          = config->reliable;
-  dc_config.ordered           = config->ordered;
-  dc_config.maxRetransmitTime = config->maxRetransmitTime;
-  dc_config.maxRetransmits    = config->maxRetransmits;
-  dc_config.protocol          = std::string(config->protocol);
-  dc_config.negotiated        = config->negotiated;
-  dc_config.id                = config->id;
-
-  rtc::scoped_refptr<DataChannelInterface> channel = pc_interface->CreateDataChannel(dc_label, &dc_config);
+  // Let the observer know a data channel was create so it can register itself to receive messages.
+  pc_observer->OnDataChannel(channel);
 
   // Channel is now owned by caller.  Must call Rust_releaseRef() eventually.
   return channel.release();
 }
 
 RUSTEXPORT bool
-Rust_addIceCandidate(PeerConnectionInterface* pc_interface,
-                     const char*              sdp) {
+Rust_addIceCandidateFromSdp(PeerConnectionInterface* peer_connection,
+                            const char*              sdp) {
   // Since we always use bundle, we can always use index 0 and ignore the mid
-  std::unique_ptr<IceCandidateInterface> candidate(
+  std::unique_ptr<IceCandidateInterface> ice_candidate(
       CreateIceCandidate("", 0, std::string(sdp), nullptr));
 
-  return pc_interface->AddIceCandidate(candidate.get());
+  return peer_connection->AddIceCandidate(ice_candidate.get());
 }
 
 RUSTEXPORT IceGathererInterface*
-Rust_createSharedIceGatherer(PeerConnectionInterface* pc_interface) {
-  rtc::scoped_refptr<IceGathererInterface> ice_gatherer = pc_interface->CreateSharedIceGatherer();
+Rust_createSharedIceGatherer(PeerConnectionInterface* peer_connection) {
+  rtc::scoped_refptr<IceGathererInterface> ice_gatherer = peer_connection->CreateSharedIceGatherer();
 
   // IceGatherer is now owned by caller.  Must call Rust_releaseRef() eventually.
   return ice_gatherer.release();
 }
 
 RUSTEXPORT bool
-Rust_useSharedIceGatherer(PeerConnectionInterface* pc_interface,
+Rust_useSharedIceGatherer(PeerConnectionInterface* peer_connection,
                           IceGathererInterface* ice_gatherer) {
-  return pc_interface->UseSharedIceGatherer(rtc::scoped_refptr<IceGathererInterface>(ice_gatherer));
+  return peer_connection->UseSharedIceGatherer(rtc::scoped_refptr<IceGathererInterface>(ice_gatherer));
 }
 
 RUSTEXPORT void
-Rust_getStats(PeerConnectionInterface* pc_interface,
+Rust_getStats(PeerConnectionInterface* peer_connection,
               StatsObserverRffi* stats_observer) {
-    pc_interface->GetStats(stats_observer, nullptr, PeerConnectionInterface::kStatsOutputLevelStandard);
+    peer_connection->GetStats(stats_observer, nullptr, PeerConnectionInterface::kStatsOutputLevelStandard);
 }
 
 RUSTEXPORT void
-Rust_setMaxSendBitrate(PeerConnectionInterface* pc_interface,
+Rust_setMaxSendBitrate(PeerConnectionInterface* peer_connection,
                        int32_t                  max_bitrate_bps) {
     struct BitrateSettings bitrate_settings;
     bitrate_settings.max_bitrate_bps = max_bitrate_bps;
 
-    pc_interface->SetBitrate(bitrate_settings);
+    peer_connection->SetBitrate(bitrate_settings);
+}
+
+RUSTEXPORT void
+Rust_closePeerConnection(PeerConnectionInterface* peer_connection) {
+    peer_connection->Close();
 }
 
 } // namespace rffi

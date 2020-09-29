@@ -23,7 +23,7 @@ use crate::native::{
     PeerId,
     SignalingSender,
 };
-use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource};
+use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource, VideoTrack};
 use crate::webrtc::peer_connection_factory::{
     AudioDevice,
     Certificate,
@@ -172,15 +172,17 @@ impl OneFrameBuffer {
 pub struct CallEndpoint {
     call_manager: CallManager<NativePlatform>,
 
-    events_receiver:  Receiver<Event>,
+    events_receiver:       Receiver<Event>,
     // This is what we use to control mute/not.
     // It should probably be per-call, but for now it's easier to have only one.
-    outgoing_audio:   AudioTrack,
-    // This is what we use to control mute/not.
-    // It should probably be per-call, but for now it's easier to have only one.
-    outgoing_video:   VideoSource,
+    outgoing_audio_track:  AudioTrack,
+    // This is what we use to push video frames out.
+    outgoing_video_source: VideoSource,
+    // We only keep this around so we can pass it to PeerConnectionFactory::create_peer_connection
+    // via the NativeCallContext.
+    outgoing_video_track:  VideoTrack,
     // Pulled out by receiveVideoFrame
-    unrendered_frame: OneFrameBuffer,
+    unrendered_frame:      OneFrameBuffer,
 
     peer_connection_factory: PeerConnectionFactory,
 }
@@ -191,8 +193,10 @@ impl CallEndpoint {
 
         let use_injectable_network = false;
         let peer_connection_factory = PeerConnectionFactory::new(use_injectable_network)?;
-        let outgoing_audio = peer_connection_factory.create_outgoing_audio_track()?;
-        let outgoing_video = peer_connection_factory.create_outgoing_video_source()?;
+        let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
+        let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;
+        let outgoing_video_track =
+            peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
         let unrendered_frame = OneFrameBuffer::new();
         let platform = NativePlatform::new(
             false, // Use async notification from app to send next message.
@@ -208,8 +212,9 @@ impl CallEndpoint {
         Ok(Self {
             call_manager,
             events_receiver,
-            outgoing_audio,
-            outgoing_video,
+            outgoing_audio_track,
+            outgoing_video_source,
+            outgoing_video_track,
             unrendered_frame,
             peer_connection_factory,
         })
@@ -320,8 +325,8 @@ declare_types! {
                     certificate,
                     hide_ip,
                     ice_server,
-                    cm.outgoing_audio.clone(),
-                    cm.outgoing_video.clone());
+                    cm.outgoing_audio_track.clone(),
+                    cm.outgoing_video_track.clone());
                 cm.call_manager.proceed(call_id, call_context)?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -603,7 +608,7 @@ declare_types! {
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |cm| {
-                cm.outgoing_audio.set_enabled(enabled);
+                cm.outgoing_audio_track.set_enabled(enabled);
                 // TODO: Should we not send silent audio?
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -624,7 +629,7 @@ declare_types! {
             });
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |cm| {
-                cm.outgoing_video.push_frame(frame);
+                cm.outgoing_video_source.push_frame(frame);
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())

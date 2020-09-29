@@ -21,12 +21,12 @@ use crate::protobuf;
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::sdp_observer as sdp;
 #[cfg(not(feature = "sim"))]
-pub use crate::webrtc::ffi::sdp_observer::RffiSessionDescriptionInterface;
+pub use crate::webrtc::ffi::sdp_observer::RffiSessionDescription;
 
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::sdp_observer as sdp;
 #[cfg(feature = "sim")]
-pub use crate::webrtc::sim::sdp_observer::RffiSessionDescriptionInterface;
+pub use crate::webrtc::sim::sdp_observer::RffiSessionDescription;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -42,19 +42,19 @@ pub struct SrtpKey {
     pub key:   Vec<u8>,
     pub salt:  Vec<u8>,
 }
-/// Rust wrapper around WebRTC C++ SessionDescriptionInterface.
-pub struct SessionDescriptionInterface {
-    /// Pointer to C++ SessionDescriptionInterface object.
-    sd_interface: *const RffiSessionDescriptionInterface,
+/// Rust wrapper around WebRTC C++ SessionDescription.
+pub struct SessionDescription {
+    /// Pointer to C++ SessionDescription object.
+    rffi: *mut RffiSessionDescription,
 }
 
-impl fmt::Display for SessionDescriptionInterface {
+impl fmt::Display for SessionDescription {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "sd_interface: {:p}", self.sd_interface)
+        write!(f, "rffi_session_description: {:p}", self.rffi)
     }
 }
 
-impl fmt::Debug for SessionDescriptionInterface {
+impl fmt::Debug for SessionDescription {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
@@ -83,20 +83,30 @@ pub struct RffiConnectionParametersV4 {
     pub receive_video_codecs_size: usize,
 }
 
-impl SessionDescriptionInterface {
-    /// Create a new SessionDescriptionInterface from a C++ SessionDescriptionInterface object.
-    pub fn new(sd_interface: *const RffiSessionDescriptionInterface) -> Self {
-        Self { sd_interface }
+impl Drop for SessionDescription {
+    fn drop(&mut self) {
+        if !self.rffi.is_null() {
+            unsafe { sdp::Rust_releaseSessionDescription(self.rffi) };
+        }
+    }
+}
+
+impl SessionDescription {
+    /// Create a new SessionDescription from a C++ SessionDescription object.
+    pub fn new(rffi: *mut RffiSessionDescription) -> Self {
+        Self { rffi }
     }
 
-    /// Return the internal WebRTC C++ SessionDescriptionInterface pointer.
-    pub fn rffi_interface(&self) -> *const RffiSessionDescriptionInterface {
-        self.sd_interface
+    pub fn take_rffi(mut self) -> *mut RffiSessionDescription {
+        let rffi = self.rffi;
+        // This makes it so drop() will not release it a second time.
+        self.rffi = std::ptr::null_mut();
+        rffi
     }
 
-    /// Return SDP representation of this SessionDescriptionInterface.
+    /// Return SDP representation of this SessionDescription.
     pub fn to_sdp(&self) -> Result<String> {
-        let sdp_ptr = unsafe { sdp::Rust_toSdp(self.sd_interface) };
+        let sdp_ptr = unsafe { sdp::Rust_toSdp(self.rffi) };
         if sdp_ptr.is_null() {
             return Err(RingRtcError::ToSdp.into());
         }
@@ -112,7 +122,7 @@ impl SessionDescriptionInterface {
         if answer.is_null() {
             return Err(RingRtcError::ConvertSdpAnswer.into());
         }
-        Ok(SessionDescriptionInterface::new(answer))
+        Ok(SessionDescription::new(answer))
     }
 
     /// Create a SDP offer from the session description string.
@@ -122,22 +132,21 @@ impl SessionDescriptionInterface {
         if offer.is_null() {
             return Err(RingRtcError::ConvertSdpOffer.into());
         }
-        Ok(SessionDescriptionInterface::new(offer))
+        Ok(SessionDescription::new(offer))
     }
 
-    pub fn replace_rtp_data_channels_with_sctp(&mut self) -> Result<()> {
-        let success = unsafe { sdp::Rust_replaceRtpDataChannelsWithSctp(self.sd_interface) };
-        if success {
-            Ok(())
-        } else {
-            Err(RingRtcError::MungeSdp.into())
+    pub fn replace_rtp_data_channels_with_sctp(&self) -> Result<Self> {
+        let rffi = unsafe { sdp::Rust_replaceRtpDataChannelsWithSctp(self.rffi) };
+        if rffi.is_null() {
+            return Err(RingRtcError::MungeSdp.into());
         }
+        Ok(Self::new(rffi))
     }
 
     pub fn disable_dtls_and_set_srtp_key(&mut self, key: &SrtpKey) -> Result<()> {
         let success = unsafe {
             sdp::Rust_disableDtlsAndSetSrtpKey(
-                self.sd_interface,
+                self.rffi,
                 key.suite,
                 key.key.as_ptr(),
                 key.key.len(),
@@ -156,7 +165,7 @@ impl SessionDescriptionInterface {
         &self,
         public_key: Vec<u8>,
     ) -> Result<protobuf::signaling::ConnectionParametersV4> {
-        let rffi_v4_ptr = unsafe { sdp::Rust_sessionDescriptionToV4(self.sd_interface) };
+        let rffi_v4_ptr = unsafe { sdp::Rust_sessionDescriptionToV4(self.rffi) };
 
         if rffi_v4_ptr.is_null() {
             return Err(RingRtcError::MungeSdp.into());
@@ -248,11 +257,11 @@ impl SessionDescriptionInterface {
             receive_video_codecs:      rffi_video_codecs.as_ptr(),
             receive_video_codecs_size: rffi_video_codecs.len(),
         };
-        let sdi = unsafe { sdp::Rust_sessionDescriptionFromV4(offer, &rffi_v4) };
-        if sdi.is_null() {
+        let rffi = unsafe { sdp::Rust_sessionDescriptionFromV4(offer, &rffi_v4) };
+        if rffi.is_null() {
             return Err(RingRtcError::MungeSdp.into());
         }
-        Ok(Self::new(sdi))
+        Ok(Self::new(rffi))
     }
 }
 
@@ -281,19 +290,19 @@ pub use crate::webrtc::sim::sdp_observer::RffiCreateSessionDescriptionObserver;
 /// Observer object for creating a session description.
 #[derive(Debug)]
 pub struct CreateSessionDescriptionObserver {
-    /// condition varialbe used to signal the completion of the create
+    /// condition variable used to signal the completion of the create
     /// session description operation.
-    condition:         FutureResult<Result<*const RffiSessionDescriptionInterface>>,
-    /// Pointer to C++ webrtc::rffi::CreateSessionDescriptionObserverRffi object
-    rffi_csd_observer: *const RffiCreateSessionDescriptionObserver,
+    condition: FutureResult<Result<*mut RffiSessionDescription>>,
+    /// Pointer to C++ webrtc::rffi::RffiCreateSessionDescriptionObserver object
+    rffi:      *const RffiCreateSessionDescriptionObserver,
 }
 
 impl CreateSessionDescriptionObserver {
     /// Create a new CreateSessionDescriptionObserver.
     fn new() -> Self {
         Self {
-            condition:         Arc::new((Mutex::new((false, Ok(ptr::null()))), Condvar::new())),
-            rffi_csd_observer: ptr::null(),
+            condition: Arc::new((Mutex::new((false, Ok(ptr::null_mut()))), Condvar::new())),
+            rffi:      ptr::null(),
         }
     }
 
@@ -301,11 +310,11 @@ impl CreateSessionDescriptionObserver {
     /// success.
     ///
     /// This call signals the condition variable.
-    fn on_create_success(&self, desc: *const RffiSessionDescriptionInterface) {
+    fn on_create_success(&self, session_description: *mut RffiSessionDescription) {
         info!("on_create_success()");
         let &(ref mtx, ref cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
-            guard.1 = Ok(desc);
+            guard.1 = Ok(session_description);
             guard.0 = true;
             // We notify the condvar that the value has changed.
             cvar.notify_one();
@@ -334,7 +343,7 @@ impl CreateSessionDescriptionObserver {
     /// Retrieve the result of the create session description operation.
     ///
     /// This call blocks on the condition variable.
-    pub fn get_result(&self) -> Result<SessionDescriptionInterface> {
+    pub fn get_result(&self) -> Result<SessionDescription> {
         let &(ref mtx, ref cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             while !guard.0 {
@@ -346,7 +355,7 @@ impl CreateSessionDescriptionObserver {
             }
             // TODO: implement guard.1.clone() here ....
             match &guard.1 {
-                Ok(v) => Ok(SessionDescriptionInterface::new(*v)),
+                Ok(v) => Ok(SessionDescription::new(*v)),
                 Err(e) => Err(
                     RingRtcError::CreateSessionDescriptionObserverResult(format!("{}", e)).into(),
                 ),
@@ -360,13 +369,13 @@ impl CreateSessionDescriptionObserver {
     }
 
     /// Set the RFFI observer object.
-    pub fn set_rffi_observer(&mut self, observer: *const RffiCreateSessionDescriptionObserver) {
-        self.rffi_csd_observer = observer
+    pub fn set_rffi(&mut self, observer: *const RffiCreateSessionDescriptionObserver) {
+        self.rffi = observer
     }
 
     /// Return the RFFI observer object.
-    pub fn rffi_observer(&self) -> *const RffiCreateSessionDescriptionObserver {
-        self.rffi_csd_observer
+    pub fn rffi(&self) -> *const RffiCreateSessionDescriptionObserver {
+        self.rffi
     }
 }
 
@@ -375,11 +384,11 @@ impl CreateSessionDescriptionObserver {
 #[allow(non_snake_case)]
 extern "C" fn csd_observer_OnSuccess(
     csd_observer: *mut CreateSessionDescriptionObserver,
-    desc: *const RffiSessionDescriptionInterface,
+    session_description: *mut RffiSessionDescription,
 ) {
     info!("csd_observer_OnSuccess()");
     match unsafe { ptr_as_ref(csd_observer) } {
-        Ok(v) => v.on_create_success(desc),
+        Ok(csd_observer) => csd_observer.on_create_success(session_description),
         Err(e) => error!("csd_observer_OnSuccess(): {}", e),
     };
 }
@@ -410,7 +419,7 @@ extern "C" fn csd_observer_OnFailure(
 pub struct CreateSessionDescriptionObserverCallbacks {
     pub onSuccess: extern "C" fn(
         csd_observer: *mut CreateSessionDescriptionObserver,
-        desc: *const RffiSessionDescriptionInterface,
+        session_description: *mut RffiSessionDescription,
     ),
     pub onFailure: extern "C" fn(
         csd_observer: *mut CreateSessionDescriptionObserver,
@@ -434,7 +443,7 @@ const CSD_OBSERVER_CBS_PTR: *const CreateSessionDescriptionObserverCallbacks = &
 pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
     let csd_observer = Box::new(CreateSessionDescriptionObserver::new());
     let csd_observer_ptr = Box::into_raw(csd_observer);
-    let rffi_csd_observer = unsafe {
+    let rffi = unsafe {
         sdp::Rust_createCreateSessionDescriptionObserver(
             csd_observer_ptr as RustObject,
             CSD_OBSERVER_CBS_PTR as *const c_void,
@@ -442,7 +451,7 @@ pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
     };
     let mut csd_observer = unsafe { Box::from_raw(csd_observer_ptr) };
 
-    csd_observer.set_rffi_observer(rffi_csd_observer);
+    csd_observer.set_rffi(rffi);
     csd_observer
 }
 
@@ -457,17 +466,17 @@ pub use crate::webrtc::sim::sdp_observer::RffiSetSessionDescriptionObserver;
 pub struct SetSessionDescriptionObserver {
     /// condition varialbe used to signal the completion of the set
     /// session description operation.
-    condition:         FutureResult<Result<()>>,
+    condition: FutureResult<Result<()>>,
     /// Pointer to C++ CreateSessionDescriptionObserver object
-    rffi_ssd_observer: *const RffiSetSessionDescriptionObserver,
+    rffi:      *const RffiSetSessionDescriptionObserver,
 }
 
 impl SetSessionDescriptionObserver {
     /// Create a new SetSessionDescriptionObserver.
     fn new() -> Self {
         Self {
-            condition:         Arc::new((Mutex::new((false, Ok(()))), Condvar::new())),
-            rffi_ssd_observer: ptr::null(),
+            condition: Arc::new((Mutex::new((false, Ok(()))), Condvar::new())),
+            rffi:      ptr::null(),
         }
     }
 
@@ -532,13 +541,13 @@ impl SetSessionDescriptionObserver {
     }
 
     /// Set the RFFI observer object.
-    pub fn set_rffi_observer(&mut self, observer: *const RffiSetSessionDescriptionObserver) {
-        self.rffi_ssd_observer = observer
+    pub fn set_rffi(&mut self, rffi: *const RffiSetSessionDescriptionObserver) {
+        self.rffi = rffi
     }
 
     /// Return the RFFI observer object.
-    pub fn rffi_observer(&self) -> *const RffiSetSessionDescriptionObserver {
-        self.rffi_ssd_observer
+    pub fn rffi(&self) -> *const RffiSetSessionDescriptionObserver {
+        self.rffi
     }
 }
 
@@ -608,6 +617,6 @@ pub fn create_ssd_observer() -> Box<SetSessionDescriptionObserver> {
     };
     let mut ssd_observer = unsafe { Box::from_raw(ssd_observer_ptr) };
 
-    ssd_observer.set_rffi_observer(rffi_ssd_observer as *const RffiSetSessionDescriptionObserver);
+    ssd_observer.set_rffi(rffi_ssd_observer as *const RffiSetSessionDescriptionObserver);
     ssd_observer
 }

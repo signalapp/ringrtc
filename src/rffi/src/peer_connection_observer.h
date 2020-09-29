@@ -10,6 +10,7 @@
 #ifndef RFFI_PEER_CONNECTION_OBSERVER_H__
 #define RFFI_PEER_CONNECTION_OBSERVER_H__
 
+#include "api/data_channel_interface.h"
 #include "api/peer_connection_interface.h"
 
 /**
@@ -21,10 +22,10 @@
 namespace webrtc {
 namespace rffi {
 
-class PeerConnectionObserverRffi : public PeerConnectionObserver {
+class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataChannelObserver {
  public:
-  PeerConnectionObserverRffi(const rust_object call_connection,
-                             const PeerConnectionObserverCallbacks* pc_observer_cbs);
+  PeerConnectionObserverRffi(const rust_object observer,
+                             const PeerConnectionObserverCallbacks* callbacks);
   ~PeerConnectionObserverRffi() override;
 
   // Implementation of PeerConnectionObserver interface, which propagates
@@ -51,9 +52,15 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver {
   void OnTrack(
       rtc::scoped_refptr<RtpTransceiverInterface> transceiver) override;
 
+  // Implementation of DataChannelObserver interface, which propagates
+  // the callbacks to the Rust observer.
+  void OnMessage(const DataBuffer& buffer) override;
+  void OnBufferedAmountChange(uint64_t previous_amount) override {}
+  void OnStateChange() override {}
+
  private:
-  const rust_object call_connection_;
-  PeerConnectionObserverCallbacks pc_observer_cbs_;
+  const rust_object observer_;
+  PeerConnectionObserverCallbacks callbacks_;
 
 };
 

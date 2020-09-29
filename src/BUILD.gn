@@ -40,12 +40,12 @@ if (is_linux || is_mac || is_win) {
 
     sources = [
       "rffi/src/data_channel.cc",
-      "rffi/src/data_channel_observer.cc",
       "rffi/src/injectable_network.cc",
       "rffi/src/logging.cc",
       "rffi/src/media.cc",
+      "rffi/src/network.cc",
       "rffi/src/peer_connection_factory.cc",
-      "rffi/src/peer_connection_interface.cc",
+      "rffi/src/peer_connection.cc",
       "rffi/src/peer_connection_observer.cc",
       "rffi/src/ref_count.cc",
       "rffi/src/sdp_observer.cc",

@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! WebRTC FFI Stats Observer Interface.
+//! WebRTC FFI Stats Observer
 
 use crate::core::util::RustObject;
 use std::ffi::c_void;

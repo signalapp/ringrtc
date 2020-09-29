@@ -7,31 +7,30 @@
  *
  */
 
-#ifndef RFFI_API_PEER_CONNECTION_INTERFACE_INTF_H__
-#define RFFI_API_PEER_CONNECTION_INTERFACE_INTF_H__
+#ifndef RFFI_API_PEER_CONNECTION_INTF_H__
+#define RFFI_API_PEER_CONNECTION_INTF_H__
 
 #include "api/peer_connection_interface.h"
-#include "rffi/api/data_channel.h"
+#include "rffi/api/network.h"
 #include "rffi/api/sdp_observer_intf.h"
 #include "rffi/api/stats_observer_intf.h"
 
 /**
  * Rust friendly wrapper around some webrtc::PeerConnectionInterface
  * methods
- *
  */
 
 RUSTEXPORT void
-Rust_createOffer(webrtc::PeerConnectionInterface*                    pc_interface,
+Rust_createOffer(webrtc::PeerConnectionInterface*                    peer_connection,
                  webrtc::rffi::CreateSessionDescriptionObserverRffi* csd_observer);
 
 RUSTEXPORT void
-Rust_setLocalDescription(webrtc::PeerConnectionInterface*                 pc_interface,
+Rust_setLocalDescription(webrtc::PeerConnectionInterface*                 peer_connection,
                          webrtc::rffi::SetSessionDescriptionObserverRffi* ssd_observer,
-                         webrtc::SessionDescriptionInterface*             description);
+                         webrtc::SessionDescriptionInterface*             local_description);
 
 RUSTEXPORT const char*
-Rust_toSdp(webrtc::SessionDescriptionInterface* sdi);
+Rust_toSdp(webrtc::SessionDescriptionInterface* session_description);
 
 RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_answerFromSdp(const char* sdp);
@@ -39,11 +38,11 @@ Rust_answerFromSdp(const char* sdp);
 RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_offerFromSdp(const char* sdp);
 
-RUSTEXPORT bool
-Rust_replaceRtpDataChannelsWithSctp(webrtc::SessionDescriptionInterface* sdi);
+RUSTEXPORT webrtc::SessionDescriptionInterface*
+Rust_replaceRtpDataChannelsWithSctp(const webrtc::SessionDescriptionInterface* session_description);
 
 RUSTEXPORT bool
-Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* sdi,
+Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* session_description,
                               int                                  crypto_suite,
                               const char*                          key_ptr,
                               size_t                               key_len,
@@ -81,7 +80,7 @@ typedef struct {
 
 // Must call Rust_releaseV4 once finished with the result
 RUSTEXPORT RffiConnectionParametersV4*
-Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* sdi);
+Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_description);
 
 RUSTEXPORT void
 Rust_releaseV4(RffiConnectionParametersV4* v4);
@@ -90,30 +89,32 @@ RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4);
 
 RUSTEXPORT void
-Rust_createAnswer(webrtc::PeerConnectionInterface*                    pc_interface,
+Rust_createAnswer(webrtc::PeerConnectionInterface*                    peer_connection,
                   webrtc::rffi::CreateSessionDescriptionObserverRffi* csd_observer);
 
 RUSTEXPORT void
-Rust_setRemoteDescription(webrtc::PeerConnectionInterface*                 pc_interface,
+Rust_setRemoteDescription(webrtc::PeerConnectionInterface*                 peer_connection,
                           webrtc::rffi::SetSessionDescriptionObserverRffi* ssd_observer,
-                          webrtc::SessionDescriptionInterface*             description);
+                          webrtc::SessionDescriptionInterface*             remote_description);
 
 RUSTEXPORT void
-Rust_setOutgoingAudioEnabled(webrtc::PeerConnectionInterface* pc_interface,
+Rust_releaseSessionDescription(webrtc::SessionDescriptionInterface*);
+
+RUSTEXPORT void
+Rust_setOutgoingMediaEnabled(webrtc::PeerConnectionInterface* peer_connection,
                              bool                             enabled);
 
 RUSTEXPORT bool
-Rust_setIncomingRtpEnabled(webrtc::PeerConnectionInterface* pc_interface,
-                           bool                             enabled);
+Rust_setIncomingMediaEnabled(webrtc::PeerConnectionInterface* peer_connection,
+                             bool                             enabled);
 
 /*
- * NOTE: The object created with Rust_createDataChannel() must be
+ * NOTE: The object created with Rust_createSignalingDataChannel() must be
  * freed using Rust_releaseRef().
  */
 RUSTEXPORT webrtc::DataChannelInterface*
-Rust_createDataChannel(webrtc::PeerConnectionInterface* pc_interface,
-                       const char*                      label,
-                       const RffiDataChannelInit*       config);
+Rust_createSignalingDataChannel(webrtc::PeerConnectionInterface* peer_connection,
+                                webrtc::PeerConnectionObserver* pc_observer);
 
 RUSTEXPORT void
 Rust_releaseRef(rtc::RefCountInterface* ref_counted_ptr);
@@ -122,22 +123,22 @@ RUSTEXPORT void
 Rust_addRef(rtc::RefCountInterface* ref_counted_ptr);
 
 RUSTEXPORT bool
-Rust_addIceCandidate(webrtc::PeerConnectionInterface* pc_interface,
-                     const char*                      sdp);
+Rust_addIceCandidateFromSdp(webrtc::PeerConnectionInterface* peer_connection,
+                            const char*                      sdp);
 
 RUSTEXPORT webrtc::IceGathererInterface*
-Rust_createSharedIceGatherer(webrtc::PeerConnectionInterface* pc_interface);
+Rust_createSharedIceGatherer(webrtc::PeerConnectionInterface* peer_connection);
 
 RUSTEXPORT bool
-Rust_useSharedIceGatherer(webrtc::PeerConnectionInterface* pc_interface,
+Rust_useSharedIceGatherer(webrtc::PeerConnectionInterface* peer_connection,
                           webrtc::IceGathererInterface* ice_gatherer);
 
 RUSTEXPORT void
-Rust_getStats(webrtc::PeerConnectionInterface* pc_interface,
+Rust_getStats(webrtc::PeerConnectionInterface* peer_connection,
               webrtc::rffi::StatsObserverRffi* stats_observer);
 
 RUSTEXPORT void
-Rust_setMaxSendBitrate(webrtc::PeerConnectionInterface* pc_interface,
+Rust_setMaxSendBitrate(webrtc::PeerConnectionInterface* peer_connection,
                        int32_t                          max_bitrate_bps);
 
-#endif /* RFFI_API_PEER_CONNECTION_INTERFACE_INTF_H__ */
+#endif /* RFFI_API_PEER_CONNECTION_INTF_H__ */

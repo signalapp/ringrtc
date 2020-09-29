@@ -19,6 +19,8 @@ pub enum RingRtcError {
     NullPointer(String, String),
     #[fail(display = "Expecting non-none option value in: {}, var: {}", _0, _1)]
     OptionValueNotSet(String, String),
+    #[fail(display = "Couldn't register an actor")]
+    RegisterActor,
 
     // Call Manager error codes
     #[fail(display = "Active call already in progress, id: {}", _0)]
@@ -49,10 +51,8 @@ pub enum RingRtcError {
     // WebRTC / C++ error codes
     #[fail(display = "Unable to create C++ PeerConnectionObserver")]
     CreatePeerConnectionObserver,
-    #[fail(display = "Unable to create C++ DataChannel with label: {}", _0)]
-    CreateDataChannel(String),
-    #[fail(display = "Unable to create C++ DataChannelObserver")]
-    CreateDataChannelObserver,
+    #[fail(display = "Unable to create C++ signaling DataChannel")]
+    CreateSignalingDataChannel,
     #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ PeerConnectionFactory")]
     CreatePeerConnectionFactory,
@@ -62,6 +62,9 @@ pub enum RingRtcError {
     #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ VideoSource")]
     CreateVideoSource,
+    #[cfg(any(feature = "native", feature = "sim"))]
+    #[fail(display = "Unable to create C++ VideoTrack")]
+    CreateVideoTrack,
     #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ AudioTrack")]
     CreateAudioTrack,

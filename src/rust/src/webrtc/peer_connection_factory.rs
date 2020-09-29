@@ -5,18 +5,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! WebRTC Peer Connection Interface
+//! WebRTC Peer Connection
 use std::fmt;
 
 use crate::common::Result;
-use crate::core::platform::Platform;
 use crate::core::util::CppObject;
 use crate::error::RingRtcError;
 #[cfg(feature = "simnet")]
 use crate::webrtc::injectable_network::InjectableNetwork;
-use crate::webrtc::media::{AudioTrack, VideoSource};
+use crate::webrtc::media::{AudioTrack, VideoSource, VideoTrack};
 use crate::webrtc::peer_connection::PeerConnection;
-use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
+use crate::webrtc::peer_connection_observer::{
+    PeerConnectionObserver,
+    PeerConnectionObserverTrait,
+};
 use std::ffi::CString;
 use std::os::raw::c_char;
 
@@ -156,10 +158,10 @@ impl AudioDevice {
     }
 }
 
-/// Rust wrapper around WebRTC C++ PeerConnectionFactoryInterface object.
+/// Rust wrapper around WebRTC C++ PeerConnectionFactory object.
 pub struct PeerConnectionFactory {
-    /// Pointer to C++ PeerConnectionFactoryInterface.
-    rffi: *const pcf::RffiPeerConnectionFactoryInterface,
+    /// Pointer to C++ PeerConnectionFactory.
+    rffi: *const pcf::RffiPeerConnectionFactory,
 }
 
 impl fmt::Display for PeerConnectionFactory {
@@ -188,7 +190,7 @@ unsafe impl Sync for PeerConnectionFactory {}
 
 impl PeerConnectionFactory {
     /// Create a new Rust PeerConnectionFactory object from a WebRTC C++
-    /// PeerConnectionFactoryInterface object.
+    /// PeerConnectionFactory object.
     pub fn new(use_injectable_network: bool) -> Result<Self> {
         debug!("PeerConnectionFactory::new()");
         let rffi = unsafe { pcf::Rust_createPeerConnectionFactory(use_injectable_network) };
@@ -208,14 +210,14 @@ impl PeerConnectionFactory {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn create_peer_connection<T: Platform>(
+    pub fn create_peer_connection<T: PeerConnectionObserverTrait>(
         &self,
         observer: PeerConnectionObserver<T>,
         certificate: Certificate,
         hide_ip: bool,
         ice_servers: &IceServer,
-        outgoing_audio: AudioTrack,
-        outgoing_video: VideoSource,
+        outgoing_audio_track: AudioTrack,
+        outgoing_video_track: VideoTrack,
         enable_dtls: bool,
         enable_rtp_data_channel: bool,
     ) -> Result<PeerConnection> {
@@ -226,12 +228,12 @@ impl PeerConnectionFactory {
         let rffi = unsafe {
             pcf::Rust_createPeerConnection(
                 self.rffi,
-                observer.rffi_interface(),
+                observer.rffi(),
                 certificate.rffi(),
                 hide_ip,
                 ice_servers.rffi(),
-                outgoing_audio.rffi(),
-                outgoing_video.rffi(),
+                outgoing_audio_track.rffi(),
+                outgoing_video_track.rffi(),
                 enable_dtls,
                 enable_rtp_data_channel,
             )
@@ -243,11 +245,11 @@ impl PeerConnectionFactory {
         if rffi.is_null() {
             return Err(RingRtcError::CreatePeerConnection.into());
         }
-        Ok(PeerConnection::owned(rffi))
+        Ok(PeerConnection::owned(rffi, observer.rffi()))
     }
 
     pub fn create_outgoing_audio_track(&self) -> Result<AudioTrack> {
-        debug!("PeerConnectionFactory::create_audio_track()");
+        debug!("PeerConnectionFactory::create_outgoing_audio_track()");
         let rffi = unsafe { pcf::Rust_createAudioTrack(self.rffi) };
         if rffi.is_null() {
             return Err(RingRtcError::CreateAudioTrack.into());
@@ -256,12 +258,26 @@ impl PeerConnectionFactory {
     }
 
     pub fn create_outgoing_video_source(&self) -> Result<VideoSource> {
-        debug!("PeerConnectionFactory::create_video_source()");
+        debug!("PeerConnectionFactory::create_outgoing_video_source()");
         let rffi = unsafe { pcf::Rust_createVideoSource(self.rffi) };
         if rffi.is_null() {
             return Err(RingRtcError::CreateVideoSource.into());
         }
         Ok(VideoSource::new(rffi))
+    }
+
+    // We take ownership of the VideoSource because Rust_createVideoTrack takes ownership
+    // of one takes ownership of one ref count to the source.
+    pub fn create_outgoing_video_track(
+        &self,
+        outgoing_video_source: &VideoSource,
+    ) -> Result<VideoTrack> {
+        debug!("PeerConnectionFactory::create_outgoing_video_track()");
+        let rffi = unsafe { pcf::Rust_createVideoTrack(self.rffi, outgoing_video_source.rffi()) };
+        if rffi.is_null() {
+            return Err(RingRtcError::CreateVideoTrack.into());
+        }
+        Ok(VideoTrack::new(rffi))
     }
 
     fn get_audio_playout_device(&self, index: u16) -> Result<AudioDevice> {

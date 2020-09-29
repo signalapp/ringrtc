@@ -26,7 +26,7 @@ Rust_createJavaMediaStream(MediaStreamInterface *stream) {
   rtc::scoped_refptr<MediaStreamInterface> media_stream(stream);
   JNIEnv* env = AttachCurrentThreadIfNeeded();
 
-  // NOTE: JavaMediaStream() takes ownership of the MediaStreamInterface* ref counted pointer.
+  // NOTE: JavaMediaStream() takes ownership of the MediaStream* ref counted pointer.
   jni::JavaMediaStream *java_media_stream = new jni::JavaMediaStream(env, media_stream);
   return java_media_stream;
 }
@@ -37,7 +37,7 @@ Rust_freeJavaMediaStream(webrtc::jni::JavaMediaStream *java_media_stream) {
 }
 
 RUSTEXPORT jobject
-Rust_getObjectJavaMediaStream(webrtc::jni::JavaMediaStream *java_media_stream) {
+Rust_getJavaMediaStreamObject(webrtc::jni::JavaMediaStream *java_media_stream) {
   return java_media_stream->j_media_stream().obj();
 }
 

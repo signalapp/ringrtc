@@ -11,7 +11,7 @@ use crate::core::util::{CppObject, RustObject};
 
 /// Incomplete type for C++ PeerConnectionObserver.
 #[repr(C)]
-pub struct RffiPeerConnectionObserverInterface {
+pub struct RffiPeerConnectionObserver {
     _private: [u8; 0],
 }
 
@@ -19,5 +19,5 @@ extern "C" {
     pub fn Rust_createPeerConnectionObserver(
         cc_ptr: RustObject,
         pc_observer_cb: CppObject,
-    ) -> *const RffiPeerConnectionObserverInterface;
+    ) -> *const RffiPeerConnectionObserver;
 }

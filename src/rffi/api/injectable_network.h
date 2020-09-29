@@ -13,22 +13,12 @@
 
 #include "p2p/base/port_allocator.h"
 #include "rtc_base/thread.h"
+#include "rffi/api/network.h"
 #include "rffi/api/rffi_defs.h"
+
 namespace webrtc {
+
 namespace rffi {
-
-// A simplified version of rtc::IpAddress
-typedef struct {
-  // If v6 == false, only use the first 4 bytes.
-  bool v6;
-  uint8_t address[16];
-} Ip;
-
-// As simplified version of rtc::SocketAddress
-typedef struct {
-  Ip ip;
-  uint16_t port;
-} IpPort;
 
 typedef struct {
   rust_object object;

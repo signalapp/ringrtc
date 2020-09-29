@@ -5,10 +5,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! WebRTC FFI IceGatherer Interface.
+//! WebRTC FFI IceGatherer
 
 /// Incomplete type for C++ IceGathererInterface.
 #[repr(C)]
-pub struct RffiIceGathererInterface {
+pub struct RffiIceGatherer {
     _private: [u8; 0],
 }

@@ -23,12 +23,12 @@ use crate::webrtc::sim::media;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::ref_count;
 
-pub use media::RffiMediaStreamInterface;
+pub use media::RffiMediaStream;
 
-/// Rust wrapper around WebRTC C++ MediaStreamInterface object.
+/// Rust wrapper around WebRTC C++ MediaStream object.
 pub struct MediaStream {
     /// Pointer to C++ webrtc::MediaStreamInterface object.
-    rffi_ms_interface: *const RffiMediaStreamInterface,
+    rffi: *const RffiMediaStream,
 }
 
 // Send and Sync needed to share *const pointer types across threads.
@@ -37,7 +37,7 @@ unsafe impl Sync for MediaStream {}
 
 impl fmt::Display for MediaStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ms_interface: {:p}", self.rffi_ms_interface)
+        write!(f, "rffi_media_stream: {:p}", self.rffi)
     }
 }
 
@@ -50,40 +50,40 @@ impl fmt::Debug for MediaStream {
 impl Default for MediaStream {
     fn default() -> Self {
         Self {
-            rffi_ms_interface: std::ptr::null(),
+            rffi: std::ptr::null(),
         }
     }
 }
 
 impl Drop for MediaStream {
     fn drop(&mut self) {
-        if !self.rffi_ms_interface.is_null() {
-            ref_count::release_ref(self.rffi_ms_interface as CppObject);
+        if !self.rffi.is_null() {
+            ref_count::release_ref(self.rffi as CppObject);
         }
     }
 }
 
 impl MediaStream {
-    /// Create new MediaStream object from C++ MediaStreamInterface.
-    pub fn new(rffi_ms_interface: *const media::RffiMediaStreamInterface) -> Self {
-        Self { rffi_ms_interface }
+    /// Create new MediaStream object from C++ MediaStream.
+    pub fn new(rffi: *const media::RffiMediaStream) -> Self {
+        Self { rffi }
     }
 
-    /// Return inner C++ MediaStreamInterface pointer.
-    pub fn rffi_interface(&self) -> *const media::RffiMediaStreamInterface {
-        self.rffi_ms_interface
+    /// Return inner C++ MediaStream pointer.
+    pub fn rffi(&self) -> *const media::RffiMediaStream {
+        self.rffi
     }
 
-    /// Take ownership of the MediaStreamInterface pointer.
-    pub fn own_rffi_interface(&mut self) -> *const media::RffiMediaStreamInterface {
-        let rffi_ms_interface = self.rffi_ms_interface;
-        self.rffi_ms_interface = std::ptr::null();
-        rffi_ms_interface
+    /// Take ownership of the MediaStream pointer.
+    pub fn take_rffi(mut self) -> *const media::RffiMediaStream {
+        let rffi = self.rffi;
+        self.rffi = std::ptr::null();
+        rffi
     }
 
     #[cfg(feature = "native")]
     pub fn first_video_track(&self) -> Option<VideoTrack> {
-        let track_rffi = unsafe { media::Rust_getFirstVideoTrack(self.rffi_ms_interface) };
+        let track_rffi = unsafe { media::Rust_getFirstVideoTrack(self.rffi) };
         if track_rffi.is_null() {
             return None;
         }
@@ -94,16 +94,16 @@ impl MediaStream {
 /// Rust wrapper around WebRTC C++ AudioTrackInterface object.
 #[cfg(any(feature = "native", feature = "sim"))]
 pub struct AudioTrack {
-    rffi: *const media::RffiAudioTrackInterface,
+    rffi: *const media::RffiAudioTrack,
 }
 
 #[cfg(any(feature = "native", feature = "sim"))]
 impl AudioTrack {
-    pub fn new(rffi: *const media::RffiAudioTrackInterface) -> Self {
+    pub fn new(rffi: *const media::RffiAudioTrack) -> Self {
         Self { rffi }
     }
 
-    pub fn rffi(&self) -> *const media::RffiAudioTrackInterface {
+    pub fn rffi(&self) -> *const media::RffiAudioTrack {
         self.rffi
     }
 
@@ -274,16 +274,16 @@ unsafe impl Sync for VideoFrame {}
 /// Rust wrapper around WebRTC C++ VideoTrackSourceInterface object.
 #[cfg(any(feature = "native", feature = "sim"))]
 pub struct VideoSource {
-    rffi: *const media::RffiVideoTrackSourceInterface,
+    rffi: *const media::RffiVideoSource,
 }
 
 #[cfg(any(feature = "native", feature = "sim"))]
 impl VideoSource {
-    pub fn new(rffi: *const media::RffiVideoTrackSourceInterface) -> Self {
+    pub fn new(rffi: *const media::RffiVideoSource) -> Self {
         Self { rffi }
     }
 
-    pub fn rffi(&self) -> *const media::RffiVideoTrackSourceInterface {
+    pub fn rffi(&self) -> *const media::RffiVideoSource {
         self.rffi
     }
 
@@ -336,21 +336,22 @@ unsafe impl Send for VideoSource {}
 unsafe impl Sync for VideoSource {}
 
 /// Rust wrapper around WebRTC C++ VideoTrackInterface object.
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", feature = "sim"))]
 pub struct VideoTrack {
-    rffi: *const media::RffiVideoTrackInterface,
+    rffi: *const media::RffiVideoTrack,
 }
 
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", feature = "sim"))]
 impl VideoTrack {
-    pub fn new(rffi: *const media::RffiVideoTrackInterface) -> Self {
+    pub fn new(rffi: *const media::RffiVideoTrack) -> Self {
         Self { rffi }
     }
 
-    pub fn rffi(&self) -> *const media::RffiVideoTrackInterface {
+    pub fn rffi(&self) -> *const media::RffiVideoTrack {
         self.rffi
     }
 
+    #[cfg(feature = "native")]
     pub fn add_sink(&self, sink: &dyn VideoSink) {
         let sink_ptr = Box::into_raw(Box::new(RffiVideoSink { sink })) as RustObject;
         let cbs_ptr = &VideoSinkCallbacks {

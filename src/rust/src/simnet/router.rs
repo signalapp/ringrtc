@@ -5,8 +5,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-use crate::common::units::{DataRate, DataSize};
-use crate::simnet::actor::{Actor, Stopper};
+use crate::common::{
+    actor::{Actor, Stopper},
+    units::{DataRate, DataSize},
+    Result,
+};
 use rand::{distributions, distributions::Distribution, rngs::ThreadRng, thread_rng, Rng};
 use std::{
     collections::HashMap,
@@ -96,13 +99,15 @@ struct RouterState {
 // => callback passed to Router.add_interface
 // One could theoretically combine Routers for a larger, more complex graph.
 impl Router {
-    pub fn new(stopper: &Stopper) -> Self {
-        Self {
-            actor: Actor::new(stopper.clone(), move |_| RouterState {
-                send_link_by_ip:    HashMap::new(),
-                receive_link_by_ip: HashMap::new(),
-            }),
-        }
+    pub fn start(stopper: &Stopper) -> Result<Self> {
+        Ok(Self {
+            actor: Actor::start(stopper.clone(), move |_| {
+                Ok(RouterState {
+                    send_link_by_ip:    HashMap::new(),
+                    receive_link_by_ip: HashMap::new(),
+                })
+            })?,
+        })
     }
 
     // Packets sent from the ip will behave according to send_config.
@@ -114,17 +119,18 @@ impl Router {
         send_config: LinkConfig,
         receive_config: LinkConfig,
         receiver: Box<dyn PacketReceiver>,
-    ) {
-        let router = Box::new(self.clone());
-        let stopper = self.actor.stopper().clone();
+    ) -> Result<()> {
+        let send_link = Link::start(
+            send_config,
+            Box::new(self.clone()),
+            self.actor.stopper().clone(),
+        )?;
+        let receive_link = Link::start(receive_config, receiver, self.actor.stopper().clone())?;
         self.actor.send(move |state| {
-            state
-                .send_link_by_ip
-                .insert(ip, Link::new(send_config, router, stopper.clone()));
-            state
-                .receive_link_by_ip
-                .insert(ip, Link::new(receive_config, receiver, stopper));
+            state.send_link_by_ip.insert(ip, send_link);
+            state.receive_link_by_ip.insert(ip, receive_link);
         });
+        Ok(())
     }
 
     pub fn send_packet(&self, packet: Packet) {
@@ -182,7 +188,11 @@ struct LinkState {
 }
 
 impl Link {
-    pub fn new(config: LinkConfig, receiver: Box<dyn PacketReceiver>, stopper: Stopper) -> Self {
+    pub fn start(
+        config: LinkConfig,
+        receiver: Box<dyn PacketReceiver>,
+        stopper: Stopper,
+    ) -> Result<Self> {
         // Could also be mean + std_dev
         // let delay_distribution = distributions::Normal::new(
         //     config.delay_mean.as_secs_f64(),
@@ -191,17 +201,19 @@ impl Link {
         let delay_distribution = distributions::Uniform::from(
             (config.delay_min.as_millis() as u64)..(config.delay_max.as_millis() as u64),
         );
-        let leaky_bucket = LeakyBucket::new(config.clone(), receiver, stopper.clone());
-        Self {
-            actor: Actor::new(stopper, move |actor| LinkState {
-                actor,
-                config,
-                rng: thread_rng(),
-                previous_packet_dropped: false,
-                delay_distribution,
-                leaky_bucket,
-            }),
-        }
+        let leaky_bucket = LeakyBucket::start(config.clone(), receiver, stopper.clone())?;
+        Ok(Self {
+            actor: Actor::start(stopper, move |actor| {
+                Ok(LinkState {
+                    actor,
+                    config,
+                    rng: thread_rng(),
+                    previous_packet_dropped: false,
+                    delay_distribution,
+                    leaky_bucket,
+                })
+            })?,
+        })
     }
 
     fn send_packet(&self, packet: Packet) {
@@ -245,17 +257,23 @@ struct LeakyBucketState {
 }
 
 impl LeakyBucket {
-    pub fn new(config: LinkConfig, receiver: Box<dyn PacketReceiver>, stopper: Stopper) -> Self {
+    pub fn start(
+        config: LinkConfig,
+        receiver: Box<dyn PacketReceiver>,
+        stopper: Stopper,
+    ) -> Result<Self> {
         let queued_size = Arc::new(AtomicU64::new(0));
         let queued_size_clone = queued_size.clone();
-        Self {
+        Ok(Self {
             config,
-            actor: Actor::new(stopper, move |_| LeakyBucketState {
-                queued_size: queued_size_clone,
-                receiver,
-            }),
+            actor: Actor::start(stopper, move |_| {
+                Ok(LeakyBucketState {
+                    queued_size: queued_size_clone,
+                    receiver,
+                })
+            })?,
             queued_size,
-        }
+        })
     }
 
     pub fn send_packet(&self, packet: Packet) {

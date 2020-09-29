@@ -19,16 +19,19 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::common::Result;
+use crate::error::RingRtcError;
+
 pub struct Actor<State> {
     sender:  Sender<Task<State>>,
     stopper: Stopper,
 }
 
 impl<State: 'static> Actor<State> {
-    pub fn new(
+    pub fn start(
         stopper: Stopper,
-        gen_state: impl FnOnce(Actor<State>) -> State + Send + 'static,
-    ) -> Self {
+        gen_state: impl FnOnce(Actor<State>) -> Result<State> + Send + 'static,
+    ) -> Result<Self> {
         let (sender, receiver) = channel::<Task<State>>();
 
         let stopper_to_register = stopper.clone();
@@ -44,7 +47,14 @@ impl<State: 'static> Actor<State> {
         let actor_to_return = actor.clone();
         // Moves in actor and stopped
         let join_handle = thread::spawn(move || {
-            let mut state = gen_state(actor);
+            let mut state = match gen_state(actor) {
+                Ok(state) => state,
+                Err(e) => {
+                    warn!("Failed to start actor because of {:?}", e);
+                    // Never enter the loop.  As if we had been stopped before starting.
+                    return;
+                }
+            };
             let mut delayed_tasks = BinaryHeap::<Task<State>>::new();
             loop {
                 // The following is basically a manual way of doing:
@@ -68,12 +78,12 @@ impl<State: 'static> Actor<State> {
                             // It's waited long enough.
                             // Treat it like an immediate task (run it below)
                             Err(RecvTimeoutError::Timeout) => {
-                                delayed_tasks.pop().unwrap().as_immediate()
+                                delayed_tasks.pop().unwrap().into_immediate()
                             }
                         }
                     }
                 };
-                if stopped.load(atomic::Ordering::Relaxed) {
+                if stopped.load(atomic::Ordering::SeqCst) {
                     break;
                 }
                 if received_task.is_delayed() {
@@ -83,12 +93,12 @@ impl<State: 'static> Actor<State> {
                 }
             }
         });
-        stopper_to_register.register(
+        stopper_to_register.register_actor(
             Box::new(actor_to_register),
             stopped_to_register,
             join_handle,
-        );
-        actor_to_return
+        )?;
+        Ok(actor_to_return)
     }
 
     pub fn send(&self, run: impl FnOnce(&mut State) + Send + 'static) {
@@ -116,7 +126,7 @@ impl<State> Clone for Actor<State> {
 
 impl<State> Stop for Actor<State> {
     fn stop(&self, stopped: &AtomicBool) {
-        stopped.store(true, atomic::Ordering::Relaxed);
+        stopped.store(true, atomic::Ordering::SeqCst);
         // Sending an empty message kicks the message loop if it's stuck.
         let _ = self.sender.send(Task::immediate(Box::new(|_state| {})));
     }
@@ -144,7 +154,7 @@ impl<State> Task<State> {
         }
     }
 
-    fn as_immediate(self) -> Self {
+    fn into_immediate(self) -> Self {
         Self {
             run:      self.run,
             deadline: None,
@@ -188,7 +198,7 @@ trait Stop: Send {
     fn stop(&self, stopped: &AtomicBool);
 }
 
-// A stopper is used to stopper all the actors associated with it.
+// A stopper is used to stop all the actors associated with it.
 // You pass in one stopper to many actors
 // (and those actors to child actors and so forth).
 // Then you close them all once.
@@ -200,9 +210,15 @@ trait Stop: Send {
 // it without the parent actor keeping a reference to the child.
 // In the normal case when you just want to shut everything down,
 // this is very convenient.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Stopper {
-    actors: Arc<Mutex<Vec<(Box<dyn Stop>, Arc<AtomicBool>, thread::JoinHandle<()>)>>>,
+    actors: Arc<Mutex<Vec<StoppableActorHandle>>>,
+}
+
+struct StoppableActorHandle {
+    actor:       Box<dyn Stop>,
+    stopped:     Arc<AtomicBool>,
+    join_handle: thread::JoinHandle<()>,
 }
 
 impl Stopper {
@@ -212,14 +228,22 @@ impl Stopper {
         }
     }
 
-    fn register(
+    fn register_actor(
         &self,
         actor: Box<dyn Stop>,
         stopped: Arc<AtomicBool>,
         join_handle: thread::JoinHandle<()>,
-    ) {
-        let mut actors = self.actors.lock().expect("Couldn't get lock to add actor");
-        actors.push((actor, stopped, join_handle));
+    ) -> Result<()> {
+        let mut actors = self
+            .actors
+            .lock()
+            .map_err(|_| RingRtcError::RegisterActor)?;
+        actors.push(StoppableActorHandle {
+            actor,
+            stopped,
+            join_handle,
+        });
+        Ok(())
     }
 
     // TODO: Add support for removing actors.
@@ -233,10 +257,16 @@ impl Stopper {
             .expect("Couldn't get lock to stop actors");
         actors
             .drain(..)
-            .map(|(actor, stopped, join_handle)| {
-                actor.stop(&stopped);
-                join_handle
-            })
+            .map(
+                |StoppableActorHandle {
+                     actor,
+                     stopped,
+                     join_handle,
+                 }| {
+                    actor.stop(&stopped);
+                    join_handle
+                },
+            )
             .collect()
     }
 

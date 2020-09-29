@@ -28,22 +28,14 @@ namespace rffi {
 /* Peer Connection Observer callback function pointers */
 typedef struct {
   void (*onIceCandidate)(rust_object, const RustIceCandidate*);
-  void (*onIceCandidatesRemoved)(rust_object);
-  void (*onSignalingChange)(rust_object, webrtc::PeerConnectionInterface::SignalingState);
   void (*onIceConnectionChange)(rust_object, webrtc::PeerConnectionInterface::IceConnectionState);
-  void (*onConnectionChange)(rust_object, webrtc::PeerConnectionInterface::PeerConnectionState);
-  void (*onIceConnectionReceivingChange)(rust_object);
-  void (*onIceGatheringChange)(rust_object, webrtc::PeerConnectionInterface::IceGatheringState);
   void (*onAddStream)(rust_object, webrtc::MediaStreamInterface*);
-  void (*onRemoveStream)(rust_object);
-  void (*onDataChannel)(rust_object, webrtc::DataChannelInterface*);
-  void (*onRenegotiationNeeded)(rust_object);
-  void (*onAddTrack)(rust_object);
-  void (*onTrack)(rust_object);
+  void (*onSignalingDataChannel)(rust_object, webrtc::DataChannelInterface*);
+  void (*onSignalingDataChannelMessage)(rust_object, const uint8_t*, size_t);
 } PeerConnectionObserverCallbacks;
 
 RUSTEXPORT webrtc::rffi::PeerConnectionObserverRffi*
-Rust_createPeerConnectionObserver(const rust_object                      call_connection,
-                                  const PeerConnectionObserverCallbacks* pc_observer_cbs);
+Rust_createPeerConnectionObserver(const rust_object                      observer,
+                                  const PeerConnectionObserverCallbacks* callbacks);
 
 #endif /* RFFI_API_PEER_CONNECTION_OBSERVER_INTF_H__ */

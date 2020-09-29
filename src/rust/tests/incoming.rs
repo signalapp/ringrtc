@@ -142,10 +142,10 @@ fn connect_inbound_call() -> TestContext {
         CallState::ConnectingBeforeAccepted
     );
 
-    info!("test: injecting data channel connected");
+    info!("test: injecting signaling data channel connected");
     let data_channel = unsafe { DataChannel::new(ptr::null()) };
     active_connection
-        .inject_received_data_channel(data_channel)
+        .inject_received_signaling_data_channel(data_channel)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());

@@ -20,6 +20,6 @@
  *
  */
 RUSTEXPORT webrtc::PeerConnectionInterface*
-Rust_getPeerConnectionInterface(jlong owned_peer_connection);
+Rust_getPeerConnectionFromJniOwnedPeerConnection(jlong owned_peer_connection);
 
 #endif /* ANDROID_PEER_CONNECTION_H__ */

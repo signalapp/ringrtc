@@ -26,12 +26,6 @@ Rust_dataChannelSend(DataChannelInterface* data_channel,
   return ret;
 }
 
-RUSTEXPORT const char*
-Rust_dataChannelGetLabel(DataChannelInterface* data_channel) {
-  std::string label = data_channel->label();
-  return strdup(&label[0u]);
-}
-
 RUSTEXPORT bool
 Rust_dataChannelIsReliable(DataChannelInterface* data_channel) {
   return data_channel->reliable();

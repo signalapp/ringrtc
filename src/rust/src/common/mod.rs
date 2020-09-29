@@ -7,6 +7,7 @@
 
 //! Common types used throughout the library.
 
+pub mod actor;
 pub mod units;
 
 use std::fmt;
@@ -359,9 +360,6 @@ impl BandwidthMode {
         units::DataRate::from_bps(self as u64)
     }
 }
-
-/// The label of the WebRTC DataChannel.
-pub const DATA_CHANNEL_NAME: &str = "signaling";
 
 // Benchmarking component list.
 pub enum RingBench {

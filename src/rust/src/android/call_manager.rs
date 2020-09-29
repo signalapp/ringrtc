@@ -98,7 +98,7 @@ pub fn create_peer_connection(
             peer_connection_factory,
             jni_rtc_config,
             jni_media_constraints,
-            pc_observer.rffi_interface() as jlong,
+            pc_observer.rffi() as jlong,
             JObject::null(),
             enable_dtls as jboolean,
             enable_rtp_data_channel as jboolean,
@@ -110,15 +110,16 @@ pub fn create_peer_connection(
         return Err(AndroidError::CreateJniPeerConnection.into());
     }
 
-    // Retrieve the underlying PeerConnectionInterface object from the
+    // Retrieve the underlying PeerConnection object from the
     // JNI OwnedPeerConnection object.
-    let rffi_pc_interface = unsafe { Rust_getPeerConnectionInterface(jni_owned_pc) };
-    if rffi_pc_interface.is_null() {
-        return Err(AndroidError::ExtractNativePeerConnectionInterface.into());
+    let rffi_pc = unsafe { Rust_getPeerConnectionFromJniOwnedPeerConnection(jni_owned_pc) };
+    if rffi_pc.is_null() {
+        return Err(AndroidError::ExtractNativePeerConnection.into());
     }
-    let pc_interface = PeerConnection::unowned(rffi_pc_interface);
 
-    connection.set_pc_interface(pc_interface)?;
+    let peer_connection = PeerConnection::unowned(rffi_pc, pc_observer.rffi());
+
+    connection.set_peer_connection(peer_connection)?;
 
     info!("connection: {:?}", connection);
 

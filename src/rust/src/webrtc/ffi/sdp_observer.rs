@@ -14,10 +14,10 @@ use std::os::raw::c_char;
 
 use crate::webrtc::sdp_observer::RffiConnectionParametersV4;
 
-/// Incomplete type for SessionDescriptionInterface, used by
+/// Incomplete type for SessionDescription, used by
 /// CreateSessionDescriptionObserver callbacks.
 #[repr(C)]
-pub struct RffiSessionDescriptionInterface {
+pub struct RffiSessionDescription {
     _private: [u8; 0],
 }
 
@@ -44,17 +44,18 @@ extern "C" {
         csd_observer_cb: *const c_void,
     ) -> *const RffiCreateSessionDescriptionObserver;
 
-    pub fn Rust_toSdp(offer: *const RffiSessionDescriptionInterface) -> *const c_char;
+    pub fn Rust_toSdp(offer: *const RffiSessionDescription) -> *const c_char;
 
-    pub fn Rust_answerFromSdp(sdp: *const c_char) -> *const RffiSessionDescriptionInterface;
+    pub fn Rust_answerFromSdp(sdp: *const c_char) -> *mut RffiSessionDescription;
 
-    pub fn Rust_offerFromSdp(sdp: *const c_char) -> *const RffiSessionDescriptionInterface;
+    pub fn Rust_offerFromSdp(sdp: *const c_char) -> *mut RffiSessionDescription;
 
-    pub fn Rust_replaceRtpDataChannelsWithSctp(sdi: *const RffiSessionDescriptionInterface)
-        -> bool;
+    pub fn Rust_replaceRtpDataChannelsWithSctp(
+        session_description: *const RffiSessionDescription,
+    ) -> *mut RffiSessionDescription;
 
     pub fn Rust_disableDtlsAndSetSrtpKey(
-        sdi: *const RffiSessionDescriptionInterface,
+        session_description: *mut RffiSessionDescription,
         crypto_suite: crate::webrtc::sdp_observer::SrtpCryptoSuite,
         key_ptr: *const u8,
         key_len: size_t,
@@ -63,13 +64,15 @@ extern "C" {
     ) -> bool;
 
     pub fn Rust_sessionDescriptionToV4(
-        sdi: *const RffiSessionDescriptionInterface,
+        session_description: *const RffiSessionDescription,
     ) -> *mut RffiConnectionParametersV4;
 
-    pub fn Rust_releaseV4(sdi: *mut RffiConnectionParametersV4);
+    pub fn Rust_releaseV4(session_description: *mut RffiConnectionParametersV4);
 
     pub fn Rust_sessionDescriptionFromV4(
         offer: bool,
         v4: *const RffiConnectionParametersV4,
-    ) -> *const RffiSessionDescriptionInterface;
+    ) -> *mut RffiSessionDescription;
+
+    pub fn Rust_releaseSessionDescription(sdi: *mut RffiSessionDescription);
 }

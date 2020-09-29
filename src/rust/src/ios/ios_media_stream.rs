@@ -49,12 +49,12 @@ impl Drop for IOSMediaStream {
 impl IOSMediaStream {
     pub fn new(
         app_media_stream_interface: AppMediaStreamInterface,
-        mut stream: MediaStream,
+        stream: MediaStream,
     ) -> Result<Self> {
         // Create the application's RTCMediaStream object pointer using the native stream pointer.
         let app_media_stream = (app_media_stream_interface.createMediaStream)(
             app_media_stream_interface.object,
-            stream.own_rffi_interface() as *mut c_void,
+            stream.take_rffi() as *mut c_void,
         );
         if app_media_stream.is_null() {
             return Err(IOSError::CreateIOSMediaStream.into());

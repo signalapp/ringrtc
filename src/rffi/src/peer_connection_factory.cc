@@ -235,7 +235,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     bool hide_ip,
     RffiIceServer ice_server,
     webrtc::AudioTrackInterface* outgoing_audio_track,
-    webrtc::VideoTrackSourceInterface* outgoing_video_source,
+    webrtc::VideoTrackInterface* outgoing_video_track,
     bool enable_dtls,
     bool enable_rtp_data_channel) {
   auto factory = factory_owner->peer_connection_factory();
@@ -280,17 +280,10 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     }
   }
 
-  if (outgoing_video_source) {
-    // Note: This must stay "video1" to stay in sync with V4 signaling.
-    auto outgoing_video_track =
-      factory->CreateVideoTrack("video1", outgoing_video_source);
-    if (outgoing_video_track) {
-      auto result = pc->AddTrack(outgoing_video_track, stream_ids);
-      if (!result.ok()) {
-        RTC_LOG(LS_ERROR) << "Failed to PeerConnection::AddTrack(video)";
-      }
-    } else {
-      RTC_LOG(LS_ERROR) << "Failed to PeerConnectionFactory::CreateVideoTrack";
+  if (outgoing_video_track) {
+    auto result = pc->AddTrack(outgoing_video_track, stream_ids);
+    if (!result.ok()) {
+      RTC_LOG(LS_ERROR) << "Failed to PeerConnection::AddTrack(video)";
     }
   }
 
@@ -309,7 +302,7 @@ RUSTEXPORT AudioTrackInterface* Rust_createAudioTrack(
   cricket::AudioOptions options;
   auto source = factory->CreateAudioSource(options);
   // Note: This must stay "audio1" to stay in sync with V4 signaling.
-  auto track = factory->CreateAudioTrack("audio1", source);
+  auto track = factory->CreateAudioTrack("audio1", std::move(source));
   return track.release();
 }
 
@@ -318,6 +311,18 @@ RUSTEXPORT VideoTrackSourceInterface* Rust_createVideoSource(
   auto source = new rtc::RefCountedObject<webrtc::rffi::VideoSource>();
   source->AddRef();
   return source;
+}
+
+
+RUSTEXPORT VideoTrackInterface* Rust_createVideoTrack(
+    PeerConnectionFactoryOwner* factory_owner,
+    VideoTrackSourceInterface* source) {
+  auto factory = factory_owner->peer_connection_factory();
+
+  // PeerConnectionFactory::CreateVideoTrack increments the refcount on source.
+  // Note: This must stay "video1" to stay in sync with V4 signaling.
+  auto track = factory->CreateVideoTrack("video1", source);
+  return track.release();
 }
 
 // This could technically be in its own file because it's not part of PeerConnectionFactory,

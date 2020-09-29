@@ -11,7 +11,7 @@ use jni::objects::{JClass, JObject};
 use jni::sys::{jboolean, jlong};
 use jni::JNIEnv;
 
-use crate::webrtc::peer_connection::RffiPeerConnectionInterface;
+use crate::webrtc::peer_connection::RffiPeerConnection;
 
 extern "C" {
     /// Export the nativeCreatepeerconnection() call from the
@@ -29,9 +29,10 @@ extern "C" {
     ) -> jlong;
 }
 
-/// Retrieve the underlying PeerConnectionInterface object from the
+/// Retrieve the underlying PeerConnection object from the
 /// JNI OwnedPeerConnection object.
 extern "C" {
-    pub fn Rust_getPeerConnectionInterface(jni_owned_pc: i64)
-        -> *const RffiPeerConnectionInterface;
+    pub fn Rust_getPeerConnectionFromJniOwnedPeerConnection(
+        jni_owned_pc: i64,
+    ) -> *const RffiPeerConnection;
 }

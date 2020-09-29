@@ -12,7 +12,7 @@ use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::signaling;
 use crate::webrtc::media::MediaStream;
-use crate::webrtc::media::{AudioTrack, VideoSink, VideoSource};
+use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
 use crate::webrtc::peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
 use std::fmt;
@@ -22,11 +22,11 @@ use std::fmt;
 // for each call.
 #[derive(Clone)]
 pub struct NativeCallContext {
-    certificate:    Certificate,
-    hide_ip:        bool,
-    ice_server:     IceServer,
-    outgoing_audio: AudioTrack,
-    outgoing_video: VideoSource,
+    certificate:          Certificate,
+    hide_ip:              bool,
+    ice_server:           IceServer,
+    outgoing_audio_track: AudioTrack,
+    outgoing_video_track: VideoTrack,
 }
 
 impl NativeCallContext {
@@ -34,15 +34,15 @@ impl NativeCallContext {
         certificate: Certificate,
         hide_ip: bool,
         ice_server: IceServer,
-        outgoing_audio: AudioTrack,
-        outgoing_video: VideoSource,
+        outgoing_audio_track: AudioTrack,
+        outgoing_video_track: VideoTrack,
     ) -> Self {
         Self {
             certificate,
             hide_ip,
             ice_server,
-            outgoing_audio,
-            outgoing_video,
+            outgoing_audio_track,
+            outgoing_video_track,
         }
     }
 }
@@ -284,13 +284,13 @@ impl Platform for NativePlatform {
             context.certificate.clone(),
             context.hide_ip,
             &context.ice_server,
-            context.outgoing_audio.clone(),
-            context.outgoing_video.clone(),
+            context.outgoing_audio_track.clone(),
+            context.outgoing_video_track.clone(),
             signaling_version.enable_dtls(),
             signaling_version.enable_rtp_data_channel(),
         )?;
 
-        connection.set_pc_interface(pc)?;
+        connection.set_peer_connection(pc)?;
         Ok(connection)
     }
 

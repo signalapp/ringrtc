@@ -29,7 +29,7 @@ class CreateSessionDescriptionObserverRffi : public CreateSessionDescriptionObse
 
   // MediaConstraintsInterface* constraints() { return constraints_.get(); }
 
-  void OnSuccess(SessionDescriptionInterface* desc) override;
+  void OnSuccess(SessionDescriptionInterface* session_description) override;
   void OnFailure(RTCError error) override;
 
  private:

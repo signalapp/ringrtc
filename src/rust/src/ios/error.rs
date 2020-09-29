@@ -22,6 +22,6 @@ pub enum IOSError {
     CreateIOSMediaStream,
 
     // iOS Misc error codes
-    #[fail(display = "Extracting native PeerConnectionInterface failed")]
-    ExtractNativePeerConnectionInterface,
+    #[fail(display = "Extracting native PeerConnection failed")]
+    ExtractNativePeerConnection,
 }

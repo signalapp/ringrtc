@@ -30,6 +30,6 @@ Rust_freeJavaMediaStream(webrtc::jni::JavaMediaStream* java_media_stream);
 // Return the Java JNI object contained within the JavaMediaStream C++
 // object.
 RUSTEXPORT jobject
-Rust_getObjectJavaMediaStream(webrtc::jni::JavaMediaStream* java_media_stream);
+Rust_getJavaMediaStreamObject(webrtc::jni::JavaMediaStream* java_media_stream);
 
 #endif /* ANDROID_MEDIA_STREAM_INTF_H__ */

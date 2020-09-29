@@ -10,7 +10,7 @@
 #ifndef RFFI_API_PEER_CONNECTION_FACTORY_H__
 #define RFFI_API_PEER_CONNECTION_FACTORY_H__
 
-#include "rffi/api/peer_connection_interface_intf.h"
+#include "rffi/api/peer_connection_intf.h"
 #include "rffi/api/injectable_network.h"
 #include "rtc_base/ref_count.h"
 
@@ -67,11 +67,12 @@ RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   bool hide_ip,
   RffiIceServer ice_server,
   webrtc::AudioTrackInterface*,
-  webrtc::VideoTrackSourceInterface*,
+  webrtc::VideoTrackInterface*,
   bool enable_dtls,
   bool enable_rtp_data_channel);
 RUSTEXPORT webrtc::AudioTrackInterface* Rust_createAudioTrack(webrtc::PeerConnectionFactoryOwner*);
 RUSTEXPORT webrtc::VideoTrackSourceInterface* Rust_createVideoSource(webrtc::PeerConnectionFactoryOwner*);
+RUSTEXPORT webrtc::VideoTrackInterface* Rust_createVideoTrack(webrtc::PeerConnectionFactoryOwner*, webrtc::VideoTrackSourceInterface* source);
 RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(webrtc::PeerConnectionFactoryOwner*);
 RUSTEXPORT int32_t Rust_getAudioPlayoutDeviceName(webrtc::PeerConnectionFactoryOwner*, uint16_t index, char *out_name, char *out_uuid);
 RUSTEXPORT bool Rust_setAudioPlayoutDevice(webrtc::PeerConnectionFactoryOwner*, uint16_t index);

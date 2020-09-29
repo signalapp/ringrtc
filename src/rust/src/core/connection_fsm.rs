@@ -34,7 +34,7 @@
 //! - IceFailed
 //! - IceDisconnected
 //! - ReceivedIncomingMedia
-//! - ReceivedDataChannel
+//! - ReceivedSignalingDataChannel
 //! - ReceivedAcceptedViaDataChannel
 //! - ReceivedSenderStatusViaDataChannel
 //! - ReceivedReceiverStatusViaDataChannel
@@ -137,10 +137,10 @@ pub enum ConnectionEvent {
     /// Source: PeerConnection (OnAddStream)
     /// Action: remember the MediaStream so we can "connect" to it after the call is accepted
     ReceivedIncomingMedia(MediaStream),
-    /// Received data channel from PeerConnection
+    /// Received signaling data channel from PeerConnection
     /// Source: PeerConnection
     /// Action: Use the DataChannel to send and receive messages.
-    ReceivedDataChannel(DataChannel),
+    ReceivedSignalingDataChannel(DataChannel),
     /// Synchronize the FSM.
     /// Only used by unit tests
     Synchronize(Arc<(Mutex<bool>, Condvar)>),
@@ -193,8 +193,8 @@ impl fmt::Display for ConnectionEvent {
             ConnectionEvent::ReceivedIncomingMedia(stream) => {
                 format!("ReceivedIncomingMedia, stream: {:}", stream)
             }
-            ConnectionEvent::ReceivedDataChannel(dc) => {
-                format!("ReceivedDataChannel, dc: {:?}", dc)
+            ConnectionEvent::ReceivedSignalingDataChannel(dc) => {
+                format!("ReceivedSignalingDataChannel, dc: {:?}", dc)
             }
             ConnectionEvent::Synchronize(_) => "Synchronize".to_string(),
             ConnectionEvent::Terminate => "Terminate".to_string(),
@@ -442,8 +442,8 @@ where
             ConnectionEvent::ReceivedIncomingMedia(stream) => {
                 self.handle_received_incoming_media(connection, state, stream)
             }
-            ConnectionEvent::ReceivedDataChannel(dc) => {
-                self.handle_received_data_channel(connection, state, dc)
+            ConnectionEvent::ReceivedSignalingDataChannel(dc) => {
+                self.handle_received_signaling_data_channel(connection, state, dc)
             }
             ConnectionEvent::SendHangupViaDataChannel(_) => Ok(()),
             ConnectionEvent::Synchronize(_) => Ok(()),
@@ -942,7 +942,7 @@ where
         Ok(())
     }
 
-    fn handle_received_data_channel(
+    fn handle_received_signaling_data_channel(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
@@ -958,9 +958,9 @@ where
                 debug_assert_eq!(
                     CallDirection::InComing,
                     connection.direction(),
-                    "ReceivedDataChannel should only happen for incoming calls"
+                    "ReceivedSignalingDataChannel should only happen for incoming calls"
                 );
-                connection.set_data_channel(data_channel)?;
+                connection.set_signaling_data_channel(data_channel)?;
                 if state == ConnectionState::ConnectedBeforeAccepted {
                     self.notify_observer(
                         notify_handle,
@@ -968,7 +968,7 @@ where
                     );
                 }
             }
-            _ => self.unexpected_state(state, "ReceivedDataChannel"),
+            _ => self.unexpected_state(state, "ReceivedSignalingDataChannel"),
         }
         Ok(())
     }

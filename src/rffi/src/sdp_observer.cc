@@ -25,20 +25,19 @@ CreateSessionDescriptionObserverRffi::~CreateSessionDescriptionObserverRffi() {
   RTC_LOG(LS_INFO) << "CreateSessionDescriptionObserverRffi:dtor(): " << this->csd_observer_;
 }
 
-void CreateSessionDescriptionObserverRffi::OnSuccess(SessionDescriptionInterface* desc) {
+void CreateSessionDescriptionObserverRffi::OnSuccess(SessionDescriptionInterface* session_description) {
   // OnSuccess transfers ownership of the description
   RTC_LOG(LS_INFO) << "CreateSessionDescriptionObserverRffi:OnSuccess(): ";
 
   // TODO tweak the response a little
-  std::string updateSdp;
-  if (desc->ToString(&updateSdp)) {
-    updateSdp = std::regex_replace(updateSdp, std::regex("(a=fmtp:111 ((?!cbr=).)*)\r?\n"), "$1;cbr=1\r\n");
-    updateSdp = std::regex_replace(updateSdp, std::regex(".+urn:ietf:params:rtp-hdrext:ssrc-audio-level.*\r?\n"), "");
+  std::string sdp;
+  if (session_description->ToString(&sdp)) {
+    sdp = std::regex_replace(sdp, std::regex("(a=fmtp:111 ((?!cbr=).)*)\r?\n"), "$1;cbr=1\r\n");
+    sdp = std::regex_replace(sdp, std::regex(".+urn:ietf:params:rtp-hdrext:ssrc-audio-level.*\r?\n"), "");
 
-    std::unique_ptr<SessionDescriptionInterface> updated_desc = CreateSessionDescription(desc->GetType(),
-                                                                                         updateSdp);
-    delete desc;
-    this->csd_observer_cbs_.onSuccess(this->csd_observer_, updated_desc.release());
+    std::unique_ptr<SessionDescriptionInterface> session_description2 = CreateSessionDescription(session_description->GetType(), sdp);
+    delete session_description;
+    this->csd_observer_cbs_.onSuccess(this->csd_observer_, session_description2.release());
   } else {
     RTC_LOG(LS_ERROR) << "Unable to convert SessionDescriptionInterface to std::string";
   }
