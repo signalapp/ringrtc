@@ -65,5 +65,15 @@ name = "protobuf-gen"
 path = "protobuf/protobuf_gen.rs"
 required-features = ["protobuf_gen_deps"]
 
+[[test]]
+name = "incoming"
+path = "tests/incoming.rs"
+required-features = ["sim"]
+
+[[test]]
+name = "outgoing"
+path = "tests/outgoing.rs"
+required-features = ["sim"]
+
 [target.'cfg(target_os="android")'.dependencies]
 jni = { version = "0.13.0", default-features = false }
