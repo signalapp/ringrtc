@@ -54,6 +54,11 @@ fn main() {
         }
     }
 
+    if target.ends_with("-ios") {
+        println!("cargo:rustc-link-lib=framework=WebRTC");
+        println!("cargo:rustc-link-search=framework=../../out");
+    }
+
     if cfg!(feature = "electron") {
         neon_build::setup();
     }
