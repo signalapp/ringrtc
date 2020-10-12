@@ -339,18 +339,12 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4) 
   // These are the current defaults for WebRTC
   // We set them explictly to avoid having the defaults change on us.
   opus.SetParam("stereo", "0");  // "1" would cause non-VOIP mode to be used
-  opus.SetParam("ptime", "10");
+  opus.SetParam("ptime", "20");
   opus.SetParam("minptime", "10");
   opus.SetParam("maxptime", "120");
   opus.SetParam("useinbandfec", "1");
   opus.SetParam("usedtx", "0");
-  // This one is weird. 
-  // WebRTC has a "send" default of 32000 and a "receive" default of 64000
-  // but the receive ends up winning when combined for "sendrecv", which gives us 64000.
-  // But if we don't set something here, we wend up with 32000.
-  // I think that's actually the more correct value, so we should probably use it.
-  // But I believe Signal has been using 64000 for a long time.
-  opus.SetParam("maxaveragebitrate", "64000");
+  opus.SetParam("maxaveragebitrate", "40000");
   // This is not a default.  We enable this for privacy.
   opus.SetParam("cbr", "1");
   opus.AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamTransportCc, cricket::kParamValueEmpty));
