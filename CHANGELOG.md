@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.7.3
+
+- Refactor calling code (non-functional improvements)
+
+- Update opus codec settings
+
+- Update builds and documentation
+
 ## v2.7.2
 
 - Electron: Expose more message types
