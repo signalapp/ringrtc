@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.7.4
+
+- Electron: Fix debug build
+
 ## v2.7.3
 
 - Refactor calling code (non-functional improvements)
