@@ -68,7 +68,7 @@ electron:
 	fi
 	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
 		echo "Electron: Debug build" ; \
-		../bin/build-electron -d ; \
+		./bin/build-electron -d ; \
 	else \
 		echo "Electron: Release build" ; \
 		./bin/build-electron -r ; \
