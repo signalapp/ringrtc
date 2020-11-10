@@ -98,9 +98,6 @@ Rust_setRemoteDescription(webrtc::PeerConnectionInterface*                 peer_
                           webrtc::SessionDescriptionInterface*             remote_description);
 
 RUSTEXPORT void
-Rust_releaseSessionDescription(webrtc::SessionDescriptionInterface*);
-
-RUSTEXPORT void
 Rust_setOutgoingMediaEnabled(webrtc::PeerConnectionInterface* peer_connection,
                              bool                             enabled);
 
@@ -126,6 +123,12 @@ RUSTEXPORT bool
 Rust_addIceCandidateFromSdp(webrtc::PeerConnectionInterface* peer_connection,
                             const char*                      sdp);
 
+RUSTEXPORT bool
+Rust_addIceCandidateFromServer(webrtc::PeerConnectionInterface* peer_connection,
+                               webrtc::rffi::Ip,
+                               uint16_t port,
+                               bool tcp);
+
 RUSTEXPORT webrtc::IceGathererInterface*
 Rust_createSharedIceGatherer(webrtc::PeerConnectionInterface* peer_connection);
 
@@ -140,5 +143,18 @@ Rust_getStats(webrtc::PeerConnectionInterface* peer_connection,
 RUSTEXPORT void
 Rust_setMaxSendBitrate(webrtc::PeerConnectionInterface* peer_connection,
                        int32_t                          max_bitrate_bps);
+
+RUSTEXPORT bool
+Rust_sendRtp(webrtc::PeerConnectionInterface* peer_connection,
+             uint8_t pt,
+             uint16_t seqnum,
+             uint32_t timestamp,
+             uint32_t ssrc,
+             const uint8_t* payload_data,
+             size_t payload_size);
+
+RUSTEXPORT bool
+Rust_receiveRtp(webrtc::PeerConnectionInterface* peer_connection, uint8_t pt);
+
 
 #endif /* RFFI_API_PEER_CONNECTION_INTF_H__ */

@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-//! The main Call Manager object defitions.
+//! The main Call Manager object definitions.
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
@@ -15,30 +15,37 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+use bytes::{Bytes, BytesMut};
 use futures::future::lazy;
 use futures::future::TryFutureExt;
 use futures::Future;
+use prost::Message;
 
 use crate::common::{
     ApplicationEvent,
+    BandwidthMode,
     CallDirection,
     CallId,
     CallMediaType,
     CallState,
     DeviceId,
     FeatureLevel,
+    HttpMethod,
+    HttpResponse,
     Result,
     RingBench,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
+use crate::core::http_client::HttpClient;
 use crate::core::platform::Platform;
-use crate::core::signaling;
+use crate::core::sfu_client::SfuClient;
 use crate::core::util::TaskQueueRuntime;
+use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
-
-use crate::webrtc::media::MediaStream;
+use crate::protobuf;
+use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
 
 const TIME_OUT_PERIOD_SEC: u64 = 120;
 pub const MAX_MESSAGE_AGE_SEC: u64 = 120;
@@ -106,6 +113,17 @@ macro_rules! handle_api {
     }};
 }
 
+/// Result from the message queue closures as to whether a message was
+/// sent or not. If not, it is due to some non-error check and as a
+/// result, no message is given to the application. In this case, no
+/// message is in-flight and the next one can be sent right away, if
+/// any.
+#[derive(PartialEq)]
+enum MessageSendResult {
+    Sent,
+    NotSent,
+}
+
 /// A structure to hold messages in the message_queue, identified by their CallId.
 pub struct SignalingMessageItem<T>
 where
@@ -115,10 +133,8 @@ where
     call_id:         CallId,
     /// The type of message the item corresponds to.
     message_type:    signaling::MessageType,
-    /// The closure to be called which will send the message. Returns Ok(true)
-    /// if messages should be considered to be in-flight otherwise it can be
-    /// assumed that messages weren't sent.
-    message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<bool> + Send>,
+    /// The closure to be called which will send the message.
+    message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<MessageSendResult> + Send>,
 }
 
 /// A structure implementing a message queue used to control the
@@ -154,20 +170,33 @@ where
     }
 }
 
+/// Maintains the set of HTTP requests in progress, and their associated callbacks.
+type HttpResponseCallback = Box<dyn FnOnce(Option<HttpResponse>) + Send>;
+struct HttpRequestTracker {
+    response_callbacks: HashMap<u32, HttpResponseCallback>,
+    next_request_id:    u32,
+}
+
 pub struct CallManager<T>
 where
     T: Platform,
 {
     /// Interface to platform specific methods.
-    platform:       Arc<CallMutex<T>>,
-    /// Map of all calls, indexed by CallId.
-    call_map:       Arc<CallMutex<HashMap<CallId, Call<T>>>>,
+    platform:                  Arc<CallMutex<T>>,
+    /// Map of all 1:1 calls.
+    call_by_call_id:           Arc<CallMutex<HashMap<CallId, Call<T>>>>,
     /// CallId of the active call.
-    active_call_id: Arc<CallMutex<Option<CallId>>>,
+    active_call_id:            Arc<CallMutex<Option<CallId>>>,
+    /// Map of all group calls.
+    group_call_by_client_id:   Arc<CallMutex<HashMap<group_call::ClientId, group_call::Client>>>,
+    /// Next value of the group call client id (sequential).
+    next_group_call_client_id: Arc<CallMutex<u32>>,
     /// Tokio runtime for back ground task execution.
-    worker_runtime: Arc<CallMutex<Option<TaskQueueRuntime>>>,
+    worker_runtime:            Arc<CallMutex<Option<TaskQueueRuntime>>>,
     /// Signaling message queue.
-    message_queue:  Arc<CallMutex<SignalingMessageQueue<T>>>,
+    message_queue:             Arc<CallMutex<SignalingMessageQueue<T>>>,
+    /// Outstanding HTTP requests
+    http_request_tracker:      Arc<CallMutex<HttpRequestTracker>>,
 }
 
 impl<T> fmt::Display for CallManager<T>
@@ -221,11 +250,56 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            platform:       Arc::clone(&self.platform),
-            call_map:       Arc::clone(&self.call_map),
-            active_call_id: Arc::clone(&self.active_call_id),
-            worker_runtime: Arc::clone(&self.worker_runtime),
-            message_queue:  Arc::clone(&self.message_queue),
+            platform:                  Arc::clone(&self.platform),
+            call_by_call_id:           Arc::clone(&self.call_by_call_id),
+            active_call_id:            Arc::clone(&self.active_call_id),
+            group_call_by_client_id:   Arc::clone(&self.group_call_by_client_id),
+            next_group_call_client_id: Arc::clone(&self.next_group_call_client_id),
+            worker_runtime:            Arc::clone(&self.worker_runtime),
+            message_queue:             Arc::clone(&self.message_queue),
+            http_request_tracker:      Arc::clone(&self.http_request_tracker),
+        }
+    }
+}
+
+impl<T> HttpClient for CallManager<T>
+where
+    T: Platform,
+{
+    fn make_request(
+        &self,
+        url: String,
+        method: HttpMethod,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+        on_response: HttpResponseCallback,
+    ) {
+        info!(
+            "make_request url: {} method: {:?} headers: {:?}",
+            url, method, headers
+        );
+        let request_id = {
+            let mut tracker = self
+                .http_request_tracker
+                .lock()
+                .expect("http_request_tracker lock");
+            let next_request_id = tracker.next_request_id;
+            tracker.next_request_id += 1;
+            tracker
+                .response_callbacks
+                .insert(next_request_id, on_response);
+            next_request_id
+        };
+        match self
+            .platform()
+            .unwrap()
+            .send_http_request(request_id, url, method, headers, body)
+        {
+            Ok(()) => {}
+            Err(e) => {
+                error!("send_http_request synchronously failed: {:?}", e);
+                // We can't call the failure callback since ownership has been transferred.
+            }
         }
     }
 }
@@ -248,16 +322,28 @@ where
         );
 
         Ok(Self {
-            platform:       Arc::new(CallMutex::new(platform, "platform")),
-            call_map:       Arc::new(CallMutex::new(HashMap::new(), "hash_map")),
-            active_call_id: Arc::new(CallMutex::new(None, "active_call_id")),
-            worker_runtime: Arc::new(CallMutex::new(
+            platform:                  Arc::new(CallMutex::new(platform, "platform")),
+            call_by_call_id:           Arc::new(CallMutex::new(HashMap::new(), "call_by_call_id")),
+            active_call_id:            Arc::new(CallMutex::new(None, "active_call_id")),
+            group_call_by_client_id:   Arc::new(CallMutex::new(
+                HashMap::new(),
+                "group_call_by_client_id",
+            )),
+            next_group_call_client_id: Arc::new(CallMutex::new(0, "next_group_call_client_id")),
+            worker_runtime:            Arc::new(CallMutex::new(
                 Some(TaskQueueRuntime::new("call-manager-worker")?),
                 "worker_runtime",
             )),
-            message_queue:  Arc::new(CallMutex::new(
+            message_queue:             Arc::new(CallMutex::new(
                 SignalingMessageQueue::new()?,
                 "message_queue",
+            )),
+            http_request_tracker:      Arc::new(CallMutex::new(
+                HttpRequestTracker {
+                    response_callbacks: HashMap::new(),
+                    next_request_id:    0,
+                },
+                "http_request_tracker",
             )),
         })
     }
@@ -388,6 +474,40 @@ where
         handle_active_call_api!(self, CallManager::handle_received_busy, call_id, received)
     }
 
+    /// Received a call message from the application.
+    pub fn received_call_message(
+        &mut self,
+        sender_uuid: Vec<u8>,
+        sender_device_id: DeviceId,
+        local_device_id: DeviceId,
+        message: Vec<u8>,
+        message_age_sec: u64,
+    ) -> Result<()> {
+        handle_api!(
+            self,
+            CallManager::handle_received_call_message,
+            sender_uuid,
+            sender_device_id,
+            local_device_id,
+            message,
+            message_age_sec
+        )
+    }
+
+    /// Received a HTTP response from the application.
+    pub fn received_http_response(
+        &mut self,
+        request_id: u32,
+        response: Option<HttpResponse>,
+    ) -> Result<()> {
+        handle_api!(
+            self,
+            CallManager::handle_received_http_response,
+            request_id,
+            response
+        )
+    }
+
     /// Request to reset the Call Manager.
     ///
     /// Conclude all calls and clear active callId.  Do not notify the
@@ -426,7 +546,7 @@ where
         let active_call_id = self.active_call_id.lock()?;
         match *active_call_id {
             Some(call_id) => {
-                let call_map = self.call_map.lock()?;
+                let call_map = self.call_by_call_id.lock()?;
                 match call_map.get(&call_id) {
                     Some(call) => Ok(call.clone()),
                     None => Err(RingRtcError::CallIdNotFound(call_id).into()),
@@ -478,7 +598,7 @@ where
         // events on the FSMs.
         for i in 0..3 {
             info!("synchronize(): pass: {}", i);
-            let mut map_clone = self.call_map.lock()?.clone();
+            let mut map_clone = self.call_by_call_id.lock()?.clone();
             for (_, call) in map_clone.iter_mut() {
                 info!("synchronize(): syncing call: {}", call.call_id());
                 call.synchronize()?;
@@ -598,7 +718,7 @@ where
     fn terminate_and_drop_call(&mut self, call_id: CallId) -> Result<()> {
         info!("terminate_call(): call_id: {}", call_id);
 
-        let mut call = match self.call_map.lock()?.remove(&call_id) {
+        let mut call = match self.call_by_call_id.lock()?.remove(&call_id) {
             Some(v) => v,
             None => return Err(RingRtcError::CallIdNotFound(call_id).into()),
         };
@@ -628,7 +748,7 @@ where
             let platform = cm.platform.lock()?;
             platform.on_send_hangup(&*remote_peer, call_id, send)?;
 
-            Ok(true)
+            Ok(MessageSendResult::Sent)
         });
 
         let message_item = SignalingMessageItem {
@@ -755,7 +875,7 @@ where
                 // Whenever there is a new call, ensure that messages can flow.
                 self.reset_messages_in_flight()?;
 
-                let mut call_map = self.call_map.lock()?;
+                let mut call_map = self.call_by_call_id.lock()?;
                 call_map.insert(call_id, call.clone());
 
                 *active_call_id = Some(call_id);
@@ -885,7 +1005,7 @@ where
             // See if the associated call is in the call map.
             let mut call = None;
             {
-                if let Ok(call_map) = self.call_map.lock() {
+                if let Ok(call_map) = self.call_by_call_id.lock() {
                     if let Some(v) = call_map.get(&call_id) {
                         call = Some(v.clone());
                     };
@@ -988,7 +1108,7 @@ where
             match *active_call_id {
                 None => (None, None),
                 Some(active_call_id) => {
-                    let call_map = self.call_map.lock()?;
+                    let call_map = self.call_by_call_id.lock()?;
                     let active_call = call_map.get(&active_call_id).cloned();
                     (Some(active_call_id), active_call)
                 }
@@ -1007,11 +1127,16 @@ where
         )?;
 
         enum Collision {
-            None,        // No active call, so we can proceed normally
-            Busy,        // An active call with a different user, so act busy
-            Winner, // An active call with the same user, but we win so ignore the incoming call
-            Loser,  // An active call with the same user, but we lose so drop our call
-            DoubleLoser, // An active call with the same user, but we both lose and drop both calls
+            /// No active call, so we can proceed normally
+            None,
+            /// An active call with a different user, so act busy
+            Busy,
+            /// An active call with the same user, but we win so ignore the incoming call
+            Winner,
+            /// An active call with the same user, but we lose so drop our call
+            Loser,
+            /// An active call with the same user, but we both lose and drop both calls
+            DoubleLoser,
         }
 
         let collision = match (active_call_id, &active_call) {
@@ -1112,7 +1237,7 @@ where
                 // Whenever there is a new call, ensure that messages can flow.
                 self.reset_messages_in_flight()?;
 
-                let mut call_map = self.call_map.lock()?;
+                let mut call_map = self.call_by_call_id.lock()?;
                 call_map.insert(incoming_call_id, incoming_call.clone());
 
                 *active_call_id = Some(incoming_call_id);
@@ -1245,6 +1370,83 @@ where
         )
     }
 
+    /// Handle received_call_message() API from the application.
+    fn handle_received_call_message(
+        &mut self,
+        sender_uuid: Vec<u8>,
+        _sender_device_id: DeviceId,
+        _local_device_id: DeviceId,
+        message: Vec<u8>,
+        _message_age_sec: u64,
+    ) -> Result<()> {
+        info!("handle_received_call_message():");
+
+        let message = protobuf::signaling::CallMessage::decode(Bytes::from(message))?;
+        match message {
+            protobuf::signaling::CallMessage {
+                group_call_message: Some(group_call_message),
+                ..
+            } => {
+                if let Some(group_id) = group_call_message.group_id.as_ref() {
+                    let group_calls = self
+                        .group_call_by_client_id
+                        .lock()
+                        .expect("lock group_call_by_client_id");
+                    let group_call = group_calls.values().find(|c| &c.group_id == group_id);
+                    match group_call {
+                        Some(call) => {
+                            call.on_signaling_message_received(sender_uuid, group_call_message)
+                        }
+                        None => warn!("Received signaling message for unknown group ID"),
+                    };
+                }
+            }
+            _ => {
+                warn!("Received unknown CallMessage - ignoring");
+            }
+        };
+        Ok(())
+    }
+
+    /// Handle receiving an HTTP response from the application.
+    fn handle_received_http_response(
+        &mut self,
+        request_id: u32,
+        response: Option<HttpResponse>,
+    ) -> Result<()> {
+        info!(
+            "handle_received_http_response(): request_id: {}",
+            request_id
+        );
+
+        match &response {
+            Some(r) => {
+                info!("  status_code: {}", r.status_code);
+                debug!("  body: {} bytes", r.body.len())
+            }
+            None => {
+                info!("  app indicates request failure");
+            }
+        }
+
+        let callback = self
+            .http_request_tracker
+            .lock()
+            .expect("http_request_tracker lock")
+            .response_callbacks
+            .remove(&request_id);
+        if let Some(callback) = callback {
+            debug!("received_http_response(): calling registered callback");
+            callback(response);
+        } else {
+            error!(
+                "received_http_response(): received response for untracked request: {}",
+                request_id
+            );
+        }
+        Ok(())
+    }
+
     /// Handle reset() API from application.
     ///
     /// Terminate all calls and clear active callId.  Do not notify the
@@ -1254,13 +1456,13 @@ where
 
         // gather all the calls from the call_map.
         let calls: Vec<Call<T>> = {
-            let call_map = self.call_map.lock()?;
+            let call_map = self.call_by_call_id.lock()?;
             call_map.values().cloned().collect()
         };
 
-        // foreach call, termiante without notifying application
+        // foreach call, terminate without notifying application
         for call in calls {
-            info!("reset(): termianting call_id: {}", call.call_id());
+            info!("reset(): terminating call_id: {}", call.call_id());
             let _ = self.terminate_call(call, Some(signaling::Hangup::Normal), None);
         }
 
@@ -1291,7 +1493,7 @@ where
             let platform = cm.platform.lock()?;
             platform.on_send_busy(&*remote_peer, call_id)?;
 
-            Ok(true)
+            Ok(MessageSendResult::Sent)
         });
 
         let message_item = SignalingMessageItem {
@@ -1387,7 +1589,7 @@ where
         let _ = self.notify_call_concluded(remote_peer, call_id);
     }
 
-    /// Internal error occured on an API future.
+    /// Internal error occurred on an API future.
     ///
     /// This shuts down the specified call if active and notifies the
     /// application.
@@ -1466,8 +1668,9 @@ where
                                     // is actually in flight, set the in flight flag. But
                                     // check to see if the platform overrides it (in which
                                     // case the platform doesn't want messages to be queued).
-                                    message_queue.messages_in_flight =
-                                        message_is_in_flight && !assume_messages_sent;
+                                    message_queue.messages_in_flight = (message_is_in_flight
+                                        == MessageSendResult::Sent)
+                                        && !assume_messages_sent;
 
                                     message_queue.last_sent_message_type =
                                         Some(message_item.message_type);
@@ -1653,7 +1856,7 @@ where
         }
     }
 
-    /// Network failure occured on the active call.
+    /// Network failure occurred on the active call.
     pub(super) fn connection_failure(&mut self, call_id: CallId) -> Result<()> {
         info!("call_failed(): call_id: {}", call_id);
 
@@ -1665,7 +1868,7 @@ where
         }
     }
 
-    /// Internal error occured on the active call.
+    /// Internal error occurred on the active call.
     ///
     /// This shuts down the specified call if active and notifies the
     /// application.
@@ -1708,9 +1911,9 @@ where
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
                 platform.on_send_offer(&*remote_peer, call_id, offer)?;
-                Ok(true)
+                Ok(MessageSendResult::Sent)
             } else {
-                Ok(false)
+                Ok(MessageSendResult::NotSent)
             }
         });
 
@@ -1755,9 +1958,9 @@ where
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
                 platform.on_send_answer(&*remote_peer, call_id, send)?;
-                Ok(true)
+                Ok(MessageSendResult::Sent)
             } else {
-                Ok(false)
+                Ok(MessageSendResult::NotSent)
             }
         });
 
@@ -1784,7 +1987,7 @@ where
             let local_candidates = connection.take_buffered_local_ice_candidates()?;
 
             if local_candidates.is_empty() {
-                return Ok(false);
+                return Ok(MessageSendResult::NotSent);
             }
 
             ringbench!(
@@ -1814,7 +2017,7 @@ where
                     },
                 },
             )?;
-            Ok(true)
+            Ok(MessageSendResult::Sent)
         });
 
         let message_item = SignalingMessageItem {
@@ -1824,5 +2027,302 @@ where
         };
 
         self.send_next_message(Some(message_item))
+    }
+}
+
+// Group Calls
+
+macro_rules! platform_handler {
+    (
+        $s:ident,
+        $f:tt
+        $(, $a:expr)*
+    ) => {{
+        let platform = $s.platform.lock();
+        match platform {
+            Ok(platform) => {
+                platform.$f($($a),*);
+            }
+            Err(error) => {
+                error!("{}", error);
+            }
+        }
+    }};
+}
+
+impl<T> group_call::Observer for CallManager<T>
+where
+    T: Platform,
+{
+    fn request_membership_proof(&self, client_id: group_call::ClientId) {
+        info!("request_membership_proof():");
+        platform_handler!(self, request_membership_proof, client_id);
+    }
+
+    fn request_group_members(&self, client_id: group_call::ClientId) {
+        info!("request_group_members():");
+        platform_handler!(self, request_group_members, client_id);
+    }
+
+    fn handle_connection_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        connection_state: group_call::ConnectionState,
+    ) {
+        info!("handle_connection_state_changed():");
+        platform_handler!(
+            self,
+            handle_connection_state_changed,
+            client_id,
+            connection_state
+        );
+    }
+
+    fn handle_join_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        join_state: group_call::JoinState,
+    ) {
+        info!("handle_join_state_changed():");
+        platform_handler!(self, handle_join_state_changed, client_id, join_state);
+    }
+
+    fn handle_remote_devices_changed(
+        &self,
+        client_id: group_call::ClientId,
+        remote_device_states: &[group_call::RemoteDeviceState],
+    ) {
+        info!("handle_remote_devices_changed():");
+        platform_handler!(
+            self,
+            handle_remote_devices_changed,
+            client_id,
+            remote_device_states
+        );
+    }
+
+    fn handle_incoming_video_track(
+        &mut self,
+        client_id: group_call::ClientId,
+        remote_demux_id: group_call::DemuxId,
+        incoming_video_track: VideoTrack,
+    ) {
+        info!("handle_incoming_video_track():");
+        platform_handler!(
+            self,
+            handle_incoming_video_track,
+            client_id,
+            remote_demux_id,
+            incoming_video_track
+        );
+    }
+
+    fn handle_joined_members_changed(
+        &self,
+        client_id: group_call::ClientId,
+        joined_members: &[group_call::UserId],
+    ) {
+        info!("handle_joined_members_changed():");
+        platform_handler!(
+            self,
+            handle_joined_members_changed,
+            client_id,
+            joined_members
+        );
+    }
+
+    fn send_signaling_message(
+        &mut self,
+        recipient: group_call::UserId,
+        message: protobuf::group_call::DeviceToDevice,
+    ) {
+        info!("send_signaling_message(): recipient: {:?}", recipient);
+        let platform = self.platform.lock().expect("platform.lock()");
+        let mut call_message = protobuf::signaling::CallMessage::default();
+        call_message.group_call_message = Some(message);
+        let mut bytes = BytesMut::with_capacity(call_message.encoded_len());
+        let result = call_message.encode(&mut bytes);
+        match result {
+            Ok(()) => {
+                platform
+                    .send_call_message(recipient, bytes.to_vec())
+                    .unwrap_or_else(|_| {
+                        error!("failed to send signaling message",);
+                    });
+            }
+            Err(_) => {
+                error!("Failed to encode signaling message");
+            }
+        }
+    }
+
+    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
+        info!("handle_ended():");
+        platform_handler!(self, handle_ended, client_id, reason);
+    }
+}
+
+impl<T> CallManager<T>
+where
+    T: Platform,
+{
+    pub fn create_group_call_client(
+        &mut self,
+        group_id: group_call::GroupId,
+        outgoing_audio_track: AudioTrack,
+        outgoing_video_track: VideoTrack,
+    ) -> Result<group_call::ClientId> {
+        info!("create_group_call_client(): group_id: {:?}", group_id);
+
+        let mut next_group_call_client_id = self.next_group_call_client_id.lock()?;
+        if *next_group_call_client_id == group_call::INVALID_CLIENT_ID {
+            *next_group_call_client_id += 1;
+        }
+        let client_id = *next_group_call_client_id;
+        *next_group_call_client_id += 1;
+
+        let sfu_client = SfuClient::new(Box::new(self.clone()));
+        let client = group_call::Client::start(
+            group_id,
+            client_id,
+            Box::new(sfu_client),
+            Box::new(self.clone()),
+            outgoing_audio_track,
+            Some(outgoing_video_track),
+        )?;
+
+        let mut client_by_id = self.group_call_by_client_id.lock()?;
+        client_by_id.insert(client_id, client);
+
+        info!("Group Client created with id: {}", client_id);
+
+        Ok(client_id)
+    }
+
+    pub fn delete_group_call_client(&mut self, client_id: group_call::ClientId) {
+        info!("delete_group_call_client(): id: {}", client_id);
+
+        // Remove the group_call client from the map.
+        let group_call_map = self.group_call_by_client_id.lock();
+        match group_call_map {
+            Ok(mut group_call_map) => {
+                let group_call = group_call_map.remove(&client_id);
+                match group_call {
+                    Some(_group_call) => {
+                        // Let group_call drop.
+                    }
+                    None => {
+                        warn!("Group Client not found for id: {}", client_id);
+                    }
+                }
+            }
+            Err(error) => {
+                error!("{}", error);
+            }
+        }
+    }
+}
+
+macro_rules! group_call_api_handler {
+    (
+        $s:ident,
+        $i:ident,
+        $f:tt
+        $(, $a:expr)*
+    ) => {{
+        let group_call_map = $s.group_call_by_client_id.lock();
+        match group_call_map {
+            Ok(mut group_call_map) => {
+                let group_call = group_call_map.get_mut(&$i);
+                match group_call {
+                    Some(group_call) => {
+                        group_call.$f($($a),*);
+                    }
+                    None => {
+                        warn!("Group Client not found for id: {}", $i);
+                    }
+                }
+            }
+            Err(error) => {
+                error!("{}", error);
+            }
+        }
+    }};
+}
+
+impl<T> CallManager<T>
+where
+    T: Platform,
+{
+    pub fn connect(&mut self, client_id: group_call::ClientId) {
+        info!("connect(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, connect);
+    }
+
+    pub fn join(&mut self, client_id: group_call::ClientId) {
+        info!("join(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, join);
+    }
+
+    pub fn leave(&mut self, client_id: group_call::ClientId) {
+        info!("leave(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, leave);
+    }
+
+    pub fn disconnect(&mut self, client_id: group_call::ClientId) {
+        info!("disconnect(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, disconnect);
+    }
+
+    pub fn set_outgoing_audio_muted(&mut self, client_id: group_call::ClientId, muted: bool) {
+        info!("set_outgoing_audio_muted(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_outgoing_audio_muted, muted);
+    }
+
+    pub fn set_outgoing_video_muted(&mut self, client_id: group_call::ClientId, muted: bool) {
+        info!("set_outgoing_video_muted(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_outgoing_video_muted, muted);
+    }
+
+    pub fn set_bandwidth_mode(
+        &mut self,
+        client_id: group_call::ClientId,
+        bandwidth_mode: BandwidthMode,
+    ) {
+        info!("set_bandwidth_mode(): id: {}", client_id);
+        group_call_api_handler!(
+            self,
+            client_id,
+            set_max_send_bitrate,
+            bandwidth_mode.max_bitrate()
+        );
+    }
+
+    pub fn set_rendered_resolutions(
+        &mut self,
+        client_id: group_call::ClientId,
+        rendered_resolutions: Vec<group_call::VideoRequest>,
+    ) {
+        info!("set_rendered_resolutions(): id: {}", client_id);
+        group_call_api_handler!(
+            self,
+            client_id,
+            set_rendered_resolutions,
+            rendered_resolutions
+        );
+    }
+
+    pub fn set_group_members(
+        &mut self,
+        client_id: group_call::ClientId,
+        members: Vec<group_call::GroupMemberInfo>,
+    ) {
+        info!("set_group_members(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_group_members, members);
+    }
+
+    pub fn set_membership_proof(&mut self, client_id: group_call::ClientId, proof: Vec<u8>) {
+        info!("set_membership_proof(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_membership_proof, proof);
     }
 }

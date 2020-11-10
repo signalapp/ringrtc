@@ -264,8 +264,8 @@ where
                 let mut call_clone = self.clone();
                 let when = Instant::now() + Duration::from_secs(time_out_period);
                 let call_timeout_future = async move {
-                    let delay = tokio::time::delay_until(tokio::time::Instant::from_std(when));
-                    delay.await;
+                    let sleep = tokio::time::sleep_until(tokio::time::Instant::from_std(when));
+                    sleep.await;
                     call_clone
                         .inject_call_timeout()
                         .map_err(|e| error!("Inject call timeout failed: {:?}", e))
@@ -815,7 +815,7 @@ where
         Ok(())
     }
 
-    /// Termiante Connections for all devices except the device
+    /// Terminate Connections for all devices except the device
     /// that accepted the call.
     pub fn terminate_connections_except_accepted(
         &mut self,

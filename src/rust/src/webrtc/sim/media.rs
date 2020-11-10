@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-use crate::core::util::{CppObject, RustObject};
 pub use crate::webrtc::media::VideoRotation;
 
 pub type RffiMediaStream = u32;
@@ -27,19 +26,25 @@ pub type RffiVideoFrameBuffer = u32;
 pub static FAKE_VIDEO_FRAME_BUFFER: RffiVideoFrameBuffer = 24;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_getTrackIdAsUint32(_track: *const RffiVideoTrack) -> u32 {
+    info!("Rust_getTrackIdAsUint32()");
+    1
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setAudioTrackEnabled(_track: *const RffiAudioTrack, _enabled: bool) {
     info!("Rust_setAudioTrackEnabled()");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getFirstVideoTrack(_stream: *const RffiMediaStream) -> *const RffiVideoTrack {
-    info!("Rust_setAudioTrackEnabled()");
-    &FAKE_VIDEO_TRACK
+pub unsafe fn Rust_setVideoTrackEnabled(_track: *const RffiVideoTrack, _enabled: bool) {
+    info!("Rust_setVideoTrackEnabled()");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_addVideoSink(_track: *const RffiVideoTrack, _obj: RustObject, _cb: CppObject) {
-    info!("Rust_addVideoSink()");
+pub unsafe fn Rust_getFirstVideoTrack(_stream: *const RffiMediaStream) -> *const RffiVideoTrack {
+    info!("Rust_getFirstVideoTrack()");
+    &FAKE_VIDEO_TRACK
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -65,7 +70,7 @@ pub unsafe fn Rust_convertVideoFrameBufferToRgba(
     _buffer: *const RffiVideoFrameBuffer,
     _rgba_buffer: *mut u8,
 ) {
-    info!("Rust_rotateAndConvertVideoFrameBufferToRgba()");
+    info!("Rust_convertVideoFrameBufferToRgba()");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -73,6 +78,6 @@ pub unsafe fn Rust_copyAndRotateVideoFrameBuffer(
     _buffer: *const RffiVideoFrameBuffer,
     _rotation: VideoRotation,
 ) -> *const RffiVideoFrameBuffer {
-    info!("Rust_createVideoFrameBufferWithRotationApplied()");
+    info!("Rust_copyAndRotateVideoFrameBuffer()");
     &FAKE_VIDEO_FRAME_BUFFER
 }

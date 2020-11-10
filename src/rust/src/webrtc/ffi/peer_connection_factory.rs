@@ -19,7 +19,7 @@ pub struct RffiPeerConnectionFactory {
     _private: [u8; 0],
 }
 
-/// Incomplete type for C++ RTCCerficate.
+/// Incomplete type for C++ RTCCertificate.
 #[repr(C)]
 pub struct RffiCertificate {
     _private: [u8; 0],
@@ -58,6 +58,10 @@ extern "C" {
         source: *const RffiVideoSource,
     ) -> *const RffiVideoTrack;
     pub fn Rust_generateCertificate() -> *const RffiCertificate;
+    pub fn Rust_computeCertificateFingerprintSha256(
+        cert: *const RffiCertificate,
+        fingerprint: *mut [u8; 32],
+    ) -> bool;
     pub fn Rust_getAudioPlayoutDevices(factory: *const RffiPeerConnectionFactory) -> i16;
     pub fn Rust_getAudioPlayoutDeviceName(
         factory: *const RffiPeerConnectionFactory,

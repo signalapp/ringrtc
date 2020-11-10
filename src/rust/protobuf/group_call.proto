@@ -1,0 +1,31 @@
+/*
+ *
+ *  Copyright (C) 2020 Signal Messenger, LLC.
+ *  All rights reserved.
+ *
+ *  SPDX-License-Identifier: GPL-3.0-only
+ *
+ */
+
+syntax = "proto2";
+
+package group_call;
+
+message DeviceToDevice {
+  // Sent over signaling
+  message MediaKey {
+    optional uint32 ratchet_counter = 1;
+    optional bytes secret = 2;
+    optional uint32 demux_id = 3;
+  }
+
+  // Sent over RTP data
+  message Heartbeat {
+    optional bool audio_muted = 1;
+    optional bool video_muted = 2;
+  }
+
+  optional bytes group_id = 1;
+  optional MediaKey media_key = 2;
+  optional Heartbeat heartbeat = 3;
+}

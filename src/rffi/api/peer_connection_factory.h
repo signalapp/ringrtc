@@ -11,6 +11,7 @@
 #define RFFI_API_PEER_CONNECTION_FACTORY_H__
 
 #include "rffi/api/peer_connection_intf.h"
+
 #include "rffi/api/injectable_network.h"
 #include "rtc_base/ref_count.h"
 
@@ -41,6 +42,10 @@ namespace webrtc {
     virtual int32_t AudioRecordingDeviceName(uint16_t index, char *out_name, char *out_uuid) = 0;
     virtual bool SetAudioRecordingDevice(uint16_t index) = 0;
   };
+
+  namespace rffi {
+    class PeerConnectionObserverRffi;
+  }
 }
 
 typedef struct {
@@ -62,7 +67,7 @@ RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
 // want all the normal stuff like
 RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   webrtc::PeerConnectionFactoryOwner*,
-  webrtc::PeerConnectionObserver*,
+  webrtc::rffi::PeerConnectionObserverRffi*,
   rtc::RTCCertificate* certificate,
   bool hide_ip,
   RffiIceServer ice_server,
@@ -80,5 +85,6 @@ RUSTEXPORT int16_t Rust_getAudioRecordingDevices(webrtc::PeerConnectionFactoryOw
 RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(webrtc::PeerConnectionFactoryOwner*, uint16_t index, char *out_name, char *out_uuid);
 RUSTEXPORT bool Rust_setAudioRecordingDevice(webrtc::PeerConnectionFactoryOwner*, uint16_t index);
 RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate();
+RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(rtc::RTCCertificate* cert, uint8_t fingerprint[32]);
 
 #endif /* RFFI_API_PEER_CONNECTION_FACTORY_H__ */

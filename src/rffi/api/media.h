@@ -64,8 +64,15 @@ class VideoSource : public VideoTrackSource {
 } // namespace rffi
 } // namespace webrtc
 
+// Parses track->id()
+// Returns 0 upon failure
+RUSTEXPORT uint32_t Rust_getTrackIdAsUint32(webrtc::MediaStreamTrackInterface* track);
+
 // Same as AudioTrackEnabled::set_enabled
 RUSTEXPORT void Rust_setAudioTrackEnabled(webrtc::AudioTrackInterface*, bool);
+
+// Same as VideoTrackEnabled::set_enabled
+RUSTEXPORT void Rust_setVideoTrackEnabled(webrtc::VideoTrackInterface*, bool);
 
 // Gets the first video track from the stream, or nullptr if there is none.
 RUSTEXPORT webrtc::VideoTrackInterface* Rust_getFistVideoTrack(

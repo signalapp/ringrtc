@@ -21,9 +21,12 @@
 #include "pc/peer_connection_factory.h"
 #include "rffi/api/media.h"
 #include "rffi/api/peer_connection_factory.h"
+#include "rffi/api/peer_connection_observer_intf.h"
 #include "rffi/api/injectable_network.h"
+#include "rffi/src/peer_connection_observer.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/log_sinks.h"
+#include "rtc_base/message_digest.h"
 #include "rtc_base/rtc_certificate_generator.h"
 
 namespace webrtc {
@@ -69,7 +72,7 @@ class PeerConnectionFactoryWithOwnedThreads
     media_dependencies.task_queue_factory = dependencies.task_queue_factory.get();
 
     // The audio device module must be created (and destroyed) on the _worker_ thread.
-    // It is safe to release the reference on this thread, however, because the PeerConectionFactory keeps its own reference.
+    // It is safe to release the reference on this thread, however, because the PeerConnectionFactory keeps its own reference.
     rtc::scoped_refptr<AudioDeviceModule> adm = worker_thread->Invoke<rtc::scoped_refptr<AudioDeviceModule>>(RTC_FROM_HERE, [&]() {
       return AudioDeviceModule::Create(
         AudioDeviceModule::kPlatformDefaultAudio, dependencies.task_queue_factory.get());
@@ -230,7 +233,7 @@ RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(bool use
 
 RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     PeerConnectionFactoryOwner* factory_owner,
-    PeerConnectionObserver* observer,
+    PeerConnectionObserverRffi* observer,
     rtc::RTCCertificate* certificate,
     bool hide_ip,
     RffiIceServer ice_server,
@@ -260,6 +263,10 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
 
   config.enable_dtls_srtp = enable_dtls;
   config.enable_rtp_data_channel = enable_rtp_data_channel;
+  if (observer->enable_frame_encryption()) {
+    config.crypto_options = webrtc::CryptoOptions{};
+    config.crypto_options->sframe.require_frame_encryption = true;
+  }
 
   PeerConnectionDependencies deps(observer);
   if (factory_owner->injectable_network()) {
@@ -275,14 +282,24 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
 
   if (outgoing_audio_track) {
     auto result = pc->AddTrack(outgoing_audio_track, stream_ids);
-    if (!result.ok()) {
+    if (result.ok()) {
+      if (observer->enable_frame_encryption()) {
+        auto rtp_sender = result.MoveValue();
+        rtp_sender->SetFrameEncryptor(observer->CreateEncryptor());
+      }
+    } else {
       RTC_LOG(LS_ERROR) << "Failed to PeerConnection::AddTrack(audio)";
     }
   }
 
   if (outgoing_video_track) {
     auto result = pc->AddTrack(outgoing_video_track, stream_ids);
-    if (!result.ok()) {
+    if (result.ok()) {
+      if (observer->enable_frame_encryption()) {
+        auto rtp_sender = result.MoveValue();
+        rtp_sender->SetFrameEncryptor(observer->CreateEncryptor());
+      }
+    } else {
       RTC_LOG(LS_ERROR) << "Failed to PeerConnection::AddTrack(video)";
     }
   }
@@ -332,6 +349,16 @@ RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate() {
   absl::optional<uint64_t> expires_ms;  // default is to never expire?
   auto cert = rtc::RTCCertificateGenerator::GenerateCertificate(params, expires_ms);
   return cert.release();
+}
+
+RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(rtc::RTCCertificate* cert, uint8_t fingerprint[32]) {
+  if (!cert || !fingerprint) {
+    return false;
+  }
+
+  size_t digest_size;
+  return (cert->GetSSLCertificate().ComputeDigest(rtc::DIGEST_SHA_256, fingerprint, 32, &digest_size)
+          && (digest_size == 32));
 }
 
 RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(

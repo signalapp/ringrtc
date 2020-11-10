@@ -13,6 +13,8 @@ syntax = "proto2";
 
 package signaling;
 
+import "group_call.proto";
+
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 // For future compatibility, we can add new slots (v2, v3, v4 ....)
 message Offer {
@@ -62,4 +64,11 @@ message ConnectionParametersV4 {
   optional string ice_pwd = 3;
   // In other words, the video codecs the sender can receive.
   repeated VideoCodec receive_video_codecs = 4;
+}
+
+// A generic calling message that is opaque to the application but interpreted by RingRTC.
+// A serialized one of these goes into the "Opaque" field in the CallingMessage variant
+// in Signal protocol messages.
+message CallMessage {
+  optional group_call.DeviceToDevice group_call_message = 1;
 }

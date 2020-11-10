@@ -56,8 +56,20 @@ void VideoSource::PushVideoFrame(const webrtc::VideoFrame& frame) {
   broadcaster_.OnFrame(frame);
 }
 
+// Returns 0 upon failure
+RUSTEXPORT uint32_t Rust_getTrackIdAsUint32(webrtc::MediaStreamTrackInterface* track) {
+  uint32_t id = 0;
+  rtc::FromString(track->id(), &id);
+  return id;
+}
+
 RUSTEXPORT void Rust_setAudioTrackEnabled(
     webrtc::AudioTrackInterface* track, bool enabled) {
+  track->set_enabled(enabled);
+}
+
+RUSTEXPORT void Rust_setVideoTrackEnabled(
+    webrtc::VideoTrackInterface* track, bool enabled) {
   track->set_enabled(enabled);
 }
 
@@ -66,6 +78,7 @@ RUSTEXPORT VideoTrackInterface* Rust_getFirstVideoTrack(MediaStreamInterface* st
   if (tracks.empty()) {
     return nullptr;
   }
+  // Note: "release" means this takes ownership of the VideoTrack ref count
   return tracks[0].release();
 }
 

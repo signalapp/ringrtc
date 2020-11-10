@@ -18,6 +18,12 @@ jobs:
       run: |
         cd src/rust
         cargo +nightly-2020-03-15 fmt -- --check
+
+  lints:
+    name: Lints
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
     - name: Install cargo clippy
       run: rustup component add clippy
     - name: Check rust lint
@@ -29,4 +35,4 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Run rust tests
-      run:  cd src/rust && ./scripts/run-tests
+      run: cd src/rust && ./scripts/run-tests

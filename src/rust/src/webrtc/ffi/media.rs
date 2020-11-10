@@ -38,14 +38,14 @@ pub struct RffiVideoTrack {
 
 /// Incomplete type for C++ webrtc::VideoFrameBuffer.
 #[repr(C)]
-#[cfg(feature = "native")]
 pub struct RffiVideoFrameBuffer {
     _private: [u8; 0],
 }
 
-#[cfg(feature = "native")]
 extern "C" {
+    pub fn Rust_getTrackIdAsUint32(track: *const RffiVideoTrack) -> u32;
     pub fn Rust_setAudioTrackEnabled(track: *const RffiAudioTrack, enabled: bool);
+    pub fn Rust_setVideoTrackEnabled(track: *const RffiVideoTrack, enabled: bool);
     pub fn Rust_getFirstVideoTrack(stream: *const RffiMediaStream) -> *const RffiVideoTrack;
     #[cfg(feature = "native")]
     pub fn Rust_addVideoSink(track: *const RffiVideoTrack, obj: RustObject, cb: CppObject);

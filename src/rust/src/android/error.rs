@@ -86,6 +86,10 @@ pub enum AndroidError {
     JniCallConstructor(String, String),
     #[fail(display = "JNI: getting field failed.  Field: {}, Type: {}", _0, _1)]
     JniGetField(String, String),
+    #[fail(display = "JNI: class not found.  Type: {} Add to the cache?", _0)]
+    JniGetLangClassNotFound(String),
+    #[fail(display = "JNI: new object failed.  Type: {}", _0)]
+    JniNewLangObjectFailed(String),
 
     // Android Class Cache error codes
     #[fail(display = "ClassCache: Class is already in cache: {}", _0)]

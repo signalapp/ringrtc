@@ -15,12 +15,16 @@ use ringrtc::{
         CallMediaType,
         DeviceId,
         FeatureLevel,
+        HttpMethod,
         Result,
     },
-    core::{call_manager::CallManager, signaling},
+    core::{call_manager::CallManager, group_call, signaling},
     native::{
         CallState,
         CallStateHandler,
+        GroupUpdate,
+        GroupUpdateHandler,
+        HttpClient,
         NativeCallContext,
         NativePlatform,
         PeerId,
@@ -53,11 +57,7 @@ fn main() {
 
     let hide_ip = false;
     // TODO: Real STUN/TURN servers.
-    let ice_server = IceServer::new(
-        "".to_string(), // username
-        "".to_string(), // password
-        vec![],         //  vec!["stun:stun.l.google.com".to_string()],
-    );
+    let ice_server = IceServer::none();
     let stopper = Stopper::new();
     let signaling_server = SignalingServer::start(&stopper).expect("Start signaling server");
     let router = Router::start(&stopper).expect("Start router");
@@ -276,15 +276,23 @@ impl CallEndpoint {
 
                 // Set up signaling/state
                 signaling_server.add_endpoint(&endpoint);
-                let state_handler = Box::new(endpoint.clone());
                 let signaling_sender = Box::new(endpoint.clone());
+                let should_assume_messages_sent = true; // cli doesn't support async sending yet.
+                let state_handler = Box::new(endpoint.clone());
                 let incoming_video_sink = Box::new(endpoint.clone());
+
+                // Fill in fake group call things
+                let http_client = Box::new(endpoint.clone());
+                let group_handler = Box::new(endpoint.clone());
+
                 let platform = NativePlatform::new(
-                    true, // cli doesn't support async sending yet.
                     pcf.clone(),
-                    state_handler,
                     signaling_sender,
+                    should_assume_messages_sent,
+                    state_handler,
                     incoming_video_sink,
+                    http_client,
+                    group_handler,
                 );
                 let call_manager = CallManager::new(platform)?;
 
@@ -530,6 +538,10 @@ impl SignalingSender for CallEndpoint {
         });
         Ok(())
     }
+
+    fn send_call_message(&self, _recipient_id: group_call::UserId, _msg: Vec<u8>) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 impl CallStateHandler for CallEndpoint {
@@ -558,6 +570,30 @@ impl CallStateHandler for CallEndpoint {
             self.peer_id, remote_peer_id, enabled
         );
         Ok(())
+    }
+}
+
+impl GroupUpdateHandler for CallEndpoint {
+    fn handle_group_update(
+        &self,
+        client_id: &group_call::ClientId,
+        update: GroupUpdate,
+    ) -> Result<()> {
+        info!("Group Update for id: {} => {}", client_id, update);
+        Ok(())
+    }
+}
+
+impl HttpClient for CallEndpoint {
+    fn send_http_request(
+        &self,
+        _request_id: u32,
+        _url: String,
+        _method: HttpMethod,
+        _headers: HashMap<String, String>,
+        _body: Option<Vec<u8>>,
+    ) -> Result<()> {
+        unimplemented!()
     }
 }
 

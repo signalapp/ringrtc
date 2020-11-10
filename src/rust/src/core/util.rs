@@ -18,6 +18,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 use futures::future::Future;
+use sha2::{Digest, Sha256};
 use tokio::runtime;
 
 use crate::common::Result;
@@ -263,6 +264,38 @@ pub fn redact_string(text: &str) -> String {
     redact_ipv4(&string)
 }
 
+/// Encodes a slice of bytes as a hexadecimal string
+///
+/// ```
+/// use ringrtc::core::util::bytes_to_hexstring;
+///
+/// assert_eq!(bytes_to_hexstring(&[]), "");
+/// assert_eq!(bytes_to_hexstring(&[0x01, 0xAB, 0xCD]), "01abcd");
+/// ```
+pub fn bytes_to_hexstring(bytes: &[u8]) -> String {
+    let mut result = String::new();
+    for byte in bytes {
+        let hex_byte = format!("{:02x}", byte);
+        result.push_str(&hex_byte);
+    }
+    result
+}
+
+/// Computes a SHA-256 hash of the input value and returns it as a hex string
+///
+/// ```
+/// use ringrtc::core::util::sha256_as_hexstring;
+///
+/// assert_eq!(sha256_as_hexstring("abc".as_bytes()), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+/// ```
+pub fn sha256_as_hexstring(data: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(data);
+    let hash = hash.finalize();
+
+    bytes_to_hexstring(&hash)
+}
+
 /// A specially configured tokio::Runtime for processing sequential tasks
 /// in the context of a Call or Connection.
 /// Pre-configured with the right parameters for single-threaded operation,
@@ -292,10 +325,9 @@ impl Drop for TaskQueueRuntime {
 impl TaskQueueRuntime {
     pub fn new(name: &str) -> Result<Self> {
         let rt = Some(
-            runtime::Builder::new()
-                .core_threads(1)
+            runtime::Builder::new_multi_thread()
+                .worker_threads(1)
                 .max_threads(1)
-                .threaded_scheduler()
                 .enable_all()
                 .thread_name(name)
                 .build()?,

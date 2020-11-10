@@ -36,7 +36,7 @@ impl<State: 'static> Actor<State> {
 
         let stopper_to_register = stopper.clone();
 
-        // "stopped" is signal that this Actor's thread should stop.
+        // "stopped" signals that this Actor's thread should stop.
         // We keep one on the inside of the loop to check if we've been stopped.
         // We keep another on the outside to trigger stopping.
         let stopped = Arc::new(AtomicBool::new(false));

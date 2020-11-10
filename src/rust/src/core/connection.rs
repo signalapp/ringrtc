@@ -1086,15 +1086,10 @@ where
     /// Check to see if this Connection is able to send messages.
     /// Once it is terminated it shouldn't be able to.
     pub fn can_send_messages(&self) -> bool {
-        let state_result = self.state();
-
-        match state_result {
-            Ok(state) => !matches!(
-                state,
-                ConnectionState::Terminating | ConnectionState::Terminated
-            ),
-            Err(_) => false,
-        }
+        !matches!(
+            self.state(),
+            Ok(ConnectionState::Terminating) | Ok(ConnectionState::Terminated)
+        )
     }
 
     pub fn set_outgoing_media_enabled(&self, enabled: bool) -> Result<()> {

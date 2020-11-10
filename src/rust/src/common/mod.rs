@@ -85,7 +85,7 @@ pub enum CallState {
     ConnectingBeforeAccepted,
 
     /// ICE is connected and there is a data channel available,
-    /// But the the callee has not yet accepted.
+    /// But the callee has not yet accepted.
     ConnectedWithDataChannelBeforeAccepted,
 
     /// ICE is connected and the callee has accepted.
@@ -238,7 +238,7 @@ pub enum ConnectionState {
     /// ICE is disconnected/reconnecting after the call is accepted.
     ReconnectingAfterAccepted,
 
-    /// The connection is in the process of terminaing
+    /// The connection is in the process of terminating
     Terminating,
 
     /// The connection is completely terminated
@@ -330,6 +330,27 @@ impl CallMediaType {
             _ => panic!("Unknown value: {}", value),
         }
     }
+}
+
+/// The HTTP method to use when making a request.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum HttpMethod {
+    Get = 0,
+    Put,
+    Post,
+}
+
+impl fmt::Display for HttpMethod {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+/// A response to an HTTP request.
+pub struct HttpResponse {
+    pub status_code: u16,
+    pub body:        Vec<u8>,
 }
 
 /// Standard bitrates used in RingRTC.

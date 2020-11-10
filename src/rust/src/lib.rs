@@ -26,6 +26,9 @@ extern crate log;
 extern crate simplelog;
 
 #[macro_use]
+extern crate static_assertions;
+
+#[macro_use]
 pub mod common;
 
 mod error;
@@ -38,7 +41,11 @@ pub mod core {
     pub mod call_mutex;
     pub mod connection;
     pub mod connection_fsm;
+    pub mod crypto;
+    pub mod group_call;
+    pub mod http_client;
     pub mod platform;
+    pub mod sfu_client;
     pub mod signaling;
     pub mod util;
 }
@@ -46,6 +53,7 @@ pub mod core {
 /// Protobuf Definitions.
 mod protobuf {
     pub mod data_channel;
+    pub mod group_call;
     pub mod signaling;
 }
 
@@ -76,7 +84,6 @@ mod ios {
     mod error;
     mod ios_media_stream;
     mod ios_platform;
-    mod ios_util;
     mod logging;
 }
 
@@ -97,9 +104,9 @@ pub mod webrtc {
     pub mod media;
     pub mod network;
     pub mod peer_connection;
-    #[cfg(any(feature = "native", feature = "sim"))]
     pub mod peer_connection_factory;
     pub mod peer_connection_observer;
+    pub mod rtp;
     pub mod sdp_observer;
     pub mod stats_observer;
     #[cfg(not(feature = "sim"))]
@@ -109,7 +116,6 @@ pub mod webrtc {
         pub mod logging;
         pub mod media;
         pub mod peer_connection;
-        #[cfg(feature = "native")]
         pub mod peer_connection_factory;
         pub mod peer_connection_observer;
         pub mod ref_count;

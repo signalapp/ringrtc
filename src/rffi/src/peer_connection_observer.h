@@ -11,6 +11,7 @@
 #define RFFI_PEER_CONNECTION_OBSERVER_H__
 
 #include "api/data_channel_interface.h"
+#include "api/crypto/frame_encryptor_interface.h"
 #include "api/peer_connection_interface.h"
 
 /**
@@ -25,8 +26,19 @@ namespace rffi {
 class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataChannelObserver {
  public:
   PeerConnectionObserverRffi(const rust_object observer,
-                             const PeerConnectionObserverCallbacks* callbacks);
+                             const PeerConnectionObserverCallbacks* callbacks,
+                             bool enable_frame_encryption);
   ~PeerConnectionObserverRffi() override;
+
+  // If enabled, the PeerConnection will be configured to encrypt and decrypt
+  // media frames using PeerConnectionObserverCallbacks.
+  bool enable_frame_encryption() { return enable_frame_encryption_; }
+  // These will be a passed into RtpSenders and will be implemented
+  // with callbacks to PeerConnectionObserverCallbacks.
+  rtc::scoped_refptr<FrameEncryptorInterface> CreateEncryptor();
+  // These will be a passed into RtpReceivers and will be implemented
+  // with callbacks to PeerConnectionObserverCallbacks.
+  rtc::scoped_refptr<FrameDecryptorInterface> CreateDecryptor(uint32_t track_id);
 
   // Implementation of PeerConnectionObserver interface, which propagates
   // the callbacks to the Rust observer.
@@ -45,6 +57,7 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataCha
   void OnAddStream(rtc::scoped_refptr<MediaStreamInterface> stream) override;
   void OnRemoveStream(rtc::scoped_refptr<MediaStreamInterface> stream) override;
   void OnDataChannel(rtc::scoped_refptr<DataChannelInterface> channel) override;
+  void OnRtpPacket(const RtpPacketReceived& rtp_packet) override;
   void OnRenegotiationNeeded() override;
   void OnAddTrack(rtc::scoped_refptr<RtpReceiverInterface> receiver,
                   const std::vector<rtc::scoped_refptr<MediaStreamInterface>>&
@@ -61,7 +74,7 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataCha
  private:
   const rust_object observer_;
   PeerConnectionObserverCallbacks callbacks_;
-
+  bool enable_frame_encryption_ = false;
 };
 
 } // namespace rffi

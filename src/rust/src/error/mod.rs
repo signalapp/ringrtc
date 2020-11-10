@@ -53,24 +53,20 @@ pub enum RingRtcError {
     CreatePeerConnectionObserver,
     #[fail(display = "Unable to create C++ signaling DataChannel")]
     CreateSignalingDataChannel,
-    #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ PeerConnectionFactory")]
     CreatePeerConnectionFactory,
-    #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ PeerConnection")]
     CreatePeerConnection,
-    #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ VideoSource")]
     CreateVideoSource,
-    #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ VideoTrack")]
     CreateVideoTrack,
-    #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to create C++ AudioTrack")]
     CreateAudioTrack,
-    #[cfg(any(feature = "native", feature = "sim"))]
     #[fail(display = "Unable to generate C++ RTCCertificate")]
     GenerateCertificate,
+    #[fail(display = "Unable to compute C++ RTCCertificate fingerprint")]
+    ComputeCertificateFingerprint,
     #[fail(display = "Unable to query Audio Devices")]
     #[allow(dead_code)]
     QueryAudioDevices,
@@ -119,6 +115,10 @@ pub enum RingRtcError {
     DataChannelSend,
     #[fail(display = "Data channel protocol error: {}", _0)]
     DataChannelProtocol(String),
+    #[fail(display = "Unable to send RTP data")]
+    SendRtp,
+    #[fail(display = "Unable to receive RTP data")]
+    ReceiveRtp,
 
     // IceGatherer error codes
     #[fail(display = "UseSharedIceGatherer failure")]
@@ -126,7 +126,17 @@ pub enum RingRtcError {
     #[fail(display = "CreateIceGatherer failure")]
     CreateIceGatherer,
 
+    // Frame encryption error codes
+    #[fail(display = "Frame Counter too big")]
+    FrameCounterTooBig,
+    #[fail(display = "Failed to encrypt")]
+    FailedToEncrypt,
+    #[fail(display = "Failed to decrypt")]
+    FailedToDecrypt,
+
     // Misc error codes
     #[fail(display = "Failed to negotiate SRTP keys")]
     SrtpKeyNegotiationFailure,
+    #[fail(display = "Buffer too small")]
+    BufferTooSmall,
 }

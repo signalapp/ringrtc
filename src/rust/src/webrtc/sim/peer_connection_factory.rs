@@ -49,7 +49,7 @@ pub unsafe fn Rust_createPeerConnection(
     _enable_rtp_data_channel: bool,
 ) -> *const RffiPeerConnection {
     info!("Rust_createPeerConnection()");
-    &RffiPeerConnection::new()
+    Box::leak(Box::new(RffiPeerConnection::new()))
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -81,6 +81,15 @@ pub unsafe fn Rust_createVideoTrack(
 pub unsafe fn Rust_generateCertificate() -> *const RffiCertificate {
     info!("Rust_generateCertificate()");
     &FAKE_CERTIFICATE
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_computeCertificateFingerprintSha256(
+    _cert: *const RffiCertificate,
+    _fingerprint: *mut [u8; 32],
+) -> bool {
+    info!("Rust_computeCertificateFingerprintSha256()");
+    true
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

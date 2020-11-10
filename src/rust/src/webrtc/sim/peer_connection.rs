@@ -11,6 +11,7 @@ use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
 use crate::core::platform::PlatformItem;
+use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
     RffiSessionDescription,
@@ -50,6 +51,7 @@ impl RffiPeerConnection {
                 remote_description_set: false,
                 outgoing_audio_enabled: true,
                 incoming_rtp_enabled:   true,
+                rtp_packet_sink:        None,
             })),
         }
     }
@@ -81,13 +83,21 @@ impl RffiPeerConnection {
         let mut state = self.state.lock().unwrap();
         state.incoming_rtp_enabled = enabled;
     }
+
+    pub fn set_rtp_packet_sink(&self, rtp_packet_sink: BoxedRtpPacketSink) {
+        let mut state = self.state.lock().unwrap();
+        state.rtp_packet_sink = Some(rtp_packet_sink);
+    }
 }
+
+pub type BoxedRtpPacketSink = Box<dyn Fn(rtp::Header, &[u8]) + Send + 'static>;
 
 struct RffiPeerConnectionState {
     local_description_set:  bool,
     remote_description_set: bool,
     outgoing_audio_enabled: bool,
     incoming_rtp_enabled:   bool,
+    rtp_packet_sink:        Option<BoxedRtpPacketSink>,
 }
 
 /// Simulation type for DataChannelInterface.
@@ -169,6 +179,17 @@ pub unsafe fn Rust_addIceCandidateFromSdp(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_addIceCandidateFromServer(
+    _peer_connection: *const RffiPeerConnection,
+    _ip: RffiIp,
+    _port: u16,
+    _tcp: bool,
+) -> bool {
+    info!("Rust_addIceCandidateFromServer():");
+    true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createSharedIceGatherer(
     _peer_connection: *const RffiPeerConnection,
 ) -> *const RffiIceGatherer {
@@ -199,6 +220,40 @@ pub unsafe fn Rust_setMaxSendBitrate(
     _max_bitrate_bps: i32,
 ) {
     info!("Rust_setMaxSendBitrate:");
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_sendRtp(
+    peer_connection: *const RffiPeerConnection,
+    pt: rtp::PayloadType,
+    seqnum: rtp::SequenceNumber,
+    timestamp: rtp::Timestamp,
+    ssrc: rtp::Ssrc,
+    payload_data: *const u8,
+    payload_size: usize,
+) -> bool {
+    info!("Rust_sendRtp:");
+    let state = (*peer_connection).state.lock().unwrap();
+    if let Some(rtp_packet_sink) = &state.rtp_packet_sink {
+        let header = rtp::Header {
+            pt,
+            seqnum,
+            timestamp,
+            ssrc,
+        };
+        let payload = std::slice::from_raw_parts(payload_data, payload_size as usize);
+        rtp_packet_sink(header, payload);
+    }
+    true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_receiveRtp(
+    _peer_connection: *const RffiPeerConnection,
+    _pt: rtp::PayloadType,
+) -> bool {
+    info!("Rust_receiveRtp:");
+    true
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

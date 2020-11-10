@@ -63,6 +63,8 @@ final class TestDelegate: CallManagerDelegate {
     var shouldSendHangupBusyInvoked = false
     var shouldSendHangupNeedPermissionInvoked = false
     var shouldSendBusyInvoked = false
+    var shouldSendCallMessageInvoked = false
+    var shouldSendHttpRequestInvoked = false
     var shouldCompareCallsInvoked = false
 //    var shouldConcludeCallInvoked = false
 //    var concludedCallCount = 0
@@ -104,6 +106,15 @@ final class TestDelegate: CallManagerDelegate {
     var sentAnswer: String?
     var sentAnswerOpaque: Data?
     var sentIceCandidates: [CallManagerIceCandidate] = []
+
+    var sentCallMessageRecipientUuid: UUID?
+    var sentCallMessageMessage: Data?
+
+    var sentHttpRequestId: UInt32?
+    var sentHttpRequestUrl: String?
+    var sentHttpRequestMethod: CallManagerHttpMethod?
+    var sentHttpRequestHeaders: [String: String]?
+    var sentHttpRequestBody: Data?
 
     var remoteCompareResult: Bool? = .none
 
@@ -267,7 +278,7 @@ final class TestDelegate: CallManagerDelegate {
         case .receivedOfferWithGlare:
             Logger.debug("TestDelegate:receivedOfferWithGlare")
             eventReceivedOfferWithGlare = true
-        
+
         case .ignoreCallsFromNonMultiringCallers:
             Logger.debug("TestDelegate:ignoreCallsFromNonMultiringCallers")
             eventIgnoreCallsFromNonMultiringCallers = true
@@ -483,6 +494,38 @@ final class TestDelegate: CallManagerDelegate {
                 }
             }
         }
+    }
+
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendCallMessage recipientUuid: UUID, message: Data) {
+        Logger.debug("TestDelegate:shouldSendCallMessage")
+        generalInvocationDetected = true
+
+        shouldSendCallMessageInvoked = true
+
+        sentCallMessageRecipientUuid = recipientUuid
+        sentCallMessageMessage = message
+    }
+
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendHttpRequest requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
+        Logger.debug("TestDelegate:shouldSendHttpRequest")
+        generalInvocationDetected = true
+
+        shouldSendHttpRequestInvoked = true
+
+        sentHttpRequestId = requestId
+        sentHttpRequestUrl = url
+        sentHttpRequestMethod = method
+        sentHttpRequestHeaders = headers
+        sentHttpRequestBody = body
+
+        Logger.debug("requestId: \(requestId)")
+        Logger.debug("url: \(url)")
+        Logger.debug("method: \(method)")
+        Logger.debug("headers:")
+        headers.forEach { (header) in
+            Logger.debug("key: \(header.key) value: \(header.value)")
+        }
+        Logger.debug("body: \(body)")
     }
 
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldCompareCalls call1: OpaqueCallData, call2: OpaqueCallData) -> Bool {

@@ -57,6 +57,14 @@ pub struct ConnectionParametersV4 {
     #[prost(message, repeated, tag="4")]
     pub receive_video_codecs: ::std::vec::Vec<VideoCodec>,
 }
+/// A generic calling message that is opaque to the application but interpreted by RingRTC.
+/// A serialized one of these goes into the "Opaque" field in the CallingMessage variant
+/// in Signal protocol messages.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CallMessage {
+    #[prost(message, optional, tag="1")]
+    pub group_call_message: ::std::option::Option<super::group_call::DeviceToDevice>,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum VideoCodecType {

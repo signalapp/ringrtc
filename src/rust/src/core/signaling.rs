@@ -98,7 +98,7 @@ impl fmt::Debug for Message {
     }
 }
 
-// It's conveneient to be able to now the type of a message without having
+// It's convenient to be able to now the type of a message without having
 // an entire message, so we have the related MessageType enum
 #[repr(i32)]
 #[derive(Debug, PartialEq)]
@@ -108,6 +108,7 @@ pub enum MessageType {
     Ice,
     Hangup,
     Busy,
+    MediaKey,
 }
 
 /// The caller sends this to several callees to initiate the call.
@@ -116,7 +117,7 @@ pub struct Offer {
     pub call_media_type: CallMediaType,
     // While we are transitioning, we should send *both* of these
     // and receive *either* of these.  Eventually, we'll drop to
-    // only sending an receving the opaque value.
+    // only sending an receiving the opaque value.
     pub opaque:          Option<Vec<u8>>,
     pub sdp:             Option<String>,
     // We cache a deserialized opaque value to avoid deserializing it repeatedly.
@@ -462,7 +463,7 @@ pub struct Ice {
 pub struct IceCandidate {
     // While we are transitioning, we should send *both* of these
     // and receive *either* of these.  Eventually, we'll drop to
-    // only sending an receving the opaque value.
+    // only sending and receiving the opaque value.
     pub opaque: Option<Vec<u8>>,
     pub sdp:    Option<String>,
 }
@@ -596,7 +597,7 @@ impl fmt::Display for Hangup {
     }
 }
 
-// It's conveneient to be able to now the type of a hangup without having
+// It's convenient to be able to now the type of a hangup without having
 // an entire message (such as with FFI), so we have the related HangupType.
 // For convenience, we make this match the protobufs
 #[repr(i32)]
@@ -633,7 +634,7 @@ pub struct SendAnswer {
 
 /// An ICE message with extra info specific to sending
 /// ICE messages can either target a particular device (callee only)
-/// or brodacast (caller only).
+/// or broadcast (caller only).
 pub struct SendIce {
     pub ice:                Ice,
     pub receiver_device_id: Option<DeviceId>,

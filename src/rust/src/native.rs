@@ -5,17 +5,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
 
-use crate::common::CallMediaType;
+use std::collections::HashMap;
+use std::fmt;
+
 use crate::common::{ApplicationEvent, CallDirection, CallId, DeviceId, Result};
+use crate::common::{CallMediaType, HttpMethod};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
-use crate::core::signaling;
+use crate::core::{
+    group_call::{self, UserId},
+    signaling,
+};
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
 use crate::webrtc::peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
-use std::fmt;
 
 // This serves as the Platform::AppCallContext
 // Users of the native platform must provide these things
@@ -84,11 +89,25 @@ pub trait SignalingSender {
         receiver_device_id: Option<DeviceId>,
         msg: signaling::Message,
     ) -> Result<()>;
+
+    fn send_call_message(&self, recipient_id: UserId, msg: Vec<u8>) -> Result<()>;
 }
 
 pub trait CallStateHandler {
     fn handle_call_state(&self, remote_peer_id: &PeerId, state: CallState) -> Result<()>;
     fn handle_remote_video_state(&self, remote_peer_id: &PeerId, enabled: bool) -> Result<()>;
+}
+
+// Starts an HTTP request. CallManager is notified of the result via a separate callback.
+pub trait HttpClient {
+    fn send_http_request(
+        &self,
+        request_id: u32,
+        url: String,
+        method: HttpMethod,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+    ) -> Result<()>;
 }
 
 // These are the different states a call can be in.
@@ -114,11 +133,11 @@ impl fmt::Display for CallState {
             CallState::Outgoing(call_id, call_media_type) => {
                 format!("Outgoing({}, {})", call_id, call_media_type)
             }
-            CallState::Connected => format!("Connected"),
-            CallState::Connecting => format!("Connecting"),
-            CallState::Ringing => format!("Ringing"),
+            CallState::Connected => "Connected".to_string(),
+            CallState::Connecting => "Connecting".to_string(),
+            CallState::Ringing => "Ringing".to_string(),
             CallState::Ended(reason) => format!("Ended({})", reason),
-            CallState::Concluded => format!("Concluded"),
+            CallState::Concluded => "Concluded".to_string(),
         };
         write!(f, "({})", display)
     }
@@ -184,33 +203,99 @@ impl fmt::Debug for EndReason {
     }
 }
 
+// Group Calls
+
+pub trait GroupUpdateHandler {
+    fn handle_group_update(
+        &self,
+        client_id: &group_call::ClientId,
+        update: GroupUpdate,
+    ) -> Result<()>;
+}
+
+pub enum GroupUpdate {
+    RequestMembershipProof,
+    RequestGroupMembers,
+    ConnectionStateChanged(group_call::ConnectionState),
+    JoinStateChanged(group_call::JoinState),
+    RemoteDeviceStatesChanged(Vec<group_call::RemoteDeviceState>),
+    IncomingVideoTrack(group_call::DemuxId, VideoTrack),
+    JoinedMembersChanged(Vec<group_call::UserId>),
+    Ended(group_call::EndReason),
+}
+
+impl fmt::Display for GroupUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let display = match self {
+            GroupUpdate::RequestMembershipProof => "GroupMembershipProof".to_string(),
+            GroupUpdate::RequestGroupMembers => "GroupMembers".to_string(),
+            GroupUpdate::ConnectionStateChanged(_) => "ConnectionStateChanged".to_string(),
+            GroupUpdate::JoinStateChanged(_) => "JoinStateChanged".to_string(),
+            GroupUpdate::RemoteDeviceStatesChanged(_) => "RemoteDeviceStatesChanged".to_string(),
+            GroupUpdate::IncomingVideoTrack(_, _) => "IncomingVideoTrack".to_string(),
+            GroupUpdate::JoinedMembersChanged(_) => "JoinedGroupMembersChanged".to_string(),
+            GroupUpdate::Ended(reason) => format!("Ended({:?})", reason),
+        };
+        write!(f, "({})", display)
+    }
+}
+
+impl fmt::Debug for GroupUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 pub struct NativePlatform {
-    should_assume_messages_sent: bool,
-    peer_connection_factory:     PeerConnectionFactory,
+    // Relevant for both group calls and 1:1 calls
+    peer_connection_factory: PeerConnectionFactory,
+
+    // Only relevant for 1:1 calls
     signaling_sender:            Box<dyn SignalingSender + Send>,
+    should_assume_messages_sent: bool,
     state_handler:               Box<dyn CallStateHandler + Send>,
     incoming_video_sink:         Box<dyn VideoSink + Send>,
+
+    // Only relevant for group calls
+    http_client:   Box<dyn HttpClient + Send>,
+    group_handler: Box<dyn GroupUpdateHandler + Send>,
 }
 
 impl NativePlatform {
     pub fn new(
-        should_assume_messages_sent: bool,
         peer_connection_factory: PeerConnectionFactory,
+
         signaling_sender: Box<dyn SignalingSender + Send>,
+        should_assume_messages_sent: bool,
         state_handler: Box<dyn CallStateHandler + Send>,
         incoming_video_sink: Box<dyn VideoSink + Send>,
+
+        http_client: Box<dyn HttpClient + Send>,
+        group_handler: Box<dyn GroupUpdateHandler + Send>,
     ) -> Self {
         Self {
-            should_assume_messages_sent,
             peer_connection_factory,
+
             signaling_sender,
+            should_assume_messages_sent,
             state_handler,
             incoming_video_sink,
+
+            http_client,
+            group_handler,
         }
     }
 
     fn send_state(&self, peer_id: &PeerId, state: CallState) -> Result<()> {
         self.state_handler.handle_call_state(peer_id, state)
+    }
+
+    fn send_group_update(
+        &self,
+        client_id: &group_call::ClientId,
+        update: GroupUpdate,
+    ) -> Result<()> {
+        self.group_handler.handle_group_update(client_id, update)
     }
 
     fn send_remote_video_state(&self, peer_id: &PeerId, enabled: bool) -> Result<()> {
@@ -278,14 +363,17 @@ impl Platform for NativePlatform {
         let context = call.call_context()?;
 
         // Like android::call_manager::create_peer_connection
-        let pc_observer = PeerConnectionObserver::new(connection.get_connection_ptr()?)?;
+        let pc_observer = PeerConnectionObserver::new(
+            connection.get_connection_ptr()?,
+            false, /* enable_frame_encryption */
+        )?;
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,
             context.certificate.clone(),
             context.hide_ip,
             &context.ice_server,
             context.outgoing_audio_track.clone(),
-            context.outgoing_video_track.clone(),
+            Some(context.outgoing_video_track.clone()),
             signaling_version.enable_dtls(),
             signaling_version.enable_rtp_data_channel(),
         )?;
@@ -533,5 +621,151 @@ impl Platform for NativePlatform {
             signaling::Message::Busy,
         )?;
         Ok(())
+    }
+
+    fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()> {
+        info!(
+            "NativePlatform::send_call_message(): recipent_uuid: {:?}, ... ",
+            recipient_uuid,
+        );
+        self.signaling_sender
+            .send_call_message(recipient_uuid, message)
+    }
+
+    fn send_http_request(
+        &self,
+        request_id: u32,
+        url: String,
+        method: HttpMethod,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+    ) -> Result<()> {
+        self.http_client
+            .send_http_request(request_id, url, method, headers, body)
+    }
+
+    // Group Calls
+
+    fn request_membership_proof(&self, client_id: group_call::ClientId) {
+        info!(
+            "NativePlatform::request_membership_proof(): id: {}",
+            client_id
+        );
+
+        let result = self.send_group_update(&client_id, GroupUpdate::RequestMembershipProof);
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn request_group_members(&self, client_id: group_call::ClientId) {
+        info!("NativePlatform::request_group_members(): id: {}", client_id);
+
+        let result = self.send_group_update(&client_id, GroupUpdate::RequestGroupMembers);
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_connection_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        connection_state: group_call::ConnectionState,
+    ) {
+        info!(
+            "NativePlatform::handle_connection_state_changed(): id: {}",
+            client_id
+        );
+
+        let result = self.send_group_update(
+            &client_id,
+            GroupUpdate::ConnectionStateChanged(connection_state),
+        );
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_join_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        join_state: group_call::JoinState,
+    ) {
+        info!(
+            "NativePlatform::handle_join_state_changed(): id: {}",
+            client_id
+        );
+
+        let result = self.send_group_update(&client_id, GroupUpdate::JoinStateChanged(join_state));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_remote_devices_changed(
+        &self,
+        client_id: group_call::ClientId,
+        remote_device_states: &[group_call::RemoteDeviceState],
+    ) {
+        info!(
+            "NativePlatform::handle_remote_devices_changed(): id: {}",
+            client_id
+        );
+
+        let result = self.send_group_update(
+            &client_id,
+            GroupUpdate::RemoteDeviceStatesChanged(remote_device_states.iter().cloned().collect()),
+        );
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_incoming_video_track(
+        &self,
+        client_id: group_call::ClientId,
+        remote_demux_id: group_call::DemuxId,
+        incoming_video_track: VideoTrack,
+    ) {
+        info!(
+            "NativePlatform::handle_incoming_video_track(): id: {}; remote_demux_id: {}",
+            client_id, remote_demux_id
+        );
+
+        let result = self.send_group_update(
+            &client_id,
+            GroupUpdate::IncomingVideoTrack(remote_demux_id, incoming_video_track),
+        );
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_joined_members_changed(
+        &self,
+        client_id: group_call::ClientId,
+        joined_members: &[group_call::UserId],
+    ) {
+        info!(
+            "NativePlatform::handle_joined_members_changed(): id: {}",
+            client_id
+        );
+
+        let result = self.send_group_update(
+            &client_id,
+            GroupUpdate::JoinedMembersChanged(joined_members.iter().cloned().collect()),
+        );
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
+        info!("NativePlatform::handle_ended(): id: {}", client_id);
+
+        let result = self.send_group_update(&client_id, GroupUpdate::Ended(reason));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
     }
 }

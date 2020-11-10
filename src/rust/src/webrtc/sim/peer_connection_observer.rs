@@ -18,6 +18,7 @@ static FAKE_OBSERVER: u32 = 7;
 pub unsafe fn Rust_createPeerConnectionObserver(
     _cc_ptr: RustObject,
     _pc_observer_cb: CppObject,
+    _enable_frame_encryption: bool,
 ) -> *const RffiPeerConnectionObserver {
     info!("Rust_createPeerConnectionObserver():");
     &FAKE_OBSERVER

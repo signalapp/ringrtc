@@ -12,18 +12,26 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
+use crate::common::{
+    ApplicationEvent,
+    CallDirection,
+    CallId,
+    CallMediaType,
+    DeviceId,
+    HttpMethod,
+    Result,
+};
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
-use crate::core::signaling;
+use crate::core::{group_call, signaling};
 use crate::sim::error::SimError;
-use crate::webrtc::media::MediaStream;
+use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::sim::peer_connection::RffiPeerConnection;
 
-/// Simulation implmentation for platform::Platform::{AppIncomingMedia,
+/// Simulation implementation for platform::Platform::{AppIncomingMedia,
 /// AppRemotePeer, AppCallContext}
 type SimPlatformItem = String;
 impl PlatformItem for SimPlatformItem {}
@@ -315,6 +323,21 @@ impl Platform for SimPlatform {
         }
     }
 
+    fn send_call_message(&self, _recipient_uuid: Vec<u8>, _message: Vec<u8>) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn send_http_request(
+        &self,
+        _request_id: u32,
+        _url: String,
+        _method: HttpMethod,
+        _headers: HashMap<String, String>,
+        _body: Option<Vec<u8>>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
     fn create_incoming_media(
         &self,
         _connection: &Connection<Self>,
@@ -378,6 +401,59 @@ impl Platform for SimPlatform {
             let _ = self.stats.call_concluded.fetch_add(1, Ordering::AcqRel);
             Ok(())
         }
+    }
+
+    fn request_membership_proof(&self, _client_id: group_call::ClientId) {
+        unimplemented!()
+    }
+
+    fn request_group_members(&self, _client_id: group_call::ClientId) {
+        unimplemented!()
+    }
+
+    fn handle_connection_state_changed(
+        &self,
+        _client_id: group_call::ClientId,
+        _connection_state: group_call::ConnectionState,
+    ) {
+        unimplemented!()
+    }
+
+    fn handle_join_state_changed(
+        &self,
+        _client_id: group_call::ClientId,
+        _join_state: group_call::JoinState,
+    ) {
+        unimplemented!()
+    }
+
+    fn handle_remote_devices_changed(
+        &self,
+        _client_id: group_call::ClientId,
+        _remote_device_states: &[group_call::RemoteDeviceState],
+    ) {
+        unimplemented!()
+    }
+
+    fn handle_incoming_video_track(
+        &self,
+        _client_id: group_call::ClientId,
+        _remote_demux_id: group_call::DemuxId,
+        _incoming_video_track: VideoTrack,
+    ) {
+        unimplemented!()
+    }
+
+    fn handle_joined_members_changed(
+        &self,
+        _client_id: group_call::ClientId,
+        _joined_members: &[group_call::UserId],
+    ) {
+        unimplemented!()
+    }
+
+    fn handle_ended(&self, _client_id: group_call::ClientId, _reason: group_call::EndReason) {
+        unimplemented!()
     }
 }
 

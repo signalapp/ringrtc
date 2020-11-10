@@ -1,8 +1,8 @@
 PODS:
-  - CocoaLumberjack (3.6.1):
-    - CocoaLumberjack/Core (= 3.6.1)
-  - CocoaLumberjack/Core (3.6.1)
-  - GRKOpenSSLFramework (1.0.2.20)
+  - CocoaLumberjack (3.7.0):
+    - CocoaLumberjack/Core (= 3.7.0)
+  - CocoaLumberjack/Core (3.7.0)
+  - GRKOpenSSLFramework (1.0.2.20.2)
   - Nimble (8.0.9)
   - SignalCoreKit (1.0.0):
     - CocoaLumberjack
@@ -28,12 +28,12 @@ EXTERNAL SOURCES:
 
 CHECKOUT OPTIONS:
   SignalCoreKit:
-    :commit: 9b2fd76993b1c109375272314cdaf227a7b1b681
+    :commit: cfefb262ba319a2d0051c97f0bdd4f6c98db3336
     :git: https://github.com/signalapp/SignalCoreKit.git
 
 SPEC CHECKSUMS:
-  CocoaLumberjack: b17ae15142558d08bbacf69775fa10c4abbebcc9
-  GRKOpenSSLFramework: dc635b0a9d4cd8af2a9ff80a61e779e21b69dfd8
+  CocoaLumberjack: e8955b9d337ac307103b0a34fd141c32f27e53c5
+  GRKOpenSSLFramework: 01e3dd58a1d865111ac9439841119ff91a26e1f2
   Nimble: 98b888285a615fd34f20e61753cf58ea1402bde4
   SignalCoreKit: 4562b2bbd9830077439ca003f952a798457d4ea5
 

@@ -23,7 +23,7 @@ use crate::webrtc::sim::media;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::ref_count;
 
-pub use media::RffiMediaStream;
+pub use media::{RffiAudioTrack, RffiMediaStream, RffiVideoTrack};
 
 /// Rust wrapper around WebRTC C++ MediaStream object.
 pub struct MediaStream {
@@ -81,26 +81,31 @@ impl MediaStream {
         rffi
     }
 
-    #[cfg(feature = "native")]
     pub fn first_video_track(&self) -> Option<VideoTrack> {
         let track_rffi = unsafe { media::Rust_getFirstVideoTrack(self.rffi) };
         if track_rffi.is_null() {
             return None;
         }
-        Some(VideoTrack::new(track_rffi))
+        Some(VideoTrack::owned(track_rffi))
     }
 }
 
 /// Rust wrapper around WebRTC C++ AudioTrackInterface object.
-#[cfg(any(feature = "native", feature = "sim"))]
 pub struct AudioTrack {
-    rffi: *const media::RffiAudioTrack,
+    rffi:  *const media::RffiAudioTrack,
+    // If owned, release ref count when Dropped
+    owned: bool,
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl AudioTrack {
-    pub fn new(rffi: *const media::RffiAudioTrack) -> Self {
-        Self { rffi }
+    pub fn unowned(rffi: *const media::RffiAudioTrack) -> Self {
+        let owned = false;
+        Self { rffi, owned }
+    }
+
+    pub fn owned(rffi: *const media::RffiAudioTrack) -> Self {
+        let owned = true;
+        Self { rffi, owned }
     }
 
     pub fn rffi(&self) -> *const media::RffiAudioTrack {
@@ -112,39 +117,35 @@ impl AudioTrack {
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl fmt::Display for AudioTrack {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "AudioSource: {:p}", self.rffi)
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl fmt::Debug for AudioTrack {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl Drop for AudioTrack {
     fn drop(&mut self) {
-        ref_count::release_ref(self.rffi as CppObject);
+        if self.owned && !self.rffi.is_null() {
+            ref_count::release_ref(self.rffi as CppObject);
+        }
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl Clone for AudioTrack {
     fn clone(&self) -> Self {
         ref_count::add_ref(self.rffi as CppObject);
-        Self::new(self.rffi)
+        Self::owned(self.rffi)
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 unsafe impl Send for AudioTrack {}
 
-#[cfg(any(feature = "native", feature = "sim"))]
 unsafe impl Sync for AudioTrack {}
 
 /// cbindgen:prefix-with-name=true
@@ -182,14 +183,12 @@ impl VideoFrameMetadata {
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 pub struct VideoFrame {
     metadata:    VideoFrameMetadata,
     // Owns this
     rffi_buffer: *const media::RffiVideoFrameBuffer,
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl VideoFrame {
     pub fn width(&self) -> u32 {
         self.metadata.width
@@ -241,7 +240,6 @@ impl VideoFrame {
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl Drop for VideoFrame {
     fn drop(&mut self) {
         debug!("VideoFrame::drop()");
@@ -251,33 +249,27 @@ impl Drop for VideoFrame {
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl fmt::Display for VideoFrame {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "VideoFrame({}x{})", self.width(), self.height())
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl fmt::Debug for VideoFrame {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 unsafe impl Send for VideoFrame {}
 
-#[cfg(any(feature = "native", feature = "sim"))]
 unsafe impl Sync for VideoFrame {}
 
 /// Rust wrapper around WebRTC C++ VideoTrackSourceInterface object.
-#[cfg(any(feature = "native", feature = "sim"))]
 pub struct VideoSource {
     rffi: *const media::RffiVideoSource,
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl VideoSource {
     pub fn new(rffi: *const media::RffiVideoSource) -> Self {
         Self { rffi }
@@ -294,21 +286,18 @@ impl VideoSource {
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl fmt::Display for VideoSource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "VideoSource: {:p}", self.rffi)
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl fmt::Debug for VideoSource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl Drop for VideoSource {
     fn drop(&mut self) {
         debug!("VideoSource::drop()");
@@ -318,7 +307,6 @@ impl Drop for VideoSource {
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl Clone for VideoSource {
     fn clone(&self) -> Self {
         debug!("VideoSource::clone() {}", self.rffi as u64);
@@ -329,26 +317,43 @@ impl Clone for VideoSource {
     }
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 unsafe impl Send for VideoSource {}
 
-#[cfg(any(feature = "native", feature = "sim"))]
 unsafe impl Sync for VideoSource {}
 
 /// Rust wrapper around WebRTC C++ VideoTrackInterface object.
-#[cfg(any(feature = "native", feature = "sim"))]
 pub struct VideoTrack {
-    rffi: *const media::RffiVideoTrack,
+    rffi:  *const media::RffiVideoTrack,
+    // If owned, release ref count when Dropped
+    owned: bool,
 }
 
-#[cfg(any(feature = "native", feature = "sim"))]
 impl VideoTrack {
-    pub fn new(rffi: *const media::RffiVideoTrack) -> Self {
-        Self { rffi }
+    pub fn unowned(rffi: *const media::RffiVideoTrack) -> Self {
+        let owned = false;
+        Self { rffi, owned }
+    }
+
+    pub fn owned(rffi: *const media::RffiVideoTrack) -> Self {
+        let owned = true;
+        Self { rffi, owned }
     }
 
     pub fn rffi(&self) -> *const media::RffiVideoTrack {
         self.rffi
+    }
+
+    pub fn set_enabled(&self, enabled: bool) {
+        unsafe { media::Rust_setVideoTrackEnabled(self.rffi, enabled) }
+    }
+
+    pub fn id(&self) -> Option<u32> {
+        let id = unsafe { media::Rust_getTrackIdAsUint32(self.rffi) };
+        if id == 0 {
+            None
+        } else {
+            Some(id)
+        }
     }
 
     #[cfg(feature = "native")]
@@ -363,7 +368,6 @@ impl VideoTrack {
     }
 }
 
-#[cfg(feature = "native")]
 pub trait VideoSink {
     // If not enabled, ignore new frames and clear old frames.
     fn set_enabled(&self, enabled: bool);
@@ -380,16 +384,16 @@ struct RffiVideoSink<'sink> {
     sink: &'sink dyn VideoSink,
 }
 
+#[cfg(feature = "native")]
 #[repr(C)]
 #[allow(non_snake_case)]
-#[cfg(feature = "native")]
 struct VideoSinkCallbacks {
     onVideoFrame:
         extern "C" fn(*mut RffiVideoSink, VideoFrameMetadata, *mut media::RffiVideoFrameBuffer),
 }
 
-#[allow(non_snake_case)]
 #[cfg(feature = "native")]
+#[allow(non_snake_case)]
 extern "C" fn video_sink_OnVideoFrame(
     rffi_sink: *mut RffiVideoSink,
     metadata: VideoFrameMetadata,
@@ -401,37 +405,33 @@ extern "C" fn video_sink_OnVideoFrame(
         .on_video_frame(VideoFrame::from_owned_buffer(metadata, rffi_buffer));
 }
 
-#[cfg(feature = "native")]
 impl fmt::Display for VideoTrack {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "VideoTrack: {:p}", self.rffi)
     }
 }
 
-#[cfg(feature = "native")]
 impl fmt::Debug for VideoTrack {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-#[cfg(feature = "native")]
 impl Drop for VideoTrack {
     fn drop(&mut self) {
-        ref_count::release_ref(self.rffi as CppObject);
+        if self.owned && !self.rffi.is_null() {
+            ref_count::release_ref(self.rffi as crate::core::util::CppObject);
+        }
     }
 }
 
-#[cfg(feature = "native")]
 impl Clone for VideoTrack {
     fn clone(&self) -> Self {
         ref_count::add_ref(self.rffi as CppObject);
-        Self::new(self.rffi)
+        Self::owned(self.rffi)
     }
 }
 
-#[cfg(feature = "native")]
 unsafe impl Send for VideoTrack {}
 
-#[cfg(feature = "native")]
 unsafe impl Sync for VideoTrack {}

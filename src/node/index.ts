@@ -7,6 +7,7 @@
 
 export {
     AudioDevice,
+    BandwidthMode,
     Call,
     CallId,
     CallEndedReason,
@@ -14,11 +15,22 @@ export {
     CallState,
     CallingMessage,
     CallSettings,
+    ConnectionState,
     DeviceId,
+    GroupCall,
+    GroupCallEndReason,
+    GroupCallObserver,
+    GroupMemberInfo,
     HangupMessage,
     HangupType,
-    RingRTCType,
+    HttpMethod,
+    JoinState,
+    LocalDeviceState,
     OfferType,
+    OpaqueMessage,
+    RemoteDeviceState,
+    RenderedResolution,
+    RingRTCType,
     UserId,
     VideoCapturer,
     VideoRenderer
@@ -26,7 +38,8 @@ export {
 
 export {
     CanvasVideoRenderer,
-    GumVideoCapturer
+    GumVideoCapturer,
+    VideoFrameSource,
 } from './ringrtc/VideoSupport';
 
 import { RingRTCType } from './ringrtc/Service';

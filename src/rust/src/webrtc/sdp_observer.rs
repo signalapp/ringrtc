@@ -263,6 +263,53 @@ impl SessionDescription {
         }
         Ok(Self::new(rffi))
     }
+
+    pub fn local_for_group_call(
+        ice_ufrag: &str,
+        ice_pwd: &str,
+        dtls_fingerprint_sha256: &[u8; 32],
+        rtp_demux_id: Option<u32>,
+    ) -> Result<Self> {
+        let rffi_ice_ufrag = CString::new(ice_ufrag.as_bytes())?;
+        let rffi_ice_pwd = CString::new(ice_pwd.as_bytes())?;
+
+        let sdi = unsafe {
+            sdp::Rust_localDescriptionForGroupCall(
+                rffi_ice_ufrag.as_ptr(),
+                rffi_ice_pwd.as_ptr(),
+                dtls_fingerprint_sha256,
+                rtp_demux_id.unwrap_or(0),
+            )
+        };
+        if sdi.is_null() {
+            return Err(RingRtcError::MungeSdp.into());
+        }
+        Ok(Self::new(sdi))
+    }
+
+    pub fn remote_for_group_call(
+        ice_ufrag: &str,
+        ice_pwd: &str,
+        dtls_fingerprint_sha256: &[u8; 32],
+        rtp_demux_ids: &[u32],
+    ) -> Result<Self> {
+        let rffi_ice_ufrag = CString::new(ice_ufrag.as_bytes())?;
+        let rffi_ice_pwd = CString::new(ice_pwd.as_bytes())?;
+
+        let sdi = unsafe {
+            sdp::Rust_remoteDescriptionForGroupCall(
+                rffi_ice_ufrag.as_ptr(),
+                rffi_ice_pwd.as_ptr(),
+                dtls_fingerprint_sha256,
+                rtp_demux_ids.as_ptr(),
+                rtp_demux_ids.len(),
+            )
+        };
+        if sdi.is_null() {
+            return Err(RingRtcError::MungeSdp.into());
+        }
+        Ok(Self::new(sdi))
+    }
 }
 
 fn to_cstring(s: &Option<String>) -> Result<CString> {
@@ -464,7 +511,7 @@ pub use crate::webrtc::sim::sdp_observer::RffiSetSessionDescriptionObserver;
 /// Observer object for setting a session description.
 #[derive(Debug)]
 pub struct SetSessionDescriptionObserver {
-    /// condition varialbe used to signal the completion of the set
+    /// condition variable used to signal the completion of the set
     /// session description operation.
     condition: FutureResult<Result<()>>,
     /// Pointer to C++ CreateSessionDescriptionObserver object

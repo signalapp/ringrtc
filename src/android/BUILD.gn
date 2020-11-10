@@ -38,10 +38,13 @@ if (is_android) {
       "api/org/signal/ringrtc/CallManager.java",
       "api/org/signal/ringrtc/CameraControl.java",
       "api/org/signal/ringrtc/Connection.java",
+      "api/org/signal/ringrtc/GroupCall.java",
+      "api/org/signal/ringrtc/HttpHeader.java",
       "api/org/signal/ringrtc/IceCandidate.java",
       "api/org/signal/ringrtc/Log.java",
       "api/org/signal/ringrtc/Remote.java",
       "api/org/signal/ringrtc/Testing.java",
+      "api/org/signal/ringrtc/Util.java",
       "api/org/signal/ringrtc/WebRtcLogger.java",
     ]
 
@@ -56,7 +59,6 @@ if (is_android) {
     ] + jar_list
 
     deps = [
-#      "//third_party/android_deps:com_android_support_support_annotations_java",
       "//third_party/android_deps:androidx_annotation_annotation_java",
       "//sdk/android:libwebrtc"
     ]

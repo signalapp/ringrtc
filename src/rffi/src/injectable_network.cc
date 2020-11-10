@@ -159,7 +159,7 @@ class InjectableNetworkImpl : public InjectableNetwork, public rtc::NetworkManag
 
   // name used for debugging a lot, but also as an ID for the network for TURN pruning.
   // type Affects Candidate network cost and other ICE behavior
-  // preference affects ICE cndidate priorities higher is more preferred 
+  // preference affects ICE candidate priorities higher is more preferred
   void AddInterface(
     const char* name, rtc::AdapterType type, Ip ip, int preference) override {
     RTC_LOG(LS_INFO) << "InjectableNetworkImpl::AddInterface() name: " << name;
@@ -291,7 +291,7 @@ class InjectableNetworkImpl : public InjectableNetwork, public rtc::NetworkManag
     RTC_DCHECK(network_thread_->IsCurrent());
     RTC_LOG(LS_INFO) << "InjectableNetworkImpl::CreateUdpSocket() ip: " << local_address_without_port.ip();
     const rtc::IPAddress& local_ip = local_address_without_port.ipaddr();
-    // The min_port and max_port are ultimiately controlled by the PortAllocator,
+    // The min_port and max_port are ultimately controlled by the PortAllocator,
     // which we create, so we can ignore those.
     // And the local_address is supposed to have a port of 0.
     uint16_t local_port = next_udp_port_++;

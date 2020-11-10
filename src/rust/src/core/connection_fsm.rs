@@ -146,7 +146,7 @@ pub enum ConnectionEvent {
     Synchronize(Arc<(Mutex<bool>, Condvar)>),
 
     /// Terminate the connection.
-    /// Source: Termination of the call or reponse to ICE failed
+    /// Source: Termination of the call or response to ICE failed
     /// Action: Drain threads of tasks and wait for them
     Terminate,
 }

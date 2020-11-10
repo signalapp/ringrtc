@@ -7,15 +7,23 @@
 
 //! Platform trait describing the interface an operating system platform must
 /// implement for calling.
+use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
+use crate::common::{
+    ApplicationEvent,
+    CallDirection,
+    CallId,
+    CallMediaType,
+    DeviceId,
+    HttpMethod,
+    Result,
+};
 
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
-use crate::core::signaling;
-
-use crate::webrtc::media::MediaStream;
+use crate::core::{group_call, signaling};
+use crate::webrtc::media::{MediaStream, VideoTrack};
 
 /// A trait encompassing the traits the platform associated types must
 /// implement.
@@ -97,6 +105,21 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     /// signaling channel.  This always broadcasts to all devices.
     fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()>;
 
+    /// Send a generic call message to a recipient using the
+    /// signaling channel.
+    fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()>;
+
+    /// Send a generic HTTP request to the service using the application's
+    /// HTTP stack and connection.
+    fn send_http_request(
+        &self,
+        request_id: u32,
+        url: String,
+        method: HttpMethod,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+    ) -> Result<()>;
+
     /// Create a platform dependent media stream from the base WebRTC
     /// MediaStream.
     fn create_incoming_media(
@@ -134,4 +157,43 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     fn assume_messages_sent(&self) -> bool {
         false
     }
+
+    // Group Calls
+
+    fn request_membership_proof(&self, client_id: group_call::ClientId);
+
+    fn request_group_members(&self, client_id: group_call::ClientId);
+
+    fn handle_connection_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        connection_state: group_call::ConnectionState,
+    );
+
+    fn handle_join_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        join_state: group_call::JoinState,
+    );
+
+    fn handle_remote_devices_changed(
+        &self,
+        client_id: group_call::ClientId,
+        remote_device_states: &[group_call::RemoteDeviceState],
+    );
+
+    fn handle_incoming_video_track(
+        &self,
+        client_id: group_call::ClientId,
+        remote_demux_id: group_call::DemuxId,
+        incoming_video_track: VideoTrack,
+    );
+
+    fn handle_joined_members_changed(
+        &self,
+        client_id: group_call::ClientId,
+        joined_members: &[group_call::UserId],
+    );
+
+    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason);
 }

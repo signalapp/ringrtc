@@ -23,8 +23,9 @@
     "@types/chai": "4.2.7",
     "@types/mocha": "5.2.7",
     "@types/node": "13.1.8",
+    "@types/uuid": "^8.3.0",
     "chai": "4.2.0",
-    "electron": "8.2.5",
+    "electron": "8.5.2",
     "electron-mocha": "8.1.1",
     "eslint": "4.18.2",
     "eslint-config-airbnb-base": "12.1.0",
@@ -38,6 +39,7 @@
     "tslint": "5.13.0",
     "tslint-microsoft-contrib": "6.2.0",
     "tslint-react": "3.6.0",
-    "typescript": "3.7.4"
+    "typescript": "3.7.4",
+    "uuid": "8.3.1"
   }
 }

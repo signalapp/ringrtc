@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (11.4.1), and for the host platform as a Node.js module for use in Electron apps.
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (12.1.0), and for the host platform as a Node.js module for use in Electron apps.
 
 ## Prerequisites
 
@@ -20,10 +20,10 @@ Install rustup, the Rust management system:
 
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-We currently use Rust 1.44.1 for official builds, but any recent stable version should work.
+We currently use Rust 1.47.0 for official builds, but any recent stable version should work.
 
-    rustup toolchain install 1.44.1
-    rustup default 1.44.1
+    rustup toolchain install 1.47.0
+    rustup default 1.47.0
 
 #### Android
 

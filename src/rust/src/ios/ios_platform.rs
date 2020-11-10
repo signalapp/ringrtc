@@ -7,28 +7,44 @@
 
 //! iOS Platform
 
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
+use crate::common::{
+    ApplicationEvent,
+    CallDirection,
+    CallId,
+    CallMediaType,
+    DeviceId,
+    HttpMethod,
+    Result,
+};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
-use crate::core::signaling;
+use crate::core::{group_call, signaling};
 use crate::ios::api::call_manager_interface::{
+    AppByteSlice,
     AppCallContext,
     AppConnectionInterface,
+    AppHeader,
+    AppHeaderArray,
     AppIceCandidate,
     AppIceCandidateArray,
     AppInterface,
+    AppMemberArray,
     AppObject,
+    AppOptionalBool,
+    AppOptionalFloat,
+    AppOptionalUInt16,
+    AppRemoteDeviceState,
+    AppRemoteDeviceStateArray,
 };
 use crate::ios::error::IOSError;
 use crate::ios::ios_media_stream::IOSMediaStream;
-use crate::ios::ios_util::*;
-
-use crate::webrtc::media::MediaStream;
+use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnection};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
 
@@ -107,7 +123,8 @@ impl Platform for IOSPlatform {
 
         // Get the observer because we will need it when creating the
         // PeerConnection in Swift.
-        let pc_observer = PeerConnectionObserver::new(connection_ptr)?;
+        let pc_observer =
+            PeerConnectionObserver::new(connection_ptr, false /* enable_frame_encryption */)?;
 
         let app_connection_interface = (self.app_interface.onCreateConnectionInterface)(
             self.app_interface.object,
@@ -335,6 +352,59 @@ impl Platform for IOSPlatform {
         Ok(())
     }
 
+    fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()> {
+        info!("send_call_message(): recipient_uuid: {:?}", recipient_uuid,);
+
+        (self.app_interface.sendCallMessage)(
+            self.app_interface.object,
+            app_slice_from_bytes(Some(&recipient_uuid)),
+            app_slice_from_bytes(Some(&message)),
+        );
+
+        Ok(())
+    }
+
+    fn send_http_request(
+        &self,
+        request_id: u32,
+        url: String,
+        method: HttpMethod,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+    ) -> Result<()> {
+        info!(
+            "send_http_request(): request_id: {}, url: {}, method: {}",
+            request_id, url, method
+        );
+
+        let mut app_headers: Vec<AppHeader> = Vec::new();
+
+        for (name, value) in headers.iter() {
+            let app_header = AppHeader {
+                name:  app_slice_from_str(Some(&name)),
+                value: app_slice_from_str(Some(&value)),
+            };
+
+            app_headers.push(app_header);
+        }
+
+        let app_header_array = AppHeaderArray {
+            headers: app_headers.as_ptr(),
+            count:   app_headers.len(),
+        };
+
+        (self.app_interface.sendHttpRequest)(
+            self.app_interface.object,
+            request_id,
+            app_slice_from_str(Some(&url)),
+            method as i32,
+            app_header_array,
+            app_slice_from_bytes(body.as_ref()),
+        );
+
+        Ok(())
+    }
+
     fn create_incoming_media(
         &self,
         connection: &Connection<Self>,
@@ -403,6 +473,119 @@ impl Platform for IOSPlatform {
 
         Ok(())
     }
+
+    // Group Calls
+
+    fn request_membership_proof(&self, client_id: group_call::ClientId) {
+        (self.app_interface.requestMembershipProof)(self.app_interface.object, client_id);
+    }
+
+    fn request_group_members(&self, client_id: group_call::ClientId) {
+        (self.app_interface.requestGroupMembers)(self.app_interface.object, client_id);
+    }
+
+    fn handle_connection_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        connection_state: group_call::ConnectionState,
+    ) {
+        (self.app_interface.handleConnectionStateChanged)(
+            self.app_interface.object,
+            client_id,
+            connection_state as i32,
+        );
+    }
+
+    fn handle_join_state_changed(
+        &self,
+        client_id: group_call::ClientId,
+        join_state: group_call::JoinState,
+    ) {
+        (self.app_interface.handleJoinStateChanged)(
+            self.app_interface.object,
+            client_id,
+            match join_state {
+                group_call::JoinState::NotJoined => 0,
+                group_call::JoinState::Joining => 1,
+                group_call::JoinState::Joined(_) => 2,
+            },
+        );
+    }
+
+    fn handle_remote_devices_changed(
+        &self,
+        client_id: group_call::ClientId,
+        remote_device_states: &[group_call::RemoteDeviceState],
+    ) {
+        let mut app_remote_device_states: Vec<AppRemoteDeviceState> = Vec::new();
+
+        for remote_device_state in remote_device_states {
+            let app_remote_device_state = AppRemoteDeviceState {
+                demuxId:          remote_device_state.demux_id,
+                user_id:          app_slice_from_bytes(Some(remote_device_state.user_id.as_ref())),
+                audioMuted:       app_option_from_bool(remote_device_state.audio_muted),
+                videoMuted:       app_option_from_bool(remote_device_state.video_muted),
+                speakerIndex:     app_option_from_u16(remote_device_state.speaker_index),
+                videoAspectRatio: app_option_from_f32(remote_device_state.video_aspect_ratio),
+                audioLevel:       app_option_from_u16(remote_device_state.audio_level),
+            };
+
+            app_remote_device_states.push(app_remote_device_state);
+        }
+
+        let app_remote_device_states_array = AppRemoteDeviceStateArray {
+            states: app_remote_device_states.as_ptr(),
+            count:  app_remote_device_states.len(),
+        };
+
+        (self.app_interface.handleRemoteDevicesChanged)(
+            self.app_interface.object,
+            client_id,
+            app_remote_device_states_array,
+        );
+    }
+
+    fn handle_incoming_video_track(
+        &self,
+        client_id: group_call::ClientId,
+        remote_demux_id: group_call::DemuxId,
+        incoming_video_track: VideoTrack,
+    ) {
+        (self.app_interface.handleIncomingVideoTrack)(
+            self.app_interface.object,
+            client_id,
+            remote_demux_id,
+            incoming_video_track.rffi() as *mut c_void,
+        );
+    }
+
+    fn handle_joined_members_changed(
+        &self,
+        client_id: group_call::ClientId,
+        joined_members: &[group_call::UserId],
+    ) {
+        let mut app_joined_members: Vec<AppByteSlice> = Vec::new();
+
+        for member in joined_members {
+            let app_joined_member = app_slice_from_bytes(Some(member));
+            app_joined_members.push(app_joined_member);
+        }
+
+        let app_joined_members_array = AppMemberArray {
+            members: app_joined_members.as_ptr(),
+            count:   app_joined_members.len(),
+        };
+
+        (self.app_interface.handleJoinedMembersChanged)(
+            self.app_interface.object,
+            client_id,
+            app_joined_members_array,
+        );
+    }
+
+    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
+        (self.app_interface.handleEnded)(self.app_interface.object, client_id, reason as i32);
+    }
 }
 
 impl IOSPlatform {
@@ -442,6 +625,45 @@ fn app_slice_from_str(s: Option<&String>) -> AppByteSlice {
         Some(s) => AppByteSlice {
             bytes: s.as_ptr(),
             len:   s.len(),
+        },
+    }
+}
+
+fn app_option_from_u16(v: Option<u16>) -> AppOptionalUInt16 {
+    match v {
+        None => AppOptionalUInt16 {
+            value: 0, // <- app should ignore
+            valid: false,
+        },
+        Some(v) => AppOptionalUInt16 {
+            value: v,
+            valid: true,
+        },
+    }
+}
+
+fn app_option_from_bool(v: Option<bool>) -> AppOptionalBool {
+    match v {
+        None => AppOptionalBool {
+            value: false, // <- app should ignore
+            valid: false,
+        },
+        Some(v) => AppOptionalBool {
+            value: v,
+            valid: true,
+        },
+    }
+}
+
+fn app_option_from_f32(v: Option<f32>) -> AppOptionalFloat {
+    match v {
+        None => AppOptionalFloat {
+            value: 0.0, // <- app should ignore
+            valid: false,
+        },
+        Some(v) => AppOptionalFloat {
+            value: v,
+            valid: true,
         },
     }
 }

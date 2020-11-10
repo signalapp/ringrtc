@@ -14,10 +14,23 @@ protocol CallManagerInterfaceDelegate: class {
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate])
     func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool)
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
+    func sendCallMessage(recipientUuid: UUID, message: Data)
+    func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?)
     func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
     func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool
     func onCallConcluded(remote: UnsafeRawPointer)
+
+    // Group Calls
+
+    func requestMembershipProof(clientId: UInt32)
+    func requestGroupMembers(clientId: UInt32)
+    func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState)
+    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
+    func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
+    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?)
+    func handleJoinedMembersChanged(clientId: UInt32, joinedMembers: [UUID])
+    func handleEnded(clientId: UInt32, reason: GroupCallEndReason)
 }
 
 class CallManagerInterface {
@@ -36,23 +49,37 @@ class CallManagerInterface {
 
     // MARK: API Functions
 
-     func getWrapper() -> AppInterface {
-         return AppInterface(
-             object: UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque()),
-             destroy: callManagerInterfaceDestroy,
-             onStartCall: callManagerInterfaceOnStartCall,
-             onEvent: callManagerInterfaceOnCallEvent,
-             onSendOffer: callManagerInterfaceOnSendOffer,
-             onSendAnswer: callManagerInterfaceOnSendAnswer,
-             onSendIceCandidates: callManagerInterfaceOnSendIceCandidates,
-             onSendHangup: callManagerInterfaceOnSendHangup,
-             onSendBusy: callManagerInterfaceOnSendBusy,
-             onCreateConnectionInterface: callManagerInterfaceOnCreateConnectionInterface,
-             onCreateMediaStreamInterface: callManagerInterfaceOnCreateMediaStreamInterface,
-             onConnectMedia: callManagerInterfaceOnConnectMedia,
-             onCompareRemotes: callManagerInterfaceOnCompareRemotes,
-             onCallConcluded: callManagerInterfaceOnCallConcluded)
-     }
+    func getWrapper() -> AppInterface {
+        return AppInterface(
+            object: UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque()),
+            destroy: callManagerInterfaceDestroy,
+            onStartCall: callManagerInterfaceOnStartCall,
+            onEvent: callManagerInterfaceOnCallEvent,
+            onSendOffer: callManagerInterfaceOnSendOffer,
+            onSendAnswer: callManagerInterfaceOnSendAnswer,
+            onSendIceCandidates: callManagerInterfaceOnSendIceCandidates,
+            onSendHangup: callManagerInterfaceOnSendHangup,
+            onSendBusy: callManagerInterfaceOnSendBusy,
+            sendCallMessage: callManagerInterfaceSendCallMessage,
+            sendHttpRequest: callManagerInterfaceSendHttpRequest,
+            onCreateConnectionInterface: callManagerInterfaceOnCreateConnectionInterface,
+            onCreateMediaStreamInterface: callManagerInterfaceOnCreateMediaStreamInterface,
+            onConnectMedia: callManagerInterfaceOnConnectMedia,
+            onCompareRemotes: callManagerInterfaceOnCompareRemotes,
+            onCallConcluded: callManagerInterfaceOnCallConcluded,
+
+            // Group Calls
+
+            requestMembershipProof: callManagerInterfaceRequestMembershipProof,
+            requestGroupMembers: callManagerInterfaceRequestGroupMembers,
+            handleConnectionStateChanged: callManagerInterfaceHandleConnectionStateChanged,
+            handleJoinStateChanged: callManagerInterfaceHandleJoinStateChanged,
+            handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
+            handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
+            handleJoinedMembersChanged: callManagerInterfaceHandleJoinedMembersChanged,
+            handleEnded: callManagerInterfaceHandleEnded
+        )
+    }
 
     // MARK: Delegate Handlers
 
@@ -116,6 +143,22 @@ class CallManagerInterface {
         delegate.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
     }
 
+    func sendCallMessage(recipientUuid: UUID, message: Data) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.sendCallMessage(recipientUuid: recipientUuid, message: message)
+    }
+
+    func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.sendHttpRequest(requestId: requestId, url: url, method: method, headers: headers, body: body)
+    }
+
     func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
         guard let delegate = self.callManagerObserverDelegate else {
             return nil
@@ -146,6 +189,72 @@ class CallManagerInterface {
         }
 
         delegate.onCallConcluded(remote: remote)
+    }
+
+    // Group Calls
+
+    func requestMembershipProof(clientId: UInt32) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.requestMembershipProof(clientId: clientId)
+    }
+
+    func requestGroupMembers(clientId: UInt32) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.requestGroupMembers(clientId: clientId)
+    }
+
+    func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleConnectionStateChanged(clientId: clientId, connectionState: connectionState)
+    }
+
+    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleJoinStateChanged(clientId: clientId, joinState: joinState)
+    }
+
+    func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState]) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleRemoteDevicesChanged(clientId: clientId, remoteDeviceStates: remoteDeviceStates)
+    }
+
+    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
+    }
+
+    func handleJoinedMembersChanged(clientId: UInt32, joinedMembers: [UUID]) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleJoinedMembersChanged(clientId: clientId, joinedMembers: joinedMembers)
+    }
+
+    func handleEnded(clientId: UInt32, reason: GroupCallEndReason) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleEnded(clientId: clientId, reason: reason)
     }
 }
 
@@ -336,6 +445,56 @@ func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UI
     obj.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
 }
 
+func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recipientUuid: AppByteSlice, message: AppByteSlice) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let recipient = recipientUuid.asData() else {
+        return
+    }
+
+    guard let message = message.asData() else {
+        return
+    }
+
+    obj.sendCallMessage(recipientUuid: recipient.uuid, message: message)
+}
+
+func callManagerInterfaceSendHttpRequest(object: UnsafeMutableRawPointer?, requestId: UInt32, url: AppByteSlice, method: Int32, headerArray: AppHeaderArray, body: AppByteSlice) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let url = url.asString() else {
+        Logger.error("url is not a valid string")
+        return
+    }
+
+    let httpMethod: CallManagerHttpMethod
+    if let validHttpMethod = CallManagerHttpMethod(rawValue: method) {
+        httpMethod = validHttpMethod
+    } else {
+        owsFailDebug("unexpected method")
+        return
+    }
+
+    var finalHeaders: [String: String] = [:]
+    for index in 0..<headerArray.count {
+        guard let name = headerArray.headers[index].name.asString() else {
+            continue
+        }
+
+        finalHeaders[name] = headerArray.headers[index].value.asString()
+    }
+
+    obj.sendHttpRequest(requestId: requestId, url: url, method: httpMethod, headers: finalHeaders, body: body.asData())
+}
+
 func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, observer: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?, enableDtls: Bool, enableRtpDataChannel: Bool) -> AppConnectionInterface {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -418,7 +577,6 @@ func callManagerInterfaceOnConnectMedia(object: UnsafeMutableRawPointer?, remote
         owsFailDebug("object was unexpectedly nil")
         return
     }
-
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
@@ -468,7 +626,6 @@ func callManagerInterfaceOnCallConcluded(object: UnsafeMutableRawPointer?, remot
         owsFailDebug("object was unexpectedly nil")
         return
     }
-
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
@@ -477,4 +634,154 @@ func callManagerInterfaceOnCallConcluded(object: UnsafeMutableRawPointer?, remot
     }
 
     obj.onCallConcluded(remote: remote)
+}
+
+// Group Calls
+
+func callManagerInterfaceRequestMembershipProof(object: UnsafeMutableRawPointer?, clientId: UInt32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    obj.requestMembershipProof(clientId: clientId)
+}
+
+func callManagerInterfaceRequestGroupMembers(object: UnsafeMutableRawPointer?, clientId: UInt32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    obj.requestGroupMembers(clientId: clientId)
+}
+
+func callManagerInterfaceHandleConnectionStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, connectionState: Int32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    let _connectionState: ConnectionState
+    if let validState = ConnectionState(rawValue: connectionState) {
+        _connectionState = validState
+    } else {
+        owsFailDebug("unexpected connection state")
+        return
+    }
+
+    obj.handleConnectionStateChanged(clientId: clientId, connectionState: _connectionState)
+}
+
+func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinState: Int32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    let _joinState: JoinState
+    if let validState = JoinState(rawValue: joinState) {
+        _joinState = validState
+    } else {
+        owsFailDebug("unexpected join state")
+        return
+    }
+
+    obj.handleJoinStateChanged(clientId: clientId, joinState: _joinState)
+}
+
+func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDeviceStates: AppRemoteDeviceStateArray) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    var finalRemoteDeviceStates: [RemoteDeviceState] = []
+
+    for index in 0..<remoteDeviceStates.count {
+        guard let userId = remoteDeviceStates.states[index].user_id.asData() else {
+            Logger.debug("missing userId for demuxId: \(remoteDeviceStates.states[index].demuxId)")
+            continue
+        }
+
+        let deviceState = RemoteDeviceState(demuxId: remoteDeviceStates.states[index].demuxId, userId: userId.uuid)
+
+        if remoteDeviceStates.states[index].audioMuted.valid {
+            deviceState.audioMuted = remoteDeviceStates.states[index].audioMuted.value
+        }
+
+        if remoteDeviceStates.states[index].videoMuted.valid {
+            deviceState.videoMuted = remoteDeviceStates.states[index].videoMuted.value
+        }
+
+        if remoteDeviceStates.states[index].speakerIndex.valid {
+            deviceState.speakerIndex = remoteDeviceStates.states[index].speakerIndex.value
+        }
+
+        if remoteDeviceStates.states[index].videoAspectRatio.valid {
+            deviceState.videoAspectRatio = remoteDeviceStates.states[index].videoAspectRatio.value
+        }
+
+        if remoteDeviceStates.states[index].audioLevel.valid {
+            deviceState.audioLevel = remoteDeviceStates.states[index].audioLevel.value
+        }
+
+        finalRemoteDeviceStates.append(deviceState)
+    }
+
+    obj.handleRemoteDevicesChanged(clientId: clientId, remoteDeviceStates: finalRemoteDeviceStates)
+}
+
+func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    obj.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
+}
+
+func callManagerInterfaceHandleJoinedMembersChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppMemberArray) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    var finalJoinedMembers: [UUID] = []
+
+    for index in 0..<joinedMembers.count {
+        guard let userId = joinedMembers.members[index].asData() else {
+            Logger.debug("missing userId")
+            continue
+        }
+
+        finalJoinedMembers.append(userId.uuid)
+    }
+
+    obj.handleJoinedMembersChanged(clientId: clientId, joinedMembers: finalJoinedMembers)
+}
+
+func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId: UInt32, reason: Int32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    let _reason: GroupCallEndReason
+    if let validReason = GroupCallEndReason(rawValue: reason) {
+        _reason = validReason
+    } else {
+        owsFailDebug("unexpected end reason")
+        return
+    }
+
+    obj.handleEnded(clientId: clientId, reason: _reason)
 }

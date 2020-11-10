@@ -12,18 +12,24 @@ use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::ios::logging::{init_logging, IOSLogger};
-
 use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppObject};
 use crate::ios::ios_platform::IOSPlatform;
+use crate::ios::logging::{init_logging, IOSLogger};
 
-use crate::common::{BandwidthMode, CallId, CallMediaType, DeviceId, FeatureLevel, Result};
-
-use crate::core::signaling;
-use crate::core::util::{ptr_as_box, ptr_as_mut};
-
+use crate::common::{
+    BandwidthMode,
+    CallId,
+    CallMediaType,
+    DeviceId,
+    FeatureLevel,
+    HttpResponse,
+    Result,
+};
 use crate::core::call_manager::CallManager;
+use crate::core::util::{ptr_as_box, ptr_as_mut};
+use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::webrtc::media;
 
 /// Public type for iOS CallManager
 pub type IOSCallManager = CallManager<IOSPlatform>;
@@ -113,6 +119,7 @@ pub fn hangup(call_manager: *mut IOSCallManager) -> Result<()> {
 }
 
 /// Application notification of received answer message
+#[allow(clippy::too_many_arguments)]
 pub fn received_answer(
     call_manager: *mut IOSCallManager,
     call_id: u64,
@@ -166,6 +173,7 @@ pub fn received_answer(
 }
 
 /// Application notification of received offer message
+#[allow(clippy::too_many_arguments)]
 pub fn received_offer(
     call_manager: *mut IOSCallManager,
     call_id: u64,
@@ -289,6 +297,40 @@ pub fn received_busy(
     call_manager.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
 }
 
+pub fn received_call_message(
+    call_manager: *mut IOSCallManager,
+    sender_uuid: Vec<u8>,
+    sender_device_id: DeviceId,
+    local_device_id: DeviceId,
+    message: Vec<u8>,
+    message_age_sec: u64,
+) -> Result<()> {
+    info!(
+        "received_call_message(): sender_uuid: {:?} sender_device_id: {}",
+        sender_uuid, sender_device_id
+    );
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.received_call_message(
+        sender_uuid,
+        sender_device_id,
+        local_device_id,
+        message,
+        message_age_sec,
+    )
+}
+
+pub fn received_http_response(
+    call_manager: *mut IOSCallManager,
+    request_id: u32,
+    response: Option<HttpResponse>,
+) -> Result<()> {
+    info!("received_http_response(): request_id: {}", request_id,);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.received_http_response(request_id, response)
+}
+
 /// Application notification to accept the incoming call
 pub fn accept_call(call_manager: *mut IOSCallManager, call_id: u64) -> Result<()> {
     let call_id = CallId::from(call_id);
@@ -330,8 +372,11 @@ pub fn set_video_enable(call_manager: *mut IOSCallManager, enable: bool) -> Resu
     active_connection.inject_send_sender_status_via_data_channel(enable)
 }
 
-/// CMI request to set the low bandwidth mode
-pub fn set_bandwidth_mode(call_manager: *mut IOSCallManager, mode: BandwidthMode) -> Result<()> {
+/// CMI request to set the low bandwidth mode on the direct connection
+pub fn set_direct_bandwidth_mode(
+    call_manager: *mut IOSCallManager,
+    mode: BandwidthMode,
+) -> Result<()> {
     info!("set_low_bandwidth_mode():");
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
@@ -367,4 +412,141 @@ pub fn close(call_manager: *mut IOSCallManager) -> Result<()> {
     // scope when this function exits.
     let mut call_manager = unsafe { ptr_as_box(call_manager)? };
     call_manager.close()
+}
+
+// Group Calls
+
+pub fn create_group_call_client(
+    call_manager: *mut IOSCallManager,
+    group_id: group_call::GroupId,
+    native_audio_track: *const c_void,
+    native_video_track: *const c_void,
+) -> Result<group_call::ClientId> {
+    info!("create_group_call_client():");
+
+    let outgoing_audio_track =
+        media::AudioTrack::owned(native_audio_track as *const media::RffiAudioTrack);
+    let outgoing_video_track =
+        media::VideoTrack::owned(native_video_track as *const media::RffiVideoTrack);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.create_group_call_client(group_id, outgoing_audio_track, outgoing_video_track)
+}
+
+pub fn delete_group_call_client(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+) -> Result<()> {
+    info!("delete_group_call_client(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.delete_group_call_client(client_id);
+    Ok(())
+}
+
+pub fn connect(call_manager: *mut IOSCallManager, client_id: group_call::ClientId) -> Result<()> {
+    info!("connect(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.connect(client_id);
+    Ok(())
+}
+
+pub fn join(call_manager: *mut IOSCallManager, client_id: group_call::ClientId) -> Result<()> {
+    info!("join(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.join(client_id);
+    Ok(())
+}
+
+pub fn leave(call_manager: *mut IOSCallManager, client_id: group_call::ClientId) -> Result<()> {
+    info!("leave(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.leave(client_id);
+    Ok(())
+}
+
+pub fn disconnect(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+) -> Result<()> {
+    info!("disconnect(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.disconnect(client_id);
+    Ok(())
+}
+
+pub fn set_outgoing_audio_muted(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+    muted: bool,
+) -> Result<()> {
+    info!("set_outgoing_audio_muted(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_outgoing_audio_muted(client_id, muted);
+    Ok(())
+}
+
+pub fn set_outgoing_video_muted(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+    muted: bool,
+) -> Result<()> {
+    info!("set_outgoing_video_muted(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_outgoing_video_muted(client_id, muted);
+    Ok(())
+}
+
+pub fn set_bandwidth_mode(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+    bandwidth_mode: BandwidthMode,
+) -> Result<()> {
+    info!("set_bandwidth_mode(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_bandwidth_mode(client_id, bandwidth_mode);
+    Ok(())
+}
+
+pub fn set_rendered_resolutions(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+    rendered_resolutions: Vec<group_call::VideoRequest>,
+) -> Result<()> {
+    info!("set_rendered_resolutions(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_rendered_resolutions(client_id, rendered_resolutions);
+    Ok(())
+}
+
+pub fn set_group_members(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+    members: Vec<group_call::GroupMemberInfo>,
+) -> Result<()> {
+    info!("set_group_members(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_group_members(client_id, members);
+    Ok(())
+}
+
+pub fn set_membership_proof(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+    proof: Vec<u8>,
+) -> Result<()> {
+    info!("set_group_membership_proof(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_membership_proof(client_id, proof);
+    Ok(())
 }

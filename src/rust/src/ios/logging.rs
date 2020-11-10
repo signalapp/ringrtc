@@ -16,8 +16,8 @@ use libc::size_t;
 use log::{LevelFilter, Log, Metadata, Record};
 
 use crate::common::Result;
+use crate::ios::api::call_manager_interface::AppByteSlice;
 use crate::ios::error::IOSError;
-use crate::ios::ios_util::*;
 
 /// Log object for interfacing with swift.
 #[repr(C)]

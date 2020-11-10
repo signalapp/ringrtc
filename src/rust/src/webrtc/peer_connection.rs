@@ -15,6 +15,7 @@ use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::peer_connection_observer::RffiPeerConnectionObserver;
+use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver,
     SessionDescription,
@@ -32,7 +33,11 @@ use crate::webrtc::ffi::ref_count;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection as pc;
 #[cfg(feature = "sim")]
-pub use crate::webrtc::sim::peer_connection::{RffiDataChannel, RffiPeerConnection};
+pub use crate::webrtc::sim::peer_connection::{
+    BoxedRtpPacketSink,
+    RffiDataChannel,
+    RffiPeerConnection,
+};
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::ref_count;
 
@@ -95,6 +100,11 @@ impl PeerConnection {
             owned,
             rffi_pc_observer,
         }
+    }
+
+    #[cfg(feature = "sim")]
+    pub fn set_rtp_packet_sink(&self, rtp_packet_sink: BoxedRtpPacketSink) {
+        unsafe { (*self.rffi).set_rtp_packet_sink(rtp_packet_sink) }
     }
 
     /// Rust wrapper around C++ PeerConnection::CreateDataChannel().
@@ -187,6 +197,20 @@ impl PeerConnection {
         }
     }
 
+    pub fn add_ice_candidate_from_server(
+        &self,
+        ip: std::net::IpAddr,
+        port: u16,
+        tcp: bool,
+    ) -> Result<()> {
+        let add_ok = unsafe { pc::Rust_addIceCandidateFromServer(self.rffi, ip.into(), port, tcp) };
+        if add_ok {
+            Ok(())
+        } else {
+            Err(RingRtcError::AddIceCandidate.into())
+        }
+    }
+
     // Rust wrapper around C++ PeerConnection::CreateSharedIceGatherer().
     pub fn create_shared_ice_gatherer(&self) -> Result<IceGatherer> {
         let rffi_ice_gatherer = unsafe { pc::Rust_createSharedIceGatherer(self.rffi) };
@@ -221,6 +245,42 @@ impl PeerConnection {
         unsafe { pc::Rust_setMaxSendBitrate(self.rffi, max_bitrate.as_bps() as i32) };
 
         Ok(())
+    }
+
+    pub fn send_rtp(&self, header: rtp::Header, payload: &[u8]) -> Result<()> {
+        let rtp::Header {
+            pt,
+            seqnum,
+            timestamp,
+            ssrc,
+        } = header;
+        let ok = unsafe {
+            pc::Rust_sendRtp(
+                self.rffi,
+                pt,
+                seqnum,
+                timestamp,
+                ssrc,
+                payload.as_ptr(),
+                payload.len(),
+            )
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(RingRtcError::SendRtp.into())
+        }
+    }
+
+    // Must be called after either SetLocalDescription or SetRemoteDescription.
+    // Received RTP with the matching PT will be sent to PeerConnectionObserver::handle_rtp_received.
+    pub fn receive_rtp(&self, pt: rtp::PayloadType) -> Result<()> {
+        let ok = unsafe { pc::Rust_receiveRtp(self.rffi, pt) };
+        if ok {
+            Ok(())
+        } else {
+            Err(RingRtcError::ReceiveRtp.into())
+        }
     }
 
     pub fn close(&self) {

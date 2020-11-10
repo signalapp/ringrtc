@@ -65,7 +65,7 @@ impl JavaMediaStream {
     pub fn global_ref(&self, env: &JNIEnv) -> Result<GlobalRef> {
         unsafe {
             let jobject = Rust_getJavaMediaStreamObject(self.rffi);
-            Ok(env.new_global_ref(jobject.into())?)
+            Ok(env.new_global_ref(jobject)?)
         }
     }
 }

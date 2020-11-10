@@ -12,18 +12,34 @@ interface Ref<T> {
   readonly current: T | null;
 }
 
+// The way a CanvasVideoRender gets VideoFrames
+export interface VideoFrameSource {
+  // Fills in the given buffer and returns the width x height
+  // or returns undefined if nothing was filled in because no
+  // video frame was available.
+  receiveVideoFrame(buffer: ArrayBuffer): [number, number] | undefined;
+}
+
+// The way a GumVideoCapturer sends frames
+interface VideoFrameSender {
+  sendVideoFrame(width: number, height: number, rgbaBuffer: ArrayBuffer): void;
+}
+
 export class GumVideoCapturer {
   private readonly maxWidth: number;
   private readonly maxHeight: number;
   private readonly maxFramerate: number;
   private localPreview?: Ref<HTMLVideoElement>;
   private capturing: boolean;
-  private call?: Call;
+  private sender?: VideoFrameSender;
   private mediaStream?: MediaStream;
   private canvas?: OffscreenCanvas;
   private canvasContext?: OffscreenCanvasRenderingContext2D;
   private intervalId?: any;
   private preferredDeviceId?: string;
+  private capturingStartTime: number | undefined;
+  // Set this if you want fake video
+  public fakeVideoName: string | undefined;
 
   constructor(maxWidth: number, maxHeight: number, maxFramerate: number) {
     this.maxWidth = maxWidth;
@@ -41,10 +57,10 @@ export class GumVideoCapturer {
     this.startCapturing();
   }
 
-  enableCaptureAndSend(call: Call): void {
+  enableCaptureAndSend(sender: VideoFrameSender): void {
     // tslint:disable no-floating-promises
     this.startCapturing();
-    this.startSending(call);
+    this.startSending(sender);
   }
 
   disable(): void {
@@ -72,6 +88,7 @@ export class GumVideoCapturer {
       return;
     }
     this.capturing = true;
+    this.capturingStartTime = Date.now();
     try {
       const mediaStream = await window.navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -124,11 +141,16 @@ export class GumVideoCapturer {
     }
   }
 
-  private startSending(call: Call): void {
-    if (this.call === call) {
+  private startSending(sender: VideoFrameSender): void {
+    if (this.sender === sender) {
       return;
     }
-    this.call = call;
+    if (!this.sender) {
+      // If we're replacing an existing sender, make sure we stop the
+      // current setInterval loop before starting another one.
+      this.stopSending();
+    }
+    this.sender = sender;
     this.canvas = new OffscreenCanvas(this.maxWidth, this.maxHeight);
     this.canvasContext = this.canvas.getContext('2d') || undefined;
     const interval = 1000 / this.maxFramerate;
@@ -139,7 +161,7 @@ export class GumVideoCapturer {
   }
 
   private stopSending(): void {
-    this.call = undefined;
+    this.sender = undefined;
     this.canvas = undefined;
     this.canvasContext = undefined;
     if (!!this.intervalId) {
@@ -167,36 +189,102 @@ export class GumVideoCapturer {
   }
 
   private captureAndSendOneVideoFrame(): void {
-    if (!this.localPreview || !this.localPreview.current) {
+    if (!this.canvas || !this.canvasContext || !this.sender) {
       return;
     }
-    if (!this.localPreview.current.srcObject && !!this.mediaStream) {
-      this.setLocalPreviewSourceObject(this.mediaStream);
-    }
-    if (!this.canvas || !this.canvasContext || !this.call) {
+
+    if ((this.fakeVideoName != undefined) && (this.capturingStartTime != undefined)) {
+      let width = 640;
+      let height = 480;
+      let duration = Date.now() - this.capturingStartTime;
+      this.drawFakeVideo(this.canvasContext, width, height, this.fakeVideoName, duration);
+      const image = this.canvasContext.getImageData(0, 0, width, height);
+      this.sender.sendVideoFrame(image.width, image.height, image.data.buffer);
       return;
     }
-    const width = this.localPreview.current.videoWidth;
-    const height = this.localPreview.current.videoHeight;
-    if (width === 0 || height === 0) {
-      return;
+
+    if (this.localPreview && this.localPreview.current) {
+      if (!this.localPreview.current.srcObject && !!this.mediaStream) {
+        this.setLocalPreviewSourceObject(this.mediaStream);
+      }
+      const width = this.localPreview.current.videoWidth;
+      const height = this.localPreview.current.videoHeight;
+      if (width === 0 || height === 0) {
+        return;
+      }
+      this.canvasContext.drawImage(
+        this.localPreview.current,
+        0,
+        0,
+        width,
+        height
+      );
+      const image = this.canvasContext.getImageData(0, 0, width, height);
+      this.sender.sendVideoFrame(image.width, image.height, image.data.buffer);
     }
-    this.canvasContext.drawImage(
-      this.localPreview.current,
-      0,
-      0,
-      width,
-      height
-    );
-    const image = this.canvasContext.getImageData(0, 0, width, height);
-    this.call.sendVideoFrame(image.width, image.height, image.data.buffer);
+  }
+
+  private drawFakeVideo(context: OffscreenCanvasRenderingContext2D, width: number, height: number, name: string, time: number): void {
+    function fill(style: string, draw: () => void) {
+      context.fillStyle = style;
+      context.beginPath();
+      draw();
+      context.fill();
+    }
+
+    function stroke(style: string, draw: () => void) {
+      context.strokeStyle = style;
+      context.beginPath();
+      draw();
+      context.stroke();
+    }
+
+    function arc(x: number, y: number, radius: number, start: number, end: number) {
+      const twoPi = 2 * Math.PI;
+      context.arc(x, y, radius, start * twoPi, end * twoPi);
+    }
+
+    function circle(x: number, y: number, radius: number) {
+      arc(x, y, radius, 0, 1);
+    }
+
+    function fillFace(x: number, y: number, faceRadius: number) {
+      const eyeRadius = faceRadius/5;
+      const eyeOffsetX = faceRadius/2;
+      const eyeOffsetY = -faceRadius/4;
+      const smileRadius = faceRadius/2;
+      const smileOffsetY = -eyeOffsetY;
+      fill("yellow", () => circle(x, y, faceRadius));
+      fill("black", () => circle(x - eyeOffsetX, y + eyeOffsetY, eyeRadius));
+      fill("black", () => circle(x + eyeOffsetX, y + eyeOffsetY, eyeRadius));
+      stroke("black", () => arc(x, y + smileOffsetY, smileRadius, 0, 0.5));
+    }
+
+    function fillText(x: number, y: number, fillStyle: string, fontSize: number, fontName: string, align: CanvasTextAlign, text: string) {
+      context.font = `${fontSize}px ${fontName}`;
+      context.textAlign = align;
+      context.fillStyle = fillStyle;
+      context.fillText(text, x, y);
+    }
+
+    function fillLabeledFace(x: number, y: number, faceRadius: number, label: string) {
+      const labelSize = faceRadius*.3;
+      const labelOffsetY = faceRadius*1.5;
+
+      fillFace(x, y, faceRadius);
+      fillText(x, y + labelOffsetY, "black", labelSize, "monospace", "center", label);
+    }
+
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, width, height);
+    fillLabeledFace(width/2, height/2, height/3, `${name} ${time}`);
   }
 }
 
 export class CanvasVideoRenderer {
   private canvas?: Ref<HTMLCanvasElement>;
   private buffer: ArrayBuffer;
-  private call?: Call;
+  private source?: VideoFrameSource;
   private rafId?: any;
 
   constructor() {
@@ -208,17 +296,23 @@ export class CanvasVideoRenderer {
     this.canvas = canvas;
   }
 
-  enable(call: Call): void {
-    if (this.call === call) {
+  enable(source: VideoFrameSource): void {
+    if (this.source === source) {
       return;
     }
-    this.call = call;
+    if (!!this.source) {
+      // If we're replacing an existing source, make sure we stop the
+      // current rAF loop before starting another one.
+      // And blanking the video is nice as well.
+      this.disable();
+    }
+    this.source = source;
     this.requestAnimationFrameCallback();
   }
 
   disable() {
     this.renderBlack();
-    this.call = undefined;
+    this.source = undefined;
     if (this.rafId) {
       window.cancelAnimationFrame(this.rafId);
     }
@@ -246,7 +340,7 @@ export class CanvasVideoRenderer {
   }
 
   private renderVideoFrame() {
-    if (!this.call || !this.canvas) {
+    if (!this.source || !this.canvas) {
       return;
     }
     const canvas = this.canvas.current;
@@ -258,7 +352,7 @@ export class CanvasVideoRenderer {
       return;
     }
 
-    const frame = this.call.receiveVideoFrame(this.buffer);
+    const frame = this.source.receiveVideoFrame(this.buffer);
     if (!frame) {
       return;
     }

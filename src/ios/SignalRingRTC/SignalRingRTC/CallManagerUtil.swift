@@ -30,3 +30,17 @@ extension AppByteSlice {
         return Data(asUnsafeBufferPointer())
     }
 }
+
+extension Data {
+    var uuid: UUID {
+        get {
+            return UUID(uuid: withUnsafeBytes { $0.load(as: uuid_t.self) } )
+        }
+    }
+}
+
+extension UUID {
+    var data: Data {
+        return withUnsafeBytes(of: self.uuid, { Data($0) })
+    }
+}

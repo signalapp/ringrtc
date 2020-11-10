@@ -52,6 +52,16 @@ impl Certificate {
         Ok(Self { rffi })
     }
 
+    pub fn compute_fingerprint_sha256(&self) -> Result<[u8; 32]> {
+        let mut fingerprint = [0u8; 32];
+        let ok =
+            unsafe { pcf::Rust_computeCertificateFingerprintSha256(self.rffi, &mut fingerprint) };
+        if !ok {
+            return Err(RingRtcError::ComputeCertificateFingerprint.into());
+        }
+        Ok(fingerprint)
+    }
+
     pub fn rffi(&self) -> *const pcf::RffiCertificate {
         self.rffi
     }
@@ -125,6 +135,15 @@ impl IceServer {
             urls,
             url_ptrs,
         }
+    }
+
+    pub fn none() -> Self {
+        // In the FFI C++, no urls means no IceServer is added
+        Self::new(
+            "".to_string(), // username
+            "".to_string(), // password
+            vec![],         // urls
+        )
     }
 
     pub fn rffi(&self) -> RffiIceServer {
@@ -217,7 +236,7 @@ impl PeerConnectionFactory {
         hide_ip: bool,
         ice_servers: &IceServer,
         outgoing_audio_track: AudioTrack,
-        outgoing_video_track: VideoTrack,
+        outgoing_video_track: Option<VideoTrack>,
         enable_dtls: bool,
         enable_rtp_data_channel: bool,
     ) -> Result<PeerConnection> {
@@ -233,7 +252,11 @@ impl PeerConnectionFactory {
                 hide_ip,
                 ice_servers.rffi(),
                 outgoing_audio_track.rffi(),
-                outgoing_video_track.rffi(),
+                if let Some(outgoing_video_track) = outgoing_video_track {
+                    outgoing_video_track.rffi()
+                } else {
+                    std::ptr::null()
+                },
                 enable_dtls,
                 enable_rtp_data_channel,
             )
@@ -254,7 +277,7 @@ impl PeerConnectionFactory {
         if rffi.is_null() {
             return Err(RingRtcError::CreateAudioTrack.into());
         }
-        Ok(AudioTrack::new(rffi))
+        Ok(AudioTrack::owned(rffi))
     }
 
     pub fn create_outgoing_video_source(&self) -> Result<VideoSource> {
@@ -277,7 +300,7 @@ impl PeerConnectionFactory {
         if rffi.is_null() {
             return Err(RingRtcError::CreateVideoTrack.into());
         }
-        Ok(VideoTrack::new(rffi))
+        Ok(VideoTrack::owned(rffi))
     }
 
     fn get_audio_playout_device(&self, index: u16) -> Result<AudioDevice> {

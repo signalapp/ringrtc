@@ -74,5 +74,20 @@ extern "C" {
         v4: *const RffiConnectionParametersV4,
     ) -> *mut RffiSessionDescription;
 
+    pub fn Rust_localDescriptionForGroupCall(
+        ice_ufrag: *const c_char,
+        ice_pwd: *const c_char,
+        _dtls_fingerprint_sha256: *const [u8; 32],
+        demux_id: u32,
+    ) -> *mut RffiSessionDescription;
+
+    pub fn Rust_remoteDescriptionForGroupCall(
+        ice_ufrag: *const c_char,
+        ice_pwd: *const c_char,
+        _dtls_fingerprint_sha256: *const [u8; 32],
+        demux_ids_data: *const u32,
+        demux_ids_len: size_t,
+    ) -> *mut RffiSessionDescription;
+
     pub fn Rust_releaseSessionDescription(sdi: *mut RffiSessionDescription);
 }

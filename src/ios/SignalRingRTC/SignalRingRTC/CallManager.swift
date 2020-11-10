@@ -87,9 +87,9 @@ public enum HangupType: Int32 {
     case needPermission = 4
 }
 
-// We define our own structure for Ice Candidates so that the
-// Call Service doesn't need a direct WebRTC dependency and
-// we don't need the SSKProtoCallMessageIce dependency.
+/// We define our own structure for Ice Candidates so that the
+/// Call Service doesn't need a direct WebRTC dependency and
+/// we don't need the SSKProtoCallMessageIce dependency.
 public class CallManagerIceCandidate {
     public let opaque: Data?
     public let sdp: String?
@@ -97,6 +97,24 @@ public class CallManagerIceCandidate {
     public init(opaque: Data?, sdp: String?) {
         self.opaque = opaque
         self.sdp = sdp
+    }
+}
+
+/// The HTTP methods supported by the Call Manager.
+public enum CallManagerHttpMethod: Int32 {
+    case get = 0
+    case put = 1
+    case post = 2
+}
+
+/// Class to wrap the group call dictionary so group call objects can reference
+/// it. All operations must be done on the main thread.
+class GroupCallByClientId {
+    private var groupCallByClientId: [UInt32: GroupCall] = [:]
+
+    subscript(clientId: UInt32) -> GroupCall? {
+        get { groupCallByClientId[clientId] }
+        set { groupCallByClientId[clientId] = newValue }
     }
 }
 
@@ -152,6 +170,20 @@ public protocol CallManagerDelegate: class {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendBusy callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?)
 
     /**
+     * A call message should be sent to the given remote recipient.
+     * Invoked on the main thread, asychronously.
+     * If there is any error, the UI can reset UI state and invoke the reset() API.
+     */
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessage recipientUuid: UUID, message: Data)
+
+    /**
+     * A HTTP request should be sent to the given url.
+     * Invoked on the main thread, asychronously.
+     * The result of the call should be indicated by calling the receivedHttpResponse() function.
+     */
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHttpRequest requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?)
+
+    /**
      * Two call 'remote' pointers should be compared to see if they refer to the same
      * remote peer/contact.
      * Invoked on the main thread, *synchronously*.
@@ -182,6 +214,10 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     private var factory: RTCPeerConnectionFactory?
 
+    // This dictionary is shared with each groupCall object, but the
+    // permanent reference to it is here.
+    private let groupCallByClientId: GroupCallByClientId
+    
     private var ringRtcCallManager: UnsafeMutableRawPointer!
 
     private var videoCaptureController: VideoCaptureController?
@@ -194,6 +230,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let decoderFactory = RTCDefaultVideoDecoderFactory()
         let encoderFactory = RTCDefaultVideoEncoderFactory()
         self.factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory)
+
+        self.groupCallByClientId = GroupCallByClientId()
 
         // Create an anonymous Call Manager interface. Ownership will
         // be transferred to RingRTC.
@@ -543,6 +581,68 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    public func receivedCallMessage(senderUuid: UUID, senderDeviceId: UInt32, localDeviceId: UInt32, message: Data, messageAgeSec: UInt64) {
+        AssertIsOnMainThread()
+        Logger.debug("receivedCallMessage")
+
+        let senderUuidSlice = allocatedAppByteSliceFromData(maybe_data: senderUuid.data)
+        let messageSlice = allocatedAppByteSliceFromData(maybe_data: message)
+
+        // Make sure to release the allocated memory when the function exists,
+        // to ensure that the pointers are still valid when used in the RingRTC
+        // API function.
+        defer {
+            if senderUuidSlice.bytes != nil {
+                 senderUuidSlice.bytes.deallocate()
+            }
+            if messageSlice.bytes != nil {
+                messageSlice.bytes.deallocate()
+            }
+        }
+
+        ringrtcReceivedCallMessage(ringRtcCallManager, senderUuidSlice, senderDeviceId, localDeviceId, messageSlice, messageAgeSec)
+    }
+
+    public func receivedHttpResponse(requestId: UInt32, statusCode: UInt16, body: Data?) {
+        AssertIsOnMainThread()
+        Logger.debug("receivedHttpResponse")
+
+        let bodySlice = allocatedAppByteSliceFromData(maybe_data: body)
+
+        // Make sure to release the allocated memory when the function exists,
+        // to ensure that the pointers are still valid when used in the RingRTC
+        // API function.
+        defer {
+            if bodySlice.bytes != nil {
+                bodySlice.bytes.deallocate()
+            }
+        }
+
+        ringrtcReceivedHttpResponse(ringRtcCallManager, requestId, statusCode, bodySlice)
+    }
+
+    public func httpRequestFailed(requestId: UInt32) {
+        AssertIsOnMainThread()
+        Logger.debug("httpRequestFailed")
+
+        ringrtcHttpRequestFailed(ringRtcCallManager, requestId)
+    }
+
+    // MARK: - Group Call
+
+    public func createGroupCall(groupId: Data, videoCaptureController: VideoCaptureController) -> GroupCall? {
+        AssertIsOnMainThread()
+        Logger.debug("createGroupCall")
+
+        guard let factory = self.factory else {
+            owsFailDebug("No factory found for GroupCall")
+            return nil
+        }
+
+        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, groupId: groupId, videoCaptureController: videoCaptureController)
+        return groupCall
+    }
+
     // MARK: - Event Observers
 
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType) {
@@ -638,6 +738,30 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    func sendCallMessage(recipientUuid: UUID, message: Data) {
+        Logger.debug("sendCallMessage")
+
+        DispatchQueue.main.async {
+            Logger.debug("sendCallMessage - main.async")
+
+            guard let delegate = self.delegate else { return }
+
+            delegate.callManager(self, shouldSendCallMessage: recipientUuid, message: message)
+        }
+    }
+
+    func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
+        Logger.debug("onSendHttpRequest")
+
+        DispatchQueue.main.async {
+            Logger.debug("onSendHttpRequest - main.async")
+
+            guard let delegate = self.delegate else { return }
+
+            delegate.callManager(self, shouldSendHttpRequest: requestId, url: url, method: method, headers: headers, body: body)
+        }
+    }
+
     // MARK: - Utility Observers
 
     func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
@@ -665,8 +789,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             configuration.iceTransportPolicy = .relay
         }
 
-        configuration.enableDtlsSrtp = enableDtls;
-        configuration.enableRtpDataChannel = enableRtpDataChannel;
+        configuration.enableDtlsSrtp = enableDtls
+        configuration.enableRtpDataChannel = enableRtpDataChannel
 
         // Create the default media constraints.
         let constraints: RTCMediaConstraints
@@ -739,6 +863,120 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
             // rust lib has signaled that it's done with the call reference
             unmanagedRemote.release()
+        }
+    }
+
+    // MARK: - Group Call Observers
+
+    func requestMembershipProof(clientId: UInt32) {
+        Logger.debug("requestMembershipProof")
+
+        DispatchQueue.main.async {
+            Logger.debug("requestMembershipProof - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.requestMembershipProof()
+        }
+    }
+
+    func requestGroupMembers(clientId: UInt32) {
+        Logger.debug("requestGroupMembers")
+
+        DispatchQueue.main.async {
+            Logger.debug("requestGroupMembers - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.requestGroupMembers()
+        }
+    }
+
+    func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState) {
+        Logger.debug("handleConnectionStateChanged")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleConnectionStateChanged - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleConnectionStateChanged(connectionState: connectionState)
+        }
+    }
+
+    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
+        Logger.debug("handleJoinStateChanged")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleJoinStateChanged - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleJoinStateChanged(joinState: joinState)
+        }
+    }
+
+    func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState]) {
+        Logger.debug("handleRemoteDevicesChanged")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleRemoteDevicesChanged - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleRemoteDevicesChanged(remoteDeviceStates: remoteDeviceStates)
+        }
+    }
+
+    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
+        Logger.debug("handleIncomingVideoTrack")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleIncomingVideoTrack - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleIncomingVideoTrack(remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
+        }
+    }
+
+    func handleJoinedMembersChanged(clientId: UInt32, joinedMembers: [UUID]) {
+        Logger.debug("handleJoinedMembersChanged")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleJoinedMembersChanged - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleJoinedMembersChanged(joinedMembers: joinedMembers)
+        }
+    }
+
+    func handleEnded(clientId: UInt32, reason: GroupCallEndReason) {
+        Logger.debug("handleEnded")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleEnded - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleEnded(reason: reason)
         }
     }
 }

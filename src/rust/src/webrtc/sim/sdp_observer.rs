@@ -145,6 +145,29 @@ pub unsafe fn Rust_sessionDescriptionFromV4(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_localDescriptionForGroupCall(
+    _ice_ufrag: *const c_char,
+    _ice_pwd: *const c_char,
+    _dtls_fingerprint_sha256: *const [u8; 32],
+    _demux_id: u32,
+) -> *mut RffiSessionDescription {
+    info!("Rust_localDescriptionForGroupCall(): ");
+    &mut FAKE_SDP_OFFER
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_remoteDescriptionForGroupCall(
+    _ice_ufrag: *const c_char,
+    _ice_pwd: *const c_char,
+    _dtls_fingerprint_sha256: *const [u8; 32],
+    _demux_ids_data: *const u32,
+    _demux_ids_len: size_t,
+) -> *mut RffiSessionDescription {
+    info!("Rust_remoteDescriptionForGroupCall(): ");
+    &mut FAKE_SDP_ANSWER
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_releaseSessionDescription(_sdi: *mut RffiSessionDescription) {
     info!("Rust_releaseSessionDescription(): ");
 }

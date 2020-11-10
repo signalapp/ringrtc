@@ -18,7 +18,7 @@ use crate::common::Result;
 /// Wrapper around JNIEnv::call_method() with logging.
 pub fn jni_call_method<'a>(
     env: &'a JNIEnv,
-    object: JObject,
+    object: JObject<'a>,
     name: &str,
     sig: &str,
     args: &[JValue],
@@ -65,7 +65,7 @@ pub fn jni_new_object<'a>(
 /// Wrapper around JNIEnv::get_field() with logging.
 pub fn jni_get_field<'a>(
     env: &'a JNIEnv,
-    obj: JObject,
+    obj: JObject<'a>,
     name: &str,
     ty: &str,
 ) -> Result<JValue<'a>> {

@@ -19,5 +19,6 @@ extern "C" {
     pub fn Rust_createPeerConnectionObserver(
         cc_ptr: RustObject,
         pc_observer_cb: CppObject,
+        enable_frame_encryption: bool,
     ) -> *const RffiPeerConnectionObserver;
 }

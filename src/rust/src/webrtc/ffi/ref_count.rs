@@ -10,7 +10,6 @@
 use crate::core::util::CppObject;
 
 /// Rust wrapper around RefCountInterface::AddRef()
-#[cfg(feature = "native")]
 pub fn add_ref(ref_counted_pointer: CppObject) {
     unsafe { Rust_addRef(ref_counted_pointer) };
 }
@@ -22,7 +21,6 @@ pub fn release_ref(ref_counted_pointer: CppObject) {
 
 extern "C" {
 
-    #[cfg(feature = "native")]
     fn Rust_addRef(ref_counted_pointer: CppObject);
 
     fn Rust_releaseRef(ref_counted_pointer: CppObject);

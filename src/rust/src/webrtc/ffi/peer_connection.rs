@@ -11,6 +11,8 @@ use std::os::raw::c_char;
 
 use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
+use crate::webrtc::network::RffiIp;
+use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
     RffiSessionDescription,
@@ -70,6 +72,13 @@ extern "C" {
         sdp: *const c_char,
     ) -> bool;
 
+    pub fn Rust_addIceCandidateFromServer(
+        peer_connection: *const RffiPeerConnection,
+        ip: RffiIp,
+        port: u16,
+        tcp: bool,
+    ) -> bool;
+
     pub fn Rust_createSharedIceGatherer(
         peer_connection: *const RffiPeerConnection,
     ) -> *const RffiIceGatherer;
@@ -85,6 +94,21 @@ extern "C" {
     );
 
     pub fn Rust_setMaxSendBitrate(peer_connection: *const RffiPeerConnection, max_bitrate_bps: i32);
+
+    pub fn Rust_sendRtp(
+        peer_connection: *const RffiPeerConnection,
+        pt: rtp::PayloadType,
+        seqnum: rtp::SequenceNumber,
+        timestamp: rtp::Timestamp,
+        ssrc: rtp::Ssrc,
+        payload_data: *const u8,
+        payload_size: usize,
+    ) -> bool;
+
+    pub fn Rust_receiveRtp(
+        peer_connection: *const RffiPeerConnection,
+        pt: rtp::PayloadType,
+    ) -> bool;
 
     pub fn Rust_closePeerConnection(peer_connection: *const RffiPeerConnection);
 }
