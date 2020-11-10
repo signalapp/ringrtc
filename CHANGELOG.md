@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.8.0
+
+- Add Group Calling feature
+
+- Reference signalapp/webrtc@4183f
+
+- Update Rust dependencies
+
+- Update builds and documentation
+
 ## v2.7.4
 
 - Electron: Fix debug build
