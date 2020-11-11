@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.8.1
+
+- Electron: Fix video track setting
+
 ## v2.8.0
 
 - Add Group Calling feature
