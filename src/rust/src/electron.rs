@@ -487,19 +487,6 @@ declare_types! {
             Ok(cx.undefined().upcast())
         }
 
-        method sendVideoStatus(mut cx) {
-            debug!("JsCallManager.sendVideoStatus()");
-            let enabled = cx.argument::<JsBoolean>(0)?.value();
-
-            let mut this = cx.this();
-            cx.borrow_mut(&mut this, |cm| {
-                let mut active_connection = cm.call_manager.active_connection()?;
-                active_connection.inject_send_sender_status_via_data_channel(enabled)?;
-                Ok(())
-            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
-            Ok(cx.undefined().upcast())
-        }
-
         method setLowBandwidthMode(mut cx) {
             debug!("JsCallManager.setLowBandwidthMode()");
             let enabled = cx.argument::<JsBoolean>(0)?.value();
@@ -755,7 +742,20 @@ declare_types! {
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |cm| {
                 cm.outgoing_audio_track.set_enabled(enabled);
-                // TODO: Should we not send silent audio?
+                Ok(())
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            Ok(cx.undefined().upcast())
+        }
+
+        method setOutgoingVideoEnabled(mut cx) {
+            let enabled = cx.argument::<JsBoolean>(0)?.value();
+            debug!("JsCallManager.setOutgoingVideoEnabled({})", enabled);
+
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |cm| {
+                cm.outgoing_video_track.set_enabled(enabled);
+                let mut active_connection = cm.call_manager.active_connection()?;
+                active_connection.inject_send_sender_status_via_data_channel(enabled)?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())

@@ -943,7 +943,7 @@ export class Call {
     if (!this.outgoingVideoEnabled) {
       this._videoCapturer.disable();
       if (this.state === CallState.Accepted) {
-        this.sendVideoStatus(false);
+        this.setOutgoingVideoEnabled(false);
       }
       return;
     }
@@ -954,7 +954,7 @@ export class Call {
         break;
       case CallState.Accepted:
         this._videoCapturer.enableCaptureAndSend(this);
-        this.sendVideoStatus(true);
+        this.setOutgoingVideoEnabled(true);
         break;
       case CallState.Reconnecting:
         this._videoCapturer.enableCaptureAndSend(this);
@@ -967,14 +967,14 @@ export class Call {
     }
   }
 
-  private sendVideoStatus(enabled: boolean) {
+  private setOutgoingVideoEnabled(enabled: boolean) {
     // tslint:disable no-floating-promises
     (async () => {
       // This is a silly way of causing a deadlock.
       // tslint:disable-next-line await-promise
       await 0;
       try {
-        this._callManager.sendVideoStatus(enabled);
+        this._callManager.setOutgoingVideoEnabled(enabled);
       } catch {
         // We may not have an active connection any more.
         // In which case it doesn't matter
@@ -1423,7 +1423,7 @@ export interface CallManager {
   signalingMessageSent(callId: CallId): void;
   signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
-  sendVideoStatus(enabled: boolean): void;
+  setOutgoingVideoEnabled(enabled: boolean): void;
   setLowBandwidthMode(enabled: boolean): void;
   sendVideoFrame(width: number, height: number, buffer: ArrayBuffer): void;
   receiveVideoFrame(buffer: ArrayBuffer): [number, number] | undefined;
