@@ -107,7 +107,7 @@ pub enum Event {
     // Like call state, we ID the call by PeerId and assume there is only one.
     RemoteVideoState(PeerId, bool),
     // The group call has an update.
-    GroupUpdate(group_call::ClientId, GroupUpdate),
+    GroupUpdate(GroupUpdate),
     // JavaScript should initiate an HTTP request.
     SendHttpRequest(
         u32,
@@ -170,12 +170,8 @@ impl HttpClient for Sender<Event> {
 }
 
 impl GroupUpdateHandler for Sender<Event> {
-    fn handle_group_update(
-        &self,
-        client_id: &group_call::ClientId,
-        update: GroupUpdate,
-    ) -> Result<()> {
-        self.send(Event::GroupUpdate(*client_id, update))?;
+    fn handle_group_update(&self, update: GroupUpdate) -> Result<()> {
+        self.send(Event::GroupUpdate(update))?;
         Ok(())
     }
 }
@@ -837,6 +833,7 @@ declare_types! {
 
         method createGroupCallClient(mut cx) {
             let group_id = cx.argument::<JsValue>(0)?.as_value(&mut cx);
+            let sfu_url = cx.argument::<JsString>(1)?.value();
 
             let mut client_id = group_call::INVALID_CLIENT_ID;
 
@@ -850,7 +847,7 @@ declare_types! {
             cx.borrow_mut(&mut this, |mut cm| {
                 let outgoing_audio_track = cm.outgoing_audio_track.clone();
                 let outgoing_video_track = cm.outgoing_video_track.clone();
-                let result = cm.call_manager.create_group_call_client(group_id, outgoing_audio_track, outgoing_video_track);
+                let result = cm.call_manager.create_group_call_client(group_id, sfu_url, outgoing_audio_track, outgoing_video_track);
                 if let Ok(v) = result {
                     client_id = v;
                 }
@@ -941,6 +938,17 @@ declare_types! {
             Ok(cx.undefined().upcast())
         }
 
+        method resendMediaKeys(mut cx) {
+            let client_id = cx.argument::<JsNumber>(0)?.value() as group_call::ClientId;
+
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |mut cm| {
+                cm.call_manager.resend_media_keys(client_id);
+                Ok(())
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            Ok(cx.undefined().upcast())
+        }
+
         method setBandwidthMode(mut cx) {
             let client_id = cx.argument::<JsNumber>(0)?.value() as group_call::ClientId;
             let js_bandwidth_mode = cx.argument::<JsNumber>(1)?.value() as i32;
@@ -963,13 +971,13 @@ declare_types! {
             Ok(cx.undefined().upcast())
         }
 
-        method setRenderedResolutions(mut cx) {
+        method requestVideo(mut cx) {
             let client_id = cx.argument::<JsNumber>(0)?.value() as group_call::ClientId;
             let js_resolutions = *cx.argument::<JsArray>(1)?;
 
             let mut resolutions = Vec::with_capacity(js_resolutions.len() as usize);
             for i in 0..js_resolutions.len() {
-                let js_resolution = js_resolutions.get(&mut cx, i as u32)?.downcast::<JsObject>().expect("RenderedResolution");
+                let js_resolution = js_resolutions.get(&mut cx, i as u32)?.downcast::<JsObject>().expect("VideoRequest");
 
                 let demux_id = match js_resolution.get(&mut cx, "demuxId")?.downcast::<JsNumber>() {
                     Ok(handle) => Some(handle.value() as group_call::DemuxId),
@@ -997,7 +1005,7 @@ declare_types! {
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                cm.call_manager.set_rendered_resolutions(client_id, resolutions);
+                cm.call_manager.request_video(client_id, resolutions);
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -1051,6 +1059,45 @@ declare_types! {
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
                 cm.call_manager.set_membership_proof(client_id, proof);
+                Ok(())
+            }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+            Ok(cx.undefined().upcast())
+        }
+
+        method peekGroupCall(mut cx) {
+            let request_id = cx.argument::<JsNumber>(0)?.value() as u32;
+
+            let sfu_url = cx.argument::<JsString>(1)?.value() as PeerId;
+
+            let membership_proof = cx.argument::<JsArrayBuffer>(2)?;
+            let membership_proof = cx.borrow(&membership_proof, |handle| { handle.as_slice().to_vec() });
+
+            let js_members = *cx.argument::<JsArray>(3)?;
+            let mut members = Vec::with_capacity(js_members.len() as usize);
+            for i in 0..js_members.len() {
+                let js_member = js_members.get(&mut cx, i as u32)?.downcast::<JsObject>().expect("group_member");
+                let user_id = match js_member.get(&mut cx, "userId")?.downcast::<JsArrayBuffer>() {
+                    Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
+                    Err(_) => None,
+                };
+                let user_id_ciphertext = match js_member.get(&mut cx, "userIdCipherText")?.downcast::<JsArrayBuffer>() {
+                    Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
+                    Err(_) => None,
+                };
+
+                match (user_id, user_id_ciphertext) {
+                    (Some(user_id), Some(user_id_ciphertext)) => {
+                        members.push(group_call::GroupMemberInfo { user_id, user_id_ciphertext });
+                    },
+                    _ => {
+                        warn!("Ignoring invalid GroupMemberInfo");
+                    },
+                };
+            }
+
+            let mut this = cx.this();
+            cx.borrow_mut(&mut this, |cm| {
+                cm.call_manager.peek_group_call(request_id, sfu_url, membership_proof, members);
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -1133,8 +1180,8 @@ declare_types! {
         method poll(mut cx) {
             let observer = cx.argument::<JsObject>(0)?;
 
-            let mut log_entries = LOG_MESSAGES.lock().expect("lock log messages");
-            for log_entry in log_entries.drain(0..) {
+            let log_entries: Vec<LogMessage> = LOG_MESSAGES.lock().expect("lock log messages").drain(0..).collect();
+            for log_entry in log_entries.into_iter() {
                 let method_name = "onLogMessage";
                 let args : Vec<Handle<JsValue>> = vec![
                     cx.number(log_entry.level).upcast(),
@@ -1386,7 +1433,7 @@ declare_types! {
 
                     // Group Calls
 
-                    Event::GroupUpdate(client_id, GroupUpdate::RequestMembershipProof) => {
+                    Event::GroupUpdate(GroupUpdate::RequestMembershipProof(client_id)) => {
                         let method_name = "requestMembershipProof";
 
                         let args: Vec<Handle<JsValue>> = vec![
@@ -1397,7 +1444,7 @@ declare_types! {
                         method.call(&mut cx, observer, args)?;
                     }
 
-                    Event::GroupUpdate(client_id, GroupUpdate::RequestGroupMembers) => {
+                    Event::GroupUpdate(GroupUpdate::RequestGroupMembers(client_id)) => {
                         let method_name = "requestGroupMembers";
 
                         let args: Vec<Handle<JsValue>> = vec![
@@ -1408,7 +1455,7 @@ declare_types! {
                         method.call(&mut cx, observer, args)?;
                     }
 
-                    Event::GroupUpdate(client_id, GroupUpdate::ConnectionStateChanged(connection_state)) => {
+                    Event::GroupUpdate(GroupUpdate::ConnectionStateChanged(client_id, connection_state)) => {
                         let method_name = "handleConnectionStateChanged";
 
                         let args: Vec<Handle<JsValue>> = vec![
@@ -1420,7 +1467,7 @@ declare_types! {
                         method.call(&mut cx, observer, args)?;
                     }
 
-                    Event::GroupUpdate(client_id, GroupUpdate::JoinStateChanged(join_state)) => {
+                    Event::GroupUpdate(GroupUpdate::JoinStateChanged(client_id, join_state)) => {
                         let method_name = "handleJoinStateChanged";
 
                         let args: Vec<Handle<JsValue>> = vec![
@@ -1428,7 +1475,7 @@ declare_types! {
                             cx.number(match join_state {
                                 group_call::JoinState::NotJoined => 0,
                                 group_call::JoinState::Joining => 1,
-                                group_call::JoinState::Joined(_) => 2,
+                                group_call::JoinState::Joined(_, _) => 2,
                             }).upcast(),
                         ];
                         let error_message = format!("{} is a function", method_name);
@@ -1436,13 +1483,14 @@ declare_types! {
                         method.call(&mut cx, observer, args)?;
                     }
 
-                    Event::GroupUpdate(client_id, GroupUpdate::RemoteDeviceStatesChanged(remote_device_states)) => {
+                    Event::GroupUpdate(GroupUpdate::RemoteDeviceStatesChanged(client_id, remote_device_states)) => {
                         let method_name = "handleRemoteDevicesChanged";
 
                         let js_remote_device_states = JsArray::new(&mut cx, remote_device_states.len() as u32);
                         for (i, remote_device_state) in remote_device_states.iter().enumerate() {
-                            let demux_id: neon::handle::Handle<JsNumber> = cx.number(remote_device_state.demux_id);
+                            let demux_id = cx.number(remote_device_state.demux_id);
                             let user_id = to_js_array_buffer(&mut cx, &remote_device_state.user_id);
+                            let media_keys_received = cx.boolean(remote_device_state.media_keys_received);
                             let audio_muted: neon::handle::Handle<JsValue> = match remote_device_state.audio_muted {
                                 None => cx.undefined().upcast(),
                                 Some(muted) => cx.boolean(muted).upcast(),
@@ -1451,27 +1499,17 @@ declare_types! {
                                 None => cx.undefined().upcast(),
                                 Some(muted) => cx.boolean(muted).upcast(),
                             };
-                            let speaker_index: neon::handle::Handle<JsValue> = match remote_device_state.speaker_index {
-                                None => cx.undefined().upcast(),
-                                Some(index) => cx.number(index).upcast(),
-                            };
-                            let video_aspect_ratio: neon::handle::Handle<JsValue> = match remote_device_state.video_aspect_ratio {
-                                None => cx.undefined().upcast(),
-                                Some(ratio) => cx.number(ratio).upcast(),
-                            };
-                            let audio_level: neon::handle::Handle<JsValue> = match remote_device_state.audio_level {
-                                None => cx.undefined().upcast(),
-                                Some(level) => cx.number(level).upcast(),
-                            };
+                            let added_time: neon::handle::Handle<JsValue> = cx.number(u64_to_js_num(remote_device_state.added_time_as_unix_millis())).upcast();
+                            let speaker_time: neon::handle::Handle<JsValue> = cx.number(u64_to_js_num(remote_device_state.speaker_time_as_unix_millis())).upcast();
 
                             let js_remote_device_state = cx.empty_object();
                             js_remote_device_state.set(&mut cx, "demuxId", demux_id)?;
                             js_remote_device_state.set(&mut cx, "userId", user_id)?;
+                            js_remote_device_state.set(&mut cx, "mediaKeysReceived", media_keys_received)?;
                             js_remote_device_state.set(&mut cx, "audioMuted", audio_muted)?;
                             js_remote_device_state.set(&mut cx, "videoMuted", video_muted)?;
-                            js_remote_device_state.set(&mut cx, "speakerIndex", speaker_index)?;
-                            js_remote_device_state.set(&mut cx, "videoAspectRatio", video_aspect_ratio)?;
-                            js_remote_device_state.set(&mut cx, "audioLevel", audio_level)?;
+                            js_remote_device_state.set(&mut cx, "addedTime", added_time)?;
+                            js_remote_device_state.set(&mut cx, "speakertime", speaker_time)?;
 
                             js_remote_device_states.set(&mut cx, i as u32, js_remote_device_state)?;
                         }
@@ -1485,7 +1523,7 @@ declare_types! {
                         method.call(&mut cx, observer, args)?;
                     }
 
-                    Event::GroupUpdate(client_id, GroupUpdate::IncomingVideoTrack(remote_demux_id, incoming_video_track)) => {
+                    Event::GroupUpdate(GroupUpdate::IncomingVideoTrack(client_id, remote_demux_id, incoming_video_track)) => {
                         cx.borrow_mut(&mut this, |mut cm| {
                             // Warning: this needs to be boxed.  Otherwise, the reference won't work.
                             // TODO: Use the type system to protect against this kind of mistake.
@@ -1498,8 +1536,8 @@ declare_types! {
                         }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
                     }
 
-                    Event::GroupUpdate(client_id, GroupUpdate::JoinedMembersChanged(members)) => {
-                        let method_name = "handleJoinedMembersChanged";
+                    Event::GroupUpdate(GroupUpdate::PeekChanged(client_id, members, creator, era_id, max_devices, device_count)) => {
+                        let method_name = "handlePeekChanged";
 
                         let js_members = JsArray::new(&mut cx, members.len() as u32);
                         for (i, member) in members.iter().enumerate() {
@@ -1512,17 +1550,78 @@ declare_types! {
                             };
                             js_members.set(&mut cx, i as u32, member)?;
                         }
+                        let js_creator: neon::handle::Handle<JsValue> = match creator {
+                            Some(creator) => to_js_array_buffer(&mut cx, &creator).upcast(),
+                            None => cx.undefined().upcast(),
+                        };
+                        let era_id: neon::handle::Handle<JsValue> = match era_id {
+                            None => cx.undefined().upcast(),
+                            Some(id) => cx.string(id).upcast(),
+                        };
+                        let max_devices: neon::handle::Handle<JsValue> = match max_devices {
+                            None => cx.undefined().upcast(),
+                            Some(devices) => cx.number(devices).upcast(),
+                        };
+                        let device_count: neon::handle::Handle<JsValue> = cx.number(device_count).upcast();
+
+
+                        let js_info = cx.empty_object();
+                        js_info.set(&mut cx, "joinedMembers", js_members)?;
+                        js_info.set(&mut cx, "creator", js_creator)?;
+                        js_info.set(&mut cx, "eraId", era_id)?;
+                        js_info.set(&mut cx, "maxDevices", max_devices)?;
+                        js_info.set(&mut cx, "deviceCount", device_count)?;
 
                         let args: Vec<Handle<JsValue>> = vec![
                             cx.number(client_id).upcast(),
-                            js_members.upcast(),
+                            js_info.upcast(),
                         ];
                         let error_message = format!("{} is a function", method_name);
                         let method = *observer.get(&mut cx, method_name)?.downcast::<JsFunction>().expect(&error_message);
                         method.call(&mut cx, observer, args)?;
                     }
 
-                    Event::GroupUpdate(client_id, GroupUpdate::Ended(reason)) => {
+                    Event::GroupUpdate(GroupUpdate::PeekResponse(request_id, members, creator, era_id, max_devices, device_count)) => {
+                        let method_name = "handlePeekResponse";
+                        let js_info = cx.empty_object();
+                        let js_members = JsArray::new(&mut cx, members.len() as u32);
+                        for (i, member) in members.iter().enumerate() {
+                            let member: neon::handle::Handle<JsValue> = {
+                                let mut js_member = cx.array_buffer(member.len() as u32)?;
+                                cx.borrow_mut(&mut js_member, |handle| {
+                                    handle.as_mut_slice().copy_from_slice(member.as_ref());
+                                });
+                                js_member.upcast()
+                            };
+                            js_members.set(&mut cx, i as u32, member)?;
+                        }
+                        let js_creator: neon::handle::Handle<JsValue> = match creator {
+                            Some(creator) => to_js_array_buffer(&mut cx, &creator).upcast(),
+                            None => cx.undefined().upcast(),
+                        };
+                        let era_id: neon::handle::Handle<JsValue> = match era_id {
+                            None => cx.undefined().upcast(),
+                            Some(id) => cx.string(id).upcast(),
+                        };
+                        let max_devices: neon::handle::Handle<JsValue> = match max_devices {
+                            None => cx.undefined().upcast(),
+                            Some(devices) => cx.number(devices).upcast(),
+                        };
+                        let device_count: neon::handle::Handle<JsValue> = cx.number(device_count).upcast();
+
+                        js_info.set(&mut cx, "joinedMembers", js_members)?;
+                        js_info.set(&mut cx, "creator", js_creator)?;
+                        js_info.set(&mut cx, "eraId", era_id)?;
+                        js_info.set(&mut cx, "maxDevices", max_devices)?;
+                        js_info.set(&mut cx, "deviceCount", device_count)?;
+
+                        let args: Vec<Handle<JsValue>> = vec![cx.number(request_id).upcast(), js_info.upcast()];
+                        let error_message = format!("{} is a function", method_name);
+                        let method = *observer.get(&mut cx, method_name)?.downcast::<JsFunction>().expect(&error_message);
+                        method.call(&mut cx, observer, args)?;
+                    }
+
+                    Event::GroupUpdate(GroupUpdate::Ended(client_id, reason)) => {
                         let method_name = "handleEnded";
                         let args : Vec<Handle<JsValue>> = vec![
                             cx.number(client_id).upcast(),

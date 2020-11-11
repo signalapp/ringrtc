@@ -28,12 +28,13 @@ export {
     LocalDeviceState,
     OfferType,
     OpaqueMessage,
+    PeekInfo,
     RemoteDeviceState,
-    RenderedResolution,
     RingRTCType,
     UserId,
     VideoCapturer,
-    VideoRenderer
+    VideoRenderer,
+    VideoRequest
 } from './ringrtc/Service';
 
 export {

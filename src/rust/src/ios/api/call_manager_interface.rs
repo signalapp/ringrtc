@@ -88,21 +88,21 @@ pub struct AppOptionalUInt16 {
     pub valid: bool,
 }
 
+/// Structure for passing optional u32 values to/from Swift.
+#[repr(C)]
+#[derive(Debug)]
+#[allow(non_snake_case)]
+pub struct AppOptionalUInt32 {
+    pub value: u32,
+    pub valid: bool,
+}
+
 /// Structure for passing optional bool values to/from Swift.
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppOptionalBool {
     pub value: bool,
-    pub valid: bool,
-}
-
-/// Structure for passing optional f32 values to/from Swift.
-#[repr(C)]
-#[derive(Debug)]
-#[allow(non_snake_case)]
-pub struct AppOptionalFloat {
-    pub value: f32,
     pub valid: bool,
 }
 
@@ -240,13 +240,13 @@ impl Drop for AppMediaStreamInterface {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppRemoteDeviceState {
-    pub demuxId:          group_call::DemuxId,
-    pub user_id:          AppByteSlice,
-    pub audioMuted:       AppOptionalBool,
-    pub videoMuted:       AppOptionalBool,
-    pub speakerIndex:     AppOptionalUInt16,
-    pub videoAspectRatio: AppOptionalFloat,
-    pub audioLevel:       AppOptionalUInt16,
+    pub demuxId:           group_call::DemuxId,
+    pub user_id:           AppByteSlice,
+    pub mediaKeysReceived: bool,
+    pub audioMuted:        AppOptionalBool,
+    pub videoMuted:        AppOptionalBool,
+    pub addedTime:         u64, // unix millis
+    pub speakerTime:       u64, // unix millis; 0 if never was a speaker
 }
 
 #[repr(C)]
@@ -276,15 +276,15 @@ pub struct AppGroupMemberInfoArray {
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
-pub struct AppMemberArray {
-    pub members: *const AppByteSlice,
-    pub count:   size_t,
+pub struct AppUuidArray {
+    pub uuids: *const AppByteSlice,
+    pub count: size_t,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
-pub struct AppRenderedResolution {
+pub struct AppVideoRequest {
     pub demux_id:  group_call::DemuxId,
     pub width:     u16,
     pub height:    u16,
@@ -294,8 +294,8 @@ pub struct AppRenderedResolution {
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
-pub struct AppRenderedResolutionArray {
-    pub resolutions: *const AppRenderedResolution,
+pub struct AppVideoRequestArray {
+    pub resolutions: *const AppVideoRequest,
     pub count:       size_t,
 }
 
@@ -407,6 +407,16 @@ pub struct AppInterface {
 
     // Group Calls
     ///
+    pub handlePeekResponse: extern "C" fn(
+        object: *mut c_void,
+        requestId: u32,
+        joinedMembers: AppUuidArray,
+        creator: AppByteSlice,
+        eraId: AppByteSlice,
+        maxDevices: AppOptionalUInt32,
+        deviceCount: u32,
+    ),
+    ///
     pub requestMembershipProof: extern "C" fn(object: *mut c_void, clientId: group_call::ClientId),
     ///
     pub requestGroupMembers: extern "C" fn(object: *mut c_void, clientId: group_call::ClientId),
@@ -430,10 +440,14 @@ pub struct AppInterface {
         nativeVideoTrack: *mut c_void,
     ),
     ///
-    pub handleJoinedMembersChanged: extern "C" fn(
+    pub handlePeekChanged: extern "C" fn(
         object: *mut c_void,
         clientId: group_call::ClientId,
-        joinedMembers: AppMemberArray,
+        joinedMembers: AppUuidArray,
+        creator: AppByteSlice,
+        eraId: AppByteSlice,
+        maxDevices: AppOptionalUInt32,
+        deviceCount: u32,
     ),
     ///
     pub handleEnded:
@@ -924,9 +938,70 @@ pub extern "C" fn ringrtcClose(callManager: *mut c_void) -> *mut c_void {
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub extern "C" fn ringrtcPeekGroupCall(
+    callManager: *mut c_void,
+    requestId: u32,
+    sfuUrl: AppByteSlice,
+    proof: AppByteSlice,
+    appGroupMemberInfoArray: *const AppGroupMemberInfoArray,
+) {
+    info!("ringrtcPeekGroupCall():");
+
+    let sfu_url = string_from_app_slice(&sfuUrl);
+    if sfu_url.is_none() {
+        error!("Invalid sfuUrl");
+        return;
+    }
+
+    let proof = byte_vec_from_app_slice(&proof);
+    if proof.is_none() {
+        error!("Invalid proof");
+        return;
+    }
+
+    let count = unsafe { (*appGroupMemberInfoArray).count };
+    let app_group_members = unsafe { (*appGroupMemberInfoArray).members };
+
+    let app_members = unsafe { slice::from_raw_parts(app_group_members, count) };
+    let mut group_members = Vec::new();
+
+    for member in app_members {
+        let user_id = byte_vec_from_app_slice(&member.userId);
+        if user_id.is_none() {
+            error!("Invalid userId");
+            continue;
+        }
+
+        let user_id_ciphertext = byte_vec_from_app_slice(&member.userIdCipherText);
+        if user_id_ciphertext.is_none() {
+            error!("Invalid userIdCipherText");
+            continue;
+        }
+
+        group_members.push(group_call::GroupMemberInfo {
+            user_id:            user_id.unwrap(),
+            user_id_ciphertext: user_id_ciphertext.unwrap(),
+        })
+    }
+
+    let result = call_manager::peek_group_call(
+        callManager as *mut IOSCallManager,
+        requestId,
+        sfu_url.unwrap(),
+        proof.unwrap(),
+        group_members,
+    );
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub extern "C" fn ringrtcCreateGroupCallClient(
     callManager: *mut c_void,
     groupId: AppByteSlice,
+    sfuUrl: AppByteSlice,
     nativeAudioTrack: *const c_void,
     nativeVideoTrack: *const c_void,
 ) -> group_call::ClientId {
@@ -937,10 +1012,16 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
         error!("Invalid groupId");
         return group_call::INVALID_CLIENT_ID;
     }
+    let sfu_url = string_from_app_slice(&sfuUrl);
+    if sfu_url.is_none() {
+        error!("Invalid sfuUrl");
+        return group_call::INVALID_CLIENT_ID;
+    }
 
     match call_manager::create_group_call_client(
         callManager as *mut IOSCallManager,
         group_id.unwrap(),
+        sfu_url.unwrap(),
         nativeAudioTrack,
         nativeVideoTrack,
     ) {
@@ -1042,6 +1123,17 @@ pub extern "C" fn ringrtcSetOutgoingVideoMuted(
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub extern "C" fn ringrtcResendMediaKeys(callManager: *mut c_void, clientId: group_call::ClientId) {
+    info!("ringrtcResendMediaKeys():");
+
+    let result = call_manager::resend_media_keys(callManager as *mut IOSCallManager, clientId);
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetBandwidthMode(
     callManager: *mut c_void,
     clientId: group_call::ClientId,
@@ -1071,15 +1163,15 @@ pub extern "C" fn ringrtcSetBandwidthMode(
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcSetRenderedResolutions(
+pub extern "C" fn ringrtcRequestVideo(
     callManager: *mut c_void,
     clientId: group_call::ClientId,
-    appRenderedResolutionArray: *const AppRenderedResolutionArray,
+    appVideoRequestArray: *const AppVideoRequestArray,
 ) {
-    info!("ringrtcSetRenderedResolutions():");
+    info!("ringrtcRequestVideo():");
 
-    let count = unsafe { (*appRenderedResolutionArray).count };
-    let resolutions = unsafe { (*appRenderedResolutionArray).resolutions };
+    let count = unsafe { (*appVideoRequestArray).count };
+    let resolutions = unsafe { (*appVideoRequestArray).resolutions };
 
     let app_resolutions = unsafe { slice::from_raw_parts(resolutions, count) };
     let mut rendered_resolutions = Vec::new();
@@ -1099,7 +1191,7 @@ pub extern "C" fn ringrtcSetRenderedResolutions(
         });
     }
 
-    let result = call_manager::set_rendered_resolutions(
+    let result = call_manager::request_video(
         callManager as *mut IOSCallManager,
         clientId,
         rendered_resolutions,

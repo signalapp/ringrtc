@@ -160,6 +160,16 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
 
     // Group Calls
 
+    fn handle_peek_response(
+        &self,
+        request_id: u32,
+        joined_members: &[group_call::UserId],
+        creator: Option<group_call::UserId>,
+        era_id: Option<&str>,
+        max_devices: Option<u32>,
+        device_count: u32,
+    );
+
     fn request_membership_proof(&self, client_id: group_call::ClientId);
 
     fn request_group_members(&self, client_id: group_call::ClientId);
@@ -189,10 +199,14 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         incoming_video_track: VideoTrack,
     );
 
-    fn handle_joined_members_changed(
+    fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
         joined_members: &[group_call::UserId],
+        creator: Option<group_call::UserId>,
+        era_id: Option<&str>,
+        max_devices: Option<u32>,
+        device_count: u32,
     );
 
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason);

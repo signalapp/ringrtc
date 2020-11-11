@@ -35,6 +35,8 @@ import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 import org.webrtc.VideoSink;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
@@ -59,6 +61,9 @@ public class CallManager {
   // and will fit in to the long type.
   @NonNull
   private              LongSparseArray<GroupCall> groupCallByClientId;
+
+  @NonNull
+  private              Requests<PeekInfo>         peekInfoRequests;
 
   static {
     if (Build.VERSION.SDK_INT < 21) {
@@ -127,6 +132,7 @@ public class CallManager {
     this.observer            = observer;
     this.nativeCallManager   = 0;
     this.groupCallByClientId = new LongSparseArray<>();
+    this.peekInfoRequests    = new Requests();
   }
 
   @Nullable
@@ -170,7 +176,7 @@ public class CallManager {
    *
    * @param remote         remote side fo the call
    * @param callMediaType  used to specify origination as an audio or video call
-   * @param localDevice    the local deviceId of the client
+   * @param localDeviceId  the local deviceId of the client
    *
    * @throws CallException for native code failures
    *
@@ -531,23 +537,6 @@ public class CallManager {
 
   /**
    *
-   */
-  public GroupCall createGroupCall(@NonNull byte[]             groupId,
-                                   @NonNull EglBase            eglBase,
-                                   @NonNull GroupCall.Observer observer)
-  {
-    checkCallManagerExists();
-
-    GroupCall groupCall = new GroupCall(nativeCallManager, groupId, eglBase, observer);
-
-    // Add the groupCall to the map.
-    this.groupCallByClientId.append(groupCall.clientId, groupCall);
-
-    return groupCall;
-  }
-
-  /**
-   *
    * Indication from application to accept the active call.
    *
    * @param callId  callId for the call
@@ -655,6 +644,73 @@ public class CallManager {
 
     Log.i(TAG, "hangup():");
     ringrtcHangup(nativeCallManager);
+  }
+
+  // Group Calls
+
+  public interface ResponseHandler<T> {
+    void handleResponse(T response);
+  }
+
+  static class Requests<T> {
+    private long nextId = 1;
+    @NonNull private LongSparseArray<ResponseHandler<T>> handlerById = new LongSparseArray();
+  
+    long add(ResponseHandler<T> handler) {
+      long id = this.nextId++;
+      this.handlerById.put(id, handler);
+      return id;
+    }
+
+    boolean resolve(long id, T response) {
+      ResponseHandler<T> handler = this.handlerById.get(id);
+      if (handler == null) {
+        return false;
+      }
+      handler.handleResponse(response);
+      this.handlerById.delete(id);
+      return true;
+    }
+  }
+
+  /**
+   *
+   */
+  public void peekGroupCall(@NonNull String                                sfuUrl,
+                            @NonNull byte[]                                membershipProof,
+                            @NonNull Collection<GroupCall.GroupMemberInfo> groupMembers,
+                            @NonNull ResponseHandler<PeekInfo>             handler)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    Log.i(TAG, "peekGroupCall():");
+
+    // Convert each userId UUID to a userIdByteArray.
+    for (GroupCall.GroupMemberInfo member : groupMembers) {
+      member.userIdByteArray = Util.getBytesFromUuid(member.userId);
+    }
+
+    long requestId = this.peekInfoRequests.add(handler);
+    ringrtcPeekGroupCall(nativeCallManager, requestId, sfuUrl, membershipProof, new ArrayList<>(groupMembers));
+  }
+
+  /**
+   *
+   */
+  public GroupCall createGroupCall(@NonNull byte[]             groupId,
+                                   @NonNull String             sfuUrl,
+                                   @NonNull EglBase            eglBase,
+                                   @NonNull GroupCall.Observer observer)
+  {
+    checkCallManagerExists();
+
+    GroupCall groupCall = new GroupCall(nativeCallManager, groupId, sfuUrl, eglBase, observer);
+
+    // Add the groupCall to the map.
+    this.groupCallByClientId.append(groupCall.clientId, groupCall);
+
+    return groupCall;
   }
 
   /****************************************************************************
@@ -892,6 +948,27 @@ public class CallManager {
   // Group Calls
 
   @CalledByNative
+  private void handlePeekResponse(long requestId, List<byte[]> joinedMembers, @Nullable byte[] creator, @Nullable String eraId, @Nullable Long maxDevices, long deviceCount) {
+    if (joinedMembers != null) {
+      Log.i(TAG, "handlePeekResponse(): joinedMembers.size = " + joinedMembers.size());
+    } else {
+      Log.i(TAG, "handlePeekResponse(): joinedMembers is null");
+    }
+
+    // Create the collection, converting each provided byte[] to a UUID.
+    Collection<UUID> joinedGroupMembers = new ArrayList<UUID>();
+    for (byte[] joinedMember : joinedMembers) {
+        joinedGroupMembers.add(Util.getUuidFromBytes(joinedMember));
+    }
+
+    PeekInfo info = new PeekInfo(joinedGroupMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCount);
+
+    if (!this.peekInfoRequests.resolve(requestId, info)) {
+      Log.w(TAG, "Invalid requestId for handlePeekResponse: " + requestId);
+    }
+  }
+
+  @CalledByNative
   private void requestMembershipProof(long clientId) {
     Log.i(TAG, "requestMembershipProof():");
 
@@ -945,7 +1022,11 @@ public class CallManager {
 
   @CalledByNative
   private void handleRemoteDevicesChanged(long clientId, List<GroupCall.RemoteDeviceState> remoteDeviceStates) {
-    Log.i(TAG, "handleRemoteDevicesChanged():");
+    if (remoteDeviceStates != null) {
+      Log.i(TAG, "handleRemoteDevicesChanged(): remoteDeviceStates.size = " + remoteDeviceStates.size());
+    } else {
+      Log.i(TAG, "handleRemoteDevicesChanged(): remoteDeviceStates is null!");
+    }
 
     GroupCall groupCall = this.groupCallByClientId.get(clientId);
     if (groupCall == null) {
@@ -970,8 +1051,12 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void handleJoinedMembersChanged(long clientId, List<byte[]> members) {
-    Log.i(TAG, "handleJoinedMembersChanged():");
+  private void handlePeekChanged(long clientId, List<byte[]> joinedMembers, @Nullable byte[] creator, @Nullable String eraId, @Nullable Long maxDevices, long deviceCount) {
+    if (joinedMembers != null) {
+      Log.i(TAG, "handlePeekChanged(): joinedMembers.size = " + joinedMembers.size());
+    } else {
+      Log.i(TAG, "handlePeekChanged(): joinedMembers is null");
+    }
 
     GroupCall groupCall = this.groupCallByClientId.get(clientId);
     if (groupCall == null) {
@@ -979,7 +1064,15 @@ public class CallManager {
       return;
     }
 
-    groupCall.handleJoinedMembersChanged(members);
+    // Create the collection, converting each provided byte[] to a UUID.
+    Collection<UUID> joinedGroupMembers = new ArrayList<UUID>();
+    for (byte[] joinedMember : joinedMembers) {
+        joinedGroupMembers.add(Util.getUuidFromBytes(joinedMember));
+    }
+
+    PeekInfo info = new PeekInfo(joinedGroupMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCount);
+
+    groupCall.handlePeekChanged(info);
   }
 
   @CalledByNative
@@ -993,6 +1086,7 @@ public class CallManager {
     }
 
     this.groupCallByClientId.delete(clientId);
+
     groupCall.handleEnded(reason);
   }
 
@@ -1284,7 +1378,10 @@ public class CallManager {
     PUT,
 
     /**  */
-    POST;
+    POST,
+
+    /**  */
+    DELETE;
 
     @CalledByNative
     static HttpMethod fromNativeIndex(int nativeIndex) {
@@ -1413,11 +1510,11 @@ public class CallManager {
      *
      * A HTTP request should be sent to the given url.
      *
-     * @param requestId  
-     * @param url        
-     * @param method     
-     * @param headers    
-     * @param body       
+     * @param requestId
+     * @param url
+     * @param method
+     * @param headers
+     * @param body
      *
      */
     void onSendHttpRequest(long requestId, @NonNull String url, @NonNull HttpMethod method, @Nullable List<HttpHeader> headers, @Nullable byte[] body);
@@ -1579,5 +1676,13 @@ public class CallManager {
 
   private native
     void ringrtcClose(long nativeCallManager)
+    throws CallException;
+
+  private native
+    void ringrtcPeekGroupCall(         long                            nativeCallManager,
+                                       long                            requestId,
+                              @NonNull String                          sfuUrl,
+                              @NonNull byte[]                          membershipProof,
+                              @NonNull List<GroupCall.GroupMemberInfo> groupMembers)
     throws CallException;
 }

@@ -5,6 +5,7 @@
 import SignalRingRTC.RingRTC
 import WebRTC
 import SignalCoreKit
+import PromiseKit
 
 // Errors that the Call Manager APIs can throw.
 public enum CallManagerError: Error {
@@ -100,11 +101,29 @@ public class CallManagerIceCandidate {
     }
 }
 
+/// Contains the list of currently joined participants and related info about the call in progress.
+public struct PeekInfo {
+    public let joinedMembers: [UUID]
+    public let creator: UUID?
+    public let eraId: String?
+    public let maxDevices: UInt32?
+    public let deviceCount: UInt32
+
+    public init(joinedMembers: [UUID], creator: UUID?, eraId: String?, maxDevices: UInt32?, deviceCount: UInt32) {
+        self.joinedMembers = joinedMembers
+        self.creator = creator
+        self.eraId = eraId
+        self.maxDevices = maxDevices
+        self.deviceCount = deviceCount
+    }
+}
+
 /// The HTTP methods supported by the Call Manager.
 public enum CallManagerHttpMethod: Int32 {
     case get = 0
     case put = 1
     case post = 2
+    case delete = 3
 }
 
 /// Class to wrap the group call dictionary so group call objects can reference
@@ -115,6 +134,29 @@ class GroupCallByClientId {
     subscript(clientId: UInt32) -> GroupCall? {
         get { groupCallByClientId[clientId] }
         set { groupCallByClientId[clientId] = newValue }
+    }
+}
+
+class Requests<T> {
+    private var sealById: [UInt32: Resolver<T>] = [:]
+    private var nextId: UInt32 = 1
+    
+    func add() -> (UInt32, Promise<T>) {
+        let id = self.nextId
+        self.nextId += 1
+        let promise: Promise<T> = Promise { seal in
+            self.sealById[id] = seal
+        }
+        return (id, promise)
+    }
+
+    func resolve(id: UInt32, response: T) -> Bool {
+        guard let seal = self.sealById[id] else {
+            return false
+        }
+        seal.fulfill(response)
+        self.sealById[id] = nil
+        return true
     }
 }
 
@@ -217,7 +259,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     // This dictionary is shared with each groupCall object, but the
     // permanent reference to it is here.
     private let groupCallByClientId: GroupCallByClientId
-    
+
+    private let peekInfoRequests: Requests<PeekInfo> = Requests()
+
     private var ringRtcCallManager: UnsafeMutableRawPointer!
 
     private var videoCaptureController: VideoCaptureController?
@@ -324,11 +368,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let videoTrack = self.factory!.videoTrack(with: videoSource, trackId: "video1")
         videoTrack.isEnabled = false
 
-        // Define output video size.
+        // Define maximum output video format for 1:1 calls.
         videoSource.adaptOutputFormat(
-            toWidth: VideoCaptureController.outputSizeWidth,
-            height: VideoCaptureController.outputSizeHeight,
-            fps: VideoCaptureController.outputFrameRate
+            toWidth: 1280,
+            height: 720,
+            fps: 30
         )
 
         videoCaptureController.capturerDelegate = videoSource
@@ -630,7 +674,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Group Call
 
-    public func createGroupCall(groupId: Data, videoCaptureController: VideoCaptureController) -> GroupCall? {
+    public func createGroupCall(groupId: Data, sfuUrl: String, videoCaptureController: VideoCaptureController) -> GroupCall? {
         AssertIsOnMainThread()
         Logger.debug("createGroupCall")
 
@@ -639,8 +683,55 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             return nil
         }
 
-        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, groupId: groupId, videoCaptureController: videoCaptureController)
+        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, groupId: groupId, sfuUrl: sfuUrl, videoCaptureController: videoCaptureController)
         return groupCall
+    }
+
+    public func peekGroupCall(sfuUrl: String, membershipProof: Data, groupMembers: [GroupMemberInfo]) -> Promise<PeekInfo> {
+        AssertIsOnMainThread()
+        Logger.debug("peekGroupCall")
+
+        let sfuUrlSlice = allocatedAppByteSliceFromString(maybe_string: sfuUrl)
+        let membershipProofSlice = allocatedAppByteSliceFromData(maybe_data: membershipProof)
+
+        let appMembers: [AppGroupMemberInfo] = groupMembers.map { member in
+            let userIdSlice = allocatedAppByteSliceFromData(maybe_data: member.userId.data)
+            let userIdCipherTextSlice = allocatedAppByteSliceFromData(maybe_data: member.userIdCipherText)
+
+            return AppGroupMemberInfo(userId: userIdSlice, userIdCipherText: userIdCipherTextSlice)
+        }
+
+        // Make sure to release the allocated memory when the function exists,
+        // to ensure that the pointers are still valid when used in the RingRTC
+        // API function.
+        defer {
+            if sfuUrlSlice.bytes != nil {
+                sfuUrlSlice.bytes.deallocate()
+            }
+            if membershipProofSlice.bytes != nil {
+                membershipProofSlice.bytes.deallocate()
+            }
+
+            for appMember in appMembers {
+                if appMember.userId.bytes != nil {
+                    appMember.userId.bytes.deallocate()
+                }
+                if appMember.userIdCipherText.bytes != nil {
+                    appMember.userIdCipherText.bytes.deallocate()
+                }
+            }
+        }
+
+        var appGroupMemberInfoArray = appMembers.withUnsafeBufferPointer { appMembersBytes in
+            return AppGroupMemberInfoArray(
+                members: appMembersBytes.baseAddress,
+                count: groupMembers.count
+            )
+        }
+
+        let (requestId, promise) = self.peekInfoRequests.add()
+        ringrtcPeekGroupCall(self.ringRtcCallManager, requestId, sfuUrlSlice, membershipProofSlice, &appGroupMemberInfoArray)
+        return promise
     }
 
     // MARK: - Event Observers
@@ -866,6 +957,18 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo) {
+        Logger.debug("handlePeekResponse")
+
+        DispatchQueue.main.async {
+            Logger.debug("handlePeekResponse - main.async")
+
+            if !self.peekInfoRequests.resolve(id: requestId, response: peekInfo) {
+                Logger.warn("Invalid requestId for handlePeekResponse: \(requestId)")
+            }
+        }
+    }
+
     // MARK: - Group Call Observers
 
     func requestMembershipProof(clientId: UInt32) {
@@ -952,17 +1055,17 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func handleJoinedMembersChanged(clientId: UInt32, joinedMembers: [UUID]) {
-        Logger.debug("handleJoinedMembersChanged")
+    func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo) {
+        Logger.debug("handlePeekChanged")
 
         DispatchQueue.main.async {
-            Logger.debug("handleJoinedMembersChanged - main.async")
+            Logger.debug("handlePeekChanged - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
                 return
             }
 
-            groupCall.handleJoinedMembersChanged(joinedMembers: joinedMembers)
+            groupCall.handlePeekChanged(peekInfo: peekInfo)
         }
     }
 

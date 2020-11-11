@@ -26,7 +26,7 @@ use crate::common::{
     Result,
 };
 use crate::core::call_manager::CallManager;
-use crate::core::util::{ptr_as_box, ptr_as_mut};
+use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::webrtc::media;
@@ -306,9 +306,10 @@ pub fn received_call_message(
     message_age_sec: u64,
 ) -> Result<()> {
     info!(
-        "received_call_message(): sender_uuid: {:?} sender_device_id: {}",
-        sender_uuid, sender_device_id
+        "received_call_message(): sender_device_id: {}",
+        sender_device_id
     );
+    debug!("  sender_uuid: {}", uuid_to_string(&sender_uuid));
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.received_call_message(
@@ -416,9 +417,24 @@ pub fn close(call_manager: *mut IOSCallManager) -> Result<()> {
 
 // Group Calls
 
+pub fn peek_group_call(
+    call_manager: *mut IOSCallManager,
+    request_id: u32,
+    sfu_url: String,
+    membership_proof: Vec<u8>,
+    group_members: Vec<group_call::GroupMemberInfo>,
+) -> Result<()> {
+    info!("peek_group_call(): id: {}", request_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.peek_group_call(request_id, sfu_url, membership_proof, group_members);
+    Ok(())
+}
+
 pub fn create_group_call_client(
     call_manager: *mut IOSCallManager,
     group_id: group_call::GroupId,
+    sfu_url: String,
     native_audio_track: *const c_void,
     native_video_track: *const c_void,
 ) -> Result<group_call::ClientId> {
@@ -430,7 +446,12 @@ pub fn create_group_call_client(
         media::VideoTrack::owned(native_video_track as *const media::RffiVideoTrack);
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.create_group_call_client(group_id, outgoing_audio_track, outgoing_video_track)
+    call_manager.create_group_call_client(
+        group_id,
+        sfu_url,
+        outgoing_audio_track,
+        outgoing_video_track,
+    )
 }
 
 pub fn delete_group_call_client(
@@ -503,6 +524,17 @@ pub fn set_outgoing_video_muted(
     Ok(())
 }
 
+pub fn resend_media_keys(
+    call_manager: *mut IOSCallManager,
+    client_id: group_call::ClientId,
+) -> Result<()> {
+    info!("resend_media_keys(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.resend_media_keys(client_id);
+    Ok(())
+}
+
 pub fn set_bandwidth_mode(
     call_manager: *mut IOSCallManager,
     client_id: group_call::ClientId,
@@ -515,15 +547,15 @@ pub fn set_bandwidth_mode(
     Ok(())
 }
 
-pub fn set_rendered_resolutions(
+pub fn request_video(
     call_manager: *mut IOSCallManager,
     client_id: group_call::ClientId,
     rendered_resolutions: Vec<group_call::VideoRequest>,
 ) -> Result<()> {
-    info!("set_rendered_resolutions(): id: {}", client_id);
+    info!("request_video(): id: {}", client_id);
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.set_rendered_resolutions(client_id, rendered_resolutions);
+    call_manager.request_video(client_id, rendered_resolutions);
     Ok(())
 }
 

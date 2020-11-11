@@ -551,16 +551,70 @@ pub fn close(call_manager: *mut AndroidCallManager) -> Result<()> {
 
 // Group Calls
 
+pub fn peek_group_call(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    request_id: jlong,
+    sfu_url: JString,
+    membership_proof: jbyteArray,
+    jni_members: JObject,
+) -> Result<()> {
+    info!("peek_group_call():");
+
+    let request_id = request_id as u32;
+
+    let sfu_url = env.get_string(sfu_url)?.into();
+
+    let membership_proof = env.convert_byte_array(membership_proof)?;
+
+    // Convert Java list of GroupMemberInfo into Rust Vec<group_call::GroupMemberInfo>.
+    let jni_member_list = env.get_list(jni_members)?;
+    let mut group_members = Vec::new();
+    for jni_member in jni_member_list.iter()? {
+        const BYTES_TYPE: &str = "[B";
+
+        const USER_ID_FIELD: &str = "userIdByteArray";
+        let user_id = jni_get_field(&env, jni_member, USER_ID_FIELD, BYTES_TYPE)?.l()?;
+        let user_id = if user_id.is_null() {
+            warn!("Invalid userId/ByteArray");
+            continue;
+        } else {
+            Some(env.convert_byte_array(user_id.into_inner())?)
+        };
+
+        const USER_ID_CIPHER_TEXT_FIELD: &str = "userIdCipherText";
+        let user_id_ciphertext =
+            jni_get_field(&env, jni_member, USER_ID_CIPHER_TEXT_FIELD, BYTES_TYPE)?.l()?;
+        let user_id_ciphertext = if user_id_ciphertext.is_null() {
+            warn!("Invalid userId/CipherText");
+            continue;
+        } else {
+            Some(env.convert_byte_array(user_id_ciphertext.into_inner())?)
+        };
+
+        group_members.push(group_call::GroupMemberInfo {
+            user_id:            user_id.unwrap(),
+            user_id_ciphertext: user_id_ciphertext.unwrap(),
+        })
+    }
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.peek_group_call(request_id, sfu_url, membership_proof, group_members);
+    Ok(())
+}
+
 pub fn create_group_call_client(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     group_id: jbyteArray,
+    sfu_url: JString,
     native_audio_track: jlong,
     native_video_track: jlong,
 ) -> Result<group_call::ClientId> {
     info!("create_group_call_client():");
 
     let group_id = env.convert_byte_array(group_id)?;
+    let sfu_url = env.get_string(sfu_url)?.into();
 
     let outgoing_audio_track =
         media::AudioTrack::unowned(native_audio_track as *const media::RffiAudioTrack);
@@ -569,7 +623,12 @@ pub fn create_group_call_client(
         media::VideoTrack::unowned(native_video_track as *const media::RffiVideoTrack);
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.create_group_call_client(group_id, outgoing_audio_track, outgoing_video_track)
+    call_manager.create_group_call_client(
+        group_id,
+        sfu_url,
+        outgoing_audio_track,
+        outgoing_video_track,
+    )
 }
 
 pub fn delete_group_call_client(
@@ -645,6 +704,17 @@ pub fn set_outgoing_video_muted(
     Ok(())
 }
 
+pub fn resend_media_keys(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+) -> Result<()> {
+    info!("resend_media_keys(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.resend_media_keys(client_id);
+    Ok(())
+}
+
 pub fn set_bandwidth_mode(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
@@ -657,15 +727,15 @@ pub fn set_bandwidth_mode(
     Ok(())
 }
 
-pub fn set_rendered_resolutions(
+pub fn request_video(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     jni_rendered_resolutions: JObject,
 ) -> Result<()> {
-    info!("set_rendered_resolutions(): id: {}", client_id);
+    info!("request_video(): id: {}", client_id);
 
-    // Convert Java list of RenderedResolution into Rust Vec<group_call::VideoRequest>.
+    // Convert Java list of VideoRequest into Rust Vec<group_call::VideoRequest>.
     let jni_rendered_resolution_list = env.get_list(jni_rendered_resolutions)?;
     let mut rendered_resolutions: Vec<group_call::VideoRequest> = Vec::new();
     for jni_rendered_resolution in jni_rendered_resolution_list.iter()? {
@@ -727,7 +797,7 @@ pub fn set_rendered_resolutions(
     }
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.set_rendered_resolutions(client_id, rendered_resolutions);
+    call_manager.request_video(client_id, rendered_resolutions);
     Ok(())
 }
 
@@ -781,7 +851,7 @@ pub fn set_membership_proof(
     client_id: group_call::ClientId,
     proof: jbyteArray,
 ) -> Result<()> {
-    info!("set_group_membership_proof():");
+    info!("set_group_membership_proof(): id: {}", client_id);
 
     let proof = env.convert_byte_array(proof)?;
 

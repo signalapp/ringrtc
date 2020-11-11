@@ -303,8 +303,9 @@ export class CanvasVideoRenderer {
     if (!!this.source) {
       // If we're replacing an existing source, make sure we stop the
       // current rAF loop before starting another one.
-      // And blanking the video is nice as well.
-      this.disable();
+      if (this.rafId) {
+        window.cancelAnimationFrame(this.rafId);
+      }
     }
     this.source = source;
     this.requestAnimationFrameCallback();

@@ -574,12 +574,8 @@ impl CallStateHandler for CallEndpoint {
 }
 
 impl GroupUpdateHandler for CallEndpoint {
-    fn handle_group_update(
-        &self,
-        client_id: &group_call::ClientId,
-        update: GroupUpdate,
-    ) -> Result<()> {
-        info!("Group Update for id: {} => {}", client_id, update);
+    fn handle_group_update(&self, update: GroupUpdate) -> Result<()> {
+        info!("Group Update {}", update);
         Ok(())
     }
 }

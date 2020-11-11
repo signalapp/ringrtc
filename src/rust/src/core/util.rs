@@ -264,7 +264,7 @@ pub fn redact_string(text: &str) -> String {
     redact_ipv4(&string)
 }
 
-/// Encodes a slice of bytes as a hexadecimal string
+/// Encodes a slice of bytes as a hexadecimal string.
 ///
 /// ```
 /// use ringrtc::core::util::bytes_to_hexstring;
@@ -281,7 +281,7 @@ pub fn bytes_to_hexstring(bytes: &[u8]) -> String {
     result
 }
 
-/// Computes a SHA-256 hash of the input value and returns it as a hex string
+/// Computes a SHA-256 hash of the input value and returns it as a hex string.
 ///
 /// ```
 /// use ringrtc::core::util::sha256_as_hexstring;
@@ -294,6 +294,33 @@ pub fn sha256_as_hexstring(data: &[u8]) -> String {
     let hash = hash.finalize();
 
     bytes_to_hexstring(&hash)
+}
+
+/// Encodes a slice of bytes representing a UUID as a string. Returns an empty
+/// string if the slice of bytes is not the expected size of 16 bytes.
+///
+/// ```
+/// use ringrtc::core::util::uuid_to_string;
+///
+/// assert_eq!(uuid_to_string(&[]), "");
+/// assert_eq!(uuid_to_string(&[0x01, 0xAB, 0xCD]), "");
+/// assert_eq!(uuid_to_string(&[0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]), "11223344-5566-7788-9900-aabbccddeeff");
+/// assert_eq!(uuid_to_string(&[0xb3, 0x9b, 0x70, 0xb0, 0x1c, 0xc8, 0x4b, 0x00, 0xb9, 0x32, 0x18, 0x31, 0x03, 0x76, 0x03, 0x15]), "b39b70b0-1cc8-4b00-b932-183103760315");
+/// ```
+pub fn uuid_to_string(bytes: &[u8]) -> String {
+    if bytes.len() == 16 {
+        let mut result = String::with_capacity(36);
+        for (i, byte) in bytes.iter().enumerate() {
+            let hex_byte = format!("{:02x}", byte);
+            result.push_str(&hex_byte);
+            if i == 3 || i == 5 || i == 7 || i == 9 {
+                result.push('-');
+            }
+        }
+        result
+    } else {
+        String::new()
+    }
 }
 
 /// A specially configured tokio::Runtime for processing sequential tasks

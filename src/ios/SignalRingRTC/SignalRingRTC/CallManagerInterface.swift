@@ -23,13 +23,15 @@ protocol CallManagerInterfaceDelegate: class {
 
     // Group Calls
 
+    func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo)
+
     func requestMembershipProof(clientId: UInt32)
     func requestGroupMembers(clientId: UInt32)
     func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState)
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?)
-    func handleJoinedMembersChanged(clientId: UInt32, joinedMembers: [UUID])
+    func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo)
     func handleEnded(clientId: UInt32, reason: GroupCallEndReason)
 }
 
@@ -70,13 +72,15 @@ class CallManagerInterface {
 
             // Group Calls
 
+            handlePeekResponse: callManagerInterfaceHandlePeekResponse,
+
             requestMembershipProof: callManagerInterfaceRequestMembershipProof,
             requestGroupMembers: callManagerInterfaceRequestGroupMembers,
             handleConnectionStateChanged: callManagerInterfaceHandleConnectionStateChanged,
             handleJoinStateChanged: callManagerInterfaceHandleJoinStateChanged,
             handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
-            handleJoinedMembersChanged: callManagerInterfaceHandleJoinedMembersChanged,
+            handlePeekChanged: callManagerInterfaceHandlePeekChanged,
             handleEnded: callManagerInterfaceHandleEnded
         )
     }
@@ -193,6 +197,14 @@ class CallManagerInterface {
 
     // Group Calls
 
+    func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handlePeekResponse(requestId: requestId, peekInfo: peekInfo)
+    }
+
     func requestMembershipProof(clientId: UInt32) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
@@ -241,12 +253,12 @@ class CallManagerInterface {
         delegate.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
     }
 
-    func handleJoinedMembersChanged(clientId: UInt32, joinedMembers: [UUID]) {
+    func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.handleJoinedMembersChanged(clientId: clientId, joinedMembers: joinedMembers)
+        delegate.handlePeekChanged(clientId: clientId, peekInfo: peekInfo)
     }
 
     func handleEnded(clientId: UInt32, reason: GroupCallEndReason) {
@@ -638,6 +650,34 @@ func callManagerInterfaceOnCallConcluded(object: UnsafeMutableRawPointer?, remot
 
 // Group Calls
 
+func callManagerInterfaceHandlePeekResponse(object: UnsafeMutableRawPointer?, requestId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    var finalJoinedMembers: [UUID] = []
+
+    for index in 0..<joinedMembers.count {
+        guard let userId = joinedMembers.uuids[index].asData() else {
+            Logger.debug("missing userId")
+            continue
+        }
+
+        finalJoinedMembers.append(userId.uuid)
+    }
+
+    var finalMaxDevices: UInt32?
+    if maxDevices.valid {
+        finalMaxDevices = maxDevices.value
+    }
+
+    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.asData()?.uuid, eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount)
+
+    obj.handlePeekResponse(requestId: requestId, peekInfo: peekInfo)
+}
+
 func callManagerInterfaceRequestMembershipProof(object: UnsafeMutableRawPointer?, clientId: UInt32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -704,31 +744,21 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
     var finalRemoteDeviceStates: [RemoteDeviceState] = []
 
     for index in 0..<remoteDeviceStates.count {
-        guard let userId = remoteDeviceStates.states[index].user_id.asData() else {
-            Logger.debug("missing userId for demuxId: \(remoteDeviceStates.states[index].demuxId)")
+        let remoteDeviceState = remoteDeviceStates.states[index]
+
+        guard let userId = remoteDeviceState.user_id.asData() else {
+            Logger.debug("missing userId for demuxId: \(remoteDeviceState.demuxId)")
             continue
         }
 
-        let deviceState = RemoteDeviceState(demuxId: remoteDeviceStates.states[index].demuxId, userId: userId.uuid)
+        let deviceState = RemoteDeviceState(demuxId: remoteDeviceState.demuxId, userId: userId.uuid, mediaKeysReceived: remoteDeviceState.mediaKeysReceived, addedTime: remoteDeviceState.addedTime, speakerTime: remoteDeviceState.speakerTime)
 
-        if remoteDeviceStates.states[index].audioMuted.valid {
-            deviceState.audioMuted = remoteDeviceStates.states[index].audioMuted.value
+        if remoteDeviceState.audioMuted.valid {
+            deviceState.audioMuted = remoteDeviceState.audioMuted.value
         }
 
-        if remoteDeviceStates.states[index].videoMuted.valid {
-            deviceState.videoMuted = remoteDeviceStates.states[index].videoMuted.value
-        }
-
-        if remoteDeviceStates.states[index].speakerIndex.valid {
-            deviceState.speakerIndex = remoteDeviceStates.states[index].speakerIndex.value
-        }
-
-        if remoteDeviceStates.states[index].videoAspectRatio.valid {
-            deviceState.videoAspectRatio = remoteDeviceStates.states[index].videoAspectRatio.value
-        }
-
-        if remoteDeviceStates.states[index].audioLevel.valid {
-            deviceState.audioLevel = remoteDeviceStates.states[index].audioLevel.value
+        if remoteDeviceState.videoMuted.valid {
+            deviceState.videoMuted = remoteDeviceState.videoMuted.value
         }
 
         finalRemoteDeviceStates.append(deviceState)
@@ -747,7 +777,7 @@ func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointe
     obj.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
 }
 
-func callManagerInterfaceHandleJoinedMembersChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppMemberArray) {
+func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -757,7 +787,7 @@ func callManagerInterfaceHandleJoinedMembersChanged(object: UnsafeMutableRawPoin
     var finalJoinedMembers: [UUID] = []
 
     for index in 0..<joinedMembers.count {
-        guard let userId = joinedMembers.members[index].asData() else {
+        guard let userId = joinedMembers.uuids[index].asData() else {
             Logger.debug("missing userId")
             continue
         }
@@ -765,7 +795,14 @@ func callManagerInterfaceHandleJoinedMembersChanged(object: UnsafeMutableRawPoin
         finalJoinedMembers.append(userId.uuid)
     }
 
-    obj.handleJoinedMembersChanged(clientId: clientId, joinedMembers: finalJoinedMembers)
+    var finalMaxDevices: UInt32?
+    if maxDevices.valid {
+        finalMaxDevices = maxDevices.value
+    }
+
+    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.asData()?.uuid, eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount)
+
+    obj.handlePeekChanged(clientId: clientId, peekInfo: peekInfo)
 }
 
 func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId: UInt32, reason: Int32) {

@@ -12,10 +12,50 @@ const os = require('os');
 // tslint:disable-next-line no-var-requires no-require-imports
 const Native = require('../../build/' + os.platform() + '/libringrtc.node');
 
+type GroupId = ArrayBuffer;
+type GroupCallUserId = ArrayBuffer;
+
+export class PeekInfo {
+  joinedMembers: Array<GroupCallUserId>;
+  creator?: GroupCallUserId;
+  eraId?: string;
+  maxDevices?: number;
+  deviceCount: number;
+
+  constructor() {
+    this.joinedMembers = [];
+    this.deviceCount = 0;
+  }
+}
+
+class Requests<T> {
+  private _resolveById: Map<number, (response: T) => void> = new Map();
+  private _nextId: number = 1;
+
+  add(): [number, Promise<T>] {
+    const id = this._nextId++;
+    const promise = new Promise<T>((resolve, _reject) => {
+      this._resolveById.set(id, resolve);
+    });
+    return [id, promise];
+  }
+
+  resolve(id: number, response: T): boolean {
+    const resolve = this._resolveById.get(id);
+    if (!resolve) {
+      return false;
+    }
+    resolve(response);
+    this._resolveById.delete(id);
+    return true;
+  }
+}
+
 export class RingRTCType {
   private readonly callManager: CallManager;
   private _call: Call | null;
   private _groupCallByClientId: Map<GroupCallClientId, GroupCall>;
+  private _peekRequests: Requests<PeekInfo>;
 
   // Set by UX
   handleOutgoingSignaling: ((remoteUserId: UserId, message: CallingMessage) => Promise<boolean>) | null = null;
@@ -29,6 +69,7 @@ export class RingRTCType {
     this.callManager = new Native.CallManager() as CallManager;
     this._call = null;
     this._groupCallByClientId = new Map();
+    this._peekRequests = new Requests<PeekInfo>();
     this.pollEvery(50);
   }
 
@@ -117,12 +158,7 @@ export class RingRTCType {
   }
 
   private proceed(callId: CallId, settings: CallSettings): void {
-    // tslint:disable no-floating-promises
-    (async () => {
-      // This is a silly way of causing a deadlock.
-      // tslint:disable-next-line await-promise
-      await 0;
-
+    silly_deadlock_protection(() => {
       this.callManager.proceed(
         callId,
         settings.iceServer.username || '',
@@ -130,7 +166,7 @@ export class RingRTCType {
         settings.iceServer.urls,
         settings.hideIp,
       );
-    })();
+    });
   }
 
   // Called by Rust
@@ -327,11 +363,25 @@ export class RingRTCType {
   }
 
   receivedHttpResponse(requestId: number, status: number, body: ArrayBuffer) : void {
-    this.callManager.receivedHttpResponse(requestId, status, body);
+    silly_deadlock_protection(() => {
+      try {
+        this.callManager.receivedHttpResponse(requestId, status, body);
+      } catch {
+        // We may not have an active connection any more.
+        // In which case it doesn't matter
+      }
+    });
   }
 
-  httpRequestFailed(requestId: number, debugInfo: string | undefined) {
-      this.callManager.httpRequestFailed(requestId, debugInfo);
+  httpRequestFailed(requestId: number, debugInfo: string | undefined) : void {
+    silly_deadlock_protection(() => {
+      try {
+        this.callManager.httpRequestFailed(requestId, debugInfo);
+      } catch {
+        // We may not have an active connection any more.
+        // In which case it doesn't matter
+      }
+    });
   }
 
   // Group Calls
@@ -339,22 +389,37 @@ export class RingRTCType {
   // Called by UX
   getGroupCall(
     groupId: ArrayBuffer,
+    sfuUrl: string,
     observer: GroupCallObserver
   ): GroupCall | undefined {
-    const groupCall = new GroupCall(this.callManager, groupId, observer);
+    const groupCall = new GroupCall(this.callManager, groupId, sfuUrl, observer);
 
     this._groupCallByClientId.set(groupCall.clientId, groupCall);
 
     return groupCall;
   }
 
+  // Called by UX
+  // Returns a list of user IDs
+  peekGroupCall(
+    sfu_url: string,
+    membership_proof: ArrayBuffer,
+    group_members: Array<GroupMemberInfo>,
+
+  ): Promise<PeekInfo> {
+    let [requestId, promise] = this._peekRequests.add();
+    // Response comes back via handlePeekResponse
+    silly_deadlock_protection(() => {
+      this.callManager.peekGroupCall(requestId, sfu_url, membership_proof, group_members);
+    });
+    return promise;
+  }
+
   // Called by Rust
   requestMembershipProof(
     clientId: GroupCallClientId
   ): void {
-    (async () => {
-      await 0;
-
+    silly_deadlock_protection(() => {
       let groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
         let error = new Error();
@@ -363,16 +428,14 @@ export class RingRTCType {
       }
       
       groupCall.requestMembershipProof();      
-    })();
+    });
   }
 
   // Called by Rust
   requestGroupMembers(
     clientId: GroupCallClientId
   ): void {
-    (async () => {
-      await 0;
-
+    silly_deadlock_protection(() => {
       let groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
         let error = new Error();
@@ -381,7 +444,7 @@ export class RingRTCType {
       }
       
       groupCall.requestGroupMembers();      
-    })();
+    });
   }
 
   // Called by Rust
@@ -389,9 +452,7 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     connectionState: ConnectionState
   ): void {
-    (async () => {
-      await 0;
-
+    silly_deadlock_protection(() => {
       let groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
         let error = new Error();
@@ -400,7 +461,7 @@ export class RingRTCType {
       }
       
       groupCall.handleConnectionStateChanged(connectionState);
-    })();
+    });
   }
 
   // Called by Rust
@@ -408,9 +469,7 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     joinState: JoinState
   ): void {
-    (async () => {
-      await 0;
-
+    silly_deadlock_protection(() => {
       let groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
         let error = new Error();
@@ -419,7 +478,7 @@ export class RingRTCType {
       }
       
       groupCall.handleJoinStateChanged(joinState);
-    })();
+    });
   }
 
   // Called by Rust
@@ -427,9 +486,7 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     remoteDeviceStates: Array<RemoteDeviceState>
   ): void {
-    (async () => {
-      await 0;
-
+    silly_deadlock_protection(() => {
       let groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
         let error = new Error();
@@ -438,26 +495,36 @@ export class RingRTCType {
       }
 
       groupCall.handleRemoteDevicesChanged(remoteDeviceStates);
-    })();
+    });
   }
 
   // Called by Rust
-  handleJoinedMembersChanged(
+  handlePeekChanged(
     clientId: GroupCallClientId,
-    members: Array<ArrayBuffer>
+    info: PeekInfo,
   ): void {
-    (async () => {
-      await 0;
-
+    silly_deadlock_protection(() => {
       let groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
         let error = new Error();
-        this.onLogMessage(CallLogLevel.Error, 'Service.ts', 0, 'handleJoinedMembersChanged(): GroupCall not found in map!');
+        this.onLogMessage(CallLogLevel.Error, 'Service.ts', 0, 'handlePeekChanged(): GroupCall not found in map!');
         return;
       }
       
-      groupCall.handleJoinedMembersChanged(members);
-    })();
+      groupCall.handlePeekChanged(info);
+    });
+  }
+
+  // Called by Rust
+  handlePeekResponse(
+    request_id: number,
+    info: PeekInfo,
+  ): void {
+    silly_deadlock_protection(() => {
+      if (!this._peekRequests.resolve(request_id, info)) {
+        this.onLogMessage(CallLogLevel.Warn, 'Service.ts', 0, `Invalid request ID for handlePeekResponse: ${request_id}`);
+      }
+    });
   }
 
   // Called by Rust
@@ -465,9 +532,7 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     reason: GroupCallEndReason
   ): void {
-    (async () => {
-      await 0;
-
+    silly_deadlock_protection(() => {
       let groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
         let error = new Error();
@@ -478,7 +543,7 @@ export class RingRTCType {
       this._groupCallByClientId.delete(clientId);
       
       groupCall.handleEnded(reason);
-    })();
+    });
   }
 
   // Called by Rust
@@ -883,12 +948,9 @@ export class Call {
       this._videoRenderer.disable();
     }
     // This assumes we only have one active all.
-    (async () => {
-      // This is a silly way of causing a deadlock.
-      // tslint:disable-next-line await-promise
-      await 0;
+    silly_deadlock_protection(() => {
       this._callManager.hangup();
-    })();
+    });
   }
 
   get outgoingAudioEnabled(): boolean {
@@ -898,12 +960,9 @@ export class Call {
   set outgoingAudioEnabled(enabled: boolean) {
     this._outgoingAudioEnabled = enabled;
     // This assumes we only have one active all.
-    (async () => {
-      // This is a silly way of not causing a deadlock.
-      // tslint:disable-next-line await-promise
-      await 0;
+    silly_deadlock_protection(() => {
       this._callManager.setOutgoingAudioEnabled(enabled);
-    })();
+    });
   }
 
   get outgoingVideoEnabled(): boolean {
@@ -968,33 +1027,25 @@ export class Call {
   }
 
   private setOutgoingVideoEnabled(enabled: boolean) {
-    // tslint:disable no-floating-promises
-    (async () => {
-      // This is a silly way of causing a deadlock.
-      // tslint:disable-next-line await-promise
-      await 0;
+    silly_deadlock_protection(() => {
       try {
         this._callManager.setOutgoingVideoEnabled(enabled);
       } catch {
         // We may not have an active connection any more.
         // In which case it doesn't matter
       }
-    })();
+    });
   }
 
   setLowBandwidthMode(enabled: boolean) {
-    // tslint:disable no-floating-promises
-    (async () => {
-      // This is a silly way of causing a deadlock.
-      // tslint:disable-next-line await-promise
-      await 0;
+    silly_deadlock_protection(() => {
       try {
         this._callManager.setLowBandwidthMode(enabled);
       } catch {
         // We may not have an active connection any more.
         // In which case it doesn't matter
       }
-    })();
+    });
   }
 
   private enableOrDisableRenderer(): void {
@@ -1054,10 +1105,10 @@ export enum GroupCallEndReason {
     ServerExplicitlyDisconnected = 1,
 
     // Things that can go wrong
-    SfuClientFailedToJoin = 2,
-    FailedToCreatePeerConnectionFactory = 3,
-    FailedToGenerateCertificate = 4,
-    FailedToCreateOutgoingAudioTrack = 5,
+    CallManagerIsBusy = 2,
+    SfuClientFailedToJoin = 3,
+    FailedToCreatePeerConnectionFactory = 4,
+    FailedToGenerateCertificate = 5,
     FailedToCreatePeerConnection = 6,
     FailedToCreateDataChannel = 7,
     FailedToStartPeerConnection = 8,
@@ -1066,6 +1117,7 @@ export enum GroupCallEndReason {
     IceFailedWhileConnecting = 11,
     IceFailedAfterConnected = 12,
     ServerChangedDemuxId = 13,
+    HasMaxDevices = 14,
 }
 
 // HTTP request methods.
@@ -1073,6 +1125,7 @@ export enum HttpMethod {
   Get = 0,
   Put = 1,
   Post = 2,
+  Delete = 3,
 }
 
 // The local device state for a group call.
@@ -1095,19 +1148,22 @@ export class LocalDeviceState {
 export class RemoteDeviceState {
   demuxId: number;  // UInt32
   userId: ArrayBuffer;
+  mediaKeysReceived: boolean;
 
   audioMuted: boolean | undefined;
   videoMuted: boolean | undefined;
-  speakerIndex: number | undefined;  // UInt16
   videoAspectRatio: number | undefined;  // Float
-  audioLevel: number | undefined;  // UInt16
+  addedTime: number | undefined;  // unix millis
+  speakerTime: number | undefined;  // unix millis;  0 if they've never spoken
 
   constructor(
     demuxId: number,
-    userId: ArrayBuffer
+    userId: ArrayBuffer,
+    mediaKeysReceived: boolean
   ) {
     this.demuxId = demuxId;
     this.userId = userId;
+    this.mediaKeysReceived = mediaKeysReceived
   }
 }
 
@@ -1127,7 +1183,7 @@ export class GroupMemberInfo {
 
 // Used for the application to communicate the actual resolutions of
 // each device in a group call to RingRTC and the SFU.
-export class RenderedResolution {
+export class VideoRequest {
   demuxId: number;  // UInt32
   width: number;  // UInt16
   height: number;  // UInt16
@@ -1151,7 +1207,7 @@ export interface GroupCallObserver {
   requestGroupMembers(groupCall: GroupCall): void;
   onLocalDeviceStateChanged(groupCall: GroupCall): void;
   onRemoteDeviceStatesChanged(groupCall: GroupCall): void;
-  onJoinedMembersChanged(groupCall: GroupCall): void;
+  onPeekChanged(groupCall: GroupCall): void;
   onEnded(groupCall: GroupCall, reason: GroupCallEndReason): void;
 }
 
@@ -1167,12 +1223,13 @@ export class GroupCall {
   private _localDeviceState: LocalDeviceState;
   private _remoteDeviceStates: Array<RemoteDeviceState> | undefined;
 
-  private _joinedGroupMembers: Array<ArrayBuffer> | undefined;  // uuid
+  private _peekInfo: PeekInfo | undefined;  // uuid
 
   // Called by UI via RingRTC object
   constructor(
     callManager: CallManager,
     groupId: ArrayBuffer,
+    sfuUrl: string,
     observer: GroupCallObserver
   ) {
     this._callManager = callManager;
@@ -1180,7 +1237,7 @@ export class GroupCall {
 
     this._localDeviceState = new LocalDeviceState();
 
-    this._clientId = this._callManager.createGroupCallClient(groupId);
+    this._clientId = this._callManager.createGroupCallClient(groupId, sfuUrl);
   }
 
   // Called by UI
@@ -1214,20 +1271,27 @@ export class GroupCall {
   }
 
   // Called by UI
-  getJoinedGroupMembers(): Array<ArrayBuffer> | undefined {
-    return this._joinedGroupMembers;
+  getPeekInfo(): PeekInfo | undefined {
+    return this._peekInfo;
   }
 
   // Called by UI
   setOutgoingAudioMuted(muted: boolean): void {
     this._localDeviceState.audioMuted = muted;
     this._callManager.setOutgoingAudioMuted(this._clientId, muted);
+    this._observer.onLocalDeviceStateChanged(this);
   }
 
   // Called by UI
   setOutgoingVideoMuted(muted: boolean): void {
     this._localDeviceState.videoMuted = muted;
     this._callManager.setOutgoingVideoMuted(this._clientId, muted);
+    this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by UI
+  resendMediaKeys(): void {
+    this._callManager.resendMediaKeys(this._clientId);
   }
 
   // Called by UI
@@ -1236,8 +1300,8 @@ export class GroupCall {
   }
 
   // Called by UI
-  setRenderedResolutions(resolutions: Array<RenderedResolution>): void {
-    this._callManager.setRenderedResolutions(this._clientId, resolutions);
+  requestVideo(resolutions: Array<VideoRequest>): void {
+    this._callManager.requestVideo(this._clientId, resolutions);
   }
 
   // Called by UI
@@ -1276,16 +1340,22 @@ export class GroupCall {
 
   // Called by Rust via RingRTC object
   handleRemoteDevicesChanged(remoteDeviceStates: Array<RemoteDeviceState>): void {
+    // We don't get aspect ratios from RingRTC, so make sure to copy them over.
+    for (const noo of remoteDeviceStates) {
+      const old = this._remoteDeviceStates?.find((old) => old.demuxId == noo.demuxId);
+      noo.videoAspectRatio = old?.videoAspectRatio;
+    }
+
     this._remoteDeviceStates = remoteDeviceStates;
 
     this._observer.onRemoteDeviceStatesChanged(this);
   }
 
   // Called by Rust via RingRTC object
-  handleJoinedMembersChanged(members: Array<ArrayBuffer>): void {
-    this._joinedGroupMembers = members;
+  handlePeekChanged(info: PeekInfo): void {
+    this._peekInfo = info;
 
-    this._observer.onJoinedMembersChanged(this);
+    this._observer.onPeekChanged(this);
   }
 
   // Called by Rust via RingRTC object
@@ -1303,28 +1373,43 @@ export class GroupCall {
 
   // With this, a GroupCall can provide a VideoFrameSource for each remote device.
   getVideoSource(remoteDemuxId: number): GroupCallVideoFrameSource {
-    return new GroupCallVideoFrameSource(this._callManager, this._clientId, remoteDemuxId);
+    return new GroupCallVideoFrameSource(this._callManager, this, remoteDemuxId);
+  }
+
+  // Called by the GroupCallVideoFrameSource when it receives a video frame.
+  setRemoteAspectRatio(remoteDemuxId: number, aspectRatio: number) {
+    const remoteDevice = this._remoteDeviceStates?.find((device) => device.demuxId == remoteDemuxId);
+    if (!!remoteDevice && remoteDevice.videoAspectRatio != aspectRatio) {
+      remoteDevice.videoAspectRatio = aspectRatio;
+      this._observer.onRemoteDeviceStatesChanged(this);
+    }
   }
 }
 
 // Implements VideoSource for use in CanvasVideoRenderer
 class GroupCallVideoFrameSource {
   private readonly _callManager: CallManager;
-  private readonly _clientId: GroupCallClientId;
+  private readonly _groupCall: GroupCall;
   private readonly _remoteDemuxId: number;  // Uint32
 
   constructor(
     callManager: CallManager,
-    clientId: GroupCallClientId,
+    groupCall: GroupCall,
     remoteDemuxId: number,  // Uint32
   ) {
     this._callManager = callManager;
-    this._clientId = clientId;
+    this._groupCall = groupCall;
     this._remoteDemuxId = remoteDemuxId;
   }
   
   receiveVideoFrame(buffer: ArrayBuffer): [number, number] | undefined {
-    return this._callManager.receiveGroupCallVideoFrame(this._clientId, this._remoteDemuxId, buffer);
+    // This assumes we only have one active all.
+    const frame = this._callManager.receiveGroupCallVideoFrame(this._groupCall.clientId, this._remoteDemuxId, buffer);
+    if (!!frame) {
+      const [ width, height ] = frame;
+      this._groupCall.setRemoteAspectRatio(this._remoteDemuxId, width / height);
+    }
+    return frame;
   }
 }
 
@@ -1485,7 +1570,7 @@ export interface CallManager {
 
   // Group Calls
 
-  createGroupCallClient(groupId: ArrayBuffer) : GroupCallClientId;
+  createGroupCallClient(groupId: ArrayBuffer, sfuUrl: string) : GroupCallClientId;
   deleteGroupCallClient(clientId: GroupCallClientId): void;
   connect(clientId: GroupCallClientId): void;
   join(clientId: GroupCallClientId): void;
@@ -1493,12 +1578,15 @@ export interface CallManager {
   disconnect(clientId: GroupCallClientId): void;
   setOutgoingAudioMuted(clientId: GroupCallClientId, muted: boolean): void;
   setOutgoingVideoMuted(clientId: GroupCallClientId, muted: boolean): void;
+  resendMediaKeys(clientId: GroupCallClientId): void;
   setBandwidthMode(clientId: GroupCallClientId, bandwidthMode: BandwidthMode): void;
-  setRenderedResolutions(clientId: GroupCallClientId, resolutions: Array<RenderedResolution>): void;
+  requestVideo(clientId: GroupCallClientId, resolutions: Array<VideoRequest>): void;
   setGroupMembers(clientId: GroupCallClientId, members: Array<GroupMemberInfo>): void;
   setMembershipProof(clientId: GroupCallClientId, proof: ArrayBuffer): void;
   // Same as receiveVideoFrame, but with a specific GroupCallClientId and remoteDemuxId.
   receiveGroupCallVideoFrame(clientId: GroupCallClientId, remoteDemuxId: number, buffer: ArrayBuffer): [number, number] | undefined;
+  // Response comes back via handlePeekResponse
+  peekGroupCall(requestId: number, sfu_url: string, membership_proof: ArrayBuffer, group_members: Array<GroupMemberInfo>): Promise<PeekInfo>;
 
   getAudioInputs() : AudioDevice[];
   setAudioInput(index: number) : void;
@@ -1591,9 +1679,13 @@ export interface CallManagerCallbacks {
     clientId: GroupCallClientId,
     remoteDeviceStates: Array<RemoteDeviceState>
   ): void;
-  handleJoinedMembersChanged(
+  handlePeekChanged(
     clientId: GroupCallClientId,
-    members: Array<ArrayBuffer>
+    info: PeekInfo
+  ): void;
+  handlePeekResponse(
+    request_id: number,
+    info: PeekInfo
   ): void;
   handleEnded(
     clientId: GroupCallClientId,
@@ -1643,4 +1735,15 @@ export enum CallLogLevel {
   Info,
   Debug,
   Trace,
+}
+
+function silly_deadlock_protection(f: () => void) {
+    // tslint:disable no-floating-promises
+    (async () => {
+      // This is a silly way of preventing a deadlock.
+      // tslint:disable-next-line await-promise
+      await 0;
+
+      f();
+    })();
 }

@@ -13,10 +13,19 @@ use std::net::SocketAddr;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::common::HttpMethod;
-use crate::core::group_call::{GroupMemberInfo, MembershipProof, UserId};
+use crate::common::{HttpMethod, HttpResponse, Result};
+use crate::core::group_call::{
+    BoxedPeekInfoHandler,
+    DemuxId,
+    GroupMemberInfo,
+    MembershipProof,
+    PeekInfo,
+    SfuInfo,
+    UserId,
+};
 use crate::core::util::sha256_as_hexstring;
 use crate::core::{group_call, http_client::HttpClient};
+use crate::error::RingRtcError;
 
 #[derive(Deserialize, Debug)]
 struct JoinResponse {
@@ -52,7 +61,15 @@ struct SfuFingerprint {
 
 #[derive(Deserialize, Debug)]
 struct ParticipantsResponse {
+    #[serde(rename = "conferenceId")]
+    era_id: Option<String>,
+
+    #[serde(rename = "maxConferenceSize")]
+    max_devices: Option<u32>,
+
     participants: Vec<SfuParticipant>,
+
+    creator: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -83,15 +100,95 @@ pub struct SfuClient {
     )>,
 }
 
+const RESPONSE_CODE_NO_CONFERENCE: u16 = 404;
+const RESPONSE_CODE_MAX_PARTICIPANTS_REACHED: u16 = 413;
+
 impl SfuClient {
-    pub fn new(http_client: Box<dyn HttpClient + Send>) -> Self {
+    pub fn new(http_client: Box<dyn HttpClient + Send>, url: String) -> Self {
+        let url = url.trim_end_matches('/').to_string();
         SfuClient {
-            url: "https://sfu.voip.signal.org/v1/conference/".to_string(),
+            url,
             http_client,
             auth_header: None,
             member_prefixes: vec![],
             deferred_join: None,
         }
+    }
+
+    fn process_join_response(response: Option<HttpResponse>) -> Result<(SfuInfo, DemuxId, String)> {
+        let body = match response {
+            Some(r) if r.status_code >= 200 && r.status_code <= 300 => r.body,
+            Some(r) if r.status_code == RESPONSE_CODE_MAX_PARTICIPANTS_REACHED => {
+                error!("SfuClient: maximum number of participants reached, can't join");
+                return Err(RingRtcError::MaxParticipantsReached.into());
+            }
+            Some(r) => {
+                error!(
+                    "SfuClient: unexpected join response status code {}",
+                    r.status_code
+                );
+                return Err(RingRtcError::SfuClientReceivedUnexpectedResponseStatusCode(
+                    r.status_code,
+                )
+                .into());
+            }
+            _ => {
+                error!("SfuClient: join request failed (no response)");
+                return Err(RingRtcError::SfuClientRequestFailed.into());
+            }
+        };
+        let body = std::str::from_utf8(&body)?;
+        debug!("SfuClient: join response: {:?}", body);
+
+        let deserialized: JoinResponse = serde_json::from_str(&body)?;
+        let sha256_fingerprint = match deserialized
+            .transport
+            .fingerprints
+            .iter()
+            .find(|fp| fp.hash == "sha-256")
+        {
+            Some(fp) => fp,
+            None => {
+                error!("SfuClient: no SHA-256 fingerprint in the join response");
+                return Err(RingRtcError::SfuClientRequestFailed.into());
+            }
+        };
+        let dtls_fingerprint = match group_call::decode_fingerprint(&sha256_fingerprint.fingerprint)
+        {
+            Some(fp) => fp,
+            None => {
+                error!("SfuClient: Failed to parse DTLS fingerprint in join response");
+                return Err(RingRtcError::SfuClientRequestFailed.into());
+            }
+        };
+
+        if deserialized.transport.candidates.is_empty() {
+            error!("SfuClient: no candidates provided in the join response");
+            return Err(RingRtcError::SfuClientRequestFailed.into());
+        }
+        let udp_addresses: Vec<SocketAddr> = deserialized
+            .transport
+            .candidates
+            .iter()
+            .filter_map(|c| Some(SocketAddr::new(c.ip.parse().ok()?, c.port)))
+            .collect();
+
+        let ice_ufrag = deserialized.transport.ufrag;
+        let ice_pwd = deserialized.transport.pwd;
+        let endpoint_id = deserialized.endpoint_id;
+
+        let info = group_call::SfuInfo {
+            udp_addresses,
+            ice_ufrag,
+            ice_pwd,
+            dtls_fingerprint,
+        };
+        let demux_id = deserialized.ssrc_prefix;
+        debug!(
+            "SfuClient: successful join, info: {:?}, demux_id: {}, endpoint_id: {}",
+            info, demux_id, endpoint_id
+        );
+        Ok((info, demux_id, endpoint_id))
     }
 
     fn join_with_header(
@@ -102,10 +199,7 @@ impl SfuClient {
         dtls_fingerprint: &group_call::DtlsFingerprint,
         client: group_call::Client,
     ) {
-        info!(
-            "SfuClient JoinWithToken: ufrag={:?} pwd={:?} fp={:?}",
-            ice_ufrag, ice_pwd, dtls_fingerprint
-        );
+        info!("SfuClient join_with_header:");
 
         let join_json = json!({
             // The payload types, header extensions, fingerprint hash, payload formats,
@@ -169,7 +263,7 @@ impl SfuClient {
                     "useinbandfec": 1
                 }
             },
-            "videoHeaderExtensions" : [
+            "audioHeaderExtensions" : [
                 // The extension IDs and URIs need to match those configured in
                 // peer_connection.cc (CreateSessionDescriptionForGroupCall)
                 {
@@ -177,9 +271,27 @@ impl SfuClient {
                     "uri": "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
                 },
                 {
-                    "id": 4,
-                    "uri": "urn:3gpp:video-orientation"
+                    "id": 5,
+                    "uri": "urn:ietf:params:rtp-hdrext:ssrc-audio-level"
                 },
+                {
+                    "id": 12,
+                    "uri": "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+                },
+            ],
+            "videoHeaderExtensions" : [
+                // The extension IDs and URIs need to match those configured in
+                // peer_connection.cc (CreateSessionDescriptionForGroupCall)
+                {
+                    "id": 1,
+                    "uri": "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+                },
+                // The SFU doesn't know about this.  We still send it for the benefit of other clients,
+                // But the SFU just passes it along.
+                // {
+                //     "id": 4,
+                //     "uri": "urn:3gpp:video-orientation"
+                // },
                 {
                     "id": 12,
                     "uri": "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
@@ -213,8 +325,8 @@ impl SfuClient {
                 },
             ],
         });
-        info!("Sending join request: {}", join_json.to_string());
-        let participants_url = format!("{}participants", self.url);
+        debug!("Sending join request: {}", join_json.to_string());
+        let participants_url = format!("{}/v1/conference/participants", self.url);
         let mut headers = HashMap::new();
         headers.insert("Authorization".to_string(), auth_header.to_string());
         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -225,86 +337,93 @@ impl SfuClient {
             headers,
             Some(body),
             Box::new(move |resp| {
-                let body = match resp {
-                    Some(r) if r.status_code >= 200 && r.status_code <= 300 => r.body,
-                    Some(r) => {
-                        error!(
-                            "SfuClient: unexpected join response status code {}",
-                            r.status_code
-                        );
-                        return;
-                    }
-                    _ => {
-                        error!("SfuClient: join request failed");
-                        return;
-                    }
-                };
-                let body = match std::str::from_utf8(&body) {
-                    Ok(utf) => utf,
-                    Err(_) => {
-                        error!("SfuClient: failed to parse the response as UTF-8");
-                        return;
-                    }
-                };
-                info!("SfuClient: join response: {:?}", body);
-
-                let deserialized: serde_json::Result<JoinResponse> = serde_json::from_str(&body);
-                let deserialized = match deserialized {
-                    Ok(obj) => obj,
-                    Err(_) => {
-                        error!("SfuClient: failed to deserialize the join response");
-                        return;
-                    }
-                };
-                let sha256_fingerprint = match deserialized
-                    .transport
-                    .fingerprints
-                    .iter()
-                    .find(|fp| fp.hash == "sha-256")
-                {
-                    Some(fp) => fp,
-                    None => {
-                        error!("SfuClient: no SHA-256 fingerprint in the join response");
-                        return;
-                    }
-                };
-                let dtls_fingerprint =
-                    match group_call::decode_fingerprint(&sha256_fingerprint.fingerprint) {
-                        Some(fp) => fp,
-                        None => {
-                            error!("SfuClient: Failed to parse DTLS fingerprint in join response");
-                            return;
-                        }
-                    };
-
-                if deserialized.transport.candidates.is_empty() {
-                    error!("SfuClient: no candidates provided in the join response");
-                    return;
-                }
-                let udp_addresses: Vec<SocketAddr> = deserialized
-                    .transport
-                    .candidates
-                    .iter()
-                    .filter_map(|c| Some(SocketAddr::new(c.ip.parse().ok()?, c.port)))
-                    .collect();
-
-                let ice_ufrag = deserialized.transport.ufrag;
-                let ice_pwd = deserialized.transport.pwd;
-
-                let info = group_call::SfuInfo {
-                    udp_addresses,
-                    ice_ufrag,
-                    ice_pwd,
-                    dtls_fingerprint,
-                };
-                info!("SfuInfo: {:?}", info);
-                client.on_sfu_client_joined(Ok((info, deserialized.ssrc_prefix)));
+                let outcome = Self::process_join_response(resp);
+                client.on_sfu_client_joined(outcome);
             }),
         );
     }
 
-    fn request_remote_devices_with_header(&self, auth_header: &str, client: group_call::Client) {
-        let participants_url = format!("{}participants", self.url);
+    fn process_remote_devices_response(
+        response: Option<HttpResponse>,
+        member_prefixes: Vec<UuidEndpointPrefix>,
+    ) -> Result<PeekInfo> {
+        let body = match response {
+            Some(r) if r.status_code >= 200 && r.status_code <= 300 => r.body,
+            Some(r) if r.status_code == RESPONSE_CODE_NO_CONFERENCE => {
+                info!("SfuClient: no participants joined");
+                return Ok(PeekInfo {
+                    devices:      vec![],
+                    creator:      None,
+                    era_id:       None,
+                    max_devices:  None,
+                    device_count: 0,
+                });
+            }
+            Some(r) => {
+                error!(
+                    "SfuClient: unexpected GetParticipants response status code {}",
+                    r.status_code
+                );
+                return Err(RingRtcError::SfuClientReceivedUnexpectedResponseStatusCode(
+                    r.status_code,
+                )
+                .into());
+            }
+            _ => {
+                error!("SfuClient: GetParticipants request failed (no response)");
+                return Err(RingRtcError::SfuClientRequestFailed.into());
+            }
+        };
+        let body = std::str::from_utf8(&body)?;
+        debug!("Remote Devices Response: {}", body);
+        let deserialized: ParticipantsResponse = serde_json::from_str(&body)?;
+
+        let era_id = deserialized.era_id;
+        let max_devices = deserialized.max_devices;
+        let device_count = deserialized.participants.len() as u32;
+        let creator = match deserialized.creator {
+            None => None,
+            Some(encoded_uid) => Self::lookup_uuid_by_endpoint_id(&member_prefixes, &encoded_uid),
+        };
+
+        let devices: Vec<group_call::PeekDeviceInfo> = deserialized
+            .participants
+            .into_iter()
+            .filter_map(|p| {
+                let demux_id = p.ssrc_prefix;
+                let user_id = Self::lookup_uuid_by_endpoint_id(&member_prefixes, &p.endpoint_id);
+                if let Ok(request_token) =
+                    p.endpoint_id.split('-').nth(1).unwrap_or_default().parse()
+                {
+                    Some(group_call::PeekDeviceInfo {
+                        demux_id,
+                        user_id,
+                        request_token,
+                    })
+                } else {
+                    warn!(
+                        "Ignoring device with unparsable endpoint ID: {}",
+                        p.endpoint_id
+                    );
+                    None
+                }
+            })
+            .collect();
+        Ok(PeekInfo {
+            devices,
+            creator,
+            era_id,
+            max_devices,
+            device_count,
+        })
+    }
+
+    fn request_remote_devices_with_header(
+        &self,
+        auth_header: &str,
+        handle_result: BoxedPeekInfoHandler,
+    ) {
+        let participants_url = format!("{}/v1/conference/participants", self.url);
         let mut headers = HashMap::new();
         headers.insert("Authorization".to_string(), auth_header.to_string());
         let member_prefixes = self.member_prefixes.clone();
@@ -314,53 +433,8 @@ impl SfuClient {
             headers,
             None,
             Box::new(move |resp| {
-                let body = match resp {
-                    Some(r) if r.status_code >= 200 && r.status_code <= 300 => r.body,
-                    Some(r) => {
-                        error!(
-                            "SfuClient: unexpected GetParticipants response status code {}",
-                            r.status_code
-                        );
-                        return;
-                    }
-                    _ => {
-                        error!("SfuClient: GetParticipants request failed");
-                        return;
-                    }
-                };
-                let body = match std::str::from_utf8(&body) {
-                    Ok(utf) => utf,
-                    Err(_) => {
-                        error!("SfuClient: failed to parse the response as UTF-8");
-                        return;
-                    }
-                };
-                let deserialized: serde_json::Result<ParticipantsResponse> =
-                    serde_json::from_str(&body);
-                let deserialized = match deserialized {
-                    Ok(obj) => obj,
-                    Err(_) => {
-                        error!("SfuClient: failed to deserialize the GetParticipants response");
-                        return;
-                    }
-                };
-
-                let remote_devices: Vec<(group_call::DemuxId, group_call::UserId)> = deserialized
-                    .participants
-                    .into_iter()
-                    .map(|p| {
-                        let demux_id = p.ssrc_prefix;
-                        let user_id =
-                            Self::lookup_uuid_by_endpoint_id(&member_prefixes, &p.endpoint_id)
-                                .unwrap_or_default();
-                        (demux_id, user_id)
-                    })
-                    .collect();
-                info!(
-                    "SfuClient: remote devices updated, len={}",
-                    remote_devices.len()
-                );
-                client.update_remote_devices(remote_devices);
+                let result = Self::process_remote_devices_response(resp, member_prefixes);
+                handle_result(result);
             }),
         );
     }
@@ -377,6 +451,19 @@ impl SfuClient {
                 None
             }
         })
+    }
+
+    pub fn request_joined_members(
+        &mut self,
+        membership_proof: group_call::MembershipProof,
+        group_members: Vec<group_call::GroupMemberInfo>,
+        handle_response: BoxedPeekInfoHandler,
+    ) {
+        group_call::SfuClient::set_membership_proof(self, membership_proof);
+        group_call::SfuClient::set_group_members(self, group_members);
+        if let Some(header) = self.auth_header.as_ref() {
+            self.request_remote_devices_with_header(header, handle_response);
+        }
     }
 }
 
@@ -429,11 +516,11 @@ impl group_call::SfuClient for SfuClient {
         }
     }
 
-    fn request_remote_devices(&mut self, client: group_call::Client) {
+    fn peek(&mut self, handle_remote_devices: BoxedPeekInfoHandler) {
         match self.auth_header.as_ref() {
-            Some(h) => self.request_remote_devices_with_header(h, client),
+            Some(h) => self.request_remote_devices_with_header(h, handle_remote_devices),
             None => {
-                warn!("SfuClient: request_remote_devices() called with no token available - skipping and waiting until next poll cycle");
+                handle_remote_devices(Err(RingRtcError::SfuClientHasNotAuthToken.into()));
             }
         }
     }
@@ -442,11 +529,11 @@ impl group_call::SfuClient for SfuClient {
         // Transform the [uuid, ciphertext] map to a [uuid, endpoint-id-prefix] map.
         // The SFU frontend assigns the endpoint ID as "prefix-<random number>", where the
         // prefix is sha256(uuid_ciphertext).
-        // Our map includes the trailing dash.
+        // Our map does not include the trailing dash.
         self.member_prefixes = members
             .iter()
             .map(|m| {
-                let prefix = format!("{}-", sha256_as_hexstring(&m.user_id_ciphertext));
+                let prefix = sha256_as_hexstring(&m.user_id_ciphertext);
                 UuidEndpointPrefix {
                     uuid: m.user_id.clone(),
                     prefix,
@@ -459,8 +546,39 @@ impl group_call::SfuClient for SfuClient {
         );
     }
 
-    fn leave(&mut self) {
-        // NOT IMPLEMENTED
+    fn leave(&mut self, endpoint_id: String) {
         info!("SfuClient leave");
+
+        let auth_header = match self.auth_header.as_ref() {
+            Some(h) => h,
+            None => {
+                // We shouldn't have been able to join without an auth header. In theory, we could
+                // request a new auth token and use it, but it will likely take longer and be less
+                // reliable than just letting it time out.
+                warn!("Requesting to leave a conference without an auth header; ignoring");
+                return;
+            }
+        };
+
+        let endpoint_url = format!("{}/v1/conference/participants/{}", self.url, endpoint_id);
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), auth_header.to_string());
+        self.http_client.make_request(
+            endpoint_url,
+            HttpMethod::Delete,
+            headers,
+            None,
+            Box::new(move |resp| match resp {
+                Some(r) if r.status_code >= 200 && r.status_code <= 300 => {
+                    debug!("SfuClient: leave successful");
+                }
+                Some(r) => {
+                    warn!("SfuClient: HTTP error while leaving ({})", r.status_code);
+                }
+                _ => {
+                    warn!("SfuClient: HTTP error while leaving (no response)");
+                }
+            }),
+        );
     }
 }

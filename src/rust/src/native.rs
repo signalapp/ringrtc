@@ -206,35 +206,47 @@ impl fmt::Debug for EndReason {
 // Group Calls
 
 pub trait GroupUpdateHandler {
-    fn handle_group_update(
-        &self,
-        client_id: &group_call::ClientId,
-        update: GroupUpdate,
-    ) -> Result<()>;
+    fn handle_group_update(&self, update: GroupUpdate) -> Result<()>;
 }
 
 pub enum GroupUpdate {
-    RequestMembershipProof,
-    RequestGroupMembers,
-    ConnectionStateChanged(group_call::ConnectionState),
-    JoinStateChanged(group_call::JoinState),
-    RemoteDeviceStatesChanged(Vec<group_call::RemoteDeviceState>),
-    IncomingVideoTrack(group_call::DemuxId, VideoTrack),
-    JoinedMembersChanged(Vec<group_call::UserId>),
-    Ended(group_call::EndReason),
+    RequestMembershipProof(group_call::ClientId),
+    RequestGroupMembers(group_call::ClientId),
+    ConnectionStateChanged(group_call::ClientId, group_call::ConnectionState),
+    JoinStateChanged(group_call::ClientId, group_call::JoinState),
+    RemoteDeviceStatesChanged(group_call::ClientId, Vec<group_call::RemoteDeviceState>),
+    IncomingVideoTrack(group_call::ClientId, group_call::DemuxId, VideoTrack),
+    PeekChanged(
+        group_call::ClientId,
+        Vec<group_call::UserId>,
+        Option<group_call::UserId>,
+        Option<String>,
+        Option<u32>,
+        u32,
+    ),
+    PeekResponse(
+        u32,
+        Vec<group_call::UserId>,
+        Option<group_call::UserId>,
+        Option<String>,
+        Option<u32>,
+        u32,
+    ),
+    Ended(group_call::ClientId, group_call::EndReason),
 }
 
 impl fmt::Display for GroupUpdate {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            GroupUpdate::RequestMembershipProof => "GroupMembershipProof".to_string(),
-            GroupUpdate::RequestGroupMembers => "GroupMembers".to_string(),
-            GroupUpdate::ConnectionStateChanged(_) => "ConnectionStateChanged".to_string(),
-            GroupUpdate::JoinStateChanged(_) => "JoinStateChanged".to_string(),
-            GroupUpdate::RemoteDeviceStatesChanged(_) => "RemoteDeviceStatesChanged".to_string(),
-            GroupUpdate::IncomingVideoTrack(_, _) => "IncomingVideoTrack".to_string(),
-            GroupUpdate::JoinedMembersChanged(_) => "JoinedGroupMembersChanged".to_string(),
-            GroupUpdate::Ended(reason) => format!("Ended({:?})", reason),
+            GroupUpdate::RequestMembershipProof(_) => "GroupMembershipProof".to_string(),
+            GroupUpdate::RequestGroupMembers(_) => "GroupMembers".to_string(),
+            GroupUpdate::ConnectionStateChanged(_, _) => "ConnectionStateChanged".to_string(),
+            GroupUpdate::JoinStateChanged(_, _) => "JoinStateChanged".to_string(),
+            GroupUpdate::RemoteDeviceStatesChanged(_, _) => "RemoteDeviceStatesChanged".to_string(),
+            GroupUpdate::IncomingVideoTrack(_, _, _) => "IncomingVideoTrack".to_string(),
+            GroupUpdate::PeekChanged(_, _, _, _, _, _) => "PeekChanged".to_string(),
+            GroupUpdate::PeekResponse(_, _, _, _, _, _) => "PeekResponse".to_string(),
+            GroupUpdate::Ended(_, reason) => format!("Ended({:?})", reason),
         };
         write!(f, "({})", display)
     }
@@ -290,12 +302,8 @@ impl NativePlatform {
         self.state_handler.handle_call_state(peer_id, state)
     }
 
-    fn send_group_update(
-        &self,
-        client_id: &group_call::ClientId,
-        update: GroupUpdate,
-    ) -> Result<()> {
-        self.group_handler.handle_group_update(client_id, update)
+    fn send_group_update(&self, update: GroupUpdate) -> Result<()> {
+        self.group_handler.handle_group_update(update)
     }
 
     fn send_remote_video_state(&self, peer_id: &PeerId, enabled: bool) -> Result<()> {
@@ -624,10 +632,7 @@ impl Platform for NativePlatform {
     }
 
     fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()> {
-        info!(
-            "NativePlatform::send_call_message(): recipent_uuid: {:?}, ... ",
-            recipient_uuid,
-        );
+        info!("NativePlatform::send_call_message():");
         self.signaling_sender
             .send_call_message(recipient_uuid, message)
     }
@@ -652,7 +657,7 @@ impl Platform for NativePlatform {
             client_id
         );
 
-        let result = self.send_group_update(&client_id, GroupUpdate::RequestMembershipProof);
+        let result = self.send_group_update(GroupUpdate::RequestMembershipProof(client_id));
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -661,7 +666,7 @@ impl Platform for NativePlatform {
     fn request_group_members(&self, client_id: group_call::ClientId) {
         info!("NativePlatform::request_group_members(): id: {}", client_id);
 
-        let result = self.send_group_update(&client_id, GroupUpdate::RequestGroupMembers);
+        let result = self.send_group_update(GroupUpdate::RequestGroupMembers(client_id));
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -677,10 +682,10 @@ impl Platform for NativePlatform {
             client_id
         );
 
-        let result = self.send_group_update(
-            &client_id,
-            GroupUpdate::ConnectionStateChanged(connection_state),
-        );
+        let result = self.send_group_update(GroupUpdate::ConnectionStateChanged(
+            client_id,
+            connection_state,
+        ));
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -696,7 +701,7 @@ impl Platform for NativePlatform {
             client_id
         );
 
-        let result = self.send_group_update(&client_id, GroupUpdate::JoinStateChanged(join_state));
+        let result = self.send_group_update(GroupUpdate::JoinStateChanged(client_id, join_state));
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -712,10 +717,10 @@ impl Platform for NativePlatform {
             client_id
         );
 
-        let result = self.send_group_update(
-            &client_id,
-            GroupUpdate::RemoteDeviceStatesChanged(remote_device_states.iter().cloned().collect()),
-        );
+        let result = self.send_group_update(GroupUpdate::RemoteDeviceStatesChanged(
+            client_id,
+            remote_device_states.iter().cloned().collect(),
+        ));
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -732,29 +737,66 @@ impl Platform for NativePlatform {
             client_id, remote_demux_id
         );
 
-        let result = self.send_group_update(
-            &client_id,
-            GroupUpdate::IncomingVideoTrack(remote_demux_id, incoming_video_track),
-        );
+        let result = self.send_group_update(GroupUpdate::IncomingVideoTrack(
+            client_id,
+            remote_demux_id,
+            incoming_video_track,
+        ));
         if result.is_err() {
             error!("{:?}", result.err());
         }
     }
 
-    fn handle_joined_members_changed(
+    fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
         joined_members: &[group_call::UserId],
+        creator: Option<group_call::UserId>,
+        era_id: Option<&str>,
+        max_devices: Option<u32>,
+        device_count: u32,
     ) {
         info!(
-            "NativePlatform::handle_joined_members_changed(): id: {}",
-            client_id
+            "NativePlatform::handle_peek_changed(): id: {}, era_id: {:?}, max_devices: {:?}, device_count: {}",
+            client_id,
+            era_id,
+            max_devices,
+            device_count
         );
 
-        let result = self.send_group_update(
-            &client_id,
-            GroupUpdate::JoinedMembersChanged(joined_members.iter().cloned().collect()),
-        );
+        let result = self.send_group_update(GroupUpdate::PeekChanged(
+            client_id,
+            joined_members.iter().cloned().collect(),
+            creator,
+            era_id.map(String::from),
+            max_devices,
+            device_count,
+        ));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    // Response of peek_group_call without group_call::Client
+    fn handle_peek_response(
+        &self,
+        request_id: u32,
+        joined_members: &[group_call::UserId],
+        creator: Option<group_call::UserId>,
+        era_id: Option<&str>,
+        max_devices: Option<u32>,
+        device_count: u32,
+    ) {
+        info!("NativePlatform::handle_peek_response(): id: {}", request_id,);
+
+        let result = self.send_group_update(GroupUpdate::PeekResponse(
+            request_id,
+            joined_members.to_vec(),
+            creator,
+            era_id.map(String::from),
+            max_devices,
+            device_count,
+        ));
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -763,7 +805,7 @@ impl Platform for NativePlatform {
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
         info!("NativePlatform::handle_ended(): id: {}", client_id);
 
-        let result = self.send_group_update(&client_id, GroupUpdate::Ended(reason));
+        let result = self.send_group_update(GroupUpdate::Ended(client_id, reason));
         if result.is_err() {
             error!("{:?}", result.err());
         }

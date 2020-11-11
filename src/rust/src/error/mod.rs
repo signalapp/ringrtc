@@ -25,6 +25,8 @@ pub enum RingRtcError {
     // Call Manager error codes
     #[fail(display = "Active call already in progress, id: {}", _0)]
     CallAlreadyInProgress(CallId),
+    #[fail(display = "Call Manager is busy")]
+    CallManagerIsBusy,
     #[fail(display = "No active call found")]
     NoActiveCall,
     #[fail(display = "CallID not found in call_map: {}", _0)]
@@ -125,6 +127,16 @@ pub enum RingRtcError {
     UseIceGatherer,
     #[fail(display = "CreateIceGatherer failure")]
     CreateIceGatherer,
+
+    // SFU client error codes
+    #[fail(display = "SfuClient received unexpected response status code {}", _0)]
+    SfuClientReceivedUnexpectedResponseStatusCode(u16),
+    #[fail(display = "SfuClient request failed")]
+    SfuClientRequestFailed,
+    #[fail(display = "SfuClient asked to make a request with no auth token")]
+    SfuClientHasNotAuthToken,
+    #[fail(display = "The maximum number of participants has been reached")]
+    MaxParticipantsReached,
 
     // Frame encryption error codes
     #[fail(display = "Frame Counter too big")]

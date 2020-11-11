@@ -339,6 +339,7 @@ pub enum HttpMethod {
     Get = 0,
     Put,
     Post,
+    Delete,
 }
 
 impl fmt::Display for HttpMethod {

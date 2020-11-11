@@ -444,10 +444,26 @@ impl Platform for SimPlatform {
         unimplemented!()
     }
 
-    fn handle_joined_members_changed(
+    fn handle_peek_changed(
         &self,
         _client_id: group_call::ClientId,
         _joined_members: &[group_call::UserId],
+        _creator: Option<group_call::UserId>,
+        _era_id: Option<&str>,
+        _max_devices: Option<u32>,
+        _device_count: u32,
+    ) {
+        unimplemented!()
+    }
+
+    fn handle_peek_response(
+        &self,
+        _request_id: u32,
+        _joined_members: &[group_call::UserId],
+        _creator: Option<group_call::UserId>,
+        _era_id: Option<&str>,
+        _max_devices: Option<u32>,
+        _device_count: u32,
     ) {
         unimplemented!()
     }

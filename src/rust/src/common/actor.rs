@@ -88,6 +88,9 @@ impl<State: 'static> Actor<State> {
                 }
                 if received_task.is_delayed() {
                     delayed_tasks.push(received_task);
+                    if delayed_tasks.len() > 2 {
+                        warn!("delayed_tasks exceed 2, len(): {}", delayed_tasks.len());
+                    }
                 } else {
                     (received_task.run)(&mut state);
                 }

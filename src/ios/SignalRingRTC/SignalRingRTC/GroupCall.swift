@@ -34,17 +34,19 @@ public enum GroupCallEndReason: Int32 {
     case serverExplicitlyDisconnected = 1
 
     // Things that can go wrong
-    case sfuClientFailedToJoin = 2
-    case failedToCreatePeerConnectionFactory = 3
-    case failedToGenerateCertificate = 4
-    case failedToCreatePeerConnection = 5
-    case failedToCreateDataChannel = 6
-    case failedToStartPeerConnection = 7
-    case failedToUpdatePeerConnection = 8
-    case failedToSetMaxSendBitrate = 9
-    case iceFailedWhileConnecting = 10
-    case iceFailedAfterConnected = 11
-    case serverChangedDemuxId = 12
+    case callManagerIsBusy = 2
+    case sfuClientFailedToJoin = 3
+    case failedToCreatePeerConnectionFactory = 4
+    case failedToGenerateCertificate = 5
+    case failedToCreatePeerConnection = 6
+    case failedToCreateDataChannel = 7
+    case failedToStartPeerConnection = 8
+    case failedToUpdatePeerConnection = 9
+    case failedToSetMaxSendBitrate = 10
+    case iceFailedWhileConnecting = 11
+    case iceFailedAfterConnected = 12
+    case serverChangedDemuxId = 13
+    case hasMaxDevices = 14
 }
 
 /// The local device state for a group call.
@@ -62,18 +64,21 @@ public class LocalDeviceState {
 public class RemoteDeviceState: Hashable {
     public let demuxId: UInt32
     public var userId: UUID
+    public var mediaKeysReceived: Bool
 
     public internal(set) var audioMuted: Bool?
     public internal(set) var videoMuted: Bool?
-    public internal(set) var speakerIndex: UInt16?
-    public internal(set) var videoAspectRatio: Float?
-    public internal(set) var audioLevel: UInt16?
+    public internal(set) var addedTime: UInt64  // unix millis
+    public internal(set) var speakerTime: UInt64  // unix millis; 0 if they've never spoken
 
     public internal(set) var videoTrack: RTCVideoTrack?
 
-    init(demuxId: UInt32, userId: UUID) {
+    init(demuxId: UInt32, userId: UUID, mediaKeysReceived: Bool, addedTime: UInt64, speakerTime: UInt64) {
         self.demuxId = demuxId
         self.userId = userId
+        self.mediaKeysReceived = mediaKeysReceived
+        self.addedTime = addedTime
+        self.speakerTime = speakerTime
     }
 
     public static func ==(lhs: RemoteDeviceState, rhs: RemoteDeviceState) -> Bool {
@@ -99,7 +104,7 @@ public struct GroupMemberInfo {
 
 /// Used for the application to communicate the actual resolutions of
 /// each device in a group call to RingRTC and the media server.
-public struct RenderedResolution {
+public struct VideoRequest {
     let demuxId: UInt32
     let width: UInt16
     let height: UInt16
@@ -140,10 +145,10 @@ public protocol GroupCallDelegate: class {
     func groupCall(onRemoteDeviceStatesChanged groupCall: GroupCall)
 
     /**
-     * Indication that the application can retrieve an updated list of users thar
-     * are actively in the group call.
+     * Indication that the application can retrieve an updated PeekInfo which
+     * includes a list of users that are actively in the group call.
      */
-    func groupCall(onJoinedMembersChanged groupCall: GroupCall)
+    func groupCall(onPeekChanged groupCall: GroupCall)
 
     /**
      * Indication that group call ended due to a reason other than the user choosing
@@ -157,6 +162,7 @@ public class GroupCall {
     let factory: RTCPeerConnectionFactory
     var groupCallByClientId: GroupCallByClientId
     let groupId: Data
+    let sfuUrl: String
 
     public weak var delegate: GroupCallDelegate?
 
@@ -167,23 +173,23 @@ public class GroupCall {
 
     public private(set) var localDeviceState: LocalDeviceState
     public private(set) var remoteDeviceStates: [UInt32: RemoteDeviceState]
-    public private(set) var joinedGroupMembers: [UUID]
+    public private(set) var peekInfo: PeekInfo?
 
     let videoCaptureController: VideoCaptureController
     var audioTrack: RTCAudioTrack?
     var videoTrack: RTCVideoTrack?
 
-    internal init(ringRtcCallManager: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, groupCallByClientId: GroupCallByClientId, groupId: Data, videoCaptureController: VideoCaptureController) {
+    internal init(ringRtcCallManager: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, groupCallByClientId: GroupCallByClientId, groupId: Data, sfuUrl: String, videoCaptureController: VideoCaptureController) {
         AssertIsOnMainThread()
 
         self.ringRtcCallManager = ringRtcCallManager
         self.factory = factory
         self.groupCallByClientId = groupCallByClientId
         self.groupId = groupId
+        self.sfuUrl = sfuUrl
 
         self.localDeviceState = LocalDeviceState()
         self.remoteDeviceStates = [:]
-        self.joinedGroupMembers = []
 
         self.videoCaptureController = videoCaptureController
 
@@ -206,6 +212,7 @@ public class GroupCall {
             // There is no RingRTC instance yet or anymore, so create it.
 
             let groupIdSlice = allocatedAppByteSliceFromData(maybe_data: self.groupId)
+            let sfuUrlSlice = allocatedAppByteSliceFromString(maybe_string: self.sfuUrl)
 
             // Make sure to release the allocated memory when the function exists,
             // to ensure that the pointers are still valid when used in the RingRTC
@@ -213,6 +220,9 @@ public class GroupCall {
             defer {
                 if groupIdSlice.bytes != nil {
                     groupIdSlice.bytes.deallocate()
+                }
+                if sfuUrlSlice.bytes != nil {
+                    sfuUrlSlice.bytes.deallocate()
                 }
             }
 
@@ -229,16 +239,16 @@ public class GroupCall {
             videoTrack.isEnabled = !isOutgoingVideoMuted
             self.videoTrack = videoTrack
 
-            // Define output video size.
+            // Define maximum output video format for group calls.
             videoSource.adaptOutputFormat(
-                toWidth: VideoCaptureController.outputSizeWidth,
-                height: VideoCaptureController.outputSizeHeight,
-                fps: VideoCaptureController.outputFrameRate
+                toWidth: 640,
+                height: 360,
+                fps: 30
             )
 
             self.videoCaptureController.capturerDelegate = videoSource
 
-            let clientId = ringrtcCreateGroupCallClient(self.ringRtcCallManager, groupIdSlice, audioTrack.getNativeAudioTrack(), videoTrack.getNativeVideoTrack())
+            let clientId = ringrtcCreateGroupCallClient(self.ringRtcCallManager, groupIdSlice, sfuUrlSlice, audioTrack.getNativeAudioTrack(), videoTrack.getNativeVideoTrack())
             if clientId != 0 {
                 // Add this instance to the shared dictionary.
                 self.groupCallByClientId[clientId] = self
@@ -343,6 +353,18 @@ public class GroupCall {
         }
     }
 
+    public func resendMediaKeys() {
+        AssertIsOnMainThread()
+        Logger.debug("resendMediaKeys")
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        ringrtcResendMediaKeys(self.ringRtcCallManager, clientId)
+    }
+
     public func updateBandwidthMode(bandwidthMode: BandwidthMode) {
         AssertIsOnMainThread()
         Logger.debug("updateBandwidthMode")
@@ -355,16 +377,16 @@ public class GroupCall {
         ringrtcSetBandwidthMode(self.ringRtcCallManager, clientId, bandwidthMode.rawValue)
     }
 
-    public func updateRenderedResolutions(resolutions: [RenderedResolution]) {
+    public func updateVideoRequests(resolutions: [VideoRequest]) {
         AssertIsOnMainThread()
-        Logger.debug("updateRenderedResolutions")
+        Logger.debug("updateVideoRequests")
 
         guard let clientId = self.clientId else {
             Logger.warn("no clientId defined for groupCall")
             return
         }
 
-        let appResolutions: [AppRenderedResolution] = resolutions.map { resolution in
+        let appResolutions: [AppVideoRequest] = resolutions.map { resolution in
             let appFramerate: AppOptionalUInt16
             if resolution.framerate != nil {
                 appFramerate = AppOptionalUInt16(value: resolution.framerate!, valid: true)
@@ -372,17 +394,17 @@ public class GroupCall {
                 appFramerate = AppOptionalUInt16(value: 0, valid: false)
             }
 
-            return AppRenderedResolution(demux_id: resolution.demuxId, width: resolution.width, height: resolution.height, framerate: appFramerate)
+            return AppVideoRequest(demux_id: resolution.demuxId, width: resolution.width, height: resolution.height, framerate: appFramerate)
         }
 
         var appResolutionArray = appResolutions.withUnsafeBufferPointer { appResolutionBytes in
-            return AppRenderedResolutionArray(
+            return AppVideoRequestArray(
                 resolutions: appResolutionBytes.baseAddress,
                 count: resolutions.count
             )
         }
 
-        ringrtcSetRenderedResolutions(self.ringRtcCallManager, clientId, &appResolutionArray)
+        ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray)
     }
 
     public func updateGroupMembers(members: [GroupMemberInfo]) {
@@ -518,12 +540,12 @@ public class GroupCall {
         self.delegate?.groupCall(onRemoteDeviceStatesChanged: self)
     }
 
-    func handleJoinedMembersChanged(joinedMembers: [UUID]) {
+    func handlePeekChanged(peekInfo: PeekInfo) {
         AssertIsOnMainThread()
 
-        self.joinedGroupMembers = joinedMembers
+        self.peekInfo = peekInfo
 
-        self.delegate?.groupCall(onJoinedMembersChanged: self)
+        self.delegate?.groupCall(onPeekChanged: self)
     }
 
     func handleEnded(reason: GroupCallEndReason) {
@@ -542,7 +564,7 @@ public class GroupCall {
         // Reset the other states so that the object can be used again.
         self.localDeviceState = LocalDeviceState()
         self.remoteDeviceStates = [:]
-        self.joinedGroupMembers = []
+        self.peekInfo = nil
         self.audioTrack = nil
         self.videoTrack = nil
 

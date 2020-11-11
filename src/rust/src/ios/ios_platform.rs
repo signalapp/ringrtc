@@ -34,13 +34,12 @@ use crate::ios::api::call_manager_interface::{
     AppIceCandidate,
     AppIceCandidateArray,
     AppInterface,
-    AppMemberArray,
     AppObject,
     AppOptionalBool,
-    AppOptionalFloat,
-    AppOptionalUInt16,
+    AppOptionalUInt32,
     AppRemoteDeviceState,
     AppRemoteDeviceStateArray,
+    AppUuidArray,
 };
 use crate::ios::error::IOSError;
 use crate::ios::ios_media_stream::IOSMediaStream;
@@ -353,7 +352,7 @@ impl Platform for IOSPlatform {
     }
 
     fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()> {
-        info!("send_call_message(): recipient_uuid: {:?}", recipient_uuid,);
+        info!("send_call_message():");
 
         (self.app_interface.sendCallMessage)(
             self.app_interface.object,
@@ -372,10 +371,7 @@ impl Platform for IOSPlatform {
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
     ) -> Result<()> {
-        info!(
-            "send_http_request(): request_id: {}, url: {}, method: {}",
-            request_id, url, method
-        );
+        info!("send_http_request(): request_id: {}", request_id);
 
         let mut app_headers: Vec<AppHeader> = Vec::new();
 
@@ -476,6 +472,44 @@ impl Platform for IOSPlatform {
 
     // Group Calls
 
+    fn handle_peek_response(
+        &self,
+        request_id: u32,
+        joined_members: &[group_call::UserId],
+        creator: Option<group_call::UserId>,
+        era_id: Option<&str>,
+        max_devices: Option<u32>,
+        device_count: u32,
+    ) {
+        let mut app_joined_members: Vec<AppByteSlice> = Vec::new();
+
+        for member in joined_members {
+            let app_joined_member = app_slice_from_bytes(Some(&member));
+            app_joined_members.push(app_joined_member);
+        }
+
+        let app_joined_members_array = AppUuidArray {
+            uuids: app_joined_members.as_ptr(),
+            count: app_joined_members.len(),
+        };
+
+        let app_creator = app_slice_from_bytes(creator.as_ref());
+        let era_id = era_id.map(String::from);
+        let app_era_id = app_slice_from_str(era_id.as_ref());
+
+        let app_max_devices = app_option_from_u32(max_devices);
+
+        (self.app_interface.handlePeekResponse)(
+            self.app_interface.object,
+            request_id,
+            app_joined_members_array,
+            app_creator,
+            app_era_id,
+            app_max_devices,
+            device_count,
+        );
+    }
+
     fn request_membership_proof(&self, client_id: group_call::ClientId) {
         (self.app_interface.requestMembershipProof)(self.app_interface.object, client_id);
     }
@@ -507,7 +541,7 @@ impl Platform for IOSPlatform {
             match join_state {
                 group_call::JoinState::NotJoined => 0,
                 group_call::JoinState::Joining => 1,
-                group_call::JoinState::Joined(_) => 2,
+                group_call::JoinState::Joined(_, _) => 2,
             },
         );
     }
@@ -521,13 +555,13 @@ impl Platform for IOSPlatform {
 
         for remote_device_state in remote_device_states {
             let app_remote_device_state = AppRemoteDeviceState {
-                demuxId:          remote_device_state.demux_id,
-                user_id:          app_slice_from_bytes(Some(remote_device_state.user_id.as_ref())),
-                audioMuted:       app_option_from_bool(remote_device_state.audio_muted),
-                videoMuted:       app_option_from_bool(remote_device_state.video_muted),
-                speakerIndex:     app_option_from_u16(remote_device_state.speaker_index),
-                videoAspectRatio: app_option_from_f32(remote_device_state.video_aspect_ratio),
-                audioLevel:       app_option_from_u16(remote_device_state.audio_level),
+                demuxId:           remote_device_state.demux_id,
+                user_id:           app_slice_from_bytes(Some(remote_device_state.user_id.as_ref())),
+                mediaKeysReceived: remote_device_state.media_keys_received,
+                audioMuted:        app_option_from_bool(remote_device_state.audio_muted),
+                videoMuted:        app_option_from_bool(remote_device_state.video_muted),
+                addedTime:         remote_device_state.added_time_as_unix_millis(),
+                speakerTime:       remote_device_state.speaker_time_as_unix_millis(),
             };
 
             app_remote_device_states.push(app_remote_device_state);
@@ -559,10 +593,14 @@ impl Platform for IOSPlatform {
         );
     }
 
-    fn handle_joined_members_changed(
+    fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
         joined_members: &[group_call::UserId],
+        creator: Option<group_call::UserId>,
+        era_id: Option<&str>,
+        max_devices: Option<u32>,
+        device_count: u32,
     ) {
         let mut app_joined_members: Vec<AppByteSlice> = Vec::new();
 
@@ -571,15 +609,25 @@ impl Platform for IOSPlatform {
             app_joined_members.push(app_joined_member);
         }
 
-        let app_joined_members_array = AppMemberArray {
-            members: app_joined_members.as_ptr(),
-            count:   app_joined_members.len(),
+        let app_joined_members_array = AppUuidArray {
+            uuids: app_joined_members.as_ptr(),
+            count: app_joined_members.len(),
         };
 
-        (self.app_interface.handleJoinedMembersChanged)(
+        let app_creator = app_slice_from_bytes(creator.as_ref());
+        let era_id = era_id.map(String::from);
+        let app_era_id = app_slice_from_str(era_id.as_ref());
+
+        let app_max_devices = app_option_from_u32(max_devices);
+
+        (self.app_interface.handlePeekChanged)(
             self.app_interface.object,
             client_id,
             app_joined_members_array,
+            app_creator,
+            app_era_id,
+            app_max_devices,
+            device_count,
         );
     }
 
@@ -629,13 +677,13 @@ fn app_slice_from_str(s: Option<&String>) -> AppByteSlice {
     }
 }
 
-fn app_option_from_u16(v: Option<u16>) -> AppOptionalUInt16 {
+fn app_option_from_u32(v: Option<u32>) -> AppOptionalUInt32 {
     match v {
-        None => AppOptionalUInt16 {
+        None => AppOptionalUInt32 {
             value: 0, // <- app should ignore
             valid: false,
         },
-        Some(v) => AppOptionalUInt16 {
+        Some(v) => AppOptionalUInt32 {
             value: v,
             valid: true,
         },
@@ -649,19 +697,6 @@ fn app_option_from_bool(v: Option<bool>) -> AppOptionalBool {
             valid: false,
         },
         Some(v) => AppOptionalBool {
-            value: v,
-            valid: true,
-        },
-    }
-}
-
-fn app_option_from_f32(v: Option<f32>) -> AppOptionalFloat {
-    match v {
-        None => AppOptionalFloat {
-            value: 0.0, // <- app should ignore
-            valid: false,
-        },
-        Some(v) => AppOptionalFloat {
             value: v,
             valid: true,
         },

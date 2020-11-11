@@ -26,11 +26,8 @@ import org.webrtc.VideoSink;
 import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,7 +51,7 @@ public final class GroupCall {
     @NonNull  private LocalDeviceState                   localDeviceState;
     @Nullable private LongSparseArray<RemoteDeviceState> remoteDeviceStates;
 
-    @Nullable private ArrayList<UUID>                    joinedGroupMembers;
+    @Nullable private PeekInfo                           peekInfo;
 
     @NonNull  private AudioSource                        outgoingAudioSource;
     @NonNull  private AudioTrack                         outgoingAudioTrack;
@@ -71,6 +68,7 @@ public final class GroupCall {
 
     public GroupCall(@NonNull long     nativeCallManager,
                      @NonNull byte[]   groupId,
+                     @NonNull String   sfuUrl,
                      @NonNull EglBase  eglBase,
                      @NonNull Observer observer) {
         Log.i(TAG, "GroupCall():");
@@ -101,10 +99,14 @@ public final class GroupCall {
         this.outgoingVideoTrack = factory.createVideoTrack("video1", this.outgoingVideoSource);
         this.outgoingVideoTrack.setEnabled(!this.localDeviceState.videoMuted);
 
+        // Define maximum output video format for group calls.
+        this.outgoingVideoSource.adaptOutputFormat(640, 360, 30);
+
         try {
             this.clientId = ringrtcCreateGroupCallClient(
                 nativeCallManager,
                 groupId,
+                sfuUrl,
                 this.outgoingAudioTrack.getNativeAudioTrack(),
                 this.outgoingVideoTrack.getNativeVideoTrack());
             if (this.clientId == 0) {
@@ -183,11 +185,11 @@ public final class GroupCall {
     /**
      *
      */
-    public ArrayList<UUID> getJoinedGroupMembers()
+    public PeekInfo getPeekInfo()
     {
-        Log.i(TAG, "getJoinedGroupMembers():");
+        Log.i(TAG, "getPeekInfo():");
 
-        return this.joinedGroupMembers;
+        return this.peekInfo;
     }
 
     /**
@@ -236,6 +238,17 @@ public final class GroupCall {
     /**
      *
      */
+    public void resendMediaKeys()
+        throws CallException
+    {
+        Log.i(TAG, "resendMediaKeys():");
+
+        ringrtcResendMediaKeys(nativeCallManager, this.clientId);
+    }
+
+    /**
+     *
+     */
     public void setBandwidthMode(@NonNull BandwidthMode bandwidthMode)
         throws CallException
     {
@@ -247,18 +260,18 @@ public final class GroupCall {
     /**
      *
      */
-    public void setRenderedResolutions(@NonNull ArrayList<RenderedResolution> resolutions)
+    public void requestVideo(@NonNull Collection<VideoRequest> resolutions)
         throws CallException
     {
-        Log.i(TAG, "setRenderedResolutions():");
+        Log.i(TAG, "requestVideo():");
 
-        ringrtcSetRenderedResolutions(nativeCallManager, this.clientId, resolutions);
+        ringrtcRequestVideo(nativeCallManager, this.clientId, new ArrayList<>(resolutions));
     }
 
     /**
      *
      */
-    public void setGroupMembers(@NonNull ArrayList<GroupMemberInfo> members)
+    public void setGroupMembers(@NonNull Collection<GroupMemberInfo> members)
         throws CallException
     {
         Log.i(TAG, "setGroupMembers():");
@@ -268,7 +281,7 @@ public final class GroupCall {
             member.userIdByteArray = Util.getBytesFromUuid(member.userId);
         }
 
-        ringrtcSetGroupMembers(nativeCallManager, this.clientId, members); 
+        ringrtcSetGroupMembers(nativeCallManager, this.clientId, new ArrayList<>(members));
     }
 
     /**
@@ -279,7 +292,7 @@ public final class GroupCall {
     {
         Log.i(TAG, "setMembershipProof():");
 
-        ringrtcSetMembershipProof(nativeCallManager, this.clientId, proof); 
+        ringrtcSetMembershipProof(nativeCallManager, this.clientId, proof);
     }
 
     /*
@@ -381,18 +394,12 @@ public final class GroupCall {
     /*
      * Called by the CallManager.
      */
-    void handleJoinedMembersChanged(List<byte[]> joinedMembers) {
-        Log.i(TAG, "handleJoinedMembersChanged():");
+    void handlePeekChanged(PeekInfo info) {
+        Log.i(TAG, "handlePeekChanged():");
 
-        // Convert byte[] to uuid.
-        ArrayList<UUID> joinedGroupMembers = new ArrayList<UUID>();
-        for (byte[] joinedMember : joinedMembers) {
-            joinedGroupMembers.add(Util.getUuidFromBytes(joinedMember));
-        }
+        this.peekInfo = info;
 
-        this.joinedGroupMembers = joinedGroupMembers;
-
-        this.observer.onJoinedMembersChanged(this);
+        this.observer.onPeekChanged(this);
     }
 
     /*
@@ -486,6 +493,9 @@ public final class GroupCall {
         // Things that can go wrong
 
         /** */
+        CALL_MANAGER_IS_BUSY,
+
+        /** */
         SFU_CLIENT_FAILED_TO_JOIN,
 
         /** */
@@ -516,7 +526,10 @@ public final class GroupCall {
         ICE_FAILED_AFTER_CONNECTED,
 
         /** */
-        SERVER_CHANGED_DEMUXID;
+        SERVER_CHANGED_DEMUXID,
+
+        /** */
+        HAS_MAX_DEVICES;
 
         @CalledByNative
         static GroupCallEndReason fromNativeIndex(int nativeIndex) {
@@ -576,29 +589,30 @@ public final class GroupCall {
         @Nullable UUID       userId;
         @NonNull  byte[]     userIdByteArray;
 
+                  boolean    mediaKeysReceived;
+
         @Nullable Boolean    audioMuted;
         @Nullable Boolean    videoMuted;
-        @Nullable Integer    speakerIndex;     // UInt16
-        @Nullable Float      videoAspectRatio;
-        @Nullable Integer    audioLevel;       // UInt16
+        long                 addedTime;   // unix millis
+        long                 speakerTime; // unix millis; 0 if was never the speaker
 
         @Nullable VideoTrack videoTrack;
 
         public RemoteDeviceState(          long    demuxId,
                                  @NonNull  byte[]  userIdByteArray,
+                                           boolean mediaKeysReceived,
                                  @Nullable Boolean audioMuted,
                                  @Nullable Boolean videoMuted,
-                                 @Nullable Integer speakerIndex,
-                                 @Nullable Float   videoAspectRatio,
-                                 @Nullable Integer audioLevel) {
+                                           long    addedTime,
+                                           long    speakerTime) {
             this.demuxId = demuxId;
             this.userIdByteArray = userIdByteArray;
+            this.mediaKeysReceived = mediaKeysReceived;
 
             this.audioMuted = audioMuted;
             this.videoMuted = videoMuted;
-            this.speakerIndex = speakerIndex;
-            this.videoAspectRatio = videoAspectRatio;
-            this.audioLevel = audioLevel;
+            this.addedTime = addedTime;
+            this.speakerTime = speakerTime;
         }
 
         public long getDemuxId() {
@@ -611,6 +625,10 @@ public final class GroupCall {
             return userId;
         }
 
+        public boolean getMediaKeysReceived() {
+            return mediaKeysReceived;
+        }
+
         public @Nullable Boolean getAudioMuted() {
             return audioMuted;
         }
@@ -619,16 +637,12 @@ public final class GroupCall {
             return videoMuted;
         }
 
-        public @Nullable Integer getSpeakerIndex() {
-            return speakerIndex;
+        public long getAddedTime() {
+            return addedTime;
         }
 
-        public @Nullable Float getVideoAspectRatio() {
-            return videoAspectRatio;
-        }
-
-        public @Nullable Integer getAudioLevel() {
-            return audioLevel;
+        public long getSpeakerTime() {
+            return speakerTime;
         }
 
         public @Nullable VideoTrack getVideoTrack() {
@@ -656,13 +670,13 @@ public final class GroupCall {
     /**
      *
      */
-    public static class RenderedResolution {
+    public static class VideoRequest {
                   long    demuxId;   // UInt32
                   int     width;     // UInt16
                   int     height;    // UInt16
         @Nullable Integer framerate; // UInt16
 
-        public RenderedResolution(          long    demuxId,
+        public VideoRequest(          long    demuxId,
                                             int     width,
                                             int     height,
                                   @Nullable Integer framerate) {
@@ -701,7 +715,7 @@ public final class GroupCall {
         /**
          *
          */
-        void onJoinedMembersChanged(GroupCall groupCall);
+        void onPeekChanged(GroupCall groupCall);
 
         /**
          *
@@ -714,6 +728,7 @@ public final class GroupCall {
     private native
         long ringrtcCreateGroupCallClient(long   nativeCallManager,
                                           byte[] groupId,
+                                          String sfuUrl,
                                           long   nativeAudioTrack,
                                           long   nativeVideoTrack)
         throws CallException;
@@ -756,15 +771,20 @@ public final class GroupCall {
         throws CallException;
 
     private native
+        void ringrtcResendMediaKeys(long nativeCallManager,
+                                    long clientId)
+        throws CallException;
+
+    private native
         void ringrtcSetBandwidthMode(long nativeCallManager,
                                      long clientId,
                                      int bandwidthMode)
         throws CallException;
 
     private native
-        void ringrtcSetRenderedResolutions(long nativeCallManager,
+        void ringrtcRequestVideo(long nativeCallManager,
                                            long clientId,
-                                           List<RenderedResolution> renderedResolutions)
+                                           List<VideoRequest> renderedResolutions)
         throws CallException;
 
     private native

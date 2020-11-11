@@ -263,10 +263,11 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
 
   config.enable_dtls_srtp = enable_dtls;
   config.enable_rtp_data_channel = enable_rtp_data_channel;
+  config.crypto_options = webrtc::CryptoOptions{};
   if (observer->enable_frame_encryption()) {
-    config.crypto_options = webrtc::CryptoOptions{};
     config.crypto_options->sframe.require_frame_encryption = true;
   }
+  config.crypto_options->srtp.enable_gcm_crypto_suites = true;
 
   PeerConnectionDependencies deps(observer);
   if (factory_owner->injectable_network()) {

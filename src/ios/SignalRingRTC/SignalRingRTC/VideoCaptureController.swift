@@ -6,9 +6,10 @@ import WebRTC
 import SignalCoreKit
 
 public class VideoCaptureController {
-    static let outputSizeWidth: Int32 = 1280
-    static let outputSizeHeight: Int32 = 720
-    static let outputFrameRate: Int32 = 30
+    // The maximum video format allowable for any type of call.
+    static let maxCaptureWidth: Int32 = 1280
+    static let maxCaptureHeight: Int32 = 720
+    static let maxCaptureFrameRate: Int32 = 30
 
     private let capturer = RTCCameraVideoCapturer()
     var capturerDelegate: RTCVideoCapturerDelegate? {
@@ -27,6 +28,8 @@ public class VideoCaptureController {
 
     public func startCapture() {
         serialQueue.sync { [weak self] in
+            Logger.info("startCapture():")
+
             guard let strongSelf = self else {
                 return
             }
@@ -40,6 +43,8 @@ public class VideoCaptureController {
 
     public func stopCapture() {
         serialQueue.sync { [weak self] in
+            Logger.info("stopCapture():")
+
             guard let strongSelf = self else {
                 return
             }
@@ -56,6 +61,8 @@ public class VideoCaptureController {
 
     public func switchCamera(isUsingFrontCamera: Bool) {
         serialQueue.sync { [weak self] in
+            Logger.info("switchCamera():")
+
             guard let strongSelf = self else {
                 return
             }
@@ -75,6 +82,7 @@ public class VideoCaptureController {
     }
 
     private func startCaptureSync() {
+        Logger.info("startCaptureSync():")
         assertIsOnSerialQueue()
 
         let position: AVCaptureDevice.Position = isUsingFrontCamera ? .front : .back
@@ -88,8 +96,7 @@ public class VideoCaptureController {
             return
         }
 
-        let fps = self.framesPerSecond(format: format)
-        capturer.startCapture(with: device, format: format, fps: fps)
+        capturer.startCapture(with: device, format: format, fps: Int(VideoCaptureController.maxCaptureFrameRate))
         isCapturing = true
     }
 
@@ -103,6 +110,24 @@ public class VideoCaptureController {
         return device
     }
 
+    private func getSubTypeString(pixelFormat: FourCharCode) -> String {
+        let cString: [CChar] = [
+            CChar(pixelFormat >> 24 & 0xFF),
+            CChar(pixelFormat >> 16 & 0xFF),
+            CChar(pixelFormat >> 8 & 0xFF),
+            CChar(pixelFormat & 0xFF),
+            0
+        ]
+
+        var subTypeString = ""
+
+        cString.withUnsafeBufferPointer { ptr in
+            subTypeString = String(cString: ptr.baseAddress!)
+        }
+
+        return subTypeString
+    }
+
     private func format(device: AVCaptureDevice) -> AVCaptureDevice.Format? {
         let formats = RTCCameraVideoCapturer.supportedFormats(for: device)
 
@@ -111,37 +136,50 @@ public class VideoCaptureController {
         // the camera capture is at least our output size, which should be available
         // on all devices the client supports.
         let screenSize = UIScreen.main.nativeBounds.size
-        let targetWidth = max(Int32(screenSize.width), Self.outputSizeWidth)
-        let targetHeight = max(Int32(screenSize.height), Self.outputSizeHeight)
+        let targetWidth = max(Int32(screenSize.width), VideoCaptureController.maxCaptureWidth)
+        let targetHeight = max(Int32(screenSize.height), VideoCaptureController.maxCaptureHeight)
+        let targetFrameRate = VideoCaptureController.maxCaptureFrameRate
+
+        Logger.info("Capture Formats")
+        Logger.info("  screenSize:           \(screenSize)")
+        Logger.info("  maxCaptureWidth:      \(VideoCaptureController.maxCaptureWidth)")
+        Logger.info("  maxCaptureHeight:     \(VideoCaptureController.maxCaptureHeight)")
+        Logger.info("  targetWidth:          \(targetWidth)")
+        Logger.info("  targetHeight:         \(targetHeight)")
+        Logger.info("  targetFrameRate:      \(targetFrameRate)")
+        Logger.info("  preferredPixelFormat: \(getSubTypeString(pixelFormat: capturer.preferredOutputPixelFormat()))")
+        Logger.info("  formats:")
 
         var selectedFormat: AVCaptureDevice.Format?
         var currentDiff: Int32 = Int32.max
 
         for format in formats {
             let dimension = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let pixelFormat = CMFormatDescriptionGetMediaSubType(format.formatDescription);
+
+            for range in format.videoSupportedFrameRateRanges {
+                Logger.info("     width: \(dimension.width) height: \(dimension.height) pixelFormat: \(getSubTypeString(pixelFormat: pixelFormat)) fps range: \(range.minFrameRate) - \(range.maxFrameRate)")
+            }
+
             let diff = abs(targetWidth - dimension.width) + abs(targetHeight - dimension.height)
             if diff < currentDiff {
-                selectedFormat = format
-                currentDiff = diff
+                // Look through all framerate ranges for this capture format and find
+                // the first that supports the desired framerate.
+                for range in format.videoSupportedFrameRateRanges {
+                    if Double(targetFrameRate) >= range.minFrameRate && Double(targetFrameRate) <= range.maxFrameRate {
+                        selectedFormat = format
+                        currentDiff = diff
+                    }
+                }
             }
         }
 
         if _isDebugAssertConfiguration(), let selectedFormat = selectedFormat {
-            let dimension = CMVideoFormatDescriptionGetDimensions(selectedFormat.formatDescription)
-            Logger.debug("selected format width: \(dimension.width) height: \(dimension.height)")
+            Logger.info("  selected: \(selectedFormat)")
         }
 
         assert(selectedFormat != nil)
 
         return selectedFormat
-    }
-
-    private func framesPerSecond(format: AVCaptureDevice.Format) -> Int {
-        var maxFrameRate: Float64 = 0
-        for range in format.videoSupportedFrameRateRanges {
-            maxFrameRate = max(maxFrameRate, range.maxFrameRate)
-        }
-
-        return Int(maxFrameRate)
     }
 }

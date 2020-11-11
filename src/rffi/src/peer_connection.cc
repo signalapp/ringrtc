@@ -653,17 +653,17 @@ CreateSessionDescriptionForGroupCall(bool local,
     // For remote, this will result in the remote video track/receiver's ID,
     video_stream.id = local ? LOCAL_VIDEO_TRACK_ID : rtp_demux_id_str;
     video_stream.add_ssrc(video1_ssrc);
-    video_stream.AddFidSsrc(video1_ssrc, video1_rtx_ssrc);  // AKA RTX
     if (local) {
       // Don't add simulcast for remote descriptions
       video_stream.add_ssrc(video2_ssrc);
-      video_stream.AddFidSsrc(video2_ssrc, video2_rtx_ssrc);  // AKA RTX
       video_stream.add_ssrc(video3_ssrc);
+      video_stream.ssrc_groups.push_back(cricket::SsrcGroup(cricket::kSimSsrcGroupSemantics, video_stream.ssrcs));
+    }
+    video_stream.AddFidSsrc(video1_ssrc, video1_rtx_ssrc);  // AKA RTX
+    if (local) {
+      // Don't add simulcast for remote descriptions
+      video_stream.AddFidSsrc(video2_ssrc, video2_rtx_ssrc);  // AKA RTX
       video_stream.AddFidSsrc(video3_ssrc, video3_rtx_ssrc);  // AKA RTX
-      std::vector<uint32_t> primary_ssrcs;
-      video_stream.GetPrimarySsrcs(&primary_ssrcs);
-      auto simulcast = cricket::SsrcGroup(cricket::kSimSsrcGroupSemantics, primary_ssrcs);
-      video_stream.ssrc_groups.push_back(simulcast);
     }
 
     // Things that are the same for all of them

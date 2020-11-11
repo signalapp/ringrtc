@@ -248,16 +248,20 @@ impl Context {
         Err(Error::NoMatchingSenderState)
     }
 
+    pub fn send_state(&self) -> (RatchetCounter, Secret) {
+        (
+            self.sender_state.ratchet_counter,
+            self.sender_state.current_secret,
+        )
+    }
+
     /// Ratchets our send state forward.
     ///
     /// This should be called when a new recipient joins the call. When an existing recipient leaves
     /// the call, [reset_send_ratchet] should be used instead.
     pub fn advance_send_ratchet(&mut self) -> (RatchetCounter, Secret) {
         self.sender_state.mut_advance_ratchet();
-        (
-            self.sender_state.ratchet_counter,
-            self.sender_state.current_secret,
-        )
+        self.send_state()
     }
 
     /// Commit a send secret and start using it for subsequent encrypt calls.
