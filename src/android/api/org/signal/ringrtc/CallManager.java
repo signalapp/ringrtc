@@ -1156,6 +1156,13 @@ public class CallManager {
          add("SM-G935S");
          add("SM-G935K");
          add("SM-G935L");
+
+        // Samsung A3 with Exynos 7870 SoC
+        add("SM-A320F");
+        add("SM-A320FL");
+        add("SM-A320F/DS");
+        add("SM-A320Y/DS");
+        add("SM-A320Y");
       }};
 
       VideoEncoderFactory encoderFactory;
