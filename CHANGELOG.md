@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.8.2
+
+- Update Group Calling feature
+
+- Android: Add more devices to hardware encoder blacklist
+
+- Reference signalapp/webrtc@4183g
+
 ## v2.8.1
 
 - Electron: Fix video track setting
