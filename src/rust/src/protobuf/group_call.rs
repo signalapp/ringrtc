@@ -65,7 +65,7 @@ pub mod device_to_sfu {
             /// Functionally the same as a DemuxId, but oddly different.
             /// Called endpointSuffix in the SFU's RtpDataChannelMessages.proto
             #[prost(uint64, optional, tag="1")]
-            pub request_token: ::std::option::Option<u64>,
+            pub short_device_id: ::std::option::Option<u64>,
             /// Called idealHeight in the SFU's RtpDataChannelMessages.proto
             /// This does not allocate bits eagerly.
             #[prost(uint32, optional, tag="2")]
@@ -78,7 +78,7 @@ pub mod device_to_sfu {
         /// Functionally the same as a DemuxId, but oddly different.
         /// If not set, it will broadcast
         #[prost(string, optional, tag="1")]
-        pub request_token_with_prefix: ::std::option::Option<std::string::String>,
+        pub long_device_id: ::std::option::Option<std::string::String>,
         #[prost(bytes, optional, tag="3")]
         pub payload: ::std::option::Option<std::vec::Vec<u8>>,
     }
@@ -98,30 +98,32 @@ pub struct SfuToDevice {
     /// Called forwardedEndpoints in the SFU's RtpDataChannelMessages.proto
     #[prost(message, optional, tag="5")]
     pub forwarding: ::std::option::Option<sfu_to_device::Forwarding>,
-    /// Called conferenceParticipants in the SFU's RtpDataChannelMessages.proto
+    /// Called endpointChanged in the SFU's RtpDataChannelMessages.proto
     #[prost(message, optional, tag="6")]
-    pub devices: ::std::option::Option<sfu_to_device::Devices>,
+    pub device_joined_or_left: ::std::option::Option<sfu_to_device::DeviceJoinedOrLeft>,
     /// Called forwardedEndpoints in the SFU's RtpDataChannelMessages.proto
     #[prost(message, optional, tag="7")]
     pub received_from_device: ::std::option::Option<sfu_to_device::ReceivedFromDevice>,
 }
 pub mod sfu_to_device {
-    /// Called ConferenceParticipantsMessage in the SFU's RtpDataChannelMessages.proto
+    /// Called EndpointChangedMessage in the SFU's RtpDataChannelMessages.proto
     #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Devices {
+    pub struct DeviceJoinedOrLeft {
         /// Functionally the same as a DemuxId, but oddly different.
-        /// Called endpointSuffix in the SFU's RtpDataChannelMessages.proto
-        #[prost(uint64, repeated, packed="false", tag="1")]
-        pub request_tokens: ::std::vec::Vec<u64>,
+        /// Called endpoint in the SFU's RtpDataChannelMessages.proto
+        #[prost(string, optional, tag="1")]
+        pub long_device_id: ::std::option::Option<std::string::String>,
+        #[prost(bool, optional, tag="2")]
+        pub joined: ::std::option::Option<bool>,
     }
     /// The current primary/active speaker as calculated by rather complex logic by the SFU.
     /// Called DominantSpeakerMessage in the SFU's RtpDataChannelMessages.proto
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Speaker {
         /// Functionally the same as a DemuxId, but oddly different.
-        /// Called endpointSuffix in the SFU's RtpDataChannelMessages.proto
-        #[prost(uint64, optional, tag="1")]
-        pub request_token: ::std::option::Option<u64>,
+        /// Called endpoint in the SFU's RtpDataChannelMessages.proto
+        #[prost(string, optional, tag="1")]
+        pub long_device_id: ::std::option::Option<std::string::String>,
     }
     /// The resolution the SFU wants you to send to it to satisfy the requests
     /// of all of the other devices.
@@ -137,7 +139,7 @@ pub mod sfu_to_device {
     pub struct DeviceConnectionStatus {
         /// Functionally the same as a DemuxId, but oddly different.
         #[prost(string, optional, tag="1")]
-        pub request_token_with_prefix: ::std::option::Option<std::string::String>,
+        pub long_device_id: ::std::option::Option<std::string::String>,
         #[prost(bool, optional, tag="2")]
         pub active: ::std::option::Option<bool>,
     }
@@ -146,7 +148,7 @@ pub mod sfu_to_device {
     pub struct ReceivedFromDevice {
         /// Functionally the same as a DemuxId, but oddly different.
         #[prost(string, optional, tag="1")]
-        pub request_token_with_prefix: ::std::option::Option<std::string::String>,
+        pub long_device_id: ::std::option::Option<std::string::String>,
         #[prost(bytes, optional, tag="3")]
         pub payload: ::std::option::Option<std::vec::Vec<u8>>,
     }
@@ -157,17 +159,17 @@ pub mod sfu_to_device {
         /// Functionally the same as a DemuxId, but oddly different.
         /// Called suffixEndpointsBeingForwarded in the SFU's RtpDataChannelMessages.proto
         #[prost(uint64, repeated, packed="false", tag="1")]
-        pub video_forwarded_request_tokens: ::std::vec::Vec<u64>,
+        pub video_forwarded_short_device_ids: ::std::vec::Vec<u64>,
         /// The remote devices from which video is being forwarded, but from which
         /// video was not being forwarded in the last Forwarding message.
         /// Functionally the same as a DemuxId, but oddly different.
         /// Called suffixEndpointsEnteringLastN in the SFU's RtpDataChannelMessages.proto
         #[prost(uint64, repeated, packed="false", tag="2")]
-        pub newly_forwarded_request_token: ::std::vec::Vec<u64>,
+        pub newly_forwarded_short_device_ids: ::std::vec::Vec<u64>,
         /// All the of devices.  The same as the "Devices" messages.
         /// Functionally the same as a DemuxId, but oddly different.
         /// Called suffixEndpointsInConference in the SFU's RtpDataChannelMessages.proto
         #[prost(uint64, repeated, packed="false", tag="3")]
-        pub suffix_endpoints_in_conference: ::std::vec::Vec<u64>,
+        pub all_devices_short_device_ids: ::std::vec::Vec<u64>,
     }
 }

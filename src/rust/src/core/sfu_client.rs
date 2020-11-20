@@ -392,13 +392,14 @@ impl SfuClient {
             .filter_map(|p| {
                 let demux_id = p.ssrc_prefix;
                 let user_id = Self::lookup_uuid_by_endpoint_id(&member_prefixes, &p.endpoint_id);
-                if let Ok(request_token) =
+                if let Ok(short_device_id) =
                     p.endpoint_id.split('-').nth(1).unwrap_or_default().parse()
                 {
                     Some(group_call::PeekDeviceInfo {
                         demux_id,
                         user_id,
-                        request_token,
+                        short_device_id,
+                        long_device_id: p.endpoint_id,
                     })
                 } else {
                     warn!(
