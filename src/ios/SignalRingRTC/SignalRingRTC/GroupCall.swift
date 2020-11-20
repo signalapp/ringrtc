@@ -294,6 +294,10 @@ public class GroupCall {
             return
         }
 
+        // When leaving, make sure outgoing media is stopped as soon as possible.
+        self.audioTrack?.isEnabled = false
+        self.videoTrack?.isEnabled = false
+
         ringrtcLeave(self.ringRtcCallManager, clientId)
     }
 
@@ -305,6 +309,10 @@ public class GroupCall {
             Logger.warn("no clientId defined for groupCall")
             return
         }
+
+        // When disconnecting, make sure outgoing media is stopped as soon as possible.
+        self.audioTrack?.isEnabled = false
+        self.videoTrack?.isEnabled = false
 
         ringrtcDisconnect(self.ringRtcCallManager, clientId)
     }

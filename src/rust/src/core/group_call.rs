@@ -1099,6 +1099,13 @@ impl Client {
 
     fn set_max_send_bitrate_inner(state: &mut State, rate: DataRate) {
         if state.max_send_bitrate.is_none() || state.max_send_bitrate == Some(rate) {
+            if rate.as_kbps() == ALL_ALONE_SEND_BITRATE_KBPS {
+                info!("Disabling outgoing media because there are no other devices.");
+                state.peer_connection.set_outgoing_media_enabled(false);
+            } else {
+                info!("Enabling outgoing media because there are other devices.");
+                state.peer_connection.set_outgoing_media_enabled(true);
+            }
             if state.peer_connection.set_max_send_bitrate(rate).is_err() {
                 warn!("Could not set max send bitrate to {:?}", rate);
             } else {

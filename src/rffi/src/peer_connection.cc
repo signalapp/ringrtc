@@ -862,7 +862,7 @@ Rust_useSharedIceGatherer(PeerConnectionInterface* peer_connection,
 RUSTEXPORT void
 Rust_getStats(PeerConnectionInterface* peer_connection,
               StatsObserverRffi* stats_observer) {
-    peer_connection->GetStats(stats_observer, nullptr, PeerConnectionInterface::kStatsOutputLevelStandard);
+  peer_connection->GetStats(stats_observer);
 }
 
 RUSTEXPORT void

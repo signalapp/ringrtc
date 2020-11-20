@@ -8,9 +8,10 @@
 //! WebRTC Simulation Create/Set SessionDescription
 
 use std::ffi::c_void;
+use std::ptr;
 
 use crate::core::util::RustObject;
-use crate::webrtc::stats_observer::{StatsObserver, StatsObserverCallbacks, StatsObserverValues};
+use crate::webrtc::stats_observer::{MediaStatistics, StatsObserver, StatsObserverCallbacks};
 
 /// Simulation type for webrtc::rffi::StatsObserverRffi
 pub type RffiStatsObserver = u32;
@@ -24,18 +25,15 @@ pub unsafe fn Rust_createStatsObserver(
 ) -> *const RffiStatsObserver {
     info!("Rust_createStatsObserver():");
 
-    let dummy: StatsObserverValues = StatsObserverValues {
-        audio_packets_sent:             1,
-        audio_packets_sent_lost:        1,
-        audio_rtt:                      1,
-        audio_packets_received:         1,
-        audio_packets_received_lost:    1,
-        audio_jitter_received:          1,
-        audio_expand_rate:              1.0,
-        audio_accelerate_rate:          1.0,
-        audio_preemptive_rate:          1.0,
-        audio_speech_expand_rate:       1.0,
-        audio_preferred_buffer_size_ms: 1,
+    let dummy = MediaStatistics {
+        audio_sender_statistics_size:   0,
+        audio_sender_statistics:        ptr::null(),
+        video_sender_statistics_size:   0,
+        video_sender_statistics:        ptr::null(),
+        audio_receiver_statistics_size: 0,
+        audio_receiver_statistics:      ptr::null(),
+        video_receiver_statistics_size: 0,
+        video_receiver_statistics:      ptr::null(),
     };
 
     // Hit on the onComplete() callback

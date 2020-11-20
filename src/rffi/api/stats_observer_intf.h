@@ -15,7 +15,7 @@
 
 /**
  * Rust friendly wrapper for creating objects that implement the
- * webrtc::StatsObserver interface.
+ * webrtc::StatsCollector interface.
  *
  */
 
@@ -26,22 +26,73 @@ namespace rffi {
 } // namespace webrtc
 
 typedef struct {
-  int32_t audio_packets_sent = {-1};
-  int32_t audio_packets_sent_lost = {-1};
-  int64_t audio_rtt = {-1};
-  int32_t audio_packets_received = {-1};
-  int32_t audio_packets_received_lost = {-1};
-  int32_t audio_jitter_received = {-1};
-  float_t audio_expand_rate = {-1.0};
-  float_t audio_accelerate_rate = {-1.0};
-  float_t audio_preemptive_rate = {-1.0};
-  float_t audio_speech_expand_rate = {-1.0};
-  int32_t audio_preferred_buffer_size_ms = {-1};
-} StatsObserverValues;
+  uint32_t ssrc;
+  uint32_t packets_sent;
+  uint64_t bytes_sent;
+  int32_t remote_packets_lost;
+  double remote_jitter;
+  double remote_round_trip_time;
+} AudioSenderStatistics;
+
+typedef struct {
+  uint32_t ssrc;
+  uint32_t packets_sent;
+  uint64_t bytes_sent;
+  uint32_t frames_encoded;
+  uint32_t key_frames_encoded;
+  double total_encode_time;
+  uint32_t frame_width;
+  uint32_t frame_height;
+  uint64_t retransmitted_packets_sent;
+  uint64_t retransmitted_bytes_sent;
+  double total_packet_send_delay;
+  uint32_t nack_count;
+  uint32_t fir_count;
+  uint32_t pli_count;
+  uint32_t quality_limitation_reason;  // 0 - kNone, 1 - kCpu, 2 - kBandwidth, 3 - kOther
+  uint32_t quality_limitation_resolution_changes;
+  int32_t remote_packets_lost;
+  double remote_jitter;
+  double remote_round_trip_time;
+} VideoSenderStatistics;
+
+typedef struct {
+    uint32_t ssrc;
+    uint32_t packets_received;
+    int32_t packets_lost;
+    uint64_t bytes_received;
+    double jitter;
+    uint32_t frames_decoded;
+    double total_decode_time;
+} AudioReceiverStatistics;
+
+typedef struct {
+    uint32_t ssrc;
+    uint32_t packets_received;
+    int32_t packets_lost;
+    uint32_t packets_repaired;
+    uint64_t bytes_received;
+    uint32_t frames_decoded;
+    uint32_t key_frames_decoded;
+    double total_decode_time;
+    uint32_t frame_width;
+    uint32_t frame_height;
+} VideoReceiverStatistics;
+
+typedef struct {
+    uint32_t audio_sender_statistics_size;
+    const AudioSenderStatistics *audio_sender_statistics;
+    uint32_t video_sender_statistics_size;
+    const VideoSenderStatistics *video_sender_statistics;
+    uint32_t audio_receiver_statistics_size;
+    const AudioReceiverStatistics *audio_receiver_statistics;
+    uint32_t video_receiver_statistics_count;
+    const VideoReceiverStatistics *video_receiver_statistics;
+} MediaStatistics;
 
 /* Stats Observer Callback callback function pointers */
 typedef struct {
-  void (*OnStatsComplete)(rust_object, StatsObserverValues *values);
+  void (*OnStatsComplete)(rust_object, const MediaStatistics *media_statistics);
 } StatsObserverCallbacks;
 
 RUSTEXPORT webrtc::rffi::StatsObserverRffi*

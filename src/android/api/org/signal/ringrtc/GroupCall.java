@@ -39,65 +39,84 @@ import java.util.UUID;
 public final class GroupCall {
     @NonNull private static final String TAG = GroupCall.class.getSimpleName();
 
-    @NonNull  private long                               nativeCallManager;
-    @NonNull  private PeerConnectionFactory              factory;
+              private   long                               nativeCallManager;
+    @NonNull  private   PeerConnectionFactory              factory;
 
-    @NonNull  private Observer                           observer;
+    @NonNull  private   Observer                           observer;
 
-    @NonNull          long                               clientId;
+              protected long                               clientId;
+
+    // State to track if RingRTC has invoked handleEnded() or not.
+    // RingRTC treats this as a final state of the GroupCall.
+              private   boolean                            handleEndedCalled;
+    // State to track if the client has invoked disconnect() or not.
+    // The client currently treats this as a final state of the GroupCall.
+              private   boolean                            disconnectCalled;
 
     // Whenever the local or remote device states are updated, a new
     // object will be created to update the object value.
-    @NonNull  private LocalDeviceState                   localDeviceState;
-    @Nullable private LongSparseArray<RemoteDeviceState> remoteDeviceStates;
+    @NonNull  private   LocalDeviceState                   localDeviceState;
+    @Nullable private   LongSparseArray<RemoteDeviceState> remoteDeviceStates;
 
-    @Nullable private PeekInfo                           peekInfo;
+    @Nullable private   PeekInfo                           peekInfo;
 
-    @NonNull  private AudioSource                        outgoingAudioSource;
-    @NonNull  private AudioTrack                         outgoingAudioTrack;
-    @NonNull  private VideoSource                        outgoingVideoSource;
-    @NonNull  private VideoTrack                         outgoingVideoTrack;
+    @Nullable private   AudioSource                        outgoingAudioSource;
+    @Nullable private   AudioTrack                         outgoingAudioTrack;
+    @Nullable private   VideoSource                        outgoingVideoSource;
+    @Nullable private   VideoTrack                         outgoingVideoTrack;
 
-    class PeerConnectionFactoryOptions extends PeerConnectionFactory.Options {
-        public PeerConnectionFactoryOptions() {
-            // Give the (native default) behavior of filtering out loopback addresses.
-            // See https://source.chromium.org/chromium/chromium/src/+/master:third_party/webrtc/rtc_base/network.h;l=47?q=.networkIgnoreMask&ss=chromium
-            this.networkIgnoreMask = 1 << 4;
-        }
-    }
-
-    public GroupCall(@NonNull long     nativeCallManager,
-                     @NonNull byte[]   groupId,
-                     @NonNull String   sfuUrl,
-                     @NonNull EglBase  eglBase,
-                     @NonNull Observer observer) {
+    /*
+     * Creates a GroupCall object. If successful, all supporting objects
+     * will be valid. Otherwise, clientId will be 0.
+     *
+     * Should only be accessed via the CallManager.createGroupCall().
+     *
+     * If clientId is 0, the caller should invoke dispose() and let the
+     * object itself get GC'd.
+     */
+    GroupCall(         long                  nativeCallManager,
+              @NonNull byte[]                groupId,
+              @NonNull String                sfuUrl,
+              @NonNull PeerConnectionFactory factory,
+              @NonNull Observer              observer) {
         Log.i(TAG, "GroupCall():");
 
         this.nativeCallManager = nativeCallManager;
+        this.factory = factory;
         this.observer = observer;
 
+        this.handleEndedCalled = false;
+        this.disconnectCalled = false;
+
         this.localDeviceState = new LocalDeviceState();
-
-        VideoEncoderFactory encoderFactory = new DefaultVideoEncoderFactory(eglBase.getEglBaseContext(), true, true);
-        VideoDecoderFactory decoderFactory = new DefaultVideoDecoderFactory(eglBase.getEglBaseContext());
-
-        this.factory = PeerConnectionFactory.builder()
-            .setOptions(new PeerConnectionFactoryOptions())
-            .setVideoEncoderFactory(encoderFactory)
-            .setVideoDecoderFactory(decoderFactory)
-            .createPeerConnectionFactory();
 
         MediaConstraints audioConstraints = new MediaConstraints();
 
         this.outgoingAudioSource = factory.createAudioSource(audioConstraints);
+        if (this.outgoingAudioSource == null) {
+            return;
+        }
+
         // Note: This must stay "audio1" to stay in sync with CreateSessionDescriptionForGroupCall.
         this.outgoingAudioTrack = factory.createAudioTrack("audio1", this.outgoingAudioSource);
-        this.outgoingAudioTrack.setEnabled(!this.localDeviceState.audioMuted);
+        if (this.outgoingAudioTrack == null) {
+            return;
+        } else {
+            this.outgoingAudioTrack.setEnabled(false);
+        }
 
         this.outgoingVideoSource = factory.createVideoSource(false);
+        if (this.outgoingVideoSource == null) {
+            return;
+        }
+
         // Note: This must stay "video1" to stay in sync with CreateSessionDescriptionForGroupCall.
         this.outgoingVideoTrack = factory.createVideoTrack("video1", this.outgoingVideoSource);
-        this.outgoingVideoTrack.setEnabled(!this.localDeviceState.videoMuted);
+        if (this.outgoingVideoTrack == null) {
+            return;
+        } else {
+            this.outgoingVideoTrack.setEnabled(false);
+        }
 
         // Define maximum output video format for group calls.
         this.outgoingVideoSource.adaptOutputFormat(640, 360, 30);
@@ -109,12 +128,33 @@ public final class GroupCall {
                 sfuUrl,
                 this.outgoingAudioTrack.getNativeAudioTrack(),
                 this.outgoingVideoTrack.getNativeVideoTrack());
-            if (this.clientId == 0) {
-                // TODO
-            }
         } catch  (CallException e) {
             Log.w(TAG, "Unable to create group call client", e);
             throw new AssertionError("Unable to create group call client");
+        }
+    }
+
+    /**
+     * Releases native resources belonging to the object.
+     */
+    public void dispose()
+        throws CallException
+    {
+        Log.i(TAG, "dispose():");
+
+        if (this.clientId != 0) {
+            ringrtcDeleteGroupCallClient(nativeCallManager, this.clientId);
+            this.clientId = 0;
+        }
+
+        if (this.outgoingAudioTrack != null) {
+            this.outgoingAudioTrack.dispose();
+            this.outgoingAudioTrack = null;
+        }
+
+        if (this.outgoingVideoTrack != null) {
+            this.outgoingVideoTrack.dispose();
+            this.outgoingVideoTrack = null;
         }
     }
 
@@ -148,6 +188,10 @@ public final class GroupCall {
     {
         Log.i(TAG, "leave():");
 
+        // When leaving, make sure outgoing media is stopped as soon as possible.
+        this.outgoingAudioTrack.setEnabled(false);
+        this.outgoingVideoTrack.setEnabled(false);
+
         ringrtcLeave(nativeCallManager, this.clientId);
     }
 
@@ -159,12 +203,31 @@ public final class GroupCall {
     {
         Log.i(TAG, "disconnect():");
 
-        ringrtcDisconnect(nativeCallManager, this.clientId);
+        // Protect against the client invoking disconnect() multiple times.
+        if (!this.disconnectCalled) {
+            this.disconnectCalled = true;
+
+            if (this.handleEndedCalled) {
+                // The handleEnded() callback has been called, so this is happening
+                // after RingRTC is done. Resources can now be disposed.
+                this.dispose();
+            } else {
+                // When disconnecting, make sure outgoing media is stopped as soon as possible.
+                this.outgoingAudioTrack.setEnabled(false);
+                this.outgoingVideoTrack.setEnabled(false);
+
+                // The handleEnded() callback has not been called, so we can invoke
+                // the RingRTC API to handle the disconnect, and resources will be
+                // disposed later when handleEnded() is called.
+                ringrtcDisconnect(nativeCallManager, this.clientId);
+            }
+        }
     }
 
     /**
      *
      */
+    @NonNull
     public LocalDeviceState getLocalDeviceState()
     {
         Log.i(TAG, "getLocalDevice():");
@@ -175,6 +238,7 @@ public final class GroupCall {
     /**
      *
      */
+    @Nullable
     public LongSparseArray<RemoteDeviceState> getRemoteDeviceStates()
     {
         Log.i(TAG, "getRemoteDevices():");
@@ -185,6 +249,7 @@ public final class GroupCall {
     /**
      *
      */
+    @Nullable
     public PeekInfo getPeekInfo()
     {
         Log.i(TAG, "getPeekInfo():");
@@ -231,6 +296,7 @@ public final class GroupCall {
         if (cameraControl.hasCapturer()) {
             // Connect camera as the local video source.
             cameraControl.initCapturer(this.outgoingVideoSource.getCapturerObserver());
+
             this.outgoingVideoTrack.addSink(localSink);
         }
     }
@@ -408,12 +474,22 @@ public final class GroupCall {
     void handleEnded(GroupCallEndReason reason) {
         Log.i(TAG, "handleEnded():");
 
-        this.observer.onEnded(this, reason);
+        // This check is not strictly necessary since RingRTC should only be
+        // calling handleEnded() once.
+        if (!this.handleEndedCalled) {
+            this.handleEndedCalled = true;
 
-        try {
-            ringrtcDeleteGroupCallClient(nativeCallManager, this.clientId);
-        } catch  (CallException e) {
-            Log.w(TAG, "Unable to delete group call client: ", e);
+            this.observer.onEnded(this, reason);
+
+            try {
+                if (this.disconnectCalled) {
+                    // The disconnect() API has been called, so this is happening
+                    // after the client side is done. Resources can now be disposed.
+                    this.dispose();
+                }
+            } catch (CallException e) {
+                Log.w(TAG, "Unable to delete group call clientId: " + this.clientId, e);
+            }
         }
     }
 

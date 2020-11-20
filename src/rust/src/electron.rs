@@ -895,6 +895,9 @@ declare_types! {
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
+                // When leaving, make sure outgoing media is stopped as soon as possible.
+                cm.outgoing_audio_track.set_enabled(false);
+                cm.outgoing_video_track.set_enabled(false);
                 cm.call_manager.leave(client_id);
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -906,6 +909,9 @@ declare_types! {
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
+                // When disconnecting, make sure outgoing media is stopped as soon as possible.
+                cm.outgoing_audio_track.set_enabled(false);
+                cm.outgoing_video_track.set_enabled(false);
                 cm.call_manager.disconnect(client_id);
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -1499,8 +1505,9 @@ declare_types! {
                                 None => cx.undefined().upcast(),
                                 Some(muted) => cx.boolean(muted).upcast(),
                             };
-                            let added_time: neon::handle::Handle<JsValue> = cx.number(u64_to_js_num(remote_device_state.added_time_as_unix_millis())).upcast();
-                            let speaker_time: neon::handle::Handle<JsValue> = cx.number(u64_to_js_num(remote_device_state.speaker_time_as_unix_millis())).upcast();
+                            // These are strings because we can't safely convert a u64 to a JavaScript-compatible number. We'll convert them to numeric types on the other side.
+                            let added_time: neon::handle::Handle<JsValue> = cx.string(remote_device_state.added_time_as_unix_millis().to_string()).upcast();
+                            let speaker_time: neon::handle::Handle<JsValue> = cx.string(remote_device_state.speaker_time_as_unix_millis().to_string()).upcast();
 
                             let js_remote_device_state = cx.empty_object();
                             js_remote_device_state.set(&mut cx, "demuxId", demux_id)?;
@@ -1509,7 +1516,7 @@ declare_types! {
                             js_remote_device_state.set(&mut cx, "audioMuted", audio_muted)?;
                             js_remote_device_state.set(&mut cx, "videoMuted", video_muted)?;
                             js_remote_device_state.set(&mut cx, "addedTime", added_time)?;
-                            js_remote_device_state.set(&mut cx, "speakertime", speaker_time)?;
+                            js_remote_device_state.set(&mut cx, "speakerTime", speaker_time)?;
 
                             js_remote_device_states.set(&mut cx, i as u32, js_remote_device_state)?;
                         }

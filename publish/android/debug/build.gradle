@@ -7,7 +7,6 @@ version          = version_number
 group            = group_info
 
 android {
-
     compileSdkVersion 28
     buildToolsVersion '28.0.3'
 
@@ -25,6 +24,11 @@ android {
         variant.outputs.all {
             outputFileName =  "${archivesBaseName}-${version}.aar"
         }
+    }
+
+    packagingOptions {
+        // Libraries are already stripped if necessary when linked.
+        doNotStrip "**/*.so"
     }
 }
 

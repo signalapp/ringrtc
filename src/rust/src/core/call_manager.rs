@@ -2169,7 +2169,7 @@ where
     }
 
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
-        info!("handle_ended():");
+        info!("handle_ended({:?}):", reason);
         platform_handler!(self, handle_ended, client_id, reason);
     }
 

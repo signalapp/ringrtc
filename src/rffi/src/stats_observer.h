@@ -21,18 +21,23 @@ namespace rffi {
  * C++ callbacks to Rust.
  */
 
-class StatsObserverRffi : public StatsObserver {
+class StatsObserverRffi : public RTCStatsCollectorCallback {
 public:
   StatsObserverRffi(const rust_object             stats_observer,
                     const StatsObserverCallbacks* stats_observer_cbs);
   ~StatsObserverRffi() override;
 
 protected:
-  void OnComplete(const StatsReports& reports) override;
+  void OnStatsDelivered(const rtc::scoped_refptr<const RTCStatsReport>& report) override;
 
 private:
   const rust_object stats_observer_;
   StatsObserverCallbacks stats_observer_cbs_;
+
+  std::vector<AudioSenderStatistics> audio_sender_statistics_;
+  std::vector<VideoSenderStatistics> video_sender_statistics_;
+  std::vector<AudioReceiverStatistics> audio_receiver_statistics_;
+  std::vector<VideoReceiverStatistics> video_receiver_statistics_;
 };
 
 } // namespace rffi

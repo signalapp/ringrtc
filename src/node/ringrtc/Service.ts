@@ -1153,8 +1153,8 @@ export class RemoteDeviceState {
   audioMuted: boolean | undefined;
   videoMuted: boolean | undefined;
   videoAspectRatio: number | undefined;  // Float
-  addedTime: number | undefined;  // unix millis
-  speakerTime: number | undefined;  // unix millis;  0 if they've never spoken
+  addedTime: string | undefined;  // unix millis (to be converted to a numeric type)
+  speakerTime: string | undefined;  // unix millis; 0 if they've never spoken (to be converted to a numeric type)
 
   constructor(
     demuxId: number,

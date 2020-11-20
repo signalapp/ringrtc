@@ -955,11 +955,6 @@ where
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => {
                 let notify_handle = connection.clone();
-                debug_assert_eq!(
-                    CallDirection::InComing,
-                    connection.direction(),
-                    "ReceivedSignalingDataChannel should only happen for incoming calls"
-                );
                 connection.set_signaling_data_channel(data_channel)?;
                 if state == ConnectionState::ConnectedBeforeAccepted {
                     self.notify_observer(
