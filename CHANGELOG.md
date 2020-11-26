@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.8.4
+
+- Update Group Calling feature
+
 ## v2.8.3
 
 - Update Group Calling feature
