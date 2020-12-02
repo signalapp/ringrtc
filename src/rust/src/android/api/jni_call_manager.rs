@@ -790,7 +790,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRequestVideo(
     env: JNIEnv<'static>,
     _object: JObject,
     call_manager: jlong,
-    client_id: group_call::ClientId,
+    client_id: jlong,
     jni_rendered_resolutions: JObject,
 ) {
     match call_manager::request_video(

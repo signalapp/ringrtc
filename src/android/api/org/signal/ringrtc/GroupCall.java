@@ -859,8 +859,8 @@ public final class GroupCall {
 
     private native
         void ringrtcRequestVideo(long nativeCallManager,
-                                           long clientId,
-                                           List<VideoRequest> renderedResolutions)
+                                 long clientId,
+                                 List<VideoRequest> renderedResolutions)
         throws CallException;
 
     private native

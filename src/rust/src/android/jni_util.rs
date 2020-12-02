@@ -84,6 +84,22 @@ pub fn jni_new_linked_list<'a>(env: &'a JNIEnv) -> Result<JList<'a, 'a>> {
     Ok(env.get_list(list)?)
 }
 
+/// Prints local and global references to the log.
+#[allow(dead_code)]
+pub fn dump_references(env: &JNIEnv) {
+    let _ = env.with_local_frame(5, || {
+        const VM_DEBUG_CLASS: &str = "dalvik/system/VMDebug";
+        const VM_DEBUG_METHOD: &str = "dumpReferenceTables";
+        const VM_DEBUG_SIG: &str = "()V";
+
+        info!("Dumping references ->");
+        let _ = env.call_static_method(VM_DEBUG_CLASS, VM_DEBUG_METHOD, VM_DEBUG_SIG, &[]);
+        info!("<- Done with references");
+
+        Ok(JObject::null())
+    });
+}
+
 /// A cache of Java class objects
 ///
 /// JNI cannot lookup classes by name from threads other than the main
