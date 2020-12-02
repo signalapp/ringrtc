@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.8.5
+
+- Android: Improve stability for Group Calling
+
 ## v2.8.4
 
 - Update Group Calling feature
