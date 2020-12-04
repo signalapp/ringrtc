@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.8.6
+
+- Update Group Calling feature
+
+- Reference signalapp/webrtc@4183h
+
 ## v2.8.5
 
 - Android: Improve stability for Group Calling
