@@ -98,7 +98,7 @@ void PeerConnectionObserverRffi::OnRtpPacket(const RtpPacketReceived& rtp_packet
   uint32_t ssrc = rtp_packet.Ssrc();
   const uint8_t* payload_data = rtp_packet.payload().data();
   size_t payload_size = rtp_packet.payload().size();
-  RTC_LOG(LS_INFO) << "OnRtpReceived() << pt: " << pt  << " seqnum: " << seqnum << " timestamp: " << timestamp << " ssrc: " << ssrc << " size: " << payload_size;
+  RTC_LOG(LS_VERBOSE) << "OnRtpReceived() << pt: " << pt  << " seqnum: " << seqnum << " timestamp: " << timestamp << " ssrc: " << ssrc << " size: " << payload_size;
   callbacks_.onRtpReceived(observer_, pt, seqnum, timestamp, ssrc, payload_data, payload_size);
 }
 

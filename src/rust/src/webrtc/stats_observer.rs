@@ -31,8 +31,6 @@ pub use crate::webrtc::sim::stats_observer::RffiStatsObserver;
 pub struct StatsObserver {
     /// Pointer to C++ webrtc::rffi::StatsObserverRffi object.
     rffi_stats_observer: *const RffiStatsObserver,
-    /// Serial counter for organizing statistic groups.
-    counter:             u64,
 }
 
 unsafe impl Send for StatsObserver {}
@@ -52,19 +50,21 @@ impl StatsObserver {
             "ringrtc_stats!,\
                 audio,\
                 send,\
-                counter,\
+                timestamp_us,\
                 ssrc,\
                 packets_sent,\
                 bytes_sent,\
                 remote_packets_lost,\
                 remote_jitter,\
-                remote_round_trip_time"
+                remote_round_trip_time,\
+                audio_level,\
+                total_audio_energy"
         );
         info!(
             "ringrtc_stats!,\
                 video,\
                 send,\
-                counter,\
+                timestamp_us,\
                 ssrc,\
                 packets_sent,\
                 bytes_sent,\
@@ -89,20 +89,22 @@ impl StatsObserver {
             "ringrtc_stats!,\
                 audio,\
                 recv,\
-                counter,\
+                timestamp_us,\
                 ssrc,\
                 packets_received,\
                 packets_lost,\
                 bytes_received,\
                 jitter,\
                 frames_decoded,\
-                total_decode_time"
+                total_decode_time,\
+                audio_level,\
+                total_audio_energy"
         );
         info!(
             "ringrtc_stats!,\
                 video,\
                 recv,\
-                counter,\
+                timestamp_us,\
                 ssrc,\
                 packets_received,\
                 packets_lost,\
@@ -117,14 +119,11 @@ impl StatsObserver {
 
         Self {
             rffi_stats_observer: ptr::null(),
-            counter:             0,
         }
     }
 
     /// Invoked when statistics are received via the stats observer callback.
     fn on_stats_complete(&mut self, media_statistics: &MediaStatistics) {
-        self.counter = self.counter.wrapping_add(1);
-
         if media_statistics.audio_sender_statistics_size > 0 {
             let audio_senders = unsafe {
                 if media_statistics.audio_sender_statistics.is_null() {
@@ -138,14 +137,16 @@ impl StatsObserver {
             };
             for audio_sender in audio_senders.iter() {
                 info!(
-                    "ringrtc_stats!,audio,send,{},{},{},{},{},{:.5},{:.3}",
-                    self.counter,
+                    "ringrtc_stats!,{},audio,send,{},{},{},{},{:.5},{:.3},{:.5},{:.3}",
+                    media_statistics.timestamp_us,
                     audio_sender.ssrc,
                     audio_sender.packets_sent,
                     audio_sender.bytes_sent,
                     audio_sender.remote_packets_lost,
                     audio_sender.remote_jitter,
                     audio_sender.remote_round_trip_time,
+                    audio_sender.audio_level,
+                    audio_sender.total_audio_energy,
                 );
             }
         }
@@ -162,8 +163,8 @@ impl StatsObserver {
                 }
             };
             for video_sender in video_senders.iter() {
-                info!("ringrtc_stats!,video,send,{},{},{},{},{},{},{:.3},{},{},{},{},{:.3},{},{},{},{},{},{},{:.5},{:.3}",
-                      self.counter,
+                info!("ringrtc_stats!,{},video,send,{},{},{},{},{},{:.3},{},{},{},{},{:.3},{},{},{},{},{},{},{:.5},{:.3}",
+                      media_statistics.timestamp_us,
                       video_sender.ssrc,
                       video_sender.packets_sent,
                       video_sender.bytes_sent,
@@ -200,8 +201,8 @@ impl StatsObserver {
             };
             for audio_receiver in audio_receivers.iter() {
                 info!(
-                    "ringrtc_stats!,audio,recv,{},{},{},{},{},{:.5},{},{:.3}",
-                    self.counter,
+                    "ringrtc_stats!,{},audio,recv,{},{},{},{},{:.5},{},{:.3},{:.5},{:.3}",
+                    media_statistics.timestamp_us,
                     audio_receiver.ssrc,
                     audio_receiver.packets_received,
                     audio_receiver.packets_lost,
@@ -209,6 +210,8 @@ impl StatsObserver {
                     audio_receiver.jitter,
                     audio_receiver.frames_decoded,
                     audio_receiver.total_decode_time,
+                    audio_receiver.audio_level,
+                    audio_receiver.total_audio_energy,
                 );
             }
         }
@@ -226,8 +229,8 @@ impl StatsObserver {
             };
             for video_receive in video_receivers.iter() {
                 info!(
-                    "ringrtc_stats!,video,recv,{},{},{},{},{},{},{},{},{:.3},{},{}",
-                    self.counter,
+                    "ringrtc_stats!,{},video,recv,{},{},{},{},{},{},{},{:.3},{},{}",
+                    media_statistics.timestamp_us,
                     video_receive.ssrc,
                     video_receive.packets_received,
                     video_receive.packets_lost,
@@ -263,6 +266,8 @@ pub struct AudioSenderStatistics {
     pub remote_packets_lost:    i32,
     pub remote_jitter:          f64,
     pub remote_round_trip_time: f64,
+    pub audio_level:            f64,
+    pub total_audio_energy:     f64,
 }
 
 #[repr(C)]
@@ -292,13 +297,15 @@ pub struct VideoSenderStatistics {
 #[repr(C)]
 #[derive(Debug)]
 pub struct AudioReceiverStatistics {
-    pub ssrc:              u32,
-    pub packets_received:  u32,
-    pub packets_lost:      i32,
-    pub bytes_received:    u64,
-    pub jitter:            f64,
-    pub frames_decoded:    u32,
-    pub total_decode_time: f64,
+    pub ssrc:               u32,
+    pub packets_received:   u32,
+    pub packets_lost:       i32,
+    pub bytes_received:     u64,
+    pub jitter:             f64,
+    pub frames_decoded:     u32,
+    pub total_decode_time:  f64,
+    pub audio_level:        f64,
+    pub total_audio_energy: f64,
 }
 
 #[repr(C)]
@@ -320,6 +327,7 @@ pub struct VideoReceiverStatistics {
 #[repr(C)]
 #[derive(Debug)]
 pub struct MediaStatistics {
+    pub timestamp_us:                   i64,
     pub audio_sender_statistics_size:   u32,
     pub audio_sender_statistics:        *const AudioSenderStatistics,
     pub video_sender_statistics_size:   u32,

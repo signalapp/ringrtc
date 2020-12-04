@@ -32,6 +32,8 @@ typedef struct {
   int32_t remote_packets_lost;
   double remote_jitter;
   double remote_round_trip_time;
+  double audio_level;
+  double total_audio_energy;
 } AudioSenderStatistics;
 
 typedef struct {
@@ -64,6 +66,8 @@ typedef struct {
     double jitter;
     uint32_t frames_decoded;
     double total_decode_time;
+    double audio_level;
+    double total_audio_energy;
 } AudioReceiverStatistics;
 
 typedef struct {
@@ -80,6 +84,7 @@ typedef struct {
 } VideoReceiverStatistics;
 
 typedef struct {
+    int64_t timestamp_us;
     uint32_t audio_sender_statistics_size;
     const AudioSenderStatistics *audio_sender_statistics;
     uint32_t video_sender_statistics_size;

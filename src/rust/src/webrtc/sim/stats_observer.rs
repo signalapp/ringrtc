@@ -26,6 +26,7 @@ pub unsafe fn Rust_createStatsObserver(
     info!("Rust_createStatsObserver():");
 
     let dummy = MediaStatistics {
+        timestamp_us:                   0,
         audio_sender_statistics_size:   0,
         audio_sender_statistics:        ptr::null(),
         video_sender_statistics_size:   0,

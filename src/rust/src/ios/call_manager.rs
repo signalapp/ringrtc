@@ -449,6 +449,7 @@ pub fn create_group_call_client(
     call_manager.create_group_call_client(
         group_id,
         sfu_url,
+        None,
         outgoing_audio_track,
         outgoing_video_track,
     )

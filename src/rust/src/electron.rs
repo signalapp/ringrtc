@@ -354,6 +354,11 @@ declare_types! {
         init(mut cx) {
             if ENABLE_LOGGING {
                 log::set_logger(&LOG).expect("set logger");
+
+                #[cfg(debug_assertions)]
+                log::set_max_level(log::LevelFilter::Debug);
+
+                #[cfg(not(debug_assertions))]
                 log::set_max_level(log::LevelFilter::Info);
 
                 // Show WebRTC logs via application Logger while debugging.
@@ -845,9 +850,10 @@ declare_types! {
             };
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
+                let peer_connection_factory = cm.peer_connection_factory.clone();
                 let outgoing_audio_track = cm.outgoing_audio_track.clone();
                 let outgoing_video_track = cm.outgoing_video_track.clone();
-                let result = cm.call_manager.create_group_call_client(group_id, sfu_url, outgoing_audio_track, outgoing_video_track);
+                let result = cm.call_manager.create_group_call_client(group_id, sfu_url, Some(peer_connection_factory), outgoing_audio_track, outgoing_video_track);
                 if let Ok(v) = result {
                     client_id = v;
                 }

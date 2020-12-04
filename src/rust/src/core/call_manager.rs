@@ -46,6 +46,7 @@ use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
+use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 
 const TIME_OUT_PERIOD_SEC: u64 = 120;
 pub const MAX_MESSAGE_AGE_SEC: u64 = 120;
@@ -2256,6 +2257,7 @@ where
         &mut self,
         group_id: group_call::GroupId,
         sfu_url: String,
+        peer_connection_factory: Option<PeerConnectionFactory>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
     ) -> Result<group_call::ClientId> {
@@ -2280,6 +2282,7 @@ where
             Box::new(sfu_client),
             Box::new(self.clone()),
             self.busy.clone(),
+            peer_connection_factory,
             outgoing_audio_track,
             Some(outgoing_video_track),
         )?;

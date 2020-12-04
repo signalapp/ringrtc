@@ -111,7 +111,7 @@ pub fn init_logging(log_object: IOSLogger) -> Result<()> {
         Err(_e) => return Err(IOSError::InitializeLogging.into()),
     }
 
-    log::set_max_level(LevelFilter::Trace);
+    log::set_max_level(LevelFilter::Debug);
 
     env::set_var("RUST_BACKTRACE", "1");
 

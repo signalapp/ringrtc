@@ -196,7 +196,7 @@ where
     T: Platform,
 {
     fn drop(&mut self) {
-        info!("Dropping CallStateMachine:");
+        debug!("Dropping CallStateMachine:");
     }
 }
 
@@ -218,7 +218,7 @@ where
                     }
                 }
                 None => {
-                    info!("No more events!");
+                    debug!("No more events!");
                     break;
                 }
             }
@@ -285,16 +285,16 @@ where
 
     /// Shutdown the worker runtime.
     fn drain_worker_thread(&mut self) {
-        info!("draining worker thread");
+        debug!("draining worker thread");
         self.worker_runtime.take();
-        info!("draining worker thread: complete");
+        debug!("draining worker thread: complete");
     }
 
     /// Shutdown the notify runtime.
     fn drain_notify_thread(&mut self) {
-        info!("draining notify thread");
+        debug!("draining notify thread");
         self.notify_runtime.take();
-        info!("draining notify thread: complete");
+        debug!("draining notify thread: complete");
     }
 
     /// Top level event dispatch.

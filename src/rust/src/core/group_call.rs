@@ -581,6 +581,7 @@ impl Client {
         sfu_client: Box<dyn SfuClient + Send>,
         observer: Box<dyn Observer + Send>,
         busy: Arc<CallMutex<bool>>,
+        peer_connection_factory: Option<PeerConnectionFactory>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
     ) -> Result<Self> {
@@ -599,14 +600,21 @@ impl Client {
             actor: Actor::start(stopper, move |actor| {
                 debug!("group_call::Client(inner)::new(client_id: {})", client_id);
 
-                let peer_connection_factory = PeerConnectionFactory::new(
-                    false, /* use_injectable network */
-                )
-                .map_err(|e| {
-                    observer
-                        .handle_ended(client_id, EndReason::FailedToCreatePeerConnectionFactory);
-                    e
-                })?;
+                let peer_connection_factory = match peer_connection_factory {
+                    None => {
+                        match PeerConnectionFactory::new(false /* use_injectable network */) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                observer.handle_ended(
+                                    client_id,
+                                    EndReason::FailedToCreatePeerConnectionFactory,
+                                );
+                                return Err(err);
+                            }
+                        }
+                    }
+                    Some(v) => v,
+                };
                 let certificate = Certificate::generate().map_err(|e| {
                     observer.handle_ended(client_id, EndReason::FailedToGenerateCertificate);
                     e
@@ -3010,6 +3018,7 @@ mod tests {
                 Box::new(sfu_client.clone()),
                 Box::new(observer.clone()),
                 fake_busy,
+                None,
                 fake_audio_track,
                 None,
             )

@@ -261,7 +261,7 @@ extern "C" fn pc_observer_OnSignalingDataChannelMessage<T>(
         return;
     }
 
-    debug!("pc_observer_OnDataChannelMessage(): length: {}", length);
+    trace!("pc_observer_OnDataChannelMessage(): length: {}", length);
 
     let slice = unsafe { slice::from_raw_parts(buffer, length as usize) };
     let bytes = Bytes::from_static(slice);
@@ -306,9 +306,10 @@ extern "C" fn pc_observer_GetMediaCiphertextBufferSize<T>(
 where
     T: PeerConnectionObserverTrait,
 {
-    debug!(
+    trace!(
         "pc_observer_GetMediaCiphertextBufferSize(): is_audio: {} plaintext_size: {}",
-        is_audio, plaintext_size
+        is_audio,
+        plaintext_size
     );
 
     let observer = unsafe { &mut *observer_ptr };
@@ -333,9 +334,11 @@ where
         return false;
     }
 
-    debug!(
+    trace!(
         "pc_observer_EncryptMedia(): is_audio: {} plaintext_size: {}, ciphertext_buffer_size: {}",
-        is_audio, plaintext_size, ciphertext_buffer_size
+        is_audio,
+        plaintext_size,
+        ciphertext_buffer_size
     );
 
     let observer = unsafe { &mut *observer_ptr };
@@ -364,9 +367,11 @@ extern "C" fn pc_observer_GetMediaPlaintextBufferSize<T>(
 where
     T: PeerConnectionObserverTrait,
 {
-    debug!(
+    trace!(
         "pc_observer_GetMediaPlaintextBufferSize(): track_id: {}, is_audio: {} ciphertext_size: {}",
-        track_id, is_audio, ciphertext_size
+        track_id,
+        is_audio,
+        ciphertext_size
     );
 
     let observer = unsafe { &mut *observer_ptr };
