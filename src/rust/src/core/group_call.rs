@@ -1176,12 +1176,25 @@ impl Client {
                 .collect();
             match encode_proto(DeviceToSfu {
                 video_request: Some(VideoRequestMessage {
-                    max: Some(
-                        requests
-                            .iter()
-                            .filter(|request| request.height.unwrap() > 0)
-                            .count() as u32,
-                    ),
+                    // TODO: Update the server to handle this as expected or remove this altogether.
+                    // The client needs the server to sort by resolution and then cap the number after that sort.
+                    // Currently, the server is sorting by audio activity and then capping the number.
+                    // Two possible fixes on the server:
+                    // A. Sort by resolution and then cap.
+                    //    After that, the client could re-add the lines below.
+                    // B. Treat the list of resolution requests as "complete" and don't use "lastN" at all.
+                    //    After that, the client could remove the lines below.
+                    // Note: the server can't handle a None value here, so we have to pass
+                    // in a value larger than a group call would ever be.
+                    // The only problem with this mechanism is that the server will send video for
+                    // new remote devices that the local device hasn't yet learned about.
+                    // max: Some(
+                    //     requests
+                    //         .iter()
+                    //         .filter(|request| request.height.unwrap() > 0)
+                    //         .count() as u32,
+                    // ),
+                    max: Some(1000000),
                     requests,
                 }),
                 ..DeviceToSfu::default()
