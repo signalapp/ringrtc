@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.8.7
+
+- Group Calling: Fix issue with video resolution requests
+
 ## v2.8.6
 
 - Update Group Calling feature
