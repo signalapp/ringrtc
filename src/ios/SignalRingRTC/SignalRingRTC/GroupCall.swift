@@ -197,7 +197,6 @@ public class GroupCall {
     }
 
     deinit {
-        videoCaptureController.stopCapture()
         Logger.debug("object! GroupCall destroyed... \(ObjectIdentifier(self))")
     }
 
