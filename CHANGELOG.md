@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.8.8
+
+- iOS: Fix issue when ending a Group Call
+
 ## v2.8.7
 
 - Group Calling: Fix issue with video resolution requests
