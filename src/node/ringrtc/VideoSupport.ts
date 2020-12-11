@@ -31,6 +31,7 @@ export class GumVideoCapturer {
   private readonly maxFramerate: number;
   private localPreview?: Ref<HTMLVideoElement>;
   private capturing: boolean;
+  private getUserMediaPromise?: Promise<MediaStream>;
   private sender?: VideoFrameSender;
   private mediaStream?: MediaStream;
   private canvas?: OffscreenCanvas;
@@ -83,6 +84,33 @@ export class GumVideoCapturer {
     return cameras;
   }
 
+  // This helps prevent concurrent calls to `getUserMedia`.
+  private getUserMedia(): Promise<MediaStream> {
+    if (!this.getUserMediaPromise) {
+      this.getUserMediaPromise = window.navigator.mediaDevices
+        .getUserMedia({
+          audio: false,
+          video: {
+            deviceId: this.preferredDeviceId,
+            width: {
+              max: this.maxWidth,
+            },
+            height: {
+              max: this.maxHeight,
+            },
+            frameRate: {
+              max: this.maxFramerate,
+            },
+          },
+        })
+        .then(mediaStream => {
+          delete this.getUserMediaPromise;
+          return mediaStream;
+        });
+    }
+    return this.getUserMediaPromise;
+  }
+
   private async startCapturing(): Promise<void> {
     if (this.capturing) {
       return;
@@ -90,21 +118,7 @@ export class GumVideoCapturer {
     this.capturing = true;
     this.capturingStartTime = Date.now();
     try {
-      const mediaStream = await window.navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          deviceId: this.preferredDeviceId,
-          width: {
-            max: this.maxWidth,
-          },
-          height: {
-            max: this.maxHeight,
-          },
-          frameRate: {
-            max: this.maxFramerate,
-          },
-        },
-      });
+      const mediaStream = await this.getUserMedia();
       // We could have been disabled between when we requested the stream
       // and when we got it.
       if (!this.capturing) {
