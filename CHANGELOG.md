@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.8.9
+
+- Android: Fix memory issues for Direct Calling
+
+- Electron: Fix issue where camera was not released
+
 ## v2.8.8
 
 - iOS: Fix issue when ending a Group Call
