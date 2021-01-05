@@ -160,6 +160,12 @@ public final class GroupCall {
 
     /**
      *
+     * Connects the group call to an SFU. The observer can now get
+     * asynchronous requests for the membership proof and group
+     * members, as well as regular updates of joined members.
+     *
+     * @throws CallException for native code failures
+     *
      */
     public void connect()
         throws CallException
@@ -171,6 +177,10 @@ public final class GroupCall {
 
     /**
      *
+     * Joins the group call and begins media flow.
+     *
+     * @throws CallException for native code failures
+     *
      */
     public void join()
         throws CallException
@@ -181,6 +191,10 @@ public final class GroupCall {
     }
 
     /**
+     *
+     * Leaves the group call terminating media flow.
+     *
+     * @throws CallException for native code failures
      *
      */
     public void leave()
@@ -196,6 +210,11 @@ public final class GroupCall {
     }
 
     /**
+     *
+     * Disconnects the group call from an SFU. This will also leave the
+     * group call if it is joined.
+     *
+     * @throws CallException for native code failures
      *
      */
     public void disconnect()
@@ -225,7 +244,7 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * Returns the LocalDeviceState tracked for the group call.
      */
     @NonNull
     public LocalDeviceState getLocalDeviceState()
@@ -236,7 +255,8 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * Returns an array of RemoteDeviceState objects as updated
+     * from the SFU. Keyed by the demuxId.
      */
     @Nullable
     public LongSparseArray<RemoteDeviceState> getRemoteDeviceStates()
@@ -247,7 +267,9 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * Returns a PeekInfo object which holds the current state of the
+     * group call from the SFU, including a collection of joined members
+     * and other meta data.
      */
     @Nullable
     public PeekInfo getPeekInfo()
@@ -258,6 +280,13 @@ public final class GroupCall {
     }
 
     /**
+     *
+     * Mute (or unmute) outgoing audio. This adjusts the outgoing audio
+     * track and sends the status to the SFU.
+     *
+     * @param muted          true to mute, false to unmute
+     *
+     * @throws CallException for native code failures
      *
      */
     public void setOutgoingAudioMuted(boolean muted)
@@ -273,6 +302,14 @@ public final class GroupCall {
 
     /**
      *
+     * Mute (or unmute) outgoing video. This adjusts the outgoing video
+     * track and sends the status to the SFU. The camera capture state
+     * is not affected and should be set accordingly by the application.
+     *
+     * @param muted          true to mute, false to unmute
+     *
+     * @throws CallException for native code failures
+     *
      */
     public void setOutgoingVideoMuted(boolean muted)
         throws CallException
@@ -286,7 +323,14 @@ public final class GroupCall {
     }
 
     /**	
-     *	
+     *
+     * Links the camera to the outgoing video track.
+     *
+     * @param localSink      the sink to associate with the video track
+     * @param cameraControl  the camera that will be used to capture video
+     *
+     * @throws CallException for native code failures
+     *
      */	
     public void setOutgoingVideoSource(@NonNull VideoSink     localSink,
                                        @NonNull CameraControl cameraControl)
@@ -296,12 +340,17 @@ public final class GroupCall {
         if (cameraControl.hasCapturer()) {
             // Connect camera as the local video source.
             cameraControl.initCapturer(this.outgoingVideoSource.getCapturerObserver());
-
             this.outgoingVideoTrack.addSink(localSink);
         }
     }
 
     /**
+     *
+     * Forces the group call object to send the latest media keys to
+     * the SFU. This is useful when the application knows that a key
+     * will have changed and needs the SFU to be updated.
+     *
+     * @throws CallException for native code failures
      *
      */
     public void resendMediaKeys()
@@ -314,6 +363,13 @@ public final class GroupCall {
 
     /**
      *
+     * Allows the application to constrain bandwidth if so configured
+     * by the user.
+     *
+     * @param bandwidthMode  one of the BandwidthMode enumerated values
+     *
+     * @throws CallException for native code failures
+     *
      */
     public void setBandwidthMode(@NonNull BandwidthMode bandwidthMode)
         throws CallException
@@ -324,6 +380,15 @@ public final class GroupCall {
     }
 
     /**
+     *
+     * Provides a collection of VideoRequest objects to the group call
+     * object which are sent to the SFU. This allows the appropriate
+     * video resolution to be sent from the SFU to efficiently fit in
+     * rendered resolution on the screen.
+     *
+     * @param resolutions    the VideoRequest objects for each user rendered on the screen
+     *
+     * @throws CallException for native code failures
      *
      */
     public void requestVideo(@NonNull Collection<VideoRequest> resolutions)
@@ -336,6 +401,13 @@ public final class GroupCall {
 
     /**
      *
+     * Provides a collection of GroupMemberInfo objects representing all
+     * the possible members of a group.
+     *
+     * @param members        a GroupMemberInfo object for each member in a group
+     *
+     * @throws CallException for native code failures
+     *
      */
     public void setGroupMembers(@NonNull Collection<GroupMemberInfo> groupMembers)
         throws CallException
@@ -347,6 +419,12 @@ public final class GroupCall {
 
     /**
      *
+     * Proves that the user is a member of the group.
+     *
+     * @param proof          byte array containing the proof
+     *
+     * @throws CallException for native code failures
+     *
      */
     public void setMembershipProof(@NonNull byte[] proof)
         throws CallException
@@ -356,8 +434,11 @@ public final class GroupCall {
         ringrtcSetMembershipProof(nativeCallManager, this.clientId, proof);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC when the group call object needs an updated
+     * membership proof. Called via the CallManager.
+     *
      */
     void requestMembershipProof() {
         Log.i(TAG, "requestMembershipProof():");
@@ -365,8 +446,11 @@ public final class GroupCall {
         this.observer.requestMembershipProof(this);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC when the group call object needs an updated
+     * list of group members. Called via the CallManager.
+     *
      */
     void requestGroupMembers() {
         Log.i(TAG, "handleGroupMembers():");
@@ -374,8 +458,11 @@ public final class GroupCall {
         this.observer.requestGroupMembers(this);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC when the connection state changes. Called
+     * via the CallManager.
+     *
      */
     void handleConnectionStateChanged(ConnectionState connectionState) {
         Log.i(TAG, "handleConnectionStateChanged():");
@@ -388,8 +475,11 @@ public final class GroupCall {
         this.observer.onLocalDeviceStateChanged(this);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC when the join state changes. Called via
+     * the CallManager.
+     *
      */
     void handleJoinStateChanged(JoinState joinState) {
         Log.i(TAG, "handleJoinStateChanged():");
@@ -402,8 +492,11 @@ public final class GroupCall {
         this.observer.onLocalDeviceStateChanged(this);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC when the remote device states have changed.
+     * Called via the CallManager.
+     *
      */
     void handleRemoteDevicesChanged(List<RemoteDeviceState> remoteDeviceStates) {
         Log.i(TAG, "handleRemoteDevicesChanged():");
@@ -430,8 +523,11 @@ public final class GroupCall {
         this.observer.onRemoteDeviceStatesChanged(this);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC with details about a new video track that can be
+     * rendered for a specific member (by demuxId). Called via the CallManager.
+     *
      */
     void handleIncomingVideoTrack(long remoteDemuxId, long nativeVideoTrack) {
         Log.i(TAG, "handleIncomingVideoTrack():");
@@ -452,8 +548,11 @@ public final class GroupCall {
         this.observer.onRemoteDeviceStatesChanged(this);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC that the PeekInfo changed with new information
+     * about the members in the group call. Called via the CallManager.
+     *
      */
     void handlePeekChanged(PeekInfo info) {
         Log.i(TAG, "handlePeekChanged():");
@@ -463,8 +562,11 @@ public final class GroupCall {
         this.observer.onPeekChanged(this);
     }
 
-    /*
-     * Called by the CallManager.
+    /**
+     *
+     * Callback from RingRTC when the group call ends. Called via the
+     * CallManager.
+     *
      */
     void handleEnded(GroupCallEndReason reason) {
         Log.i(TAG, "handleEnded():");
@@ -489,20 +591,20 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * The connection states of a device connecting to a group call.
      */
     public enum ConnectionState {
 
-        /** */
+        /** connect() has not yet been called or disconnect() has been called or connect() was called but failed. */
         NOT_CONNECTED,
 
-        /** */
+        /** connect() has been called but connectivity is pending. */
         CONNECTING,
 
-        /** */
+        /** connect() has been called and connectivity has been established. */
         CONNECTED,
 
-        /** */
+        /** connect() has been called and a connection has been established, but the connectivity is temporarily failing. */
         RECONNECTING;
 
         @CalledByNative
@@ -512,17 +614,17 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * The join states of a device joining a group call.
      */
     public enum JoinState {
 
-        /** */
+        /** join() has not yet been called or leave() has been called or join() was called but failed. */
         NOT_JOINED,
 
-        /** */
+        /** join() has been called but a response from the SFU is pending. */
         JOINING,
 
-        /** */
+        /** join() has been called and a response from the SFU has been received and a demuxId has been assigned.. */
         JOINED;
 
         @CalledByNative
@@ -532,14 +634,14 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * A set of bandwidth constraints that the client can control for the group call.
      */
     public enum BandwidthMode {
 
-        /** */
+        /** Chooses a low-bandwidth mode. */
         LOW,
 
-        /** */
+        /** Chooses the normal (default) bandwidth mode. */
         NORMAL;
 
         @CalledByNative
@@ -549,57 +651,57 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * A set of reasons why the group call has ended.
      */
     public enum GroupCallEndReason {
 
         // Normal events
 
-        /** */
+        /** The client disconnected by calling the disconnect() API. */
         DEVICE_EXPLICITLY_DISCONNECTED,
 
-        /** */
+        /** The server disconnected due to policy or some other controlled reason. */
         SERVER_EXPLICITLY_DISCONNECTED,
 
         // Things that can go wrong
 
-        /** */
+        /** Another direct call or group call is currently in progress and using media resources. */
         CALL_MANAGER_IS_BUSY,
 
-        /** */
+        /** Could not join the group call. */
         SFU_CLIENT_FAILED_TO_JOIN,
 
-        /** */
+        /** Could not create a usable peer connection factory for media. */
         FAILED_TO_CREATE_PEER_CONNECTION_FACTORY,
 
-        /** */
+        /** Could not generate a certificate for media. */
         FAILED_TO_GENERATE_CERTIFICATE,
 
-        /** */
+        /** Could not create a peer connection for media. */
         FAILED_TO_CREATE_PEER_CONNECTION,
 
-        /** */
+        /** Could not create a data channel to send data. */
         FAILED_TO_CREATE_DATA_CHANNEL,
 
-        /** */
+        /** Could not start the peer connection for media. */
         FAILED_TO_START_PEER_CONNECTION,
 
-        /** */
+        /** Could not update the peer connection for media. */
         FAILED_TO_UPDATE_PEER_CONNECTION,
 
-        /** */
+        /** Could not set the requested bitrate for media. */
         FAILED_TO_SET_MAX_SEND_BITRATE,
 
-        /** */
+        /** Could not connect successfully. */
         ICE_FAILED_WHILE_CONNECTING,
 
-        /** */
+        /** Lost a connection and retries were unsuccessful. */
         ICE_FAILED_AFTER_CONNECTED,
 
-        /** */
+        /** Unexpected change in demuxId requiring a new group call. */
         SERVER_CHANGED_DEMUXID,
 
-        /** */
+        /** The SFU reported that the group call is full. */
         HAS_MAX_DEVICES;
 
         @CalledByNative
@@ -609,7 +711,7 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * A convenience class grouping together all the local state.
      */
     public class LocalDeviceState {
         ConnectionState connectionState;
@@ -649,7 +751,7 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * The state of each remote member in a group call.
      */
     public static class RemoteDeviceState {
                   long       demuxId;          // UInt32
@@ -722,7 +824,7 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * A class grouping each member's opaque cipher text and their UUID.
      */
     public static class GroupMemberInfo {
         @NonNull  UUID   userId;
@@ -736,7 +838,7 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * A class used to convey how each member is rendered on the screen.
      */
     public static class VideoRequest {
                   long    demuxId;   // UInt32
@@ -756,42 +858,44 @@ public final class GroupCall {
     }
 
     /**
-     *
+     * The client must provide an observer for each group call object
+     * which is used to convey callbacks and notifications from
+     * RingRTC.
      */
     public interface Observer {
 
         /**
-         *
+         * Notification that the group call object needs an updated membership proof.
          */
         void requestMembershipProof(GroupCall groupCall);
 
         /**
-         *
+         * Notification that the group call object needs an updated list of group members.
          */
         void requestGroupMembers(GroupCall groupCall);
 
         /**
-         *
+         * Notification that the local device state has changed.
          */
         void onLocalDeviceStateChanged(GroupCall groupCall);
 
         /**
-         *
+         * Notification that the remote device states have changed.
          */
         void onRemoteDeviceStatesChanged(GroupCall groupCall);
 
         /**
-         *
+         * Notification that the PeekInfo changed.
          */
         void onPeekChanged(GroupCall groupCall);
 
         /**
-         *
+         * Notification that the group call has ended.
          */
         void onEnded(GroupCall groupCall, GroupCallEndReason reason);
     }
 
-    /* Native methods below here */
+    /* Native methods below here. */
 
     private native
         long ringrtcCreateGroupCallClient(long nativeCallManager,

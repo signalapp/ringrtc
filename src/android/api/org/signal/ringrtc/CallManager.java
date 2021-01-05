@@ -562,6 +562,17 @@ public class CallManager {
 
   /**
    *
+   * Provides a generic call message that has been received to the
+   * RingRTC Call Manager for handling.
+   *
+   * @param senderUuid      the UUID of the sending user
+   * @param senderDeviceId  the deviceId of the sending device
+   * @param localDeviceId   the local deviceId
+   * @param message         the byte array of the actual message
+   * @param messageAgeSec   the age of the message, in seconds
+   *
+   * @throws CallException for native code failures
+   *
    */
   public void receivedCallMessage(@NonNull UUID    senderUuid,
                                   @NonNull Integer senderDeviceId,
@@ -584,6 +595,15 @@ public class CallManager {
 
   /**
    *
+   * Provides a HTTP response that has been received for a prior request
+   * to the RingRTC Call Manager for handling.
+   *
+   * @param requestId       the Id of the request that the response belongs to
+   * @param status          the standard HTTP status value of the response
+   * @param body            the body of the response
+   *
+   * @throws CallException for native code failures
+   *
    */
   public void receivedHttpResponse(         long   requestId,
                                             int    status,
@@ -600,6 +620,12 @@ public class CallManager {
   }
 
   /**
+   *
+   * Indicates a failure that has been detected for a HTTP request.
+   *
+   * @param requestId       the Id of the request that the response belongs to
+   *
+   * @throws CallException for native code failures
    *
    */
   public void httpRequestFailed(long requestId)
@@ -751,6 +777,16 @@ public class CallManager {
 
   /**
    *
+   * Asynchronous request for the group call state from the SFU for a particular
+   * group. Does not require a group call object.
+   *
+   * @param sfuUrl           the URL to use when accessing the SFU
+   * @param membershipProof  byte array containing the proof for accessing a specific group call
+   * @param groupMembers     a GroupMemberInfo object for each member in a group
+   * @param handler          a handler function which is invoked once the data is available
+   *
+   * @throws CallException for native code failures
+   *
    */
   public void peekGroupCall(@NonNull String                                sfuUrl,
                             @NonNull byte[]                                membershipProof,
@@ -767,10 +803,17 @@ public class CallManager {
   }
 
   /**
+   *
    * Creates and returns a GroupCall object.
    *
    * If there is any error when allocating resources for the object,
    * null is returned.
+   *
+   * @param groupId      the unique identifier for the group
+   * @param sfuUrl       the URL to use when accessing the SFU
+   * @param eglBase      graphics base needed to initialize media
+   * @param observer     the observer that the group call object will use for callback notifications
+   *
    */
   public GroupCall createGroupCall(@NonNull byte[]             groupId,
                                    @NonNull String             sfuUrl,
