@@ -48,9 +48,9 @@ impl StatsObserver {
     fn new() -> Self {
         info!(
             "ringrtc_stats!,\
+                timestamp_us,\
                 audio,\
                 send,\
-                timestamp_us,\
                 ssrc,\
                 packets_sent,\
                 bytes_sent,\
@@ -62,9 +62,9 @@ impl StatsObserver {
         );
         info!(
             "ringrtc_stats!,\
+                timestamp_us,\
                 video,\
                 send,\
-                timestamp_us,\
                 ssrc,\
                 packets_sent,\
                 bytes_sent,\
@@ -87,9 +87,9 @@ impl StatsObserver {
         );
         info!(
             "ringrtc_stats!,\
+                timestamp_us,\
                 audio,\
                 recv,\
-                timestamp_us,\
                 ssrc,\
                 packets_received,\
                 packets_lost,\
@@ -102,9 +102,9 @@ impl StatsObserver {
         );
         info!(
             "ringrtc_stats!,\
+                timestamp_us,\
                 video,\
                 recv,\
-                timestamp_us,\
                 ssrc,\
                 packets_received,\
                 packets_lost,\
