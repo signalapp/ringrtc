@@ -1,9 +1,8 @@
 //
-// Copyright (C) 2020 Signal Messenger, LLC.
-// All rights reserved.
+// Copyright 2019-2021 Signal Messenger, LLC
+// SPDX-License-Identifier: AGPL-3.0-only
 //
-// SPDX-License-Identifier: GPL-3.0-only
-//
+
 use aes_ctr::cipher::{NewStreamCipher, SyncStreamCipher};
 use aes_ctr::Aes256Ctr;
 use hkdf::Hkdf;

@@ -10,7 +10,6 @@ For building RingRTC see [BUILDING.md](BUILDING.md).
 
 -----------------
 
-Copyright (C) 2020 Signal Messenger, LLC.<br/>
-All rights reserved.
+Copyright 2019-2021 Signal Messenger, LLC<br/>
 
-Licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.html) only.
+Licensed under [AGPLv3](https://www.gnu.org/licenses/agpl-3.0.html) only.

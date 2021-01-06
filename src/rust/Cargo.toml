@@ -1,8 +1,6 @@
 #
-# Copyright (C) 2019 Signal Messenger, LLC.
-# All rights reserved.
-#
-# SPDX-License-Identifier: GPL-3.0-only
+# Copyright 2019-2021 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
 #
 
 [package]
@@ -11,7 +9,7 @@ version = "2.8.10"
 authors = ["Curt Brune <curt@signal.org>", "Jim Gustafson <jim@signal.org>", "Peter Thatcher <peter@signal.org>", "Vladimir Skuratovich <vlad@signal.org>"]
 edition = "2018"
 description = "A Rust interface for WebRTC"
-license = "GPL-3.0-only"
+license = "AGPL-3.0-only"
 
 [lib]
 crate_type = ["cdylib", "staticlib", "lib"]

@@ -335,20 +335,20 @@ def process(filepath):
     text = sort_includes(filepath, filename, file_ext, text)
     text = sort_class_statements(filepath, filename, file_ext, text)
     
-    lines = text.split('\n')
-    while lines and lines[0].startswith('//'):
-        lines = lines[1:]
-    text = '\n'.join(lines)
-    text = text.strip()
+#     lines = text.split('\n')
+#     while lines and lines[0].startswith('//'):
+#         lines = lines[1:]
+#     text = '\n'.join(lines)
+#     text = text.strip()
 
-    header = '''//
-//  Copyright (c) %s Open Whisper Systems. All rights reserved.
-//
+#     header = '''//
+# //  Copyright (c) %s Open Whisper Systems. All rights reserved.
+# //
 
-''' % ( 
-    datetime.datetime.now().year,
-    )
-    text = header + text + '\n'
+# ''' % ( 
+#     datetime.datetime.now().year,
+#     )
+#     text = header + text + '\n'
 
     if original_text == text:
         return

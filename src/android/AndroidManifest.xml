@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
- *  Copyright (C) 2019 Signal Messenger, LLC.
- *  All rights reserved.
- *
- *  SPDX-License-Identifier: GPL-3.0-only
+ * Copyright 2019-2021 Signal Messenger, LLC
+ * SPDX-License-Identifier: AGPL-3.0-only
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           package="org.signal.ringrtc"
