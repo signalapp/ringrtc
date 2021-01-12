@@ -142,11 +142,13 @@ pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
     Ok(object)
 }
 
+#[allow(dead_code)]
 #[cfg(all(debug_assertions, not(test)))]
 fn redact_ice_password(text: &str) -> String {
     text.to_string()
 }
 
+#[allow(dead_code)]
 #[cfg(any(not(debug_assertions), test))]
 fn redact_ice_password(text: &str) -> String {
     let mut lines = text.lines().collect::<Vec<&str>>();
@@ -192,11 +194,13 @@ fn redact_ice_password(text: &str) -> String {
 //            :((:IPV6SEG){1,7}|:)|                  # ::2:3:4:5:6:7:8    ::2:3:4:5:6:7:8  ::8       ::
 //            )
 
+#[allow(dead_code)]
 #[cfg(all(debug_assertions, not(test)))]
 fn redact_ipv6(text: &str) -> String {
     text.to_string()
 }
 
+#[allow(dead_code)]
 #[cfg(any(not(debug_assertions), test))]
 fn redact_ipv6(text: &str) -> String {
     lazy_static! {
@@ -229,11 +233,13 @@ fn redact_ipv6(text: &str) -> String {
     }
 }
 
+#[allow(dead_code)]
 #[cfg(all(debug_assertions, not(test)))]
 fn redact_ipv4(text: &str) -> String {
     text.to_string()
 }
 
+#[allow(dead_code)]
 #[cfg(any(not(debug_assertions), test))]
 fn redact_ipv4(text: &str) -> String {
     lazy_static! {
@@ -256,10 +262,17 @@ fn redact_ipv4(text: &str) -> String {
 /// logging purposes, including:
 /// - ICE passwords
 /// - IPv4 and IPv6 addresses
+#[cfg(not(debug_assertions))]
 pub fn redact_string(text: &str) -> String {
     let mut string = redact_ice_password(text);
     string = redact_ipv6(&string);
     redact_ipv4(&string)
+}
+
+/// For debug builds, redacting won't do anything.
+#[cfg(debug_assertions)]
+pub fn redact_string(text: &str) -> String {
+    text.to_string()
 }
 
 /// Encodes a slice of bytes as a hexadecimal string.

@@ -22,10 +22,5 @@ Rust_dataChannelSend(DataChannelInterface* data_channel,
   return ret;
 }
 
-RUSTEXPORT bool
-Rust_dataChannelIsReliable(DataChannelInterface* data_channel) {
-  return data_channel->reliable();
-}
-
 } // namespace rffi
 } // namespace webrtc

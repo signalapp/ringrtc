@@ -69,7 +69,7 @@ pub type DeviceId = u32;
 /// Tracks the state of a call.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CallState {
-    /// The call has been created, but not yet stated.
+    /// The call has been created, but not yet started.
     NotYetStarted,
 
     /// The call has been started (via start_call() or handle_received_offer())

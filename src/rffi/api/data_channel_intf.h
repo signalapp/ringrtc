@@ -24,7 +24,4 @@ Rust_dataChannelSend(webrtc::DataChannelInterface* data_channel,
                      size_t                        len,
                      bool                          binary);
 
-RUSTEXPORT bool
-Rust_dataChannelIsReliable(webrtc::DataChannelInterface* data_channel);
-
 #endif /* RFFI_API_DATA_CHANNEL_OBSERVER_INTF_H__ */

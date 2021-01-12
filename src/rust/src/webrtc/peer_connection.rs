@@ -9,6 +9,7 @@ use std::fmt;
 
 use crate::common::{units::DataRate, Result};
 use crate::core::signaling;
+use crate::core::util::redact_string;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
@@ -106,7 +107,7 @@ impl PeerConnection {
     }
 
     /// Rust wrapper around C++ PeerConnection::CreateDataChannel().
-    /// Assumes the label "signaling" and reliable/ordered when using SCTP and unordered/unreliable for RTP
+    /// Assumes the label "signaling" and unordered/unreliable for RTP.
     pub fn create_signaling_data_channel(&self) -> Result<DataChannel> {
         let rffi_data_channel =
             unsafe { pc::Rust_createSignalingDataChannel(self.rffi, self.rffi_pc_observer) };
@@ -185,7 +186,14 @@ impl PeerConnection {
 
     /// Rust wrapper around C++ PeerConnection::AddIceCandidate().
     pub fn add_ice_candidate(&self, candidate: &signaling::IceCandidate) -> Result<()> {
-        let sdp = candidate.to_v3_and_v2_and_v1_sdp()?;
+        let sdp = candidate.to_v3_and_v2_sdp()?;
+
+        info!(
+            "Remote ICE candidate: {}; {}",
+            candidate.to_info_string(),
+            redact_string(sdp.as_str())
+        );
+
         let sdp_c = CString::new(sdp)?;
         let add_ok = unsafe { pc::Rust_addIceCandidateFromSdp(self.rffi, sdp_c.as_ptr()) };
         if add_ok {

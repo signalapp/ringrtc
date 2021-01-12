@@ -33,7 +33,6 @@ use std::collections::HashMap;
 
 const RINGRTC_PACKAGE: &str = "org/signal/ringrtc";
 const CALL_MANAGER_CLASS: &str = "CallManager";
-const ICE_CANDIDATE_CLASS: &str = "org/signal/ringrtc/IceCandidate";
 const HTTP_HEADER_CLASS: &str = "org/signal/ringrtc/HttpHeader";
 const REMOTE_DEVICE_STATE_CLASS: &str = "org/signal/ringrtc/GroupCall$RemoteDeviceState";
 
@@ -296,7 +295,7 @@ impl Platform for AndroidPlatform {
             jni_remote_device_id.into(),
             jni_call_context.as_obj().into(),
             signaling_version.enable_dtls().into(),
-            signaling_version.enable_rtp_data_channel().into(),
+            true.into(), /* always enable the RTP data channel */
         ];
         let result = jni_call_method(
             &env,
@@ -409,7 +408,6 @@ impl Platform for AndroidPlatform {
         offer: signaling::Offer,
     ) -> Result<()> {
         // Offers are always broadcast
-        // TODO: Simplify Java's onSendOffer method to assume broadcast
         let broadcast = true;
         let receiver_device_id = 0 as DeviceId;
 
@@ -424,14 +422,7 @@ impl Platform for AndroidPlatform {
             let jni_remote = remote_peer.as_obj();
             let call_id_jlong = u64::from(call_id) as jlong;
             let receiver_device_id = receiver_device_id as jint;
-            let jni_opaque = match offer.opaque {
-                None => JObject::null(),
-                Some(opaque) => JObject::from(env.byte_array_from_slice(&opaque)?),
-            };
-            let jni_sdp = match offer.sdp {
-                None => JObject::null(),
-                Some(sdp) => JObject::from(env.new_string(sdp)?),
-            };
+            let jni_opaque = JObject::from(env.byte_array_from_slice(&offer.opaque)?);
             let jni_call_media_type = match self.java_enum(
                 &env,
                 CALL_MANAGER_CLASS,
@@ -442,11 +433,12 @@ impl Platform for AndroidPlatform {
                 Err(error) => {
                     error!("jni_call_media_type: {:?}", error);
                     return Ok(JObject::null());
-                },
+                }
             };
 
             const SEND_OFFER_MESSAGE_METHOD: &str = "onSendOffer";
-            const SEND_OFFER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZ[BLjava/lang/String;Lorg/signal/ringrtc/CallManager$CallMediaType;)V";
+            const SEND_OFFER_MESSAGE_SIG: &str =
+                "(JLorg/signal/ringrtc/Remote;IZ[BLorg/signal/ringrtc/CallManager$CallMediaType;)V";
 
             let args = [
                 call_id_jlong.into(),
@@ -454,7 +446,6 @@ impl Platform for AndroidPlatform {
                 receiver_device_id.into(),
                 broadcast.into(),
                 jni_opaque.into(),
-                jni_sdp.into(),
                 jni_call_media_type.into(),
             ];
             let result = jni_call_method(
@@ -481,7 +472,6 @@ impl Platform for AndroidPlatform {
         send: signaling::SendAnswer,
     ) -> Result<()> {
         // Answers are never broadcast
-        // TODO: Simplify Java's onSendAnswer method to assume no broadcast
         let broadcast = false;
         let receiver_device_id = send.receiver_device_id;
 
@@ -499,18 +489,10 @@ impl Platform for AndroidPlatform {
             let jni_remote = remote_peer.as_obj();
             let call_id_jlong = u64::from(call_id) as jlong;
             let receiver_device_id = receiver_device_id as jint;
-            let jni_opaque = match send.answer.opaque {
-                None => JObject::null(),
-                Some(opaque) => JObject::from(env.byte_array_from_slice(&opaque)?),
-            };
-            let jni_sdp = match send.answer.sdp {
-                None => JObject::null(),
-                Some(sdp) => JObject::from(env.new_string(sdp)?),
-            };
+            let jni_opaque = JObject::from(env.byte_array_from_slice(&send.answer.opaque)?);
 
             const SEND_ANSWER_MESSAGE_METHOD: &str = "onSendAnswer";
-            const SEND_ANSWER_MESSAGE_SIG: &str =
-                "(JLorg/signal/ringrtc/Remote;IZ[BLjava/lang/String;)V";
+            const SEND_ANSWER_MESSAGE_SIG: &str = "(JLorg/signal/ringrtc/Remote;IZ[B)V";
 
             let args = [
                 call_id_jlong.into(),
@@ -518,7 +500,6 @@ impl Platform for AndroidPlatform {
                 receiver_device_id.into(),
                 broadcast.into(),
                 jni_opaque.into(),
-                jni_sdp.into(),
             ];
             let result = jni_call_method(
                 &env,
@@ -564,14 +545,6 @@ impl Platform for AndroidPlatform {
             let call_id_jlong = u64::from(call_id) as jlong;
             let receiver_device_id = receiver_device_id as jint;
 
-            // create Java List<IceCandidate>
-            let ice_candidate_class = match self.class_cache.get_class(ICE_CANDIDATE_CLASS) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("ice_candidate_class: {:?}", error);
-                    return Ok(JObject::null());
-                }
-            };
             let ice_candidate_list = match jni_new_linked_list(&env) {
                 Ok(v) => v,
                 Err(error) => {
@@ -581,20 +554,12 @@ impl Platform for AndroidPlatform {
             };
 
             for candidate in send.ice.candidates_added {
-                const ICE_CANDIDATE_CTOR_SIG: &str = "([BLjava/lang/String;)V";
-                let jni_opaque = match candidate.opaque {
-                    None => JObject::null(),
-                    Some(opaque) => JObject::from(env.byte_array_from_slice(&opaque)?),
-                };
-                let jni_sdp = match candidate.sdp {
-                    None => JObject::null(),
-                    Some(sdp) => JObject::from(env.new_string(sdp)?),
-                };
-
-                let args = [jni_opaque.into(), jni_sdp.into()];
-                let ice_message_obj =
-                    env.new_object(ice_candidate_class, ICE_CANDIDATE_CTOR_SIG, &args)?;
-                ice_candidate_list.add(ice_message_obj)?;
+                let jni_opaque = JObject::from(env.byte_array_from_slice(&candidate.opaque)?);
+                let result = ice_candidate_list.add(jni_opaque);
+                if result.is_err() {
+                    error!("ice_candidate_list.add: {:?}", result.err());
+                    continue;
+                }
             }
 
             const ON_SEND_ICE_CANDIDATES_METHOD: &str = "onSendIceCandidates";
@@ -632,7 +597,6 @@ impl Platform for AndroidPlatform {
         send: signaling::SendHangup,
     ) -> Result<()> {
         // Hangups are always broadcast
-        // TODO: Simplify Java's onSendHangup method to assume broadcast
         let broadcast = true;
         let receiver_device_id = 0 as DeviceId;
 
@@ -683,7 +647,6 @@ impl Platform for AndroidPlatform {
 
     fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
         // Busy messages are always broadcast
-        // TODO: Simplify Java's onSendBusy method to assume broadcast
         let broadcast = true;
         let receiver_device_id = 0 as DeviceId;
 
@@ -1382,7 +1345,6 @@ impl AndroidPlatform {
             "org/signal/ringrtc/GroupCall$ConnectionState",
             "org/signal/ringrtc/GroupCall$JoinState",
             "org/signal/ringrtc/GroupCall$GroupCallEndReason",
-            ICE_CANDIDATE_CLASS,
             HTTP_HEADER_CLASS,
             REMOTE_DEVICE_STATE_CLASS,
             "java/lang/Boolean",

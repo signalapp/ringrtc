@@ -102,11 +102,9 @@ final class TestDelegate: CallManagerDelegate {
     var recentCallId: UInt64 = 0
     var recentBusyCallId: UInt64 = 0
 
-    var sentOffer: String?
     var sentOfferOpaque: Data?
-    var sentAnswer: String?
     var sentAnswerOpaque: Data?
-    var sentIceCandidates: [CallManagerIceCandidate] = []
+    var sentIceCandidates: [Data] = []
 
     var sentCallMessageRecipientUuid: UUID?
     var sentCallMessageMessage: Data?
@@ -286,7 +284,7 @@ final class TestDelegate: CallManagerDelegate {
         }
     }
 
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendOffer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?, callMediaType: CallMediaType) {
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendOffer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
         Logger.debug("TestDelegate:shouldSendOffer")
         generalInvocationDetected = true
 
@@ -299,7 +297,6 @@ final class TestDelegate: CallManagerDelegate {
 
         // @todo Create a structure to hold offers by deviceId
         if destinationDeviceId == nil || destinationDeviceId == 1 {
-            sentOffer = sdp
             sentOfferOpaque = opaque
         }
 
@@ -326,7 +323,7 @@ final class TestDelegate: CallManagerDelegate {
         }
     }
 
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendAnswer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?) {
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendAnswer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data) {
         Logger.debug("TestDelegate:shouldSendAnswer")
         generalInvocationDetected = true
 
@@ -334,7 +331,6 @@ final class TestDelegate: CallManagerDelegate {
 
         // @todo Create a structure to hold answers by deviceId
         if destinationDeviceId == nil || destinationDeviceId == 1 {
-            sentAnswer = sdp
             sentAnswerOpaque = opaque
         }
 
@@ -361,7 +357,7 @@ final class TestDelegate: CallManagerDelegate {
         }
     }
 
-    func tryToSendIceCandidates(callId: UInt64, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
+    func tryToSendIceCandidates(callId: UInt64, destinationDeviceId: UInt32?, candidates: [Data]) {
         if destinationDeviceId != nil {
             Logger.debug("callId: \(callId) destinationDeviceId: \(destinationDeviceId ?? 0) candidates.count: \(candidates.count)")
         } else {
@@ -391,7 +387,7 @@ final class TestDelegate: CallManagerDelegate {
         }
     }
 
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendIceCandidates callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendIceCandidates callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, candidates: [Data]) {
         Logger.debug("TestDelegate:shouldSendIceCandidates localDevice: \(self.localDevice) destinationDeviceId: \(destinationDeviceId ?? 0) count: \(candidates.count)")
         generalInvocationDetected = true
 
@@ -568,16 +564,6 @@ class SignalRingRTCTests: XCTestCase {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
-    // This function does a simple conversion of an Offer to an Answer.
-    func convertOfferToAnswer(offer: String) -> String {
-
-        var answer: String = ""
-
-        answer = offer.replacingOccurrences(of: "actpass", with: "active")
-
-        return answer
-    }
-
     // Helper function to delay, without blocking the main thread.
     func delay(interval: TimeInterval) {
         var timerFlag = false
@@ -730,19 +716,17 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        expect(delegate.shouldSendOfferInvoked).toEventually(equal(true), timeout: 1)
+        expect(delegate.shouldSendOfferInvoked).toEventually(equal(true), timeout: 2)
         delegate.shouldSendOfferInvoked = false
 
         // We've sent an offer, so we should see some Ice candidates.
         // @todo Update now that we can send Ice candidates before receiving the Answer.
 
-        // Simulate receiving an Answer. We will use the recently sent Offer.
-        let answer = self.convertOfferToAnswer(offer: delegate.sentOffer ?? "")
         let sourceDevice: UInt32 = 1
 
         do {
             Logger.debug("Test: Invoking receivedAnswer()...")
-            try callManager?.receivedAnswer(sourceDevice: 1, callId: callId, opaque: nil, sdp: answer, remoteSupportsMultiRing: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+            try callManager?.receivedAnswer(sourceDevice: 1, callId: callId, opaque: exampleV4Answer, remoteSupportsMultiRing: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedAnswer() failed: \(error)")
             return
@@ -882,7 +866,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: exampleV4V3V2Offer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -970,7 +954,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: false, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: exampleV4V3V2Offer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: false, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1276,7 +1260,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: exampleV4V3V2Offer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1342,7 +1326,7 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegate.expectedValue, remote: delegate.expectedValue)
 
-            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: self.audioOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+            try callManager?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: exampleV4V3V2Offer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1377,7 +1361,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
-    func multiCallTesting(loopIterations: Int, enable_opaque: Bool) {
+    func multiCallTesting(loopIterations: Int) {
         Logger.debug("Test: MultiCall...")
 
         let delegateCaller = TestDelegate()
@@ -1459,12 +1443,12 @@ class SignalRingRTCTests: XCTestCase {
                 // outside this block.
                 let call = OpaqueCallData(value: delegateCallee.expectedValue, remote: callerAddress)
 
-                var opaque: Data?
-                if enable_opaque {
-                    opaque = delegateCallee.sentOfferOpaque
+                guard let opaque = delegateCaller.sentOfferOpaque else {
+                    XCTFail("No sentOfferOpaque detected!")
+                    return
                 }
 
-                try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: opaque, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+                try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -1497,12 +1481,12 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking receivedAnswer()...")
 
-                var opaque: Data?
-                if enable_opaque {
-                    opaque = delegateCallee.sentAnswerOpaque
+                guard let opaque = delegateCallee.sentAnswerOpaque else {
+                    XCTFail("No sentAnswerOpaque detected!")
+                    return
                 }
 
-                try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: opaque, sdp: delegateCallee.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+                try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: opaque, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedAnswer() failed: \(error)")
                 return
@@ -1528,7 +1512,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking receivedHangup()...")
-                _ = try callManagerCaller?.receivedHangup(sourceDevice: sourceDevice, callId: callId, hangupType: .normal, deviceId: 0)
+                _ = try callManagerCallee?.receivedHangup(sourceDevice: sourceDevice, callId: callId, hangupType: .normal, deviceId: 0)
             } catch {
                 XCTFail("Call Manager hangup() failed: \(error)")
                 return
@@ -1555,12 +1539,8 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
-    func testMultiCall() {
-        multiCallTesting(loopIterations: 2, enable_opaque: false)
-    }
-
     func testMultiCallOpaque() {
-        multiCallTesting(loopIterations: 1, enable_opaque: true)
+        multiCallTesting(loopIterations: 2)
     }
 
     func testMultiCallFastIceCheck() {
@@ -1638,8 +1618,13 @@ class SignalRingRTCTests: XCTestCase {
             // outside this block.
             let call = OpaqueCallData(value: delegateCallee.expectedValue, remote: delegateCallee.expectedValue)
 
+            guard let opaque = delegateCaller.sentOfferOpaque else {
+                XCTFail("No sentOfferOpaque detected!")
+                return
+            }
+
             // Send the ICE candidates right after the offer.
-            try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+            try callManagerCallee?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callId, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: calleeLocalDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             try callManagerCallee?.receivedIceCandidates(sourceDevice: sourceDevice, callId: callId, candidates: delegateCaller.sentIceCandidates)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
@@ -1668,7 +1653,12 @@ class SignalRingRTCTests: XCTestCase {
         do {
             Logger.debug("Test: Invoking receivedAnswer()...")
 
-            try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: nil, sdp: delegateCallee.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+            guard let opaque = delegateCallee.sentAnswerOpaque else {
+                XCTFail("No sentOfferOpaque detected!")
+                return
+            }
+
+            try callManagerCaller?.receivedAnswer(sourceDevice: sourceDevice, callId: callId, opaque: opaque, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
         } catch {
             XCTFail("Call Manager receivedAnswer() failed: \(error)")
             return
@@ -1821,7 +1811,13 @@ class SignalRingRTCTests: XCTestCase {
         do {
             Logger.debug("Test: Invoking B.receivedOffer(A)...")
             let call = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
-            try callManagerB?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdAtoBOverride, opaque: nil, sdp: delegateA.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+
+            guard let opaque = delegateA.sentOfferOpaque else {
+                XCTFail("No sentOfferOpaque detected!")
+                return
+            }
+
+            try callManagerB?.receivedOffer(call: call, sourceDevice: sourceDevice, callId: callIdAtoBOverride, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
         } catch {
             XCTFail("Call Manager receivedOffer() failed: \(error)")
             return
@@ -1988,7 +1984,13 @@ class SignalRingRTCTests: XCTestCase {
                 busyCallee.delegate.shouldSendOfferInvoked = false
 
                 let callExtra = OpaqueCallData(value: delegateExtra.expectedValue, remote: calleeAddress)
-                try callManagerExtra?.receivedOffer(call: callExtra, sourceDevice: busyCallee.deviceId, callId: callId, opaque: nil, sdp: busyCallee.delegate.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: extraDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+
+                guard let opaqueOffer = busyCallee.delegate.sentOfferOpaque else {
+                    XCTFail("No sentOfferOpaque detected!")
+                    return
+                }
+
+                try callManagerExtra?.receivedOffer(call: callExtra, sourceDevice: busyCallee.deviceId, callId: callId, opaque: opaqueOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: extraDevice, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
 
                 expect(busyCallee.delegate.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
                 busyCallee.delegate.canSendICE = true
@@ -2003,7 +2005,12 @@ class SignalRingRTCTests: XCTestCase {
                 delegateExtra.shouldSendAnswerInvoked = false
                 expect(delegateExtra.recentCallId).to(equal(callId))
 
-                try busyCallee.callManager.receivedAnswer(sourceDevice: extraDevice, callId: callId, opaque: nil, sdp: delegateExtra.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+                guard let opaqueAnswer = delegateExtra.sentAnswerOpaque else {
+                    XCTFail("No sentAnswerOpaque detected!")
+                    return
+                }
+
+                try busyCallee.callManager.receivedAnswer(sourceDevice: extraDevice, callId: callId, opaque: opaqueAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
 
                 expect(delegateExtra.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: 1)
 
@@ -2076,11 +2083,16 @@ class SignalRingRTCTests: XCTestCase {
                     // outside this block.
                     let call = OpaqueCallData(value: element.delegate.expectedValue, remote: callerAddress)
 
+                    guard let opaque = delegateCaller.sentOfferOpaque else {
+                        XCTFail("No sentOfferOpaque detected!")
+                        return
+                    }
+
                     Logger.debug("Test: Invoking receivedOffer()...")
 
                     // @note We are specifying multiple devices as primary, but it shouldn't
                     // matter for this type of testing.
-                    try element.callManager.receivedOffer(call: call, sourceDevice: callerDevice, callId: callId, opaque: nil, sdp: delegateCaller.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: element.deviceId, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+                    try element.callManager.receivedOffer(call: call, sourceDevice: callerDevice, callId: callId, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: element.deviceId, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
                 }
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
@@ -2142,8 +2154,13 @@ class SignalRingRTCTests: XCTestCase {
 
                     expect(element.delegate.recentCallId).to(equal(callId))
 
+                    guard let opaque = element.delegate.sentAnswerOpaque else {
+                        XCTFail("No sentAnswerOpaque detected!")
+                        return
+                    }
+
                     Logger.debug("Test: Invoking receivedAnswer()...")
-                    try callManagerCaller?.receivedAnswer(sourceDevice: element.deviceId, callId: callId, opaque: nil, sdp: element.delegate.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+                    try callManagerCaller?.receivedAnswer(sourceDevice: element.deviceId, callId: callId, opaque: opaque, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
                 }
             } catch {
                 XCTFail("Call Manager receivedAnswer() failed: \(error)")
@@ -2178,13 +2195,15 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateCaller.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: 2)
                 delegateCaller.shouldSendHangupNormalInvoked = false
 
-                // Since all callees are connected to the caller, the hangup should go
-                // over the data channel, so there is no need to send the signaling
-                // version, although we could just to make sure the signaling messages
-                // get ignored. But not now.
-
                 // Now make sure all the callees get hungup.
                 for element in calleeDevices {
+                    do {
+                        try element.callManager.receivedHangup(sourceDevice: delegateCaller.localDevice, callId: callId, hangupType: .normal, deviceId: 0)
+                    } catch {
+                        XCTFail("Call Manager receivedHangup(caller) failed: \(error)")
+                        return
+                    }
+
                     expect(element.delegate.eventEndedRemoteHangup).toEventually(equal(true), timeout: 2)
                     element.delegate.eventEndedRemoteHangup = false
                 }
@@ -2219,13 +2238,15 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateCaller.shouldSendHangupDeclinedInvoked).toEventually(equal(true), timeout: 2)
                 delegateCaller.shouldSendHangupDeclinedInvoked = false
 
-                // Since all callees are connected to the caller, the hangup should go
-                // over the data channel, so there is no need to send the signaling
-                // version, although we could just to make sure the signaling messages
-                // get ignored. But not now.
-
                 // Now make sure all the callees get proper hangup indication.
                 for element in calleeDevices {
+                    do {
+                        try element.callManager.receivedHangup(sourceDevice: delegateCaller.localDevice, callId: callId, hangupType: .declined, deviceId: delegateCaller.hangupDeviceId ?? 0)
+                    } catch {
+                        XCTFail("Call Manager receivedHangup(caller) failed: \(error)")
+                        return
+                    }
+
                     // Skip over the declining callee...
                     if element.deviceId != decliningCallee.deviceId {
                         expect(element.delegate.eventEndedRemoteHangupDeclined).toEventually(equal(true), timeout: 2)
@@ -2300,13 +2321,15 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateCaller.shouldSendHangupAcceptedInvoked).toEventually(equal(true), timeout: 1)
                 delegateCaller.shouldSendHangupAcceptedInvoked = false
 
-                // Since all callees are connected to the caller, the hangup should go
-                // over the data channel, so there is no need to send the signaling
-                // version, although we could just to make sure the signaling messages
-                // get ignored. But not now.
-
                 // Now make sure all the callees get proper hangup indication.
                 for element in calleeDevices {
+                    do {
+                        try element.callManager.receivedHangup(sourceDevice: delegateCaller.localDevice, callId: callId, hangupType: .accepted, deviceId: delegateCaller.hangupDeviceId ?? 0)
+                    } catch {
+                        XCTFail("Call Manager receivedHangup(caller) failed: \(error)")
+                        return
+                    }
+
                     // Skip over the accepting callee...
                     if element.deviceId != acceptingCallee.deviceId {
                         expect(element.delegate.eventEndedRemoteHangupAccepted).toEventually(equal(true), timeout: 1)
@@ -2364,19 +2387,19 @@ class SignalRingRTCTests: XCTestCase {
     }
 
     func testMultiRing() {
-        multiRingTesting(calleeDeviceCount: 2, loopIterations: 2, scenario: .callerEnds)
+        multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .callerEnds)
     }
 
     func testMultiRingDeclined() {
-        multiRingTesting(calleeDeviceCount: 2, loopIterations: 2, scenario: .calleeDeclines)
+        multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .calleeDeclines)
     }
 
     func testMultiRingBusy() {
-        multiRingTesting(calleeDeviceCount: 2, loopIterations: 2, scenario: .calleeBusy)
+        multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .calleeBusy)
     }
 
     func testMultiRingAccepted() {
-        multiRingTesting(calleeDeviceCount: 2, loopIterations: 2, scenario: .calleeAccepts)
+        multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .calleeAccepts)
     }
 
     enum MultiRingGlareScenario {
@@ -2517,9 +2540,15 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
                 let callA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+
+                guard let opaque = delegateA1.sentOfferOpaque else {
+                    XCTFail("No sentOfferOpaque detected!")
+                    return
+                }
+
+                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
                 let callA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toBOverride, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2529,7 +2558,13 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking A1.receivedOffer(B1)...")
                 let call = OpaqueCallData(value: delegateA1.expectedValue, remote: bAddress)
-                try callManagerA1?.receivedOffer(call: call, sourceDevice: b1Device, callId: callIdB1toAOverride, opaque: nil, sdp: delegateB1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+
+                guard let opaque = delegateB1.sentOfferOpaque else {
+                    XCTFail("No sentOfferOpaque detected!")
+                    return
+                }
+
+                try callManagerA1?.receivedOffer(call: call, sourceDevice: b1Device, callId: callIdB1toAOverride, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: a1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2726,9 +2761,15 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A1)...")
                 let callA1toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+
+                guard let opaque = delegateA1.sentOfferOpaque else {
+                    XCTFail("No sentOfferOpaque detected!")
+                    return
+                }
+
+                try callManagerB1?.receivedOffer(call: callA1toB1, sourceDevice: a1Device, callId: callIdA1toB, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
                 let callA1toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toB, opaque: nil, sdp: delegateA1.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+                try callManagerB2?.receivedOffer(call: callA1toB2, sourceDevice: a1Device, callId: callIdA1toB, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2763,7 +2804,13 @@ class SignalRingRTCTests: XCTestCase {
             // Send answer and candidates between A1 and B1.
             do {
                 Logger.debug("Test: Invoking received*()...")
-                try callManagerA1?.receivedAnswer(sourceDevice: b1Device, callId: callIdA1toB, opaque: nil, sdp: delegateB1.sentAnswer, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+
+                guard let opaque = delegateB1.sentAnswerOpaque else {
+                    XCTFail("No sentAnswerOpaque detected!")
+                    return
+                }
+
+                try callManagerA1?.receivedAnswer(sourceDevice: b1Device, callId: callIdA1toB, opaque: opaque, remoteSupportsMultiRing: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
                 try callManagerB1?.receivedIceCandidates(sourceDevice: a1Device, callId: callIdA1toB, candidates: delegateA1.sentIceCandidates)
                 try callManagerA1?.receivedIceCandidates(sourceDevice: b1Device, callId: callIdA1toB, candidates: delegateB1.sentIceCandidates)
             } catch {
@@ -2847,9 +2894,15 @@ class SignalRingRTCTests: XCTestCase {
             do {
                 Logger.debug("Test: Invoking B*.receivedOffer(A2)...")
                 let callA2toB1 = OpaqueCallData(value: delegateB1.expectedValue, remote: aAddress)
-                try callManagerB1?.receivedOffer(call: callA2toB1, sourceDevice: a2Device, callId: callIdA2toB, opaque: nil, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+
+                guard let opaque = delegateA2.sentOfferOpaque else {
+                    XCTFail("No sentOfferOpaque detected!")
+                    return
+                }
+
+                try callManagerB1?.receivedOffer(call: callA2toB1, sourceDevice: a2Device, callId: callIdA2toB, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b1Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: true, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
                 let callA2toB2 = OpaqueCallData(value: delegateB2.expectedValue, remote: aAddress)
-                try callManagerB2?.receivedOffer(call: callA2toB2, sourceDevice: a2Device, callId: callIdA2toB, opaque: nil, sdp: delegateA2.sentOffer, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+                try callManagerB2?.receivedOffer(call: callA2toB2, sourceDevice: a2Device, callId: callIdA2toB, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: b2Device, remoteSupportsMultiRing: true, isLocalDevicePrimary: false, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
             } catch {
                 XCTFail("Call Manager receivedOffer() failed: \(error)")
                 return
@@ -2933,44 +2986,12 @@ class SignalRingRTCTests: XCTestCase {
 
     // MARK: - Constants
 
-    let audioOffer =
-        "v=0\r\n" +
-        "o=- 6814183694769985039 2 IN IP4 127.0.0.1\r\n" +
-        "s=-\r\n" +
-        "t=0 0\r\n" +
-        "a=group:BUNDLE audio data\r\n" +
-        "a=msid-semantic: WMS ARDAMS\r\n" +
-        "m=audio 9 UDP/TLS/RTP/SAVPF 111\r\n" +
-        "c=IN IP4 0.0.0.0\r\n" +
-        "a=rtcp:9 IN IP4 0.0.0.0\r\n" +
-        "a=ice-ufrag:VLSN\r\n" +
-        "a=ice-pwd:9i7G0u4UW2NBi+HFScgTi9PF\r\n" +
-        "a=ice-options:trickle renomination\r\n" +
-        "a=fingerprint:sha-256 71:CB:D2:0B:59:35:DA:C6:E0:DD:B8:86:E0:97:F7:44:C2:8D:ED:D3:C7:75:1D:F2:0C:2D:A7:B0:D9:29:33:95\r\n" +
-        "a=setup:actpass\r\n" +
-        "a=mid:audio\r\n" +
-        "a=extmap:1 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\n" +
-        "a=extmap:2 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n" +
-        "a=sendrecv\r\n" +
-        "a=rtcp-mux\r\n" +
-        "a=rtpmap:111 opus/48000/2\r\n" +
-        "a=rtcp-fb:111 transport-cc\r\n" +
-        "a=fmtp:111 cbr=1;minptime=10;useinbandfec=1\r\n" +
-        "a=ssrc:34648539 cname:r3JjCVJ2BiIklTY6\r\n" +
-        "a=ssrc:34648539 msid:ARDAMS cbc05114-13bf-473d-9224-f665b9c5ee84\r\n" +
-        "a=ssrc:34648539 mslabel:ARDAMS\r\n" +
-        "a=ssrc:34648539 label:cbc05114-13bf-473d-9224-f665b9c5ee84\r\n" +
-        "m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n" +
-        "c=IN IP4 0.0.0.0\r\n" +
-        "a=ice-ufrag:VLSN\r\n" +
-        "a=ice-pwd:9i7G0u4UW2NBi+HFScgTi9PF\r\n" +
-        "a=ice-options:trickle renomination\r\n" +
-        "a=fingerprint:sha-256 71:CB:D2:0B:59:35:DA:C6:E0:DD:B8:86:E0:97:F7:44:C2:8D:ED:D3:C7:75:1D:F2:0C:2D:A7:B0:D9:29:33:95\r\n" +
-        "a=setup:actpass\r\n" +
-        "a=mid:data\r\n" +
-        "a=sctp-port:5000\r\n" +
-        "a=max-message-size:262144\r\n"
+    let exampleV4V3V2Offer = Data(
+        [18, 132, 25, 10, 223, 24, 118, 61, 48, 13, 10, 111, 61, 45, 32, 54, 49, 53, 53, 49, 54, 53, 54, 57, 52, 57, 57, 56, 54, 48, 55, 54, 54, 49, 32, 50, 32, 73, 78, 32, 73, 80, 52, 32, 49, 50, 55, 46, 48, 46, 48, 46, 49, 13, 10, 115, 61, 45, 13, 10, 116, 61, 48, 32, 48, 13, 10, 97, 61, 103, 114, 111, 117, 112, 58, 66, 85, 78, 68, 76, 69, 32, 97, 117, 100, 105, 111, 32, 118, 105, 100, 101, 111, 32, 100, 97, 116, 97, 13, 10, 97, 61, 109, 115, 105, 100, 45, 115, 101, 109, 97, 110, 116, 105, 99, 58, 32, 87, 77, 83, 32, 65, 82, 68, 65, 77, 83, 13, 10, 109, 61, 97, 117, 100, 105, 111, 32, 57, 32, 85, 68, 80, 47, 84, 76, 83, 47, 82, 84, 80, 47, 83, 65, 86, 80, 70, 32, 49, 49, 49, 13, 10, 99, 61, 73, 78, 32, 73, 80, 52, 32, 48, 46, 48, 46, 48, 46, 48, 13, 10, 97, 61, 114, 116, 99, 112, 58, 57, 32, 73, 78, 32, 73, 80, 52, 32, 48, 46, 48, 46, 48, 46, 48, 13, 10, 97, 61, 105, 99, 101, 45, 117, 102, 114, 97, 103, 58, 53, 84, 67, 89, 13, 10, 97, 61, 105, 99, 101, 45, 112, 119, 100, 58, 50, 112, 116, 56, 43, 111, 50, 43, 97, 48, 86, 53, 84, 105, 65, 121, 121, 49, 68, 121, 113, 99, 120, 115, 13, 10, 97, 61, 105, 99, 101, 45, 111, 112, 116, 105, 111, 110, 115, 58, 116, 114, 105, 99, 107, 108, 101, 32, 114, 101, 110, 111, 109, 105, 110, 97, 116, 105, 111, 110, 13, 10, 97, 61, 102, 105, 110, 103, 101, 114, 112, 114, 105, 110, 116, 58, 115, 104, 97, 45, 50, 53, 54, 32, 68, 56, 58, 65, 48, 58, 66, 66, 58, 65, 54, 58, 55, 52, 58, 65, 70, 58, 70, 50, 58, 55, 53, 58, 56, 55, 58, 51, 68, 58, 55, 65, 58, 70, 52, 58, 65, 51, 58, 70, 65, 58, 51, 56, 58, 52, 57, 58, 51, 52, 58, 49, 56, 58, 67, 51, 58, 57, 65, 58, 51, 69, 58, 70, 52, 58, 48, 57, 58, 55, 53, 58, 54, 54, 58, 57, 55, 58, 50, 57, 58, 68, 67, 58, 70, 65, 58, 54, 65, 58, 70, 48, 58, 68, 54, 13, 10, 97, 61, 115, 101, 116, 117, 112, 58, 97, 99, 116, 112, 97, 115, 115, 13, 10, 97, 61, 109, 105, 100, 58, 97, 117, 100, 105, 111, 13, 10, 97, 61, 101, 120, 116, 109, 97, 112, 58, 49, 32, 104, 116, 116, 112, 58, 47, 47, 119, 119, 119, 46, 119, 101, 98, 114, 116, 99, 46, 111, 114, 103, 47, 101, 120, 112, 101, 114, 105, 109, 101, 110, 116, 115, 47, 114, 116, 112, 45, 104, 100, 114, 101, 120, 116, 47, 97, 98, 115, 45, 115, 101, 110, 100, 45, 116, 105, 109, 101, 13, 10, 97, 61, 101, 120, 116, 109, 97, 112, 58, 50, 32, 104, 116, 116, 112, 58, 47, 47, 119, 119, 119, 46, 105, 101, 116, 102, 46, 111, 114, 103, 47, 105, 100, 47, 100, 114, 97, 102, 116, 45, 104, 111, 108, 109, 101, 114, 45, 114, 109, 99, 97, 116, 45, 116, 114, 97, 110, 115, 112, 111, 114, 116, 45, 119, 105, 100, 101, 45, 99, 99, 45, 101, 120, 116, 101, 110, 115, 105, 111, 110, 115, 45, 48, 49, 13, 10, 97, 61, 115, 101, 110, 100, 114, 101, 99, 118, 13, 10, 97, 61, 114, 116, 99, 112, 45, 109, 117, 120, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 49, 49, 49, 32, 111, 112, 117, 115, 47, 52, 56, 48, 48, 48, 47, 50, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 49, 49, 49, 32, 116, 114, 97, 110, 115, 112, 111, 114, 116, 45, 99, 99, 13, 10, 97, 61, 102, 109, 116, 112, 58, 49, 49, 49, 32, 99, 98, 114, 61, 49, 59, 109, 105, 110, 112, 116, 105, 109, 101, 61, 49, 48, 59, 117, 115, 101, 105, 110, 98, 97, 110, 100, 102, 101, 99, 61, 49, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 52, 55, 54, 48, 52, 51, 50, 55, 32, 99, 110, 97, 109, 101, 58, 100, 110, 98, 73, 66, 121, 98, 110, 89, 47, 90, 53, 110, 118, 108, 108, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 52, 55, 54, 48, 52, 51, 50, 55, 32, 109, 115, 105, 100, 58, 65, 82, 68, 65, 77, 83, 32, 97, 117, 100, 105, 111, 49, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 52, 55, 54, 48, 52, 51, 50, 55, 32, 109, 115, 108, 97, 98, 101, 108, 58, 65, 82, 68, 65, 77, 83, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 52, 55, 54, 48, 52, 51, 50, 55, 32, 108, 97, 98, 101, 108, 58, 97, 117, 100, 105, 111, 49, 13, 10, 109, 61, 118, 105, 100, 101, 111, 32, 57, 32, 85, 68, 80, 47, 84, 76, 83, 47, 82, 84, 80, 47, 83, 65, 86, 80, 70, 32, 57, 54, 32, 57, 55, 32, 57, 56, 32, 57, 57, 32, 49, 48, 48, 32, 49, 48, 49, 32, 49, 48, 50, 32, 49, 48, 51, 32, 49, 48, 52, 13, 10, 99, 61, 73, 78, 32, 73, 80, 52, 32, 48, 46, 48, 46, 48, 46, 48, 13, 10, 97, 61, 114, 116, 99, 112, 58, 57, 32, 73, 78, 32, 73, 80, 52, 32, 48, 46, 48, 46, 48, 46, 48, 13, 10, 97, 61, 105, 99, 101, 45, 117, 102, 114, 97, 103, 58, 53, 84, 67, 89, 13, 10, 97, 61, 105, 99, 101, 45, 112, 119, 100, 58, 50, 112, 116, 56, 43, 111, 50, 43, 97, 48, 86, 53, 84, 105, 65, 121, 121, 49, 68, 121, 113, 99, 120, 115, 13, 10, 97, 61, 105, 99, 101, 45, 111, 112, 116, 105, 111, 110, 115, 58, 116, 114, 105, 99, 107, 108, 101, 32, 114, 101, 110, 111, 109, 105, 110, 97, 116, 105, 111, 110, 13, 10, 97, 61, 102, 105, 110, 103, 101, 114, 112, 114, 105, 110, 116, 58, 115, 104, 97, 45, 50, 53, 54, 32, 68, 56, 58, 65, 48, 58, 66, 66, 58, 65, 54, 58, 55, 52, 58, 65, 70, 58, 70, 50, 58, 55, 53, 58, 56, 55, 58, 51, 68, 58, 55, 65, 58, 70, 52, 58, 65, 51, 58, 70, 65, 58, 51, 56, 58, 52, 57, 58, 51, 52, 58, 49, 56, 58, 67, 51, 58, 57, 65, 58, 51, 69, 58, 70, 52, 58, 48, 57, 58, 55, 53, 58, 54, 54, 58, 57, 55, 58, 50, 57, 58, 68, 67, 58, 70, 65, 58, 54, 65, 58, 70, 48, 58, 68, 54, 13, 10, 97, 61, 115, 101, 116, 117, 112, 58, 97, 99, 116, 112, 97, 115, 115, 13, 10, 97, 61, 109, 105, 100, 58, 118, 105, 100, 101, 111, 13, 10, 97, 61, 101, 120, 116, 109, 97, 112, 58, 49, 52, 32, 117, 114, 110, 58, 105, 101, 116, 102, 58, 112, 97, 114, 97, 109, 115, 58, 114, 116, 112, 45, 104, 100, 114, 101, 120, 116, 58, 116, 111, 102, 102, 115, 101, 116, 13, 10, 97, 61, 101, 120, 116, 109, 97, 112, 58, 49, 32, 104, 116, 116, 112, 58, 47, 47, 119, 119, 119, 46, 119, 101, 98, 114, 116, 99, 46, 111, 114, 103, 47, 101, 120, 112, 101, 114, 105, 109, 101, 110, 116, 115, 47, 114, 116, 112, 45, 104, 100, 114, 101, 120, 116, 47, 97, 98, 115, 45, 115, 101, 110, 100, 45, 116, 105, 109, 101, 13, 10, 97, 61, 101, 120, 116, 109, 97, 112, 58, 51, 32, 117, 114, 110, 58, 51, 103, 112, 112, 58, 118, 105, 100, 101, 111, 45, 111, 114, 105, 101, 110, 116, 97, 116, 105, 111, 110, 13, 10, 97, 61, 101, 120, 116, 109, 97, 112, 58, 50, 32, 104, 116, 116, 112, 58, 47, 47, 119, 119, 119, 46, 105, 101, 116, 102, 46, 111, 114, 103, 47, 105, 100, 47, 100, 114, 97, 102, 116, 45, 104, 111, 108, 109, 101, 114, 45, 114, 109, 99, 97, 116, 45, 116, 114, 97, 110, 115, 112, 111, 114, 116, 45, 119, 105, 100, 101, 45, 99, 99, 45, 101, 120, 116, 101, 110, 115, 105, 111, 110, 115, 45, 48, 49, 13, 10, 97, 61, 115, 101, 110, 100, 114, 101, 99, 118, 13, 10, 97, 61, 114, 116, 99, 112, 45, 109, 117, 120, 13, 10, 97, 61, 114, 116, 99, 112, 45, 114, 115, 105, 122, 101, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 57, 54, 32, 72, 50, 54, 52, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 54, 32, 103, 111, 111, 103, 45, 114, 101, 109, 98, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 54, 32, 116, 114, 97, 110, 115, 112, 111, 114, 116, 45, 99, 99, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 54, 32, 99, 99, 109, 32, 102, 105, 114, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 54, 32, 110, 97, 99, 107, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 54, 32, 110, 97, 99, 107, 32, 112, 108, 105, 13, 10, 97, 61, 102, 109, 116, 112, 58, 57, 54, 32, 108, 101, 118, 101, 108, 45, 97, 115, 121, 109, 109, 101, 116, 114, 121, 45, 97, 108, 108, 111, 119, 101, 100, 61, 49, 59, 112, 97, 99, 107, 101, 116, 105, 122, 97, 116, 105, 111, 110, 45, 109, 111, 100, 101, 61, 49, 59, 112, 114, 111, 102, 105, 108, 101, 45, 108, 101, 118, 101, 108, 45, 105, 100, 61, 54, 52, 48, 99, 49, 102, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 57, 55, 32, 114, 116, 120, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 102, 109, 116, 112, 58, 57, 55, 32, 97, 112, 116, 61, 57, 54, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 57, 56, 32, 72, 50, 54, 52, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 56, 32, 103, 111, 111, 103, 45, 114, 101, 109, 98, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 56, 32, 116, 114, 97, 110, 115, 112, 111, 114, 116, 45, 99, 99, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 56, 32, 99, 99, 109, 32, 102, 105, 114, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 56, 32, 110, 97, 99, 107, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 57, 56, 32, 110, 97, 99, 107, 32, 112, 108, 105, 13, 10, 97, 61, 102, 109, 116, 112, 58, 57, 56, 32, 108, 101, 118, 101, 108, 45, 97, 115, 121, 109, 109, 101, 116, 114, 121, 45, 97, 108, 108, 111, 119, 101, 100, 61, 49, 59, 112, 97, 99, 107, 101, 116, 105, 122, 97, 116, 105, 111, 110, 45, 109, 111, 100, 101, 61, 49, 59, 112, 114, 111, 102, 105, 108, 101, 45, 108, 101, 118, 101, 108, 45, 105, 100, 61, 52, 50, 101, 48, 49, 102, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 57, 57, 32, 114, 116, 120, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 102, 109, 116, 112, 58, 57, 57, 32, 97, 112, 116, 61, 57, 56, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 49, 48, 48, 32, 86, 80, 56, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 49, 48, 48, 32, 103, 111, 111, 103, 45, 114, 101, 109, 98, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 49, 48, 48, 32, 116, 114, 97, 110, 115, 112, 111, 114, 116, 45, 99, 99, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 49, 48, 48, 32, 99, 99, 109, 32, 102, 105, 114, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 49, 48, 48, 32, 110, 97, 99, 107, 13, 10, 97, 61, 114, 116, 99, 112, 45, 102, 98, 58, 49, 48, 48, 32, 110, 97, 99, 107, 32, 112, 108, 105, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 49, 48, 49, 32, 114, 116, 120, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 102, 109, 116, 112, 58, 49, 48, 49, 32, 97, 112, 116, 61, 49, 48, 48, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 49, 48, 50, 32, 114, 101, 100, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 49, 48, 51, 32, 114, 116, 120, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 102, 109, 116, 112, 58, 49, 48, 51, 32, 97, 112, 116, 61, 49, 48, 50, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 49, 48, 52, 32, 117, 108, 112, 102, 101, 99, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 115, 115, 114, 99, 45, 103, 114, 111, 117, 112, 58, 70, 73, 68, 32, 51, 52, 49, 49, 52, 49, 53, 52, 51, 48, 32, 56, 52, 54, 50, 54, 53, 48, 55, 48, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 49, 49, 52, 49, 53, 52, 51, 48, 32, 99, 110, 97, 109, 101, 58, 100, 110, 98, 73, 66, 121, 98, 110, 89, 47, 90, 53, 110, 118, 108, 108, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 49, 49, 52, 49, 53, 52, 51, 48, 32, 109, 115, 105, 100, 58, 65, 82, 68, 65, 77, 83, 32, 118, 105, 100, 101, 111, 49, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 49, 49, 52, 49, 53, 52, 51, 48, 32, 109, 115, 108, 97, 98, 101, 108, 58, 65, 82, 68, 65, 77, 83, 13, 10, 97, 61, 115, 115, 114, 99, 58, 51, 52, 49, 49, 52, 49, 53, 52, 51, 48, 32, 108, 97, 98, 101, 108, 58, 118, 105, 100, 101, 111, 49, 13, 10, 97, 61, 115, 115, 114, 99, 58, 56, 52, 54, 50, 54, 53, 48, 55, 48, 32, 99, 110, 97, 109, 101, 58, 100, 110, 98, 73, 66, 121, 98, 110, 89, 47, 90, 53, 110, 118, 108, 108, 13, 10, 97, 61, 115, 115, 114, 99, 58, 56, 52, 54, 50, 54, 53, 48, 55, 48, 32, 109, 115, 105, 100, 58, 65, 82, 68, 65, 77, 83, 32, 118, 105, 100, 101, 111, 49, 13, 10, 97, 61, 115, 115, 114, 99, 58, 56, 52, 54, 50, 54, 53, 48, 55, 48, 32, 109, 115, 108, 97, 98, 101, 108, 58, 65, 82, 68, 65, 77, 83, 13, 10, 97, 61, 115, 115, 114, 99, 58, 56, 52, 54, 50, 54, 53, 48, 55, 48, 32, 108, 97, 98, 101, 108, 58, 118, 105, 100, 101, 111, 49, 13, 10, 109, 61, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 32, 57, 32, 85, 68, 80, 47, 84, 76, 83, 47, 82, 84, 80, 47, 83, 65, 86, 80, 70, 32, 49, 48, 57, 13, 10, 99, 61, 73, 78, 32, 73, 80, 52, 32, 48, 46, 48, 46, 48, 46, 48, 13, 10, 98, 61, 65, 83, 58, 51, 48, 13, 10, 97, 61, 114, 116, 99, 112, 58, 57, 32, 73, 78, 32, 73, 80, 52, 32, 48, 46, 48, 46, 48, 46, 48, 13, 10, 97, 61, 105, 99, 101, 45, 117, 102, 114, 97, 103, 58, 53, 84, 67, 89, 13, 10, 97, 61, 105, 99, 101, 45, 112, 119, 100, 58, 50, 112, 116, 56, 43, 111, 50, 43, 97, 48, 86, 53, 84, 105, 65, 121, 121, 49, 68, 121, 113, 99, 120, 115, 13, 10, 97, 61, 105, 99, 101, 45, 111, 112, 116, 105, 111, 110, 115, 58, 116, 114, 105, 99, 107, 108, 101, 32, 114, 101, 110, 111, 109, 105, 110, 97, 116, 105, 111, 110, 13, 10, 97, 61, 102, 105, 110, 103, 101, 114, 112, 114, 105, 110, 116, 58, 115, 104, 97, 45, 50, 53, 54, 32, 68, 56, 58, 65, 48, 58, 66, 66, 58, 65, 54, 58, 55, 52, 58, 65, 70, 58, 70, 50, 58, 55, 53, 58, 56, 55, 58, 51, 68, 58, 55, 65, 58, 70, 52, 58, 65, 51, 58, 70, 65, 58, 51, 56, 58, 52, 57, 58, 51, 52, 58, 49, 56, 58, 67, 51, 58, 57, 65, 58, 51, 69, 58, 70, 52, 58, 48, 57, 58, 55, 53, 58, 54, 54, 58, 57, 55, 58, 50, 57, 58, 68, 67, 58, 70, 65, 58, 54, 65, 58, 70, 48, 58, 68, 54, 13, 10, 97, 61, 115, 101, 116, 117, 112, 58, 97, 99, 116, 112, 97, 115, 115, 13, 10, 97, 61, 109, 105, 100, 58, 100, 97, 116, 97, 13, 10, 97, 61, 115, 101, 110, 100, 114, 101, 99, 118, 13, 10, 97, 61, 114, 116, 99, 112, 45, 109, 117, 120, 13, 10, 97, 61, 114, 116, 112, 109, 97, 112, 58, 49, 48, 57, 32, 103, 111, 111, 103, 108, 101, 45, 100, 97, 116, 97, 47, 57, 48, 48, 48, 48, 13, 10, 97, 61, 115, 115, 114, 99, 58, 52, 50, 54, 54, 56, 53, 57, 53, 51, 49, 32, 99, 110, 97, 109, 101, 58, 100, 110, 98, 73, 66, 121, 98, 110, 89, 47, 90, 53, 110, 118, 108, 108, 13, 10, 97, 61, 115, 115, 114, 99, 58, 52, 50, 54, 54, 56, 53, 57, 53, 51, 49, 32, 109, 115, 105, 100, 58, 115, 105, 103, 110, 97, 108, 105, 110, 103, 32, 115, 105, 103, 110, 97, 108, 105, 110, 103, 13, 10, 97, 61, 115, 115, 114, 99, 58, 52, 50, 54, 54, 56, 53, 57, 53, 51, 49, 32, 109, 115, 108, 97, 98, 101, 108, 58, 115, 105, 103, 110, 97, 108, 105, 110, 103, 13, 10, 97, 61, 115, 115, 114, 99, 58, 52, 50, 54, 54, 56, 53, 57, 53, 51, 49, 32, 108, 97, 98, 101, 108, 58, 115, 105, 103, 110, 97, 108, 105, 110, 103, 13, 10, 18, 32, 137, 138, 251, 85, 15, 240, 215, 1, 33, 233, 51, 132, 97, 36, 254, 111, 60, 105, 207, 137, 41, 137, 38, 41, 250, 225, 143, 74, 85, 182, 172, 9, 34, 82, 10, 32, 137, 138, 251, 85, 15, 240, 215, 1, 33, 233, 51, 132, 97, 36, 254, 111, 60, 105, 207, 137, 41, 137, 38, 41, 250, 225, 143, 74, 85, 182, 172, 9, 18, 4, 53, 84, 67, 89, 26, 24, 50, 112, 116, 56, 43, 111, 50, 43, 97, 48, 86, 53, 84, 105, 65, 121, 121, 49, 68, 121, 113, 99, 120, 115, 34, 4, 8, 46, 16, 31, 34, 4, 8, 40, 16, 31, 34, 2, 8, 8])
+
+    let exampleV4Answer = Data([34, 82, 10, 32, 60, 93, 207, 142, 18, 208, 151, 187, 125, 151, 77, 86, 197, 145, 136, 202, 197, 146, 173, 45, 125, 106, 161, 170, 46, 112, 192, 50, 103, 106, 207, 122, 18, 4, 109, 88, 56, 112, 26, 24, 113, 48, 117, 53, 80, 90, 119, 111, 67, 106, 115, 52, 113, 52, 110, 57, 76, 56, 89, 50, 100, 114, 86, 99, 34, 4, 8, 46, 16, 31, 34, 4, 8, 40, 16, 31, 34, 2, 8, 8])
 
     let dummyLocalIdentityKey = Data(_: [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
     let dummyRemoteIdentityKey = Data(_: [0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f])
+
 }

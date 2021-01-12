@@ -335,20 +335,12 @@ where
     /// *before* the application has formally decided to accept the
     /// call.
     pub fn handle_received_offer(&self, received: signaling::ReceivedOffer) -> Result<()> {
-        info!(
-            "id: {}, RX offer:\n{}",
-            self.call_id.format(received.sender_device_id),
-            received.offer.to_redacted_string()
-        );
-
         let mut pending_call = self.pending_call.lock()?;
         match pending_call.as_ref() {
             Some(pending) => {
-                return Err(RingRtcError::PendingCallAlreadySet(
-                    pending.received.sender_device_id,
-                    pending.received.offer.to_redacted_string(),
+                return Err(
+                    RingRtcError::PendingCallAlreadySet(pending.received.sender_device_id).into(),
                 )
-                .into())
             }
             None => {
                 let pending_data = PendingCall {
@@ -579,12 +571,6 @@ where
     /// Handle the received answer.
     pub fn received_answer(&self, received: signaling::ReceivedAnswer) -> Result<()> {
         let sender_device_id = received.sender_device_id;
-        info!(
-            "id: {}, RX answer:\n{}",
-            self.call_id().format(sender_device_id),
-            received.answer.to_redacted_string()
-        );
-
         let mut connection_map = self.connection_map.lock()?;
         if !connection_map.contains_key(&sender_device_id) {
             if self.state()? == CallState::ConnectedAndAccepted

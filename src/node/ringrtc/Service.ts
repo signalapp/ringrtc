@@ -235,15 +235,13 @@ export class RingRTCType {
     callId: CallId,
     broadcast: boolean,
     offerType: OfferType,
-    opaque?: ArrayBuffer,
-    sdp?: string
+    opaque: ArrayBuffer
   ): void {
     const message = new CallingMessage();
     message.offer = new OfferMessage();
     message.offer.callId = callId;
     message.offer.type = offerType;
     message.offer.opaque = opaque;
-    message.offer.sdp = sdp;
     this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
 
@@ -253,14 +251,12 @@ export class RingRTCType {
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    opaque?: ArrayBuffer,
-    sdp?: string
+    opaque: ArrayBuffer
   ): void {
     const message = new CallingMessage();
     message.answer = new AnswerMessage();
     message.answer.callId = callId;
     message.answer.opaque = opaque;
-    message.answer.sdp = sdp;
     this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
   }
 
@@ -270,18 +266,14 @@ export class RingRTCType {
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    candidates: Array<IceCandidateMessage>
+    candidates: Array<ArrayBuffer>
   ): void {
     const message = new CallingMessage();
     message.iceCandidates = [];
     for (const candidate of candidates) {
       const copy = new IceCandidateMessage();
       copy.callId = callId;
-      // TODO: Remove this once all old clients are gone (along with .sdp below)
-      copy.mid = "audio";
-      copy.line = 0;
-      copy.opaque = candidate.opaque;
-      copy.sdp = candidate.sdp;
+      copy.opaque = candidate;
       message.iceCandidates.push(copy);
     }
     this.sendSignaling(remoteUserId, remoteDeviceId, callId, broadcast, message);
@@ -578,7 +570,14 @@ export class RingRTCType {
     if (message.offer && message.offer.callId) {
       const callId = message.offer.callId;
       const opaque = to_array_buffer(message.offer.opaque);
-      const sdp = message.offer.sdp;
+
+      // opaque is required. sdp is obsolete, but it might still come with opaque.
+      if (!opaque) {
+        // TODO: Remove once the proto is updated to only support opaque and require it.
+        this.onLogMessage(CallLogLevel.Error, 'Service.ts', 0, 'handleCallingMessage(): opaque not received for offer, remote should update');
+        return;
+      }
+
       const offerType = message.offer.type || OfferType.AudioCall;
       this.callManager.receivedOffer(
         remoteUserId,
@@ -589,7 +588,6 @@ export class RingRTCType {
         offerType,
         remoteSupportsMultiRing,
         opaque,
-        sdp,
         senderIdentityKey,
         receiverIdentityKey
       );
@@ -597,14 +595,20 @@ export class RingRTCType {
     if (message.answer && message.answer.callId) {
       const callId = message.answer.callId;
       const opaque = to_array_buffer(message.answer.opaque);
-      const sdp = message.answer.sdp;
+
+      // opaque is required. sdp is obsolete, but it might still come with opaque.
+      if (!opaque) {
+        // TODO: Remove once the proto is updated to only support opaque and require it.
+        this.onLogMessage(CallLogLevel.Error, 'Service.ts', 0, 'handleCallingMessage(): opaque not received for answer, remote should update');
+        return;
+      }
+
       this.callManager.receivedAnswer(
         remoteUserId,
         remoteDeviceId,
         callId,
         remoteSupportsMultiRing,
         opaque,
-        sdp,
         senderIdentityKey,
         receiverIdentityKey
       );
@@ -613,17 +617,21 @@ export class RingRTCType {
       // We assume they all have the same .callId
       let callId = message.iceCandidates[0].callId;
       // We have to copy them to do the .toArrayBuffer() thing.
-      const candidates: Array<IceCandidateMessage> = [];
+      const candidates: Array<ArrayBuffer> = [];
       for (const candidate of message.iceCandidates) {
-        const copy = new IceCandidateMessage();
-        // TODO: Remove this once all old clients are gone (along with .sdp below)
-        // Actually, I don't think we need this at all, but it's safer just to leave it
-        // temporariliy.
-        copy.mid = "audio";
-        copy.line = 0;
-        copy.opaque = to_array_buffer(candidate.opaque);
-        copy.sdp = candidate.sdp;
-        candidates.push(copy);
+        const copy = to_array_buffer(candidate.opaque);
+        if (copy) {
+          candidates.push(copy);
+        } else {
+          // TODO: Remove once the proto is updated to only support opaque and require it.
+          this.onLogMessage(CallLogLevel.Error, 'Service.ts', 0, 'handleCallingMessage(): opaque not received for ice candidate, remote should update');
+          continue;
+        }
+      }
+
+      if (candidates.length == 0) {
+        this.onLogMessage(CallLogLevel.Warn, 'Service.ts', 0, 'handleCallingMessage(): No ice candidates in ice message, remote should update');
+        return;
       }
 
       this.callManager.receivedIceCandidates(
@@ -1518,8 +1526,7 @@ export interface CallManager {
     offerType: OfferType,
     localDeviceId: DeviceId,
     remoteSupportsMultiRing: boolean,
-    opaque: ArrayBuffer | undefined,
-    sdp: string | undefined,
+    opaque: ArrayBuffer,
     senderIdentityKey: ArrayBuffer,
     receiverIdentityKey: ArrayBuffer
   ): void;
@@ -1528,8 +1535,7 @@ export interface CallManager {
     remoteDeviceId: DeviceId,
     callId: CallId,
     remoteSupportsMultiRing: boolean,
-    opaque: ArrayBuffer | undefined,
-    sdp: string | undefined,
+    opaque: ArrayBuffer,
     senderIdentityKey: ArrayBuffer,
     receiverIdentityKey: ArrayBuffer
   ): void;
@@ -1537,7 +1543,7 @@ export interface CallManager {
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
-    candidates: Array<IceCandidateMessage>
+    candidates: Array<ArrayBuffer>
   ): void;
   receivedHangup(
     remoteUserId: UserId,
@@ -1605,23 +1611,21 @@ export interface CallManagerCallbacks {
     callId: CallId,
     broadcast: boolean,
     mediaType: number,
-    opaque?: ArrayBuffer,
-    sdp?: string
+    opaque: ArrayBuffer
   ): void;
   onSendAnswer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    opaque?: ArrayBuffer,
-    sdp?: string
+    opaque: ArrayBuffer
   ): void;
   onSendIceCandidates(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    candidates: Array<IceCandidateMessage>
+    candidates: Array<ArrayBuffer>
   ): void;
   onSendLegacyHangup(
     remoteUserId: UserId,

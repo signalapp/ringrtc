@@ -48,10 +48,6 @@ extern "C" {
 
     pub fn Rust_offerFromSdp(sdp: *const c_char) -> *mut RffiSessionDescription;
 
-    pub fn Rust_replaceRtpDataChannelsWithSctp(
-        session_description: *const RffiSessionDescription,
-    ) -> *mut RffiSessionDescription;
-
     pub fn Rust_disableDtlsAndSetSrtpKey(
         session_description: *mut RffiSessionDescription,
         crypto_suite: crate::webrtc::sdp_observer::SrtpCryptoSuite,

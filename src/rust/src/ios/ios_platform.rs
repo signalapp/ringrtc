@@ -29,7 +29,6 @@ use crate::ios::api::call_manager_interface::{
     AppConnectionInterface,
     AppHeader,
     AppHeaderArray,
-    AppIceCandidate,
     AppIceCandidateArray,
     AppInterface,
     AppObject,
@@ -129,7 +128,7 @@ impl Platform for IOSPlatform {
             remote_device_id,
             call.call_context()?.object,
             signaling_version.enable_dtls(),
-            signaling_version.enable_rtp_data_channel(),
+            true, /* always enable the RTP data channel */
         );
 
         if app_connection_interface.object.is_null() || app_connection_interface.pc.is_null() {
@@ -195,7 +194,6 @@ impl Platform for IOSPlatform {
         offer: signaling::Offer,
     ) -> Result<()> {
         // Offer messages are always broadcast
-        // TODO: Simplify Swift's onSendOffer method to assume broadcast
         let broadcast = true;
         let receiver_device_id = 0 as DeviceId;
 
@@ -207,8 +205,7 @@ impl Platform for IOSPlatform {
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
-            app_slice_from_bytes(offer.opaque.as_ref()),
-            app_slice_from_str(offer.sdp.as_ref()),
+            app_slice_from_bytes(Some(&offer.opaque)),
             offer.call_media_type as i32,
         );
 
@@ -222,7 +219,6 @@ impl Platform for IOSPlatform {
         send: signaling::SendAnswer,
     ) -> Result<()> {
         // Answers are never broadcast
-        // TODO: Simplify Swift's onSendAnswer method to assume no broadcast
         let broadcast = false;
         let receiver_device_id = send.receiver_device_id;
 
@@ -237,8 +233,7 @@ impl Platform for IOSPlatform {
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
-            app_slice_from_bytes(send.answer.opaque.as_ref()),
-            app_slice_from_str(send.answer.sdp.as_ref()),
+            app_slice_from_bytes(Some(&send.answer.opaque)),
         );
 
         Ok(())
@@ -265,18 +260,10 @@ impl Platform for IOSPlatform {
             return Ok(());
         }
 
-        // The format of the IceCandidate structure is not enough for iOS,
-        // so we will convert to a more appropriate structure.
-        let mut app_ice_candidates: Vec<AppIceCandidate> = Vec::new();
+        let mut app_ice_candidates: Vec<AppByteSlice> = Vec::new();
 
-        // Take a reference here so that we don't take ownership of it
-        // and cause it to be dropped prematurely.
         for candidate in &send.ice.candidates_added {
-            let app_ice_candidate = AppIceCandidate {
-                opaque: app_slice_from_bytes(candidate.opaque.as_ref()),
-                sdp:    app_slice_from_str(candidate.sdp.as_ref()),
-            };
-
+            let app_ice_candidate = app_slice_from_bytes(Some(&candidate.opaque));
             app_ice_candidates.push(app_ice_candidate);
         }
 
@@ -284,7 +271,8 @@ impl Platform for IOSPlatform {
             candidates: app_ice_candidates.as_ptr(),
             count:      app_ice_candidates.len(),
         };
-        // The ice_candidates array is passed up by reference and must
+
+        // The app_ice_candidates_array is passed up by reference and must
         // be consumed by the integration layer before returning.
         (self.app_interface.onSendIceCandidates)(
             self.app_interface.object,
@@ -305,7 +293,6 @@ impl Platform for IOSPlatform {
         send: signaling::SendHangup,
     ) -> Result<()> {
         // Hangups are always broadcast
-        // TODO: Simplify Swift's onSendHangup method to assume broadcast
         let broadcast = true;
         let receiver_device_id = 0 as DeviceId;
 
@@ -332,7 +319,6 @@ impl Platform for IOSPlatform {
 
     fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
         // Busy messages are always broadcast
-        // TODO: Simplify Java's onSendBusy method to assume broadcast
         let broadcast = true;
         let receiver_device_id = 0 as DeviceId;
 

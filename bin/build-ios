@@ -96,7 +96,7 @@ if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
   echo "Building the WebRTC.framework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
 
-  (cd ${WEBRTC_SRC_DIR} && ./tools_webrtc/ios/build_ios_libs.py -o ${OUTPUT_DIR}/${BUILD_TYPE} --build_config ${BUILD_TYPE} --arch {arm64,x64})
+  (cd ${WEBRTC_SRC_DIR} && ./tools_webrtc/ios/build_ios_libs.py -o ${OUTPUT_DIR}/${BUILD_TYPE} --build_config ${BUILD_TYPE} --arch {arm64,x64} --extra-gn-args rtc_enable_sctp=false)
 
   echo "Copying to ${OUTPUT_DIR}"
 

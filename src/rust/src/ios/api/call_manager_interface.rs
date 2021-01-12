@@ -104,21 +104,12 @@ pub struct AppOptionalBool {
     pub valid: bool,
 }
 
-/// Structure for passing Ice Candidates to/from Swift.
-#[repr(C)]
-#[derive(Debug)]
-#[allow(non_snake_case)]
-pub struct AppIceCandidate {
-    pub opaque: AppByteSlice,
-    pub sdp:    AppByteSlice,
-}
-
 /// Structure for passing multiple Ice Candidates to/from Swift.
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppIceCandidateArray {
-    pub candidates: *const AppIceCandidate,
+    pub candidates: *const AppByteSlice,
     pub count:      size_t,
 }
 
@@ -324,7 +315,6 @@ pub struct AppInterface {
         destinationDeviceId: u32,
         broadcast: bool,
         opaque: AppByteSlice,
-        sdp: AppByteSlice,
         callMediaType: i32,
     ),
     ///
@@ -335,7 +325,6 @@ pub struct AppInterface {
         destinationDeviceId: u32,
         broadcast: bool,
         opaque: AppByteSlice,
-        sdp: AppByteSlice,
     ),
     ///
     pub onSendIceCandidates: extern "C" fn(
@@ -590,7 +579,6 @@ pub extern "C" fn ringrtcReceivedAnswer(
     callId: u64,
     senderDeviceId: u32,
     opaque: AppByteSlice,
-    sdp: AppByteSlice,
     senderSupportsMultiRing: bool,
     senderIdentityKey: AppByteSlice,
     receiverIdentityKey: AppByteSlice,
@@ -606,7 +594,6 @@ pub extern "C" fn ringrtcReceivedAnswer(
         callId,
         senderDeviceId as DeviceId,
         byte_vec_from_app_slice(&opaque),
-        string_from_app_slice(&sdp),
         sender_device_feature_level,
         byte_vec_from_app_slice(&senderIdentityKey),
         byte_vec_from_app_slice(&receiverIdentityKey),
@@ -630,7 +617,6 @@ pub extern "C" fn ringrtcReceivedOffer(
     remotePeer: *const c_void,
     senderDeviceId: u32,
     opaque: AppByteSlice,
-    sdp: AppByteSlice,
     messageAgeSec: u64,
     callMediaType: i32,
     receiverDeviceId: u32,
@@ -651,7 +637,6 @@ pub extern "C" fn ringrtcReceivedOffer(
         remotePeer,
         senderDeviceId as DeviceId,
         byte_vec_from_app_slice(&opaque),
-        string_from_app_slice(&sdp),
         messageAgeSec,
         CallMediaType::from_i32(callMediaType),
         receiverDeviceId as DeviceId,
@@ -679,6 +664,8 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
     senderDeviceId: u32,
     appIceCandidateArray: *const AppIceCandidateArray,
 ) -> *mut c_void {
+    info!("ringrtcReceivedIceCandidates():");
+
     let count = unsafe { (*appIceCandidateArray).count };
     let candidates = unsafe { (*appIceCandidateArray).candidates };
 
@@ -686,10 +673,15 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
     let mut ice_candidates = Vec::new();
 
     for app_ice_candidate in app_ice_candidates {
-        ice_candidates.push(signaling::IceCandidate::from_opaque_or_sdp(
-            byte_vec_from_app_slice(&app_ice_candidate.opaque),
-            string_from_app_slice(&app_ice_candidate.sdp),
-        ));
+        let opaque = byte_vec_from_app_slice(&app_ice_candidate);
+        match opaque {
+            Some(v) => {
+                ice_candidates.push(signaling::IceCandidate::new(v));
+            }
+            None => {
+                warn!("Skipping empty opaque value");
+            }
+        }
     }
 
     match call_manager::received_ice(

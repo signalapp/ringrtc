@@ -42,7 +42,7 @@ use crate::core::call_mutex::CallMutex;
 use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
 use crate::core::platform::Platform;
 use crate::core::signaling;
-use crate::core::util::{ptr_as_box, TaskQueueRuntime};
+use crate::core::util::{ptr_as_box, redact_string, TaskQueueRuntime};
 use crate::error::RingRtcError;
 use crate::protobuf;
 
@@ -275,38 +275,36 @@ where
     T: Platform,
 {
     /// The parent Call object of this connection.
-    call:                           Arc<CallMutex<Call<T>>>,
+    call:                          Arc<CallMutex<Call<T>>>,
     /// Injects events into the [ConnectionStateMachine](../call_fsm/struct.CallStateMachine.html).
-    fsm_sender:                     Sender<(Connection<T>, ConnectionEvent)>,
+    fsm_sender:                    Sender<(Connection<T>, ConnectionEvent)>,
     /// Kept around between new() and start() so we can delay the starting of the FSM
     /// but queue events that happen while starting.
-    fsm_receiver:                   Option<Receiver<(Connection<T>, ConnectionEvent)>>,
+    fsm_receiver:                  Option<Receiver<(Connection<T>, ConnectionEvent)>>,
     /// Unique 64-bit number identifying the call.
-    call_id:                        CallId,
+    call_id:                       CallId,
     /// Device ID of the remote device.
-    remote_feature_level:           Arc<CallMutex<FeatureLevel>>,
+    remote_feature_level:          Arc<CallMutex<FeatureLevel>>,
     /// Connection ID, identifying the call and remote_device.
-    connection_id:                  ConnectionId,
+    connection_id:                 ConnectionId,
     /// The call direction, inbound or outbound.
-    direction:                      CallDirection,
+    direction:                     CallDirection,
     /// The current state of the call connection
-    state:                          Arc<CallMutex<ConnectionState>>,
+    state:                         Arc<CallMutex<ConnectionState>>,
     /// Execution context for the call connection FSM
-    context:                        Arc<CallMutex<Context>>,
+    context:                       Arc<CallMutex<Context>>,
     /// Ancillary WebRTC data.
-    webrtc:                         Arc<CallMutex<WebRtcData<T>>>,
+    webrtc:                        Arc<CallMutex<WebRtcData<T>>>,
     /// Local ICE candidates waiting to be sent over signaling.
-    buffered_local_ice_candidates:  Arc<CallMutex<Vec<signaling::IceCandidate>>>,
-    /// Remote ICE candidates waiting to be added to the PeerConnection.
-    buffered_remote_ice_candidates: Arc<CallMutex<Vec<signaling::IceCandidate>>>,
+    buffered_local_ice_candidates: Arc<CallMutex<Vec<signaling::IceCandidate>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
-    terminate_condvar:              Arc<(Mutex<bool>, Condvar)>,
+    terminate_condvar:             Arc<(Mutex<bool>, Condvar)>,
     /// This is write-once configuration and will not change.
-    connection_type:                ConnectionType,
+    connection_type:               ConnectionType,
     /// Execution context for the connection periodic timer tick
-    tick_context:                   Arc<CallMutex<TickContext>>,
+    tick_context:                  Arc<CallMutex<TickContext>>,
     /// The accumulated state of sending messages over the data channel
-    accumulated_dcm_state:          Arc<CallMutex<protobuf::data_channel::Data>>,
+    accumulated_dcm_state:         Arc<CallMutex<protobuf::data_channel::Data>>,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -369,25 +367,24 @@ where
 {
     fn clone(&self) -> Self {
         Connection {
-            call:                           Arc::clone(&self.call),
-            fsm_sender:                     self.fsm_sender.clone(),
+            call:                          Arc::clone(&self.call),
+            fsm_sender:                    self.fsm_sender.clone(),
             // Clones shouldn't need the Receiver because it's only used
             // for the one reference that is used by the creator between
             // creation and starting.
-            fsm_receiver:                   None,
-            call_id:                        self.call_id,
-            remote_feature_level:           Arc::clone(&self.remote_feature_level),
-            connection_id:                  self.connection_id,
-            direction:                      self.direction,
-            state:                          Arc::clone(&self.state),
-            context:                        Arc::clone(&self.context),
-            webrtc:                         Arc::clone(&self.webrtc),
-            buffered_local_ice_candidates:  Arc::clone(&self.buffered_local_ice_candidates),
-            buffered_remote_ice_candidates: Arc::clone(&self.buffered_remote_ice_candidates),
-            terminate_condvar:              Arc::clone(&self.terminate_condvar),
-            connection_type:                self.connection_type,
-            tick_context:                   Arc::clone(&self.tick_context),
-            accumulated_dcm_state:          Arc::clone(&self.accumulated_dcm_state),
+            fsm_receiver:                  None,
+            call_id:                       self.call_id,
+            remote_feature_level:          Arc::clone(&self.remote_feature_level),
+            connection_id:                 self.connection_id,
+            direction:                     self.direction,
+            state:                         Arc::clone(&self.state),
+            context:                       Arc::clone(&self.context),
+            webrtc:                        Arc::clone(&self.webrtc),
+            buffered_local_ice_candidates: Arc::clone(&self.buffered_local_ice_candidates),
+            terminate_condvar:             Arc::clone(&self.terminate_condvar),
+            connection_type:               self.connection_type,
+            tick_context:                  Arc::clone(&self.tick_context),
+            accumulated_dcm_state:         Arc::clone(&self.accumulated_dcm_state),
         }
     }
 }
@@ -439,10 +436,6 @@ where
             buffered_local_ice_candidates: Arc::new(CallMutex::new(
                 Vec::new(),
                 "buffered_local_ice_candidates",
-            )),
-            buffered_remote_ice_candidates: Arc::new(CallMutex::new(
-                Vec::new(),
-                "buffered_remote_ice_candidates",
             )),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             connection_type,
@@ -507,12 +500,10 @@ where
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
             let v4_offer = offer.to_v4(local_public_key.as_bytes().to_vec())?;
             let v2_offer_sdp = offer.to_sdp()?;
-            let v1_offer_sdp = offer.replace_rtp_data_channels_with_sctp()?.to_sdp()?;
+
             info!(
-                "Using V4 signaling for outgoing connection offer: {:?} SDP: {} original SDP: {}",
-                v4_offer,
-                v4_to_sdp_without_srtp_keys(&v4_offer)?,
-                v2_offer_sdp
+                "Using V4/3/2 signaling for outgoing offer: {:?} SDP: {}",
+                v4_offer, v2_offer_sdp
             );
 
             // The only purpose of this is to start gathering ICE candidates.
@@ -522,12 +513,11 @@ where
             peer_connection.set_local_description(observer.as_ref(), offer);
             observer.get_result()?;
 
-            let offer = signaling::Offer::from_v4_and_v3_and_v2_and_v1(
+            let offer = signaling::Offer::from_v4_and_v3_and_v2(
                 call_media_type,
                 local_public_key.as_bytes().to_vec(),
                 Some(v4_offer),
                 v2_offer_sdp,
-                v1_offer_sdp,
             )?;
 
             self.set_state(ConnectionState::IceGathering)?;
@@ -575,20 +565,20 @@ where
                 {
                     let offer = SessionDescription::offer_from_v4(&v4_offer)?;
                     let answer = SessionDescription::answer_from_v4(&v4_answer)?;
-                    info!(
-                        "Using V4 signaling for outgoing connection answer: {:?} SDP: {}",
-                        v4_answer,
-                        v4_to_sdp_without_srtp_keys(&v4_answer)?
-                    );
+
+                    info!("Using V4 signaling for incoming answer: {:?}", v4_answer);
+
                     (offer, answer, v4_answer.public_key)
                 } else {
-                    let (answer_is_v3_or_v2, answer_sdp, remote_public_key) =
-                        received.answer.to_v3_or_v2_or_v1_sdp()?;
-                    let offer_sdp = if answer_is_v3_or_v2 {
-                        offer.to_v3_or_v2_sdp()?
+                    let (answer_sdp, remote_public_key) = received.answer.to_v3_or_v2_params()?;
+                    let offer_sdp = offer.to_v3_or_v2_sdp()?;
+
+                    if remote_public_key.is_some() {
+                        info!("Using V3 signaling for incoming answer: {}", offer_sdp);
                     } else {
-                        offer.to_v1_sdp()?
-                    };
+                        info!("Using V2 signaling for incoming answer: {}", offer_sdp);
+                    }
+
                     let offer = SessionDescription::offer_from_sdp(offer_sdp)?;
                     let answer = SessionDescription::answer_from_sdp(answer_sdp)?;
                     (offer, answer, remote_public_key)
@@ -664,22 +654,23 @@ where
             let peer_connection = webrtc.peer_connection()?;
 
             let v4_offer = received.offer.to_v4();
-            let (mut offer, offer_is_v3_or_v2, remote_public_key) =
-                if let Some(v4_offer) = v4_offer.as_ref() {
-                    info!(
-                        "Using V4 signaling for incoming connection offer: {:?} SDP: {}",
-                        v4_offer,
-                        v4_to_sdp_without_srtp_keys(&v4_offer)?
-                    );
-                    let offer_is_v3_or_v2 = false;
-                    let offer = SessionDescription::offer_from_v4(&v4_offer)?;
-                    (offer, offer_is_v3_or_v2, v4_offer.public_key.clone())
+            let (mut offer, remote_public_key) = if let Some(v4_offer) = v4_offer.as_ref() {
+                info!("Using V4 signaling for incoming offer: {:?}", v4_offer);
+
+                let offer = SessionDescription::offer_from_v4(&v4_offer)?;
+                (offer, v4_offer.public_key.clone())
+            } else {
+                let (offer_sdp, remote_public_key) = received.offer.to_v3_or_v2_params()?;
+
+                if remote_public_key.is_some() {
+                    info!("Using V3 signaling for incoming offer: {}", offer_sdp);
                 } else {
-                    let (offer_is_v3_or_v2, offer_sdp, remote_public_key) =
-                        received.offer.to_v3_or_v2_or_v1_sdp()?;
-                    let offer = SessionDescription::offer_from_sdp(offer_sdp)?;
-                    (offer, offer_is_v3_or_v2, remote_public_key)
-                };
+                    info!("Using V2 signaling for incoming offer: {}", offer_sdp);
+                }
+
+                let offer = SessionDescription::offer_from_sdp(offer_sdp)?;
+                (offer, remote_public_key)
+            };
 
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
             let answer_key = match remote_public_key {
@@ -717,11 +708,8 @@ where
 
             let answer_to_send = if v4_offer.is_some() {
                 let v4_answer = answer.to_v4(local_public_key.as_bytes().to_vec())?;
-                info!(
-                    "Using V4 signaling for incoming connection answer: {:?} SDP: {}",
-                    v4_answer,
-                    v4_to_sdp_without_srtp_keys(&v4_answer)?
-                );
+
+                info!("Using V4 signaling for outgoing answer: {:?}", v4_answer);
 
                 // We have to change the local answer to match what we send back
                 answer = SessionDescription::answer_from_v4(&v4_answer)?;
@@ -730,15 +718,15 @@ where
                     answer.disable_dtls_and_set_srtp_key(answer_key)?;
                 }
                 signaling::Answer::from_v4(v4_answer)?
-            } else if offer_is_v3_or_v2 {
+            } else {
                 let answer_sdp = answer.to_sdp()?;
+
+                info!("Using V3/2 signaling for outgoing answer: {}", answer_sdp);
+
                 signaling::Answer::from_v3_and_v2_sdp(
                     local_public_key.as_bytes().to_vec(),
                     answer_sdp,
                 )?
-            } else {
-                let answer_sdp = answer.to_sdp()?;
-                signaling::Answer::from_v1_sdp(answer_sdp)?
             };
 
             // Don't enable incoming RTP until accepted.
@@ -748,6 +736,7 @@ where
 
             let observer = create_ssd_observer();
             peer_connection.set_local_description(observer.as_ref(), answer);
+
             // on_ice_connected can happen while SetLocalDescription is happening.
             // But it won't be processed until start_fsm() is called below.
             observer.get_result()?;
@@ -857,6 +846,7 @@ where
         webrtc.data_channel = Some(dc);
         Ok(())
     }
+
     /// Set the incoming media.
     pub fn set_incoming_media(
         &self,
@@ -1100,12 +1090,6 @@ where
 
     /// Buffer local ICE candidates, and maybe send them immediately
     pub fn buffer_local_ice_candidate(&self, candidate: signaling::IceCandidate) -> Result<()> {
-        info!(
-            "Local ICE candidate: {}; {}",
-            candidate.to_info_string(),
-            candidate.to_redacted_string()
-        );
-
         let num_ice_candidates = {
             let mut buffered_local_ice_candidates = self.buffered_local_ice_candidates.lock()?;
             buffered_local_ice_candidates.push(candidate);
@@ -1124,23 +1108,6 @@ where
         Ok(())
     }
 
-    /// Buffer remote ICE candidates.
-    pub fn buffer_remote_ice_candidates(
-        &self,
-        ice_candidates: Vec<signaling::IceCandidate>,
-    ) -> Result<()> {
-        let mut pending_ice_candidates = self.buffered_remote_ice_candidates.lock()?;
-        for ice_candidate in ice_candidates {
-            info!(
-                "Remote ICE candidate: {}; {}",
-                ice_candidate.to_info_string(),
-                ice_candidate.to_redacted_string()
-            );
-            pending_ice_candidates.push(ice_candidate);
-        }
-        Ok(())
-    }
-
     /// Get the current local ICE candidates to send to the remote peer.
     pub fn take_buffered_local_ice_candidates(&self) -> Result<Vec<signaling::IceCandidate>> {
         info!("take_buffered_local_ice_candidates():");
@@ -1149,11 +1116,6 @@ where
 
         let copy_candidates = ice_candidates.clone();
         ice_candidates.clear();
-
-        info!(
-            "take_buffered_local_ice_candidates(): Local ICE candidates length: {}",
-            copy_candidates.len()
-        );
 
         Ok(copy_candidates)
     }
@@ -1248,12 +1210,7 @@ where
         F: FnOnce(&mut protobuf::data_channel::Data),
     {
         if let Some(data_channel) = data_channel {
-            let message = if data_channel.reliable() {
-                // Just send this one message by itself
-                let mut single = protobuf::data_channel::Data::default();
-                populate(&mut single);
-                single
-            } else {
+            let message = {
                 // Merge this message into accumulated_state and send out the latest version.
                 let mut state = self.accumulated_dcm_state.lock()?;
                 populate(&mut state);
@@ -1273,17 +1230,12 @@ where
         data_channel: Option<&DataChannel>,
     ) -> Result<()> {
         if let Some(data_channel) = data_channel {
-            if data_channel.reliable() {
-                // Reliable data channels handle retransmissions internally.
-                Ok(())
+            let data = self.accumulated_dcm_state.lock()?;
+            if *data != protobuf::data_channel::Data::default() {
+                self.send_via_data_channel(data_channel, &data)
             } else {
-                let data = self.accumulated_dcm_state.lock()?;
-                if *data != protobuf::data_channel::Data::default() {
-                    self.send_via_data_channel(data_channel, &data)
-                } else {
-                    // Don't send empty messages
-                    Ok(())
-                }
+                // Don't send empty messages
+                Ok(())
             }
         } else {
             Ok(())
@@ -1485,10 +1437,18 @@ where
         &mut self,
         candidate: signaling::IceCandidate,
         force_send: bool,
+        sdp_for_logging: &str,
     ) -> Result<()> {
         if !force_send && self.connection_type == ConnectionType::OutgoingChild {
             return Ok(());
         }
+
+        info!(
+            "Local ICE candidate: {}; {}",
+            candidate.to_info_string(),
+            redact_string(sdp_for_logging)
+        );
+
         self.inject_event(ConnectionEvent::LocalIceCandidate(candidate))?;
         Ok(())
     }
@@ -1811,9 +1771,10 @@ where
     fn handle_ice_candidate_gathered(
         &mut self,
         ice_candidate: signaling::IceCandidate,
+        sdp_for_logging: &str,
     ) -> Result<()> {
         let force_send = false;
-        self.inject_local_ice_candidate(ice_candidate, force_send)
+        self.inject_local_ice_candidate(ice_candidate, force_send, sdp_for_logging)
     }
 
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()> {
@@ -1911,17 +1872,4 @@ pub fn clamp<T: PartialOrd>(val: T, min: T, max: T) -> T {
         return max;
     }
     val
-}
-
-fn v4_to_sdp_without_srtp_keys(v4: &protobuf::signaling::ConnectionParametersV4) -> Result<String> {
-    let mut session_description = SessionDescription::offer_from_v4(&v4)?;
-    // Clearing the keys isn't necessary because offer_from_v4 doesn't set them anyway.
-    // So we're being really overly careful here clearing something that shouldn't be there.
-    let key = SrtpKey {
-        suite: SrtpCryptoSuite::AeadAes256Gcm,
-        key:   Vec::new(),
-        salt:  Vec::new(),
-    };
-    session_description.disable_dtls_and_set_srtp_key(&key)?;
-    Ok(session_description.to_sdp()?)
 }

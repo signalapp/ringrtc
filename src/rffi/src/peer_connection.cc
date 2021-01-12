@@ -83,42 +83,6 @@ Rust_offerFromSdp(const char* sdp) {
   return createSessionDescriptionInterface(SdpType::kOffer, sdp);
 }
 
-RUSTEXPORT webrtc::SessionDescriptionInterface* 
-Rust_replaceRtpDataChannelsWithSctp(const webrtc::SessionDescriptionInterface* session_description) {
-  if (!session_description) {
-    return nullptr;
-  }
-
-  auto clone = CloneSessionDescription(session_description);
-
-  std::string rtp_data_mid;
-  cricket::SessionDescription* session = clone->description();
-  for (const cricket::ContentInfo& content : session->contents()) {
-    if (content.type == cricket::MediaProtocolType::kRtp && 
-        content.media_description() && content.media_description()->type() == cricket::MEDIA_TYPE_DATA) {
-      rtp_data_mid = content.mid();
-      break;
-    }
-  }
-  if (rtp_data_mid.empty()) {
-    // Couldn't find any RTP data channel, so nothing to change.
-    return clone.release();
-  }
-
-  session->RemoveContentByName(rtp_data_mid);
-
-  // Mirror MediaSessionDescriptionFactory::AddSctpDataContentForOffer
-  auto sctp = std::make_unique<cricket::SctpDataContentDescription>();
-  sctp->set_protocol(cricket::kMediaProtocolUdpDtlsSctp);
-  sctp->set_use_sctpmap(false);
-  sctp->set_max_message_size(256 * 1024);
-  // This shouldn't really be necessary, but just in case...
-  sctp->set_rtcp_mux(true);
-  session->AddContent(rtp_data_mid, cricket::MediaProtocolType::kSctp, std::move(sctp));
-
-  return clone.release();
-}
-
 RUSTEXPORT bool
 Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* session_description,
                               int                                  crypto_suite,

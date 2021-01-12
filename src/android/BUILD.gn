@@ -38,7 +38,6 @@ if (is_android) {
       "api/org/signal/ringrtc/Connection.java",
       "api/org/signal/ringrtc/GroupCall.java",
       "api/org/signal/ringrtc/HttpHeader.java",
-      "api/org/signal/ringrtc/IceCandidate.java",
       "api/org/signal/ringrtc/Log.java",
       "api/org/signal/ringrtc/PeekInfo.java",
       "api/org/signal/ringrtc/Remote.java",

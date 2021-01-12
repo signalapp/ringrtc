@@ -1928,12 +1928,6 @@ where
                 format!("send_offer()\t{}\t{}", call_id, offer.to_info_string())
             );
 
-            info!(
-                "call_id: {}, TX offer:\n{}",
-                call_id,
-                offer.to_redacted_string()
-            );
-
             let remote_peer = call.remote_peer()?;
 
             if connection.can_send_messages() {
@@ -1973,12 +1967,6 @@ where
                     call_id,
                     send.answer.to_info_string()
                 )
-            );
-
-            info!(
-                "call_id: {}, TX answer:\n{}",
-                call_id,
-                send.answer.to_redacted_string(),
             );
 
             let remote_peer = call.remote_peer()?;

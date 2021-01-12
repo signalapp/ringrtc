@@ -10,9 +10,9 @@ import SignalCoreKit
 protocol CallManagerInterfaceDelegate: class {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?, callMediaType: CallMediaType)
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?)
-    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate])
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType)
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data)
+    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [Data])
     func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool)
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
     func sendCallMessage(recipientUuid: UUID, message: Data)
@@ -108,23 +108,23 @@ class CallManagerInterface {
         }
     }
 
-    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?, callMediaType: CallMediaType) {
+    func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque, sdp: sdp, callMediaType: callMediaType)
+        delegate.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque, callMediaType: callMediaType)
     }
 
-    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data?, sdp: String?) {
+    func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque, sdp: sdp)
+        delegate.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque)
     }
 
-    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [CallManagerIceCandidate]) {
+    func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [Data]) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
@@ -320,7 +320,7 @@ func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: U
     obj.onEvent(remote: remote, event: event)
 }
 
-func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, sdp: AppByteSlice, mediaType: Int32) {
+func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, mediaType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -336,6 +336,11 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
     var destinationDeviceId: UInt32? = destinationDeviceId
     if broadcast {
         destinationDeviceId = nil
+    }
+
+    guard let opaque = opaque.asData() else {
+        owsFailDebug("opaque was unexpectedly nil")
+        return
     }
 
     let callMediaType: CallMediaType
@@ -346,10 +351,10 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
         return
     }
 
-    obj.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque.asData(), sdp: sdp.asString(), callMediaType: callMediaType)
+    obj.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque, callMediaType: callMediaType)
 }
 
-func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, sdp: AppByteSlice) {
+func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -367,7 +372,12 @@ func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: 
         destinationDeviceId = nil
     }
 
-    obj.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque.asData(), sdp: sdp.asString())
+    guard let opaque = opaque.asData() else {
+        owsFailDebug("opaque was unexpectedly nil")
+        return
+    }
+
+    obj.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque)
 }
 
 func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, candidates: UnsafePointer<AppIceCandidateArray>?) {
@@ -390,13 +400,14 @@ func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, c
     let iceCandidates = UnsafePointer<AppIceCandidateArray>(candidates)
     let count = iceCandidates.pointee.count
 
-    // Form the application level Ice Candidate array with
-    // copies of all strings before returning.
-    var finalCandidates: [CallManagerIceCandidate] = []
+    var finalCandidates: [Data] = []
 
     for index in 0..<count {
-        let iceCandidate = iceCandidates.pointee.candidates[index]
-        finalCandidates.append(CallManagerIceCandidate(opaque: iceCandidate.opaque.asData(), sdp: iceCandidate.sdp.asString()))
+        guard let iceCandidate = iceCandidates.pointee.candidates[index].asData() else {
+            continue
+        }
+
+        finalCandidates.append(iceCandidate)
     }
 
     // If we will broadcast this message, ignore the deviceId.

@@ -325,8 +325,6 @@ public final class GroupCall {
      * @param localSink      the sink to associate with the video track
      * @param cameraControl  the camera that will be used to capture video
      *
-     * @throws CallException for native code failures
-     *
      */	
     public void setOutgoingVideoSource(@NonNull VideoSink     localSink,
                                        @NonNull CameraControl cameraControl)

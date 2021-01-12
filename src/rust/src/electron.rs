@@ -513,19 +513,11 @@ declare_types! {
             let call_id = CallId::new(get_id_arg(&mut cx, 4));
             let offer_type = cx.argument::<JsNumber>(5)?.value() as i32;
             let sender_supports_multi_ring = cx.argument::<JsBoolean>(6)?.value();
-            let opaque = cx.argument::<JsValue>(7)?.as_value(&mut cx);
-            let sdp = cx.argument::<JsValue>(8)?.as_value(&mut cx);
-            let sender_identity_key = cx.argument::<JsArrayBuffer>(9)?;
-            let receiver_identity_key = cx.argument::<JsArrayBuffer>(10)?;
+            let opaque = cx.argument::<JsArrayBuffer>(7)?;
+            let sender_identity_key = cx.argument::<JsArrayBuffer>(8)?;
+            let receiver_identity_key = cx.argument::<JsArrayBuffer>(9)?;
 
-            let opaque = match opaque.downcast::<JsArrayBuffer>() {
-                Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
-                Err(_) => None,
-            };
-            let sdp = match sdp.downcast::<JsString>() {
-                Ok(handle) => Some(handle.value()),
-                Err(_) => None,
-            };
+            let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
             let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
             let receiver_identity_key = cx.borrow(&receiver_identity_key, |handle| handle.as_slice().to_vec());
 
@@ -541,7 +533,7 @@ declare_types! {
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                let offer = signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp)?;
+                let offer = signaling::Offer::new(call_media_type, opaque)?;
 
                 cm.call_manager.received_offer(peer_id, call_id, signaling::ReceivedOffer {
                     offer,
@@ -564,19 +556,11 @@ declare_types! {
             let sender_device_id = cx.argument::<JsNumber>(1)?.value() as DeviceId;
             let call_id = CallId::new(get_id_arg(&mut cx, 2));
             let sender_supports_multi_ring = cx.argument::<JsBoolean>(3)?.value();
-            let opaque = cx.argument::<JsValue>(4)?.as_value(&mut cx);
-            let sdp = cx.argument::<JsValue>(5)?.as_value(&mut cx);
-            let sender_identity_key = cx.argument::<JsArrayBuffer>(6)?;
-            let receiver_identity_key = cx.argument::<JsArrayBuffer>(7)?;
+            let opaque = cx.argument::<JsArrayBuffer>(4)?;
+            let sender_identity_key = cx.argument::<JsArrayBuffer>(5)?;
+            let receiver_identity_key = cx.argument::<JsArrayBuffer>(6)?;
 
-            let opaque = match opaque.downcast::<JsArrayBuffer>() {
-                Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
-                Err(_) => None,
-            };
-            let sdp = match sdp.downcast::<JsString>() {
-                Ok(handle) => Some(handle.value()),
-                Err(_) => None,
-            };
+            let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
             let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
             let receiver_identity_key = cx.borrow(&receiver_identity_key, |handle| handle.as_slice().to_vec());
 
@@ -588,7 +572,7 @@ declare_types! {
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                let answer = signaling::Answer::from_opaque_or_sdp(opaque, sdp)?;
+                let answer = signaling::Answer::new(opaque)?;
                 cm.call_manager.received_answer(call_id, signaling::ReceivedAnswer {
                     answer,
                     sender_device_id,
@@ -609,16 +593,9 @@ declare_types! {
 
             let mut candidates = Vec::with_capacity(js_candidates.len() as usize);
             for i in 0..js_candidates.len() {
-                let js_candidate = js_candidates.get(&mut cx, i as u32)?.downcast::<JsObject>().expect("ICE candidates");
-                let opaque = match js_candidate.get(&mut cx, "opaque")?.downcast::<JsArrayBuffer>() {
-                    Ok(handle) => Some(cx.borrow(&handle, |handle| { handle.as_slice().to_vec() })),
-                    Err(_) => None,
-                };
-                let sdp = match js_candidate.get(&mut cx, "sdp")?.downcast::<JsString>() {
-                    Ok(handle) => Some(handle.value()),
-                    Err(_) => None,
-                };
-                candidates.push(signaling::IceCandidate::from_opaque_or_sdp(opaque, sdp));
+                let js_candidate = js_candidates.get(&mut cx, i as u32)?.downcast::<JsArrayBuffer>().expect("ICE candidates");
+                let opaque = cx.borrow(&js_candidate, |handle| handle.as_slice().to_vec());
+                candidates.push(signaling::IceCandidate::new(opaque));
             }
             debug!("JsCallManager.receivedIceCandidates({}, {}, {}, {})", peer_id, sender_device_id, call_id, candidates.len());
 
@@ -1213,62 +1190,31 @@ declare_types! {
                     Event::SendSignaling(peer_id, maybe_device_id, call_id, signal) => {
                         let (method_name, data1, data2, data3) : (&str, Handle<JsValue>, Handle<JsValue>, Handle<JsValue>) = match signal {
                             signaling::Message::Offer(offer) => {
-                                let opaque = match offer.opaque {
-                                    None => cx.undefined().upcast(),
-                                    Some(opaque) => {
-                                        let mut js_opaque = cx.array_buffer(opaque.len() as u32)?;
-                                        cx.borrow_mut(&mut js_opaque, |handle| {
-                                            handle.as_mut_slice().copy_from_slice(&opaque);
-                                        });
-                                        js_opaque.upcast()
-                                    }
-                                };
-                                let sdp = match offer.sdp {
-                                    None => cx.undefined().upcast(),
-                                    Some(sdp) => cx.string(sdp).upcast(),
-                                };
-                                ("onSendOffer", cx.number(offer.call_media_type as i32).upcast(), opaque, sdp)
+                                let mut js_opaque = cx.array_buffer(offer.opaque.len() as u32)?;
+                                cx.borrow_mut(&mut js_opaque, |handle| {
+                                    handle.as_mut_slice().copy_from_slice(&offer.opaque);
+                                });
+                                ("onSendOffer", cx.number(offer.call_media_type as i32).upcast(), js_opaque.upcast(), cx.undefined().upcast())
                             },
                             signaling::Message::Answer(answer) => {
-                                let opaque = match answer.opaque {
-                                    None => cx.undefined().upcast(),
-                                    Some(opaque) => {
-                                        let mut js_opaque = cx.array_buffer(opaque.len() as u32)?;
-                                        cx.borrow_mut(&mut js_opaque, |handle| {
-                                            handle.as_mut_slice().copy_from_slice(&opaque);
-                                        });
-                                        js_opaque.upcast()
-                                    }
-                                };
-                                let sdp = match answer.sdp {
-                                    None => cx.undefined().upcast(),
-                                    Some(sdp) => cx.string(sdp).upcast(),
-                                };
-
-                                ("onSendAnswer", opaque, sdp, cx.undefined().upcast())
+                                let mut js_opaque = cx.array_buffer(answer.opaque.len() as u32)?;
+                                cx.borrow_mut(&mut js_opaque, |handle| {
+                                    handle.as_mut_slice().copy_from_slice(&answer.opaque);
+                                });
+                                ("onSendAnswer", js_opaque.upcast(), cx.undefined().upcast(), cx.undefined().upcast())
                             },
                             signaling::Message::Ice(ice) => {
                                 let js_candidates = JsArray::new(&mut cx, ice.candidates_added.len() as u32);
                                 for (i, candidate) in ice.candidates_added.iter().enumerate() {
-                                    let opaque: neon::handle::Handle<JsValue> = match &candidate.opaque {
-                                        None => cx.undefined().upcast(),
-                                        Some(opaque) => {
-                                            let mut js_opaque = cx.array_buffer(opaque.len() as u32)?;
-                                            cx.borrow_mut(&mut js_opaque, |handle| {
-                                                handle.as_mut_slice().copy_from_slice(opaque);
-                                            });
-                                            js_opaque.upcast()
-                                        },
-                                    };
-                                    let sdp: neon::handle::Handle<JsValue> = match &candidate.sdp {
-                                        None => cx.undefined().upcast(),
-                                        Some(sdp) => cx.string(sdp).upcast(),
+                                    let opaque: neon::handle::Handle<JsValue> = {
+                                        let mut js_opaque = cx.array_buffer(candidate.opaque.len() as u32)?;
+                                        cx.borrow_mut(&mut js_opaque, |handle| {
+                                            handle.as_mut_slice().copy_from_slice(candidate.opaque.as_ref());
+                                        });
+                                        js_opaque.upcast()
                                     };
 
-                                    let js_candidate = cx.empty_object();
-                                    js_candidate.set(&mut cx, "opaque", opaque)?;
-                                    js_candidate.set(&mut cx, "sdp", sdp)?;
-                                    js_candidates.set(&mut cx, i as u32, js_candidate)?;
+                                    js_candidates.set(&mut cx, i as u32, opaque)?;
                                 }
                                 ("onSendIceCandidates", js_candidates.upcast(), cx.undefined().upcast(), cx.undefined().upcast())
                             }

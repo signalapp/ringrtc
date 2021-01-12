@@ -175,7 +175,9 @@ impl Platform for SimPlatform {
     ) -> Result<()> {
         info!(
             "on_send_offer(): remote_peer: {}, call_id: {}, offer: {}",
-            remote_peer, call_id, offer
+            remote_peer,
+            call_id,
+            offer.to_info_string()
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {
@@ -199,7 +201,10 @@ impl Platform for SimPlatform {
     ) -> Result<()> {
         info!(
             "on_send_answer(): remote_peer: {}, call_id: {}, receiver_device_id: {}, answer: {}",
-            remote_peer, call_id, send.receiver_device_id, send.answer
+            remote_peer,
+            call_id,
+            send.receiver_device_id,
+            send.answer.to_info_string()
         );
 
         if self.force_internal_fault.load(Ordering::Acquire) {

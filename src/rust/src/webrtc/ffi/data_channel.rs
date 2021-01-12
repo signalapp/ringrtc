@@ -16,6 +16,4 @@ extern "C" {
         len: size_t,
         binary: bool,
     ) -> bool;
-
-    pub fn Rust_dataChannelIsReliable(data_channel: *const RffiDataChannel) -> bool;
 }

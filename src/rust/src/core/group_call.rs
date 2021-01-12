@@ -2413,6 +2413,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
     fn handle_ice_candidate_gathered(
         &mut self,
         _ice_candidate: signaling::IceCandidate,
+        _sdp_for_logging: &str,
     ) -> Result<()> {
         Ok(())
     }

@@ -19,9 +19,3 @@ pub unsafe fn Rust_dataChannelSend(
     info!("Rust_dataChannelSend(): ");
     true
 }
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_dataChannelIsReliable(_data_channel: *const RffiDataChannel) -> bool {
-    info!("Rust_dataChannelIsReliable(): ");
-    false
-}

@@ -123,7 +123,6 @@ pub fn received_answer(
     call_id: u64,
     sender_device_id: DeviceId,
     opaque: Option<Vec<u8>>,
-    sdp: Option<String>,
     sender_device_feature_level: FeatureLevel,
     sender_identity_key: Option<Vec<u8>>,
     receiver_identity_key: Option<Vec<u8>>,
@@ -135,6 +134,17 @@ pub fn received_answer(
         "received_answer(): call_id: {} sender_device_id: {}",
         call_id, sender_device_id
     );
+
+    let opaque = match opaque {
+        Some(v) => v,
+        None => {
+            return Err(RingRtcError::OptionValueNotSet(
+                "received_answer()".to_owned(),
+                "opaque".to_owned(),
+            )
+            .into());
+        }
+    };
 
     let sender_identity_key = match sender_identity_key {
         Some(v) => v,
@@ -161,7 +171,7 @@ pub fn received_answer(
     call_manager.received_answer(
         call_id,
         signaling::ReceivedAnswer {
-            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp)?,
+            answer: signaling::Answer::new(opaque)?,
             sender_device_id,
             sender_device_feature_level,
             sender_identity_key,
@@ -178,7 +188,6 @@ pub fn received_offer(
     remote_peer: *const c_void,
     sender_device_id: DeviceId,
     opaque: Option<Vec<u8>>,
-    sdp: Option<String>,
     age_sec: u64,
     call_media_type: CallMediaType,
     receiver_device_id: DeviceId,
@@ -195,6 +204,17 @@ pub fn received_offer(
         "received_offer(): call_id: {} remote_device_id: {}",
         call_id, sender_device_id
     );
+
+    let opaque = match opaque {
+        Some(v) => v,
+        None => {
+            return Err(RingRtcError::OptionValueNotSet(
+                "received_offer()".to_owned(),
+                "opaque".to_owned(),
+            )
+            .into());
+        }
+    };
 
     let sender_identity_key = match sender_identity_key {
         Some(v) => v,
@@ -222,7 +242,7 @@ pub fn received_offer(
         remote_peer,
         call_id,
         signaling::ReceivedOffer {
-            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp)?,
+            offer: signaling::Offer::new(call_media_type, opaque)?,
             age: Duration::from_secs(age_sec),
             sender_device_id,
             sender_device_feature_level,

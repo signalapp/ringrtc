@@ -34,9 +34,6 @@ Rust_answerFromSdp(const char* sdp);
 RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_offerFromSdp(const char* sdp);
 
-RUSTEXPORT webrtc::SessionDescriptionInterface*
-Rust_replaceRtpDataChannelsWithSctp(const webrtc::SessionDescriptionInterface* session_description);
-
 RUSTEXPORT bool
 Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* session_description,
                               int                                  crypto_suite,

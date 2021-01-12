@@ -18,6 +18,7 @@ use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
+
 use crate::common::{
     BandwidthMode,
     CallId,
@@ -31,7 +32,7 @@ use crate::core::call_manager::CallManager;
 use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 use crate::core::{group_call, signaling};
-
+use crate::error::RingRtcError;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
@@ -203,35 +204,34 @@ pub fn received_answer(
     call_id: jlong,
     sender_device_id: DeviceId,
     opaque: jbyteArray,
-    sdp: JString,
     sender_device_feature_level: FeatureLevel,
     sender_identity_key: jbyteArray,
     receiver_identity_key: jbyteArray,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let opaque = if opaque.is_null() {
-        None
-    } else {
-        Some(env.convert_byte_array(opaque)?)
-    };
-    let sdp = if sdp.is_null() {
-        None
-    } else {
-        Some(env.get_string(sdp)?.into())
-    };
 
     info!(
         "received_answer(): call_id: {} sender_device_id: {}",
         call_id, sender_device_id
     );
 
+    let opaque = if opaque.is_null() {
+        return Err(RingRtcError::OptionValueNotSet(
+            "received_answer()".to_owned(),
+            "opaque".to_owned(),
+        )
+        .into());
+    } else {
+        env.convert_byte_array(opaque)?
+    };
+
     let sender_identity_key = env.convert_byte_array(sender_identity_key)?;
     let receiver_identity_key = env.convert_byte_array(receiver_identity_key)?;
     call_manager.received_answer(
         call_id,
         signaling::ReceivedAnswer {
-            answer: signaling::Answer::from_opaque_or_sdp(opaque, sdp)?,
+            answer: signaling::Answer::new(opaque)?,
             sender_device_id,
             sender_device_feature_level,
             sender_identity_key,
@@ -249,7 +249,6 @@ pub fn received_offer(
     remote_peer: JObject,
     sender_device_id: DeviceId,
     opaque: jbyteArray,
-    sdp: JString,
     age_sec: u64,
     call_media_type: CallMediaType,
     receiver_device_id: DeviceId,
@@ -261,21 +260,21 @@ pub fn received_offer(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
     let remote_peer = env.new_global_ref(remote_peer)?;
-    let opaque = if opaque.is_null() {
-        None
-    } else {
-        Some(env.convert_byte_array(opaque)?)
-    };
-    let sdp = if sdp.is_null() {
-        None
-    } else {
-        Some(env.get_string(sdp)?.into())
-    };
 
     info!(
         "received_offer(): call_id: {} sender_device_id: {}",
         call_id, sender_device_id
     );
+
+    let opaque = if opaque.is_null() {
+        return Err(RingRtcError::OptionValueNotSet(
+            "received_offer()".to_owned(),
+            "opaque".to_owned(),
+        )
+        .into());
+    } else {
+        env.convert_byte_array(opaque)?
+    };
 
     let sender_identity_key = env.convert_byte_array(sender_identity_key)?;
     let receiver_identity_key = env.convert_byte_array(receiver_identity_key)?;
@@ -283,7 +282,7 @@ pub fn received_offer(
         remote_peer,
         call_id,
         signaling::ReceivedOffer {
-            offer: signaling::Offer::from_opaque_or_sdp(call_media_type, opaque, sdp)?,
+            offer: signaling::Offer::new(call_media_type, opaque)?,
             age: Duration::from_secs(age_sec),
             sender_device_id,
             sender_device_feature_level,
@@ -301,48 +300,31 @@ pub fn received_ice(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     sender_device_id: DeviceId,
-    jni_candidates: JObject,
+    candidates: JObject,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
 
-    // Convert Java list of IceCandidate into Rust Vector of IceCandidate
-    let jni_candidate_list = env.get_list(jni_candidates)?;
-    let mut signaling_candidates = Vec::new();
-    for jni_candidate in jni_candidate_list.iter()? {
-        const OPAQUE_FIELD: &str = "opaque";
-        const BYTES_TYPE: &str = "[B";
-        let opaque = jni_get_field(&env, jni_candidate, OPAQUE_FIELD, BYTES_TYPE)?.l()?;
-        let opaque = if opaque.is_null() {
-            None
-        } else {
-            Some(env.convert_byte_array(opaque.into_inner())?)
-        };
-
-        const SDP_FIELD: &str = "sdp";
-        const STRING_TYPE: &str = "Ljava/lang/String;";
-        let sdp = jni_get_field(&env, jni_candidate, SDP_FIELD, STRING_TYPE)?.l()?;
-        let sdp = if sdp.is_null() {
-            None
-        } else {
-            Some(env.get_string(JString::from(sdp))?.into())
-        };
-
-        signaling_candidates.push(signaling::IceCandidate::from_opaque_or_sdp(opaque, sdp));
+    // Convert Java list of byte[] into Rust Vector of IceCandidate
+    let jni_ice_candidates = env.get_list(candidates)?;
+    let mut ice_candidates = Vec::new();
+    for jni_ice_candidate in jni_ice_candidates.iter()? {
+        let opaque = env.convert_byte_array(*jni_ice_candidate)?;
+        ice_candidates.push(signaling::IceCandidate::new(opaque));
     }
 
     info!(
         "received_ice(): call_id: {} sender_device_id: {} candidates: {}",
         call_id,
         sender_device_id,
-        signaling_candidates.len()
+        ice_candidates.len()
     );
 
     call_manager.received_ice(
         call_id,
         signaling::ReceivedIce {
             ice: signaling::Ice {
-                candidates_added: signaling_candidates,
+                candidates_added: ice_candidates,
             },
             sender_device_id,
         },

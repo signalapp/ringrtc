@@ -57,6 +57,7 @@ pub trait PeerConnectionObserverTrait {
     fn handle_ice_candidate_gathered(
         &mut self,
         ice_candidate: signaling::IceCandidate,
+        sdp_for_logging: &str,
     ) -> Result<()>;
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()>;
 
@@ -130,11 +131,11 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
                 .to_string_lossy()
                 .into_owned()
         };
-        // ICE candidates are the same for V1 and V2, so this works for V1 as well.
-        let ice_candidate = signaling::IceCandidate::from_v3_and_v2_and_v1_sdp(sdp);
+        // ICE candidates are the same for V2 and V3 and V4.
+        let ice_candidate = signaling::IceCandidate::from_v3_and_v2_sdp(sdp.clone());
         if let Ok(ice_candidate) = ice_candidate {
             observer
-                .handle_ice_candidate_gathered(ice_candidate)
+                .handle_ice_candidate_gathered(ice_candidate, sdp.as_str())
                 .unwrap_or_else(|e| error!("Problems handling ice candidate: {}", e));
         } else {
             warn!("Failed to handle local ICE candidate SDP");

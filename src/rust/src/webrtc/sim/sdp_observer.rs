@@ -91,14 +91,6 @@ pub unsafe fn Rust_answerFromSdp(_sdp: *const c_char) -> *mut RffiSessionDescrip
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_replaceRtpDataChannelsWithSctp(
-    _session_description: *const RffiSessionDescription,
-) -> *mut RffiSessionDescription {
-    info!("Rust_replaceRtpDataChannelsWithSctp(): ");
-    &mut FAKE_SDP
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
     _session_description: *mut RffiSessionDescription,
     _crypto_suite: SrtpCryptoSuite,

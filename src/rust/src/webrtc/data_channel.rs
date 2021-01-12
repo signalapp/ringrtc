@@ -25,8 +25,7 @@ use crate::webrtc::peer_connection::RffiDataChannel;
 
 /// Rust wrapper around WebRTC C++ DataChannel object.
 pub struct DataChannel {
-    rffi:     *const RffiDataChannel,
-    reliable: bool,
+    rffi: *const RffiDataChannel,
 }
 
 impl Debug for DataChannel {
@@ -51,9 +50,7 @@ impl DataChannel {
     ///
     /// Create a new Rust DataChannel object from a WebRTC C++ DataChannel object.
     pub unsafe fn new(rffi: *const RffiDataChannel) -> Self {
-        let reliable = dc::Rust_dataChannelIsReliable(rffi);
-        info!("data channel is reliable: {}", reliable);
-        Self { rffi, reliable }
+        Self { rffi }
     }
 
     /// Free resources related to the DataChannel object.
@@ -62,10 +59,6 @@ impl DataChannel {
             ref_count::release_ref(self.rffi as CppObject);
             self.rffi = ptr::null();
         }
-    }
-
-    pub fn reliable(&self) -> bool {
-        self.reliable
     }
 
     /// Send data via the DataChannel.

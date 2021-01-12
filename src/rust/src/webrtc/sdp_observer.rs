@@ -133,14 +133,6 @@ impl SessionDescription {
         Ok(SessionDescription::new(offer))
     }
 
-    pub fn replace_rtp_data_channels_with_sctp(&self) -> Result<Self> {
-        let rffi = unsafe { sdp::Rust_replaceRtpDataChannelsWithSctp(self.rffi) };
-        if rffi.is_null() {
-            return Err(RingRtcError::MungeSdp.into());
-        }
-        Ok(Self::new(rffi))
-    }
-
     pub fn disable_dtls_and_set_srtp_key(&mut self, key: &SrtpKey) -> Result<()> {
         let success = unsafe {
             sdp::Rust_disableDtlsAndSetSrtpKey(
