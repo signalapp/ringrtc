@@ -337,17 +337,12 @@ public final class GroupCall {
     /**
      *
      */
-    public void setGroupMembers(@NonNull Collection<GroupMemberInfo> members)
+    public void setGroupMembers(@NonNull Collection<GroupMemberInfo> groupMembers)
         throws CallException
     {
         Log.i(TAG, "setGroupMembers():");
 
-        // Convert each userId UUID to a userIdByteArray.
-        for (GroupMemberInfo member : members) {
-            member.userIdByteArray = Util.getBytesFromUuid(member.userId);
-        }
-
-        ringrtcSetGroupMembers(nativeCallManager, this.clientId, new ArrayList<>(members));
+        ringrtcSetGroupMembers(nativeCallManager, this.clientId, Util.serializeFromGroupMemberInfo(groupMembers));
     }
 
     /**
@@ -731,9 +726,6 @@ public final class GroupCall {
      */
     public static class GroupMemberInfo {
         @NonNull  UUID   userId;
-        // The userIdByteArray is set by the GroupCall object for delivery
-        // to RingRTC, after conversion from the app-provided userId UUID.
-        @Nullable byte[] userIdByteArray;
         @NonNull  byte[] userIdCipherText;
 
         public GroupMemberInfo(@NonNull UUID   userId,
@@ -802,11 +794,11 @@ public final class GroupCall {
     /* Native methods below here */
 
     private native
-        long ringrtcCreateGroupCallClient(long   nativeCallManager,
+        long ringrtcCreateGroupCallClient(long nativeCallManager,
                                           byte[] groupId,
                                           String sfuUrl,
-                                          long   nativeAudioTrack,
-                                          long   nativeVideoTrack)
+                                          long nativeAudioTrack,
+                                          long nativeVideoTrack)
         throws CallException;
 
     private native
@@ -866,7 +858,7 @@ public final class GroupCall {
     private native
         void ringrtcSetGroupMembers(long nativeCallManager,
                                     long clientId,
-                                    List<GroupMemberInfo> members)
+                                    byte[] serializedGroupMembers)
         throws CallException;
 
     private native

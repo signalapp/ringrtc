@@ -24,10 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
+    - name: Install nightly toolchain
+      run: rustup toolchain install 1.47.0
     - name: Install cargo clippy
-      run: rustup component add clippy
+      run: rustup component add clippy --toolchain 1.47.0
     - name: Check rust lint
-      run: rm -rf out/rust-lint && cargo clippy --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
+      run: rm -rf out/rust-lint && cargo +1.47.0 clippy --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
 
   tests:
     name: Tests

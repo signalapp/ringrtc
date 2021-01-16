@@ -553,7 +553,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekGroupCal
     request_id: jlong,
     sfu_url: JString,
     membership_proof: jbyteArray,
-    jni_group_members: JObject,
+    jni_serialized_group_members: jbyteArray,
 ) {
     match call_manager::peek_group_call(
         &env,
@@ -561,7 +561,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekGroupCal
         request_id,
         sfu_url,
         membership_proof,
-        jni_group_members,
+        jni_serialized_group_members,
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -813,13 +813,13 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetGroupMember
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
-    jni_members: JObject,
+    jni_serialized_group_members: jbyteArray,
 ) {
     match call_manager::set_group_members(
         &env,
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
-        jni_members,
+        jni_serialized_group_members,
     ) {
         Ok(v) => v,
         Err(e) => {

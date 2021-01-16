@@ -90,6 +90,8 @@ pub enum AndroidError {
     JniGetLangClassNotFound(String),
     #[fail(display = "JNI: new object failed.  Type: {}", _0)]
     JniNewLangObjectFailed(String),
+    #[fail(display = "JNI: invalid serialized buffer.")]
+    JniInvalidSerializedBuffer,
 
     // Android Class Cache error codes
     #[fail(display = "ClassCache: Class is already in cache: {}", _0)]

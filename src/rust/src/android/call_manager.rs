@@ -551,13 +551,36 @@ pub fn close(call_manager: *mut AndroidCallManager) -> Result<()> {
 
 // Group Calls
 
+/// Convert a byte[] with 32-byte chunks in to a GroupMemberInfo struct vector.
+fn deserialize_to_group_member_info(
+    mut serialized_group_members: Vec<u8>,
+) -> Result<Vec<group_call::GroupMemberInfo>> {
+    if serialized_group_members.len() % 81 != 0 {
+        error!(
+            "Serialized buffer is not a multiple of 81: {}",
+            serialized_group_members.len()
+        );
+        return Err(AndroidError::JniInvalidSerializedBuffer.into());
+    }
+
+    let mut group_members = Vec::new();
+    for chunk in serialized_group_members.chunks_exact_mut(81) {
+        group_members.push(group_call::GroupMemberInfo {
+            user_id:            chunk[..16].into(),
+            user_id_ciphertext: chunk[16..].into(),
+        })
+    }
+
+    Ok(group_members)
+}
+
 pub fn peek_group_call(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     request_id: jlong,
     sfu_url: JString,
     membership_proof: jbyteArray,
-    jni_members: JObject,
+    jni_serialized_group_members: jbyteArray,
 ) -> Result<()> {
     info!("peek_group_call():");
 
@@ -567,36 +590,8 @@ pub fn peek_group_call(
 
     let membership_proof = env.convert_byte_array(membership_proof)?;
 
-    // Convert Java list of GroupMemberInfo into Rust Vec<group_call::GroupMemberInfo>.
-    let jni_member_list = env.get_list(jni_members)?;
-    let mut group_members = Vec::new();
-    for jni_member in jni_member_list.iter()? {
-        const BYTES_TYPE: &str = "[B";
-
-        const USER_ID_FIELD: &str = "userIdByteArray";
-        let user_id = jni_get_field(&env, jni_member, USER_ID_FIELD, BYTES_TYPE)?.l()?;
-        let user_id = if user_id.is_null() {
-            warn!("Invalid userId/ByteArray");
-            continue;
-        } else {
-            Some(env.convert_byte_array(user_id.into_inner())?)
-        };
-
-        const USER_ID_CIPHER_TEXT_FIELD: &str = "userIdCipherText";
-        let user_id_ciphertext =
-            jni_get_field(&env, jni_member, USER_ID_CIPHER_TEXT_FIELD, BYTES_TYPE)?.l()?;
-        let user_id_ciphertext = if user_id_ciphertext.is_null() {
-            warn!("Invalid userId/CipherText");
-            continue;
-        } else {
-            Some(env.convert_byte_array(user_id_ciphertext.into_inner())?)
-        };
-
-        group_members.push(group_call::GroupMemberInfo {
-            user_id:            user_id.unwrap(),
-            user_id_ciphertext: user_id_ciphertext.unwrap(),
-        })
-    }
+    let group_members =
+        deserialize_to_group_member_info(env.convert_byte_array(jni_serialized_group_members)?)?;
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.peek_group_call(request_id, sfu_url, membership_proof, group_members);
@@ -806,40 +801,12 @@ pub fn set_group_members(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
-    jni_members: JObject,
+    jni_serialized_group_members: jbyteArray,
 ) -> Result<()> {
     info!("set_group_members(): id: {}", client_id);
 
-    // Convert Java list of GroupMemberInfo into Rust Vec<group_call::GroupMemberInfo>.
-    let jni_member_list = env.get_list(jni_members)?;
-    let mut group_members = Vec::new();
-    for jni_member in jni_member_list.iter()? {
-        const BYTES_TYPE: &str = "[B";
-
-        const USER_ID_FIELD: &str = "userIdByteArray";
-        let user_id = jni_get_field(&env, jni_member, USER_ID_FIELD, BYTES_TYPE)?.l()?;
-        let user_id = if user_id.is_null() {
-            warn!("Invalid userId/ByteArray");
-            continue;
-        } else {
-            Some(env.convert_byte_array(user_id.into_inner())?)
-        };
-
-        const USER_ID_CIPHER_TEXT_FIELD: &str = "userIdCipherText";
-        let user_id_ciphertext =
-            jni_get_field(&env, jni_member, USER_ID_CIPHER_TEXT_FIELD, BYTES_TYPE)?.l()?;
-        let user_id_ciphertext = if user_id_ciphertext.is_null() {
-            warn!("Invalid userId/CipherText");
-            continue;
-        } else {
-            Some(env.convert_byte_array(user_id_ciphertext.into_inner())?)
-        };
-
-        group_members.push(group_call::GroupMemberInfo {
-            user_id:            user_id.unwrap(),
-            user_id_ciphertext: user_id_ciphertext.unwrap(),
-        })
-    }
+    let group_members =
+        deserialize_to_group_member_info(env.convert_byte_array(jni_serialized_group_members)?)?;
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_group_members(client_id, group_members);

@@ -762,13 +762,8 @@ public class CallManager {
 
     Log.i(TAG, "peekGroupCall():");
 
-    // Convert each userId UUID to a userIdByteArray.
-    for (GroupCall.GroupMemberInfo member : groupMembers) {
-      member.userIdByteArray = Util.getBytesFromUuid(member.userId);
-    }
-
     long requestId = this.peekInfoRequests.add(handler);
-    ringrtcPeekGroupCall(nativeCallManager, requestId, sfuUrl, membershipProof, new ArrayList<>(groupMembers));
+    ringrtcPeekGroupCall(nativeCallManager, requestId, sfuUrl, membershipProof, Util.serializeFromGroupMemberInfo(groupMembers));
   }
 
   /**
@@ -1729,10 +1724,10 @@ public class CallManager {
     throws CallException;
 
   private native
-    void ringrtcPeekGroupCall(         long                            nativeCallManager,
-                                       long                            requestId,
-                              @NonNull String                          sfuUrl,
-                              @NonNull byte[]                          membershipProof,
-                              @NonNull List<GroupCall.GroupMemberInfo> groupMembers)
+    void ringrtcPeekGroupCall(         long   nativeCallManager,
+                                       long   requestId,
+                              @NonNull String sfuUrl,
+                              @NonNull byte[] membershipProof,
+                              @NonNull byte[] serializedGroupMembers)
     throws CallException;
 }
