@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.8.10
+
+- Android: Fix JNI out of memory issues for large groups
+
 ## v2.8.9
 
 - Android: Fix memory issues for Direct Calling
