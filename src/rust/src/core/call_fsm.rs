@@ -570,7 +570,7 @@ where
             | CallState::ConnectedWithDataChannelBeforeAccepted = state
             {
                 let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
-                let excluded_remote_device_id = hangup_device_id.unwrap_or(0 as DeviceId);
+                let excluded_remote_device_id = hangup_device_id.unwrap_or(0);
                 call.send_hangup_via_data_channel_and_signaling_to_all_except(
                     hangup_to_propagate,
                     excluded_remote_device_id,

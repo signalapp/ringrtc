@@ -989,9 +989,10 @@ where
             .peer_connection()?
             .set_max_send_bitrate(combined_max)?;
 
-        let mut receiver_status = protobuf::data_channel::ReceiverStatus::default();
-        receiver_status.id = Some(u64::from(self.call_id));
-        receiver_status.max_bitrate_bps = Some(local_max.as_bps());
+        let receiver_status = protobuf::data_channel::ReceiverStatus {
+            id: Some(u64::from(self.call_id)),
+            max_bitrate_bps: Some(local_max.as_bps()),
+        };
 
         let data_channel = webrtc.data_channel().ok();
         self.update_and_send_dcm_state_via_data_channel(data_channel, move |data| {
@@ -1190,10 +1191,11 @@ where
 
         let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
 
-        let mut hangup = protobuf::data_channel::Hangup::default();
-        hangup.id = Some(u64::from(self.call_id));
-        hangup.r#type = Some(hangup_type as i32);
-        hangup.device_id = hangup_device_id;
+        let hangup = protobuf::data_channel::Hangup {
+            id: Some(u64::from(self.call_id)),
+            r#type: Some(hangup_type as i32),
+            device_id: hangup_device_id,
+        };
 
         let webrtc = self.webrtc.lock()?;
         let data_channel = webrtc.data_channel().ok();
@@ -1211,8 +1213,9 @@ where
             format!("dc(accepted)\t{}", self.connection_id)
         );
 
-        let mut accepted = protobuf::data_channel::Accepted::default();
-        accepted.id = Some(u64::from(self.call_id));
+        let accepted = protobuf::data_channel::Accepted {
+            id: Some(u64::from(self.call_id)),
+        };
 
         let webrtc = self.webrtc.lock()?;
         let data_channel = webrtc.data_channel().ok();
@@ -1229,9 +1232,10 @@ where
     /// * `video_enabled` - `true` when the local side is streaming video,
     /// otherwise `false`.
     pub fn send_sender_status_via_data_channel(&self, video_enabled: bool) -> Result<()> {
-        let mut sender_status = protobuf::data_channel::SenderStatus::default();
-        sender_status.id = Some(u64::from(self.call_id));
-        sender_status.video_enabled = Some(video_enabled);
+        let sender_status = protobuf::data_channel::SenderStatus {
+            id: Some(u64::from(self.call_id)),
+            video_enabled: Some(video_enabled),
+        };
 
         let webrtc = self.webrtc.lock()?;
         let data_channel = webrtc.data_channel().ok();

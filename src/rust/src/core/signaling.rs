@@ -192,14 +192,15 @@ impl Offer {
         v3_or_v2_sdp: String,
         v1_sdp: String,
     ) -> Result<Self> {
-        let mut offer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2::default();
-        offer_proto_v3_or_v2.public_key = Some(public_key);
-        offer_proto_v3_or_v2.sdp = Some(v3_or_v2_sdp);
+        let offer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2 {
+            public_key: Some(public_key),
+            sdp: Some(v3_or_v2_sdp),
+        };
 
-        let mut offer_proto = protobuf::signaling::Offer::default();
-        offer_proto.v3_or_v2 = Some(offer_proto_v3_or_v2);
-
-        offer_proto.v4 = v4;
+        let offer_proto = protobuf::signaling::Offer {
+            v3_or_v2: Some(offer_proto_v3_or_v2),
+            v4,
+        };
 
         let mut opaque = BytesMut::with_capacity(offer_proto.encoded_len());
         offer_proto.encode(&mut opaque)?;
@@ -370,8 +371,10 @@ impl Answer {
 
     // V4 == V3 + non-SDP; V3 == V2 + public key
     pub fn from_v4(v4: protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
-        let mut proto = protobuf::signaling::Answer::default();
-        proto.v4 = Some(v4);
+        let proto = protobuf::signaling::Answer {
+            v4: Some(v4),
+            ..Default::default()
+        };
 
         let mut opaque = BytesMut::with_capacity(proto.encoded_len());
         proto.encode(&mut opaque)?;
@@ -381,12 +384,15 @@ impl Answer {
 
     // V3 == V2 + public key
     pub fn from_v3_and_v2_sdp(public_key: Vec<u8>, v3_and_v2_sdp: String) -> Result<Self> {
-        let mut answer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2::default();
-        answer_proto_v3_or_v2.public_key = Some(public_key);
-        answer_proto_v3_or_v2.sdp = Some(v3_and_v2_sdp);
+        let answer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2 {
+            public_key: Some(public_key),
+            sdp: Some(v3_and_v2_sdp),
+        };
 
-        let mut answer_proto = protobuf::signaling::Answer::default();
-        answer_proto.v3_or_v2 = Some(answer_proto_v3_or_v2);
+        let answer_proto = protobuf::signaling::Answer {
+            v3_or_v2: Some(answer_proto_v3_or_v2),
+            ..Default::default()
+        };
 
         let mut opaque = BytesMut::with_capacity(answer_proto.encoded_len());
         answer_proto.encode(&mut opaque)?;
@@ -483,11 +489,13 @@ impl IceCandidate {
 
     // ICE candidates are the same for V1 and V2 and V3.
     pub fn from_v3_and_v2_and_v1_sdp(sdp: String) -> Result<Self> {
-        let mut ice_candidate_proto_v3_or_v2 = protobuf::signaling::IceCandidateV3OrV2::default();
-        ice_candidate_proto_v3_or_v2.sdp = Some(sdp.clone());
+        let ice_candidate_proto_v3_or_v2 = protobuf::signaling::IceCandidateV3OrV2 {
+            sdp: Some(sdp.clone()),
+        };
 
-        let mut ice_candidate_proto = protobuf::signaling::IceCandidate::default();
-        ice_candidate_proto.v3_or_v2 = Some(ice_candidate_proto_v3_or_v2);
+        let ice_candidate_proto = protobuf::signaling::IceCandidate {
+            v3_or_v2: Some(ice_candidate_proto_v3_or_v2),
+        };
 
         let mut opaque = BytesMut::with_capacity(ice_candidate_proto.encoded_len());
         ice_candidate_proto.encode(&mut opaque)?;

@@ -2183,8 +2183,9 @@ where
         debug!("  recipient: {}", uuid_to_string(&recipient));
 
         let platform = self.platform.lock().expect("platform.lock()");
-        let mut call_message = protobuf::signaling::CallMessage::default();
-        call_message.group_call_message = Some(message);
+        let call_message = protobuf::signaling::CallMessage {
+            group_call_message: Some(message)
+        };
         let mut bytes = BytesMut::with_capacity(call_message.encoded_len());
         let result = call_message.encode(&mut bytes);
         match result {
