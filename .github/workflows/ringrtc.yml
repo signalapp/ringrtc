@@ -1,6 +1,5 @@
 name: RingRTC CI
-
-on: [push]
+on: [push, pull_request]
 
 jobs:
   code_formatting:
@@ -8,34 +7,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly-2020-04-12
+        override: true
+        profile: minimal
+        components: rustfmt
     - name: Check format
-      run: |
-        rustup toolchain install ${{ env.NIGHTLY_VERSION }}
-        rustup component add rustfmt --toolchain ${{ env.NIGHTLY_VERSION }}
-        rustup show
-        cd src/rust
-        cargo +${{ env.NIGHTLY_VERSION }} fmt -- --check
-      env:
-        NIGHTLY_VERSION: nightly-2020-04-12
+      run: cd src/rust && cargo fmt -- --check
 
   lints:
     name: Lints
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Run clippy
-      run: |
-        rustup component add clippy
-        rustup show
-        rm -rf out/rust-lint && cargo clippy --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        profile: minimal
+        components: clippy
+    - run: rm -rf out/rust-lint
+    - uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
 
   tests:
     name: Tests
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Run tests
-      run: |
-        rustup show
-        cd src/rust
-        ./scripts/run-tests
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        profile: minimal
+    - name: Run rust tests
+      run: cd src/rust && ./scripts/run-tests
