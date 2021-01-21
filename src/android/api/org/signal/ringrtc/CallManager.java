@@ -122,14 +122,29 @@ public class CallManager {
   }
 
   class PeerConnectionFactoryOptions extends PeerConnectionFactory.Options {
-    public PeerConnectionFactoryOptions() {
+    // The following ADAPTER_TYPE values are from PeerConnectionFactory.Options
+    // which does not expose them. They have been copied here for now until
+    // they are exposed in WebRTC. They control the networkIgnoreMask.
+    static final int ADAPTER_TYPE_CELLULAR = 1 << 2;
+    static final int ADAPTER_TYPE_LOOPBACK = 1 << 4;
+
+    public PeerConnectionFactoryOptions(boolean allowMobile) {
       // Give the (native default) behavior of filtering out loopback addresses.
       // See https://source.chromium.org/chromium/chromium/src/+/master:third_party/webrtc/rtc_base/network.h;l=47?q=.networkIgnoreMask&ss=chromium
-      this.networkIgnoreMask = 1 << 4;
+      this.networkIgnoreMask = ADAPTER_TYPE_LOOPBACK;
+      if (!allowMobile) {
+        this.networkIgnoreMask |= ADAPTER_TYPE_CELLULAR;
+      }
     }
   }
 
+  // TODO: Delete this wrapper method once Signal-Android has been updated with the allowMobile parameter.
   private PeerConnectionFactory createPeerConnectionFactory(@NonNull EglBase eglBase) {
+    final boolean allowMobile = true;
+    return createPeerConnectionFactory(eglBase, allowMobile);
+  }
+
+  private PeerConnectionFactory createPeerConnectionFactory(@NonNull EglBase eglBase, boolean allowMobile) {
     Set<String> HARDWARE_ENCODING_BLACKLIST = new HashSet<String>() {{
       // Samsung S6 with Exynos 7420 SoC
       add("SM-G920F");
@@ -174,7 +189,7 @@ public class CallManager {
     VideoDecoderFactory decoderFactory = new DefaultVideoDecoderFactory(eglBase.getEglBaseContext());
 
     return PeerConnectionFactory.builder()
-            .setOptions(new PeerConnectionFactoryOptions())
+            .setOptions(new PeerConnectionFactoryOptions(allowMobile))
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
             .createPeerConnectionFactory();
@@ -261,8 +276,9 @@ public class CallManager {
 
     ringrtcCall(nativeCallManager, remote, callMediaType.ordinal(), localDeviceId);
   }
-
-  /**
+  
+  // TODO: Delete this wrapper method once Signal-Android has been updated with the allowMobile parameter.
+ /**
    *
    * Indication from application to proceed with call
    *
@@ -292,11 +308,57 @@ public class CallManager {
                                boolean                        enableCamera)
     throws CallException
   {
+    final boolean allowMobile = true;
+    proceed(callId,
+            context,
+            eglBase,
+            localSink,
+            remoteSink,
+            camera,
+            iceServers,
+            hideIp,
+            bandwidthMode,
+            enableCamera,
+            allowMobile);
+  }
+
+  /**
+   *
+   * Indication from application to proceed with call
+   *
+   * @param callId        callId for the call
+   * @param context       Call service context
+   * @param eglBase       eglBase to use for this Call
+   * @param localSink     local video sink to use for this Call
+   * @param remoteSink    remote video sink to use for this Call
+   * @param camera        camera control to use for this Call
+   * @param iceServers    list of ICE servers to use for this Call
+   * @param hideIp        if true hide caller's IP by using a TURN server
+   * @param bandwidthMode desired bandwidth mode to start the session with
+   * @param enableCamera  if true, enable the local camera video track when created
+   * @param allowMobile   if true, allow calls to use mobile data.
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  public void proceed(@NonNull CallId                         callId,
+                      @NonNull Context                        context,
+                      @NonNull EglBase                        eglBase,
+                      @NonNull VideoSink		                  localSink,
+                      @NonNull VideoSink                      remoteSink,
+                      @NonNull CameraControl                  camera,
+                      @NonNull List<PeerConnection.IceServer> iceServers,
+                               boolean                        hideIp,
+                               BandwidthMode                  bandwidthMode,
+                               boolean                        enableCamera,
+                               boolean                        allowMobile)
+    throws CallException
+  {
     checkCallManagerExists();
 
     Log.i(TAG, "proceed(): callId: " + callId + ", hideIp: " + hideIp);
 
-    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase);
+    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase, allowMobile);
 
     // Defaults to ECDSA, which should be fast.
     RtcCertificatePem certificate = RtcCertificatePem.generateCertificate();
@@ -797,6 +859,28 @@ public class CallManager {
     ringrtcPeekGroupCall(nativeCallManager, requestId, sfuUrl, membershipProof, Util.serializeFromGroupMemberInfo(groupMembers));
   }
 
+  // TODO: Delete this wrapper method once Signal-Android has been updated with the allowMobile parameter.
+ /**
+   *
+   * Creates and returns a GroupCall object.
+   *
+   * If there is any error when allocating resources for the object,
+   * null is returned.
+   *
+   * @param groupId      the unique identifier for the group
+   * @param sfuUrl       the URL to use when accessing the SFU
+   * @param eglBase      graphics base needed to initialize media
+   * @param observer     the observer that the group call object will use for callback notifications
+   */
+  public GroupCall createGroupCall(@NonNull byte[]             groupId,
+                                   @NonNull String             sfuUrl,
+                                   @NonNull EglBase            eglBase,
+                                   @NonNull GroupCall.Observer observer)
+  {
+    final boolean allowMobile = true;
+    return createGroupCall(groupId, sfuUrl, eglBase, observer, allowMobile);
+  }
+
   /**
    *
    * Creates and returns a GroupCall object.
@@ -808,18 +892,19 @@ public class CallManager {
    * @param sfuUrl       the URL to use when accessing the SFU
    * @param eglBase      graphics base needed to initialize media
    * @param observer     the observer that the group call object will use for callback notifications
-   *
+   * @param allowMobile  if true, allow calls to use mobile data.
    */
   public GroupCall createGroupCall(@NonNull byte[]             groupId,
                                    @NonNull String             sfuUrl,
                                    @NonNull EglBase            eglBase,
-                                   @NonNull GroupCall.Observer observer)
+                                   @NonNull GroupCall.Observer observer,
+                                            boolean            allowMobile)
   {
     checkCallManagerExists();
 
     if (this.groupFactory == null) {
       // The first GroupCall object will create a factory that will be re-used.
-      this.groupFactory = this.createPeerConnectionFactory(eglBase);
+      this.groupFactory = this.createPeerConnectionFactory(eglBase, allowMobile);
       if (this.groupFactory == null) {
         Log.e(TAG, "createPeerConnectionFactory failed");
         return null;
