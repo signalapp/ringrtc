@@ -24,7 +24,7 @@ use crate::common::{
     DeviceId,
     Result,
 };
-// use crate::core::call_connection_observer::ClientEvent;
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
 use crate::core::call_manager::CallManager;
 use crate::core::call_mutex::CallMutex;
@@ -496,7 +496,7 @@ where
     ///
     /// - create a Connection for the single remote DeviceId.
     /// - handle the previously stored pending Offer and ICE Candidates
-    pub fn proceed(&mut self) -> Result<()> {
+    pub fn proceed(&mut self, bandwidth_mode: BandwidthMode) -> Result<()> {
         info!("proceed():");
 
         let mut call_manager = self.call_manager()?;
@@ -514,6 +514,7 @@ where
                         remote_device_id,
                         ConnectionType::Incoming,
                         pending_call.received.offer.latest_version(),
+                        bandwidth_mode,
                     )?;
                     let answer = connection
                         .start_incoming(pending_call.received, pending_call.ice_candidates)?;
@@ -548,9 +549,10 @@ where
                     // for V2 and V3, which has DTLS.
                     // It's just that before we use the SDP for V3, we replace DTLS with SDES.
                     signaling::Version::V2,
+                    bandwidth_mode,
                 )?;
                 let (local_secret, ice_gatherer, offer) =
-                    parent_connection.start_outgoing_parent(self.media_type)?;
+                    parent_connection.start_outgoing_parent(self.media_type, bandwidth_mode)?;
 
                 // Keep around so that it's not closed until all the connections are closed.
                 *(self.forking.lock()?) = Some(ForkingState {
@@ -586,11 +588,13 @@ where
             if let Some(forking) = maybe_forking.as_mut() {
                 info!("received_answer from device {}; forking enabled, so inject into connection_map", sender_device_id);
                 let call_manager = self.call_manager()?;
+                let bandwidth_mode = forking.parent_connection.local_bandwidth_mode()?;
                 let mut child_connection = call_manager.create_connection(
                     &self,
                     sender_device_id,
                     ConnectionType::OutgoingChild,
                     received.answer.latest_version(),
+                    bandwidth_mode,
                 )?;
                 child_connection.start_outgoing_child(
                     &forking.local_secret,
@@ -916,8 +920,8 @@ where
     }
 
     /// Inject a call Proceed event into the FSM.
-    pub fn inject_proceed(&mut self) -> Result<()> {
-        let event = CallEvent::Proceed;
+    pub fn inject_proceed(&mut self, bandwidth_mode: BandwidthMode) -> Result<()> {
+        let event = CallEvent::Proceed(bandwidth_mode);
         self.inject_event(event)
     }
 

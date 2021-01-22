@@ -859,6 +859,12 @@ Rust_receiveRtp(webrtc::PeerConnectionInterface* peer_connection, uint8_t pt) {
 }
 
 RUSTEXPORT void
+Rust_configureAudioEncoders(webrtc::PeerConnectionInterface* peer_connection, const webrtc::AudioEncoder::Config* config) {
+  RTC_LOG(LS_INFO) << "Rust_configureAudioEncoders(...)";
+  peer_connection->ConfigureAudioEncoders(*config);
+}
+
+RUSTEXPORT void
 Rust_closePeerConnection(PeerConnectionInterface* peer_connection) {
     peer_connection->Close();
 }

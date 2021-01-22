@@ -6,8 +6,16 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, DeviceId, Result};
-use crate::common::{CallMediaType, HttpMethod};
+use crate::common::{
+    ApplicationEvent,
+    CallDirection,
+    CallId,
+    CallMediaType,
+    DeviceId,
+    HttpMethod,
+    Result,
+};
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
@@ -82,7 +90,7 @@ impl PlatformItem for NativeMediaStream {}
 pub trait SignalingSender {
     fn send_signaling(
         &self,
-        recipient_id: &PeerId,
+        recipient_id: &str,
         call_id: CallId,
         receiver_device_id: Option<DeviceId>,
         msg: signaling::Message,
@@ -92,8 +100,8 @@ pub trait SignalingSender {
 }
 
 pub trait CallStateHandler {
-    fn handle_call_state(&self, remote_peer_id: &PeerId, state: CallState) -> Result<()>;
-    fn handle_remote_video_state(&self, remote_peer_id: &PeerId, enabled: bool) -> Result<()>;
+    fn handle_call_state(&self, remote_peer_id: &str, state: CallState) -> Result<()>;
+    fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
 }
 
 // Starts an HTTP request. CallManager is notified of the result via a separate callback.
@@ -296,7 +304,7 @@ impl NativePlatform {
         }
     }
 
-    fn send_state(&self, peer_id: &PeerId, state: CallState) -> Result<()> {
+    fn send_state(&self, peer_id: &str, state: CallState) -> Result<()> {
         self.state_handler.handle_call_state(peer_id, state)
     }
 
@@ -304,14 +312,14 @@ impl NativePlatform {
         self.group_handler.handle_group_update(update)
     }
 
-    fn send_remote_video_state(&self, peer_id: &PeerId, enabled: bool) -> Result<()> {
+    fn send_remote_video_state(&self, peer_id: &str, enabled: bool) -> Result<()> {
         self.state_handler
             .handle_remote_video_state(peer_id, enabled)
     }
 
     fn send_signaling(
         &self,
-        recipient_id: &PeerId,
+        recipient_id: &str,
         call_id: CallId,
         receiver_device_id: Option<DeviceId>,
         msg: signaling::Message,
@@ -358,6 +366,7 @@ impl Platform for NativePlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<Connection<Self>> {
         info!(
             "NativePlatform::create_connection(): call: {} remote_device_id: {} signaling_version: {:?}",
@@ -365,7 +374,12 @@ impl Platform for NativePlatform {
         );
 
         // Like AndroidPlatform::create_connection
-        let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
+        let connection = Connection::new(
+            call.clone(),
+            remote_device_id,
+            connection_type,
+            bandwidth_mode,
+        )?;
         let context = call.call_context()?;
 
         // Like android::call_manager::create_peer_connection
@@ -717,7 +731,7 @@ impl Platform for NativePlatform {
 
         let result = self.send_group_update(GroupUpdate::RemoteDeviceStatesChanged(
             client_id,
-            remote_device_states.iter().cloned().collect(),
+            remote_device_states.to_vec(),
         ));
         if result.is_err() {
             error!("{:?}", result.err());
@@ -764,7 +778,7 @@ impl Platform for NativePlatform {
 
         let result = self.send_group_update(GroupUpdate::PeekChanged(
             client_id,
-            joined_members.iter().cloned().collect(),
+            joined_members.to_vec(),
             creator,
             era_id.map(String::from),
             max_devices,

@@ -56,7 +56,6 @@ use crate::error::RingRtcError;
 
 use crate::common::{
     ApplicationEvent,
-    BandwidthMode,
     CallDirection,
     CallId,
     CallState,
@@ -64,7 +63,7 @@ use crate::common::{
     FeatureLevel,
     Result,
 };
-
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::{Call, EventStream};
 use crate::core::connection::ConnectionObserverEvent;
 use crate::core::platform::Platform;
@@ -84,7 +83,7 @@ pub enum CallEvent {
 
     // Flow events from client application
     /// OK to proceed with call setup including user options.
-    Proceed,
+    Proceed(BandwidthMode),
 
     // Signaling events from client application
     /// Received answer from remote peer (caller only).
@@ -118,7 +117,9 @@ impl fmt::Display for CallEvent {
             CallEvent::SendHangupViaDataChannelToAll(hangup) => {
                 format!("SendHangupViaDataChannelToAll, hangup: {}", hangup)
             }
-            CallEvent::Proceed => "Proceed".to_string(),
+            CallEvent::Proceed(bandwidth_mode) => {
+                format!("Proceed, bandwidth_mode: {}", bandwidth_mode)
+            }
             CallEvent::ReceivedAnswer(received) => format!(
                 "ReceivedAnswer, device: {} feature_level: {}",
                 received.sender_device_id, received.sender_device_feature_level
@@ -320,7 +321,7 @@ where
 
         match event {
             CallEvent::StartCall => self.handle_start_call(call, state),
-            CallEvent::Proceed => self.handle_proceed(call, state),
+            CallEvent::Proceed(bandwidth_mode) => self.handle_proceed(call, state, bandwidth_mode),
             CallEvent::AcceptCall => self.handle_accept_call(call, state),
             CallEvent::ReceivedAnswer(received) => {
                 self.handle_received_answer(call, state, received)
@@ -372,7 +373,12 @@ where
         }
     }
 
-    fn handle_proceed(&mut self, mut call: Call<T>, state: CallState) -> Result<()> {
+    fn handle_proceed(
+        &mut self,
+        mut call: Call<T>,
+        state: CallState,
+        bandwidth_mode: BandwidthMode,
+    ) -> Result<()> {
         info!("handle_proceed():");
 
         if let CallState::WaitingToProceed = state {
@@ -383,7 +389,7 @@ where
                 if call.terminating()? {
                     return Ok(());
                 }
-                call.proceed()
+                call.proceed(bandwidth_mode)
             }
             .map_err(move |err| {
                 err_call.inject_internal_error(err, "Proceed Future failed");
@@ -568,7 +574,7 @@ where
             | CallState::ConnectedWithDataChannelBeforeAccepted = state
             {
                 let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
-                let excluded_remote_device_id = hangup_device_id.unwrap_or(0 as DeviceId);
+                let excluded_remote_device_id = hangup_device_id.unwrap_or(0);
                 call.send_hangup_via_data_channel_and_signaling_to_all_except(
                     hangup_to_propagate,
                     excluded_remote_device_id,
@@ -604,7 +610,6 @@ where
                     let mut connection = call.active_connection()?;
                     connection.inject_accept()?;
                     connection.connect_incoming_media()?;
-                    connection.set_local_max_send_bitrate(BandwidthMode::Normal.max_bitrate())?;
                     connection.start_tick()?;
                     call.notify_application(ApplicationEvent::LocalAccepted)
                 })
@@ -716,9 +721,6 @@ where
                                 // Get the media and application working for the first connection.
                                 let connection = call.active_connection()?;
                                 connection.connect_incoming_media()?;
-                                connection.set_local_max_send_bitrate(
-                                    BandwidthMode::Normal.max_bitrate(),
-                                )?;
                                 connection.start_tick()?;
                                 call.notify_application(ApplicationEvent::RemoteAccepted)?;
 

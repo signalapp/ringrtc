@@ -17,7 +17,7 @@ use crate::common::{
     HttpMethod,
     Result,
 };
-
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::{group_call, signaling};
@@ -49,6 +49,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         remote_device: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<Connection<Self>>;
 
     /// Inform the client application that a call should be started.

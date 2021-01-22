@@ -74,7 +74,7 @@ impl Log for IOSLogger {
                 },
                 None => AppByteSlice {
                     bytes: ptr::null_mut(),
-                    len:   0 as size_t,
+                    len:   0_usize,
                 },
             };
 

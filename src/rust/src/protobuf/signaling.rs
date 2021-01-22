@@ -56,6 +56,9 @@ pub struct ConnectionParametersV4 {
     /// In other words, the video codecs the sender can receive.
     #[prost(message, repeated, tag="4")]
     pub receive_video_codecs: ::std::vec::Vec<VideoCodec>,
+    /// Used at call establishment to convey the bitrate that should be used for sending.
+    #[prost(uint64, optional, tag="5")]
+    pub max_bitrate_bps: ::std::option::Option<u64>,
 }
 /// A generic calling message that is opaque to the application but interpreted by RingRTC.
 /// A serialized one of these goes into the "Opaque" field in the CallingMessage variant

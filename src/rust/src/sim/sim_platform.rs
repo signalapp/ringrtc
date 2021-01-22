@@ -19,6 +19,7 @@ use crate::common::{
     HttpMethod,
     Result,
 };
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::{Connection, ConnectionType};
@@ -114,6 +115,7 @@ impl Platform for SimPlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<Connection<Self>> {
         info!(
             "create_connection(): call_id: {} remote_device_id: {}, signaling_version: {:?}",
@@ -124,7 +126,13 @@ impl Platform for SimPlatform {
 
         let fake_pc = RffiPeerConnection::new();
 
-        let connection = Connection::new(call.clone(), remote_device_id, connection_type).unwrap();
+        let connection = Connection::new(
+            call.clone(),
+            remote_device_id,
+            connection_type,
+            bandwidth_mode,
+        )
+        .unwrap();
         connection.set_app_connection(fake_pc).unwrap();
 
         let peer_connection =
@@ -228,7 +236,7 @@ impl Platform for SimPlatform {
     ) -> Result<()> {
         let (_broadcast, receiver_device_id) = match send.receiver_device_id {
             // The DeviceId doesn't matter if we're broadcasting
-            None => (true, 0 as DeviceId),
+            None => (true, 0),
             Some(receiver_device_id) => (false, receiver_device_id),
         };
 

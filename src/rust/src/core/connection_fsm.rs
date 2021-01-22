@@ -56,15 +56,8 @@ use futures::future::TryFutureExt;
 use futures::task::Poll;
 use futures::{Future, Stream};
 
-use crate::common::{
-    units::DataRate,
-    BandwidthMode,
-    CallDirection,
-    CallId,
-    ConnectionState,
-    Result,
-    RingBench,
-};
+use crate::common::{units::DataRate, CallDirection, CallId, ConnectionState, Result, RingBench};
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
 use crate::core::platform::Platform;
 use crate::core::signaling;
@@ -109,8 +102,8 @@ pub enum ConnectionEvent {
     SendSenderStatusViaDataChannel(bool),
     /// Set bandwidth mode
     /// Source: app (user setting)
-    /// Action: Set bitrate and send a receiver status message over the data channel.
-    SetBandwidthMode(BandwidthMode),
+    /// Action: Update and send bitrate via a receiver status message over the data channel.
+    UpdateBandwidthMode(BandwidthMode),
     /// Local ICE candidate from PeerConnection
     /// Source: PeerConnection
     /// Action: Send ICE candidate over signaling.
@@ -179,8 +172,8 @@ impl fmt::Display for ConnectionEvent {
                 "SendSenderStatusViaDataChannel, enabled: {}",
                 enabled
             ),
-            ConnectionEvent::SetBandwidthMode(mode) => format!(
-                "SetBandwidthMode, mode: {:?}",
+            ConnectionEvent::UpdateBandwidthMode(mode) => format!(
+                "UpdateBandwidthMode, mode: {:?}",
                 mode
             ),
             ConnectionEvent::LocalIceCandidate(_) => "LocalIceCandidate".to_string(),
@@ -427,8 +420,8 @@ where
             ConnectionEvent::SendSenderStatusViaDataChannel(enabled) => {
                 self.handle_send_sender_status_via_data_channel(connection, state, enabled)
             }
-            ConnectionEvent::SetBandwidthMode(mode) => {
-                self.handle_set_bandwidth_mode(connection, state, mode)
+            ConnectionEvent::UpdateBandwidthMode(mode) => {
+                self.handle_update_bandwidth_mode(connection, state, mode)
             }
             ConnectionEvent::LocalIceCandidate(candidate) => {
                 self.handle_local_ice_candidate(connection, state, candidate)
@@ -741,11 +734,11 @@ where
         Ok(())
     }
 
-    fn handle_set_bandwidth_mode(
+    fn handle_update_bandwidth_mode(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
-        mode: BandwidthMode,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<()> {
         match state {
             ConnectionState::ConnectingBeforeAccepted
@@ -753,20 +746,20 @@ where
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => {
                 let mut err_connection = connection.clone();
-                let set_bandwidth_mode_future = lazy(move |_| {
+                let update_bandwidth_mode_future = lazy(move |_| {
                     if connection.terminating()? {
                         return Ok(());
                     }
 
-                    connection.set_local_max_bitrate(mode.max_bitrate())
+                    connection.update_bandwidth_mode(bandwidth_mode)
                 })
                 .map_err(move |err| {
-                    err_connection.inject_internal_error(err, "Setting low bandwidth mode failed");
+                    err_connection.inject_internal_error(err, "Updating bandwidth mode failed");
                 });
 
-                self.worker_spawn(set_bandwidth_mode_future);
+                self.worker_spawn(update_bandwidth_mode_future);
             }
-            _ => self.unexpected_state(state, "SetBandwidthMode"),
+            _ => self.unexpected_state(state, "UpdateBandwidthMode"),
         };
         Ok(())
     }

@@ -7,34 +7,35 @@ jobs:
     name: Code Formatting
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Install nightly toolchain
-      run: rustup toolchain install nightly-2020-03-15
-    - name: Install nightly rustfmt
-      run: rustup component add rustfmt --toolchain nightly-2020-03-15
-    - name: Show rust versions
-      run: rustup show
-    - name: Check code format
+    - uses: actions/checkout@v2
+    - name: Check format
       run: |
+        rustup toolchain install ${{ env.NIGHTLY_VERSION }}
+        rustup component add rustfmt --toolchain ${{ env.NIGHTLY_VERSION }}
+        rustup show
         cd src/rust
-        cargo +nightly-2020-03-15 fmt -- --check
+        cargo +${{ env.NIGHTLY_VERSION }} fmt -- --check
+      env:
+        NIGHTLY_VERSION: nightly-2020-04-12
 
   lints:
     name: Lints
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Install nightly toolchain
-      run: rustup toolchain install 1.47.0
-    - name: Install cargo clippy
-      run: rustup component add clippy --toolchain 1.47.0
-    - name: Check rust lint
-      run: rm -rf out/rust-lint && cargo +1.47.0 clippy --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
+    - uses: actions/checkout@v2
+    - name: Run clippy
+      run: |
+        rustup component add clippy
+        rustup show
+        rm -rf out/rust-lint && cargo clippy --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
 
   tests:
     name: Tests
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Run rust tests
-      run: cd src/rust && ./scripts/run-tests
+    - uses: actions/checkout@v2
+    - name: Run tests
+      run: |
+        rustup show
+        cd src/rust
+        ./scripts/run-tests

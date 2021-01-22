@@ -60,6 +60,8 @@ message ConnectionParametersV4 {
   optional string ice_pwd = 3;
   // In other words, the video codecs the sender can receive.
   repeated VideoCodec receive_video_codecs = 4;
+  // Used at call establishment to convey the bitrate that should be used for sending.
+  optional uint64 max_bitrate_bps = 5;
 }
 
 // A generic calling message that is opaque to the application but interpreted by RingRTC.

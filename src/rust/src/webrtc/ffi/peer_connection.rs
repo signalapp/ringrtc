@@ -9,6 +9,7 @@ use std::os::raw::c_char;
 
 use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
+use crate::webrtc::media::RffiAudioEncoderConfig;
 use crate::webrtc::network::RffiIp;
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
@@ -107,6 +108,11 @@ extern "C" {
         peer_connection: *const RffiPeerConnection,
         pt: rtp::PayloadType,
     ) -> bool;
+
+    pub fn Rust_configureAudioEncoders(
+        peer_connection: *const RffiPeerConnection,
+        config: *const RffiAudioEncoderConfig,
+    );
 
     pub fn Rust_closePeerConnection(peer_connection: *const RffiPeerConnection);
 }

@@ -24,6 +24,7 @@ use crate::common::{
     HttpMethod,
     Result,
 };
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
@@ -265,18 +266,25 @@ impl Platform for AndroidPlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {} signaling_version: {:?}",
+            "create_connection(): call_id: {} remote_device_id: {} signaling_version: {:?}, bandwidth_mode: {}",
             call.call_id(),
             remote_device_id,
-            signaling_version
+            signaling_version,
+            bandwidth_mode
         );
 
         let env = self.java_env()?;
         let jni_call_manager = self.jni_call_manager.as_obj();
 
-        let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
+        let connection = Connection::new(
+            call.clone(),
+            remote_device_id,
+            connection_type,
+            bandwidth_mode,
+        )?;
 
         let connection_ptr = connection.get_connection_ptr()?;
         let call_id_jlong = u64::from(call.call_id()) as jlong;

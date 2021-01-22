@@ -163,7 +163,7 @@ final class TestDelegate: CallManagerDelegate {
 //                    // We will only call proceed if we haven't concluded the call.
 //                    if !callData.concluded {
                         do {
-                            _ = try callManager.proceed(callId: callId, iceServers: self.iceServers, hideIp: self.useTurnOnly, videoCaptureController: videoCaptureController)
+                            _ = try callManager.proceed(callId: callId, iceServers: self.iceServers, hideIp: self.useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
                         } catch {
                             XCTFail("\(error)")
                         }
@@ -668,7 +668,7 @@ class SignalRingRTCTests: XCTestCase {
         delay(interval: 0.1)
     }
 
-    func testOutgoing() {
+    func outgoingTesting(bandwidthMode: BandwidthMode) {
         Logger.debug("Test: Outgoing Call...")
 
         let delegate = TestDelegate()
@@ -710,7 +710,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: bandwidthMode)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -771,6 +771,18 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    func testOutgoingNormal() {
+        outgoingTesting(bandwidthMode: .normal)
+    }
+
+    func testOutgoingLow() {
+        outgoingTesting(bandwidthMode: .low)
+    }
+
+    func testOutgoingVeryLow() {
+        outgoingTesting(bandwidthMode: .veryLow)
+    }
+
     func testOutgoingSendOfferFail() {
         Logger.debug("Test: Outgoing Call Send Offer Fail...")
 
@@ -816,7 +828,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -880,13 +892,13 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+            _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
         }
 
-        expect(delegate.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 1)
+        expect(delegate.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 2)
         delegate.shouldSendAnswerInvoked = false
 
         expect(delegate.recentCallId).to(equal(callId))
@@ -1114,7 +1126,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1191,7 +1203,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManager?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1425,7 +1437,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1465,7 +1477,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1593,7 +1605,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+            _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -1637,7 +1649,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+            _ = try callManagerCallee?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -1757,7 +1769,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerA?.proceed(callId: callIdAtoB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+            _ = try callManagerA?.proceed(callId: callIdAtoB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -1784,7 +1796,7 @@ class SignalRingRTCTests: XCTestCase {
             // Proceed on the B side.
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB?.proceed(callId: callIdBtoA, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerB?.proceed(callId: callIdBtoA, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -1979,7 +1991,7 @@ class SignalRingRTCTests: XCTestCase {
                 busyCallee.delegate.startOutgoingCallInvoked = false
 
                 let callId = busyCallee.delegate.recentCallId
-                _ = try busyCallee.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try busyCallee.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
                 expect(busyCallee.delegate.shouldSendOfferInvoked).toEventually(equal(true), timeout: 1)
                 busyCallee.delegate.shouldSendOfferInvoked = false
 
@@ -1999,7 +2011,7 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateExtra.startIncomingCallInvoked).toEventually(equal(true), timeout: 1)
                 delegateExtra.startIncomingCallInvoked = false
 
-                try callManagerExtra?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                try callManagerExtra?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
 
                 expect(delegateExtra.shouldSendAnswerInvoked).toEventually(equal(true), timeout: 2)
                 delegateExtra.shouldSendAnswerInvoked = false
@@ -2065,7 +2077,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerCaller?.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2119,7 +2131,7 @@ class SignalRingRTCTests: XCTestCase {
                     element.delegate.startIncomingCallInvoked = false
 
                     Logger.debug("Test: Invoking proceed()...")
-                    _ = try element.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                    _ = try element.callManager.proceed(callId: callId, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
                 }
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
@@ -2470,7 +2482,7 @@ class SignalRingRTCTests: XCTestCase {
 
         do {
             Logger.debug("Test: Invoking proceed()...")
-            _ = try callManagerA1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+            _ = try callManagerA1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
         } catch {
             XCTFail("Call Manager proceed() failed: \(error)")
             return
@@ -2498,7 +2510,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB1?.proceed(callId: callIdB1toA, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerB1?.proceed(callId: callIdB1toA, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2577,7 +2589,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB2?.proceed(callId: callIdA1toBOverride, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerB2?.proceed(callId: callIdA1toBOverride, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2783,8 +2795,8 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
-                _ = try callManagerB2?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerB1?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
+                _ = try callManagerB2?.proceed(callId: callIdA1toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2881,7 +2893,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerA2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerA2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return
@@ -2924,7 +2936,7 @@ class SignalRingRTCTests: XCTestCase {
 
             do {
                 Logger.debug("Test: Invoking proceed()...")
-                _ = try callManagerB2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController)
+                _ = try callManagerB2?.proceed(callId: callIdA2toB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal)
             } catch {
                 XCTFail("Call Manager proceed() failed: \(error)")
                 return

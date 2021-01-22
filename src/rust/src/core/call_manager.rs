@@ -21,7 +21,6 @@ use prost::Message;
 
 use crate::common::{
     ApplicationEvent,
-    BandwidthMode,
     CallDirection,
     CallId,
     CallMediaType,
@@ -33,6 +32,7 @@ use crate::common::{
     Result,
     RingBench,
 };
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
@@ -399,8 +399,15 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<()> {
-        handle_active_call_api!(self, CallManager::handle_proceed, call_id, app_call_context)
+        handle_active_call_api!(
+            self,
+            CallManager::handle_proceed,
+            call_id,
+            app_call_context,
+            bandwidth_mode
+        )
     }
 
     /// OK for the library to continue to send signaling messages.
@@ -951,6 +958,7 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
@@ -965,7 +973,7 @@ where
         }
 
         active_call.set_call_context(app_call_context)?;
-        active_call.inject_proceed()
+        active_call.inject_proceed(bandwidth_mode)
     }
 
     /// Handle message_sent() API from application.
@@ -1802,9 +1810,16 @@ where
         device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<Connection<T>> {
         let mut platform = self.platform.lock()?;
-        platform.create_connection(call, device_id, connection_type, signaling_version)
+        platform.create_connection(
+            call,
+            device_id,
+            connection_type,
+            signaling_version,
+            bandwidth_mode,
+        )
     }
 
     /// Create a new application specific media stream
@@ -2169,8 +2184,9 @@ where
         debug!("  recipient: {}", uuid_to_string(&recipient));
 
         let platform = self.platform.lock().expect("platform.lock()");
-        let mut call_message = protobuf::signaling::CallMessage::default();
-        call_message.group_call_message = Some(message);
+        let call_message = protobuf::signaling::CallMessage {
+            group_call_message: Some(message),
+        };
         let mut bytes = BytesMut::with_capacity(call_message.encoded_len());
         let result = call_message.encode(&mut bytes);
         match result {

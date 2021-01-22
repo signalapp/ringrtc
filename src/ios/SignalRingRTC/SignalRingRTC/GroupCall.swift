@@ -22,12 +22,6 @@ public enum JoinState: Int32 {
     case joined = 2
 }
 
-/// Bandwidth mode for limiting network bandwidth between the device and media server.
-public enum BandwidthMode: Int32 {
-    case low = 0
-    case normal = 1
-}
-
 /// If not ended purposely by the user, gives the reason why a group call ended.
 public enum GroupCallEndReason: Int32 {
     // Normal events
@@ -270,7 +264,7 @@ public class GroupCall {
         }
 
         ringrtcConnect(self.ringRtcCallManager, clientId)
-        
+
         return true
     }
 

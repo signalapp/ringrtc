@@ -433,3 +433,94 @@ impl Clone for VideoTrack {
 unsafe impl Send for VideoTrack {}
 
 unsafe impl Sync for VideoTrack {}
+
+// Same as webrtc::AudioEncoder::Config in api/audio_codecs/audio_encoder.h.
+// Very OPUS-specific
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct RffiAudioEncoderConfig {
+    packet_size_ms: u32,
+
+    bandwidth:         i32,
+    start_bitrate_bps: i32,
+    min_bitrate_bps:   i32,
+    max_bitrate_bps:   i32,
+    complexity:        i32,
+    enable_vbr:        i32,
+    enable_dtx:        i32,
+    enable_fec:        i32,
+}
+
+// A nice form of RffiAudioEncoderConfig
+#[derive(Clone, Debug)]
+pub struct AudioEncoderConfig {
+    // AKA ptime or frame size
+    // Valid sizes: 10, 20, 40, 60, 120
+    // Default is 20ms
+    pub packet_size_ms: u32,
+
+    // Default in Auto
+    pub bandwidth: AudioBandwidth,
+
+    // Valid range: 500-192000
+    // Default is to start at 40000 and move between 16000 and 40000.
+    pub start_bitrate_bps: u16,
+    pub min_bitrate_bps:   u16,
+    pub max_bitrate_bps:   u16,
+    // Valid range: 0-9 (9 must complex)
+    // Default is 9
+    pub complexity:        u16,
+    // Default is true.
+    pub enable_cbr:        bool,
+    // Default in false.
+    pub enable_dtx:        bool,
+    // Default in true.
+    pub enable_fec:        bool,
+}
+
+impl Default for AudioEncoderConfig {
+    fn default() -> Self {
+        Self {
+            packet_size_ms: 20,
+
+            bandwidth: AudioBandwidth::Auto,
+
+            start_bitrate_bps: 40000,
+            min_bitrate_bps:   16000,
+            max_bitrate_bps:   40000,
+            complexity:        9,
+            enable_cbr:        true,
+            enable_dtx:        false,
+            enable_fec:        true,
+        }
+    }
+}
+
+impl From<&AudioEncoderConfig> for RffiAudioEncoderConfig {
+    fn from(config: &AudioEncoderConfig) -> Self {
+        Self {
+            packet_size_ms: config.packet_size_ms,
+
+            bandwidth:         config.bandwidth as i32,
+            start_bitrate_bps: config.start_bitrate_bps as i32,
+            min_bitrate_bps:   config.min_bitrate_bps as i32,
+            max_bitrate_bps:   config.max_bitrate_bps as i32,
+            complexity:        config.complexity as i32,
+            enable_vbr:        if config.enable_cbr { 0 } else { 1 },
+            enable_dtx:        if config.enable_dtx { 1 } else { 0 },
+            enable_fec:        if config.enable_fec { 1 } else { 0 },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(i32)]
+pub enum AudioBandwidth {
+    // Constants in libopus
+    Auto      = -1000,
+    Full      = 1105,
+    SuperWide = 1104,
+    Wide      = 1103,
+    Medium    = 1102,
+    Narrow    = 1101,
+}

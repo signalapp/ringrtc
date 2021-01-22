@@ -139,4 +139,3 @@
    // Called forwardedEndpoints in the SFU's RtpDataChannelMessages.proto
    optional ReceivedFromDevice received_from_device         = 7;
  }
- 

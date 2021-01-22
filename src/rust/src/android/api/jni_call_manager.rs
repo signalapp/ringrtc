@@ -16,7 +16,8 @@ use crate::android::android_platform::AndroidPlatform;
 use crate::android::call_manager;
 use crate::android::call_manager::AndroidCallManager;
 use crate::android::error;
-use crate::common::{BandwidthMode, CallMediaType, DeviceId, FeatureLevel};
+use crate::common::{CallMediaType, DeviceId, FeatureLevel};
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::connection::Connection;
 use crate::core::{group_call, signaling};
 
@@ -123,12 +124,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
     call_manager: jlong,
     call_id: jlong,
     jni_call_context: JObject,
+    bandwidth_mode: jint,
 ) {
     match call_manager::proceed(
         &env,
         call_manager as *mut AndroidCallManager,
         call_id,
         jni_call_context,
+        BandwidthMode::from_i32(bandwidth_mode),
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -470,19 +473,16 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetVideoEnab
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetLowBandwidthMode(
+pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateBandwidthMode(
     env: JNIEnv<'static>,
     _object: JObject,
     call_manager: jlong,
-    enabled: bool,
+    bandwidth_mode: jint,
 ) {
-    let mode = if enabled {
-        BandwidthMode::Low
-    } else {
-        BandwidthMode::Normal
-    };
-
-    match call_manager::set_direct_bandwidth_mode(call_manager as *mut AndroidCallManager, mode) {
+    match call_manager::update_bandwidth_mode(
+        call_manager as *mut AndroidCallManager,
+        BandwidthMode::from_i32(bandwidth_mode),
+    ) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -756,20 +756,10 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetBandwidthMo
     client_id: jlong,
     bandwidth_mode: jint,
 ) {
-    // Translate from the app's mode to the internal bitrate version.
-    let bandwidth_mode = if bandwidth_mode == 0 {
-        BandwidthMode::Low
-    } else if bandwidth_mode == 1 {
-        BandwidthMode::Normal
-    } else {
-        warn!("Invalid bandwidth_mode: {}", bandwidth_mode);
-        return;
-    };
-
     match call_manager::set_bandwidth_mode(
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
-        bandwidth_mode,
+        BandwidthMode::from_i32(bandwidth_mode),
     ) {
         Ok(v) => v,
         Err(e) => {

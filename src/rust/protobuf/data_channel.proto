@@ -5,8 +5,7 @@
 
 syntax = "proto2";
 
-// Protocol Buffers for the messages sent over the WebRTC data
-// channel.
+// Messages sent over the data channel
 
 package data_channel;
 
@@ -35,6 +34,7 @@ message SenderStatus {
 
 message ReceiverStatus {
   optional uint64 id              = 1;
+  // Used during the call to convey the bitrate that should be used for sending.
   optional uint64 max_bitrate_bps = 2;
 }
 

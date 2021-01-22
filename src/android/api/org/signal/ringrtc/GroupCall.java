@@ -365,7 +365,7 @@ public final class GroupCall {
      * @throws CallException for native code failures
      *
      */
-    public void setBandwidthMode(@NonNull BandwidthMode bandwidthMode)
+    public void setBandwidthMode(CallManager.BandwidthMode bandwidthMode)
         throws CallException
     {
         Log.i(TAG, "setBandwidthMode():");
@@ -623,23 +623,6 @@ public final class GroupCall {
 
         @CalledByNative
         static JoinState fromNativeIndex(int nativeIndex) {
-            return values()[nativeIndex];
-        }
-    }
-
-    /**
-     * A set of bandwidth constraints that the client can control for the group call.
-     */
-    public enum BandwidthMode {
-
-        /** Chooses a low-bandwidth mode. */
-        LOW,
-
-        /** Chooses the normal (default) bandwidth mode. */
-        NORMAL;
-
-        @CalledByNative
-        static BandwidthMode fromNativeIndex(int nativeIndex) {
             return values()[nativeIndex];
         }
     }

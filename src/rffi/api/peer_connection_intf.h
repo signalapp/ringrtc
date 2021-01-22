@@ -149,5 +149,7 @@ Rust_sendRtp(webrtc::PeerConnectionInterface* peer_connection,
 RUSTEXPORT bool
 Rust_receiveRtp(webrtc::PeerConnectionInterface* peer_connection, uint8_t pt);
 
+RUSTEXPORT void
+Rust_configureAudioEncoders(webrtc::PeerConnectionInterface* peer_connection, const webrtc::AudioEncoder::Config* config);
 
 #endif /* RFFI_API_PEER_CONNECTION_INTF_H__ */

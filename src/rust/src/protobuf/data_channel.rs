@@ -34,6 +34,7 @@ pub struct SenderStatus {
 pub struct ReceiverStatus {
     #[prost(uint64, optional, tag="1")]
     pub id: ::std::option::Option<u64>,
+    /// Used during the call to convey the bitrate that should be used for sending.
     #[prost(uint64, optional, tag="2")]
     pub max_bitrate_bps: ::std::option::Option<u64>,
 }

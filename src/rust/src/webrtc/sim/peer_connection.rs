@@ -9,6 +9,7 @@ use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
 use crate::core::platform::PlatformItem;
+use crate::webrtc::media::RffiAudioEncoderConfig;
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
@@ -252,6 +253,14 @@ pub unsafe fn Rust_receiveRtp(
 ) -> bool {
     info!("Rust_receiveRtp:");
     true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_configureAudioEncoders(
+    _peer_connection: *const RffiPeerConnection,
+    _config: *const RffiAudioEncoderConfig,
+) {
+    info!("Rust_configureAudioEncoders:");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

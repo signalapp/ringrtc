@@ -274,6 +274,7 @@ public class CallManager {
    * @param camera        camera control to use for this Call
    * @param iceServers    list of ICE servers to use for this Call
    * @param hideIp        if true hide caller's IP by using a TURN server
+   * @param bandwidthMode desired bandwidth mode to start the session with
    * @param enableCamera  if true, enable the local camera video track when created
    *
    * @throws CallException for native code failures
@@ -287,6 +288,7 @@ public class CallManager {
                       @NonNull CameraControl                  camera,
                       @NonNull List<PeerConnection.IceServer> iceServers,
                                boolean                        hideIp,
+                               BandwidthMode                  bandwidthMode,
                                boolean                        enableCamera)
     throws CallException
   {
@@ -312,7 +314,8 @@ public class CallManager {
     callContext.setVideoEnabled(enableCamera);
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
-                   callContext);
+                   callContext,
+                   bandwidthMode.ordinal());
   }
 
   /**
@@ -708,20 +711,20 @@ public class CallManager {
 
   /**
    *
-   * Notification from application to enable/disable the low bandwidth
-   * mode for the session.
+   * Allows the application to constrain bandwidth if so configured
+   * by the user.
    *
-   * @param enabled  if true, then enable low bandwidth mode
+   * @param bandwidthMode  one of the BandwidthMode enumerated values
    *
    * @throws CallException for native code failures
    *
    */
-  public void setLowBandwidthMode(boolean enabled)
+  public void updateBandwidthMode(BandwidthMode bandwidthMode)
     throws CallException
   {
     checkCallManagerExists();
 
-    ringrtcSetLowBandwidthMode(nativeCallManager, enabled);
+    ringrtcUpdateBandwidthMode(nativeCallManager, bandwidthMode.ordinal());
   }
 
   /**
@@ -1392,7 +1395,6 @@ public class CallManager {
     static CallEvent fromNativeIndex(int nativeIndex) {
       return values()[nativeIndex];
     }
-
   }
 
   /**
@@ -1412,7 +1414,6 @@ public class CallManager {
     static CallMediaType fromNativeIndex(int nativeIndex) {
       return values()[nativeIndex];
     }
-
   }
 
   /**
@@ -1441,7 +1442,35 @@ public class CallManager {
     static HangupType fromNativeIndex(int nativeIndex) {
       return values()[nativeIndex];
     }
+  }
 
+  /**
+   * Modes of operation when working with different bandwidth environments.
+   */
+  public enum BandwidthMode {
+
+    /**
+     * Intended for audio-only, to help ensure reliable audio over
+     * severely constrained networks.
+     */
+    VERY_LOW,
+
+    /**
+     * Intended for low bitrate video calls. Useful to reduce
+     * bandwidth costs, especially on mobile networks.
+     */
+    LOW,
+
+    /**
+     * (Default) No specific constraints, but keep a relatively
+     * high bitrate to ensure good quality.
+     */
+    NORMAL;
+
+    @CalledByNative
+    static BandwidthMode fromNativeIndex(int nativeIndex) {
+        return values()[nativeIndex];
+    }
   }
 
   /**
@@ -1467,7 +1496,6 @@ public class CallManager {
     static HttpMethod fromNativeIndex(int nativeIndex) {
       return values()[nativeIndex];
     }
-
   }
 
   /**
@@ -1640,7 +1668,8 @@ public class CallManager {
   private native
     void ringrtcProceed(long        nativeCallManager,
                         long        callId,
-                        CallContext callContext)
+                        CallContext callContext,
+                        int         bandwidthMode)
     throws CallException;
 
   private native
@@ -1739,7 +1768,7 @@ public class CallManager {
     throws CallException;
 
   private native
-    void ringrtcSetLowBandwidthMode(long nativeCallManager, boolean enabled)
+    void ringrtcUpdateBandwidthMode(long nativeCallManager, int bandwidthMode)
     throws CallException;
 
   private native

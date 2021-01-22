@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::common::{
-    BandwidthMode,
     CallId,
     CallMediaType,
     DeviceId,
@@ -19,6 +18,7 @@ use crate::common::{
     HttpResponse,
     Result,
 };
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::group_call;
 use crate::core::group_call::UserId;
@@ -119,13 +119,13 @@ pub enum Event {
 impl SignalingSender for Sender<Event> {
     fn send_signaling(
         &self,
-        recipient_id: &PeerId,
+        recipient_id: &str,
         call_id: CallId,
         receiver_device_id: Option<DeviceId>,
         msg: signaling::Message,
     ) -> Result<()> {
         self.send(Event::SendSignaling(
-            recipient_id.clone(),
+            recipient_id.to_string(),
             receiver_device_id,
             call_id,
             msg,
@@ -140,13 +140,13 @@ impl SignalingSender for Sender<Event> {
 }
 
 impl CallStateHandler for Sender<Event> {
-    fn handle_call_state(&self, remote_peer_id: &PeerId, call_state: CallState) -> Result<()> {
-        self.send(Event::CallState(remote_peer_id.clone(), call_state))?;
+    fn handle_call_state(&self, remote_peer_id: &str, call_state: CallState) -> Result<()> {
+        self.send(Event::CallState(remote_peer_id.to_string(), call_state))?;
         Ok(())
     }
 
-    fn handle_remote_video_state(&self, remote_peer_id: &PeerId, enabled: bool) -> Result<()> {
-        self.send(Event::RemoteVideoState(remote_peer_id.clone(), enabled))?;
+    fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
+        self.send(Event::RemoteVideoState(remote_peer_id.to_string(), enabled))?;
         Ok(())
     }
 }
@@ -399,6 +399,7 @@ declare_types! {
             let ice_server_password = cx.argument::<JsString>(2)?.value();
             let js_ice_server_urls = cx.argument::<JsArray>(3)?;
             let hide_ip = cx.argument::<JsBoolean>(4)?.value();
+            let bandwidth_mode = cx.argument::<JsNumber>(5)?.value() as i32;
 
             let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len() as usize);
             for i in 0..js_ice_server_urls.len() {
@@ -421,7 +422,7 @@ declare_types! {
                     ice_server,
                     cm.outgoing_audio_track.clone(),
                     cm.outgoing_video_track.clone());
-                cm.call_manager.proceed(call_id, call_context)?;
+                cm.call_manager.proceed(call_id, call_context, BandwidthMode::from_i32(bandwidth_mode))?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -486,20 +487,14 @@ declare_types! {
             Ok(cx.undefined().upcast())
         }
 
-        method setLowBandwidthMode(mut cx) {
-            debug!("JsCallManager.setLowBandwidthMode()");
-            let enabled = cx.argument::<JsBoolean>(0)?.value();
-
-            let mode = if enabled {
-                BandwidthMode::Low
-            } else {
-                BandwidthMode::Normal
-            };
+        method updateBandwidthMode(mut cx) {
+            debug!("JsCallManager.updateBandwidthMode()");
+            let bandwidth_mode = cx.argument::<JsNumber>(0)?.value() as i32;
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |cm| {
-                let mut active_connection = cm.call_manager.active_connection()?;
-                active_connection.set_bandwidth_mode(mode)?;
+                let active_connection = cm.call_manager.active_connection()?;
+                active_connection.update_bandwidth_mode(BandwidthMode::from_i32(bandwidth_mode))?;
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -625,7 +620,7 @@ declare_types! {
                 // This is kind of ugly, but the Android and iOS apps do the same
                 // and so from_type_and_device_id assumes it.
                 // See signaling.rs for more details.
-                0 as DeviceId
+                0
             } else {
                 hangup_device_id.downcast::<JsNumber>().unwrap().value() as DeviceId
             };
@@ -938,21 +933,11 @@ declare_types! {
 
         method setBandwidthMode(mut cx) {
             let client_id = cx.argument::<JsNumber>(0)?.value() as group_call::ClientId;
-            let js_bandwidth_mode = cx.argument::<JsNumber>(1)?.value() as i32;
-
-            // Translate from the app's mode to the internal bitrate version.
-            let bandwidth_mode = if js_bandwidth_mode == 0 {
-                BandwidthMode::Low
-            } else if js_bandwidth_mode == 1 {
-                BandwidthMode::Normal
-            } else {
-                warn!("Invalid bandwidthMode: {}", js_bandwidth_mode);
-                return Ok(cx.undefined().upcast());
-            };
+            let bandwidth_mode = cx.argument::<JsNumber>(1)?.value() as i32;
 
             let mut this = cx.this();
             cx.borrow_mut(&mut this, |mut cm| {
-                cm.call_manager.set_bandwidth_mode(client_id, bandwidth_mode);
+                cm.call_manager.set_bandwidth_mode(client_id, BandwidthMode::from_i32(bandwidth_mode));
                 Ok(())
             }).or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             Ok(cx.undefined().upcast())
@@ -1244,7 +1229,7 @@ declare_types! {
                         let method = *observer.get(&mut cx, method_name)?.downcast::<JsFunction>().expect(&error_message);
                         let args = vec![
                             cx.string(peer_id).upcast(),
-                            cx.number(maybe_device_id.unwrap_or(0 as DeviceId) as f64).upcast(),
+                            cx.number(maybe_device_id.unwrap_or(0) as f64).upcast(),
                             create_id_arg(&mut cx, call_id.as_u64()),
                             cx.boolean(maybe_device_id.is_none()).upcast(),
                             data1,

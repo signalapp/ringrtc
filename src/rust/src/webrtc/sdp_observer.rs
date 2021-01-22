@@ -12,6 +12,7 @@ use std::ptr;
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::common::Result;
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::util::{ptr_as_ref, FutureResult, RustObject};
 use crate::error::RingRtcError;
 use crate::protobuf;
@@ -154,6 +155,7 @@ impl SessionDescription {
     pub fn to_v4(
         &self,
         public_key: Vec<u8>,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<protobuf::signaling::ConnectionParametersV4> {
         let rffi_v4_ptr = unsafe { sdp::Rust_sessionDescriptionToV4(self.rffi) };
 
@@ -200,6 +202,7 @@ impl SessionDescription {
             ice_ufrag: Some(ice_ufrag),
             ice_pwd: Some(ice_pwd),
             receive_video_codecs,
+            max_bitrate_bps: Some(bandwidth_mode.max_bitrate().as_bps()),
         })
     }
 

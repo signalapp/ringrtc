@@ -16,17 +16,15 @@ use std::time::Duration;
 
 use ringrtc::common::{
     ApplicationEvent,
-    BandwidthMode,
     CallId,
     CallMediaType,
     CallState,
     ConnectionState,
     DeviceId,
 };
+use ringrtc::core::bandwidth_mode::BandwidthMode;
 use ringrtc::core::signaling;
-
 use ringrtc::sim::error::SimError;
-
 use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
@@ -85,6 +83,7 @@ fn start_outbound_and_proceed() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        BandwidthMode::Normal,
     )
     .expect(error_line!());
 
@@ -140,6 +139,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        BandwidthMode::Normal,
     )
     .expect(error_line!());
 
@@ -624,15 +624,15 @@ fn inject_send_sender_status_via_data_channel() {
 }
 
 #[test]
-fn set_bandwidth_mode_normal() {
+fn update_bandwidth_mode_default() {
     test_init();
 
     let context = connect_outbound_call();
     let mut cm = context.cm();
-    let mut active_connection = context.active_connection();
+    let active_connection = context.active_connection();
 
     active_connection
-        .set_bandwidth_mode(BandwidthMode::Normal)
+        .update_bandwidth_mode(BandwidthMode::Normal)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -643,15 +643,15 @@ fn set_bandwidth_mode_normal() {
 }
 
 #[test]
-fn set_bandwidth_mode_low() {
+fn update_bandwidth_mode_low() {
     test_init();
 
     let context = connect_outbound_call();
     let mut cm = context.cm();
-    let mut active_connection = context.active_connection();
+    let active_connection = context.active_connection();
 
     active_connection
-        .set_bandwidth_mode(BandwidthMode::Low)
+        .update_bandwidth_mode(BandwidthMode::Low)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1035,6 +1035,7 @@ fn outbound_proceed_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        BandwidthMode::Normal,
     )
     .expect(error_line!());
 
@@ -1537,8 +1538,12 @@ fn start_outbound_receive_busy() {
         active_call.call_id()
     };
 
-    cm.proceed(call_id, format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned())
-        .expect(error_line!());
+    cm.proceed(
+        call_id,
+        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        BandwidthMode::Normal,
+    )
+    .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 

@@ -16,7 +16,7 @@ use ringrtc::{
         HttpMethod,
         Result,
     },
-    core::{call_manager::CallManager, group_call, signaling},
+    core::{bandwidth_mode::BandwidthMode, call_manager::CallManager, group_call, signaling},
     native::{
         CallState,
         CallStateHandler,
@@ -511,13 +511,13 @@ impl CallEndpoint {
 impl SignalingSender for CallEndpoint {
     fn send_signaling(
         &self,
-        recipient_id: &PeerId,
+        recipient_id: &str,
         call_id: CallId,
         _receiver_device_id: Option<DeviceId>,
         msg: signaling::Message,
     ) -> Result<()> {
         // To send across threads
-        let recipient_id = recipient_id.clone();
+        let recipient_id = recipient_id.to_string();
 
         self.actor.send(move |state| {
             let sender_id = &state.peer_id;
@@ -543,7 +543,7 @@ impl SignalingSender for CallEndpoint {
 }
 
 impl CallStateHandler for CallEndpoint {
-    fn handle_call_state(&self, remote_peer_id: &PeerId, call_state: CallState) -> Result<()> {
+    fn handle_call_state(&self, remote_peer_id: &str, call_state: CallState) -> Result<()> {
         info!(
             "State change in call from {}.{} to {}: now {:?}",
             self.peer_id, self.device_id, remote_peer_id, call_state
@@ -555,14 +555,14 @@ impl CallStateHandler for CallEndpoint {
             {
                 state
                     .call_manager
-                    .proceed(call_id, state.call_context.clone())
+                    .proceed(call_id, state.call_context.clone(), BandwidthMode::VeryLow)
                     .expect("proceed with outgoing call");
             }
         });
         Ok(())
     }
 
-    fn handle_remote_video_state(&self, remote_peer_id: &PeerId, enabled: bool) -> Result<()> {
+    fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         info!(
             "Video State for {} => {}: {}",
             self.peer_id, remote_peer_id, enabled

@@ -163,6 +163,7 @@ export class RingRTCType {
         settings.iceServer.password || '',
         settings.iceServer.urls,
         settings.hideIp,
+        settings.bandwidthMode,
       );
     });
   }
@@ -815,6 +816,7 @@ export class RingRTCType {
 export interface CallSettings {
   iceServer: IceServer;
   hideIp: boolean;
+  bandwidthMode: BandwidthMode;
 }
 
 interface IceServer {
@@ -1043,10 +1045,10 @@ export class Call {
     });
   }
 
-  setLowBandwidthMode(enabled: boolean) {
+  updateBandwidthMode(bandwidthMode: BandwidthMode) {
     silly_deadlock_protection(() => {
       try {
-        this._callManager.setLowBandwidthMode(enabled);
+        this._callManager.updateBandwidthMode(bandwidthMode);
       } catch {
         // We may not have an active connection any more.
         // In which case it doesn't matter
@@ -1096,12 +1098,6 @@ export enum JoinState {
   NotJoined = 0,
   Joining = 1,
   Joined = 2,
-}
-
-// Bandwidth mode for limiting network bandwidth between the device and media server.
-export enum BandwidthMode {
-  Low = 0,
-  Normal = 1,
 }
 
 // If not ended purposely by the user, gives the reason why a group call ended.
@@ -1499,6 +1495,12 @@ export enum HangupType {
   NeedPermission = 4,
 }
 
+export enum BandwidthMode {
+  VeryLow = 0,
+  Low = 1,
+  Normal = 2,
+}
+
 export interface CallManager {
   createOutgoingCall(remoteUserId: UserId, isVideoCall: boolean, localDeviceId: DeviceId): CallId;
   proceed(
@@ -1507,6 +1509,7 @@ export interface CallManager {
     iceServerPassword: string,
     iceServerUrls: Array<string>,
     hideIp: boolean,
+    bandwidthMode: BandwidthMode
   ): void;
   accept(callId: CallId): void;
   ignore(callId: CallId): void;
@@ -1515,7 +1518,7 @@ export interface CallManager {
   signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
   setOutgoingVideoEnabled(enabled: boolean): void;
-  setLowBandwidthMode(enabled: boolean): void;
+  updateBandwidthMode(bandwidthMode: BandwidthMode): void;
   sendVideoFrame(width: number, height: number, buffer: ArrayBuffer): void;
   receiveVideoFrame(buffer: ArrayBuffer): [number, number] | undefined;
   receivedOffer(

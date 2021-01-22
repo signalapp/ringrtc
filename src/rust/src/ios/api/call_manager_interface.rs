@@ -14,7 +14,8 @@ use crate::ios::call_manager;
 use crate::ios::call_manager::IOSCallManager;
 use crate::ios::logging::IOSLogger;
 
-use crate::common::{BandwidthMode, CallMediaType, DeviceId, FeatureLevel, HttpResponse};
+use crate::common::{CallMediaType, DeviceId, FeatureLevel, HttpResponse};
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::group_call;
 use crate::core::signaling;
 
@@ -526,8 +527,14 @@ pub extern "C" fn ringrtcProceed(
     callManager: *mut c_void,
     callId: u64,
     appCallContext: AppCallContext,
+    bandwidthMode: i32,
 ) -> *mut c_void {
-    match call_manager::proceed(callManager as *mut IOSCallManager, callId, appCallContext) {
+    match call_manager::proceed(
+        callManager as *mut IOSCallManager,
+        callId,
+        appCallContext,
+        BandwidthMode::from_i32(bandwidthMode),
+    ) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -870,21 +877,13 @@ pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) 
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcSetLowBandwidthMode(
-    callManager: *mut c_void,
-    enabled: bool,
-) -> *mut c_void {
-    let mode = if enabled {
-        BandwidthMode::Low
-    } else {
-        BandwidthMode::Normal
-    };
-    match call_manager::set_direct_bandwidth_mode(callManager as *mut IOSCallManager, mode) {
-        Ok(_v) => {
-            // Return the object reference back as indication of success.
-            callManager
-        }
-        Err(_e) => ptr::null_mut(),
+pub extern "C" fn ringrtcUpdateBandwidthMode(callManager: *mut c_void, bandwidthMode: i32) {
+    let result = call_manager::update_bandwidth_mode(
+        callManager as *mut IOSCallManager,
+        BandwidthMode::from_i32(bandwidthMode),
+    );
+    if result.is_err() {
+        error!("ringrtcUpdateBandwidthMode(): {:?}", result.err());
     }
 }
 
@@ -1131,20 +1130,10 @@ pub extern "C" fn ringrtcSetBandwidthMode(
 ) {
     info!("ringrtcSetBandwidthMode():");
 
-    // Translate from the app's mode to the internal bitrate version.
-    let bandwidth_mode = if bandwidthMode == 0 {
-        BandwidthMode::Low
-    } else if bandwidthMode == 1 {
-        BandwidthMode::Normal
-    } else {
-        warn!("Invalid bandwidthMode: {}", bandwidthMode);
-        return;
-    };
-
     let result = call_manager::set_bandwidth_mode(
         callManager as *mut IOSCallManager,
         clientId,
-        bandwidth_mode,
+        BandwidthMode::from_i32(bandwidthMode),
     );
     if result.is_err() {
         error!("{:?}", result.err());

@@ -19,15 +19,8 @@ use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
 
-use crate::common::{
-    BandwidthMode,
-    CallId,
-    CallMediaType,
-    DeviceId,
-    FeatureLevel,
-    HttpResponse,
-    Result,
-};
+use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, HttpResponse, Result};
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
@@ -157,6 +150,7 @@ pub fn proceed(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     jni_call_context: JObject,
+    bandwidth_mode: BandwidthMode,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -167,7 +161,7 @@ pub fn proceed(
     let android_call_context =
         AndroidCallContext::new(platform, env.new_global_ref(jni_call_context)?);
 
-    call_manager.proceed(call_id, android_call_context)
+    call_manager.proceed(call_id, android_call_context, bandwidth_mode)
 }
 
 /// Application notification that signal message was sent successfully
@@ -487,16 +481,16 @@ pub fn set_video_enable(call_manager: *mut AndroidCallManager, enable: bool) -> 
     active_connection.inject_send_sender_status_via_data_channel(enable)
 }
 
-/// CMI request to set the low bandwidth mode
-pub fn set_direct_bandwidth_mode(
+/// Request to update the bandwidth mode on the direct connection
+pub fn update_bandwidth_mode(
     call_manager: *mut AndroidCallManager,
-    mode: BandwidthMode,
+    bandwidth_mode: BandwidthMode,
 ) -> Result<()> {
-    info!("set_direct_bandwidth_mode():");
+    info!("update_bandwidth_mode():");
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
-    active_connection.set_bandwidth_mode(mode)
+    active_connection.inject_update_bandwidth_mode(bandwidth_mode)
 }
 
 /// CMI request to drop the active call

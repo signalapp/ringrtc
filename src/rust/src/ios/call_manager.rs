@@ -14,15 +14,8 @@ use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppO
 use crate::ios::ios_platform::IOSPlatform;
 use crate::ios::logging::{init_logging, IOSLogger};
 
-use crate::common::{
-    BandwidthMode,
-    CallId,
-    CallMediaType,
-    DeviceId,
-    FeatureLevel,
-    HttpResponse,
-    Result,
-};
+use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, HttpResponse, Result};
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
 use crate::core::{group_call, signaling};
@@ -81,13 +74,14 @@ pub fn proceed(
     call_manager: *mut IOSCallManager,
     call_id: u64,
     app_call_context: AppCallContext,
+    bandwidth_mode: BandwidthMode,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
 
     info!("proceed(): {}", call_id);
 
-    call_manager.proceed(call_id, Arc::new(app_call_context))
+    call_manager.proceed(call_id, Arc::new(app_call_context), bandwidth_mode)
 }
 
 /// Application notification that the sending of the previous message was a success.
@@ -391,16 +385,16 @@ pub fn set_video_enable(call_manager: *mut IOSCallManager, enable: bool) -> Resu
     active_connection.inject_send_sender_status_via_data_channel(enable)
 }
 
-/// CMI request to set the low bandwidth mode on the direct connection
-pub fn set_direct_bandwidth_mode(
+/// Request to update the bandwidth mode on the direct connection
+pub fn update_bandwidth_mode(
     call_manager: *mut IOSCallManager,
-    mode: BandwidthMode,
+    bandwidth_mode: BandwidthMode,
 ) -> Result<()> {
-    info!("set_low_bandwidth_mode():");
+    info!("update_bandwidth_mode():");
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
-    active_connection.set_bandwidth_mode(mode)
+    active_connection.inject_update_bandwidth_mode(bandwidth_mode)
 }
 
 /// CMI request to drop the active call

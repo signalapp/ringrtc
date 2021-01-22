@@ -14,12 +14,11 @@ use std::ptr;
 use std::time::Duration;
 
 use ringrtc::common::{ApplicationEvent, CallId, CallState, ConnectionState, DeviceId};
-
+use ringrtc::core::bandwidth_mode::BandwidthMode;
 use ringrtc::core::call_manager::MAX_MESSAGE_AGE_SEC;
 use ringrtc::core::signaling;
-use ringrtc::webrtc::media::MediaStream;
-
 use ringrtc::webrtc::data_channel::DataChannel;
+use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
 mod common;
@@ -65,6 +64,7 @@ fn start_inbound_call() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        BandwidthMode::Normal,
     )
     .expect(error_line!());
 
@@ -307,6 +307,7 @@ fn start_inbound_call_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        BandwidthMode::Normal,
     )
     .expect(error_line!());
 

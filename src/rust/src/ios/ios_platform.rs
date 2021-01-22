@@ -19,6 +19,7 @@ use crate::common::{
     HttpMethod,
     Result,
 };
+use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
@@ -105,15 +106,22 @@ impl Platform for IOSPlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
+        bandwidth_mode: BandwidthMode,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {}, signaling_version: {:?}",
+            "create_connection(): call_id: {} remote_device_id: {}, signaling_version: {:?}, bandwidth_mode: {}",
             call.call_id(),
             remote_device_id,
-            signaling_version
+            signaling_version,
+            bandwidth_mode
         );
 
-        let connection = Connection::new(call.clone(), remote_device_id, connection_type)?;
+        let connection = Connection::new(
+            call.clone(),
+            remote_device_id,
+            connection_type,
+            bandwidth_mode,
+        )?;
 
         let connection_ptr = connection.get_connection_ptr()?;
 
@@ -195,7 +203,7 @@ impl Platform for IOSPlatform {
     ) -> Result<()> {
         // Offer messages are always broadcast
         let broadcast = true;
-        let receiver_device_id = 0 as DeviceId;
+        let receiver_device_id = 0u32;
 
         info!("on_send_offer(): call_id: {}", call_id);
 
@@ -247,7 +255,7 @@ impl Platform for IOSPlatform {
     ) -> Result<()> {
         let (broadcast, receiver_device_id) = match send.receiver_device_id {
             // The DeviceId doesn't matter if we're broadcasting
-            None => (true, 0 as DeviceId),
+            None => (true, 0),
             Some(receiver_device_id) => (false, receiver_device_id),
         };
 
@@ -294,14 +302,14 @@ impl Platform for IOSPlatform {
     ) -> Result<()> {
         // Hangups are always broadcast
         let broadcast = true;
-        let receiver_device_id = 0 as DeviceId;
+        let receiver_device_id = 0;
 
         info!("on_send_hangup(): call_id: {}", call_id);
 
         let (hangup_type, hangup_device_id) = send.hangup.to_type_and_device_id();
         // We set the device_id to 0 in case it is not defined. It will
         // only be used for hangup types other than Normal.
-        let hangup_device_id = hangup_device_id.unwrap_or(0 as DeviceId);
+        let hangup_device_id = hangup_device_id.unwrap_or(0);
 
         (self.app_interface.onSendHangup)(
             self.app_interface.object,
@@ -320,7 +328,7 @@ impl Platform for IOSPlatform {
     fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
         // Busy messages are always broadcast
         let broadcast = true;
-        let receiver_device_id = 0 as DeviceId;
+        let receiver_device_id = 0;
 
         info!("on_send_busy(): call_id: {}", call_id);
 
