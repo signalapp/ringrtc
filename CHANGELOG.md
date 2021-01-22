@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.9.0
+
+- Add very low bandwidth support for audio
+
+- Remove SCTP
+
+- Update documentation
+
 ## v2.8.10
 
 - Android: Fix JNI out of memory issues for large groups
