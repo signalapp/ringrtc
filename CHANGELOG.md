@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.9.1
+
+- Electron: Fix Windows build
+
 ## v2.9.0
 
 - Add very low bandwidth support for audio
