@@ -877,7 +877,9 @@ where
 
         // If not busy, create a new direct call.
         let mut busy = self.busy.lock()?;
-        if !*busy {
+        if *busy {
+            Err(RingRtcError::CallManagerIsBusy.into())
+        } else {
             let mut active_call_id = self.active_call_id.lock()?;
             match *active_call_id {
                 Some(v) => Err(RingRtcError::CallAlreadyInProgress(v).into()),
@@ -903,8 +905,6 @@ where
                     call.inject_start_call()
                 }
             }
-        } else {
-            Err(RingRtcError::CallManagerIsBusy.into())
         }
     }
 
@@ -969,11 +969,11 @@ where
         let mut active_call = check_active_call!(self, "handle_proceed");
         if active_call.call_id() != call_id {
             ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
-            return Ok(());
+            Ok(())
+        } else {
+            active_call.set_call_context(app_call_context)?;
+            active_call.inject_proceed(bandwidth_mode)
         }
-
-        active_call.set_call_context(app_call_context)?;
-        active_call.inject_proceed(bandwidth_mode)
     }
 
     /// Handle message_sent() API from application.
