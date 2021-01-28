@@ -20,10 +20,10 @@ Install rustup, the Rust management system:
 
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-We currently use Rust 1.47.0 for official builds, but any recent stable version should work.
+We currently use Rust 1.49.0 for official builds, but any recent stable version should work.
 
-    rustup toolchain install 1.47.0
-    rustup default 1.47.0
+    rustup toolchain install 1.49.0
+    rustup default 1.49.0
 
 #### Android
 
@@ -214,7 +214,7 @@ increase the limit (generally, the default value of 256 on MacOS is not enough).
 
 We use `rustfmt` to keep the rust code tidy. To install:
 
-    rustup toolchain install nightly-2020-03-15 --force
+    rustup toolchain install nightly-2020-04-12 --force
 
 To format the code, in the `src/rust` directory, run the `format-code` script:
 
