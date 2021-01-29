@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.9.2
+
+- Electron: Update to version 11
+
+- Android: Add setOrientation() API
+
+- Update contributing readme
+
 ## v2.9.1
 
 - Electron: Fix Windows build
