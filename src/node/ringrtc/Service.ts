@@ -10,6 +10,59 @@ const os = require('os');
 // tslint:disable-next-line no-var-requires no-require-imports
 const Native = require('../../build/' + os.platform() + '/libringrtc.node');
 
+// tslint:disable-next-line no-unnecessary-class
+class NativeCallManager {
+  constructor() {
+    const callEndpoint = Native.createCallEndpoint();
+    Object.defineProperty(this, Native.callEndpointPropertyKey, {
+      value: callEndpoint,
+    });
+  }
+}
+
+// Mirror methods onto NativeCallManager.
+// This is done through direct assignment rather than wrapper methods to avoid indirection.
+(NativeCallManager.prototype as any).createOutgoingCall = Native.cm_createOutgoingCall;
+(NativeCallManager.prototype as any).proceed = Native.cm_proceed;
+(NativeCallManager.prototype as any).accept = Native.cm_accept;
+(NativeCallManager.prototype as any).ignore = Native.cm_ignore;
+(NativeCallManager.prototype as any).hangup = Native.cm_hangup;
+(NativeCallManager.prototype as any).signalingMessageSent = Native.cm_signalingMessageSent;
+(NativeCallManager.prototype as any).signalingMessageSendFailed = Native.cm_signalingMessageSendFailed;
+(NativeCallManager.prototype as any).updateBandwidthMode = Native.cm_updateBandwidthMode;
+(NativeCallManager.prototype as any).receivedOffer = Native.cm_receivedOffer;
+(NativeCallManager.prototype as any).receivedAnswer = Native.cm_receivedAnswer;
+(NativeCallManager.prototype as any).receivedIceCandidates = Native.cm_receivedIceCandidates;
+(NativeCallManager.prototype as any).receivedHangup = Native.cm_receivedHangup;
+(NativeCallManager.prototype as any).receivedBusy = Native.cm_receivedBusy;
+(NativeCallManager.prototype as any).receivedCallMessage = Native.cm_receivedCallMessage;
+(NativeCallManager.prototype as any).receivedHttpResponse = Native.cm_receivedHttpResponse;
+(NativeCallManager.prototype as any).httpRequestFailed = Native.cm_httpRequestFailed;
+(NativeCallManager.prototype as any).setOutgoingAudioEnabled = Native.cm_setOutgoingAudioEnabled;
+(NativeCallManager.prototype as any).setOutgoingVideoEnabled = Native.cm_setOutgoingVideoEnabled;
+(NativeCallManager.prototype as any).sendVideoFrame = Native.cm_sendVideoFrame;
+(NativeCallManager.prototype as any).receiveVideoFrame = Native.cm_receiveVideoFrame;
+(NativeCallManager.prototype as any).receiveGroupCallVideoFrame = Native.cm_receiveGroupCallVideoFrame;
+(NativeCallManager.prototype as any).createGroupCallClient = Native.cm_createGroupCallClient;
+(NativeCallManager.prototype as any).deleteGroupCallClient = Native.cm_deleteGroupCallClient;
+(NativeCallManager.prototype as any).connect = Native.cm_connect;
+(NativeCallManager.prototype as any).join = Native.cm_join;
+(NativeCallManager.prototype as any).leave = Native.cm_leave;
+(NativeCallManager.prototype as any).disconnect = Native.cm_disconnect;
+(NativeCallManager.prototype as any).setOutgoingAudioMuted = Native.cm_setOutgoingAudioMuted;
+(NativeCallManager.prototype as any).setOutgoingVideoMuted = Native.cm_setOutgoingVideoMuted;
+(NativeCallManager.prototype as any).resendMediaKeys = Native.cm_resendMediaKeys;
+(NativeCallManager.prototype as any).setBandwidthMode = Native.cm_setBandwidthMode;
+(NativeCallManager.prototype as any).requestVideo = Native.cm_requestVideo;
+(NativeCallManager.prototype as any).setGroupMembers = Native.cm_setGroupMembers;
+(NativeCallManager.prototype as any).setMembershipProof = Native.cm_setMembershipProof;
+(NativeCallManager.prototype as any).peekGroupCall = Native.cm_peekGroupCall;
+(NativeCallManager.prototype as any).getAudioInputs = Native.cm_getAudioInputs;
+(NativeCallManager.prototype as any).setAudioInput = Native.cm_setAudioInput;
+(NativeCallManager.prototype as any).getAudioOutputs = Native.cm_getAudioOutputs;
+(NativeCallManager.prototype as any).setAudioOutput = Native.cm_setAudioOutput;
+(NativeCallManager.prototype as any).poll = Native.cm_poll;
+
 type GroupId = ArrayBuffer;
 type GroupCallUserId = ArrayBuffer;
 
@@ -64,7 +117,7 @@ export class RingRTCType {
   handleSendCallMessage: ((recipientUuid: ArrayBuffer, message: ArrayBuffer) => void) | null = null;
 
   constructor() {
-    this.callManager = new Native.CallManager() as CallManager;
+    this.callManager = new NativeCallManager() as unknown as CallManager;
     this._call = null;
     this._groupCallByClientId = new Map();
     this._peekRequests = new Requests<PeekInfo>();

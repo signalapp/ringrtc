@@ -57,10 +57,6 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=WebRTC");
         println!("cargo:rustc-link-search=framework=../../out");
     }
-
-    if cfg!(feature = "electron") {
-        neon_build::setup();
-    }
 }
 
 // Based on https://github.com/alexcrichton/curl-rust/blob/master/curl-sys/build.rs
