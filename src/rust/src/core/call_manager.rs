@@ -974,7 +974,6 @@ where
             active_call.set_call_context(app_call_context)?;
             active_call.inject_proceed(bandwidth_mode)
         }
-
     }
 
     /// Handle message_sent() API from application.

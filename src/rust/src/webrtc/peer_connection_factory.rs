@@ -250,10 +250,9 @@ impl PeerConnectionFactory {
                 hide_ip,
                 ice_servers.rffi(),
                 outgoing_audio_track.rffi(),
-                outgoing_video_track.map_or_else(
-                    || std::ptr::null(),
-                    |outgoing_video_track| outgoing_video_track.rffi(),
-                ),
+                outgoing_video_track.map_or_else(std::ptr::null, |outgoing_video_track| {
+                    outgoing_video_track.rffi()
+                }),
                 enable_dtls,
                 enable_rtp_data_channel,
             )
