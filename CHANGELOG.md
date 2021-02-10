@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.9.3
+- Electron: Update neon to use n-api runtime
+
+- CI optimizations and lint improvements
+
 ## v2.9.2
 
 - Electron: Update to version 11
