@@ -1425,6 +1425,15 @@ impl Client {
         Self::set_peer_connection_descriptions(state, sfu_info, local_demux_id, &[])?;
 
         for addr in &sfu_info.udp_addresses {
+            // We use the octects instead of to_string() to bypass the IP address logging filter.
+            info!(
+                "Connecting to group call SFU with ip={:?} port={}",
+                match addr.ip() {
+                    std::net::IpAddr::V4(v4) => v4.octets().to_vec(),
+                    std::net::IpAddr::V6(v6) => v6.octets().to_vec(),
+                },
+                addr.port()
+            );
             state.peer_connection.add_ice_candidate_from_server(
                 addr.ip(),
                 addr.port(),
