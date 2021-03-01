@@ -57,10 +57,7 @@ impl Log for AndroidLogger {
                 Err(_) => return,
             };
 
-            let path = match record.module_path() {
-                Some(v) => v,
-                None => "unknown",
-            };
+            let path = record.module_path().unwrap_or("unknown");
 
             let level = record.level() as i32;
 

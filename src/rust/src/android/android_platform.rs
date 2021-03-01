@@ -417,7 +417,7 @@ impl Platform for AndroidPlatform {
     ) -> Result<()> {
         // Offers are always broadcast
         let broadcast = true;
-        let receiver_device_id = 0 as DeviceId;
+        let receiver_device_id = 0;
 
         info!("on_send_offer(): call_id: {}", call_id);
 
@@ -425,7 +425,7 @@ impl Platform for AndroidPlatform {
         let jni_call_manager = self.jni_call_manager.as_obj();
 
         // Set a frame capacity of min (5) + objects (3).
-        let capacity = (8) as i32;
+        let capacity = 8;
         let _ = env.with_local_frame(capacity, || {
             let jni_remote = remote_peer.as_obj();
             let call_id_jlong = u64::from(call_id) as jlong;
@@ -492,7 +492,7 @@ impl Platform for AndroidPlatform {
         let jni_call_manager = self.jni_call_manager.as_obj();
 
         // Set a frame capacity of min (5) + objects (2).
-        let capacity = (7) as i32;
+        let capacity = 7;
         let _ = env.with_local_frame(capacity, || {
             let jni_remote = remote_peer.as_obj();
             let call_id_jlong = u64::from(call_id) as jlong;
@@ -534,7 +534,7 @@ impl Platform for AndroidPlatform {
     ) -> Result<()> {
         let (broadcast, receiver_device_id) = match send.receiver_device_id {
             // The DeviceId doesn't matter if we're broadcasting
-            None => (true, 0 as DeviceId),
+            None => (true, 0),
             Some(receiver_device_id) => (false, receiver_device_id),
         };
 
@@ -606,7 +606,7 @@ impl Platform for AndroidPlatform {
     ) -> Result<()> {
         // Hangups are always broadcast
         let broadcast = true;
-        let receiver_device_id = 0 as DeviceId;
+        let receiver_device_id = 0;
 
         info!("on_send_hangup(): call_id: {}", call_id);
 
@@ -620,7 +620,7 @@ impl Platform for AndroidPlatform {
         let (hangup_type, hangup_device_id) = send.hangup.to_type_and_device_id();
         // We set the device_id to 0 in case it is not defined. It will
         // only be used for hangup types other than Normal.
-        let hangup_device_id = hangup_device_id.unwrap_or(0 as DeviceId) as jint;
+        let hangup_device_id = hangup_device_id.unwrap_or(0) as jint;
         let jni_hangup_type =
             match self.java_enum(&env, CALL_MANAGER_CLASS, "HangupType", hangup_type as i32) {
                 Ok(v) => AutoLocal::new(&env, v),
@@ -656,7 +656,7 @@ impl Platform for AndroidPlatform {
     fn on_send_busy(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
         // Busy messages are always broadcast
         let broadcast = true;
-        let receiver_device_id = 0 as DeviceId;
+        let receiver_device_id = 0;
 
         info!("on_send_busy(): call_id: {}", call_id);
 
@@ -694,7 +694,7 @@ impl Platform for AndroidPlatform {
         let jni_call_manager = self.jni_call_manager.as_obj();
 
         // Set a frame capacity of min (5) + objects (2).
-        let capacity = (7) as i32;
+        let capacity = 7;
         env.with_local_frame(capacity, || {
             let jni_recipient_uuid = JObject::from(env.byte_array_from_slice(&recipient_uuid)?);
             let jni_message = JObject::from(env.byte_array_from_slice(&message)?);
