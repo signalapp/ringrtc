@@ -36,8 +36,8 @@ impl DataRate {
         self.size_per_second.as_kilobits()
     }
 
-    pub fn from_mbps(kbps: u64) -> Self {
-        Self::per_second(DataSize::from_megabits(kbps))
+    pub fn from_mbps(mbps: u64) -> Self {
+        Self::per_second(DataSize::from_megabits(mbps))
     }
 
     pub fn as_mbps(self) -> u64 {

@@ -46,7 +46,13 @@ impl StatsObserver {
     fn new() -> Self {
         info!(
             "ringrtc_stats!,\
+                connection,\
                 timestamp_us,\
+                current_round_trip_time,\
+                available_outgoing_bitrate"
+        );
+        info!(
+            "ringrtc_stats!,\
                 audio,\
                 send,\
                 ssrc,\
@@ -60,7 +66,6 @@ impl StatsObserver {
         );
         info!(
             "ringrtc_stats!,\
-                timestamp_us,\
                 video,\
                 send,\
                 ssrc,\
@@ -85,7 +90,6 @@ impl StatsObserver {
         );
         info!(
             "ringrtc_stats!,\
-                timestamp_us,\
                 audio,\
                 recv,\
                 ssrc,\
@@ -100,7 +104,6 @@ impl StatsObserver {
         );
         info!(
             "ringrtc_stats!,\
-                timestamp_us,\
                 video,\
                 recv,\
                 ssrc,\
@@ -122,6 +125,17 @@ impl StatsObserver {
 
     /// Invoked when statistics are received via the stats observer callback.
     fn on_stats_complete(&mut self, media_statistics: &MediaStatistics) {
+        info!(
+            "ringrtc_stats!,connection,{},{:.3},{:.0}",
+            media_statistics.timestamp_us,
+            media_statistics
+                .connection_statistics
+                .current_round_trip_time,
+            media_statistics
+                .connection_statistics
+                .available_outgoing_bitrate,
+        );
+
         if media_statistics.audio_sender_statistics_size > 0 {
             let audio_senders = unsafe {
                 if media_statistics.audio_sender_statistics.is_null() {
@@ -135,8 +149,7 @@ impl StatsObserver {
             };
             for audio_sender in audio_senders.iter() {
                 info!(
-                    "ringrtc_stats!,{},audio,send,{},{},{},{},{:.5},{:.3},{:.5},{:.3}",
-                    media_statistics.timestamp_us,
+                    "ringrtc_stats!,audio,send,{},{},{},{},{:.5},{:.3},{:.5},{:.3}",
                     audio_sender.ssrc,
                     audio_sender.packets_sent,
                     audio_sender.bytes_sent,
@@ -161,8 +174,7 @@ impl StatsObserver {
                 }
             };
             for video_sender in video_senders.iter() {
-                info!("ringrtc_stats!,{},video,send,{},{},{},{},{},{:.3},{},{},{},{},{:.3},{},{},{},{},{},{},{:.5},{:.3}",
-                      media_statistics.timestamp_us,
+                info!("ringrtc_stats!,video,send,{},{},{},{},{},{:.3},{},{},{},{},{:.3},{},{},{},{},{},{},{:.5},{:.3}",
                       video_sender.ssrc,
                       video_sender.packets_sent,
                       video_sender.bytes_sent,
@@ -199,8 +211,7 @@ impl StatsObserver {
             };
             for audio_receiver in audio_receivers.iter() {
                 info!(
-                    "ringrtc_stats!,{},audio,recv,{},{},{},{},{:.5},{},{:.3},{:.5},{:.3}",
-                    media_statistics.timestamp_us,
+                    "ringrtc_stats!,audio,recv,{},{},{},{},{:.5},{},{:.3},{:.5},{:.3}",
                     audio_receiver.ssrc,
                     audio_receiver.packets_received,
                     audio_receiver.packets_lost,
@@ -227,8 +238,7 @@ impl StatsObserver {
             };
             for video_receive in video_receivers.iter() {
                 info!(
-                    "ringrtc_stats!,{},video,recv,{},{},{},{},{},{},{},{:.3},{},{}",
-                    media_statistics.timestamp_us,
+                    "ringrtc_stats!,video,recv,{},{},{},{},{},{},{},{:.3},{},{}",
                     video_receive.ssrc,
                     video_receive.packets_received,
                     video_receive.packets_lost,
@@ -321,6 +331,13 @@ pub struct VideoReceiverStatistics {
     pub frame_height:       u32,
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct ConnectionStatistics {
+    pub current_round_trip_time:    f64,
+    pub available_outgoing_bitrate: f64,
+}
+
 /// MediaStatistics struct that holds all the statistics.
 #[repr(C)]
 #[derive(Debug)]
@@ -334,6 +351,7 @@ pub struct MediaStatistics {
     pub audio_receiver_statistics:      *const AudioReceiverStatistics,
     pub video_receiver_statistics_size: u32,
     pub video_receiver_statistics:      *const VideoReceiverStatistics,
+    pub connection_statistics:          ConnectionStatistics,
 }
 
 /// StatsObserver OnStatsComplete() callback.

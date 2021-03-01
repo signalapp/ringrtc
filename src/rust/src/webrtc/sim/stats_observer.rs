@@ -9,7 +9,12 @@ use std::ffi::c_void;
 use std::ptr;
 
 use crate::core::util::RustObject;
-use crate::webrtc::stats_observer::{MediaStatistics, StatsObserver, StatsObserverCallbacks};
+use crate::webrtc::stats_observer::{
+    ConnectionStatistics,
+    MediaStatistics,
+    StatsObserver,
+    StatsObserverCallbacks,
+};
 
 /// Simulation type for webrtc::rffi::StatsObserverRffi
 pub type RffiStatsObserver = u32;
@@ -33,6 +38,10 @@ pub unsafe fn Rust_createStatsObserver(
         audio_receiver_statistics:      ptr::null(),
         video_receiver_statistics_size: 0,
         video_receiver_statistics:      ptr::null(),
+        connection_statistics:          ConnectionStatistics {
+            current_round_trip_time:    0.0,
+            available_outgoing_bitrate: 0.0,
+        },
     };
 
     // Hit on the onComplete() callback

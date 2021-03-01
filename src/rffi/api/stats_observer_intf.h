@@ -80,6 +80,11 @@ typedef struct {
 } VideoReceiverStatistics;
 
 typedef struct {
+    double current_round_trip_time;
+    double available_outgoing_bitrate;
+} ConnectionStatistics;
+
+typedef struct {
     int64_t timestamp_us;
     uint32_t audio_sender_statistics_size;
     const AudioSenderStatistics *audio_sender_statistics;
@@ -89,6 +94,7 @@ typedef struct {
     const AudioReceiverStatistics *audio_receiver_statistics;
     uint32_t video_receiver_statistics_count;
     const VideoReceiverStatistics *video_receiver_statistics;
+    ConnectionStatistics connection_statistics;
 } MediaStatistics;
 
 /* Stats Observer Callback callback function pointers */

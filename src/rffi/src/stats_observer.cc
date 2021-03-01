@@ -32,6 +32,7 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
 
   auto outbound_stream_stats = report->GetStatsOfType<RTCOutboundRTPStreamStats>();
   auto inbound_stream_stats = report->GetStatsOfType<RTCInboundRTPStreamStats>();
+  auto candidate_pair_stats = report->GetStatsOfType<RTCIceCandidatePairStats>();
 
   for (const auto& stat : outbound_stream_stats) {
     if (*stat->kind == "audio") {
@@ -146,6 +147,20 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
     }
   }
 
+  ConnectionStatistics connection_statistics = {0};
+  uint64_t highest_priority = 0;
+
+  for (const auto& stat : candidate_pair_stats) {
+    // We'll only look at the pair that is nominated with the highest priority, usually
+    // that has useful values (there does not seem to be a 'in_use' type of flag).
+    uint64_t current_priority = stat->priority.ValueOrDefault(0);
+    if (*stat->nominated && stat->priority.ValueOrDefault(0) > highest_priority) {
+      highest_priority = current_priority;
+      connection_statistics.current_round_trip_time = stat->current_round_trip_time.ValueOrDefault(0.0);
+      connection_statistics.available_outgoing_bitrate = stat->available_outgoing_bitrate.ValueOrDefault(0.0);
+    }
+  }
+
   MediaStatistics media_statistics;
   media_statistics.timestamp_us = report->timestamp_us();
   media_statistics.audio_sender_statistics_size = this->audio_sender_statistics_.size();
@@ -156,6 +171,7 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
   media_statistics.audio_receiver_statistics = this->audio_receiver_statistics_.data();
   media_statistics.video_receiver_statistics_count = this->video_receiver_statistics_.size();
   media_statistics.video_receiver_statistics = this->video_receiver_statistics_.data();
+  media_statistics.connection_statistics = connection_statistics;
 
   // Pass media_statistics up to Rust, which will consume the data before returning.
   this->stats_observer_cbs_.OnStatsComplete(this->stats_observer_, &media_statistics);
