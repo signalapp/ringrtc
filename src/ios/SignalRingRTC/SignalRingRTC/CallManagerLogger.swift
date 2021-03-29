@@ -28,8 +28,8 @@ class CallManagerLogger {
 
     // MARK: API Functions
 
-    func getWrapper() -> IOSLogger {
-        return IOSLogger(
+    func getWrapper() -> IosLogger {
+        return IosLogger(
             object: UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque()),
             destroy: callManagerLoggerDestroy,
             log: callManagerLoggerCallback)

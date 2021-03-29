@@ -23,7 +23,6 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.49.0
         override: true
         profile: minimal
         components: clippy
@@ -40,7 +39,6 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.49.0
         override: true
         profile: minimal
     - name: Run rust tests

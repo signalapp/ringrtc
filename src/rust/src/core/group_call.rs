@@ -2198,7 +2198,7 @@ impl Client {
 
         if header.pt == RTP_DATA_PAYLOAD_TYPE {
             if header.ssrc == RTP_DATA_TO_SFU_SSRC {
-                if let Ok(msg) = SfuToDevice::decode(&payload[..]) {
+                if let Ok(msg) = SfuToDevice::decode(payload) {
                     let mut handled = false;
                     if let Some(Speaker {
                         long_device_id: Some(speaker_long_device_id),

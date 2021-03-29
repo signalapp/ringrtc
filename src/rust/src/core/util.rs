@@ -155,7 +155,7 @@ fn redact_ice_password(text: &str) -> String {
 
     for line in lines.iter_mut() {
         // Redact entire line as needed to mask Ice Password.
-        if line.find("ice-pwd").is_some() {
+        if line.contains("ice-pwd") {
             *line = "a=ice-pwd:[ REDACTED ]";
         }
     }

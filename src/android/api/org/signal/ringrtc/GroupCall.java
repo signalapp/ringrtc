@@ -35,31 +35,31 @@ import java.util.UUID;
 public final class GroupCall {
     @NonNull private static final String TAG = GroupCall.class.getSimpleName();
 
-              private   long                               nativeCallManager;
-    @NonNull  private   PeerConnectionFactory              factory;
+              private long                               nativeCallManager;
+    @NonNull  private PeerConnectionFactory              factory;
 
-    @NonNull  private   Observer                           observer;
+    @NonNull  private Observer                           observer;
 
-              protected long                               clientId;
+                      long                               clientId;
 
     // State to track if RingRTC has invoked handleEnded() or not.
     // RingRTC treats this as a final state of the GroupCall.
-              private   boolean                            handleEndedCalled;
+              private boolean                            handleEndedCalled;
     // State to track if the client has invoked disconnect() or not.
     // The client currently treats this as a final state of the GroupCall.
-              private   boolean                            disconnectCalled;
+              private boolean                            disconnectCalled;
 
     // Whenever the local or remote device states are updated, a new
     // object will be created to update the object value.
-    @NonNull  private   LocalDeviceState                   localDeviceState;
-    @Nullable private   LongSparseArray<RemoteDeviceState> remoteDeviceStates;
+    @NonNull  private LocalDeviceState                   localDeviceState;
+    @Nullable private LongSparseArray<RemoteDeviceState> remoteDeviceStates;
 
-    @Nullable private   PeekInfo                           peekInfo;
+    @Nullable private PeekInfo                           peekInfo;
 
-    @Nullable private   AudioSource                        outgoingAudioSource;
-    @Nullable private   AudioTrack                         outgoingAudioTrack;
-    @Nullable private   VideoSource                        outgoingVideoSource;
-    @Nullable private   VideoTrack                         outgoingVideoTrack;
+    @Nullable private AudioSource                        outgoingAudioSource;
+    @Nullable private AudioTrack                         outgoingAudioTrack;
+    @Nullable private VideoSource                        outgoingVideoSource;
+    @Nullable private VideoTrack                         outgoingVideoTrack;
 
     /*
      * Creates a GroupCall object. If successful, all supporting objects

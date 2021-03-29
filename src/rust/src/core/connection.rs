@@ -863,7 +863,7 @@ where
 
             ringbench!(
                 RingBench::Conn,
-                RingBench::WebRTC,
+                RingBench::WebRtc,
                 format!("ice_candidates({})", remote_ice_candidates.len())
             );
             for remote_ice_candidate in remote_ice_candidates {
@@ -1233,7 +1233,7 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::Conn,
-            RingBench::WebRTC,
+            RingBench::WebRtc,
             format!("ice_candidates({})", remote_ice_candidates.len())
         );
 
@@ -1251,7 +1251,7 @@ where
     pub fn send_hangup_via_data_channel(&self, hangup: signaling::Hangup) -> Result<()> {
         ringbench!(
             RingBench::Conn,
-            RingBench::WebRTC,
+            RingBench::WebRtc,
             format!("dc(hangup/{})\t{}", hangup, self.connection_id)
         );
 
@@ -1275,7 +1275,7 @@ where
     pub fn send_accepted_via_data_channel(&self) -> Result<()> {
         ringbench!(
             RingBench::Conn,
-            RingBench::WebRTC,
+            RingBench::WebRtc,
             format!("dc(accepted)\t{}", self.connection_id)
         );
 

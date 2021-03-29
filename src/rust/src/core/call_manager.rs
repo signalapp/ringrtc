@@ -84,7 +84,7 @@ macro_rules! check_active_call {
                 v
             }
             _ => {
-                ringbenchx!(RingBench::CM, RingBench::App, "inactive");
+                ringbenchx!(RingBench::Cm, RingBench::App, "inactive");
                 return Ok(());
             }
         }
@@ -754,7 +754,7 @@ where
 
         let hangup_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CM,
+                RingBench::Cm,
                 RingBench::App,
                 format!("send_hangup({:?})\t{}", send.hangup, call_id)
             );
@@ -871,7 +871,7 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!("call()\t{}", call_id)
         );
 
@@ -912,13 +912,13 @@ where
     fn handle_accept_call(&mut self, call_id: CallId) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!("accept()\t{}", call_id)
         );
 
         let mut active_call = check_active_call!(self, "handle_accept_call");
         if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
@@ -940,13 +940,13 @@ where
     fn handle_drop_call(&mut self, call_id: CallId) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!("drop()\t{}", call_id)
         );
 
         let active_call = check_active_call!(self, "handle_drop_call");
         if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
@@ -962,13 +962,13 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!("proceed()\t{}", call_id)
         );
 
         let mut active_call = check_active_call!(self, "handle_proceed");
         if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
             Ok(())
         } else {
             active_call.set_call_context(app_call_context)?;
@@ -980,7 +980,7 @@ where
     fn handle_message_sent(&mut self, call_id: CallId) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!("message_sent()\t{}", call_id)
         );
 
@@ -1070,7 +1070,7 @@ where
 
     /// Handle hangup() API from application.
     fn handle_hangup(&mut self) -> Result<()> {
-        ringbench!(RingBench::App, RingBench::CM, "hangup()");
+        ringbench!(RingBench::App, RingBench::Cm, "hangup()");
 
         let active_call = check_active_call!(self, "handle_hangup");
 
@@ -1090,7 +1090,7 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!(
                 "received_offer()\t{}\t{}\tfeature={}\tprimary={}\t{}",
                 incoming_call_id,
@@ -1102,7 +1102,7 @@ where
         );
 
         if received.age > Duration::from_secs(MAX_MESSAGE_AGE_SEC) {
-            ringbenchx!(RingBench::CM, RingBench::App, "offer expired");
+            ringbenchx!(RingBench::Cm, RingBench::App, "offer expired");
             self.notify_application(&remote_peer, ApplicationEvent::ReceivedOfferExpired)?;
             // Notify application we are completely done with this remote.
             self.notify_call_concluded(&remote_peer, incoming_call_id)?;
@@ -1113,7 +1113,7 @@ where
             && !received.receiver_device_is_primary
         {
             ringbenchx!(
-                RingBench::CM,
+                RingBench::Cm,
                 RingBench::App,
                 "offer not supported on linked device"
             );
@@ -1292,7 +1292,7 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!(
                 "received_answer()\t{}\t{}\t{}",
                 call_id,
@@ -1303,7 +1303,7 @@ where
 
         let mut active_call = check_active_call!(self, "handle_received_answer");
         if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
@@ -1318,7 +1318,7 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!(
                 "received_ice_candidates({})\t{}\t{}",
                 received.ice.candidates_added.len(),
@@ -1329,7 +1329,7 @@ where
 
         let mut active_call = check_active_call!(self, "handle_received_ice");
         if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
@@ -1344,7 +1344,7 @@ where
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!(
                 "received_hangup({})\t{}\t{}",
                 received.hangup, call_id, received.sender_device_id
@@ -1353,7 +1353,7 @@ where
 
         let mut active_call = check_active_call!(self, "handle_received_hangup");
         if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
@@ -1369,13 +1369,13 @@ where
         let sender_device_id = received.sender_device_id;
         ringbench!(
             RingBench::App,
-            RingBench::CM,
+            RingBench::Cm,
             format!("received_busy()\t{}\t{}", call_id, sender_device_id)
         );
 
         let active_call = check_active_call!(self, "handle_received_busy");
         if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::CM, RingBench::App, "inactive call_id");
+            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
             return Ok(());
         }
 
@@ -1519,7 +1519,7 @@ where
 
         let busy_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CM,
+                RingBench::Cm,
                 RingBench::App,
                 format!("send_busy()\t{}", call_id)
             );
@@ -1782,7 +1782,7 @@ where
         call_media_type: CallMediaType,
     ) -> Result<()> {
         ringbench!(
-            RingBench::CM,
+            RingBench::Cm,
             RingBench::App,
             format!("start()\t{}", call_id)
         );
@@ -1797,7 +1797,7 @@ where
         remote_peer: &<T as Platform>::AppRemotePeer,
         event: ApplicationEvent,
     ) -> Result<()> {
-        ringbench!(RingBench::CM, RingBench::App, format!("event({})", event));
+        ringbench!(RingBench::Cm, RingBench::App, format!("event({})", event));
 
         let platform = self.platform.lock()?;
         platform.on_event(remote_peer, event)
@@ -1878,7 +1878,7 @@ where
         _call_id: CallId,
     ) -> Result<()> {
         ringbench!(
-            RingBench::CM,
+            RingBench::Cm,
             RingBench::App,
             format!("call_concluded()\t{}", _call_id)
         );
@@ -1938,7 +1938,7 @@ where
 
         let offer_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CM,
+                RingBench::Cm,
                 RingBench::App,
                 format!("send_offer()\t{}\t{}", call_id, offer.to_info_string())
             );
@@ -1975,7 +1975,7 @@ where
 
         let answer_closure = Box::new(move |cm: &CallManager<T>| {
             ringbench!(
-                RingBench::CM,
+                RingBench::Cm,
                 RingBench::App,
                 format!(
                     "send_answer()\t{}\t{}",
@@ -2022,7 +2022,7 @@ where
             }
 
             ringbench!(
-                RingBench::CM,
+                RingBench::Cm,
                 RingBench::App,
                 format!(
                     "send_ice_candidates({})\t{}",

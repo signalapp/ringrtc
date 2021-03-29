@@ -39,14 +39,14 @@ use crate::ios::api::call_manager_interface::{
     AppRemoteDeviceStateArray,
     AppUuidArray,
 };
-use crate::ios::error::IOSError;
-use crate::ios::ios_media_stream::IOSMediaStream;
+use crate::ios::error::IosError;
+use crate::ios::ios_media_stream::IosMediaStream;
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnection};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
 
 /// Concrete type for iOS AppIncomingMedia objects.
-impl PlatformItem for IOSMediaStream {}
+impl PlatformItem for IosMediaStream {}
 
 /// Concrete type for iOS AppConnection objects.
 // @todo Make a type of connection with an Arc. Finalize better naming...
@@ -61,15 +61,15 @@ impl PlatformItem for AppCallContextX {}
 impl PlatformItem for AppObject {}
 
 /// iOS implementation of platform::Platform.
-pub struct IOSPlatform {
+pub struct IosPlatform {
     ///
     app_interface: AppInterface,
 }
 
-unsafe impl Sync for IOSPlatform {}
-unsafe impl Send for IOSPlatform {}
+unsafe impl Sync for IosPlatform {}
+unsafe impl Send for IosPlatform {}
 
-impl fmt::Display for IOSPlatform {
+impl fmt::Display for IosPlatform {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         /*        let jni_owned_pc = match self.jni_owned_pc {
                     Some(v) => format!("0x{:x}", v),
@@ -80,13 +80,13 @@ impl fmt::Display for IOSPlatform {
     }
 }
 
-impl fmt::Debug for IOSPlatform {
+impl fmt::Debug for IosPlatform {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl Drop for IOSPlatform {
+impl Drop for IosPlatform {
     fn drop(&mut self) {
         info!("Dropping IOSPlatform");
 
@@ -94,8 +94,8 @@ impl Drop for IOSPlatform {
     }
 }
 
-impl Platform for IOSPlatform {
-    type AppIncomingMedia = IOSMediaStream;
+impl Platform for IosPlatform {
+    type AppIncomingMedia = IosMediaStream;
     type AppRemotePeer = AppObject;
     type AppConnection = AppConnectionX;
     type AppCallContext = AppCallContextX;
@@ -140,7 +140,7 @@ impl Platform for IOSPlatform {
         );
 
         if app_connection_interface.object.is_null() || app_connection_interface.pc.is_null() {
-            return Err(IOSError::CreateAppPeerConnection.into());
+            return Err(IosError::CreateAppPeerConnection.into());
         }
 
         debug!("app_connection_interface: {}", app_connection_interface);
@@ -151,7 +151,7 @@ impl Platform for IOSPlatform {
         // application owned RTCPeerConnection object.
         let rffi_peer_connection = app_connection_interface.pc as *const RffiPeerConnection;
         if rffi_peer_connection.is_null() {
-            return Err(IOSError::ExtractNativePeerConnection.into());
+            return Err(IosError::ExtractNativePeerConnection.into());
         }
 
         let peer_connection = PeerConnection::unowned(rffi_peer_connection, pc_observer.rffi());
@@ -410,11 +410,11 @@ impl Platform for IOSPlatform {
         );
 
         if app_media_stream_interface.object.is_null() {
-            return Err(IOSError::CreateAppMediaStream.into());
+            return Err(IosError::CreateAppMediaStream.into());
         }
 
         // Pass this object and give ownership to a new IOSMediaStream object.
-        IOSMediaStream::new(app_media_stream_interface, incoming_media)
+        IosMediaStream::new(app_media_stream_interface, incoming_media)
     }
 
     fn connect_incoming_media(
@@ -425,7 +425,7 @@ impl Platform for IOSPlatform {
     ) -> Result<()> {
         info!("connect_incoming_media():");
 
-        let ios_media_stream = incoming_media as &IOSMediaStream;
+        let ios_media_stream = incoming_media as &IosMediaStream;
         let app_media_stream = ios_media_stream.get_ref()?;
 
         (self.app_interface.onConnectMedia)(
@@ -628,7 +628,7 @@ impl Platform for IOSPlatform {
     }
 }
 
-impl IOSPlatform {
+impl IosPlatform {
     /// Create a new IOSPlatform object.
     pub fn new(
         app_call_manager_interface: *mut c_void,

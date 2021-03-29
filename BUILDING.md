@@ -20,10 +20,10 @@ Install rustup, the Rust management system:
 
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-We currently use Rust 1.49.0 for official builds, but any recent stable version should work.
+We currently use Rust 1.51.0 for official builds, but any recent stable version should work.
 
-    rustup toolchain install 1.49.0
-    rustup default 1.49.0
+    rustup toolchain install 1.51.0
+    rustup default 1.51.0
 
 #### Android
 

@@ -465,7 +465,7 @@ where
         hangup: signaling::Hangup,
     ) -> Result<()> {
         ringbench!(
-            RingBench::WebRTC,
+            RingBench::WebRtc,
             RingBench::Conn,
             format!("dc(hangup/{})\t{}", hangup, call_id)
         );
@@ -499,7 +499,7 @@ where
         match state {
             ConnectionState::ConnectingBeforeAccepted
             | ConnectionState::ConnectedBeforeAccepted => {
-                ringbench!(RingBench::WebRTC, RingBench::Conn, "dc(accepted)");
+                ringbench!(RingBench::WebRtc, RingBench::Conn, "dc(accepted)");
                 connection.set_state(ConnectionState::ConnectedAndAccepted)?;
                 self.notify_observer(
                     connection,
@@ -771,7 +771,7 @@ where
         candidate: signaling::IceCandidate,
     ) -> Result<()> {
         ringbench!(
-            RingBench::WebRTC,
+            RingBench::WebRtc,
             RingBench::Conn,
             format!("ice_candidate()\t{}", connection.id())
         );
@@ -939,7 +939,7 @@ where
         state: ConnectionState,
         data_channel: DataChannel,
     ) -> Result<()> {
-        ringbench!(RingBench::WebRTC, RingBench::Conn, "on_data_channel()");
+        ringbench!(RingBench::WebRtc, RingBench::Conn, "on_data_channel()");
 
         match state {
             ConnectionState::ConnectingBeforeAccepted

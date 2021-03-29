@@ -9,23 +9,23 @@ use std::ffi::c_void;
 use std::fmt;
 
 use crate::ios::api::call_manager_interface::AppMediaStreamInterface;
-use crate::ios::error::IOSError;
+use crate::ios::error::IosError;
 
 use crate::common::Result;
 
 use crate::webrtc::media::MediaStream;
 
 /// Rust wrapper around application stream interface and RTCMediaStream object.
-pub struct IOSMediaStream {
+pub struct IosMediaStream {
     app_media_stream_interface: AppMediaStreamInterface,
     app_media_stream:           *mut c_void,
 }
 
-unsafe impl Sync for IOSMediaStream {}
+unsafe impl Sync for IosMediaStream {}
 
-unsafe impl Send for IOSMediaStream {}
+unsafe impl Send for IosMediaStream {}
 
-impl fmt::Debug for IOSMediaStream {
+impl fmt::Debug for IosMediaStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -35,7 +35,7 @@ impl fmt::Debug for IOSMediaStream {
     }
 }
 
-impl Drop for IOSMediaStream {
+impl Drop for IosMediaStream {
     fn drop(&mut self) {
         // @note The raw app_media_stream might be released elsewhere...
 
@@ -44,7 +44,7 @@ impl Drop for IOSMediaStream {
     }
 }
 
-impl IOSMediaStream {
+impl IosMediaStream {
     pub fn new(
         app_media_stream_interface: AppMediaStreamInterface,
         stream: MediaStream,
@@ -55,7 +55,7 @@ impl IOSMediaStream {
             stream.take_rffi() as *mut c_void,
         );
         if app_media_stream.is_null() {
-            return Err(IOSError::CreateIOSMediaStream.into());
+            return Err(IosError::CreateIosMediaStream.into());
         }
 
         debug!(

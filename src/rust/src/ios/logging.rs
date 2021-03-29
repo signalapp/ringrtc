@@ -15,11 +15,11 @@ use log::{LevelFilter, Log, Metadata, Record};
 
 use crate::common::Result;
 use crate::ios::api::call_manager_interface::AppByteSlice;
-use crate::ios::error::IOSError;
+use crate::ios::error::IosError;
 
 /// Log object for interfacing with swift.
 #[repr(C)]
-pub struct IOSLogger {
+pub struct IosLogger {
     pub object:  *mut c_void,
     pub destroy: extern "C" fn(object: *mut c_void),
     pub log: extern "C" fn(
@@ -33,21 +33,21 @@ pub struct IOSLogger {
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.
-unsafe impl Send for IOSLogger {}
+unsafe impl Send for IosLogger {}
 
 // Add an empty Sync trait to allow access from multiple threads.
-unsafe impl Sync for IOSLogger {}
+unsafe impl Sync for IosLogger {}
 
 // Rust owns the log object from Swift. Drop it when it goes out of
 // scope.
-impl Drop for IOSLogger {
+impl Drop for IosLogger {
     fn drop(&mut self) {
         (self.destroy)(self.object);
     }
 }
 
 /// Implement the Log trait for our IOSLogger.
-impl Log for IOSLogger {
+impl Log for IosLogger {
     // This logger is always enabled as filtering is controlled by the
     // application level logger.
     fn enabled(&self, _metadata: &Metadata) -> bool {
@@ -103,10 +103,10 @@ impl Log for IOSLogger {
 
 /// Initialize the global logging system. Rust will take ownership of
 /// the Swift object passed down in the IOSLogger structure.
-pub fn init_logging(log_object: IOSLogger) -> Result<()> {
+pub fn init_logging(log_object: IosLogger) -> Result<()> {
     match log::set_boxed_logger(Box::new(log_object)) {
         Ok(v) => v,
-        Err(_e) => return Err(IOSError::InitializeLogging.into()),
+        Err(_e) => return Err(IosError::InitializeLogging.into()),
     }
 
     log::set_max_level(LevelFilter::Debug);

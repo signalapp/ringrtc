@@ -355,10 +355,10 @@ pub struct HttpResponse {
 // Benchmarking component list.
 pub enum RingBench {
     App,
-    CM,
+    Cm,
     Call,
     Conn,
-    WebRTC,
+    WebRtc,
     Network,
 }
 
@@ -369,10 +369,10 @@ impl fmt::Display for RingBench {
             "{}",
             match self {
                 RingBench::App => "app",
-                RingBench::CM => "cm",
+                RingBench::Cm => "cm",
                 RingBench::Call => "call",
                 RingBench::Conn => "conn",
-                RingBench::WebRTC => "rtc",
+                RingBench::WebRtc => "rtc",
                 RingBench::Network => "net",
             }
         )

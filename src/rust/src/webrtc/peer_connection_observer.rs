@@ -155,7 +155,7 @@ extern "C" fn pc_observer_OnIceConnectionChange<T>(
 {
     let observer = unsafe { &mut *observer_ptr };
     ringbench!(
-        RingBench::WebRTC,
+        RingBench::WebRtc,
         RingBench::Conn,
         format!(
             "ice_connection_change({:?})\t{}",

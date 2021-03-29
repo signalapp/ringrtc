@@ -11,8 +11,8 @@ use std::{fmt, ptr, slice, str};
 use libc::size_t;
 
 use crate::ios::call_manager;
-use crate::ios::call_manager::IOSCallManager;
-use crate::ios::logging::IOSLogger;
+use crate::ios::call_manager::IosCallManager;
+use crate::ios::logging::IosLogger;
 
 use crate::common::{CallMediaType, DeviceId, FeatureLevel, HttpResponse};
 use crate::core::bandwidth_mode::BandwidthMode;
@@ -477,7 +477,7 @@ pub fn string_from_app_slice(app_slice: &AppByteSlice) -> Option<String> {
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcInitialize(logObject: IOSLogger) -> *mut c_void {
+pub extern "C" fn ringrtcInitialize(logObject: IosLogger) -> *mut c_void {
     match call_manager::initialize(logObject) {
         Ok(_v) => {
             // Return non-null pointer to indicate success.
@@ -508,7 +508,7 @@ pub extern "C" fn ringrtcCall(
     appLocalDevice: u32,
 ) -> *mut c_void {
     match call_manager::call(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         appRemote,
         CallMediaType::from_i32(callMediaType),
         appLocalDevice as DeviceId,
@@ -530,7 +530,7 @@ pub extern "C" fn ringrtcProceed(
     bandwidthMode: i32,
 ) -> *mut c_void {
     match call_manager::proceed(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         callId,
         appCallContext,
         BandwidthMode::from_i32(bandwidthMode),
@@ -546,7 +546,7 @@ pub extern "C" fn ringrtcProceed(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcMessageSent(callManager: *mut c_void, callId: u64) -> *mut c_void {
-    match call_manager::message_sent(callManager as *mut IOSCallManager, callId) {
+    match call_manager::message_sent(callManager as *mut IosCallManager, callId) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -558,7 +558,7 @@ pub extern "C" fn ringrtcMessageSent(callManager: *mut c_void, callId: u64) -> *
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcMessageSendFailure(callManager: *mut c_void, callId: u64) -> *mut c_void {
-    match call_manager::message_send_failure(callManager as *mut IOSCallManager, callId) {
+    match call_manager::message_send_failure(callManager as *mut IosCallManager, callId) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -570,7 +570,7 @@ pub extern "C" fn ringrtcMessageSendFailure(callManager: *mut c_void, callId: u6
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcHangup(callManager: *mut c_void) -> *mut c_void {
-    match call_manager::hangup(callManager as *mut IOSCallManager) {
+    match call_manager::hangup(callManager as *mut IosCallManager) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -597,7 +597,7 @@ pub extern "C" fn ringrtcReceivedAnswer(
     };
 
     match call_manager::received_answer(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         callId,
         senderDeviceId as DeviceId,
         byte_vec_from_app_slice(&opaque),
@@ -639,7 +639,7 @@ pub extern "C" fn ringrtcReceivedOffer(
     };
 
     match call_manager::received_offer(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         callId,
         remotePeer,
         senderDeviceId as DeviceId,
@@ -692,7 +692,7 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
     }
 
     match call_manager::received_ice(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         callId,
         signaling::ReceivedIce {
             ice:              signaling::Ice {
@@ -719,7 +719,7 @@ pub extern "C" fn ringrtcReceivedHangup(
     deviceId: u32,
 ) -> *mut c_void {
     match call_manager::received_hangup(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         callId,
         remoteDevice as DeviceId,
         signaling::HangupType::from_i32(hangupType).unwrap_or(signaling::HangupType::Normal),
@@ -741,7 +741,7 @@ pub extern "C" fn ringrtcReceivedBusy(
     remoteDevice: u32,
 ) -> *mut c_void {
     match call_manager::received_busy(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         callId,
         remoteDevice as DeviceId,
     ) {
@@ -778,7 +778,7 @@ pub extern "C" fn ringrtcReceivedCallMessage(
     }
 
     match call_manager::received_call_message(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         sender_uuid.unwrap(),
         senderDeviceId as DeviceId,
         localDeviceId as DeviceId,
@@ -812,7 +812,7 @@ pub extern "C" fn ringrtcReceivedHttpResponse(
     };
 
     let result = call_manager::received_http_response(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         requestId,
         Some(response),
     );
@@ -827,7 +827,7 @@ pub extern "C" fn ringrtcHttpRequestFailed(callManager: *mut c_void, requestId: 
     info!("ringrtcHttpRequestFailed():");
 
     let result =
-        call_manager::received_http_response(callManager as *mut IOSCallManager, requestId, None);
+        call_manager::received_http_response(callManager as *mut IosCallManager, requestId, None);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -836,7 +836,7 @@ pub extern "C" fn ringrtcHttpRequestFailed(callManager: *mut c_void, requestId: 
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcAccept(callManager: *mut c_void, callId: u64) -> *mut c_void {
-    match call_manager::accept_call(callManager as *mut IOSCallManager, callId) {
+    match call_manager::accept_call(callManager as *mut IosCallManager, callId) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -848,7 +848,7 @@ pub extern "C" fn ringrtcAccept(callManager: *mut c_void, callId: u64) -> *mut c
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcGetActiveConnection(callManager: *mut c_void) -> *mut c_void {
-    match call_manager::get_active_connection(callManager as *mut IOSCallManager) {
+    match call_manager::get_active_connection(callManager as *mut IosCallManager) {
         Ok(v) => v,
         Err(_e) => ptr::null_mut(),
     }
@@ -857,7 +857,7 @@ pub extern "C" fn ringrtcGetActiveConnection(callManager: *mut c_void) -> *mut c
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcGetActiveCallContext(callManager: *mut c_void) -> *mut c_void {
-    match call_manager::get_active_call_context(callManager as *mut IOSCallManager) {
+    match call_manager::get_active_call_context(callManager as *mut IosCallManager) {
         Ok(v) => v,
         Err(_e) => ptr::null_mut(),
     }
@@ -866,7 +866,7 @@ pub extern "C" fn ringrtcGetActiveCallContext(callManager: *mut c_void) -> *mut 
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) -> *mut c_void {
-    match call_manager::set_video_enable(callManager as *mut IOSCallManager, enable) {
+    match call_manager::set_video_enable(callManager as *mut IosCallManager, enable) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -879,7 +879,7 @@ pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) 
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcUpdateBandwidthMode(callManager: *mut c_void, bandwidthMode: i32) {
     let result = call_manager::update_bandwidth_mode(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         BandwidthMode::from_i32(bandwidthMode),
     );
     if result.is_err() {
@@ -890,7 +890,7 @@ pub extern "C" fn ringrtcUpdateBandwidthMode(callManager: *mut c_void, bandwidth
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcDrop(callManager: *mut c_void, callId: u64) -> *mut c_void {
-    match call_manager::drop_call(callManager as *mut IOSCallManager, callId) {
+    match call_manager::drop_call(callManager as *mut IosCallManager, callId) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -902,7 +902,7 @@ pub extern "C" fn ringrtcDrop(callManager: *mut c_void, callId: u64) -> *mut c_v
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReset(callManager: *mut c_void) -> *mut c_void {
-    match call_manager::reset(callManager as *mut IOSCallManager) {
+    match call_manager::reset(callManager as *mut IosCallManager) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -914,7 +914,7 @@ pub extern "C" fn ringrtcReset(callManager: *mut c_void) -> *mut c_void {
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcClose(callManager: *mut c_void) -> *mut c_void {
-    match call_manager::close(callManager as *mut IOSCallManager) {
+    match call_manager::close(callManager as *mut IosCallManager) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
             callManager
@@ -974,7 +974,7 @@ pub extern "C" fn ringrtcPeekGroupCall(
     }
 
     let result = call_manager::peek_group_call(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         requestId,
         sfu_url.unwrap(),
         proof.unwrap(),
@@ -1008,7 +1008,7 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
     }
 
     match call_manager::create_group_call_client(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         group_id.unwrap(),
         sfu_url.unwrap(),
         nativeAudioTrack,
@@ -1028,7 +1028,7 @@ pub extern "C" fn ringrtcDeleteGroupCallClient(
     info!("ringrtcDeleteGroupCallClient():");
 
     let result =
-        call_manager::delete_group_call_client(callManager as *mut IOSCallManager, clientId);
+        call_manager::delete_group_call_client(callManager as *mut IosCallManager, clientId);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1039,7 +1039,7 @@ pub extern "C" fn ringrtcDeleteGroupCallClient(
 pub extern "C" fn ringrtcConnect(callManager: *mut c_void, clientId: group_call::ClientId) {
     info!("ringrtcConnect():");
 
-    let result = call_manager::connect(callManager as *mut IOSCallManager, clientId);
+    let result = call_manager::connect(callManager as *mut IosCallManager, clientId);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1050,7 +1050,7 @@ pub extern "C" fn ringrtcConnect(callManager: *mut c_void, clientId: group_call:
 pub extern "C" fn ringrtcJoin(callManager: *mut c_void, clientId: group_call::ClientId) {
     info!("ringrtcJoin():");
 
-    let result = call_manager::join(callManager as *mut IOSCallManager, clientId);
+    let result = call_manager::join(callManager as *mut IosCallManager, clientId);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1061,7 +1061,7 @@ pub extern "C" fn ringrtcJoin(callManager: *mut c_void, clientId: group_call::Cl
 pub extern "C" fn ringrtcLeave(callManager: *mut c_void, clientId: group_call::ClientId) {
     info!("ringrtcLeave():");
 
-    let result = call_manager::leave(callManager as *mut IOSCallManager, clientId);
+    let result = call_manager::leave(callManager as *mut IosCallManager, clientId);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1072,7 +1072,7 @@ pub extern "C" fn ringrtcLeave(callManager: *mut c_void, clientId: group_call::C
 pub extern "C" fn ringrtcDisconnect(callManager: *mut c_void, clientId: group_call::ClientId) {
     info!("ringrtcDisconnect():");
 
-    let result = call_manager::disconnect(callManager as *mut IOSCallManager, clientId);
+    let result = call_manager::disconnect(callManager as *mut IosCallManager, clientId);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1088,7 +1088,7 @@ pub extern "C" fn ringrtcSetOutgoingAudioMuted(
     info!("ringrtcSetOutgoingAudioMuted():");
 
     let result =
-        call_manager::set_outgoing_audio_muted(callManager as *mut IOSCallManager, clientId, muted);
+        call_manager::set_outgoing_audio_muted(callManager as *mut IosCallManager, clientId, muted);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1104,7 +1104,7 @@ pub extern "C" fn ringrtcSetOutgoingVideoMuted(
     info!("ringrtcSetOutgoingVideoMuted():");
 
     let result =
-        call_manager::set_outgoing_video_muted(callManager as *mut IOSCallManager, clientId, muted);
+        call_manager::set_outgoing_video_muted(callManager as *mut IosCallManager, clientId, muted);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1115,7 +1115,7 @@ pub extern "C" fn ringrtcSetOutgoingVideoMuted(
 pub extern "C" fn ringrtcResendMediaKeys(callManager: *mut c_void, clientId: group_call::ClientId) {
     info!("ringrtcResendMediaKeys():");
 
-    let result = call_manager::resend_media_keys(callManager as *mut IOSCallManager, clientId);
+    let result = call_manager::resend_media_keys(callManager as *mut IosCallManager, clientId);
     if result.is_err() {
         error!("{:?}", result.err());
     }
@@ -1131,7 +1131,7 @@ pub extern "C" fn ringrtcSetBandwidthMode(
     info!("ringrtcSetBandwidthMode():");
 
     let result = call_manager::set_bandwidth_mode(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         clientId,
         BandwidthMode::from_i32(bandwidthMode),
     );
@@ -1171,7 +1171,7 @@ pub extern "C" fn ringrtcRequestVideo(
     }
 
     let result = call_manager::request_video(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         clientId,
         rendered_resolutions,
     );
@@ -1215,7 +1215,7 @@ pub extern "C" fn ringrtcSetGroupMembers(
     }
 
     let result = call_manager::set_group_members(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         clientId,
         group_members,
     );
@@ -1240,7 +1240,7 @@ pub extern "C" fn ringrtcSetMembershipProof(
     }
 
     let result = call_manager::set_membership_proof(
-        callManager as *mut IOSCallManager,
+        callManager as *mut IosCallManager,
         clientId,
         proof.unwrap(),
     );

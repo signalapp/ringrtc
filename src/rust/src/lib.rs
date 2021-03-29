@@ -11,6 +11,9 @@
 //! call signaling transport.
 //!
 
+// TODO: Fix return values to avoid unnecessary wraps.
+#![allow(clippy::unnecessary_wraps)]
+
 #[macro_use]
 extern crate failure;
 
