@@ -773,6 +773,14 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
             deviceState.videoMuted = remoteDeviceState.videoMuted.value
         }
 
+        if remoteDeviceState.presenting.valid {
+            deviceState.presenting = remoteDeviceState.presenting.value
+        }
+
+        if remoteDeviceState.sharingScreen.valid {
+            deviceState.sharingScreen = remoteDeviceState.sharingScreen.value
+        }
+
         finalRemoteDeviceStates.append(deviceState)
     }
 

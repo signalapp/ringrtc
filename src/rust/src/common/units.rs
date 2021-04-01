@@ -81,35 +81,35 @@ impl DataSize {
     }
 
     pub fn from_kilobits(kbits: u64) -> Self {
-        Self::from_bits(kbits * 1024)
+        Self::from_bits(kbits * 1000)
     }
 
     pub fn as_kilobits(self) -> u64 {
-        self.as_bits() / 1024
+        self.as_bits() / 1000
     }
 
     pub fn from_kilobytes(kbytes: u64) -> Self {
-        Self::from_bytes(kbytes * 1024)
+        Self::from_bytes(kbytes * 1000)
     }
 
     pub fn as_kilobytes(self) -> u64 {
-        self.as_bytes() / 1024
+        self.as_bytes() / 1000
     }
 
     pub fn from_megabits(mbits: u64) -> Self {
-        Self::from_kilobits(mbits * 1024)
+        Self::from_kilobits(mbits * 1000)
     }
 
     pub fn as_megabits(self) -> u64 {
-        self.as_kilobits() / 1024
+        self.as_kilobits() / 1000
     }
 
     pub fn from_megabytes(mbytes: u64) -> Self {
-        Self::from_kilobytes(mbytes * 1024)
+        Self::from_kilobytes(mbytes * 1000)
     }
 
     pub fn as_megabytes(self) -> u64 {
-        self.as_kilobytes() / 1024
+        self.as_kilobytes() / 1000
     }
 }
 

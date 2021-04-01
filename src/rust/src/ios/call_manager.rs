@@ -382,7 +382,10 @@ pub fn set_video_enable(call_manager: *mut IosCallManager, enable: bool) -> Resu
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
-    active_connection.inject_send_sender_status_via_data_channel(enable)
+    active_connection.inject_send_sender_status_via_data_channel(signaling::SenderStatus {
+        video_enabled: Some(enable),
+        ..Default::default()
+    })
 }
 
 /// Request to update the bandwidth mode on the direct connection

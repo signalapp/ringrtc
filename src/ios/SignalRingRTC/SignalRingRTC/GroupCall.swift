@@ -63,6 +63,8 @@ public class RemoteDeviceState: Hashable {
 
     public internal(set) var audioMuted: Bool?
     public internal(set) var videoMuted: Bool?
+    public internal(set) var presenting: Bool?
+    public internal(set) var sharingScreen: Bool?
     public internal(set) var addedTime: UInt64  // unix millis
     public internal(set) var speakerTime: UInt64  // unix millis; 0 if they've never spoken
 

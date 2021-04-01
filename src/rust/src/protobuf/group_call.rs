@@ -27,6 +27,10 @@ pub mod device_to_device {
         pub audio_muted: ::std::option::Option<bool>,
         #[prost(bool, optional, tag="2")]
         pub video_muted: ::std::option::Option<bool>,
+        #[prost(bool, optional, tag="3")]
+        pub presenting: ::std::option::Option<bool>,
+        #[prost(bool, optional, tag="4")]
+        pub sharing_screen: ::std::option::Option<bool>,
     }
     /// Sent over RTP data channel *and* signaling
     #[derive(Clone, PartialEq, ::prost::Message)]

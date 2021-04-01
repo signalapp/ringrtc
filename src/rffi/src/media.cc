@@ -69,6 +69,11 @@ RUSTEXPORT void Rust_setVideoTrackEnabled(
   track->set_enabled(enabled);
 }
 
+RUSTEXPORT void Rust_setVideoTrackContentHint(
+    webrtc::VideoTrackInterface* track, bool is_screenshare) {
+  track->set_content_hint(is_screenshare ? VideoTrackInterface::ContentHint::kText : VideoTrackInterface::ContentHint::kNone);
+}
+
 RUSTEXPORT VideoTrackInterface* Rust_getFirstVideoTrack(MediaStreamInterface* stream) {
   auto tracks = stream->GetVideoTracks();
   if (tracks.empty()) {

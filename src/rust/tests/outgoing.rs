@@ -616,7 +616,10 @@ fn inject_send_sender_status_via_data_channel() {
     let mut active_connection = context.active_connection();
 
     active_connection
-        .inject_send_sender_status_via_data_channel(false)
+        .inject_send_sender_status_via_data_channel(signaling::SenderStatus {
+            video_enabled:  Some(false),
+            sharing_screen: None,
+        })
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -933,7 +936,14 @@ fn received_remote_video_status() {
         let enable = context.prng.gen::<bool>();
 
         active_connection
-            .inject_received_sender_status_via_data_channel(active_call.call_id(), enable, Some(i))
+            .inject_received_sender_status_via_data_channel(
+                active_call.call_id(),
+                signaling::SenderStatus {
+                    video_enabled:  Some(enable),
+                    sharing_screen: None,
+                },
+                Some(i),
+            )
             .expect(error_line!());
         cm.synchronize().expect(error_line!());
 
@@ -952,15 +962,37 @@ fn received_remote_video_status() {
             context.event_count(ApplicationEvent::RemoteVideoDisable),
             disable_count
         );
+        assert_eq!(
+            context.event_count(ApplicationEvent::RemoteSharingScreenEnable),
+            0
+        );
+        assert_eq!(
+            context.event_count(ApplicationEvent::RemoteSharingScreenDisable),
+            0
+        );
     }
 
     // Ignore old ones
     active_connection
-        .inject_received_sender_status_via_data_channel(active_call.call_id(), true, Some(1))
+        .inject_received_sender_status_via_data_channel(
+            active_call.call_id(),
+            signaling::SenderStatus {
+                video_enabled:  Some(true),
+                sharing_screen: None,
+            },
+            Some(1),
+        )
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     active_connection
-        .inject_received_sender_status_via_data_channel(active_call.call_id(), false, Some(2))
+        .inject_received_sender_status_via_data_channel(
+            active_call.call_id(),
+            signaling::SenderStatus {
+                video_enabled:  Some(false),
+                sharing_screen: None,
+            },
+            Some(2),
+        )
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -972,8 +1004,141 @@ fn received_remote_video_status() {
         context.event_count(ApplicationEvent::RemoteVideoDisable),
         disable_count
     );
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteSharingScreenEnable),
+        0
+    );
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteSharingScreenDisable),
+        0
+    );
 }
 
+#[test]
+fn received_remote_sharing_screen_status() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    let mut enable_count = 0;
+    let mut disable_count = 0;
+    for i in 0..20 {
+        let enable = context.prng.gen::<bool>();
+
+        active_connection
+            .inject_received_sender_status_via_data_channel(
+                active_call.call_id(),
+                signaling::SenderStatus {
+                    video_enabled:  None,
+                    sharing_screen: Some(enable),
+                },
+                Some(i),
+            )
+            .expect(error_line!());
+        cm.synchronize().expect(error_line!());
+
+        if enable {
+            enable_count += 1;
+        } else {
+            disable_count += 1;
+        }
+
+        assert_eq!(context.error_count(), 0);
+        assert_eq!(
+            context.event_count(ApplicationEvent::RemoteSharingScreenEnable),
+            enable_count
+        );
+        assert_eq!(
+            context.event_count(ApplicationEvent::RemoteSharingScreenDisable),
+            disable_count
+        );
+        assert_eq!(context.event_count(ApplicationEvent::RemoteVideoEnable), 0);
+        assert_eq!(context.event_count(ApplicationEvent::RemoteVideoDisable), 0);
+    }
+
+    // Ignore old ones
+    active_connection
+        .inject_received_sender_status_via_data_channel(
+            active_call.call_id(),
+            signaling::SenderStatus {
+                video_enabled:  None,
+                sharing_screen: Some(true),
+            },
+            Some(1),
+        )
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    active_connection
+        .inject_received_sender_status_via_data_channel(
+            active_call.call_id(),
+            signaling::SenderStatus {
+                video_enabled:  None,
+                sharing_screen: Some(false),
+            },
+            Some(2),
+        )
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteSharingScreenEnable),
+        enable_count
+    );
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteSharingScreenDisable),
+        disable_count
+    );
+    assert_eq!(context.event_count(ApplicationEvent::RemoteVideoEnable), 0);
+    assert_eq!(context.event_count(ApplicationEvent::RemoteVideoDisable), 0);
+}
+
+#[test]
+fn received_remote_multiple_status() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    // Ignore old ones
+    active_connection
+        .inject_received_sender_status_via_data_channel(
+            active_call.call_id(),
+            signaling::SenderStatus {
+                video_enabled:  Some(false),
+                sharing_screen: Some(true),
+            },
+            Some(1),
+        )
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    active_connection
+        .inject_received_sender_status_via_data_channel(
+            active_call.call_id(),
+            signaling::SenderStatus {
+                video_enabled:  Some(true),
+                sharing_screen: Some(false),
+            },
+            Some(2),
+        )
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteSharingScreenEnable),
+        1
+    );
+    assert_eq!(
+        context.event_count(ApplicationEvent::RemoteSharingScreenDisable),
+        1
+    );
+    assert_eq!(context.event_count(ApplicationEvent::RemoteVideoEnable), 1);
+    assert_eq!(context.event_count(ApplicationEvent::RemoteVideoDisable), 1);
+}
 #[test]
 fn call_timeout_before_connect() {
     test_init();

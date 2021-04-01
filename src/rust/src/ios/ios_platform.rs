@@ -550,8 +550,18 @@ impl Platform for IosPlatform {
                 demuxId:           remote_device_state.demux_id,
                 user_id:           app_slice_from_bytes(Some(remote_device_state.user_id.as_ref())),
                 mediaKeysReceived: remote_device_state.media_keys_received,
-                audioMuted:        app_option_from_bool(remote_device_state.audio_muted),
-                videoMuted:        app_option_from_bool(remote_device_state.video_muted),
+                audioMuted:        app_option_from_bool(
+                    remote_device_state.heartbeat_state.audio_muted,
+                ),
+                videoMuted:        app_option_from_bool(
+                    remote_device_state.heartbeat_state.video_muted,
+                ),
+                presenting:        app_option_from_bool(
+                    remote_device_state.heartbeat_state.presenting,
+                ),
+                sharingScreen:     app_option_from_bool(
+                    remote_device_state.heartbeat_state.sharing_screen,
+                ),
                 addedTime:         remote_device_state.added_time_as_unix_millis(),
                 speakerTime:       remote_device_state.speaker_time_as_unix_millis(),
             };

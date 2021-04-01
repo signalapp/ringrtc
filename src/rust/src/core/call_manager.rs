@@ -2382,6 +2382,16 @@ where
         group_call_api_handler!(self, client_id, set_outgoing_video_muted, muted);
     }
 
+    pub fn set_presenting(&mut self, client_id: group_call::ClientId, presenting: bool) {
+        info!("set_presenting(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_presenting, presenting);
+    }
+
+    pub fn set_sharing_screen(&mut self, client_id: group_call::ClientId, sharing_screen: bool) {
+        info!("set_sharing_screen(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_sharing_screen, sharing_screen);
+    }
+
     pub fn resend_media_keys(&mut self, client_id: group_call::ClientId) {
         info!("resend_media_keys(): id: {}", client_id);
         group_call_api_handler!(self, client_id, resend_media_keys);

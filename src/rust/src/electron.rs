@@ -105,6 +105,9 @@ pub enum Event {
     // The state of the remote video (whether enabled or not)
     // Like call state, we ID the call by PeerId and assume there is only one.
     RemoteVideoState(PeerId, bool),
+    // Whether the remote is sharing its screen or not
+    // Like call state, we ID the call by PeerId and assume there is only one.
+    RemoteSharingScreen(PeerId, bool),
     // The group call has an update.
     GroupUpdate(GroupUpdate),
     // JavaScript should initiate an HTTP request.
@@ -148,6 +151,14 @@ impl CallStateHandler for Sender<Event> {
 
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         self.send(Event::RemoteVideoState(remote_peer_id.to_string(), enabled))?;
+        Ok(())
+    }
+
+    fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
+        self.send(Event::RemoteSharingScreen(
+            remote_peer_id.to_string(),
+            enabled,
+        ))?;
         Ok(())
     }
 }
@@ -818,7 +829,33 @@ fn setOutgoingVideoEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_video_track.set_enabled(enabled);
         let mut active_connection = endpoint.call_manager.active_connection()?;
-        active_connection.inject_send_sender_status_via_data_channel(enabled)?;
+        active_connection.inject_send_sender_status_via_data_channel(signaling::SenderStatus {
+            video_enabled: Some(enabled),
+            ..Default::default()
+        })?;
+        Ok(())
+    })
+    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let is_screenshare = cx.argument::<JsBoolean>(0)?.value(&mut cx);
+    debug!(
+        "JsCallManager.setOutgoingVideoIsScreenShare({})",
+        is_screenshare
+    );
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .outgoing_video_track
+            .set_content_hint(is_screenshare);
+        let mut active_connection = endpoint.call_manager.active_connection()?;
+        active_connection.inject_send_sender_status_via_data_channel(signaling::SenderStatus {
+            sharing_screen: Some(is_screenshare),
+            ..Default::default()
+        })?;
         Ok(())
     })
     .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -1023,6 +1060,37 @@ fn setOutgoingVideoMuted(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint
             .call_manager
             .set_outgoing_video_muted(client_id, muted);
+        Ok(())
+    })
+    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn setPresenting(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let presenting = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint.call_manager.set_presenting(client_id, presenting);
+        Ok(())
+    })
+    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn setOutgoingGroupCallVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let is_screenshare = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .outgoing_video_track
+            .set_content_hint(is_screenshare);
+        endpoint
+            .call_manager
+            .set_sharing_screen(client_id, is_screenshare);
         Ok(())
     })
     .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -1548,6 +1616,17 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
+            Event::RemoteSharingScreen(peer_id, enabled) => {
+                let method_name = "onRemoteSharingScreen";
+                let args: Vec<Handle<JsValue>> =
+                    vec![cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
+                let method = *observer
+                    .get(&mut cx, method_name)?
+                    .downcast::<JsFunction, _>(&mut cx)
+                    .expect("onRemoteSharingScreen is a function");
+                method.call(&mut cx, observer, args)?;
+            }
+
             Event::SendHttpRequest(request_id, url, method, headers, body) => {
                 let method_name = "sendHttpRequest";
                 // Pass headers as an object with the Fetch API. Only the last value will be sent
@@ -1671,12 +1750,22 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     let user_id = to_js_array_buffer(&mut cx, &remote_device_state.user_id);
                     let media_keys_received = cx.boolean(remote_device_state.media_keys_received);
                     let audio_muted: neon::handle::Handle<JsValue> =
-                        match remote_device_state.audio_muted {
+                        match remote_device_state.heartbeat_state.audio_muted {
                             None => cx.undefined().upcast(),
                             Some(muted) => cx.boolean(muted).upcast(),
                         };
                     let video_muted: neon::handle::Handle<JsValue> =
-                        match remote_device_state.video_muted {
+                        match remote_device_state.heartbeat_state.video_muted {
+                            None => cx.undefined().upcast(),
+                            Some(muted) => cx.boolean(muted).upcast(),
+                        };
+                    let presenting: neon::handle::Handle<JsValue> =
+                        match remote_device_state.heartbeat_state.presenting {
+                            None => cx.undefined().upcast(),
+                            Some(muted) => cx.boolean(muted).upcast(),
+                        };
+                    let sharing_screen: neon::handle::Handle<JsValue> =
+                        match remote_device_state.heartbeat_state.sharing_screen {
                             None => cx.undefined().upcast(),
                             Some(muted) => cx.boolean(muted).upcast(),
                         };
@@ -1702,6 +1791,8 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     )?;
                     js_remote_device_state.set(&mut cx, "audioMuted", audio_muted)?;
                     js_remote_device_state.set(&mut cx, "videoMuted", video_muted)?;
+                    js_remote_device_state.set(&mut cx, "presenting", presenting)?;
+                    js_remote_device_state.set(&mut cx, "sharingScreen", sharing_screen)?;
                     js_remote_device_state.set(&mut cx, "addedTime", added_time)?;
                     js_remote_device_state.set(&mut cx, "speakerTime", speaker_time)?;
 
@@ -1893,6 +1984,10 @@ register_module!(mut cx, {
     cx.export_function("cm_httpRequestFailed", httpRequestFailed)?;
     cx.export_function("cm_setOutgoingAudioEnabled", setOutgoingAudioEnabled)?;
     cx.export_function("cm_setOutgoingVideoEnabled", setOutgoingVideoEnabled)?;
+    cx.export_function(
+        "cm_setOutgoingVideoIsScreenShare",
+        setOutgoingVideoIsScreenShare,
+    )?;
     cx.export_function("cm_sendVideoFrame", sendVideoFrame)?;
     cx.export_function("cm_receiveVideoFrame", receiveVideoFrame)?;
     cx.export_function("cm_receiveGroupCallVideoFrame", receiveGroupCallVideoFrame)?;
@@ -1904,6 +1999,11 @@ register_module!(mut cx, {
     cx.export_function("cm_disconnect", disconnect)?;
     cx.export_function("cm_setOutgoingAudioMuted", setOutgoingAudioMuted)?;
     cx.export_function("cm_setOutgoingVideoMuted", setOutgoingVideoMuted)?;
+    cx.export_function("cm_setPresenting", setPresenting)?;
+    cx.export_function(
+        "cm_setOutgoingGroupCallVideoIsScreenShare",
+        setOutgoingGroupCallVideoIsScreenShare,
+    )?;
     cx.export_function("cm_resendMediaKeys", resendMediaKeys)?;
     cx.export_function("cm_setBandwidthMode", setBandwidthMode)?;
     cx.export_function("cm_requestVideo", requestVideo)?;

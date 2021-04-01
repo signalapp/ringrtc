@@ -19,6 +19,8 @@
    message Heartbeat {
      optional bool audio_muted = 1;
      optional bool video_muted = 2;
+     optional bool presenting = 3;
+     optional bool sharing_screen = 4;
    }
  
    // Sent over RTP data channel *and* signaling

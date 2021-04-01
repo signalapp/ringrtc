@@ -29,6 +29,8 @@ pub struct SenderStatus {
     pub id: ::std::option::Option<u64>,
     #[prost(bool, optional, tag="2")]
     pub video_enabled: ::std::option::Option<bool>,
+    #[prost(bool, optional, tag="3")]
+    pub sharing_screen: ::std::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReceiverStatus {

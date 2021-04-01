@@ -102,6 +102,7 @@ pub trait SignalingSender {
 pub trait CallStateHandler {
     fn handle_call_state(&self, remote_peer_id: &str, state: CallState) -> Result<()>;
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
+    fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
 }
 
 // Starts an HTTP request. CallManager is notified of the result via a separate callback.
@@ -317,6 +318,11 @@ impl NativePlatform {
             .handle_remote_video_state(peer_id, enabled)
     }
 
+    fn send_remote_sharing_screen(&self, peer_id: &str, enabled: bool) -> Result<()> {
+        self.state_handler
+            .handle_remote_sharing_screen(peer_id, enabled)
+    }
+
     fn send_signaling(
         &self,
         recipient_id: &str,
@@ -530,6 +536,12 @@ impl Platform for NativePlatform {
             ApplicationEvent::RemoteVideoEnable => self.send_remote_video_state(remote_peer, true),
             ApplicationEvent::RemoteVideoDisable => {
                 self.send_remote_video_state(remote_peer, false)
+            }
+            ApplicationEvent::RemoteSharingScreenEnable => {
+                self.send_remote_sharing_screen(remote_peer, true)
+            }
+            ApplicationEvent::RemoteSharingScreenDisable => {
+                self.send_remote_sharing_screen(remote_peer, false)
             }
         }?;
         Ok(())

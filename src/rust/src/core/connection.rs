@@ -79,7 +79,7 @@ pub enum ConnectionObserverEvent {
     ReceivedAcceptedViaDataChannel,
 
     /// The remote side sent a sender status message via the data channel.
-    ReceivedSenderStatusViaDataChannel(bool),
+    ReceivedSenderStatusViaDataChannel(signaling::SenderStatus),
 
     /// The remote side sent a hangup message via the data channel
     /// or via signaling.
@@ -1304,15 +1304,14 @@ where
 
     /// Send the remote peer the current sender status via the
     /// PeerConnection DataChannel.
-    ///
-    /// # Arguments
-    ///
-    /// * `video_enabled` - `true` when the local side is streaming video,
-    /// otherwise `false`.
-    pub fn send_sender_status_via_data_channel(&self, video_enabled: bool) -> Result<()> {
+    pub fn send_sender_status_via_data_channel(
+        &self,
+        status: signaling::SenderStatus,
+    ) -> Result<()> {
         let sender_status = protobuf::data_channel::SenderStatus {
-            id:            Some(u64::from(self.call_id)),
-            video_enabled: Some(video_enabled),
+            id:             Some(u64::from(self.call_id)),
+            video_enabled:  status.video_enabled,
+            sharing_screen: status.sharing_screen,
         };
 
         let webrtc = self.webrtc.lock()?;
@@ -1664,7 +1663,10 @@ where
         if let Some(sender_status) = message.sender_status {
             self.inject_received_sender_status_via_data_channel(
                 CallId::new(sender_status.id()),
-                sender_status.video_enabled(),
+                signaling::SenderStatus {
+                    video_enabled:  sender_status.video_enabled,
+                    sharing_screen: sender_status.sharing_screen,
+                },
                 message.sequence_number,
             )
             .unwrap_or_else(|e| warn!("unable to inject remote sender status event: {}", e));
@@ -1713,16 +1715,16 @@ where
     /// # Arguments
     ///
     /// * `call_id` - Call ID from the remote peer.
-    /// * `video_enabled` - `true` if the remote peer is streaming video.
+    /// * `status` - The status of the remote peer.
     pub fn inject_received_sender_status_via_data_channel(
         &mut self,
         call_id: CallId,
-        video_enabled: bool,
+        status: signaling::SenderStatus,
         sequence_number: Option<u64>,
     ) -> Result<()> {
         self.inject_event(ConnectionEvent::ReceivedSenderStatusViaDataChannel(
             call_id,
-            video_enabled,
+            status,
             sequence_number,
         ))
     }
@@ -1766,14 +1768,12 @@ where
     ///
     /// `Called By:` Local application.
     ///
-    /// * `video_enabled` - `true` if the local peer is streaming video.
+    /// * `status` - The local peer's status.
     pub fn inject_send_sender_status_via_data_channel(
         &mut self,
-        video_enabled: bool,
+        status: signaling::SenderStatus,
     ) -> Result<()> {
-        self.inject_event(ConnectionEvent::SendSenderStatusViaDataChannel(
-            video_enabled,
-        ))
+        self.inject_event(ConnectionEvent::SendSenderStatusViaDataChannel(status))
     }
 
     /// Inject a `UpdateBandwidthMode` event into the FSM.

@@ -64,11 +64,14 @@ class VideoSource : public VideoTrackSource {
 // Returns 0 upon failure
 RUSTEXPORT uint32_t Rust_getTrackIdAsUint32(webrtc::MediaStreamTrackInterface* track);
 
-// Same as AudioTrackEnabled::set_enabled
+// Same as AudioTrack::set_enabled
 RUSTEXPORT void Rust_setAudioTrackEnabled(webrtc::AudioTrackInterface*, bool);
 
-// Same as VideoTrackEnabled::set_enabled
+// Same as VideoTrack::set_enabled
 RUSTEXPORT void Rust_setVideoTrackEnabled(webrtc::VideoTrackInterface*, bool);
+
+// Same as VideoTrack::set_content_hint with true == kText and false == kNone
+RUSTEXPORT void Rust_setVideoTrackContentHint(webrtc::VideoTrackInterface*, bool);
 
 // Gets the first video track from the stream, or nullptr if there is none.
 RUSTEXPORT webrtc::VideoTrackInterface* Rust_getFistVideoTrack(

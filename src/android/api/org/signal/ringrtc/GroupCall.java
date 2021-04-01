@@ -743,6 +743,8 @@ public final class GroupCall {
 
         @Nullable Boolean    audioMuted;
         @Nullable Boolean    videoMuted;
+        @Nullable Boolean    presenting;
+        @Nullable Boolean    sharingScreen;
         long                 addedTime;   // unix millis
         long                 speakerTime; // unix millis; 0 if was never the speaker
 
@@ -753,6 +755,8 @@ public final class GroupCall {
                                            boolean mediaKeysReceived,
                                  @Nullable Boolean audioMuted,
                                  @Nullable Boolean videoMuted,
+                                 @Nullable Boolean presenting,
+                                 @Nullable Boolean sharingScreen,
                                            long    addedTime,
                                            long    speakerTime) {
             this.demuxId = demuxId;
@@ -761,6 +765,8 @@ public final class GroupCall {
 
             this.audioMuted = audioMuted;
             this.videoMuted = videoMuted;
+            this.presenting = presenting;
+            this.sharingScreen = sharingScreen;
             this.addedTime = addedTime;
             this.speakerTime = speakerTime;
         }
@@ -785,6 +791,14 @@ public final class GroupCall {
 
         public @Nullable Boolean getVideoMuted() {
             return videoMuted;
+        }
+
+        public @Nullable Boolean getPresenting() {
+            return presenting;
+        }
+
+        public @Nullable Boolean getSharingScreen() {
+            return sharingScreen;
         }
 
         public long getAddedTime() {

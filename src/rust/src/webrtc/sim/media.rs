@@ -40,6 +40,11 @@ pub unsafe fn Rust_setVideoTrackEnabled(_track: *const RffiVideoTrack, _enabled:
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_setVideoTrackContentHint(_track: *const RffiVideoTrack, _is_screenshare: bool) {
+    info!("Rust_setVideoTrackContentHint()");
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_getFirstVideoTrack(_stream: *const RffiMediaStream) -> *const RffiVideoTrack {
     info!("Rust_getFirstVideoTrack()");
     &FAKE_VIDEO_TRACK

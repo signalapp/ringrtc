@@ -168,6 +168,12 @@ pub enum ApplicationEvent {
     /// The remote side has disabled video.
     RemoteVideoDisable,
 
+    /// The remote side has enabled screen sharing.
+    RemoteSharingScreenEnable,
+
+    /// The remote side has disabled screen sharing.
+    RemoteSharingScreenDisable,
+
     /// The call dropped while connected and is now reconnecting.
     Reconnecting,
 

@@ -23,12 +23,17 @@ interface VideoFrameSender {
   sendVideoFrame(width: number, height: number, rgbaBuffer: ArrayBuffer): void;
 }
 
+export class GumVideoCaptureOptions {
+  maxWidth: number = 640;
+  maxHeight: number = 480;
+  maxFramerate: number = 30;
+  preferredDeviceId?: string;
+  screenShareSourceId?: string;
+}
 export class GumVideoCapturer {
-  private readonly maxWidth: number;
-  private readonly maxHeight: number;
-  private readonly maxFramerate: number;
+  private defaultCaptureOptions: GumVideoCaptureOptions;
   private localPreview?: Ref<HTMLVideoElement>;
-  private capturing: boolean;
+  private captureOptions?: GumVideoCaptureOptions;
   private getUserMediaPromise?: Promise<MediaStream>;
   private sender?: VideoFrameSender;
   private mediaStream?: MediaStream;
@@ -40,11 +45,12 @@ export class GumVideoCapturer {
   // Set this if you want fake video
   public fakeVideoName: string | undefined;
 
-  constructor(maxWidth: number, maxHeight: number, maxFramerate: number) {
-    this.maxWidth = maxWidth;
-    this.maxHeight = maxHeight;
-    this.maxFramerate = maxFramerate;
-    this.capturing =  false;
+  constructor(defaultCaptureOptions: GumVideoCaptureOptions) {
+    this.defaultCaptureOptions = defaultCaptureOptions;
+  }
+
+  capturing() {
+    return this.captureOptions != undefined;
   }
 
   setLocalPreview(localPreview: Ref<HTMLVideoElement> | undefined) {
@@ -53,12 +59,12 @@ export class GumVideoCapturer {
 
   enableCapture(): void {
     // tslint:disable no-floating-promises
-    this.startCapturing();
+    this.startCapturing(this.defaultCaptureOptions);
   }
 
-  enableCaptureAndSend(sender: VideoFrameSender): void {
+  enableCaptureAndSend(sender: VideoFrameSender, options?: GumVideoCaptureOptions): void {
     // tslint:disable no-floating-promises
-    this.startCapturing();
+    this.startCapturing(options ?? this.defaultCaptureOptions);
     this.startSending(sender);
   }
 
@@ -69,10 +75,16 @@ export class GumVideoCapturer {
 
   async setPreferredDevice(deviceId: string): Promise<void> {
     this.preferredDeviceId = deviceId;
-    if (this.capturing) {
-      // Restart capturing to start using the new device
-      await this.stopCapturing();
-      await this.startCapturing();
+
+    if (this.captureOptions) {
+      const captureOptions = this.captureOptions;
+      const sender = this.sender;
+
+      this.disable();
+      this.startCapturing(captureOptions);
+      if (sender) {
+        this.startSending(sender);
+      }
     }
   }
 
@@ -83,25 +95,36 @@ export class GumVideoCapturer {
   }
 
   // This helps prevent concurrent calls to `getUserMedia`.
-  private getUserMedia(): Promise<MediaStream> {
+  private getUserMedia(options: GumVideoCaptureOptions): Promise<MediaStream> {
     if (!this.getUserMediaPromise) {
-      this.getUserMediaPromise = window.navigator.mediaDevices
-        .getUserMedia({
-          audio: false,
-          video: {
-            deviceId: this.preferredDeviceId,
-            width: {
-              max: this.maxWidth,
-            },
-            height: {
-              max: this.maxHeight,
-            },
-            frameRate: {
-              max: this.maxFramerate,
-            },
+      let contraints: any = {
+        audio: false,
+        video: {
+          deviceId: options.preferredDeviceId ?? this.preferredDeviceId,
+          width: {
+            max: options.maxWidth,
           },
-        })
-        .then(mediaStream => {
+          height: {
+            max: options.maxHeight,
+          },
+          frameRate: {
+            max: options.maxFramerate,
+          },
+        },
+      };
+      if (options.screenShareSourceId != undefined) {
+        contraints.video = {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: options.screenShareSourceId,
+            maxWidth: options.maxWidth,
+            maxHeight: options.maxHeight,
+            maxFrameRate: options.maxFramerate,
+          }
+        };
+      }
+      // TODO: Figure out a better way to make typescript accept "mandatory".
+      this.getUserMediaPromise = window.navigator.mediaDevices.getUserMedia(contraints).then(mediaStream => {
           delete this.getUserMediaPromise;
           return mediaStream;
         });
@@ -109,17 +132,17 @@ export class GumVideoCapturer {
     return this.getUserMediaPromise;
   }
 
-  private async startCapturing(): Promise<void> {
-    if (this.capturing) {
+  private async startCapturing(options: GumVideoCaptureOptions): Promise<void> {
+    if (this.capturing()) {
       return;
     }
-    this.capturing = true;
+    this.captureOptions = options;
     this.capturingStartTime = Date.now();
     try {
-      const mediaStream = await this.getUserMedia();
+      const mediaStream = await this.getUserMedia(options);
       // We could have been disabled between when we requested the stream
       // and when we got it.
-      if (!this.capturing) {
+      if (this.captureOptions != options) {
         for (const track of mediaStream.getVideoTracks()) {
           // Make the light turn off faster
           track.stop();
@@ -137,10 +160,10 @@ export class GumVideoCapturer {
   }
 
   private stopCapturing(): void {
-    if (!this.capturing) {
+    if (!this.capturing()) {
       return;
     }
-    this.capturing = false;
+    this.captureOptions = undefined;
     if (!!this.mediaStream) {
       for (const track of this.mediaStream.getVideoTracks()) {
         // Make the light turn off faster
@@ -157,15 +180,15 @@ export class GumVideoCapturer {
     if (this.sender === sender) {
       return;
     }
-    if (!this.sender) {
+    if (!!this.sender) {
       // If we're replacing an existing sender, make sure we stop the
       // current setInterval loop before starting another one.
       this.stopSending();
     }
     this.sender = sender;
-    this.canvas = new OffscreenCanvas(this.maxWidth, this.maxHeight);
+    this.canvas = new OffscreenCanvas(this.captureOptions!.maxWidth, this.captureOptions!.maxHeight);
     this.canvasContext = this.canvas.getContext('2d') || undefined;
-    const interval = 1000 / this.maxFramerate;
+    const interval = 1000 / this.captureOptions!.maxFramerate;
     this.intervalId = setInterval(
       this.captureAndSendOneVideoFrame.bind(this),
       interval
@@ -193,10 +216,10 @@ export class GumVideoCapturer {
     localPreview.srcObject = mediaStream;
     // I don't know why this is necessary
     if (localPreview.width === 0) {
-      localPreview.width = this.maxWidth;
+      localPreview.width = this.captureOptions!.maxWidth;
     }
     if (localPreview.height === 0) {
-      localPreview.height = this.maxHeight;
+      localPreview.height = this.captureOptions!.maxHeight;
     }
   }
 
@@ -224,6 +247,7 @@ export class GumVideoCapturer {
       if (width === 0 || height === 0) {
         return;
       }
+
       this.canvasContext.drawImage(
         this.localPreview.current,
         0,

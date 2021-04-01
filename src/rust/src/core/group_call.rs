@@ -331,6 +331,25 @@ pub struct GroupMemberInfo {
     pub user_id_ciphertext: UserIdCiphertext,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct HeartbeatState {
+    pub audio_muted:    Option<bool>,
+    pub video_muted:    Option<bool>,
+    pub presenting:     Option<bool>,
+    pub sharing_screen: Option<bool>,
+}
+
+impl From<protobuf::group_call::device_to_device::Heartbeat> for HeartbeatState {
+    fn from(proto: protobuf::group_call::device_to_device::Heartbeat) -> Self {
+        Self {
+            audio_muted:    proto.audio_muted,
+            video_muted:    proto.video_muted,
+            presenting:     proto.presenting,
+            sharing_screen: proto.sharing_screen,
+        }
+    }
+}
+
 // The info about remote devices received from the SFU
 #[derive(Clone, Debug, PartialEq)]
 pub struct RemoteDeviceState {
@@ -339,11 +358,10 @@ pub struct RemoteDeviceState {
     short_device_id:         u64,
     long_device_id:          String,
     pub media_keys_received: bool,
-    pub audio_muted:         Option<bool>,
-    pub video_muted:         Option<bool>,
+    pub heartbeat_state:     HeartbeatState,
     // The latest timestamp we received from an update to
-    // audio_muted and video_muted.
-    muted_rtp_timestamp:     Option<rtp::Timestamp>,
+    // heartbeat_state.
+    heartbeat_rtp_timestamp: Option<rtp::Timestamp>,
     // The time at which this device was added to the list of devices.
     // A combination of (added_timestamp, demux_id) can be used for a stable
     // sort of remote devices for a grid layout.
@@ -380,9 +398,8 @@ impl RemoteDeviceState {
             short_device_id,
             long_device_id,
             media_keys_received: false,
-            audio_muted: None,
-            video_muted: None,
-            muted_rtp_timestamp: None,
+            heartbeat_state: Default::default(),
+            heartbeat_rtp_timestamp: None,
 
             added_time,
             speaker_time: None,
@@ -509,8 +526,7 @@ struct State {
     // Things we send to other clients via heartbeats
     // These are unset until the app sets them.
     // But we err on the side of caution and don't send anything when they are unset.
-    outgoing_audio_muted: Option<bool>,
-    outgoing_video_muted: Option<bool>,
+    outgoing_heartbeat_state: HeartbeatState,
 
     // Things for controlling the PeerConnection
     local_ice_ufrag:                  String,
@@ -665,8 +681,7 @@ impl Client {
 
                     joined_members: HashSet::new(),
 
-                    outgoing_audio_muted: None,
-                    outgoing_video_muted: None,
+                    outgoing_heartbeat_state: Default::default(),
 
                     local_dtls_fingerprint,
                     sfu_info: None,
@@ -1013,7 +1028,7 @@ impl Client {
                 state.client_id, muted
             );
             // We don't modify the outgoing audio track.  We expect the app to handle that.
-            state.outgoing_audio_muted = Some(muted);
+            state.outgoing_heartbeat_state.audio_muted = Some(muted);
             if let Err(err) = Self::send_heartbeat(state) {
                 warn!(
                     "Failed to send heartbeat after updating audio mute state: {:?}",
@@ -1034,14 +1049,55 @@ impl Client {
                 state.client_id, muted
             );
             // We don't modify the outgoing video track.  We expect the app to handle that.
-            state.outgoing_video_muted = Some(muted);
+            state.outgoing_heartbeat_state.video_muted = Some(muted);
             if let Err(err) = Self::send_heartbeat(state) {
                 warn!(
                     "Failed to send heartbeat after updating video mute state: {:?}",
                     err
                 );
             }
-            state.outgoing_video_muted = Some(muted);
+        });
+    }
+
+    pub fn set_presenting(&self, presenting: bool) {
+        debug!(
+            "group_call::Client(outer)::set_presenting(client_id: {}, presenting: {})",
+            self.client_id, presenting
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::set_presenting(client_id: {}, presenting: {})",
+                state.client_id, presenting
+            );
+            state.outgoing_heartbeat_state.presenting = Some(presenting);
+            if let Err(err) = Self::send_heartbeat(state) {
+                warn!(
+                    "Failed to send heartbeat after updating presenting state: {:?}",
+                    err
+                );
+            }
+        });
+    }
+
+    pub fn set_sharing_screen(&self, sharing_screen: bool) {
+        debug!(
+            "group_call::Client(outer)::set_sharing_screen(client_id: {}, sharing_screen: {})",
+            self.client_id, sharing_screen
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::set_sharing_screen(client_id: {}, sharing_screen: {})",
+                state.client_id, sharing_screen
+            );
+            state.outgoing_heartbeat_state.sharing_screen = Some(sharing_screen);
+            if let Err(err) = Self::send_heartbeat(state) {
+                warn!(
+                    "Failed to send heartbeat after updating sharing screen state: {:?}",
+                    err
+                );
+            }
+            let max_bitrate = Self::compute_max_bitrate(state.joined_members.len(), sharing_screen);
+            Self::set_max_send_bitrate_inner(state, max_bitrate);
         });
     }
 
@@ -1093,7 +1149,7 @@ impl Client {
     }
 
     fn set_max_send_bitrate_inner(state: &mut State, rate: DataRate) {
-        if state.max_send_bitrate.is_none() || state.max_send_bitrate == Some(rate) {
+        if state.max_send_bitrate != Some(rate) {
             if rate.as_kbps() == ALL_ALONE_SEND_BITRATE_KBPS {
                 info!("Disabling outgoing media because there are no other devices.");
                 state.peer_connection.set_outgoing_media_enabled(false);
@@ -1101,8 +1157,8 @@ impl Client {
                 info!("Enabling outgoing media because there are other devices.");
                 state.peer_connection.set_outgoing_media_enabled(true);
             }
-            if state.peer_connection.set_max_send_bitrate(rate).is_err() {
-                warn!("Could not set max send bitrate to {:?}", rate);
+            if let Err(e) = state.peer_connection.set_max_send_bitrate(rate) {
+                warn!("Could not set max send bitrate to {:?}: {}", rate, e);
             } else {
                 info!("Set max send bitrate to {:?}", rate);
                 state
@@ -1660,15 +1716,14 @@ impl Client {
                 );
             }
             if new_demux_ids.len() != old_demux_ids.len() {
-                // Send between 500kbps and 1mbps depending on how many other devices there are.
-                // The more there are, the less we will send.
-                let rate = DataRate::from_kbps(match new_demux_ids.len() {
-                    // No one is here, so push it down as low as WebRTC will let us.
-                    0 => ALL_ALONE_SEND_BITRATE_KBPS,
-                    1..=7 => 1000, // Pretty much the default
-                    _ => 500,
-                });
-                Self::set_max_send_bitrate_inner(state, rate);
+                let max_bitrate = Self::compute_max_bitrate(
+                    new_demux_ids.len(),
+                    state
+                        .outgoing_heartbeat_state
+                        .sharing_screen
+                        .unwrap_or(false),
+                );
+                Self::set_max_send_bitrate_inner(state, max_bitrate);
             }
         }
         state.last_peek_info = Some(peek_info_to_remember);
@@ -1683,6 +1738,19 @@ impl Client {
             debug!("Request devices because we previously requested while a request was pending");
             Self::request_remote_devices_as_soon_as_possible(state);
         }
+    }
+
+    fn compute_max_bitrate(joined_member_count: usize, sharing_screen: bool) -> DataRate {
+        DataRate::from_kbps(match (joined_member_count, sharing_screen) {
+            // No one is here, so push it down as low as WebRTC will let us.
+            (0, _) => ALL_ALONE_SEND_BITRATE_KBPS,
+            // Use a higher bitrate for screen sharing.
+            (_, true) => 2000,
+            // Send between 500kbps and 1Mbps depending on how many other devices there are.
+            // The more there are, the less we will send.
+            (1..=7, _) => 1000, // Pretty much the default
+            _ => 500,
+        })
     }
 
     // Pulled into a named private method because it might be called by set_peek_info
@@ -2090,8 +2158,10 @@ impl Client {
             protobuf::group_call::DeviceToDevice {
                 heartbeat: {
                     Some(protobuf::group_call::device_to_device::Heartbeat {
-                        audio_muted: state.outgoing_audio_muted,
-                        video_muted: state.outgoing_video_muted,
+                        audio_muted:    state.outgoing_heartbeat_state.audio_muted,
+                        video_muted:    state.outgoing_heartbeat_state.video_muted,
+                        presenting:     state.outgoing_heartbeat_state.presenting,
+                        sharing_screen: state.outgoing_heartbeat_state.sharing_screen,
                     })
                 },
                 ..Default::default()
@@ -2321,15 +2391,13 @@ impl Client {
                 .iter_mut()
                 .find(|device| device.demux_id == demux_id)
             {
-                if timestamp > remote_device.muted_rtp_timestamp.unwrap_or(0) {
+                if timestamp > remote_device.heartbeat_rtp_timestamp.unwrap_or(0) {
                     // Record this even if nothing changed.  Otherwise an old packet could override
                     // a new packet.
-                    remote_device.muted_rtp_timestamp = Some(timestamp);
-                    if remote_device.audio_muted != heartbeat.audio_muted
-                        || remote_device.video_muted != heartbeat.video_muted
-                    {
-                        remote_device.audio_muted = heartbeat.audio_muted;
-                        remote_device.video_muted = heartbeat.video_muted;
+                    remote_device.heartbeat_rtp_timestamp = Some(timestamp);
+                    let heartbeat_state = HeartbeatState::from(heartbeat);
+                    if remote_device.heartbeat_state != heartbeat_state {
+                        remote_device.heartbeat_state = heartbeat_state;
                         state
                             .observer
                             .handle_remote_devices_changed(state.client_id, &state.remote_devices);
@@ -3553,7 +3621,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_mute_states() {
+    fn remote_heartbeat_state() {
         let client1 = TestClient::new(vec![1], 1, None);
         client1.connect_join_and_wait_until_joined();
 
@@ -3565,8 +3633,10 @@ mod tests {
         let remote_devices2 = client2.observer.remote_devices();
         assert_eq!(1, remote_devices2.len());
         assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
-        assert_eq!(None, remote_devices2[0].audio_muted);
-        assert_eq!(None, remote_devices2[0].video_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.audio_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.video_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.presenting);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.sharing_screen);
 
         client1.client.set_outgoing_audio_muted(true);
         client1.wait_for_client_to_process();
@@ -3575,8 +3645,10 @@ mod tests {
         let remote_devices2 = client2.observer.remote_devices();
         assert_eq!(1, remote_devices2.len());
         assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
-        assert_eq!(Some(true), remote_devices2[0].audio_muted);
-        assert_eq!(None, remote_devices2[0].video_muted);
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.video_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.presenting);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.sharing_screen);
 
         client1.client.set_outgoing_video_muted(false);
         client1.wait_for_client_to_process();
@@ -3585,8 +3657,37 @@ mod tests {
         let remote_devices2 = client2.observer.remote_devices();
         assert_eq!(1, remote_devices2.len());
         assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
-        assert_eq!(Some(true), remote_devices2[0].audio_muted);
-        assert_eq!(Some(false), remote_devices2[0].video_muted);
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        assert_eq!(Some(false), remote_devices2[0].heartbeat_state.video_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.presenting);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.sharing_screen);
+
+        client1.client.set_presenting(true);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        let remote_devices2 = client2.observer.remote_devices();
+        assert_eq!(1, remote_devices2.len());
+        assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        assert_eq!(Some(false), remote_devices2[0].heartbeat_state.video_muted);
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.presenting);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.sharing_screen);
+
+        client1.client.set_sharing_screen(true);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        let remote_devices2 = client2.observer.remote_devices();
+        assert_eq!(1, remote_devices2.len());
+        assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        assert_eq!(Some(false), remote_devices2[0].heartbeat_state.video_muted);
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.presenting);
+        assert_eq!(
+            Some(true),
+            remote_devices2[0].heartbeat_state.sharing_screen
+        );
     }
 
     fn hash_set<T: std::hash::Hash + Eq + Clone>(vals: impl IntoIterator<Item = T>) -> HashSet<T> {

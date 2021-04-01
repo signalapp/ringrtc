@@ -345,6 +345,10 @@ impl VideoTrack {
         unsafe { media::Rust_setVideoTrackEnabled(self.rffi, enabled) }
     }
 
+    pub fn set_content_hint(&self, is_screenshare: bool) {
+        unsafe { media::Rust_setVideoTrackContentHint(self.rffi, is_screenshare) }
+    }
+
     pub fn id(&self) -> Option<u32> {
         let id = unsafe { media::Rust_getTrackIdAsUint32(self.rffi) };
         if id == 0 {

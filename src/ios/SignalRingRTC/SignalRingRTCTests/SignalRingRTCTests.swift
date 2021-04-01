@@ -265,6 +265,10 @@ final class TestDelegate: CallManagerDelegate {
             Logger.debug("TestDelegate:remoteVideoEnable")
         case .remoteVideoDisable:
             Logger.debug("TestDelegate:remoteVideoDisable")
+        case .remoteSharingScreenEnable:
+            Logger.debug("TestDelegate:remoteSharingScreenEnable")
+        case .remoteSharingScreenDisable:
+            Logger.debug("TestDelegate:remoteSharingScreenDisable")
         case .reconnecting:
             Logger.debug("TestDelegate:reconnecting")
         case .reconnected:

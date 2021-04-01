@@ -569,6 +569,14 @@ impl CallStateHandler for CallEndpoint {
         );
         Ok(())
     }
+
+    fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
+        info!(
+            "Sharing Screen for {} => {}: {}",
+            self.peer_id, remote_peer_id, enabled
+        );
+        Ok(())
+    }
 }
 
 impl GroupUpdateHandler for CallEndpoint {

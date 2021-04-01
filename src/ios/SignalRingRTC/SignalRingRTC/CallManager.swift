@@ -18,53 +18,57 @@ public enum CallManagerEvent: Int32 {
     /// Inbound call only: The call signaling (ICE) is complete.
     case ringingLocal = 0
     /// Outbound call only: The call signaling (ICE) is complete.
-    case ringingRemote = 1
+    case ringingRemote
     /// The local side has accepted and connected the call.
-    case connectedLocal = 2
+    case connectedLocal
     /// The remote side has accepted and connected the call.
-    case connectedRemote = 3
+    case connectedRemote
     /// The call ended because of a local hangup.
-    case endedLocalHangup = 4
+    case endedLocalHangup
     /// The call ended because of a remote hangup.
-    case endedRemoteHangup = 5
+    case endedRemoteHangup
     /// The call ended because the remote needs permission.
-    case endedRemoteHangupNeedPermission = 6
+    case endedRemoteHangupNeedPermission
     /// The call ended because the call was accepted by a different device.
-    case endedRemoteHangupAccepted = 7
+    case endedRemoteHangupAccepted
     /// The call ended because the call was declined by a different device.
-    case endedRemoteHangupDeclined = 8
+    case endedRemoteHangupDeclined
     /// The call ended because the call was declared busy by a different device.
-    case endedRemoteHangupBusy = 9
+    case endedRemoteHangupBusy
     /// The call ended because of a remote busy message.
-    case endedRemoteBusy = 10
+    case endedRemoteBusy
     /// The call ended because of glare (received offer from same remote).
-    case endedRemoteGlare = 11
+    case endedRemoteGlare
     /// The call ended because it timed out during setup.
-    case endedTimeout = 12
+    case endedTimeout
     /// The call ended because of an internal error condition.
-    case endedInternalFailure = 13
+    case endedInternalFailure
     /// The call ended because a signaling message couldn't be sent.
-    case endedSignalingFailure = 14
+    case endedSignalingFailure
     /// The call ended because setting up the connection failed.
-    case endedConnectionFailure = 15
+    case endedConnectionFailure
     /// The call ended because the application wanted to drop the call.
-    case endedDropped = 16
+    case endedDropped
     /// The remote side has enabled video.
-    case remoteVideoEnable = 17
+    case remoteVideoEnable
     /// The remote side has disabled video.
-    case remoteVideoDisable = 18
+    case remoteVideoDisable
+    /// The remote side has enabled screen sharing.
+    case remoteSharingScreenEnable
+    /// The remote side has disabled screen sharing.
+    case remoteSharingScreenDisable
     /// The call dropped while connected and is now reconnecting.
-    case reconnecting = 19
+    case reconnecting
     /// The call dropped while connected and is now reconnected.
-    case reconnected = 20
+    case reconnected
     /// The received offer is expired.
-    case receivedOfferExpired = 21
+    case receivedOfferExpired
     /// Received an offer while already handling an active call.
-    case receivedOfferWhileActive = 22
+    case receivedOfferWhileActive
     /// Received an offer while already handling an active call and glare was detected.
-    case receivedOfferWithGlare = 23
+    case receivedOfferWithGlare
     /// Received an offer on a linked device from one that doesn't support multi-ring.
-    case ignoreCallsFromNonMultiringCallers = 24
+    case ignoreCallsFromNonMultiringCallers
 }
 
 /// Type of media for call at time of origination.

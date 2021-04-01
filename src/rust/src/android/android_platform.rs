@@ -1114,7 +1114,7 @@ impl Platform for AndroidPlatform {
 
             for remote_device_state in remote_device_states {
                 const REMOTE_DEVICE_STATE_CTOR_SIG: &str =
-                    "(J[BZLjava/lang/Boolean;Ljava/lang/Boolean;JJ)V";
+                    "(J[BZLjava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;JJ)V";
 
                 let jni_demux_id = remote_device_state.demux_id as jlong;
                 let jni_user_id_byte_array =
@@ -1126,22 +1126,46 @@ impl Platform for AndroidPlatform {
                         }
                     };
                 let jni_media_keys_received = remote_device_state.media_keys_received as jboolean;
-                let jni_audio_muted =
-                    match self.get_optional_boolean_object(&env, remote_device_state.audio_muted) {
-                        Ok(v) => v,
-                        Err(error) => {
-                            error!("jni_audio_muted: {:?}", error);
-                            continue;
-                        }
-                    };
-                let jni_video_muted =
-                    match self.get_optional_boolean_object(&env, remote_device_state.video_muted) {
-                        Ok(v) => v,
-                        Err(error) => {
-                            error!("jni_video_muted: {:?}", error);
-                            continue;
-                        }
-                    };
+                let jni_audio_muted = match self.get_optional_boolean_object(
+                    &env,
+                    remote_device_state.heartbeat_state.audio_muted,
+                ) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("jni_audio_muted: {:?}", error);
+                        continue;
+                    }
+                };
+                let jni_video_muted = match self.get_optional_boolean_object(
+                    &env,
+                    remote_device_state.heartbeat_state.video_muted,
+                ) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("jni_video_muted: {:?}", error);
+                        continue;
+                    }
+                };
+                let jni_presenting = match self.get_optional_boolean_object(
+                    &env,
+                    remote_device_state.heartbeat_state.presenting,
+                ) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("jni_presenting: {:?}", error);
+                        continue;
+                    }
+                };
+                let jni_sharing_screen = match self.get_optional_boolean_object(
+                    &env,
+                    remote_device_state.heartbeat_state.sharing_screen,
+                ) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("jni_sharing_screen: {:?}", error);
+                        continue;
+                    }
+                };
                 let jni_added_time = remote_device_state.added_time_as_unix_millis() as jlong;
                 let jni_speaker_time = remote_device_state.speaker_time_as_unix_millis() as jlong;
 
@@ -1151,6 +1175,8 @@ impl Platform for AndroidPlatform {
                     jni_media_keys_received.into(),
                     jni_audio_muted.into(),
                     jni_video_muted.into(),
+                    jni_presenting.into(),
+                    jni_sharing_screen.into(),
                     jni_added_time.into(),
                     jni_speaker_time.into(),
                 ];

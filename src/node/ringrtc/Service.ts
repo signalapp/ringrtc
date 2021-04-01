@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+import { GumVideoCaptureOptions } from "./VideoSupport";
+
 /* tslint:disable max-classes-per-file */
 
 import * as os from 'os';
@@ -41,6 +43,7 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).httpRequestFailed = Native.cm_httpRequestFailed;
 (NativeCallManager.prototype as any).setOutgoingAudioEnabled = Native.cm_setOutgoingAudioEnabled;
 (NativeCallManager.prototype as any).setOutgoingVideoEnabled = Native.cm_setOutgoingVideoEnabled;
+(NativeCallManager.prototype as any).setOutgoingVideoIsScreenShare = Native.cm_setOutgoingVideoIsScreenShare;
 (NativeCallManager.prototype as any).sendVideoFrame = Native.cm_sendVideoFrame;
 (NativeCallManager.prototype as any).receiveVideoFrame = Native.cm_receiveVideoFrame;
 (NativeCallManager.prototype as any).receiveGroupCallVideoFrame = Native.cm_receiveGroupCallVideoFrame;
@@ -52,6 +55,8 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).disconnect = Native.cm_disconnect;
 (NativeCallManager.prototype as any).setOutgoingAudioMuted = Native.cm_setOutgoingAudioMuted;
 (NativeCallManager.prototype as any).setOutgoingVideoMuted = Native.cm_setOutgoingVideoMuted;
+(NativeCallManager.prototype as any).setOutgoingGroupCallVideoIsScreenShare = Native.cm_setOutgoingGroupCallVideoIsScreenShare;
+(NativeCallManager.prototype as any).setPresenting = Native.cm_setPresenting;
 (NativeCallManager.prototype as any).resendMediaKeys = Native.cm_resendMediaKeys;
 (NativeCallManager.prototype as any).setBandwidthMode = Native.cm_setBandwidthMode;
 (NativeCallManager.prototype as any).requestVideo = Native.cm_requestVideo;
@@ -269,6 +274,18 @@ export class RingRTCType {
     call.remoteVideoEnabled = enabled;
     if (call.handleRemoteVideoEnabled) {
       call.handleRemoteVideoEnabled();
+    }
+  }
+
+  onRemoteSharingScreen(remoteUserId: UserId, enabled: boolean): void {
+    const call = this._call;
+    if (!call || call.remoteUserId !== remoteUserId) {
+      return;
+    }
+
+    call.remoteSharingScreen = enabled;
+    if (call.handleRemoteSharingScreen) {
+      call.handleRemoteSharingScreen();
     }
   }
 
@@ -832,6 +849,15 @@ export class RingRTCType {
     call.outgoingVideoEnabled = enabled;
   }
 
+  setOutgoingVideoIsScreenShare(callId: CallId, isScreenShare: boolean) {
+    const call = this.getCall(callId);
+    if (!call) {
+      return;
+    }
+
+    call.outgoingVideoIsScreenShare = isScreenShare;
+  }
+
   setVideoCapturer(callId: CallId, capturer: VideoCapturer | null) {
     const call = this.getCall(callId);
     if (!call) {
@@ -893,7 +919,7 @@ export interface AudioDevice {
 
 export interface VideoCapturer {
   enableCapture(): void;
-  enableCaptureAndSend(call: Call): void;
+  enableCaptureAndSend(call: Call, captureOptions?: GumVideoCaptureOptions): void;
   disable(): void;
 }
 
@@ -901,7 +927,6 @@ export interface VideoRenderer {
   enable(call: Call): void;
   disable(): void;
 }
-
 export class Call {
   // The calls' info and state.
   private readonly _callManager: CallManager;
@@ -916,6 +941,7 @@ export class Call {
   private _outgoingAudioEnabled: boolean = false;
   private _outgoingVideoEnabled: boolean = false;
   private _remoteVideoEnabled: boolean = false;
+  remoteSharingScreen: boolean = false;
   private _videoCapturer: VideoCapturer | null = null;
   private _videoRenderer: VideoRenderer | null = null;
   endedReason?: CallEndedReason;
@@ -923,6 +949,7 @@ export class Call {
   // These callbacks should be set by the UX code.
   handleStateChanged?: () => void;
   handleRemoteVideoEnabled?: () => void;
+  handleRemoteSharingScreen?: () => void;
 
   // This callback should be set by the VideoCapturer,
   // But could also be set by the UX.
@@ -1009,7 +1036,7 @@ export class Call {
     if (this._videoRenderer) {
       this._videoRenderer.disable();
     }
-    // This assumes we only have one active all.
+    // This assumes we only have one active call.
     silly_deadlock_protection(() => {
       this._callManager.hangup();
     });
@@ -1021,7 +1048,7 @@ export class Call {
 
   set outgoingAudioEnabled(enabled: boolean) {
     this._outgoingAudioEnabled = enabled;
-    // This assumes we only have one active all.
+    // This assumes we only have one active call.
     silly_deadlock_protection(() => {
       this._callManager.setOutgoingAudioEnabled(enabled);
     });
@@ -1034,6 +1061,13 @@ export class Call {
   set outgoingVideoEnabled(enabled: boolean) {
     this._outgoingVideoEnabled = enabled;
     this.enableOrDisableCapturer();
+  }
+
+  set outgoingVideoIsScreenShare(isScreenShare: boolean) {
+    // This assumes we only have one active call.
+    silly_deadlock_protection(() => {
+      this._callManager.setOutgoingVideoIsScreenShare(isScreenShare);
+    });
   }
 
   get remoteVideoEnabled(): boolean {
@@ -1092,6 +1126,17 @@ export class Call {
     silly_deadlock_protection(() => {
       try {
         this._callManager.setOutgoingVideoEnabled(enabled);
+      } catch {
+        // We may not have an active connection any more.
+        // In which case it doesn't matter
+      }
+    });
+  }
+
+  private setOutgoingVideoIsScreenShare(isScreenShare: boolean) {
+    silly_deadlock_protection(() => {
+      try {
+        this._callManager.setOutgoingVideoIsScreenShare(isScreenShare);
       } catch {
         // We may not have an active connection any more.
         // In which case it doesn't matter
@@ -1190,6 +1235,8 @@ export class LocalDeviceState {
   joinState: JoinState;
   audioMuted: boolean;
   videoMuted: boolean;
+  presenting: boolean;
+  sharingScreen: boolean;
 
   constructor() {
     this.connectionState = ConnectionState.NotConnected;
@@ -1197,6 +1244,8 @@ export class LocalDeviceState {
     // By default audio and video are muted.
     this.audioMuted = true;
     this.videoMuted = true;
+    this.presenting = false;
+    this.sharingScreen = false;
   }
 }
 
@@ -1208,6 +1257,8 @@ export class RemoteDeviceState {
 
   audioMuted: boolean | undefined;
   videoMuted: boolean | undefined;
+  presenting: boolean | undefined;
+  sharingScreen: boolean | undefined;
   videoAspectRatio: number | undefined;  // Float
   addedTime: string | undefined;  // unix millis (to be converted to a numeric type)
   speakerTime: string | undefined;  // unix millis; 0 if they've never spoken (to be converted to a numeric type)
@@ -1342,6 +1393,20 @@ export class GroupCall {
   setOutgoingVideoMuted(muted: boolean): void {
     this._localDeviceState.videoMuted = muted;
     this._callManager.setOutgoingVideoMuted(this._clientId, muted);
+    this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by UI
+  setPresenting(presenting: boolean): void {
+    this._localDeviceState.presenting = presenting;
+    this._callManager.setPresenting(this._clientId, presenting);
+    this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by UI
+  setOutgoingVideoIsScreenShare(isScreenShare: boolean): void {
+    this._localDeviceState.sharingScreen = isScreenShare;
+    this._callManager.setOutgoingGroupCallVideoIsScreenShare(this._clientId, isScreenShare);
     this._observer.onLocalDeviceStateChanged(this);
   }
 
@@ -1572,6 +1637,7 @@ export interface CallManager {
   signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
   setOutgoingVideoEnabled(enabled: boolean): void;
+  setOutgoingVideoIsScreenShare(enabled: boolean): void;
   updateBandwidthMode(bandwidthMode: BandwidthMode): void;
   sendVideoFrame(width: number, height: number, buffer: ArrayBuffer): void;
   receiveVideoFrame(buffer: ArrayBuffer): [number, number] | undefined;
@@ -1639,6 +1705,8 @@ export interface CallManager {
   disconnect(clientId: GroupCallClientId): void;
   setOutgoingAudioMuted(clientId: GroupCallClientId, muted: boolean): void;
   setOutgoingVideoMuted(clientId: GroupCallClientId, muted: boolean): void;
+  setPresenting(clientId: GroupCallClientId, presenting: boolean): void;
+  setOutgoingGroupCallVideoIsScreenShare(clientId: GroupCallClientId, isScreenShare: boolean): void;
   resendMediaKeys(clientId: GroupCallClientId): void;
   setBandwidthMode(clientId: GroupCallClientId, bandwidthMode: BandwidthMode): void;
   requestVideo(clientId: GroupCallClientId, resolutions: Array<VideoRequest>): void;
@@ -1662,6 +1730,7 @@ export interface CallManagerCallbacks {
   onCallState(remoteUserId: UserId, state: CallState): void;
   onCallEnded(remoteUserId: UserId, endedReason: CallEndedReason): void;
   onRemoteVideoEnabled(remoteUserId: UserId, enabled: boolean): void;
+  onRemoteSharingScreen(remoteUserId: UserId, enabled: boolean): void;
   onSendOffer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,

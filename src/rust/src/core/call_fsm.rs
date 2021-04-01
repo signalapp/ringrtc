@@ -27,6 +27,8 @@
 //! - Connected
 //! - RemoteVideoEnabled
 //! - RemoteVideoDisabled
+//! - RemoteSharingScreenEnabled
+//! - RemoteSharingScreenDisabled
 //! - RemoteHangup
 //! - IceFailed
 //! - Timeout
@@ -785,14 +787,35 @@ where
                     hangup,
                 },
             ),
-            ConnectionObserverEvent::ReceivedSenderStatusViaDataChannel(enabled) => {
+            ConnectionObserverEvent::ReceivedSenderStatusViaDataChannel(status) => {
                 if call.active_device_id()? == remote_device_id {
                     match state {
                         CallState::ConnectedAndAccepted => {
-                            if enabled {
-                                self.notify_application(call, ApplicationEvent::RemoteVideoEnable)
-                            } else {
-                                self.notify_application(call, ApplicationEvent::RemoteVideoDisable)
+                            if let Some(video_enabled) = status.video_enabled {
+                                if video_enabled {
+                                    self.notify_application(
+                                        call.clone(),
+                                        ApplicationEvent::RemoteVideoEnable,
+                                    )
+                                } else {
+                                    self.notify_application(
+                                        call.clone(),
+                                        ApplicationEvent::RemoteVideoDisable,
+                                    )
+                                }
+                            }
+                            if let Some(sharing_screen) = status.sharing_screen {
+                                if sharing_screen {
+                                    self.notify_application(
+                                        call,
+                                        ApplicationEvent::RemoteSharingScreenEnable,
+                                    )
+                                } else {
+                                    self.notify_application(
+                                        call,
+                                        ApplicationEvent::RemoteSharingScreenDisable,
+                                    )
+                                }
                             }
                         }
                         _ => {

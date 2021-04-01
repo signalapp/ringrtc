@@ -565,3 +565,9 @@ pub struct ReceivedHangup {
 pub struct ReceivedBusy {
     pub sender_device_id: DeviceId,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub struct SenderStatus {
+    pub video_enabled:  Option<bool>,
+    pub sharing_screen: Option<bool>,
+}

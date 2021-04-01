@@ -235,6 +235,8 @@ pub struct AppRemoteDeviceState {
     pub mediaKeysReceived: bool,
     pub audioMuted:        AppOptionalBool,
     pub videoMuted:        AppOptionalBool,
+    pub presenting:        AppOptionalBool,
+    pub sharingScreen:     AppOptionalBool,
     pub addedTime:         u64, // unix millis
     pub speakerTime:       u64, // unix millis; 0 if never was a speaker
 }
