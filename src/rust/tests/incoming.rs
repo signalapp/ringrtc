@@ -22,7 +22,7 @@ use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
 mod common;
-use common::{random_received_ice_candidate, random_received_offer, test_init, TestContext, PRNG};
+use common::{random_received_ice_candidate, random_received_offer, test_init, TestContext};
 
 // Create an inbound call session up to the ConnectingBeforeAccepted state.
 //
@@ -40,12 +40,12 @@ fn start_inbound_call() -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -63,7 +63,7 @@ fn start_inbound_call() -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -74,8 +74,11 @@ fn start_inbound_call() -> TestContext {
         .get_connection(1 as DeviceId)
         .expect(error_line!());
 
-    cm.received_ice(active_call.call_id(), random_received_ice_candidate())
-        .expect(error_line!());
+    cm.received_ice(
+        active_call.call_id(),
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
     assert_eq!(
@@ -280,12 +283,12 @@ fn start_inbound_call_with_error() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -306,7 +309,7 @@ fn start_inbound_call_with_error() {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -342,12 +345,12 @@ fn receive_offer_while_active() {
     let context = connect_inbound_call();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -369,12 +372,12 @@ fn receive_expired_offer() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(86400)), // one whole day
+        random_received_offer(&context.prng, Duration::from_secs(86400)), // one whole day
     )
     .expect(error_line!());
 
@@ -395,12 +398,12 @@ fn receive_offer_before_age_limit() {
     let mut cm = context.cm();
 
     // create off way in the past
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(MAX_MESSAGE_AGE_SEC - 1)),
+        random_received_offer(&context.prng, Duration::from_secs(MAX_MESSAGE_AGE_SEC - 1)),
     )
     .expect(error_line!());
 
@@ -421,12 +424,12 @@ fn receive_offer_at_age_limit() {
     let mut cm = context.cm();
 
     // create off way in the past
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(MAX_MESSAGE_AGE_SEC)),
+        random_received_offer(&context.prng, Duration::from_secs(MAX_MESSAGE_AGE_SEC)),
     )
     .expect(error_line!());
 
@@ -447,12 +450,12 @@ fn receive_expired_offer_after_age_limit() {
     let mut cm = context.cm();
 
     // create off way in the past
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
-    let call_id = CallId::new(PRNG.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(MAX_MESSAGE_AGE_SEC + 1)),
+        random_received_offer(&context.prng, Duration::from_secs(MAX_MESSAGE_AGE_SEC + 1)),
     )
     .expect(error_line!());
 

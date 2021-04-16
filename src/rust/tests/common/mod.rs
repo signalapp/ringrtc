@@ -7,8 +7,8 @@
 
 // Requires the 'sim' feature
 
+use std::cell::RefCell;
 use std::env;
-use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 use lazy_static::lazy_static;
@@ -44,35 +44,27 @@ macro_rules! error_line {
 }
 
 pub struct Prng {
-    seed: u64,
-    rng:  Mutex<Option<ChaCha20Rng>>,
+    rng: RefCell<ChaCha20Rng>,
 }
 
 impl Prng {
     pub fn new(seed: u64) -> Self {
         Self {
-            seed,
-            rng: Mutex::new(None),
+            rng: RefCell::new(ChaCha20Rng::seed_from_u64(seed)),
         }
-    }
-
-    // Use a freshly seeded PRNG for each test
-    pub fn init(&self) {
-        let mut opt = self.rng.lock().unwrap();
-        let _ = opt.replace(ChaCha20Rng::seed_from_u64(self.seed));
     }
 
     pub fn gen<T>(&self) -> T
     where
         Standard: Distribution<T>,
     {
-        self.rng.lock().unwrap().as_mut().unwrap().gen::<T>()
+        self.rng.borrow_mut().gen::<T>()
     }
 }
 
 lazy_static! {
-    pub static ref PRNG: Prng = {
-        let rand_seed = match env::var("RANDOM_SEED") {
+    static ref RANDOM_SEED: u64 = {
+        let seed = match env::var("RANDOM_SEED") {
             Ok(v) => v.parse().unwrap(),
             Err(_) => SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -80,8 +72,8 @@ lazy_static! {
                 .as_millis() as u64,
         };
 
-        println!("\n*** Using random seed: {}", rand_seed);
-        Prng::new(rand_seed)
+        println!("\n*** Using random seed: {}", seed);
+        seed
     };
 }
 
@@ -100,13 +92,12 @@ pub fn test_init() {
     };
 
     let _ = SimpleLogger::init(log_level, config);
-
-    PRNG.init();
 }
 
 pub struct TestContext {
     platform:     SimPlatform,
     call_manager: CallManager<SimPlatform>,
+    pub prng:     Prng,
 }
 
 impl Drop for TestContext {
@@ -134,6 +125,7 @@ impl TestContext {
         Self {
             platform,
             call_manager,
+            prng: Prng::new(*RANDOM_SEED),
         }
     }
 
@@ -254,8 +246,8 @@ impl TestContext {
     }
 }
 
-pub fn random_received_offer(age: Duration) -> signaling::ReceivedOffer {
-    let sdp = format!("OFFER-{}", PRNG.gen::<u16>()).to_owned();
+pub fn random_received_offer(prng: &Prng, age: Duration) -> signaling::ReceivedOffer {
+    let sdp = format!("OFFER-{}", prng.gen::<u16>()).to_owned();
     let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
     let offer = signaling::Offer::from_v4_and_v3_and_v2(
         CallMediaType::Audio,
@@ -279,8 +271,11 @@ pub fn random_received_offer(age: Duration) -> signaling::ReceivedOffer {
 
 // Not sure why this is needed.  It is used...
 #[allow(dead_code)]
-pub fn random_received_answer(sender_device_id: DeviceId) -> signaling::ReceivedAnswer {
-    let sdp = format!("ANSWER-{}", PRNG.gen::<u16>()).to_owned();
+pub fn random_received_answer(
+    prng: &Prng,
+    sender_device_id: DeviceId,
+) -> signaling::ReceivedAnswer {
+    let sdp = format!("ANSWER-{}", prng.gen::<u16>()).to_owned();
     let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
     let answer = signaling::Answer::from_v3_and_v2_sdp(local_public_key, sdp).unwrap();
     signaling::ReceivedAnswer {
@@ -292,15 +287,15 @@ pub fn random_received_answer(sender_device_id: DeviceId) -> signaling::Received
     }
 }
 
-pub fn random_ice_candidate() -> signaling::IceCandidate {
-    let sdp = format!("ICE-CANDIDATE-{}", PRNG.gen::<u16>()).to_owned();
+pub fn random_ice_candidate(prng: &Prng) -> signaling::IceCandidate {
+    let sdp = format!("ICE-CANDIDATE-{}", prng.gen::<u16>()).to_owned();
     // V1 and V2 are the same for ICE candidates
     let ice_candidate = signaling::IceCandidate::from_v3_and_v2_sdp(sdp).unwrap();
     signaling::IceCandidate::new(ice_candidate.opaque)
 }
 
-pub fn random_received_ice_candidate() -> signaling::ReceivedIce {
-    let candidate = random_ice_candidate();
+pub fn random_received_ice_candidate(prng: &Prng) -> signaling::ReceivedIce {
+    let candidate = random_ice_candidate(prng);
     signaling::ReceivedIce {
         ice:              signaling::Ice {
             candidates_added: vec![candidate],

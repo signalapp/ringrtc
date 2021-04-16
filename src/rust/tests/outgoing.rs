@@ -36,7 +36,6 @@ use common::{
     random_received_offer,
     test_init,
     TestContext,
-    PRNG,
 };
 
 // Simple test that:
@@ -61,7 +60,7 @@ fn start_outbound_and_proceed() -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
         .expect(error_line!());
 
@@ -82,7 +81,7 @@ fn start_outbound_and_proceed() -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -120,7 +119,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     // don't go nuts
     assert!(n_remotes < 20);
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
         .expect(error_line!());
 
@@ -138,7 +137,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -148,10 +147,13 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     // add a received answer for each remote
     for i in 1..(n_remotes + 1) {
         let call_id = active_call.call_id();
-        cm.received_answer(call_id, random_received_answer(i as DeviceId))
-            .expect(error_line!());
+        cm.received_answer(
+            call_id,
+            random_received_answer(&context.prng, i as DeviceId),
+        )
+        .expect(error_line!());
 
-        cm.received_ice(call_id, random_received_ice_candidate())
+        cm.received_ice(call_id, random_received_ice_candidate(&context.prng))
             .expect(error_line!());
 
         cm.synchronize().expect(error_line!());
@@ -669,7 +671,7 @@ fn inject_local_ice_candidate() {
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
-    let ice_candidate = random_ice_candidate();
+    let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     active_connection
         .inject_local_ice_candidate(ice_candidate, force_send, "")
@@ -690,7 +692,7 @@ fn receive_remote_ice_candidate() {
 
     // add a received ICE candidate
     let call_id = active_call.call_id();
-    cm.received_ice(call_id, random_received_ice_candidate())
+    cm.received_ice(call_id, random_received_ice_candidate(&context.prng))
         .expect("receive_ice");
     cm.synchronize().expect(error_line!());
 
@@ -740,7 +742,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     // the subsequent Hangup message is queued until message_sent() is called.
     context.no_auto_message_sent_for_ice(true);
 
-    let ice_candidate = random_ice_candidate();
+    let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     parent_connection
         .unwrap()
@@ -823,7 +825,7 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     // the subsequent Hangup message is queued until message_sent() is called.
     context.no_auto_message_sent_for_ice(true);
 
-    let ice_candidate = random_ice_candidate();
+    let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     parent_connection
         .unwrap()
@@ -928,7 +930,7 @@ fn received_remote_video_status() {
     let mut enable_count = 0;
     let mut disable_count = 0;
     for i in 0..20 {
-        let enable = PRNG.gen::<bool>();
+        let enable = context.prng.gen::<bool>();
 
         active_connection
             .inject_received_sender_status_via_data_channel(active_call.call_id(), enable, Some(i))
@@ -1012,7 +1014,7 @@ fn outbound_proceed_with_error() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
         .expect(error_line!());
 
@@ -1034,7 +1036,7 @@ fn outbound_proceed_with_error() {
     let active_call = context.active_call();
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -1098,7 +1100,7 @@ fn local_ice_candidate_with_error() {
     // cause the sending of the ICE candidate to fail.
     context.force_internal_fault(true);
 
-    let ice_candidate = random_ice_candidate();
+    let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     active_connection
         .inject_local_ice_candidate(ice_candidate, force_send, "")
@@ -1156,7 +1158,7 @@ fn outbound_multiple_remote_devices() {
     }
 
     // connect one of the remotes
-    let active_remote = (PRNG.gen::<u16>() % n_remotes) + 1;
+    let active_remote = (context.prng.gen::<u16>() % n_remotes) + 1;
     let mut active_connection = active_call
         .get_connection(active_remote as DeviceId)
         .expect(error_line!());
@@ -1272,7 +1274,7 @@ fn glare_before_connect_winner() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -1316,7 +1318,7 @@ fn glare_before_connect_loser() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -1355,7 +1357,7 @@ fn glare_before_connect_equal() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -1405,7 +1407,7 @@ fn glare_after_connect_winner() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -1450,7 +1452,7 @@ fn glare_after_connect_loser() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -1490,7 +1492,7 @@ fn glare_after_connect_equal() {
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(Duration::from_secs(0)),
+        random_received_offer(&context.prng, Duration::from_secs(0)),
     )
     .expect(error_line!());
 
@@ -1519,7 +1521,7 @@ fn start_outbound_receive_busy() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", PRNG.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
         .expect(error_line!());
 
@@ -1540,7 +1542,7 @@ fn start_outbound_receive_busy() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", PRNG.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
