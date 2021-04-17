@@ -15,13 +15,11 @@
 		383347F123AA952F00D53B63 /* CallManagerGlobal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E923AA952F00D53B63 /* CallManagerGlobal.swift */; };
 		383347F223AA952F00D53B63 /* ConnectionMediaStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */; };
 		383347F323AA952F00D53B63 /* CallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EB23AA952F00D53B63 /* CallManager.swift */; };
-		383347F723AA985F00D53B63 /* WebRTC.framework in CopyFiles */ = {isa = PBXBuildFile; fileRef = 388AC0FC22FB403800BEC609 /* WebRTC.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		387059A724EB276700916F99 /* VideoCaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387059A624EB276700916F99 /* VideoCaptureController.swift */; };
 		388AC0D122FA8B2D00BEC609 /* SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */; };
 		388AC0D622FA8B2D00BEC609 /* SignalRingRTCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388AC0D522FA8B2D00BEC609 /* SignalRingRTCTests.swift */; };
 		388AC0D822FA8B2D00BEC609 /* SignalRingRTC.h in Headers */ = {isa = PBXBuildFile; fileRef = 388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		388AC0F622FA8F1600BEC609 /* libringrtc.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0F322FA8F1600BEC609 /* libringrtc.a */; };
-		388AC0FD22FB403800BEC609 /* WebRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0FC22FB403800BEC609 /* WebRTC.framework */; };
 		38B4DB342331D0F700015A3F /* ringrtc.h in Headers */ = {isa = PBXBuildFile; fileRef = 388AC0F522FA8F1600BEC609 /* ringrtc.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		38C42F0223C530E900AE79AD /* CallContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C42F0123C530E900AE79AD /* CallContext.swift */; };
 		38C4E533251A73AC005C2ACB /* GroupCall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4E532251A73AC005C2ACB /* GroupCall.swift */; };
@@ -37,19 +35,6 @@
 			remoteInfo = SignalRingRTC;
 		};
 /* End PBXContainerItemProxy section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		383347F623AA985600D53B63 /* CopyFiles */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				383347F723AA985F00D53B63 /* WebRTC.framework in CopyFiles */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		2C724194C4821B07AE3B7C25 /* Pods_SignalRingRTCTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SignalRingRTCTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -73,7 +58,6 @@
 		388AC0F322FA8F1600BEC609 /* libringrtc.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libringrtc.a; sourceTree = "<group>"; };
 		388AC0F422FA8F1600BEC609 /* RingRTC.modulemap */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = "sourcecode.module-map"; path = RingRTC.modulemap; sourceTree = "<group>"; };
 		388AC0F522FA8F1600BEC609 /* ringrtc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ringrtc.h; sourceTree = "<group>"; };
-		388AC0FC22FB403800BEC609 /* WebRTC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebRTC.framework; path = ../../../out/WebRTC.framework; sourceTree = "<group>"; };
 		38B4DB352331D29200015A3F /* SignalRingRTC.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = SignalRingRTC.modulemap; sourceTree = "<group>"; };
 		38C42F0123C530E900AE79AD /* CallContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallContext.swift; sourceTree = "<group>"; };
 		38C4E532251A73AC005C2ACB /* GroupCall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupCall.swift; sourceTree = "<group>"; };
@@ -88,7 +72,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				38205E6B231845CF00B4BAFD /* Pods_SignalRingRTC.framework in Frameworks */,
-				388AC0FD22FB403800BEC609 /* WebRTC.framework in Frameworks */,
 				388AC0F622FA8F1600BEC609 /* libringrtc.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -171,7 +154,6 @@
 			children = (
 				383347F423AA973300D53B63 /* Nimble.framework */,
 				38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */,
-				388AC0FC22FB403800BEC609 /* WebRTC.framework */,
 				2C724194C4821B07AE3B7C25 /* Pods_SignalRingRTCTests.framework */,
 			);
 			name = Frameworks;
@@ -231,7 +213,6 @@
 				388AC0CD22FA8B2D00BEC609 /* Frameworks */,
 				388AC0CE22FA8B2D00BEC609 /* Resources */,
 				67BEB2CB4856B8F2CB8B09CF /* [CP] Embed Pods Frameworks */,
-				383347F623AA985600D53B63 /* CopyFiles */,
 			);
 			buildRules = (
 			);
