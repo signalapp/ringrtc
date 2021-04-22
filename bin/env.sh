@@ -11,7 +11,7 @@
 }
 
 # project root directory
-PROJECT_DIR="$(dirname $BIN_DIR)"
+PROJECT_DIR=$(dirname "$BIN_DIR")
 
 # project configuration directory
 CONFIG_DIR="${PROJECT_DIR}/config"
@@ -22,7 +22,7 @@ PATCH_DIR="${PROJECT_DIR}/patches/webrtc"
 RINGRTC_SRC_DIR="${PROJECT_DIR}/src"
 
 # build products
-OUTPUT_DIR="${PROJECT_DIR}/out"
+OUTPUT_DIR=$(realpath "${OUTPUT_DIR:-${PROJECT_DIR}/out}")
 
 # publish directory
 PUBLISH_DIR="${PROJECT_DIR}/publish"

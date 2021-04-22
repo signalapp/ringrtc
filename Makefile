@@ -11,6 +11,8 @@ endif
 
 JOBS ?= 8
 
+OUTPUT_DIR ?= out
+
 BUILD_TYPES := release debug
 
 GN_ARCHS     := arm arm64 x86 x64
@@ -40,23 +42,23 @@ help:
 android: $(ANDROID_TARGETS)
 	$(Q) ./bin/build-aar -j$(JOBS)
 
-out/android.env:
+$(OUTPUT_DIR)/android.env:
 	$(Q) echo "Preparing Android workspace"
 	$(Q) ./bin/prepare-workspace android
 
 android/%: ARCH = $(word 1, $(subst /, , $*))
 android/%: TYPE = $(word 2, $(subst /, , $*))
-android/%: out/android.env
+android/%: $(OUTPUT_DIR)/android.env
 	$(Q) ./bin/build-aar --compile-only --$(TYPE)-build --arch $(ARCH) -j$(JOBS)
 
 ios: $(IOS_TARGETS)
 
-out/ios.env:
+$(OUTPUT_DIR)/ios.env:
 	$(Q) echo "Preparing iOS workspace"
 	$(Q) ./bin/prepare-workspace ios
 
 ios/%: TYPE = $*
-ios/%: out/ios.env
+ios/%: $(OUTPUT_DIR)/ios.env
 	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
 		echo "iOS: Debug build" ; \
 		./bin/build-ios -d ; \

@@ -90,11 +90,11 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        gn gen -C out/Debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false"
-        ninja -C out/Debug
+        gn gen -C "${OUTPUT_DIR}"/debug "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false"
+        ninja -C "${OUTPUT_DIR}"/debug
     else
-        gn gen -C out/Release "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false is_debug=false rtc_enable_sctp=false"
-        ninja -C out/Release
+        gn gen -C "${OUTPUT_DIR}"/release "--args=use_custom_libcxx=false rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false is_debug=false"
+        ninja -C "${OUTPUT_DIR}"/release
     fi
 )
 
@@ -104,9 +104,9 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        npm_config_arch=x64 npm_config_target_arch=x64 npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=11.2.0 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp cargo build --features electron
+        npm_config_arch=x64 npm_config_target_arch=x64 npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=11.2.0 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp OUTPUT_DIR="${OUTPUT_DIR}" cargo build --features electron
     else
-        npm_config_arch=x64 npm_config_target_arch=x64 npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=11.2.0 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp RUSTFLAGS="-C link-arg=-s" cargo build --features electron --release
+        npm_config_arch=x64 npm_config_target_arch=x64 npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=11.2.0 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp RUSTFLAGS="-C link-arg=-s" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --features electron --release
     fi
 
     if [ $DEFAULT_PLATFORM = "darwin" ]

@@ -43,7 +43,7 @@ case $TARGET_CPU in
 esac
 
 # The output directory is relative to $SRC_DIR
-GN_OUT_DIR="out/${TARGET_OS}-${TARGET_CPU}"
+GN_OUT_DIR="${OUTPUT_DIR}/${TARGET_OS}-${TARGET_CPU}"
 
 GN_DEBUG=yes
 if [ "$GN_DEBUG" = "yes" ] ; then

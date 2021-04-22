@@ -9,17 +9,26 @@ use std::process::Command;
 fn main() {
     let target = env::var("TARGET").unwrap();
     let profile = env::var("PROFILE").unwrap();
+    let out_dir = env::var("OUTPUT_DIR");
     let debug = profile.contains("debug");
+    let build_type = if debug { "debug" } else { "release" };
 
     eprintln!("build.rs: target: {}, profile: {}", target, profile);
 
     if cfg!(feature = "native") {
-        println!("cargo:rustc-link-lib=webrtc");
-        if debug {
-            println!("cargo:rustc-link-search=native=../../src/webrtc/src/out/Debug/obj/",);
-        } else {
-            println!("cargo:rustc-link-search=native=../../src/webrtc/src/out/Release/obj/",);
+        if out_dir.is_err() {
+            panic!("No output directory (OUTPUT_DIR) defined!");
         }
+
+        println!("cargo:rustc-link-lib=webrtc");
+        println!(
+            "{}",
+            format!(
+                "cargo:rustc-link-search=native={}/{}/obj/",
+                out_dir.unwrap(),
+                build_type,
+            )
+        );
 
         if cfg!(target_os = "macos") {
             println!("cargo:rustc-link-lib=dylib=c++");
@@ -51,11 +60,16 @@ fn main() {
         } else {
             println!("cargo:rustc-link-lib=stdc++");
         }
-    }
+    } else if target.ends_with("-ios") {
+        if out_dir.is_err() {
+            panic!("No output directory (OUTPUT_DIR) defined!");
+        }
 
-    if target.ends_with("-ios") {
         println!("cargo:rustc-link-lib=framework=WebRTC");
-        println!("cargo:rustc-link-search=framework=../../out");
+        println!(
+            "{}",
+            format!("cargo:rustc-link-search=framework={}", out_dir.unwrap(),)
+        );
     }
 }
 

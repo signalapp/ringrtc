@@ -124,9 +124,9 @@ then
 
   if [ "${BUILD_TYPE}" = "debug" ]
   then
-    cargo lipo --targets aarch64-apple-ios,x86_64-apple-ios
+    OUTPUT_DIR="${OUTPUT_DIR}" cargo lipo --targets aarch64-apple-ios,x86_64-apple-ios
   else
-    cargo lipo --release --targets aarch64-apple-ios,x86_64-apple-ios
+    OUTPUT_DIR="${OUTPUT_DIR}" cargo lipo --release --targets aarch64-apple-ios,x86_64-apple-ios
   fi
 
   mkdir -p ${OUTPUT_DIR}/libringrtc
