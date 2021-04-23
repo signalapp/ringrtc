@@ -1,6 +1,15 @@
 # Changelog
 
+## v2.9.5
+
+- Reference signalapp/webrtc@4389a
+
+- Update dependencies
+
+- Update builds and tests
+
 ## v2.9.4
+
 - Add statistics to monitor connection information
 
 - Reference signalapp/webrtc@4183l
@@ -8,6 +17,7 @@
 - Adjust logging and build issues
 
 ## v2.9.3
+
 - Electron: Update neon to use n-api runtime
 
 - CI optimizations and lint improvements
