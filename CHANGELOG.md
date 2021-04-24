@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.9.6
+
+- Revert change for shared picture ID in WebRTC
+
 ## v2.9.5
 
 - Reference signalapp/webrtc@4389a
