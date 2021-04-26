@@ -1,5 +1,8 @@
 name: RingRTC CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [ master, 'staging/*' ]
+  pull_request: # all target branches
 
 jobs:
   code_formatting:
