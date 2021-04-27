@@ -3,7 +3,7 @@ PODS:
     - CocoaLumberjack/Core (= 3.7.0)
   - CocoaLumberjack/Core (3.7.0)
   - GRKOpenSSLFramework (1.0.2.20.2)
-  - Nimble (8.0.9)
+  - Nimble (8.1.2)
   - PromiseKit (6.13.1):
     - PromiseKit/CorePromise (= 6.13.1)
     - PromiseKit/Foundation (= 6.13.1)
@@ -22,7 +22,7 @@ PODS:
   - WebRTCForTesting (0.0.1)
 
 DEPENDENCIES:
-  - Nimble (~> 8.0.0)
+  - Nimble (~> 8.1.2)
   - PromiseKit
   - SignalCoreKit (from `https://github.com/signalapp/SignalCoreKit.git`)
   - SignalCoreKit/Tests (from `https://github.com/signalapp/SignalCoreKit.git`)
@@ -32,8 +32,9 @@ SPEC REPOS:
   https://github.com/CocoaPods/Specs.git:
     - CocoaLumberjack
     - GRKOpenSSLFramework
-    - Nimble
     - PromiseKit
+  trunk:
+    - Nimble
 
 EXTERNAL SOURCES:
   SignalCoreKit:
@@ -49,11 +50,11 @@ CHECKOUT OPTIONS:
 SPEC CHECKSUMS:
   CocoaLumberjack: e8955b9d337ac307103b0a34fd141c32f27e53c5
   GRKOpenSSLFramework: 01e3dd58a1d865111ac9439841119ff91a26e1f2
-  Nimble: 98b888285a615fd34f20e61753cf58ea1402bde4
+  Nimble: 3864815b4703c7ebffba875973c70e854489fbae
   PromiseKit: 28fda91c973cc377875d8c0ea4f973013c05b6db
   SignalCoreKit: 4562b2bbd9830077439ca003f952a798457d4ea5
   WebRTCForTesting: 36bc4fa8d793bb4b13f475dcacf62936fee63533
 
-PODFILE CHECKSUM: 31f12f850a5cbcaf83187d1efc96745107dab624
+PODFILE CHECKSUM: f972f44fec87ff3449382f8b9cb4c80cc872e6a9
 
 COCOAPODS: 1.9.2

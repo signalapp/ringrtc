@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 18.04 recommended) or iOS on a Mac using Xcode (12.1.0), and for the host platform as a Node.js module for use in Electron apps.
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 20.04 recommended) or iOS on a Mac using Xcode (12.4.0), and for the host platform as a Node.js module for use in Electron apps.
 
 ## Prerequisites
 
@@ -93,7 +93,7 @@ For Windows, follow the setup from [here](https://github.com/signalapp/Signal-De
 
 ##### Linux
 
-We currently build using Ubuntu 18.04, but other distributions should work. Here are some other
+We currently build using Ubuntu 20.04, but other distributions should work. Here are some other
 things that might help with the builds:
 - `sudo apt install build-essential git curl wget python python2.7`
 - In some cases: `sudo apt install pkg-config`

@@ -10,6 +10,6 @@ end
 target 'SignalRingRTCTests' do
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', testspecs: ["Tests"]
   pod 'PromiseKit'
-  pod 'Nimble', '~> 8.0.0'
+  pod 'Nimble', '~> 8.1.2'
   pod 'WebRTCForTesting', path: '../../../out/'
 end
