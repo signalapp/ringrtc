@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.9.7
+
+- Electron: Rebuild (no functional changes)
+
 ## v2.9.6
 
 - Revert change for shared picture ID in WebRTC
