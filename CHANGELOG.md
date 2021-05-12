@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.10.0
+
+- Add Screensharing feature
+
+- Electron: Support alternative target architectures
+
 ## v2.9.7
 
 - Electron: Rebuild (no functional changes)
