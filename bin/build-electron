@@ -109,13 +109,14 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
 # Build WebRTC.
 (
     cd src/webrtc/src
+    WEBRTC_ARGS="use_custom_libcxx=false target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false"
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        gn gen -C "${OUTPUT_DIR}"/debug "--args=use_custom_libcxx=false target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false"
+        gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}"
         ninja -C "${OUTPUT_DIR}"/debug
     else
-        gn gen -C "${OUTPUT_DIR}"/release "--args=use_custom_libcxx=false target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false is_debug=false"
+        gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false"
         ninja -C "${OUTPUT_DIR}"/release
     fi
 )
