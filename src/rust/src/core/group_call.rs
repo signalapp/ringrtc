@@ -1745,7 +1745,7 @@ impl Client {
             // No one is here, so push it down as low as WebRTC will let us.
             (0, _) => ALL_ALONE_SEND_BITRATE_KBPS,
             // Use a higher bitrate for screen sharing.
-            (_, true) => 2000,
+            (_, true) => 5000,
             // Send between 500kbps and 1Mbps depending on how many other devices there are.
             // The more there are, the less we will send.
             (1..=7, _) => 1000, // Pretty much the default
