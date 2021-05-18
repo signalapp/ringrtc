@@ -90,6 +90,7 @@ For Windows, follow the setup from [here](https://github.com/signalapp/Signal-De
 - Download and install [make](http://gnuwin32.sourceforge.net/packages/make.htm)
 - Download and install [Python 2.7](https://www.python.org/downloads/)
     - Install it to a location without spaces (e.g. c:\python27)
+- Turn off "Real-time protection" in Windows Security settings during the initial build (WebRTC clones several gigabytes of Google tools)
 
 ##### Linux
 

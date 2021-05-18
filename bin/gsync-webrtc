@@ -30,5 +30,5 @@ echo "CONFIGURED_WEBRTC_VERSION=${WEBRTC_VERSION}" > "${OUTPUT_DIR}/webrtc-versi
 
 (
  cd "$WEBRTC_DIR"
- gclient sync --jobs 32 --with_tags "--revision=src@${WEBRTC_VERSION}"
+ gclient sync --no-history --jobs 32 --with_tags "--revision=src@${WEBRTC_VERSION}"
 )
