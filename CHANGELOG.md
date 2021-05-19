@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.10.1
+
+- Screenshare: Fixes for legacy clients
+
+- Build Fixes: Support older Linux distros and other optimizations
+
+- Reference signalapp/webrtc@4389c
+
 ## v2.10.0
 
 - Add Screensharing feature
