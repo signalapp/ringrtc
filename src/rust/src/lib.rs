@@ -53,7 +53,7 @@ pub mod core {
 }
 
 /// Protobuf Definitions.
-mod protobuf {
+pub mod protobuf {
     pub mod data_channel;
     pub mod group_call;
     pub mod signaling;

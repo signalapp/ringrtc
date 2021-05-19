@@ -1304,20 +1304,20 @@ where
 
     /// Send the remote peer the current sender status via the
     /// PeerConnection DataChannel.
-    pub fn send_sender_status_via_data_channel(
-        &self,
-        status: signaling::SenderStatus,
-    ) -> Result<()> {
-        let sender_status = protobuf::data_channel::SenderStatus {
-            id:             Some(u64::from(self.call_id)),
-            video_enabled:  status.video_enabled,
-            sharing_screen: status.sharing_screen,
-        };
-
+    pub fn update_sender_status_from_fsm(&self, updated: signaling::SenderStatus) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
         let data_channel = webrtc.data_channel().ok();
         self.update_and_send_dcm_state_via_data_channel(data_channel, move |data| {
-            data.sender_status = Some(sender_status)
+            let previous = data.sender_status.as_ref();
+            let previous_video_enabled =
+                previous.and_then(|sender_status| sender_status.video_enabled);
+            let previous_sharing_screen =
+                previous.and_then(|sender_status| sender_status.sharing_screen);
+            data.sender_status = Some(protobuf::data_channel::SenderStatus {
+                id:             Some(u64::from(self.call_id)),
+                video_enabled:  updated.video_enabled.or(previous_video_enabled),
+                sharing_screen: updated.sharing_screen.or(previous_sharing_screen),
+            });
         })
     }
 
@@ -1764,16 +1764,13 @@ where
         self.inject_event(ConnectionEvent::Accept)
     }
 
-    /// Inject a `SendSenderStatusViaDataChannel` event into the FSM.
+    /// Inject a `UpdateSenderStatus` event into the FSM.
     ///
     /// `Called By:` Local application.
     ///
     /// * `status` - The local peer's status.
-    pub fn inject_send_sender_status_via_data_channel(
-        &mut self,
-        status: signaling::SenderStatus,
-    ) -> Result<()> {
-        self.inject_event(ConnectionEvent::SendSenderStatusViaDataChannel(status))
+    pub fn update_sender_status(&mut self, status: signaling::SenderStatus) -> Result<()> {
+        self.inject_event(ConnectionEvent::UpdateSenderStatus(status))
     }
 
     /// Inject a `UpdateBandwidthMode` event into the FSM.
@@ -1879,6 +1876,15 @@ where
         // The second sync flushes out any error event(s) that might
         // have happened during the first sync.
         self.inject_synchronize()
+    }
+
+    #[cfg(feature = "sim")]
+    pub fn last_sent_sender_status(&self) -> Option<protobuf::data_channel::SenderStatus> {
+        self.accumulated_dcm_state
+            .lock()
+            .unwrap()
+            .sender_status
+            .clone()
     }
 }
 

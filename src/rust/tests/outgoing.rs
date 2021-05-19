@@ -24,6 +24,7 @@ use ringrtc::common::{
 };
 use ringrtc::core::bandwidth_mode::BandwidthMode;
 use ringrtc::core::signaling;
+use ringrtc::protobuf;
 use ringrtc::sim::error::SimError;
 use ringrtc::webrtc::media::MediaStream;
 
@@ -608,15 +609,17 @@ fn inject_call_error() {
 }
 
 #[test]
-fn inject_send_sender_status_via_data_channel() {
+fn update_sender_status() {
     test_init();
 
     let context = connect_outbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
+    assert_eq!(None, active_connection.last_sent_sender_status());
+
     active_connection
-        .inject_send_sender_status_via_data_channel(signaling::SenderStatus {
+        .update_sender_status(signaling::SenderStatus {
             video_enabled:  Some(false),
             sharing_screen: None,
         })
@@ -625,7 +628,59 @@ fn inject_send_sender_status_via_data_channel() {
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
 
-    // TODO -- verify that the data channel object sent a message
+    assert_eq!(
+        Some(protobuf::data_channel::SenderStatus {
+            id:             Some(active_connection.call_id().into()),
+            video_enabled:  Some(false),
+            sharing_screen: None,
+        }),
+        active_connection.last_sent_sender_status()
+    );
+
+    active_connection
+        .update_sender_status(signaling::SenderStatus {
+            video_enabled:  Some(true),
+            sharing_screen: None,
+        })
+        .expect(error_line!());
+
+    active_connection
+        .update_sender_status(signaling::SenderStatus {
+            video_enabled:  None,
+            sharing_screen: Some(true),
+        })
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    assert_eq!(
+        Some(protobuf::data_channel::SenderStatus {
+            id:             Some(active_connection.call_id().into()),
+            video_enabled:  Some(true),
+            sharing_screen: Some(true),
+        }),
+        active_connection.last_sent_sender_status()
+    );
+
+    active_connection
+        .update_sender_status(signaling::SenderStatus {
+            video_enabled:  None,
+            sharing_screen: Some(false),
+        })
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    assert_eq!(
+        Some(protobuf::data_channel::SenderStatus {
+            id:             Some(active_connection.call_id().into()),
+            video_enabled:  Some(true),
+            sharing_screen: Some(false),
+        }),
+        active_connection.last_sent_sender_status()
+    );
 }
 
 #[test]

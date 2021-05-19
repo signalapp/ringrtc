@@ -19,7 +19,7 @@
 //! - AcceptOffer
 //! - AnswerCall
 //! - LocalHangup
-//! - SendSenderStatusViaDataChannel
+//! - UpdateSenderStatus
 //! - SendReceiverStatusViaDataChannel
 //! - SendBusy
 //! - ReceivedIce
@@ -98,8 +98,8 @@ pub enum ConnectionEvent {
     ReceivedReceiverStatusViaDataChannel(CallId, DataRate, Option<u64>),
     /// Send sender status message via the data channel
     /// Source: app (user action)
-    /// Action: Send a sender status message over the data channel.
-    SendSenderStatusViaDataChannel(signaling::SenderStatus),
+    /// Action: Accumulate and send a sender status message over the data channel.
+    UpdateSenderStatus(signaling::SenderStatus),
     /// Set bandwidth mode
     /// Source: app (user setting)
     /// Action: Update and send bitrate via a receiver status message over the data channel.
@@ -168,8 +168,8 @@ impl fmt::Display for ConnectionEvent {
             ConnectionEvent::SendHangupViaDataChannel(hangup) => {
                 format!("SendHangupViaDataChannel, hangup: {}", hangup)
             }
-            ConnectionEvent::SendSenderStatusViaDataChannel(status) => format!(
-                "SendSenderStatusViaDataChannel, status: {:?}",
+            ConnectionEvent::UpdateSenderStatus(status) => format!(
+                "UpdateSenderStatus, status: {:?}",
                 status
             ),
             ConnectionEvent::UpdateBandwidthMode(mode) => format!(
@@ -415,8 +415,8 @@ where
                 sequence_number,
             ),
             ConnectionEvent::ReceivedIce(ice) => self.handle_received_ice(connection, state, ice),
-            ConnectionEvent::SendSenderStatusViaDataChannel(status) => {
-                self.handle_send_sender_status_via_data_channel(connection, state, status)
+            ConnectionEvent::UpdateSenderStatus(status) => {
+                self.handle_update_sender_status(connection, state, status)
             }
             ConnectionEvent::UpdateBandwidthMode(mode) => {
                 self.handle_update_bandwidth_mode(connection, state, mode)
@@ -702,11 +702,11 @@ where
         Ok(())
     }
 
-    fn handle_send_sender_status_via_data_channel(
+    fn handle_update_sender_status(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
-        status: signaling::SenderStatus,
+        sender_status: signaling::SenderStatus,
     ) -> Result<()> {
         match state {
             ConnectionState::ConnectingBeforeAccepted
@@ -719,7 +719,7 @@ where
                     if connection.terminating()? {
                         return Ok(());
                     }
-                    connection.send_sender_status_via_data_channel(status)
+                    connection.update_sender_status_from_fsm(sender_status)
                 })
                 .map_err(move |err| {
                     err_connection.inject_internal_error(err, "Sending local sender status failed");
@@ -727,7 +727,7 @@ where
 
                 self.worker_spawn(send_sender_status_future);
             }
-            _ => self.unexpected_state(state, "SendSenderStatusViaDataChannel"),
+            _ => self.unexpected_state(state, "UpdateSenderStatus"),
         };
         Ok(())
     }

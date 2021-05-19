@@ -829,7 +829,7 @@ fn setOutgoingVideoEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_video_track.set_enabled(enabled);
         let mut active_connection = endpoint.call_manager.active_connection()?;
-        active_connection.inject_send_sender_status_via_data_channel(signaling::SenderStatus {
+        active_connection.update_sender_status(signaling::SenderStatus {
             video_enabled: Some(enabled),
             ..Default::default()
         })?;
@@ -852,7 +852,7 @@ fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
             .outgoing_video_track
             .set_content_hint(is_screenshare);
         let mut active_connection = endpoint.call_manager.active_connection()?;
-        active_connection.inject_send_sender_status_via_data_channel(signaling::SenderStatus {
+        active_connection.update_sender_status(signaling::SenderStatus {
             sharing_screen: Some(is_screenshare),
             ..Default::default()
         })?;
