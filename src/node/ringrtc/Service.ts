@@ -940,6 +940,7 @@ export class Call {
   private _state: CallState;
   private _outgoingAudioEnabled: boolean = false;
   private _outgoingVideoEnabled: boolean = false;
+  private _outgoingVideoIsScreenShare: boolean = false;
   private _remoteVideoEnabled: boolean = false;
   remoteSharingScreen: boolean = false;
   private _videoCapturer: VideoCapturer | null = null;
@@ -1065,6 +1066,7 @@ export class Call {
 
   set outgoingVideoIsScreenShare(isScreenShare: boolean) {
     // This assumes we only have one active call.
+    this._outgoingVideoIsScreenShare = isScreenShare;
     silly_deadlock_protection(() => {
       this._callManager.setOutgoingVideoIsScreenShare(isScreenShare);
     });
@@ -1110,6 +1112,10 @@ export class Call {
       case CallState.Accepted:
         this._videoCapturer.enableCaptureAndSend(this);
         this.setOutgoingVideoEnabled(true);
+        if (this._outgoingVideoIsScreenShare) {
+          // Make sure the status gets sent.
+          this.outgoingVideoIsScreenShare = true;
+        }
         break;
       case CallState.Reconnecting:
         this._videoCapturer.enableCaptureAndSend(this);
@@ -1126,17 +1132,6 @@ export class Call {
     silly_deadlock_protection(() => {
       try {
         this._callManager.setOutgoingVideoEnabled(enabled);
-      } catch {
-        // We may not have an active connection any more.
-        // In which case it doesn't matter
-      }
-    });
-  }
-
-  private setOutgoingVideoIsScreenShare(isScreenShare: boolean) {
-    silly_deadlock_protection(() => {
-      try {
-        this._callManager.setOutgoingVideoIsScreenShare(isScreenShare);
       } catch {
         // We may not have an active connection any more.
         // In which case it doesn't matter
