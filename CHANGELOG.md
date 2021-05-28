@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.10.2
+
+- Screenshare: Fix sending of status
+
 ## v2.10.1
 
 - Screenshare: Fixes for legacy clients
