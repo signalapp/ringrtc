@@ -49,7 +49,7 @@ use crate::protobuf;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
-use crate::webrtc::peer_connection::PeerConnection;
+use crate::webrtc::peer_connection::{PeerConnection, SendRates};
 use crate::webrtc::peer_connection_observer::{IceConnectionState, PeerConnectionObserverTrait};
 use crate::webrtc::sdp_observer::{
     create_csd_observer,
@@ -1297,7 +1297,10 @@ where
         bandwidth_mode: &BandwidthMode,
     ) -> Result<()> {
         info!("apply_bandwidth_mode(): mode: {}", bandwidth_mode);
-        peer_connection.set_max_send_bitrate(bandwidth_mode.max_bitrate())?;
+        peer_connection.set_send_rates(SendRates {
+            max: Some(bandwidth_mode.max_bitrate()),
+            ..SendRates::default()
+        })?;
         peer_connection.configure_audio_encoders(&bandwidth_mode.audio_encoder_config());
         Ok(())
     }

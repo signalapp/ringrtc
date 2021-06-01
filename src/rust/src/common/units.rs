@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd, Default)]
 pub struct DataRate {
     size_per_second: DataSize,
 }
@@ -53,7 +53,7 @@ impl Mul<Duration> for DataRate {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd, Default)]
 pub struct DataSize {
     bits: u64,
 }

@@ -825,12 +825,29 @@ Rust_getStats(PeerConnectionInterface* peer_connection,
   peer_connection->GetStats(stats_observer);
 }
 
+// This is fairly complex in WebRTC, but I think it's something like this:
+// Must be that 0 <= min <= start <= max.
+// But any value can be unset (-1).  If so, here is what happens:
+// If min isn't set, either use 30kbps (from PeerConnectionFactory::CreateCall_w) or no min (0 from WebRtcVideoChannel::ApplyChangedParams)
+// If start isn't set, use the previous start; initially 100kbps (from PeerConnectionFactory::CreateCall_w)
+// If max isn't set, either use 2mbps (from PeerConnectionFactory::CreateCall_w) or no max (-1 from WebRtcVideoChannel::ApplyChangedParams
+// If min and max are set but haven't changed since last the last unset value, nothing happens.
+// There is only an action if either min or max has changed or start is set.
 RUSTEXPORT void
-Rust_setMaxSendBitrate(PeerConnectionInterface* peer_connection,
-                       int32_t                  max_bitrate_bps) {
+Rust_setSendBitrates(PeerConnectionInterface* peer_connection,
+                     int32_t                  min_bitrate_bps,
+                     int32_t                  start_bitrate_bps,
+                     int32_t                  max_bitrate_bps) {
     struct BitrateSettings bitrate_settings;
-    bitrate_settings.max_bitrate_bps = max_bitrate_bps;
-
+    if (min_bitrate_bps >= 0) {
+      bitrate_settings.min_bitrate_bps = min_bitrate_bps;
+    }
+    if (start_bitrate_bps >= 0) {
+      bitrate_settings.start_bitrate_bps = start_bitrate_bps;
+    }
+    if (max_bitrate_bps >= 0) {
+      bitrate_settings.max_bitrate_bps = max_bitrate_bps;
+    }
     peer_connection->SetBitrate(bitrate_settings);
 }
 

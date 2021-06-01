@@ -51,6 +51,14 @@ pub struct PeerConnection {
     rffi_pc_observer: *const RffiPeerConnectionObserver,
 }
 
+// See PeerConnection::SetSendRates for more info.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct SendRates {
+    pub min:   Option<DataRate>,
+    pub start: Option<DataRate>,
+    pub max:   Option<DataRate>,
+}
+
 impl fmt::Display for PeerConnection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "rffi_peer_connection: {:p}", self.rffi)
@@ -248,8 +256,21 @@ impl PeerConnection {
     }
 
     // Rust wrapper around C++ PeerConnection::SetBitrate().
-    pub fn set_max_send_bitrate(&self, max_bitrate: DataRate) -> Result<()> {
-        unsafe { pc::Rust_setMaxSendBitrate(self.rffi, max_bitrate.as_bps() as i32) };
+    // The meaning is a bit complicated, but it's close to something like:
+    // - If you don't set the min, you get a default min which is very low or 0.
+    // - If you don't set the max, you get a default max which is high (2mbps or above).
+    // - If you don't set the start, you keep it how it is.
+    // - The whole thing is no-op unless you change something from the last set of values.
+    pub fn set_send_rates(&self, rates: SendRates) -> Result<()> {
+        let as_bps = |rate: Option<DataRate>| rate.map(|rate| rate.as_bps() as i32).unwrap_or(-1);
+        unsafe {
+            pc::Rust_setSendBitrates(
+                self.rffi,
+                as_bps(rates.min),
+                as_bps(rates.start),
+                as_bps(rates.max),
+            )
+        };
 
         Ok(())
     }

@@ -92,7 +92,12 @@ extern "C" {
         stats_observer: *const RffiStatsObserver,
     );
 
-    pub fn Rust_setMaxSendBitrate(peer_connection: *const RffiPeerConnection, max_bitrate_bps: i32);
+    pub fn Rust_setSendBitrates(
+        peer_connection: *const RffiPeerConnection,
+        min_bitrate_bps: i32,
+        start_bitrate_bps: i32,
+        max_bitrate_bps: i32,
+    );
 
     pub fn Rust_sendRtp(
         peer_connection: *const RffiPeerConnection,

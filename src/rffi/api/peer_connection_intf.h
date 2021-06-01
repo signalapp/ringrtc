@@ -134,8 +134,10 @@ Rust_getStats(webrtc::PeerConnectionInterface* peer_connection,
               webrtc::rffi::StatsObserverRffi* stats_observer);
 
 RUSTEXPORT void
-Rust_setMaxSendBitrate(webrtc::PeerConnectionInterface* peer_connection,
-                       int32_t                          max_bitrate_bps);
+Rust_setSendBitrates(webrtc::PeerConnectionInterface* peer_connection,
+                     int32_t                          min_bitrate_bps,
+                     int32_t                          start_bitrate_bps,
+                     int32_t                          max_bitrate_bps);
 
 RUSTEXPORT bool
 Rust_sendRtp(webrtc::PeerConnectionInterface* peer_connection,

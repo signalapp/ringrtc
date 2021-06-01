@@ -317,6 +317,13 @@ export class GumVideoCapturer {
   }
 }
 
+// We add 10% in each dimension to allow for things that are slightly wider or taller than 1080p.
+const MAX_VIDEO_CAPTURE_MULTIPLIER = 1.0;
+export const MAX_VIDEO_CAPTURE_WIDTH = 1920 * MAX_VIDEO_CAPTURE_MULTIPLIER;
+export const MAX_VIDEO_CAPTURE_HEIGHT = 1080 * MAX_VIDEO_CAPTURE_MULTIPLIER;
+export const MAX_VIDEO_CAPTURE_AREA = MAX_VIDEO_CAPTURE_WIDTH * MAX_VIDEO_CAPTURE_HEIGHT;
+export const MAX_VIDEO_CAPTURE_BUFFER_SIZE = MAX_VIDEO_CAPTURE_AREA * 4;
+
 export class CanvasVideoRenderer {
   private canvas?: Ref<HTMLCanvasElement>;
   private buffer: ArrayBuffer;
@@ -324,8 +331,7 @@ export class CanvasVideoRenderer {
   private rafId?: any;
 
   constructor() {
-    // The max size video frame we'll support (in RGBA)
-    this.buffer = new ArrayBuffer(1920 * 1080 * 4);
+    this.buffer = new ArrayBuffer(MAX_VIDEO_CAPTURE_BUFFER_SIZE);
   }
 
   setCanvas(canvas: Ref<HTMLCanvasElement> | undefined) {

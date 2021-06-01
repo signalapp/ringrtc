@@ -2399,16 +2399,10 @@ where
 
     pub fn set_bandwidth_mode(
         &mut self,
-        client_id: group_call::ClientId,
-        bandwidth_mode: BandwidthMode,
+        _client_id: group_call::ClientId,
+        _bandwidth_mode: BandwidthMode,
     ) {
-        info!("set_bandwidth_mode(): id: {}", client_id);
-        group_call_api_handler!(
-            self,
-            client_id,
-            set_max_send_bitrate,
-            bandwidth_mode.max_bitrate()
-        );
+        // TODO: Respect bandwidth mode for both send and receive
     }
 
     pub fn request_video(
