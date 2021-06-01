@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.10.3
+
+- Screenshare: Fix bandwidth for group call
+
 ## v2.10.2
 
 - Screenshare: Fix sending of status
