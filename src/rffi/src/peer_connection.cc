@@ -625,6 +625,10 @@ CreateSessionDescriptionForGroupCall(bool local,
       video_stream.AddFidSsrc(video2_ssrc, video2_rtx_ssrc);  // AKA RTX
       video_stream.AddFidSsrc(video3_ssrc, video3_rtx_ssrc);  // AKA RTX
     }
+    // This makes screen share use 2 layers of the highest resolution
+    // (but different quality/framerate) rather than 3 layers of
+    // differing resolution.
+    video->set_conference_mode(true);
 
     // Things that are the same for all of them
     for (auto* stream : {&audio_stream, &video_stream}) {
