@@ -464,6 +464,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
             endpoint.outgoing_audio_track.clone(),
             endpoint.outgoing_video_track.clone(),
         );
+        endpoint.outgoing_video_track.set_content_hint(false);
         endpoint.call_manager.proceed(
             call_id,
             call_context,
@@ -997,6 +998,7 @@ fn join(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
 
     with_call_endpoint(&mut cx, |endpoint| {
+        endpoint.outgoing_video_track.set_content_hint(false);
         endpoint.call_manager.join(client_id);
         Ok(())
     })
@@ -1012,6 +1014,7 @@ fn leave(mut cx: FunctionContext) -> JsResult<JsValue> {
         // When leaving, make sure outgoing media is stopped as soon as possible.
         endpoint.outgoing_audio_track.set_enabled(false);
         endpoint.outgoing_video_track.set_enabled(false);
+        endpoint.outgoing_video_track.set_content_hint(false);
         endpoint.call_manager.leave(client_id);
         Ok(())
     })
@@ -1027,6 +1030,7 @@ fn disconnect(mut cx: FunctionContext) -> JsResult<JsValue> {
         // When disconnecting, make sure outgoing media is stopped as soon as possible.
         endpoint.outgoing_audio_track.set_enabled(false);
         endpoint.outgoing_video_track.set_enabled(false);
+        endpoint.outgoing_video_track.set_content_hint(false);
         endpoint.call_manager.disconnect(client_id);
         Ok(())
     })
