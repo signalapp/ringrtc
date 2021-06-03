@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.10.4
+
+- Screenshare: Add optimizations
+
 ## v2.10.3
 
 - Screenshare: Fix bandwidth for group call
