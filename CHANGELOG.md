@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.10.5
+
+- Screenshare: Allow screenshare without a camera
+
 ## v2.10.4
 
 - Screenshare: Add optimizations
