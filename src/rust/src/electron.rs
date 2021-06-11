@@ -346,10 +346,8 @@ fn create_id_arg<'a>(cx: &mut FunctionContext<'a>, id: u64) -> Handle<'a, JsValu
     obj.upcast()
 }
 
-fn to_js_array_buffer<'a>(cx: &mut FunctionContext<'a>, data: &[u8]) -> Handle<'a, JsValue> {
-    let mut js_buffer = cx
-        .array_buffer(data.len() as u32)
-        .expect("create ArrayBuffer");
+fn to_js_buffer<'a>(cx: &mut FunctionContext<'a>, data: &[u8]) -> Handle<'a, JsValue> {
+    let mut js_buffer = cx.buffer(data.len() as u32).expect("create Buffer");
     cx.borrow_mut(&mut js_buffer, |handle| {
         handle.as_mut_slice().copy_from_slice(data.as_ref());
     });
@@ -563,9 +561,9 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let call_id = CallId::new(get_id_arg(&mut cx, 4));
     let offer_type = cx.argument::<JsNumber>(5)?.value(&mut cx) as i32;
     let sender_supports_multi_ring = cx.argument::<JsBoolean>(6)?.value(&mut cx);
-    let opaque = cx.argument::<JsArrayBuffer>(7)?;
-    let sender_identity_key = cx.argument::<JsArrayBuffer>(8)?;
-    let receiver_identity_key = cx.argument::<JsArrayBuffer>(9)?;
+    let opaque = cx.argument::<JsBuffer>(7)?;
+    let sender_identity_key = cx.argument::<JsBuffer>(8)?;
+    let receiver_identity_key = cx.argument::<JsBuffer>(9)?;
 
     let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
     let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
@@ -612,9 +610,9 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sender_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let call_id = CallId::new(get_id_arg(&mut cx, 2));
     let sender_supports_multi_ring = cx.argument::<JsBoolean>(3)?.value(&mut cx);
-    let opaque = cx.argument::<JsArrayBuffer>(4)?;
-    let sender_identity_key = cx.argument::<JsArrayBuffer>(5)?;
-    let receiver_identity_key = cx.argument::<JsArrayBuffer>(6)?;
+    let opaque = cx.argument::<JsBuffer>(4)?;
+    let sender_identity_key = cx.argument::<JsBuffer>(5)?;
+    let receiver_identity_key = cx.argument::<JsBuffer>(6)?;
 
     let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
     let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
@@ -656,7 +654,7 @@ fn receivedIceCandidates(mut cx: FunctionContext) -> JsResult<JsValue> {
     for i in 0..js_candidates.len(&mut cx) {
         let js_candidate = js_candidates
             .get(&mut cx, i as u32)?
-            .downcast::<JsArrayBuffer, _>(&mut cx)
+            .downcast::<JsBuffer, _>(&mut cx)
             .expect("ICE candidates");
         let opaque = cx.borrow(&js_candidate, |handle| handle.as_slice().to_vec());
         candidates.push(signaling::IceCandidate::new(opaque));
@@ -750,11 +748,11 @@ fn receivedBusy(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let remote_user_id = cx.argument::<JsArrayBuffer>(0)?;
+    let remote_user_id = cx.argument::<JsBuffer>(0)?;
     let remote_user_id = cx.borrow(&remote_user_id, |handle| handle.as_slice().to_vec());
     let remote_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let local_device_id = cx.argument::<JsNumber>(2)?.value(&mut cx) as DeviceId;
-    let data = cx.argument::<JsArrayBuffer>(3)?;
+    let data = cx.argument::<JsBuffer>(3)?;
     let data = cx.borrow(&data, |handle| handle.as_slice().to_vec());
     let message_age_sec = cx.argument::<JsNumber>(4)?.value(&mut cx) as u64;
 
@@ -776,7 +774,7 @@ fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn receivedHttpResponse(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let status_code = cx.argument::<JsNumber>(1)?.value(&mut cx) as u16;
-    let body = cx.argument::<JsArrayBuffer>(2)?;
+    let body = cx.argument::<JsBuffer>(2)?;
     let body = cx.borrow(&body, |handle| handle.as_slice().to_vec());
     let response = HttpResponse { status_code, body };
 
@@ -867,7 +865,7 @@ fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let width = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let height = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
-    let rgba_buffer = cx.argument::<JsArrayBuffer>(2)?;
+    let rgba_buffer = cx.argument::<JsBuffer>(2)?;
 
     let frame = cx.borrow(&rgba_buffer, |handle| {
         VideoFrame::from_rgba(width, height, handle.as_slice())
@@ -882,7 +880,7 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let rgba_buffer = cx.argument::<JsArrayBuffer>(0)?;
+    let rgba_buffer = cx.argument::<JsBuffer>(0)?;
     let frame = with_call_endpoint(&mut cx, |endpoint| endpoint.incoming_video_buffer.pop());
     if let Some(frame) = frame {
         let frame = frame.apply_rotation();
@@ -906,7 +904,7 @@ fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let remote_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as group_call::DemuxId;
-    let rgba_buffer = cx.argument::<JsArrayBuffer>(2)?;
+    let rgba_buffer = cx.argument::<JsBuffer>(2)?;
 
     let frame = with_call_endpoint(&mut cx, |endpoint| {
         if let Some(video_buffer) = endpoint
@@ -942,7 +940,7 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let mut client_id = group_call::INVALID_CLIENT_ID;
 
-    let group_id: std::vec::Vec<u8> = match group_id.downcast::<JsArrayBuffer, _>(&mut cx) {
+    let group_id: std::vec::Vec<u8> = match group_id.downcast::<JsBuffer, _>(&mut cx) {
         Ok(handle) => cx.borrow(&handle, |handle| handle.as_slice().to_vec()),
         Err(_) => {
             return Ok(cx.number(client_id).upcast());
@@ -1202,14 +1200,14 @@ fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
             .expect("group_member");
         let user_id = match js_member
             .get(&mut cx, "userId")?
-            .downcast::<JsArrayBuffer, _>(&mut cx)
+            .downcast::<JsBuffer, _>(&mut cx)
         {
             Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
             Err(_) => None,
         };
         let user_id_ciphertext = match js_member
             .get(&mut cx, "userIdCipherText")?
-            .downcast::<JsArrayBuffer, _>(&mut cx)
+            .downcast::<JsBuffer, _>(&mut cx)
         {
             Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
             Err(_) => None,
@@ -1241,7 +1239,7 @@ fn setMembershipProof(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let proof = cx.argument::<JsValue>(1)?.as_value(&mut cx);
 
-    let proof: std::vec::Vec<u8> = match proof.downcast::<JsArrayBuffer, _>(&mut cx) {
+    let proof: std::vec::Vec<u8> = match proof.downcast::<JsBuffer, _>(&mut cx) {
         Ok(handle) => cx.borrow(&handle, |handle| handle.as_slice().to_vec()),
         Err(_) => {
             return Ok(cx.undefined().upcast());
@@ -1262,7 +1260,7 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx) as PeerId;
 
-    let membership_proof = cx.argument::<JsArrayBuffer>(2)?;
+    let membership_proof = cx.argument::<JsBuffer>(2)?;
     let membership_proof = cx.borrow(&membership_proof, |handle| handle.as_slice().to_vec());
 
     let js_members = *cx.argument::<JsArray>(3)?;
@@ -1274,14 +1272,14 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
             .expect("group_member");
         let user_id = match js_member
             .get(&mut cx, "userId")?
-            .downcast::<JsArrayBuffer, _>(&mut cx)
+            .downcast::<JsBuffer, _>(&mut cx)
         {
             Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
             Err(_) => None,
         };
         let user_id_ciphertext = match js_member
             .get(&mut cx, "userIdCipherText")?
-            .downcast::<JsArrayBuffer, _>(&mut cx)
+            .downcast::<JsBuffer, _>(&mut cx)
         {
             Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
             Err(_) => None,
@@ -1430,7 +1428,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     Handle<JsValue>,
                 ) = match signal {
                     signaling::Message::Offer(offer) => {
-                        let mut opaque = cx.array_buffer(offer.opaque.len() as u32)?;
+                        let mut opaque = cx.buffer(offer.opaque.len() as u32)?;
                         cx.borrow_mut(&mut opaque, |handle| {
                             handle.as_mut_slice().copy_from_slice(&offer.opaque);
                         });
@@ -1442,7 +1440,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                         )
                     }
                     signaling::Message::Answer(answer) => {
-                        let mut opaque = cx.array_buffer(answer.opaque.len() as u32)?;
+                        let mut opaque = cx.buffer(answer.opaque.len() as u32)?;
                         cx.borrow_mut(&mut opaque, |handle| {
                             handle.as_mut_slice().copy_from_slice(&answer.opaque);
                         });
@@ -1459,8 +1457,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                             JsArray::new(&mut cx, ice.candidates_added.len() as u32);
                         for (i, candidate) in ice.candidates_added.iter().enumerate() {
                             let opaque: neon::handle::Handle<JsValue> = {
-                                let mut js_opaque =
-                                    cx.array_buffer(candidate.opaque.len() as u32)?;
+                                let mut js_opaque = cx.buffer(candidate.opaque.len() as u32)?;
                                 cx.borrow_mut(&mut js_opaque, |handle| {
                                     handle
                                         .as_mut_slice()
@@ -1644,7 +1641,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let body = match body {
                     None => cx.undefined().upcast(),
                     Some(body) => {
-                        let mut js_body = cx.array_buffer(body.len() as u32)?;
+                        let mut js_body = cx.buffer(body.len() as u32)?;
                         cx.borrow_mut(&mut js_body, |handle| {
                             handle.as_mut_slice().copy_from_slice(&body);
                         });
@@ -1668,8 +1665,8 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
 
             Event::SendCallMessage(remote_user_uuid, message) => {
                 let method_name = "sendCallMessage";
-                let remote_user_uuid = to_js_array_buffer(&mut cx, &remote_user_uuid);
-                let message = to_js_array_buffer(&mut cx, &message);
+                let remote_user_uuid = to_js_buffer(&mut cx, &remote_user_uuid);
+                let message = to_js_buffer(&mut cx, &message);
                 let args: Vec<Handle<JsValue>> = vec![remote_user_uuid, message];
                 let method = *observer
                     .get(&mut cx, method_name)?
@@ -1751,7 +1748,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     JsArray::new(&mut cx, remote_device_states.len() as u32);
                 for (i, remote_device_state) in remote_device_states.iter().enumerate() {
                     let demux_id = cx.number(remote_device_state.demux_id);
-                    let user_id = to_js_array_buffer(&mut cx, &remote_device_state.user_id);
+                    let user_id = to_js_buffer(&mut cx, &remote_device_state.user_id);
                     let media_keys_received = cx.boolean(remote_device_state.media_keys_received);
                     let audio_muted: neon::handle::Handle<JsValue> =
                         match remote_device_state.heartbeat_state.audio_muted {
@@ -1849,7 +1846,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let js_members = JsArray::new(&mut cx, members.len() as u32);
                 for (i, member) in members.iter().enumerate() {
                     let member: neon::handle::Handle<JsValue> = {
-                        let mut js_member = cx.array_buffer(member.len() as u32)?;
+                        let mut js_member = cx.buffer(member.len() as u32)?;
                         cx.borrow_mut(&mut js_member, |handle| {
                             handle.as_mut_slice().copy_from_slice(member.as_ref());
                         });
@@ -1858,7 +1855,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_members.set(&mut cx, i as u32, member)?;
                 }
                 let js_creator: neon::handle::Handle<JsValue> = match creator {
-                    Some(creator) => to_js_array_buffer(&mut cx, &creator).upcast(),
+                    Some(creator) => to_js_buffer(&mut cx, &creator).upcast(),
                     None => cx.undefined().upcast(),
                 };
                 let era_id: neon::handle::Handle<JsValue> = match era_id {
@@ -1901,7 +1898,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let js_members = JsArray::new(&mut cx, members.len() as u32);
                 for (i, member) in members.iter().enumerate() {
                     let member: neon::handle::Handle<JsValue> = {
-                        let mut js_member = cx.array_buffer(member.len() as u32)?;
+                        let mut js_member = cx.buffer(member.len() as u32)?;
                         cx.borrow_mut(&mut js_member, |handle| {
                             handle.as_mut_slice().copy_from_slice(member.as_ref());
                         });
@@ -1910,7 +1907,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_members.set(&mut cx, i as u32, member)?;
                 }
                 let js_creator: neon::handle::Handle<JsValue> = match creator {
-                    Some(creator) => to_js_array_buffer(&mut cx, &creator).upcast(),
+                    Some(creator) => to_js_buffer(&mut cx, &creator).upcast(),
                     None => cx.undefined().upcast(),
                 };
                 let era_id: neon::handle::Handle<JsValue> = match era_id {
