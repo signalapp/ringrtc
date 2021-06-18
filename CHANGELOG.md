@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.10.6
+
+- Electron: Use Buffer everywhere we used to use ArrayBuffer
+
+- iOS: Update builds and tests to support M1 iOS simulator
+
+- Update to Rust nightly
+
 ## v2.10.5
 
 - Screenshare: Allow screenshare without a camera
