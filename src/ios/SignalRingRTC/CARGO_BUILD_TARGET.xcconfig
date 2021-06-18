@@ -1,0 +1,3 @@
+CARGO_BUILD_TARGET[sdk=iphonesimulator*][arch=arm64] = aarch64-apple-ios-sim
+CARGO_BUILD_TARGET[sdk=iphonesimulator*][arch=*] = x86_64-apple-ios
+CARGO_BUILD_TARGET[sdk=iphoneos*] = aarch64-apple-ios

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		17B9C6EE267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */; };
 		38205E6B231845CF00B4BAFD /* Pods_SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */; };
 		383347EC23AA952F00D53B63 /* CallManagerLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E423AA952F00D53B63 /* CallManagerLogger.swift */; };
 		383347EE23AA952F00D53B63 /* CallManagerInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E623AA952F00D53B63 /* CallManagerInterface.swift */; };
@@ -19,7 +20,6 @@
 		388AC0D122FA8B2D00BEC609 /* SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */; };
 		388AC0D622FA8B2D00BEC609 /* SignalRingRTCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388AC0D522FA8B2D00BEC609 /* SignalRingRTCTests.swift */; };
 		388AC0D822FA8B2D00BEC609 /* SignalRingRTC.h in Headers */ = {isa = PBXBuildFile; fileRef = 388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		388AC0F622FA8F1600BEC609 /* libringrtc.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0F322FA8F1600BEC609 /* libringrtc.a */; };
 		38B4DB342331D0F700015A3F /* ringrtc.h in Headers */ = {isa = PBXBuildFile; fileRef = 388AC0F522FA8F1600BEC609 /* ringrtc.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		38C42F0223C530E900AE79AD /* CallContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C42F0123C530E900AE79AD /* CallContext.swift */; };
 		38C4E533251A73AC005C2ACB /* GroupCall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4E532251A73AC005C2ACB /* GroupCall.swift */; };
@@ -37,6 +37,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = CARGO_BUILD_TARGET.xcconfig; sourceTree = "<group>"; };
 		2C724194C4821B07AE3B7C25 /* Pods_SignalRingRTCTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SignalRingRTCTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		356D59CC1462BF3E3314D693 /* Pods-SignalRingRTCTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTCTests.release.xcconfig"; path = "Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests.release.xcconfig"; sourceTree = "<group>"; };
 		38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Pods_SignalRingRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -55,7 +56,6 @@
 		388AC0D022FA8B2D00BEC609 /* SignalRingRTCTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SignalRingRTCTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		388AC0D522FA8B2D00BEC609 /* SignalRingRTCTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalRingRTCTests.swift; sourceTree = "<group>"; };
 		388AC0D722FA8B2D00BEC609 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		388AC0F322FA8F1600BEC609 /* libringrtc.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libringrtc.a; sourceTree = "<group>"; };
 		388AC0F422FA8F1600BEC609 /* RingRTC.modulemap */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = "sourcecode.module-map"; path = RingRTC.modulemap; sourceTree = "<group>"; };
 		388AC0F522FA8F1600BEC609 /* ringrtc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ringrtc.h; sourceTree = "<group>"; };
 		38B4DB352331D29200015A3F /* SignalRingRTC.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = SignalRingRTC.modulemap; sourceTree = "<group>"; };
@@ -72,7 +72,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				38205E6B231845CF00B4BAFD /* Pods_SignalRingRTC.framework in Frameworks */,
-				388AC0F622FA8F1600BEC609 /* libringrtc.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +90,7 @@
 		388AC0BD22FA8B2D00BEC609 = {
 			isa = PBXGroup;
 			children = (
+				17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */,
 				388AC0C922FA8B2D00BEC609 /* SignalRingRTC */,
 				388AC0D422FA8B2D00BEC609 /* SignalRingRTCTests */,
 				388AC0C822FA8B2D00BEC609 /* Products */,
@@ -141,7 +141,6 @@
 		388AC0F222FA8F1600BEC609 /* libringrtc */ = {
 			isa = PBXGroup;
 			children = (
-				388AC0F322FA8F1600BEC609 /* libringrtc.a */,
 				388AC0F422FA8F1600BEC609 /* RingRTC.modulemap */,
 				388AC0F522FA8F1600BEC609 /* ringrtc.h */,
 			);
@@ -266,6 +265,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				17B9C6EE267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -381,6 +381,7 @@
 /* Begin XCBuildConfiguration section */
 		388AC0D922FA8B2D00BEC609 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -445,6 +446,7 @@
 		};
 		388AC0DA22FA8B2D00BEC609 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -526,7 +528,6 @@
 				);
 				INFOPLIST_FILE = SignalRingRTC/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -534,11 +535,15 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../../out/libringrtc",
+					"$(PROJECT_DIR)/../../../out/libringrtc/$(CARGO_BUILD_TARGET)",
 				);
 				MODULEMAP_FILE = SignalRingRTC/SignalRingRTC.modulemap;
 				MODULEMAP_PRIVATE_FILE = "";
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lringrtc",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.whispersystems.SignalRingRTC;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
@@ -572,7 +577,6 @@
 				);
 				INFOPLIST_FILE = SignalRingRTC/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -580,10 +584,14 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../../out/libringrtc",
+					"$(PROJECT_DIR)/../../../out/libringrtc/$(CARGO_BUILD_TARGET)",
 				);
 				MODULEMAP_FILE = SignalRingRTC/SignalRingRTC.modulemap;
 				MODULEMAP_PRIVATE_FILE = "";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lringrtc",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.whispersystems.SignalRingRTC;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
@@ -605,7 +613,6 @@
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/CocoaLumberjack\"",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/Nimble\"",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/SignalCoreKit\"",
-					"\"${PODS_ROOT}/GRKOpenSSLFramework/OpenSSL-iOS/bin\"",
 					"$(PROJECT_DIR)/../../../out",
 				);
 				INFOPLIST_FILE = SignalRingRTCTests/Info.plist;
@@ -634,7 +641,6 @@
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/CocoaLumberjack\"",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/Nimble\"",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/SignalCoreKit\"",
-					"\"${PODS_ROOT}/GRKOpenSSLFramework/OpenSSL-iOS/bin\"",
 					"$(PROJECT_DIR)/../../../out",
 				);
 				INFOPLIST_FILE = SignalRingRTCTests/Info.plist;

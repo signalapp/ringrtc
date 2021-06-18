@@ -1,32 +1,34 @@
-#!/bin/sh
+#!/bin/bash
 
 #
 # Copyright 2019-2021 Signal Messenger, LLC
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 
-# Be sure of the following pre-requisites in your environment (MacOS & Xcode):
+# Be sure of the following pre-requisites in your environment (macOS & Xcode):
 #
 # $ xcode-select --install
 # $ rustup target add aarch64-apple-ios x86_64-apple-ios
-# $ cargo install cargo-lipo
+# $ rustup component add rust-src
 # $ cargo install cbindgen
 #
 # The goal of this script is to do the following:
 # 1) Build WebRTC using existing (but modified) scripts for iOS,
-#    resulting in WebRTC.framework.
+#    resulting in WebRTC.xcframework.
 # 2) Build the RingRTC Rust library and associated header file.
-#    This is libringrtc.a and ringrtc.h.
+#    This is libringrtc.a (one per target) and ringrtc.h.
 #
 # The Signal-iOS client project should include both the libringrtc
-# and WebRTC.framework directories, copied from out/ to the
+# and WebRTC.xcframework directories, copied from out/ to the
 # the ThirdParty/WebRTC/Build directory. The contents of the
 # SignalRingRTC project will live in the ThirdParty/RingRTC directory.
 #
 
 set -e
 
-BIN_DIR="$(realpath -e $(dirname $0))"
+BIN_DIR=$(dirname "$0")
+BIN_DIR=$(realpath -e "${BIN_DIR}")
+# shellcheck source=bin/env.sh
 . "${BIN_DIR}/env.sh"
 
 usage()
@@ -35,7 +37,7 @@ usage()
     where:
         -d is for debug builds (default is release)
         -c (or --clean) cleans the build artifacts
-        -w builds WebRTC.framework only
+        -w builds WebRTC.xcframework only
         -r builds libringrtc.a/h only
         
         Only one w or r option should be used at a time.
@@ -46,17 +48,11 @@ usage()
 clean()
 {
   # Remove all possible artifact directories.
-  rm -r -f ${OUTPUT_DIR}/debug
-  rm -r -f ${OUTPUT_DIR}/release
-  rm -r -f ${OUTPUT_DIR}/WebRTC.framework
-  rm -r -f ${OUTPUT_DIR}/WebRTC.framework.dSYM
-  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/release
-  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/debug
-  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/universal
-  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/x86_64-apple-ios
-  rm -r -f ${RINGRTC_SRC_DIR}/rust/target/aarch64-apple-ios
-  rm -r -f ${OUTPUT_DIR}/libringrtc
-  rm -r -f ${OUTPUT_DIR}/build
+  rm -r -f "${OUTPUT_DIR}"/debug
+  rm -r -f "${OUTPUT_DIR}"/release
+  rm -r -f "${OUTPUT_DIR}"/WebRTC.xcframework
+  rm -r -f "${OUTPUT_DIR}"/libringrtc
+  rm -r -f "${OUTPUT_DIR}"/build
 }
 
 # The default build (out of git) is release. However, we don't keep
@@ -91,46 +87,74 @@ while [ "$1" != "" ]; do
     shift
 done
 
-# The WebRTC part of the build resulting in WebRTC.framework.
+webrtc_archs_for_environment() {
+  case $1 in
+    simulator )
+      echo arm64 x64
+      ;;
+    device )
+      echo arm64
+      ;;
+    * )
+      echo 'error: unknown environment ' "$1" >&2
+      exit 1
+      ;;
+    esac
+}
+
+# The WebRTC part of the build resulting in WebRTC.xcframework.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
-  echo "Building the WebRTC.framework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
+  echo "Building WebRTC.xcframework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
 
-  (cd ${WEBRTC_SRC_DIR} && ./tools_webrtc/ios/build_ios_libs.py -o ${OUTPUT_DIR}/${BUILD_TYPE} --build_config ${BUILD_TYPE} --arch {arm64,x64} --extra-gn-args rtc_enable_sctp=false)
+  ENVIRONMENTS="simulator device"
+  XCFRAMEWORK_ARGS=()
 
-  echo "Copying to ${OUTPUT_DIR}"
+  for ENVIRONMENT in ${ENVIRONMENTS}; do
+    # shellcheck disable=SC2046 # word splitting for webrtc_archs_for_environment
+    (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/${BUILD_TYPE}/${ENVIRONMENT}" --build_config ${BUILD_TYPE} --arch $(webrtc_archs_for_environment "${ENVIRONMENT}") --extra-gn-args rtc_enable_sctp=false "target_environment=\"${ENVIRONMENT}\"")
+    # Intentionally omit the debug symbols; they're huge.
+    XCFRAMEWORK_ARGS+=(-framework "${BUILD_TYPE}/${ENVIRONMENT}/WebRTC.framework")
+  done
 
-  # Copy WebRTC.framework up.
-  cp -r -f ${OUTPUT_DIR}/${BUILD_TYPE}/WebRTC.framework ${OUTPUT_DIR}
-
-  # Copy WebRTC.dSYM up for local debugging.
-  cp -r -f ${OUTPUT_DIR}/${BUILD_TYPE}/WebRTC.dSYM ${OUTPUT_DIR}/WebRTC.framework.dSYM
+  echo "Making xcframework in ${OUTPUT_DIR}"
+  rm -rf "${OUTPUT_DIR}"/WebRTC.xcframework
+  (cd "${OUTPUT_DIR}" && xcodebuild -create-xcframework "${XCFRAMEWORK_ARGS[@]}" -output WebRTC.xcframework)
 
   "${BIN_DIR}/print_build_env.py" \
       --webrtc-version="${WEBRTC_VERSION}" \
-      --ringrtc-version="${PROJECT_VERSION}" > ${OUTPUT_DIR}/WebRTC.framework/build_env.txt
+      --ringrtc-version="${PROJECT_VERSION}" > "${OUTPUT_DIR}"/WebRTC.xcframework/build_env.txt
 fi
+
+cargo_flags() {
+  case $1 in
+    aarch64-apple-ios-sim )
+      echo -Zbuild-std
+      ;;
+    * )
+      ;;
+  esac
+}
 
 # The RingRTC part of the build resulting in a library built from Rust.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
 then
-  # @todo It would be nice if cargo lipo could output to a different
-  # directory for an out-of-source build...
-
-  echo "Creating universal binary in ${OUTPUT_DIR}/libringrtc..."
-
-  (
-  cd ${RINGRTC_SRC_DIR}/rust
-
-  if [ "${BUILD_TYPE}" = "debug" ]
-  then
-    OUTPUT_DIR="${OUTPUT_DIR}" cargo lipo --targets aarch64-apple-ios,x86_64-apple-ios
+  TARGETS="x86_64-apple-ios aarch64-apple-ios-sim aarch64-apple-ios"
+  if [[ "${BUILD_TYPE}" == "debug" ]]; then
+    IS_RELEASE=
   else
-    OUTPUT_DIR="${OUTPUT_DIR}" cargo lipo --release --targets aarch64-apple-ios,x86_64-apple-ios
+    IS_RELEASE=yes
   fi
 
-  mkdir -p ${OUTPUT_DIR}/libringrtc
-  cp -f ${RINGRTC_SRC_DIR}/rust/target/universal/${BUILD_TYPE}/libringrtc.a ${OUTPUT_DIR}/libringrtc/libringrtc.a
+  for TARGET in ${TARGETS}; do
+    (
+      cd "${RINGRTC_SRC_DIR}"/rust
+      # shellcheck disable=SC2046 # word splitting for cargo_flags
+      RUSTUP_TOOLCHAIN=nightly CARGO_TARGET_DIR="${OUTPUT_DIR}"/build cargo build --target "${TARGET}" ${IS_RELEASE:+--release} $(cargo_flags "${TARGET}")
+      mkdir -p "${OUTPUT_DIR}/libringrtc/${TARGET}"
+      cp "${OUTPUT_DIR}/build/${TARGET}/${BUILD_TYPE}/libringrtc.a" "${OUTPUT_DIR}/libringrtc/${TARGET}/"
+    )
+  done
 
   # Create the modulemap:
   echo 'framework module SignalRingRTC {
@@ -142,7 +166,7 @@ then
           link "ringrtc"
           export *
       }
-  }' >${OUTPUT_DIR}/libringrtc/RingRTC.modulemap
+  }' >"${OUTPUT_DIR}"/libringrtc/RingRTC.modulemap
 
   # Create the test podspec for WebRTC:
   echo 'Pod::Spec.new do |s|
@@ -155,12 +179,11 @@ then
     s.author   = { "iOS Team": "ios@signal.org" }
 
     s.platform = :ios, "11.0"
-    s.vendored_frameworks = "WebRTC.framework"
-  end' >${OUTPUT_DIR}/WebRTCForTesting.podspec
+    s.vendored_frameworks = "WebRTC.xcframework"
+  end' >"${OUTPUT_DIR}"/WebRTCForTesting.podspec
 
   echo "Creating header file in ${OUTPUT_DIR}/libringrtc..."
-  cbindgen ${RINGRTC_SRC_DIR}/rust/src/lib.rs --config ${RINGRTC_SRC_DIR}/rust/cbindgen.toml -o ${OUTPUT_DIR}/libringrtc/ringrtc.h
-  )
+  cbindgen "${RINGRTC_SRC_DIR}"/rust/src/lib.rs --config "${RINGRTC_SRC_DIR}"/rust/cbindgen.toml -o "${OUTPUT_DIR}"/libringrtc/ringrtc.h
 fi
 
 echo "Done with the iOS build for RingRTC!"

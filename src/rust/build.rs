@@ -60,16 +60,6 @@ fn main() {
         } else {
             println!("cargo:rustc-link-lib=stdc++");
         }
-    } else if target.ends_with("-ios") {
-        if out_dir.is_err() {
-            panic!("No output directory (OUTPUT_DIR) defined!");
-        }
-
-        println!("cargo:rustc-link-lib=framework=WebRTC");
-        println!(
-            "{}",
-            format!("cargo:rustc-link-search=framework={}", out_dir.unwrap(),)
-        );
     }
 }
 
