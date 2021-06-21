@@ -7,7 +7,7 @@ import SignalRingRTC.RingRTC
 import WebRTC
 import SignalCoreKit
 
-protocol CallManagerInterfaceDelegate: class {
+protocol CallManagerInterfaceDelegate: AnyObject {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType)

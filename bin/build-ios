@@ -33,16 +33,20 @@ BIN_DIR=$(realpath -e "${BIN_DIR}")
 
 usage()
 {
-    echo 'usage: build-ios [-d|-c] [-w, -r]
+    echo 'usage: build-ios [-d|-r|-c] [--webrtc-only|--ring-rtc-only] [--host-sim-only]
     where:
-        -d is for debug builds (default is release)
+        -d is for debug builds
+        -r is for release builds (default)
         -c (or --clean) cleans the build artifacts
-        -w builds WebRTC.xcframework only
-        -r builds libringrtc.a/h only
+
+        --webrtc-only builds WebRTC.xcframework only
+        --ringrtc-only builds libringrtc.a/h only
+
+        --host-sim-only builds a simulator slice for the host
+            architecture (and no other slices)
         
-        Only one w or r option should be used at a time.
         If no options are specified, everything is built with
-        release configuration.'
+        release configuration, for all slices.'
 }
 
 clean()
@@ -60,17 +64,24 @@ clean()
 
 BUILD_WHAT=all
 BUILD_TYPE=release
+HOST_SIM_ONLY=
 
 while [ "$1" != "" ]; do
     case $1 in
         -d | --debug )
             BUILD_TYPE=debug
             ;;
-        -w )
+        -r | --release )
+            BUILD_TYPE=release
+            ;;
+        --webrtc-only )
             BUILD_WHAT=webrtc
             ;;
-        -r )
+        --ringrtc-only )
             BUILD_WHAT=ringrtc
+            ;;
+        --host-sim-only )
+            HOST_SIM_ONLY=yes
             ;;
         -c | --clean )
             clean
@@ -90,10 +101,25 @@ done
 webrtc_archs_for_environment() {
   case $1 in
     catalyst )
-      echo arm64 x64
+      echo x64 arm64
       ;;
     simulator )
-      echo arm64 x64
+      if [[ -n "${HOST_SIM_ONLY}" ]]; then
+        case $(machine) in
+          x86_64* )
+            echo x64
+            ;;
+          arm64* )
+            echo arm64
+            ;;
+          * )
+            echo 'error: unrecoginzed host architecture ' "$(machine)" >&2
+            exit 1
+            ;;
+        esac
+      else
+        echo arm64 x64
+      fi
       ;;
     device )
       echo arm64
@@ -119,7 +145,11 @@ if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
   echo "Building WebRTC.xcframework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
 
-  ENVIRONMENTS="catalyst simulator device"
+  if [[ -n "${HOST_SIM_ONLY}" ]]; then
+    ENVIRONMENTS=simulator
+  else
+    ENVIRONMENTS="catalyst simulator device"
+  fi
   XCFRAMEWORK_ARGS=()
 
   for ENVIRONMENT in ${ENVIRONMENTS}; do
@@ -153,7 +183,23 @@ cargo_flags() {
 # The RingRTC part of the build resulting in a library built from Rust.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
 then
-  TARGETS="x86_64-apple-ios-macabi aarch64-apple-ios-macabi x86_64-apple-ios aarch64-apple-ios-sim aarch64-apple-ios"
+  if [[ -n "${HOST_SIM_ONLY}" ]]; then
+    case $(machine) in
+      x86_64* )
+        TARGETS=x86_64-apple-ios
+        ;;
+      arm64* )
+        TARGETS=aarch64-apple-ios-sim
+        ;;
+      * )
+        echo 'error: unrecoginzed host architecture ' "$(machine)" >&2
+        exit 1
+        ;;
+    esac
+  else
+    TARGETS="x86_64-apple-ios-macabi aarch64-apple-ios-macabi x86_64-apple-ios aarch64-apple-ios-sim aarch64-apple-ios"
+  fi
+
   if [[ "${BUILD_TYPE}" == "debug" ]]; then
     IS_RELEASE=
   else

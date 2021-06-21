@@ -165,7 +165,7 @@ class Requests<T> {
     }
 }
 
-public protocol CallManagerDelegate: class {
+public protocol CallManagerDelegate: AnyObject {
 
     associatedtype CallManagerDelegateCallType: CallManagerCallReference
 

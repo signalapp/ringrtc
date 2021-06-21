@@ -116,7 +116,7 @@ public struct VideoRequest {
 }
 
 /// The group call observer.
-public protocol GroupCallDelegate: class {
+public protocol GroupCallDelegate: AnyObject {
     /**
      * Indication that the application should provide an updated proof of membership
      * for the group call.

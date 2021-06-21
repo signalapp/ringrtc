@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		17B9C6EE267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */; };
 		38205E6B231845CF00B4BAFD /* Pods_SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */; };
 		383347EC23AA952F00D53B63 /* CallManagerLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E423AA952F00D53B63 /* CallManagerLogger.swift */; };
 		383347EE23AA952F00D53B63 /* CallManagerInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E623AA952F00D53B63 /* CallManagerInterface.swift */; };
@@ -230,7 +229,7 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 1030;
-				LastUpgradeCheck = 1030;
+				LastUpgradeCheck = 1250;
 				ORGANIZATIONNAME = "Signal Messenger";
 				TargetAttributes = {
 					388AC0C622FA8B2D00BEC609 = {
@@ -265,7 +264,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				17B9C6EE267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -406,6 +404,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -435,6 +434,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -471,6 +471,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
