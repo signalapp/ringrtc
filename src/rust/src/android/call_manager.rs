@@ -44,7 +44,7 @@ pub fn get_build_info(env: &JNIEnv) -> Result<jobject> {
     const BUILD_INFO_SIG: &str = "(Z)V";
     let args = [debug.into()];
 
-    let result = jni_new_object(&env, BUILD_INFO_CLASS, BUILD_INFO_SIG, &args)?.into_inner();
+    let result = jni_new_object(env, BUILD_INFO_CLASS, BUILD_INFO_SIG, &args)?.into_inner();
 
     Ok(result)
 }
@@ -53,7 +53,7 @@ pub fn get_build_info(env: &JNIEnv) -> Result<jobject> {
 ///
 /// Sets up the logging infrastructure.
 pub fn initialize(env: &JNIEnv) -> Result<()> {
-    init_logging(&env, Level::Debug)?;
+    init_logging(env, Level::Debug)?;
 
     // Set a custom panic handler that uses the logger instead of
     // stderr, which is of no use on Android.
@@ -67,7 +67,7 @@ pub fn initialize(env: &JNIEnv) -> Result<()> {
 /// Creates a new AndroidCallManager object.
 pub fn create_call_manager(env: &JNIEnv, jni_call_manager: JObject) -> Result<jlong> {
     info!("create_call_manager():");
-    let platform = AndroidPlatform::new(&env, env.new_global_ref(jni_call_manager)?)?;
+    let platform = AndroidPlatform::new(env, env.new_global_ref(jni_call_manager)?)?;
 
     let call_manager = AndroidCallManager::new(platform)?;
 
@@ -718,20 +718,20 @@ pub fn request_video(
 
         const DEMUX_ID_FIELD: &str = "demuxId";
         let demux_id =
-            jni_get_field(&env, jni_rendered_resolution, DEMUX_ID_FIELD, LONG_TYPE)?.j()?;
+            jni_get_field(env, jni_rendered_resolution, DEMUX_ID_FIELD, LONG_TYPE)?.j()?;
         let demux_id = demux_id as u32;
 
         const WIDTH_FIELD: &str = "width";
-        let width = jni_get_field(&env, jni_rendered_resolution, WIDTH_FIELD, INT_TYPE)?.i()?;
+        let width = jni_get_field(env, jni_rendered_resolution, WIDTH_FIELD, INT_TYPE)?.i()?;
         let width = width as u16;
 
         const HEIGHT_FIELD: &str = "height";
-        let height = jni_get_field(&env, jni_rendered_resolution, HEIGHT_FIELD, INT_TYPE)?.i()?;
+        let height = jni_get_field(env, jni_rendered_resolution, HEIGHT_FIELD, INT_TYPE)?.i()?;
         let height = height as u16;
 
         const FRAMERATE_FIELD: &str = "framerate";
         let framerate = jni_get_field(
-            &env,
+            env,
             jni_rendered_resolution,
             FRAMERATE_FIELD,
             NULLABLE_INT_TYPE,

@@ -1548,7 +1548,7 @@ impl Client {
             RemoteDevicesRequestState::Updated { at: Instant::now() };
 
         let old_user_ids: HashSet<UserId> =
-            std::mem::replace(&mut state.joined_members, HashSet::new());
+            std::mem::take(&mut state.joined_members);
         let new_user_ids: HashSet<UserId> = peek_info
             .devices
             .iter()
@@ -1585,7 +1585,7 @@ impl Client {
             // from the old values and then building a new Vec using either the old value (if there is one)
             // or creating a new one.
             let mut old_remote_devices_by_id_pair: HashMap<(DemuxId, UserId), RemoteDeviceState> =
-                std::mem::replace(&mut state.remote_devices, Vec::new())
+                std::mem::take(&mut state.remote_devices)
                     .into_iter()
                     .map(|rd| ((rd.demux_id, rd.user_id.clone()), rd))
                     .collect();
@@ -1694,15 +1694,14 @@ impl Client {
             }
 
             // If someone was removed, we must reset the send media key and send it to everyone not removed.
-            let user_ids_removed: Vec<&UserId> = old_user_ids.difference(&new_user_ids).collect();
-            if !user_ids_removed.is_empty() {
+            if old_user_ids.difference(&new_user_ids).next().is_some() {
                 Self::rotate_media_send_key_and_send_to_users_not_removed(state);
             }
 
             // We can't gate this behind the demux IDs changing because a forged demux ID might
             // be in there already when the non-forged one comes in.
             let pending_receive_keys =
-                std::mem::replace(&mut state.pending_media_receive_keys, Vec::new());
+                std::mem::take(&mut state.pending_media_receive_keys);
             for (user_id, demux_id, ratchet_counter, secret) in pending_receive_keys {
                 // If we the key is still pending, we'll just put this back into state.pending_media_receive_keys.
                 Self::add_media_receive_key_or_store_for_later(
@@ -2266,7 +2265,7 @@ impl Client {
                 // Plus the above sequence number is too small to be useful.
                 timestamp: seqnum,
             };
-            state.peer_connection.send_rtp(header, &message)?;
+            state.peer_connection.send_rtp(header, message)?;
         }
         Ok(())
     }

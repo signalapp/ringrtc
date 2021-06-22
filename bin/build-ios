@@ -150,7 +150,7 @@ then
     (
       cd "${RINGRTC_SRC_DIR}"/rust
       # shellcheck disable=SC2046 # word splitting for cargo_flags
-      RUSTUP_TOOLCHAIN=nightly CARGO_TARGET_DIR="${OUTPUT_DIR}"/build cargo build --target "${TARGET}" ${IS_RELEASE:+--release} $(cargo_flags "${TARGET}")
+      CARGO_TARGET_DIR="${OUTPUT_DIR}"/build cargo build --target "${TARGET}" ${IS_RELEASE:+--release} $(cargo_flags "${TARGET}")
       mkdir -p "${OUTPUT_DIR}/libringrtc/${TARGET}"
       cp "${OUTPUT_DIR}/build/${TARGET}/${BUILD_TYPE}/libringrtc.a" "${OUTPUT_DIR}/libringrtc/${TARGET}/"
     )

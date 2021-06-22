@@ -5,7 +5,7 @@
 
 //! A peer-to-peer call connection interface.
 
-use std::collections::HashMap;
+use std::collections::{hash_map, HashMap};
 use std::fmt;
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -542,7 +542,7 @@ where
             }
             CallDirection::OutGoing => {
                 let mut parent_connection = call_manager.create_connection(
-                    &self,
+                    self,
                     0,
                     ConnectionType::OutgoingParent,
                     // This is V2 instead of V3 so that we can send out the same SDP in the offer
@@ -574,7 +574,7 @@ where
     pub fn received_answer(&self, received: signaling::ReceivedAnswer) -> Result<()> {
         let sender_device_id = received.sender_device_id;
         let mut connection_map = self.connection_map.lock()?;
-        if !connection_map.contains_key(&sender_device_id) {
+        if let hash_map::Entry::Vacant(e) = connection_map.entry(sender_device_id) {
             if self.state()? == CallState::ConnectedAndAccepted
                 || self.state()? == CallState::ReconnectingAfterAccepted
             {
@@ -590,7 +590,7 @@ where
                 let call_manager = self.call_manager()?;
                 let bandwidth_mode = forking.parent_connection.local_bandwidth_mode()?;
                 let mut child_connection = call_manager.create_connection(
-                    &self,
+                    self,
                     sender_device_id,
                     ConnectionType::OutgoingChild,
                     received.answer.latest_version(),
@@ -602,7 +602,7 @@ where
                     &forking.offer,
                     &received,
                 )?;
-                connection_map.insert(sender_device_id, child_connection);
+                e.insert(child_connection);
                 return Ok(());
             }
             info!(

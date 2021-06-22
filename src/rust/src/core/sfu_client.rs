@@ -138,7 +138,7 @@ impl SfuClient {
         let body = std::str::from_utf8(&body)?;
         debug!("SfuClient: join response: {:?}", body);
 
-        let deserialized: JoinResponse = serde_json::from_str(&body)?;
+        let deserialized: JoinResponse = serde_json::from_str(body)?;
         let sha256_fingerprint = match deserialized
             .transport
             .fingerprints
@@ -374,7 +374,7 @@ impl SfuClient {
         };
         let body = std::str::from_utf8(&body)?;
         debug!("Remote Devices Response: {}", body);
-        let deserialized: ParticipantsResponse = serde_json::from_str(&body)?;
+        let deserialized: ParticipantsResponse = serde_json::from_str(body)?;
 
         let era_id = deserialized.era_id;
         let max_devices = deserialized.max_devices;

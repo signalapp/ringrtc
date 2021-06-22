@@ -622,7 +622,7 @@ where
 
             let peer_connection = webrtc.peer_connection()?;
 
-            peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
+            peer_connection.use_shared_ice_gatherer(ice_gatherer)?;
 
             // The caller is responsible for creating the data channel (the callee listens for it).
             // Both sides will observe it.
@@ -679,7 +679,7 @@ where
                     offer_key,
                     answer_key,
                 } = negotiate_srtp_keys(
-                    &local_secret,
+                    local_secret,
                     &remote_public_key,
                     caller_identity_key,
                     callee_identity_key,
@@ -705,7 +705,7 @@ where
             // "accepted" message.
             peer_connection.set_incoming_media_enabled(true);
 
-            self.apply_bandwidth_mode(&peer_connection, &bandwidth_mode)?;
+            self.apply_bandwidth_mode(peer_connection, &bandwidth_mode)?;
 
             // We have to do this once we're done with peer_connection because
             // it holds a ref to peer_connection as well.
@@ -758,7 +758,7 @@ where
                         v4_offer, bandwidth_modes
                     );
 
-                    let offer = SessionDescription::offer_from_v4(&v4_offer)?;
+                    let offer = SessionDescription::offer_from_v4(v4_offer)?;
 
                     (offer, v4_offer.public_key.clone(), bandwidth_mode)
                 } else {
@@ -859,7 +859,7 @@ where
             // Don't enable until call is accepted.
             peer_connection.set_outgoing_media_enabled(false);
 
-            self.apply_bandwidth_mode(&peer_connection, &bandwidth_mode)?;
+            self.apply_bandwidth_mode(peer_connection, &bandwidth_mode)?;
 
             ringbench!(
                 RingBench::Conn,

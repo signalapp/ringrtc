@@ -49,7 +49,6 @@ impl RffiPeerConnection {
                 local_description_set:  false,
                 remote_description_set: false,
                 outgoing_audio_enabled: true,
-                incoming_rtp_enabled:   true,
                 rtp_packet_sink:        None,
             })),
         }
@@ -78,9 +77,9 @@ impl RffiPeerConnection {
         state.outgoing_audio_enabled
     }
 
-    fn set_incoming_media_enabled(&self, enabled: bool) {
-        let mut state = self.state.lock().unwrap();
-        state.incoming_rtp_enabled = enabled;
+    fn set_incoming_media_enabled(&self, _enabled: bool) {
+        let _state = self.state.lock().unwrap();
+        // Do nothing; the sim implementation doesn't use this.
     }
 
     pub fn set_rtp_packet_sink(&self, rtp_packet_sink: BoxedRtpPacketSink) {
@@ -95,7 +94,6 @@ struct RffiPeerConnectionState {
     local_description_set:  bool,
     remote_description_set: bool,
     outgoing_audio_enabled: bool,
-    incoming_rtp_enabled:   bool,
     rtp_packet_sink:        Option<BoxedRtpPacketSink>,
 }
 

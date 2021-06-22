@@ -956,7 +956,7 @@ impl Platform for AndroidPlatform {
             };
 
             for joined_member in joined_members {
-                let jni_opaque_user_id = match env.byte_array_from_slice(&joined_member) {
+                let jni_opaque_user_id = match env.byte_array_from_slice(joined_member) {
                     Ok(v) => JObject::from(v),
                     Err(error) => {
                         error!("{:?}", error);
@@ -1285,7 +1285,7 @@ impl Platform for AndroidPlatform {
             };
 
             for joined_member in joined_members {
-                let jni_opaque_user_id = match env.byte_array_from_slice(&joined_member) {
+                let jni_opaque_user_id = match env.byte_array_from_slice(joined_member) {
                     Ok(v) => JObject::from(v),
                     Err(error) => {
                         error!("{:?}", error);

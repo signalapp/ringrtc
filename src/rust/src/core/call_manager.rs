@@ -1176,7 +1176,7 @@ where
             (_, Some(active_call), _) => {
                 info!("handle_received_offer(): active call detected");
                 let glare =
-                    self.check_for_glare(&active_call, &remote_peer, received.sender_device_id);
+                    self.check_for_glare(active_call, &remote_peer, received.sender_device_id);
                 if !glare {
                     info!("handle_received_offer(): normal busy");
                     Collision::Busy
@@ -1563,7 +1563,7 @@ where
         remote_peer: &<T as Platform>::AppRemotePeer,
         remote_device_id: DeviceId,
     ) -> bool {
-        if self.remote_peer_equals_active(&active_call, remote_peer) {
+        if self.remote_peer_equals_active(active_call, remote_peer) {
             info!("check_for_glare(): remote peers match");
             if let Ok(active_device_id) = active_call.active_device_id() {
                 info!("check_for_glare(): active device exists");

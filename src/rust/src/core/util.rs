@@ -245,7 +245,7 @@ fn redact_ipv4(text: &str) -> String {
     lazy_static! {
         static ref RE: Option<Regex> = {
             let re = "(((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))\\.){3,3}((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))";
-            match Regex::new(&re) {
+            match Regex::new(re) {
                 Ok(v) => Some(v),
                 Err(_) => None,
             }
