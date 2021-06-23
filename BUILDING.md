@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 20.04 recommended) or iOS on a Mac using Xcode (12.4.0), and for the host platform as a Node.js module for use in Electron apps.
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 20.04 recommended) or iOS on a Mac using Xcode (12.5.0), and for the host platform as a Node.js module for use in Electron apps.
 
 ## Prerequisites
 
@@ -20,10 +20,7 @@ Install rustup, the Rust management system:
 
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-We currently use Rust 1.51.0 for official builds, but any recent stable version should work.
-
-    rustup toolchain install 1.51.0
-    rustup default 1.51.0
+We use a pinned nightly toolchain for official builds, specified by our [rust-toolchain file](https://github.com/signalapp/ringrtc/blob/master/rust-toolchain) ([more information](https://rust-lang.github.io/rustup/overrides.html)).
 
 #### Android
 
@@ -34,13 +31,13 @@ Install Rust target support for Android via `rustup`:
 
 #### iOS
 
-Install Rust target support for iOS via `rustup`:
+Install Rust target support for iOS, including compiling the stdlib from source, via `rustup`:
 
     rustup target add aarch64-apple-ios x86_64-apple-ios
+    rustup component add rust-src
 
-Install additional components via `cargo`:
+Install cbindgen via `cargo`:
 
-    cargo install cargo-lipo
     cargo install cbindgen
 
 ### Electron
@@ -141,18 +138,20 @@ When the build is complete, the AAR file is available here:
 
 ### iOS
 
-To build frameworks suitable for including in an Xcode project, run:
+To build libraries suitable for including in an Xcode project, run:
 
     make ios
     
 This will produce release builds for all architectures.
 
-When the build is complete, the frameworks will be available here:
+When the build is complete, the libraries will be available here:
 
-    out/SignalRingRTC.framework
-    out/WebRTC.framework
+    out/WebRTC.xcframework
+    out/libringrtc/ringrtc.h
+    out/libringrtc/*/libringrtc.a
 
-Dynamic symbol files are also available in the `out/` directory for each framework.
+The Swift sources in src/ios/SignalRingRTC can then be used to build a framework
+that links the appropriate libringrtc.a for each architecture.
 
 ### Electron
 
@@ -213,15 +212,8 @@ the dependencies, at least once:
     bundle install
     bundle exec pod install
 
-Tests might fail if the open file limit is too low. If this is the case, be sure to
-increase the limit (generally, the default value of 256 on MacOS is not enough).
-
 ### Formatting
 
-We use `rustfmt` to keep the rust code tidy. To install:
+We use `rustfmt` to keep the rust code tidy. To run:
 
-    rustup toolchain install nightly-2020-04-12 --force
-
-To format the code, in the `src/rust` directory, run the `format-code` script:
-
-    ./scripts/format-code
+    cargo fmt
