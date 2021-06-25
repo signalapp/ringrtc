@@ -138,8 +138,8 @@ fn check_mac(
     mac: &Mac,
 ) -> bool {
     let iv = convert_frame_counter_to_iv(frame_counter);
-    let mut hmac =
-        HmacSha256::new_varkey(&state.current_hmac_key[..]).expect("HMAC can take key of any size");
+    let mut hmac = HmacSha256::new_from_slice(&state.current_hmac_key[..])
+        .expect("HMAC can take key of any size");
     hmac.update(&iv[..]);
     hmac.update(&len_as_u32_be_bytes(data)[..]);
     hmac.update(data);
@@ -197,7 +197,7 @@ impl Context {
         let iv = convert_frame_counter_to_iv(frame_counter);
         let mut cipher = Aes256Ctr::new(&self.sender_state.current_aes_key.into(), &iv.into());
         cipher.apply_keystream(data);
-        let mut hmac = HmacSha256::new_varkey(&self.sender_state.current_hmac_key[..])
+        let mut hmac = HmacSha256::new_from_slice(&self.sender_state.current_hmac_key[..])
             .expect("HMAC can take key of any size");
         hmac.update(&iv[..]);
         hmac.update(&len_as_u32_be_bytes(data)[..]);
