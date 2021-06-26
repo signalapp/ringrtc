@@ -89,6 +89,9 @@ done
 
 webrtc_archs_for_environment() {
   case $1 in
+    catalyst )
+      echo arm64 x64
+      ;;
     simulator )
       echo arm64 x64
       ;;
@@ -102,17 +105,26 @@ webrtc_archs_for_environment() {
     esac
 }
 
+webrtc_args_for_environment() {
+  echo "target_environment=\"$1\""
+  case $1 in
+    catalyst )
+      echo 'ios_deployment_target="14"'
+      ;;
+  esac
+}
+
 # The WebRTC part of the build resulting in WebRTC.xcframework.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
   echo "Building WebRTC.xcframework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
 
-  ENVIRONMENTS="simulator device"
+  ENVIRONMENTS="catalyst simulator device"
   XCFRAMEWORK_ARGS=()
 
   for ENVIRONMENT in ${ENVIRONMENTS}; do
     # shellcheck disable=SC2046 # word splitting for webrtc_archs_for_environment
-    (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/${BUILD_TYPE}/${ENVIRONMENT}" --build_config ${BUILD_TYPE} --arch $(webrtc_archs_for_environment "${ENVIRONMENT}") --extra-gn-args rtc_enable_sctp=false "target_environment=\"${ENVIRONMENT}\"")
+    (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/${BUILD_TYPE}/${ENVIRONMENT}" --build_config ${BUILD_TYPE} --arch $(webrtc_archs_for_environment "${ENVIRONMENT}") --extra-gn-args rtc_enable_sctp=false $(webrtc_args_for_environment "${ENVIRONMENT}"))
     # Intentionally omit the debug symbols; they're huge.
     XCFRAMEWORK_ARGS+=(-framework "${BUILD_TYPE}/${ENVIRONMENT}/WebRTC.framework")
   done
@@ -128,6 +140,8 @@ fi
 
 cargo_flags() {
   case $1 in
+    x86_64-apple-ios-macabi | \
+    aarch64-apple-ios-macabi | \
     aarch64-apple-ios-sim )
       echo -Zbuild-std
       ;;
@@ -139,7 +153,7 @@ cargo_flags() {
 # The RingRTC part of the build resulting in a library built from Rust.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
 then
-  TARGETS="x86_64-apple-ios aarch64-apple-ios-sim aarch64-apple-ios"
+  TARGETS="x86_64-apple-ios-macabi aarch64-apple-ios-macabi x86_64-apple-ios aarch64-apple-ios-sim aarch64-apple-ios"
   if [[ "${BUILD_TYPE}" == "debug" ]]; then
     IS_RELEASE=
   else

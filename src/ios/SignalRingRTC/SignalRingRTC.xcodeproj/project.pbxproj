@@ -528,6 +528,7 @@
 				);
 				INFOPLIST_FILE = SignalRingRTC/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 14.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -550,7 +551,7 @@
 				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/../../../out/libringrtc";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,6";
 			};
 			name = Debug;
 		};
@@ -577,6 +578,7 @@
 				);
 				INFOPLIST_FILE = SignalRingRTC/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 14.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -597,7 +599,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/../../../out/libringrtc";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,6";
 			};
 			name = Release;
 		};
@@ -616,6 +618,7 @@
 					"$(PROJECT_DIR)/../../../out",
 				);
 				INFOPLIST_FILE = SignalRingRTCTests/Info.plist;
+				"IPHONEOS_DEPLOYMENT_TARGET[arch=*]" = 14.3;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -644,6 +647,7 @@
 					"$(PROJECT_DIR)/../../../out",
 				);
 				INFOPLIST_FILE = SignalRingRTCTests/Info.plist;
+				"IPHONEOS_DEPLOYMENT_TARGET[arch=*]" = 14.3;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
