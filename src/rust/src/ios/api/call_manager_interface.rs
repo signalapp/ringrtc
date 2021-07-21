@@ -682,7 +682,7 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
     let mut ice_candidates = Vec::new();
 
     for app_ice_candidate in app_ice_candidates {
-        let opaque = byte_vec_from_app_slice(&app_ice_candidate);
+        let opaque = byte_vec_from_app_slice(app_ice_candidate);
         match opaque {
             Some(v) => {
                 ice_candidates.push(signaling::IceCandidate::new(v));

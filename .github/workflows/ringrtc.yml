@@ -31,6 +31,25 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         args: --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
+    - run: rustup target add aarch64-linux-android aarch64-apple-ios
+    - name: Clippy (Android)
+      run: cargo clippy --target aarch64-linux-android -- -D warnings
+      working-directory: src/rust
+      env:
+        # Must be set to something, but will be ignored for check/clippy
+        OUTPUT_DIR: out
+    - name: Clippy (iOS)
+      run: cargo clippy --target aarch64-apple-ios -- -D warnings
+      working-directory: src/rust
+      env:
+        # Must be set to something, but will be ignored for check/clippy
+        OUTPUT_DIR: out
+    - name: Clippy (Electron)
+      run: cargo clippy --features electron -- -D warnings
+      working-directory: src/rust
+      env:
+        # Must be set to something, but will be ignored for check/clippy
+        OUTPUT_DIR: out
 
   tests:
     name: Tests

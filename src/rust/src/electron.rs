@@ -1394,12 +1394,8 @@ fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
     let observer = cx.argument::<JsObject>(0)?;
 
-    let log_entries: Vec<LogMessage> = LOG_MESSAGES
-        .lock()
-        .expect("lock log messages")
-        .drain(0..)
-        .collect();
-    for log_entry in log_entries.into_iter() {
+    let log_entries = std::mem::take(&mut *LOG_MESSAGES.lock().expect("lock log messages"));
+    for log_entry in log_entries {
         let method_name = "onLogMessage";
         let args: Vec<Handle<JsValue>> = vec![
             cx.number(log_entry.level).upcast(),

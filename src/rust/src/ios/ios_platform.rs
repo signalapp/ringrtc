@@ -369,8 +369,8 @@ impl Platform for IosPlatform {
 
         for (name, value) in headers.iter() {
             let app_header = AppHeader {
-                name:  app_slice_from_str(Some(&name)),
-                value: app_slice_from_str(Some(&value)),
+                name:  app_slice_from_str(Some(name)),
+                value: app_slice_from_str(Some(value)),
             };
 
             app_headers.push(app_header);
@@ -476,7 +476,7 @@ impl Platform for IosPlatform {
         let mut app_joined_members: Vec<AppByteSlice> = Vec::new();
 
         for member in joined_members {
-            let app_joined_member = app_slice_from_bytes(Some(&member));
+            let app_joined_member = app_slice_from_bytes(Some(member));
             app_joined_members.push(app_joined_member);
         }
 
