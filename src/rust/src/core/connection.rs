@@ -324,7 +324,7 @@ where
     fsm_receiver:                  Option<Receiver<(Connection<T>, ConnectionEvent)>>,
     /// Unique 64-bit number identifying the call.
     call_id:                       CallId,
-    /// Device ID of the remote device.
+    /// The feature level supported by the remote device.
     remote_feature_level:          Arc<CallMutex<FeatureLevel>>,
     /// Connection ID, identifying the call and remote_device.
     connection_id:                 ConnectionId,
@@ -886,6 +886,10 @@ where
     /// Return the Call identifier.
     pub fn call_id(&self) -> CallId {
         self.call_id
+    }
+
+    pub fn connection_id(&self) -> ConnectionId {
+        self.connection_id
     }
 
     pub fn remote_device_id(&self) -> DeviceId {

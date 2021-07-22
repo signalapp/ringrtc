@@ -497,7 +497,7 @@ where
         match state {
             ConnectionState::ConnectingBeforeAccepted
             | ConnectionState::ConnectedBeforeAccepted => {
-                ringbench!(RingBench::WebRtc, RingBench::Conn, "dc(accepted)");
+                ringbench!(RingBench::WebRtc, RingBench::Conn, format!("dc(accepted)\t{}", connection.connection_id()));
                 connection.set_state(ConnectionState::ConnectedAndAccepted)?;
                 self.notify_observer(
                     connection,

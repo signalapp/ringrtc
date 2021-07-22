@@ -872,7 +872,7 @@ where
         ringbench!(
             RingBench::App,
             RingBench::Cm,
-            format!("call()\t{}", call_id)
+            format!("call()\t{}\t{}\t{}", call_id, call_media_type, local_device_id)
         );
 
         // If not busy, create a new direct call.
@@ -1092,12 +1092,13 @@ where
             RingBench::App,
             RingBench::Cm,
             format!(
-                "received_offer()\t{}\t{}\tfeature={}\tprimary={}\t{}",
+                "received_offer()\t{}\t{}\tfeature={}\tprimary={}\t{}\t{}",
                 incoming_call_id,
                 received.sender_device_id,
                 received.sender_device_feature_level,
                 received.receiver_device_is_primary,
                 received.offer.to_info_string(),
+                received.receiver_device_id,
             )
         );
 
