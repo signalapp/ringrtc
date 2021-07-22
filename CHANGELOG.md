@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.10.7
+
+- iOS: Add support for building for Catalyst
+
+- iOS: Update builds
+
+- Update dependencies
+
 ## v2.10.6
 
 - Electron: Use Buffer everywhere we used to use ArrayBuffer
