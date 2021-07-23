@@ -61,7 +61,10 @@ export class GumVideoCapturer {
     this.startCapturing(this.defaultCaptureOptions);
   }
 
-  enableCaptureAndSend(sender: VideoFrameSender, options?: GumVideoCaptureOptions): void {
+  enableCaptureAndSend(
+    sender: VideoFrameSender,
+    options?: GumVideoCaptureOptions
+  ): void {
     // tslint:disable no-floating-promises
     this.startCapturing(options ?? this.defaultCaptureOptions);
     this.startSending(sender);
@@ -89,7 +92,7 @@ export class GumVideoCapturer {
 
   async enumerateDevices(): Promise<MediaDeviceInfo[]> {
     const devices = await window.navigator.mediaDevices.enumerateDevices();
-    const cameras = devices.filter(d => d.kind == "videoinput");
+    const cameras = devices.filter(d => d.kind == 'videoinput');
     return cameras;
   }
 
@@ -118,7 +121,7 @@ export class GumVideoCapturer {
           maxWidth: options.maxWidth,
           maxHeight: options.maxHeight,
           maxFrameRate: options.maxFramerate,
-        }
+        },
       };
     }
     return window.navigator.mediaDevices.getUserMedia(constraints);
@@ -189,7 +192,10 @@ export class GumVideoCapturer {
       this.stopSending();
     }
     this.sender = sender;
-    this.canvas = new OffscreenCanvas(this.captureOptions!.maxWidth, this.captureOptions!.maxHeight);
+    this.canvas = new OffscreenCanvas(
+      this.captureOptions!.maxWidth,
+      this.captureOptions!.maxHeight
+    );
     this.canvasContext = this.canvas.getContext('2d') || undefined;
     const interval = 1000 / this.captureOptions!.maxFramerate;
     this.intervalId = setInterval(
@@ -231,14 +237,31 @@ export class GumVideoCapturer {
       return;
     }
 
-    if ((this.fakeVideoName != undefined) && (this.capturingStartTime != undefined)) {
+    if (
+      this.fakeVideoName != undefined &&
+      this.capturingStartTime != undefined
+    ) {
       let width = 640;
       let height = 480;
       let duration = Date.now() - this.capturingStartTime;
-      this.drawFakeVideo(this.canvasContext, width, height, this.fakeVideoName, duration);
+      this.drawFakeVideo(
+        this.canvasContext,
+        width,
+        height,
+        this.fakeVideoName,
+        duration
+      );
       const image = this.canvasContext.getImageData(0, 0, width, height);
-      let bufferWithoutCopying = Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength);
-      this.sender.sendVideoFrame(image.width, image.height, bufferWithoutCopying);
+      let bufferWithoutCopying = Buffer.from(
+        image.data.buffer,
+        image.data.byteOffset,
+        image.data.byteLength
+      );
+      this.sender.sendVideoFrame(
+        image.width,
+        image.height,
+        bufferWithoutCopying
+      );
       return;
     }
 
@@ -260,12 +283,26 @@ export class GumVideoCapturer {
         height
       );
       const image = this.canvasContext.getImageData(0, 0, width, height);
-      let bufferWithoutCopying = Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength);
-      this.sender.sendVideoFrame(image.width, image.height, bufferWithoutCopying);
+      let bufferWithoutCopying = Buffer.from(
+        image.data.buffer,
+        image.data.byteOffset,
+        image.data.byteLength
+      );
+      this.sender.sendVideoFrame(
+        image.width,
+        image.height,
+        bufferWithoutCopying
+      );
     }
   }
 
-  private drawFakeVideo(context: OffscreenCanvasRenderingContext2D, width: number, height: number, name: string, time: number): void {
+  private drawFakeVideo(
+    context: OffscreenCanvasRenderingContext2D,
+    width: number,
+    height: number,
+    name: string,
+    time: number
+  ): void {
     function fill(style: string, draw: () => void) {
       context.fillStyle = style;
       context.beginPath();
@@ -280,7 +317,13 @@ export class GumVideoCapturer {
       context.stroke();
     }
 
-    function arc(x: number, y: number, radius: number, start: number, end: number) {
+    function arc(
+      x: number,
+      y: number,
+      radius: number,
+      start: number,
+      end: number
+    ) {
       const twoPi = 2 * Math.PI;
       context.arc(x, y, radius, start * twoPi, end * twoPi);
     }
@@ -290,35 +333,56 @@ export class GumVideoCapturer {
     }
 
     function fillFace(x: number, y: number, faceRadius: number) {
-      const eyeRadius = faceRadius/5;
-      const eyeOffsetX = faceRadius/2;
-      const eyeOffsetY = -faceRadius/4;
-      const smileRadius = faceRadius/2;
+      const eyeRadius = faceRadius / 5;
+      const eyeOffsetX = faceRadius / 2;
+      const eyeOffsetY = -faceRadius / 4;
+      const smileRadius = faceRadius / 2;
       const smileOffsetY = -eyeOffsetY;
-      fill("yellow", () => circle(x, y, faceRadius));
-      fill("black", () => circle(x - eyeOffsetX, y + eyeOffsetY, eyeRadius));
-      fill("black", () => circle(x + eyeOffsetX, y + eyeOffsetY, eyeRadius));
-      stroke("black", () => arc(x, y + smileOffsetY, smileRadius, 0, 0.5));
+      fill('yellow', () => circle(x, y, faceRadius));
+      fill('black', () => circle(x - eyeOffsetX, y + eyeOffsetY, eyeRadius));
+      fill('black', () => circle(x + eyeOffsetX, y + eyeOffsetY, eyeRadius));
+      stroke('black', () => arc(x, y + smileOffsetY, smileRadius, 0, 0.5));
     }
 
-    function fillText(x: number, y: number, fillStyle: string, fontSize: number, fontName: string, align: CanvasTextAlign, text: string) {
+    function fillText(
+      x: number,
+      y: number,
+      fillStyle: string,
+      fontSize: number,
+      fontName: string,
+      align: CanvasTextAlign,
+      text: string
+    ) {
       context.font = `${fontSize}px ${fontName}`;
       context.textAlign = align;
       context.fillStyle = fillStyle;
       context.fillText(text, x, y);
     }
 
-    function fillLabeledFace(x: number, y: number, faceRadius: number, label: string) {
-      const labelSize = faceRadius*.3;
-      const labelOffsetY = faceRadius*1.5;
+    function fillLabeledFace(
+      x: number,
+      y: number,
+      faceRadius: number,
+      label: string
+    ) {
+      const labelSize = faceRadius * 0.3;
+      const labelOffsetY = faceRadius * 1.5;
 
       fillFace(x, y, faceRadius);
-      fillText(x, y + labelOffsetY, "black", labelSize, "monospace", "center", label);
+      fillText(
+        x,
+        y + labelOffsetY,
+        'black',
+        labelSize,
+        'monospace',
+        'center',
+        label
+      );
     }
 
     context.fillStyle = 'white';
     context.fillRect(0, 0, width, height);
-    fillLabeledFace(width/2, height/2, height/3, `${name} ${time}`);
+    fillLabeledFace(width / 2, height / 2, height / 3, `${name} ${time}`);
   }
 }
 
@@ -326,7 +390,8 @@ export class GumVideoCapturer {
 const MAX_VIDEO_CAPTURE_MULTIPLIER = 1.0;
 export const MAX_VIDEO_CAPTURE_WIDTH = 1920 * MAX_VIDEO_CAPTURE_MULTIPLIER;
 export const MAX_VIDEO_CAPTURE_HEIGHT = 1080 * MAX_VIDEO_CAPTURE_MULTIPLIER;
-export const MAX_VIDEO_CAPTURE_AREA = MAX_VIDEO_CAPTURE_WIDTH * MAX_VIDEO_CAPTURE_HEIGHT;
+export const MAX_VIDEO_CAPTURE_AREA =
+  MAX_VIDEO_CAPTURE_WIDTH * MAX_VIDEO_CAPTURE_HEIGHT;
 export const MAX_VIDEO_CAPTURE_BUFFER_SIZE = MAX_VIDEO_CAPTURE_AREA * 4;
 
 export class CanvasVideoRenderer {
@@ -368,7 +433,9 @@ export class CanvasVideoRenderer {
 
   private requestAnimationFrameCallback() {
     this.renderVideoFrame();
-    this.rafId = window.requestAnimationFrame(this.requestAnimationFrameCallback.bind(this));
+    this.rafId = window.requestAnimationFrame(
+      this.requestAnimationFrameCallback.bind(this)
+    );
   }
 
   private renderBlack() {
@@ -404,10 +471,14 @@ export class CanvasVideoRenderer {
     if (!frame) {
       return;
     }
-    const [ width, height ] = frame;
+    const [width, height] = frame;
 
-    if (canvas.clientWidth <= 0 || width <= 0 ||
-        canvas.clientHeight <= 0 || height <= 0) {
+    if (
+      canvas.clientWidth <= 0 ||
+      width <= 0 ||
+      canvas.clientHeight <= 0 ||
+      height <= 0
+    ) {
       return;
     }
 
@@ -438,7 +509,11 @@ export class CanvasVideoRenderer {
     }
 
     // Share the same buffer as this.buffer.
-    const clampedArrayBuffer = new Uint8ClampedArray(this.buffer.buffer, this.buffer.byteOffset, width * height * 4);
+    const clampedArrayBuffer = new Uint8ClampedArray(
+      this.buffer.buffer,
+      this.buffer.byteOffset,
+      width * height * 4
+    );
     context.putImageData(
       new ImageData(clampedArrayBuffer, width, height),
       dx,
