@@ -17,7 +17,7 @@ if (is_android) {
   libname = "libringrtc.so"
 
   if (target_cpu == "arm") {
-    cargo_target = "arm-linux-androideabi"
+    cargo_target = "armv7-linux-androideabi"
   } else if (target_cpu == "arm64") {
     cargo_target = "aarch64-linux-android"
   } else if (target_cpu == "x86") {

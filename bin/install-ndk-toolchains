@@ -55,7 +55,7 @@ for a in $ARCHS ; do
     case "$a" in
         arm)
             target=armv7a-linux-androideabi
-            cargo_target=arm-linux-androideabi
+            cargo_target=armv7-linux-androideabi
             NDK="$NDK_32"
             ;;
         arm64)

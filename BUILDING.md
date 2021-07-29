@@ -27,7 +27,7 @@ We use a pinned nightly toolchain for official builds, specified by our [rust-to
 Install Rust target support for Android via `rustup`:
 
     rustup target add \
-      arm-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
+      armv7-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
 
 #### iOS
 
