@@ -10,12 +10,6 @@ set -e
 BIN_DIR="$(realpath -e $(dirname $0))"
 . "${BIN_DIR}/env.sh"
 
-if [ "$1" != "--clean" ] ; then
-    # Setup NDK toolchain path
-    . "$NDK_ENV"
-    export PATH="${PATH}:$NDK_PATH"
-fi
-
 "${0}.py"                                  \
     --build-dir="${OUTPUT_DIR}"            \
     --webrtc-src-dir="${WEBRTC_SRC_DIR}"   \

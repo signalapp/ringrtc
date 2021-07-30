@@ -6,9 +6,6 @@
 #
 
 # Android specific environment variables
-NDK_TOOLCHAIN_INSTALL_DIR="${OUTPUT_DIR}/ndk"
-NDK_ENV="${NDK_TOOLCHAIN_INSTALL_DIR}/ndk.env"
-
 ANDROID_CONFIG_DIR="${CONFIG_DIR}/android"
 
 ANDROID_DEPS_DIR="${OUTPUT_DIR}/android-deps"

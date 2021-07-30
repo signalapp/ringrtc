@@ -21,9 +21,6 @@ rm -rf ${OUTPUT_DIR}/*/*/*/*ringrtc* ${OUTPUT_DIR}/*/*/.fingerprint/*ringrtc*
 case $WEBRTC_PLATFORM in
     android)
         TARGET=aarch64-linux-android
-        # Setup NDK toolchain path
-        . "$NDK_ENV"
-        EXE_PATH="$NDK_PATH"
         ;;
     ios)
         TARGET=aarch64-apple-ios
@@ -35,7 +32,7 @@ esac
 
 echo "Entering directory \`$(dirname $MANIFEST)'"
 
-PATH="${PATH}:$EXE_PATH" cargo clippy \
+cargo clippy \
     --target $TARGET \
     --target-dir "$OUTPUT_DIR" \
     --manifest-path "$MANIFEST" \

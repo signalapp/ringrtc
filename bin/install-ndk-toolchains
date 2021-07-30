@@ -14,8 +14,6 @@ set -e
 BIN_DIR="$(realpath -e $(dirname $0))"
 . "${BIN_DIR}/env.sh"
 
-rm -rf "$NDK_TOOLCHAIN_INSTALL_DIR"
-
 # where is the NDK located?
 NDK_HOME="${WEBRTC_DIR}/src/third_party/android_ndk"
 
@@ -53,35 +51,26 @@ else
 fi
 mkdir -p $(dirname $CARGO_CONFIG)
 
-rm -f $NDK_ENV
-mkdir -p $(dirname $NDK_ENV)
-cat <<"EOF" > $NDK_ENV
-#!/bin/sh
-
-# shell environment variables for adding NDK toolchains to $PATH
-
-unset NDK_PATH
-
-EOF
-
 for a in $ARCHS ; do
-    ARCH_INSTALL_DIR="${NDK_TOOLCHAIN_INSTALL_DIR}/$a"
-
     case "$a" in
         arm)
-            target=arm-linux-androideabi
+            target=armv7a-linux-androideabi
+            cargo_target=arm-linux-androideabi
             NDK="$NDK_32"
             ;;
         arm64)
             target=aarch64-linux-android
+            cargo_target=aarch64-linux-android
             NDK="$NDK_64"
             ;;
         x86)
             target=i686-linux-android
+            cargo_target=i686-linux-android
             NDK="$NDK_32"
             ;;
         x86_64)
             target=x86_64-linux-android
+            cargo_target=x86_64-linux-android
             NDK="$NDK_64"
             ;;
         *)
@@ -89,25 +78,12 @@ for a in $ARCHS ; do
             exit 1
     esac
 
-    echo "I: Installing NDK-${NDK} toolchain for arch: $a --> $ARCH_INSTALL_DIR ..."
-    # Use the LLVM libc++, which is what WebRTC is using.
-    ${NDK_HOME}/build/tools/make_standalone_toolchain.py \
-               --api $NDK \
-               --stl libc++ \
-               --arch $a \
-               --install-dir "$ARCH_INSTALL_DIR"
+    toolchain_bin_dir=$(realpath -e "${NDK_HOME}/toolchains/llvm/prebuilt"/*/bin)
 
-    linker=$(realpath -e "${ARCH_INSTALL_DIR}/bin/${target}-clang")
-    ar=$(realpath -e "${ARCH_INSTALL_DIR}/bin/${target}-ar")
     cat <<EOF >> $CARGO_CONFIG
-[target.$target]
-linker = "$linker"
-ar = "$ar"
+[target.$cargo_target]
+linker = "${toolchain_bin_dir}/${target}${NDK}-clang"
 
-EOF
-
-    cat <<EOF >> $NDK_ENV
-NDK_PATH="\${NDK_PATH:+\${NDK_PATH}:}$(realpath -e ${ARCH_INSTALL_DIR}/bin)"
 EOF
 
 done
