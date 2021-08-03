@@ -442,6 +442,7 @@ impl Platform for SimPlatform {
         &self,
         _client_id: group_call::ClientId,
         _remote_device_states: &[group_call::RemoteDeviceState],
+        _reason: group_call::RemoteDevicesChangedReason,
     ) {
         unimplemented!()
     }

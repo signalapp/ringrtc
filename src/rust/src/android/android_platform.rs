@@ -1077,6 +1077,7 @@ impl Platform for AndroidPlatform {
         &self,
         client_id: group_call::ClientId,
         remote_device_states: &[group_call::RemoteDeviceState],
+        _reason: group_call::RemoteDevicesChangedReason,
     ) {
         info!("handle_remote_devices_changed():");
 

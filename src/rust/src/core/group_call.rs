@@ -116,6 +116,14 @@ pub fn decode_fingerprint(s: &str) -> Option<DtlsFingerprint> {
 
 pub const INVALID_CLIENT_ID: ClientId = 0;
 
+#[derive(Debug)]
+pub enum RemoteDevicesChangedReason {
+    DemuxIdsChanged,
+    MediaKeyReceived(DemuxId),
+    SpeakerTimeChanged(DemuxId),
+    HeartbeatStateChanged(DemuxId),
+}
+
 // The callbacks from the Call to the Observer of the call.
 // Some of these are more than an "observer" in that a response is needed,
 // which is provided asynchronously.
@@ -145,6 +153,7 @@ pub trait Observer {
         &self,
         client_id: ClientId,
         remote_devices: &[RemoteDeviceState],
+        reason: RemoteDevicesChangedReason,
     );
 
     // Notifies the observer of changes to the list of call participants.
@@ -1658,7 +1667,7 @@ impl Client {
             if demux_ids_changed || is_first_update {
                 state
                     .observer
-                    .handle_remote_devices_changed(state.client_id, &state.remote_devices);
+                    .handle_remote_devices_changed(state.client_id, &state.remote_devices, RemoteDevicesChangedReason::DemuxIdsChanged);
             }
 
             if new_user_ids != old_user_ids {
@@ -1921,7 +1930,7 @@ impl Client {
                 if !had_media_keys {
                     state
                         .observer
-                        .handle_remote_devices_changed(state.client_id, &state.remote_devices)
+                        .handle_remote_devices_changed(state.client_id, &state.remote_devices, RemoteDevicesChangedReason::MediaKeyReceived(demux_id))
                 }
             } else {
                 warn!("Ignoring received media key from user because the demux ID {} doesn't make sense", demux_id);
@@ -2371,9 +2380,10 @@ impl Client {
                     "Updated speaker time of {:?} to {:?}",
                     speaker_device.demux_id, speaker_device.speaker_time
                 );
+                let demux_id = speaker_device.demux_id;
                 state
                     .observer
-                    .handle_remote_devices_changed(state.client_id, &state.remote_devices);
+                    .handle_remote_devices_changed(state.client_id, &state.remote_devices, RemoteDevicesChangedReason::SpeakerTimeChanged(demux_id));
             } else {
                 debug!(
                     "Ignoring speaker change because it isn't a known remote devices: {}",
@@ -2412,8 +2422,8 @@ impl Client {
                         remote_device.heartbeat_state = heartbeat_state;
                         state
                             .observer
-                            .handle_remote_devices_changed(state.client_id, &state.remote_devices);
-                    }
+                            .handle_remote_devices_changed(state.client_id, &state.remote_devices, RemoteDevicesChangedReason::HeartbeatStateChanged(demux_id));
+                    } 
                 }
             } else {
                 warn!(
@@ -2985,6 +2995,7 @@ mod tests {
             &self,
             _client_id: ClientId,
             remote_devices: &[RemoteDeviceState],
+            _reason: RemoteDevicesChangedReason,
         ) {
             let mut owned_remote_devices = self
                 .remote_devices

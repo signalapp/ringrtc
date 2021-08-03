@@ -735,6 +735,7 @@ impl Platform for NativePlatform {
         &self,
         client_id: group_call::ClientId,
         remote_device_states: &[group_call::RemoteDeviceState],
+        _reason: group_call::RemoteDevicesChangedReason,
     ) {
         info!(
             "NativePlatform::handle_remote_devices_changed(): id: {}",

@@ -542,6 +542,7 @@ impl Platform for IosPlatform {
         &self,
         client_id: group_call::ClientId,
         remote_device_states: &[group_call::RemoteDeviceState],
+        _reason: group_call::RemoteDevicesChangedReason,
     ) {
         let mut app_remote_device_states: Vec<AppRemoteDeviceState> = Vec::new();
 

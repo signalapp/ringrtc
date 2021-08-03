@@ -189,6 +189,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         &self,
         client_id: group_call::ClientId,
         remote_device_states: &[group_call::RemoteDeviceState],
+        _reason: group_call::RemoteDevicesChangedReason,
     );
 
     fn handle_incoming_video_track(

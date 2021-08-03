@@ -2123,13 +2123,15 @@ where
         &self,
         client_id: group_call::ClientId,
         remote_device_states: &[group_call::RemoteDeviceState],
+        reason: group_call::RemoteDevicesChangedReason,
     ) {
-        info!("handle_remote_devices_changed():");
+        info!("handle_remote_devices_changed(): {:?}", reason);
         platform_handler!(
             self,
             handle_remote_devices_changed,
             client_id,
-            remote_device_states
+            remote_device_states,
+            reason
         );
     }
 
