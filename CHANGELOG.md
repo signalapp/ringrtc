@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.10.8
+
+- Group Calling: Reduce notifications for active speakers
+
+- Android: Modify NDK dependencies and use armv7 instead of arm
+
+- Update logging
+
 ## v2.10.7
 
 - iOS: Add support for building for Catalyst

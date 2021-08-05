@@ -889,7 +889,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.10.7"
+version = "2.10.8"
 dependencies = [
  "aes-ctr",
  "base64",
