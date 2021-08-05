@@ -6,8 +6,10 @@
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
+    iter::FromIterator,
     mem::size_of,
     net::SocketAddr,
+    ops::Deref,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
@@ -375,7 +377,7 @@ pub struct RemoteDeviceState {
     // A combination of (added_timestamp, demux_id) can be used for a stable
     // sort of remote devices for a grid layout.
     pub added_time:          SystemTime,
-    // The most recent time at which this device was primary speaker
+    // The most recent time at which this device became the primary speaker
     // Sorting using this value will give a history of who spoke.
     pub speaker_time:        Option<SystemTime>,
     pub leaving_received:    bool,
@@ -507,6 +509,37 @@ pub struct Client {
     actor:                Actor<State>,
 }
 
+struct RemoteDevices(Vec<RemoteDeviceState>);
+
+impl Deref for RemoteDevices {
+    type Target = Vec<RemoteDeviceState>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Default for RemoteDevices {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl FromIterator<RemoteDeviceState> for RemoteDevices {
+    fn from_iter<T: IntoIterator<Item=RemoteDeviceState>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl IntoIterator for RemoteDevices {
+    type Item = RemoteDeviceState;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 /// The state inside the Actor
 struct State {
     // Things passed in that never change
@@ -521,7 +554,7 @@ struct State {
     // State that changes regularly and is sent to the observer
     connection_state: ConnectionState,
     join_state:       JoinState,
-    remote_devices:   Vec<RemoteDeviceState>,
+    remote_devices:   RemoteDevices,
 
     // Things to control peeking
     remote_devices_request_state: RemoteDevicesRequestState,
@@ -586,6 +619,47 @@ struct State {
     send_rates: SendRates,
 
     actor: Actor<State>,
+}
+
+impl RemoteDevices {
+
+    /// Find the latest speaker
+    fn latest_speaker_demux_id(&self) -> Option<DemuxId> {
+        let latest_speaker = self.iter()
+            .max_by_key(|a| a.speaker_time);
+        if latest_speaker?.speaker_time.is_none() {
+           None
+        } else {
+            latest_speaker.map(|speaker| speaker.demux_id)
+        }
+    }
+
+    /// Find remote device state by demux id
+    fn find_by_demux_id(&self, demux_id: DemuxId) -> Option<&RemoteDeviceState> {
+        self.iter()
+            .find(|device| device.demux_id == demux_id)
+    }
+
+    /// Find remote device state by demux id
+    fn find_by_demux_id_mut(&mut self, demux_id: DemuxId) -> Option<&mut RemoteDeviceState> {
+        self.0
+            .iter_mut()
+            .find(|device| device.demux_id == demux_id)
+    }
+
+    /// Find remote device state by the long device id
+    fn find_by_long_device_id_mut(&mut self, long_device_id: &str) -> Option<&mut RemoteDeviceState> {
+        self.0
+            .iter_mut()
+            .find(|device| device.long_device_id == *long_device_id)
+    }
+
+    /// Returns a set containing all the demux ids in the collection
+    fn demux_id_set(&self) -> HashSet<DemuxId> {
+        self.iter()
+            .map(|device| device.demux_id)
+            .collect()
+    }
 }
 
 // The time between ticks to do periodic things like
@@ -679,7 +753,7 @@ impl Client {
 
                     connection_state: ConnectionState::NotConnected,
                     join_state: JoinState::NotJoined,
-                    remote_devices: Vec::new(),
+                    remote_devices: Default::default(),
 
                     remote_devices_request_state:
                         RemoteDevicesRequestState::WaitingForMembershipProof,
@@ -1206,8 +1280,7 @@ impl Client {
                 .filter_map(|request| {
                     state
                         .remote_devices
-                        .iter()
-                        .find(|device| device.demux_id == request.demux_id)
+                        .find_by_demux_id(request.demux_id)
                         .map(|device| {
                             VideoRequestProto {
                                 short_device_id: Some(device.short_device_id),
@@ -1587,8 +1660,7 @@ impl Client {
         let peek_info_to_remember = peek_info.clone();
         if let JoinState::Joined(local_demux_id, _) = state.join_state {
             // We remember these before changing state.remote_devices so we can calculate changes after.
-            let old_demux_ids: HashSet<DemuxId> =
-                state.remote_devices.iter().map(|rd| rd.demux_id).collect();
+            let old_demux_ids: HashSet<DemuxId> = state.remote_devices.demux_id_set();
 
             // Then we update state.remote_devices by first building a map of id_pair => RemoteDeviceState
             // from the old values and then building a new Vec using either the old value (if there is one)
@@ -1636,8 +1708,7 @@ impl Client {
                 .collect();
 
             // Recalculate to see the differences
-            let new_demux_ids: HashSet<DemuxId> =
-                state.remote_devices.iter().map(|rd| rd.demux_id).collect();
+            let new_demux_ids: HashSet<DemuxId> = state.remote_devices.demux_id_set();
 
             let demux_ids_changed = old_demux_ids != new_demux_ids;
             // If demux IDs changed, let the PeerConnection know that related SSRCs changed as well
@@ -1913,8 +1984,7 @@ impl Client {
     ) {
         if let Some(device) = state
             .remote_devices
-            .iter_mut()
-            .find(|device| device.demux_id == demux_id)
+            .find_by_demux_id_mut(demux_id)
         {
             if device.user_id == user_id {
                 info!(
@@ -2370,14 +2440,22 @@ impl Client {
             }
             state.speaker_rtp_timestamp = Some(timestamp);
 
-            if let Some(speaker_device) = state
-                .remote_devices
-                .iter_mut()
-                .find(|device| device.long_device_id == speaker_long_device_id)
+            let latest_speaker_demux_id = state.remote_devices.latest_speaker_demux_id();
+
+            if let Some(speaker_device) = state.remote_devices
+                .find_by_long_device_id_mut(&speaker_long_device_id)
             {
+                if latest_speaker_demux_id == Some(speaker_device.demux_id) {
+                    debug!(
+                        "Already the latest speaker demux {:?} since {:?}",
+                        speaker_device.demux_id, speaker_device.speaker_time
+                    );
+                    return;
+                }
+
                 speaker_device.speaker_time = Some(SystemTime::now());
-                debug!(
-                    "Updated speaker time of {:?} to {:?}",
+                info!(
+                    "New speaker {:?} at {:?}",
                     speaker_device.demux_id, speaker_device.speaker_time
                 );
                 let demux_id = speaker_device.demux_id;
@@ -2410,8 +2488,7 @@ impl Client {
         self.actor.send(move |state| {
             if let Some(remote_device) = state
                 .remote_devices
-                .iter_mut()
-                .find(|device| device.demux_id == demux_id)
+                .find_by_demux_id_mut(demux_id)
             {
                 if timestamp > remote_device.heartbeat_rtp_timestamp.unwrap_or(0) {
                     // Record this even if nothing changed.  Otherwise an old packet could override
@@ -2442,8 +2519,7 @@ impl Client {
         );
         if let Some(device) = state
             .remote_devices
-            .iter_mut()
-            .find(|device| device.demux_id == demux_id)
+            .find_by_demux_id_mut(demux_id)
         {
             if !device.leaving_received {
                 device.leaving_received = true;
@@ -2764,15 +2840,18 @@ impl<'data> Reader<'data> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::webrtc::sim::media::FAKE_AUDIO_TRACK;
     use std::sync::{
-        atomic::{self, AtomicU64},
-        mpsc,
         Arc,
+        atomic::{self, AtomicU64},
         Condvar,
+        mpsc,
         Mutex,
     };
+
+    use crate::webrtc::sim::media::FAKE_AUDIO_TRACK;
+
+    use super::*;
+    use std::sync::atomic::Ordering;
 
     #[derive(Clone)]
     struct FakeSfuClient {
@@ -2889,6 +2968,8 @@ mod tests {
         send_rates:                  Arc<CallMutex<Option<SendRates>>>,
         ended:                       Waitable<EndReason>,
         era_id:                      Option<String>,
+
+        handle_remote_devices_changed_invocation_count: Arc<AtomicU64>,
     }
 
     impl FakeObserver {
@@ -2913,6 +2994,7 @@ mod tests {
                 send_rates: Arc::new(CallMutex::new(None, "FakeObserver send rates")),
                 ended: Waitable::default(),
                 era_id: None,
+                handle_remote_devices_changed_invocation_count: Default::default(),
             }
         }
 
@@ -2970,6 +3052,11 @@ mod tests {
             let send_rates = self.send_rates.lock().expect("Lock send rates to read it");
             send_rates.clone()
         }
+
+        /// Gets the number of `handle_remote_devices_changed` since last checked.
+        fn handle_remote_devices_changed_invocation_count(&self) -> u64 {
+            self.handle_remote_devices_changed_invocation_count.swap(0, Ordering::Relaxed)
+        }
     }
 
     impl Observer for FakeObserver {
@@ -2981,6 +3068,7 @@ mod tests {
             _connection_state: ConnectionState,
         ) {
         }
+
         fn handle_join_state_changed(&self, _client_id: ClientId, join_state: JoinState) {
             if let JoinState::Joined(_, _) = join_state {
                 let mut owned_remote_devices_at_join_time = self
@@ -2991,6 +3079,7 @@ mod tests {
                 self.joined.set();
             }
         }
+
         fn handle_remote_devices_changed(
             &self,
             _client_id: ClientId,
@@ -3002,7 +3091,9 @@ mod tests {
                 .lock()
                 .expect("Lock recipients to set remote devices");
             *owned_remote_devices = remote_devices.iter().cloned().collect();
+            self.handle_remote_devices_changed_invocation_count.fetch_add(1, Ordering::Relaxed);
         }
+
         fn handle_peek_changed(
             &self,
             _client_id: ClientId,
@@ -3022,6 +3113,7 @@ mod tests {
             owned_state.max_devices = max_devices;
             owned_state.device_count = device_count;
         }
+
         fn handle_send_rates_changed(&self, _client_id: ClientId, send_rates: SendRates) {
             let mut self_send_rates = self
                 .send_rates
@@ -4172,61 +4264,73 @@ mod tests {
         client1.connect_join_and_wait_until_joined();
         client1.set_remotes_and_wait_until_applied(&[&client3, &client4]);
         assert_eq!(vec![3, 4], client1.speakers());
+        assert_eq!(1, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // New people put at the end regardless of DemuxId
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.set_remotes_and_wait_until_applied(&[&client2, &client4, &client3]);
         assert_eq!(vec![3, 4, 2], client1.speakers());
+        assert_eq!(1, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Changed
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(1, 4);
         assert_eq!(vec![4, 3, 2], client1.speakers());
+        assert_eq!(1, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Didn't change
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(2, 4);
         assert_eq!(vec![4, 3, 2], client1.speakers());
+        assert_eq!(0, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Changed back
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(3, 3);
         assert_eq!(vec![3, 4, 2], client1.speakers());
+        assert_eq!(1, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Ignore unknown demux ID
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(4, 5);
         assert_eq!(vec![3, 4, 2], client1.speakers());
+        assert_eq!(0, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Didn't change
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(6, 3);
         assert_eq!(vec![3, 4, 2], client1.speakers());
+        assert_eq!(0, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Ignore old messages
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(5, 4);
         assert_eq!(vec![3, 4, 2], client1.speakers());
+        assert_eq!(0, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Ignore when the local device is the current speaker
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(7, 1);
         assert_eq!(vec![3, 4, 2], client1.speakers());
+        assert_eq!(0, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Finally give 2 a chance
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(8, 2);
         assert_eq!(vec![2, 3, 4], client1.speakers());
+        assert_eq!(1, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Swap only the top two; leave the third alone
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(9, 3);
         assert_eq!(vec![3, 2, 4], client1.speakers());
+        assert_eq!(1, client1.observer.handle_remote_devices_changed_invocation_count());
 
         // Unchanged
         std::thread::sleep(std::time::Duration::from_millis(1));
         client1.receive_speaker(10, 3);
         assert_eq!(vec![3, 2, 4], client1.speakers());
+        assert_eq!(0, client1.observer.handle_remote_devices_changed_invocation_count());
 
         client1.disconnect_and_wait_until_ended();
     }
@@ -4409,5 +4513,133 @@ mod tests {
         );
 
         client1.disconnect_and_wait_until_ended();
+    }
+}
+
+#[cfg(test)]
+mod remote_devices_tests {
+    use super::*;
+
+    #[test]
+    fn latest_speaker_of_empty_devices() {
+        let remote_devices = RemoteDevices::default();
+        assert_eq!(None, remote_devices.latest_speaker_demux_id());
+    }
+
+    #[test]
+    fn latest_speaker_of_zero_speaking_devices() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        assert_eq!(None, remote_devices.latest_speaker_demux_id());
+    }
+
+    #[test]
+    fn latest_speaker_of_multiple_speaking_devices() {
+        let device_1 = remote_device_state(1, Some(time(100)));
+        let device_2 = remote_device_state(2, Some(time(101)));
+        let device_3 = remote_device_state(3, None);
+        let remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        assert_eq!(Some(2), remote_devices.latest_speaker_demux_id());
+    }
+
+    #[test]
+    fn find_by_demux_id_when_key_is_not_found() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let absent_id = 4;
+        let remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        let device_state = remote_devices.find_by_demux_id(absent_id);
+        assert_eq!(None, device_state);
+    }
+
+    #[test]
+    fn find_by_demux_id() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let remote_devices = RemoteDevices::from_iter(vec![device_1, device_2.clone(), device_3]);
+        assert_eq!(Some(&device_2), remote_devices.find_by_demux_id(device_2.demux_id));
+    }
+    
+    #[test]
+    fn find_by_demux_id_mut_when_key_is_not_found() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let absent_id = 4;
+        let mut remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        let device_state = remote_devices.find_by_demux_id_mut(absent_id);
+        assert_eq!(None, device_state);
+    }
+
+    #[test]
+    fn find_by_demux_id_mut_and_edit_is_persisted() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let device_2_demux_id = device_2.demux_id;
+        let mut remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        let device_state = remote_devices.find_by_demux_id_mut(device_2_demux_id).unwrap();
+        device_state.speaker_time = Some(time(300));
+        let device_state = remote_devices.find_by_demux_id_mut(device_2_demux_id).unwrap();
+        assert_eq!(Some(time(300)), device_state.speaker_time);
+    }
+    
+    #[test]
+    fn find_by_long_device_id_mut_when_key_is_not_found() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let absent_id = "not present".to_string();
+        let mut remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        let device_state = remote_devices.find_by_long_device_id_mut(&absent_id);
+        assert_eq!(None, device_state);
+    }
+
+    #[test]
+    fn find_by_long_device_id_mut_and_edit_is_persisted() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let device_2_long_id = device_2.long_device_id.clone();
+        let mut remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        let device_state = remote_devices.find_by_long_device_id_mut(&device_2_long_id).unwrap();
+        device_state.speaker_time = Some(time(300));
+        let device_state = remote_devices.find_by_long_device_id_mut(&device_2_long_id).unwrap();
+        assert_eq!(Some(time(300)), device_state.speaker_time);
+    }
+
+    #[test]
+    fn demux_id_set() {
+        let device_1 = remote_device_state(1, None);
+        let device_2 = remote_device_state(2, None);
+        let device_3 = remote_device_state(3, None);
+        let remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
+        assert_eq!(vec![1, 2, 3].into_iter().collect::<HashSet<_>>(), remote_devices.demux_id_set());
+    }
+
+    fn time(timestamp: u64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(timestamp)
+    }
+
+    fn remote_device_state(id:u32, spoken_at: Option<SystemTime>) -> RemoteDeviceState {
+        let mut remote_device_state = RemoteDeviceState::new(
+            id,
+            id.to_be_bytes().to_vec(),
+            long_device_id(id),
+            format!("long-{}", id),
+            time(1),
+        );
+
+        remote_device_state.speaker_time = spoken_at;
+
+        remote_device_state
+    }
+
+    fn long_device_id(id: u32) -> u64 {
+        ((id as u64) << 32) | (id as u64)
     }
 }
