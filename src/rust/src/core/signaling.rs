@@ -3,11 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+/// The messages we send over the signaling channel to establish a call.
+
+use std::{
+    fmt,
+    time::Duration,
+};
+
 use bytes::{Bytes, BytesMut};
 use prost::Message as _;
-/// The messages we send over the signaling channel to establish a call.
-use std::fmt;
-use std::time::Duration;
 
 use crate::common::{CallMediaType, DeviceId, FeatureLevel, Result};
 use crate::error::RingRtcError;
@@ -15,32 +19,18 @@ use crate::protobuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {
-    // The V1 protocol used SDP, DTLS, and SCTP. Removed.
-    // The V2 protocol does not use SCTP. It uses RTP data channels.
-    // It uses SDP, but embedded in a protobuf.
-    V2,
-    // Same as V2 but does not use DTLS. It uses a custom
-    // Diffie-Hellman exchange to derive SRTP keys.
+    // V1 used SDP, DTLS, and SCTP. Not supported.
+    // V2 replaced SCTP with RTCP data channel and embedded SDP in a protobuf. Not supported.
+    // V3 replaced DTLS with a custom Diffie-Hellman exchange to derive SRTP keys.
+    // V3 is used for ICE candidates but not supported for offers/answers.
     V3,
-    // Same as V3 except without any SDP.
+    // V4 is the same as V3 but replaces SDP with discrete protobuf fields.
     V4,
-}
-
-impl Version {
-    pub fn enable_dtls(self) -> bool {
-        match self {
-            Self::V2 => true,
-            // This disables DTLS
-            Self::V3 => false,
-            Self::V4 => false,
-        }
-    }
 }
 
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            Self::V2 => "V2".to_string(),
             Self::V3 => "V3".to_string(),
             Self::V4 => "V4".to_string(),
         };
@@ -95,7 +85,7 @@ impl fmt::Debug for Message {
 }
 
 // It's convenient to be able to now the type of a message without having
-// an entire message, so we have the related MessageType enum
+// an entire message, so we have the related MessageType enum.
 #[repr(i32)]
 #[derive(Debug, PartialEq)]
 pub enum MessageType {
@@ -133,35 +123,15 @@ impl Offer {
     }
 
     pub fn latest_version(&self) -> Version {
-        match self {
-            Self {
-                proto: protobuf::signaling::Offer { v4: Some(_), .. },
-                ..
-            } => Version::V4,
-            Self {
-                proto:
-                    protobuf::signaling::Offer {
-                        v3_or_v2:
-                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
-                                public_key: Some(_),
-                                ..
-                            }),
-                        ..
-                    },
-                ..
-            } => Version::V3,
-            _ => Version::V2,
-        }
+        Version::V4
     }
 
-    // V4 == V3 + non-SDP; V3 == V2 + public key
     pub fn from_v4(
         call_media_type: CallMediaType,
         v4: protobuf::signaling::ConnectionParametersV4,
     ) -> Result<Self> {
         let proto = protobuf::signaling::Offer {
             v4: Some(v4),
-            ..Default::default()
         };
 
         let mut opaque = BytesMut::with_capacity(proto.encoded_len());
@@ -170,30 +140,6 @@ impl Offer {
         Self::new(call_media_type, opaque.to_vec())
     }
 
-    // V4 == V3 w/o SDP; V3 == V2 + public key
-    pub fn from_v4_and_v3_and_v2(
-        call_media_type: CallMediaType,
-        public_key: Vec<u8>,
-        v4: Option<protobuf::signaling::ConnectionParametersV4>,
-        v3_or_v2_sdp: String,
-    ) -> Result<Self> {
-        let offer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2 {
-            public_key: Some(public_key),
-            sdp:        Some(v3_or_v2_sdp),
-        };
-        let offer_proto = protobuf::signaling::Offer {
-            v3_or_v2: Some(offer_proto_v3_or_v2),
-            v4,
-        };
-
-        let mut opaque = BytesMut::with_capacity(offer_proto.encoded_len());
-        offer_proto.encode(&mut opaque)?;
-
-        // Once SDP is gone, pass in the proto rather than deserializing it here.
-        Self::new(call_media_type, opaque.to_vec())
-    }
-
-    // V4 == V3 + non-SDP
     pub fn to_v4(&self) -> Option<protobuf::signaling::ConnectionParametersV4> {
         match self {
             Self {
@@ -201,46 +147,6 @@ impl Offer {
                 ..
             } => Some(v4.clone()),
             _ => None,
-        }
-    }
-
-    pub fn to_v3_or_v2_sdp(&self) -> Result<String> {
-        match self {
-            // Prefer opaque/proto over SDP
-            Self {
-                proto:
-                    protobuf::signaling::Offer {
-                        v3_or_v2:
-                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
-                                sdp: Some(v3_or_v2_sdp),
-                                ..
-                            }),
-                        ..
-                    },
-                ..
-            } => Ok(v3_or_v2_sdp.clone()),
-            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
-        }
-    }
-
-    // First return value means "is_v3_or_v2"
-    // V3 == V2 + public_key
-    pub fn to_v3_or_v2_params(&self) -> Result<(String, Option<Vec<u8>>)> {
-        match self {
-            // Prefer opaque over SDP
-            Self {
-                proto:
-                    protobuf::signaling::Offer {
-                        v3_or_v2:
-                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
-                                sdp: Some(v3_or_v2_sdp),
-                                public_key,
-                            }),
-                        ..
-                    },
-                ..
-            } => Ok((v3_or_v2_sdp.clone(), public_key.clone())),
-            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
         }
     }
 
@@ -254,8 +160,7 @@ impl Offer {
     }
 }
 
-/// The callee sends this in response to an answer to setup
-/// the call.
+/// The callee sends this in response to an answer to setup the call.
 #[derive(Clone)]
 pub struct Answer {
     pub opaque: Vec<u8>,
@@ -276,32 +181,12 @@ impl Answer {
     }
 
     pub fn latest_version(&self) -> Version {
-        match self {
-            Self {
-                proto: protobuf::signaling::Answer { v4: Some(_), .. },
-                ..
-            } => Version::V4,
-            Self {
-                proto:
-                    protobuf::signaling::Answer {
-                        v3_or_v2:
-                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
-                                public_key: Some(_),
-                                ..
-                            }),
-                        ..
-                    },
-                ..
-            } => Version::V3,
-            _ => Version::V2,
-        }
+        Version::V4
     }
 
-    // V4 == V3 + non-SDP; V3 == V2 + public key
     pub fn from_v4(v4: protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
         let proto = protobuf::signaling::Answer {
             v4: Some(v4),
-            ..Default::default()
         };
 
         let mut opaque = BytesMut::with_capacity(proto.encoded_len());
@@ -310,25 +195,6 @@ impl Answer {
         Self::new(opaque.to_vec())
     }
 
-    // V3 == V2 + public key
-    pub fn from_v3_and_v2_sdp(public_key: Vec<u8>, v3_and_v2_sdp: String) -> Result<Self> {
-        let answer_proto_v3_or_v2 = protobuf::signaling::ConnectionParametersV3OrV2 {
-            public_key: Some(public_key),
-            sdp:        Some(v3_and_v2_sdp),
-        };
-        let answer_proto = protobuf::signaling::Answer {
-            v3_or_v2: Some(answer_proto_v3_or_v2),
-            ..Default::default()
-        };
-
-        let mut opaque = BytesMut::with_capacity(answer_proto.encoded_len());
-        answer_proto.encode(&mut opaque)?;
-
-        // Once SDP is gone, pass in the proto rather than deserializing it here.
-        Self::new(opaque.to_vec())
-    }
-
-    // V4 == V3 + non-SDP; V3 == V2 + public key
     pub fn to_v4(&self) -> Option<protobuf::signaling::ConnectionParametersV4> {
         match self {
             // Prefer opaque over SDP
@@ -337,26 +203,6 @@ impl Answer {
                 ..
             } => Some(v4.clone()),
             _ => None,
-        }
-    }
-
-    // V3 == V2 + public_key
-    pub fn to_v3_or_v2_params(&self) -> Result<(String, Option<Vec<u8>>)> {
-        match self {
-            // Prefer opaque over SDP
-            Self {
-                proto:
-                    protobuf::signaling::Answer {
-                        v3_or_v2:
-                            Some(protobuf::signaling::ConnectionParametersV3OrV2 {
-                                sdp: Some(v3_or_v2_sdp),
-                                public_key,
-                            }),
-                        ..
-                    },
-                ..
-            } => Ok((v3_or_v2_sdp.clone(), public_key.clone())),
-            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
         }
     }
 
@@ -369,8 +215,7 @@ impl Answer {
     }
 }
 
-/// Each side can send these at any time after the offer and answer
-/// are sent.
+/// Each side can send these at any time after the offer and answer are sent.
 #[derive(Clone)]
 pub struct Ice {
     pub candidates_added: Vec<IceCandidate>,
@@ -387,12 +232,12 @@ impl IceCandidate {
         Self { opaque }
     }
 
-    // ICE candidates are the same for V2 and V3 and V4.
-    pub fn from_v3_and_v2_sdp(sdp: String) -> Result<Self> {
-        let ice_candidate_proto_v3_or_v2 =
-            protobuf::signaling::IceCandidateV3OrV2 { sdp: Some(sdp) };
+    // The plan is to switch ICE candidates to V4, but they currently still use SDP (V3).
+    pub fn from_v3_sdp(sdp: String) -> Result<Self> {
+        let ice_candidate_proto_v3 =
+            protobuf::signaling::IceCandidateV3 { sdp: Some(sdp) };
         let ice_candidate_proto = protobuf::signaling::IceCandidate {
-            v3_or_v2: Some(ice_candidate_proto_v3_or_v2),
+            v3: Some(ice_candidate_proto_v3),
         };
 
         let mut opaque = BytesMut::with_capacity(ice_candidate_proto.encoded_len());
@@ -401,15 +246,14 @@ impl IceCandidate {
         Ok(Self::new(opaque.to_vec()))
     }
 
-    // ICE candidates are the same for V2 and V3 and V4.
-    pub fn to_v3_and_v2_sdp(&self) -> Result<String> {
+    pub fn to_v3_sdp(&self) -> Result<String> {
         match protobuf::signaling::IceCandidate::decode(Bytes::from(self.opaque.clone()))? {
             protobuf::signaling::IceCandidate {
-                v3_or_v2:
-                    Some(protobuf::signaling::IceCandidateV3OrV2 {
-                        sdp: Some(v3_or_v2_sdp),
+                v3:
+                    Some(protobuf::signaling::IceCandidateV3 {
+                        sdp: Some(v3_sdp),
                     }),
-            } => Ok(v3_or_v2_sdp),
+            } => Ok(v3_sdp),
             _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
         }
     }

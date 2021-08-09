@@ -132,7 +132,7 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
                 .into_owned()
         };
         // ICE candidates are the same for V2 and V3 and V4.
-        let ice_candidate = signaling::IceCandidate::from_v3_and_v2_sdp(sdp.clone());
+        let ice_candidate = signaling::IceCandidate::from_v3_sdp(sdp.clone());
         if let Ok(ice_candidate) = ice_candidate {
             observer
                 .handle_ice_candidate_gathered(ice_candidate, sdp.as_str())

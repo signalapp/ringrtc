@@ -12,33 +12,23 @@ package signaling;
 import "group_call.proto";
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
-// For future compatibility, we can add new slots (v2, v3, v4 ....)
+// For future compatibility, we can add new slots (v5, v6, ...)
 message Offer {
-  optional ConnectionParametersV3OrV2 V3OrV2 = 2;
   optional ConnectionParametersV4 v4 = 4;
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Offer in SignalService.proto
 message Answer {
-  optional ConnectionParametersV3OrV2 V3OrV2 = 2;
   optional ConnectionParametersV4 v4 = 4;
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Ice in SignalService.proto
 message IceCandidate {
-  optional IceCandidateV3OrV2 V3OrV2 = 2;
+  // Use a field value of 2 for compatibility since both V2 and V3 have the same format.
+  optional IceCandidateV3 V3 = 2;
 }
 
-// The V2 protocol uses SDP, DTLS, but not SCTP.
-// The V3 protocol uses SDP, but not DTLS, but not SCTP.
-message ConnectionParametersV3OrV2 {
-  optional string sdp = 1;
-  // V2 has this unset.
-  // V3 has this set
-  optional bytes public_key = 2;
-}
-
-message IceCandidateV3OrV2 {
+message IceCandidateV3 {
   optional string sdp = 1;
 }
 

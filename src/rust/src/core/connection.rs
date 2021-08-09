@@ -551,45 +551,19 @@ where
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
             let v4_offer = offer.to_v4(local_public_key.as_bytes().to_vec(), bandwidth_mode)?;
 
-            if bandwidth_mode.use_v4_only() {
-                info!("Using V4 signaling for outgoing offer: {:?}", v4_offer);
+            info!("Using V4 signaling for outgoing offer: {:?}", v4_offer);
 
-                // The only purpose of this is to start gathering ICE candidates.
-                // But we need to call set_local_description before we munge it.
-                // Otherwise there will be a data channel type mismatch.
-                let observer = create_ssd_observer();
-                peer_connection.set_local_description(observer.as_ref(), offer);
-                observer.get_result()?;
+            // The only purpose of this is to start gathering ICE candidates.
+            // But we need to call set_local_description before we munge it.
+            // Otherwise there will be a data channel type mismatch.
+            let observer = create_ssd_observer();
+            peer_connection.set_local_description(observer.as_ref(), offer);
+            observer.get_result()?;
 
-                let offer = signaling::Offer::from_v4(call_media_type, v4_offer)?;
+            let offer = signaling::Offer::from_v4(call_media_type, v4_offer)?;
 
-                self.set_state(ConnectionState::IceGathering)?;
-                Ok((local_secret, ice_gatherer, offer))
-            } else {
-                let v2_offer_sdp = offer.to_sdp()?;
-
-                info!(
-                    "Using V4/3/2 signaling for outgoing offer: {:?} SDP: {}",
-                    v4_offer, v2_offer_sdp
-                );
-
-                // The only purpose of this is to start gathering ICE candidates.
-                // But we need to call set_local_description before we munge it.
-                // Otherwise there will be a data channel type mismatch.
-                let observer = create_ssd_observer();
-                peer_connection.set_local_description(observer.as_ref(), offer);
-                observer.get_result()?;
-
-                let offer = signaling::Offer::from_v4_and_v3_and_v2(
-                    call_media_type,
-                    local_public_key.as_bytes().to_vec(),
-                    Some(v4_offer),
-                    v2_offer_sdp,
-                )?;
-
-                self.set_state(ConnectionState::IceGathering)?;
-                Ok((local_secret, ice_gatherer, offer))
-            }
+            self.set_state(ConnectionState::IceGathering)?;
+            Ok((local_secret, ice_gatherer, offer))
         })();
 
         // Always start the FSM no matter what happened above because
@@ -648,28 +622,7 @@ where
 
                     (offer, answer, v4_answer.public_key, bandwidth_mode)
                 } else {
-                    let (answer_sdp, remote_public_key) = received.answer.to_v3_or_v2_params()?;
-                    let offer_sdp = offer.to_v3_or_v2_sdp()?;
-
-                    // For V2/3 we'll just use the desired local mode on this end and ignore the remote.
-                    let bandwidth_mode = bandwidth_modes.local_bandwidth_mode;
-
-                    if remote_public_key.is_some() {
-                        info!(
-                            "Using V3 signaling for incoming answer: {} bandwidth_mode: {}",
-                            offer_sdp, bandwidth_mode
-                        );
-                    } else {
-                        info!(
-                            "Using V2 signaling for incoming answer: {} bandwidth_mode: {}",
-                            offer_sdp, bandwidth_mode
-                        );
-                    }
-
-                    let offer = SessionDescription::offer_from_sdp(offer_sdp)?;
-                    let answer = SessionDescription::answer_from_sdp(answer_sdp)?;
-
-                    (offer, answer, remote_public_key, bandwidth_mode)
+                    return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
                 };
 
             if let Some(remote_public_key) = remote_public_key {
@@ -762,26 +715,7 @@ where
 
                     (offer, v4_offer.public_key.clone(), bandwidth_mode)
                 } else {
-                    let (offer_sdp, remote_public_key) = received.offer.to_v3_or_v2_params()?;
-
-                    // For V2/3 we'll just use the desired local mode on this end and ignore the remote.
-                    let bandwidth_mode = bandwidth_modes.local_bandwidth_mode;
-
-                    if remote_public_key.is_some() {
-                        info!(
-                            "Using V3 signaling for incoming offer: {} bandwidth_mode: {}",
-                            offer_sdp, bandwidth_mode
-                        );
-                    } else {
-                        info!(
-                            "Using V2 signaling for incoming offer: {} bandwidth_mode: {}",
-                            offer_sdp, bandwidth_mode
-                        );
-                    }
-
-                    let offer = SessionDescription::offer_from_sdp(offer_sdp)?;
-
-                    (offer, remote_public_key, bandwidth_mode)
+                    return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
                 };
 
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
@@ -824,7 +758,10 @@ where
                     bandwidth_modes.local_bandwidth_mode,
                 )?;
 
-                info!("Using V4 signaling for outgoing answer: {:?}", v4_answer);
+                info!(
+                        "Using V4 signaling for outgoing answer: {:?} {}",
+                        v4_answer, bandwidth_modes
+                );
 
                 // We have to change the local answer to match what we send back
                 answer = SessionDescription::answer_from_v4(&v4_answer)?;
@@ -834,14 +771,7 @@ where
                 }
                 signaling::Answer::from_v4(v4_answer)?
             } else {
-                let answer_sdp = answer.to_sdp()?;
-
-                info!("Using V3/2 signaling for outgoing answer: {}", answer_sdp);
-
-                signaling::Answer::from_v3_and_v2_sdp(
-                    local_public_key.as_bytes().to_vec(),
-                    answer_sdp,
-                )?
+                return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
             };
 
             // Don't enable incoming RTP until accepted.

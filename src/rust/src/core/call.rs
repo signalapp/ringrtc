@@ -545,10 +545,7 @@ where
                     self,
                     0,
                     ConnectionType::OutgoingParent,
-                    // This is V2 instead of V3 so that we can send out the same SDP in the offer
-                    // for V2 and V3, which has DTLS.
-                    // It's just that before we use the SDP for V3, we replace DTLS with SDES.
-                    signaling::Version::V2,
+                    signaling::Version::V4,
                     bandwidth_mode,
                 )?;
                 let (local_secret, ice_gatherer, offer) =

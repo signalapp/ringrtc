@@ -135,7 +135,7 @@ impl Platform for IosPlatform {
             pc_observer.rffi() as *mut c_void,
             remote_device_id,
             call.call_context()?.object,
-            signaling_version.enable_dtls(),
+            false, /* always disable DTLS */
             true, /* always enable the RTP data channel */
         );
 

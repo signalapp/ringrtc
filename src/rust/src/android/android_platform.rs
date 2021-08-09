@@ -302,7 +302,7 @@ impl Platform for AndroidPlatform {
             call_id_jlong.into(),
             jni_remote_device_id.into(),
             jni_call_context.as_obj().into(),
-            signaling_version.enable_dtls().into(),
+            false.into(), /* always disable DTLS */
             true.into(), /* always enable the RTP data channel */
         ];
         let result = jni_call_method(

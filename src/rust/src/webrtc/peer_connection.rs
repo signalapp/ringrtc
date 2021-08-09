@@ -195,7 +195,7 @@ impl PeerConnection {
 
     /// Rust wrapper around C++ PeerConnection::AddIceCandidate().
     pub fn add_ice_candidate(&self, candidate: &signaling::IceCandidate) -> Result<()> {
-        let sdp = candidate.to_v3_and_v2_sdp()?;
+        let sdp = candidate.to_v3_sdp()?;
 
         info!(
             "Remote ICE candidate: {}; {}",

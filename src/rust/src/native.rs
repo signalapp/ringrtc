@@ -400,8 +400,8 @@ impl Platform for NativePlatform {
             &context.ice_server,
             context.outgoing_audio_track.clone(),
             Some(context.outgoing_video_track.clone()),
-            signaling_version.enable_dtls(),
-            true, /* always enable the RTP data channel */
+            false, /* always disable DTLS */
+            true,  /* always enable the RTP data channel */
         )?;
 
         connection.set_peer_connection(pc)?;

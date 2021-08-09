@@ -58,16 +58,6 @@ impl BandwidthMode {
         }
     }
 
-    /// Return whether or not v4-only signaling should be used for the mode.
-    /// TODO: When v2/3 signaling is removed, this function can be removed.
-    pub fn use_v4_only(&self) -> bool {
-        match self {
-            BandwidthMode::VeryLow => true,
-            BandwidthMode::Low => true,
-            BandwidthMode::Normal => false,
-        }
-    }
-
     /// Return the maximum bitrate (for all media) allowed for the mode.
     pub fn max_bitrate(&self) -> units::DataRate {
         match self {

@@ -24,6 +24,7 @@ use ringrtc::core::call::Call;
 use ringrtc::core::call_manager::CallManager;
 use ringrtc::core::connection::Connection;
 use ringrtc::core::signaling;
+use ringrtc::protobuf;
 use ringrtc::sim::sim_platform::SimPlatform;
 
 /*
@@ -246,14 +247,17 @@ impl TestContext {
     }
 }
 
-pub fn random_received_offer(prng: &Prng, age: Duration) -> signaling::ReceivedOffer {
-    let sdp = format!("OFFER-{}", prng.gen::<u16>()).to_owned();
+pub fn random_received_offer(_prng: &Prng, age: Duration) -> signaling::ReceivedOffer {
     let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
-    let offer = signaling::Offer::from_v4_and_v3_and_v2(
+    let offer = signaling::Offer::from_v4(
         CallMediaType::Audio,
-        local_public_key,
-        None,
-        sdp.clone(),
+        protobuf::signaling::ConnectionParametersV4 {
+            public_key:           Some(local_public_key),
+            ice_ufrag:            None,
+            ice_pwd:              None,
+            receive_video_codecs: vec![],
+            max_bitrate_bps:      None,
+        },
     )
     .unwrap();
     let offer = signaling::Offer::new(offer.call_media_type, offer.opaque).unwrap();
@@ -272,12 +276,18 @@ pub fn random_received_offer(prng: &Prng, age: Duration) -> signaling::ReceivedO
 // Not sure why this is needed.  It is used...
 #[allow(dead_code)]
 pub fn random_received_answer(
-    prng: &Prng,
+    _prng: &Prng,
     sender_device_id: DeviceId,
 ) -> signaling::ReceivedAnswer {
-    let sdp = format!("ANSWER-{}", prng.gen::<u16>()).to_owned();
     let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
-    let answer = signaling::Answer::from_v3_and_v2_sdp(local_public_key, sdp).unwrap();
+    let answer = signaling::Answer::from_v4(protobuf::signaling::ConnectionParametersV4 {
+        public_key:           Some(local_public_key),
+        ice_ufrag:            None,
+        ice_pwd:              None,
+        receive_video_codecs: vec![],
+        max_bitrate_bps:      None,
+    })
+    .unwrap();
     signaling::ReceivedAnswer {
         answer,
         sender_device_id,
@@ -290,7 +300,7 @@ pub fn random_received_answer(
 pub fn random_ice_candidate(prng: &Prng) -> signaling::IceCandidate {
     let sdp = format!("ICE-CANDIDATE-{}", prng.gen::<u16>()).to_owned();
     // V1 and V2 are the same for ICE candidates
-    let ice_candidate = signaling::IceCandidate::from_v3_and_v2_sdp(sdp).unwrap();
+    let ice_candidate = signaling::IceCandidate::from_v3_sdp(sdp).unwrap();
     signaling::IceCandidate::new(ice_candidate.opaque)
 }
 
