@@ -53,6 +53,48 @@ pub struct ConnectionParametersV4 {
 pub struct CallMessage {
     #[prost(message, optional, tag="1")]
     pub group_call_message: ::std::option::Option<super::group_call::DeviceToDevice>,
+    #[prost(message, optional, tag="2")]
+    pub ring_intention: ::std::option::Option<call_message::RingIntention>,
+    #[prost(message, optional, tag="3")]
+    pub ring_response: ::std::option::Option<call_message::RingResponse>,
+}
+pub mod call_message {
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct RingIntention {
+        #[prost(bytes, optional, tag="1")]
+        pub group_id: ::std::option::Option<std::vec::Vec<u8>>,
+        #[prost(enumeration="ring_intention::Type", optional, tag="2")]
+        pub r#type: ::std::option::Option<i32>,
+        #[prost(fixed64, optional, tag="3")]
+        pub ring_id: ::std::option::Option<u64>,
+    }
+    pub mod ring_intention {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+        #[repr(i32)]
+        pub enum Type {
+            Ring = 0,
+            Cancelled = 1,
+        }
+    }
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct RingResponse {
+        #[prost(bytes, optional, tag="1")]
+        pub group_id: ::std::option::Option<std::vec::Vec<u8>>,
+        #[prost(enumeration="ring_response::Type", optional, tag="2")]
+        pub r#type: ::std::option::Option<i32>,
+        #[prost(fixed64, optional, tag="3")]
+        pub ring_id: ::std::option::Option<u64>,
+    }
+    pub mod ring_response {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+        #[repr(i32)]
+        pub enum Type {
+            Ringing = 0,
+            Accepted = 1,
+            Declined = 2,
+            Busy = 3,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

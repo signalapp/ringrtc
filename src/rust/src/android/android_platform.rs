@@ -687,7 +687,12 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()> {
+    fn send_call_message(
+        &self,
+        recipient_uuid: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
         info!("send_call_message():");
 
         let env = self.java_env()?;
@@ -700,14 +705,60 @@ impl Platform for AndroidPlatform {
             let jni_message = JObject::from(env.byte_array_from_slice(&message)?);
 
             const SEND_CALL_MESSAGE_METHOD: &str = "sendCallMessage";
-            const SEND_CALL_MESSAGE_SIG: &str = "([B[B)V";
+            const SEND_CALL_MESSAGE_SIG: &str = "([B[BI)V";
 
-            let args = [jni_recipient_uuid.into(), jni_message.into()];
+            let args = [
+                jni_recipient_uuid.into(),
+                jni_message.into(),
+                (urgency as i32).into(),
+            ];
             let result = jni_call_method(
                 &env,
                 jni_call_manager,
                 SEND_CALL_MESSAGE_METHOD,
                 SEND_CALL_MESSAGE_SIG,
+                &args,
+            );
+            if result.is_err() {
+                error!("jni_call_method: {:?}", result.err());
+            }
+
+            Ok(JObject::null())
+        })?;
+
+        Ok(())
+    }
+
+    fn send_call_message_to_group(
+        &self,
+        group_id: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
+        info!("send_call_message_to_group():");
+
+        let env = self.java_env()?;
+        let jni_call_manager = self.jni_call_manager.as_obj();
+
+        // Set a frame capacity of min (5) + objects (2).
+        let capacity = 7;
+        env.with_local_frame(capacity, || {
+            let jni_group_id = JObject::from(env.byte_array_from_slice(&group_id)?);
+            let jni_message = JObject::from(env.byte_array_from_slice(&message)?);
+
+            const SEND_CALL_MESSAGE_TO_GROUP_METHOD: &str = "sendCallMessageToGroup";
+            const SEND_CALL_MESSAGE_TO_GROUP_SIG: &str = "([B[BI)V";
+
+            let args = [
+                jni_group_id.into(),
+                jni_message.into(),
+                (urgency as i32).into(),
+            ];
+            let result = jni_call_method(
+                &env,
+                jni_call_manager,
+                SEND_CALL_MESSAGE_TO_GROUP_METHOD,
+                SEND_CALL_MESSAGE_TO_GROUP_SIG,
                 &args,
             );
             if result.is_err() {
@@ -922,6 +973,62 @@ impl Platform for AndroidPlatform {
 
     // Group Calls
 
+    fn group_call_ring_update(
+        &self,
+        group_id: group_call::GroupId,
+        ring_id: group_call::RingId,
+        sender: group_call::UserId,
+        update: group_call::RingUpdate,
+    ) {
+        info!("group_call_ring_update():");
+
+        let env = match self.java_env() {
+            Ok(v) => v,
+            Err(error) => {
+                error!("{:?}", error);
+                return;
+            }
+        };
+        let jni_call_manager = self.jni_call_manager.as_obj();
+
+        let group_id = match env.byte_array_from_slice(&group_id) {
+            Ok(slice) => JObject::from(slice),
+            Err(error) => {
+                error!("{:?}", error);
+                return;
+            }
+        };
+        let ring_id = u64::from(ring_id) as jlong;
+        let sender = match env.byte_array_from_slice(&sender) {
+            Ok(slice) => JObject::from(slice),
+            Err(error) => {
+                error!("{:?}", error);
+                return;
+            }
+        };
+        let update = update as jint;
+
+        const GROUP_CALL_RING_UPDATE_METHOD: &str = "groupCallRingUpdate";
+        const GROUP_CALL_RING_UPDATE_SIG: &str = "([BJ[BI)V";
+
+        let args = [
+            group_id.into(),
+            ring_id.into(),
+            sender.into(),
+            update.into(),
+        ];
+        let result = jni_call_method(
+            &env,
+            jni_call_manager,
+            GROUP_CALL_RING_UPDATE_METHOD,
+            GROUP_CALL_RING_UPDATE_SIG,
+            &args,
+        );
+        if result.is_err() {
+            error!("jni_call_method: {:?}", result.err());
+        }
+    }
+
     fn handle_peek_response(
         &self,
         request_id: u32,
@@ -1057,7 +1164,7 @@ impl Platform for AndroidPlatform {
         info!("handle_join_state_changed():");
 
         let join_state = match join_state {
-            group_call::JoinState::NotJoined => 0,
+            group_call::JoinState::NotJoined(_) => 0,
             group_call::JoinState::Joining => 1,
             group_call::JoinState::Joined(_, _) => 2,
         };

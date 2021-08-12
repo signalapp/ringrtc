@@ -5,8 +5,10 @@
 
 //! iOS Call Manager Interface
 
+use std::convert::TryFrom;
 use std::ffi::c_void;
 use std::{fmt, ptr, slice, str};
+use std::time::Duration;
 
 use libc::size_t;
 
@@ -358,8 +360,19 @@ pub struct AppInterface {
         broadcast: bool,
     ),
     ///
-    pub sendCallMessage:
-        extern "C" fn(object: *mut c_void, recipientUuid: AppByteSlice, message: AppByteSlice),
+    pub sendCallMessage: extern "C" fn(
+        object: *mut c_void,
+        recipientUuid: AppByteSlice,
+        message: AppByteSlice,
+        urgency: i32,
+    ),
+    ///
+    pub sendCallMessageToGroup: extern "C" fn(
+        object: *mut c_void,
+        groupId: AppByteSlice,
+        message: AppByteSlice,
+        urgency: i32,
+    ),
     ///
     pub sendHttpRequest: extern "C" fn(
         object: *mut c_void,
@@ -396,6 +409,14 @@ pub struct AppInterface {
     pub onCallConcluded:              extern "C" fn(object: *mut c_void, remote: *const c_void),
 
     // Group Calls
+    ///
+    pub groupCallRingUpdate: extern "C" fn(
+        object: *mut c_void,
+        groupId: AppByteSlice,
+        ringId: u64,
+        senderUuid: AppByteSlice,
+        ringUpdate: i32,
+    ),
     ///
     pub handlePeekResponse: extern "C" fn(
         object: *mut c_void,
@@ -503,6 +524,25 @@ pub extern "C" fn ringrtcCreate(
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub extern "C" fn ringrtcSetSelfUuid(callManager: *mut c_void, uuid: AppByteSlice) -> *mut c_void {
+    let uuid = match byte_vec_from_app_slice(&uuid) {
+        Some(uuid) => uuid,
+        None => {
+            error!("Missing UUID");
+            return ptr::null_mut();
+        }
+    };
+    match call_manager::set_self_uuid(callManager as *mut IosCallManager, uuid) {
+        Ok(_) => {
+            // Return the object reference back as indication of success.
+            callManager
+        }
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub extern "C" fn ringrtcCall(
     callManager: *mut c_void,
     appRemote: *const c_void,
@@ -578,6 +618,50 @@ pub extern "C" fn ringrtcHangup(callManager: *mut c_void) -> *mut c_void {
             callManager
         }
         Err(_e) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcCancelGroupRing(
+    callManager: *mut c_void,
+    groupId: AppByteSlice,
+    ringId: u64,
+    reason: i32,
+) -> *mut c_void {
+    info!("ringrtcCancelGroupRing():");
+
+    let groupId = match byte_vec_from_app_slice(&groupId) {
+        Some(groupId) => groupId,
+        None => {
+            error!("Missing groupId");
+            return ptr::null_mut();
+        }
+    };
+
+    let reason = if reason == -1 {
+        None
+    } else {
+        match group_call::RingCancelReason::try_from(reason) {
+            Ok(reason) => Some(reason),
+            Err(e) => { 
+                error!("Invalid reason: {}", e);
+                return ptr::null_mut();
+            }
+        }
+    };
+
+    match call_manager::cancel_group_ring(
+        callManager as *mut IosCallManager,
+        groupId,
+        ringId.into(),
+        reason,
+    ) {
+        Ok(_) => {
+            // Return the object reference back as indication of success.
+            callManager
+        }
+        Err(_) => ptr::null_mut(),
     }
 }
 
@@ -785,7 +869,7 @@ pub extern "C" fn ringrtcReceivedCallMessage(
         senderDeviceId as DeviceId,
         localDeviceId as DeviceId,
         message.unwrap(),
-        messageAgeSec,
+        Duration::from_secs(messageAgeSec),
     ) {
         Ok(_v) => {}
         Err(_e) => {}
@@ -1075,6 +1159,22 @@ pub extern "C" fn ringrtcDisconnect(callManager: *mut c_void, clientId: group_ca
     info!("ringrtcDisconnect():");
 
     let result = call_manager::disconnect(callManager as *mut IosCallManager, clientId);
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcGroupRing(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    recipient: AppByteSlice,
+) {
+    info!("ringrtcGroupRing():");
+
+    let recipient = byte_vec_from_app_slice(&recipient);
+    let result = call_manager::group_ring(callManager as *mut IosCallManager, clientId, recipient);
     if result.is_err() {
         error!("{:?}", result.err());
     }

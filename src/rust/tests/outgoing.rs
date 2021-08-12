@@ -14,6 +14,7 @@ use std::ptr;
 use std::thread;
 use std::time::Duration;
 
+use prost::Message;
 use ringrtc::common::{
     ApplicationEvent,
     CallId,
@@ -23,7 +24,7 @@ use ringrtc::common::{
     DeviceId,
 };
 use ringrtc::core::bandwidth_mode::BandwidthMode;
-use ringrtc::core::signaling;
+use ringrtc::core::{group_call, signaling};
 use ringrtc::protobuf;
 use ringrtc::sim::error::SimError;
 use ringrtc::webrtc::media::MediaStream;
@@ -1783,4 +1784,549 @@ fn start_outbound_receive_busy() {
     assert_eq!(context.event_count(ApplicationEvent::EndedRemoteBusy), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.call_concluded_count(), 1);
+}
+
+#[test]
+fn cancel_group_ring() {
+    use group_call::{RingCancelReason, RingId, SignalingMessageUrgency};
+
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let group_id = [1, 2, 3];
+    let ring_id = RingId::from(42);
+    cm.cancel_group_ring(
+        group_id.to_vec(),
+        ring_id,
+        Some(RingCancelReason::DeclinedByUser),
+    )
+    .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+
+    // Oops, we forgot to set the current user's UUID.
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
+
+    let self_uuid = [1, 1, 1];
+    cm.set_self_uuid(self_uuid.to_vec()).expect(error_line!());
+
+    // Okay, try again.
+    cm.cancel_group_ring(
+        group_id.to_vec(),
+        ring_id,
+        Some(RingCancelReason::DeclinedByUser),
+    )
+    .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+
+    match &messages[..] {
+        [message] => {
+            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(SignalingMessageUrgency::HandleImmediately, message.urgency);
+            let call_message = protobuf::signaling::CallMessage::decode(&message.message[..])
+                .expect(error_line!());
+            assert_eq!(
+                protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(group_id.to_vec()),
+                        ring_id:  Some(ring_id.into()),
+                        r#type:   Some(
+                            protobuf::signaling::call_message::ring_response::Type::Declined.into()
+                        ),
+                    }),
+                    ..Default::default()
+                },
+                call_message
+            );
+        }
+        _ => panic!("unexpected messages: {:?}", messages),
+    }
+
+    // If we cancel without a reason, though, nothing should get sent.
+    cm.cancel_group_ring(group_id.to_vec(), ring_id, None)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
+}
+
+#[test]
+fn group_call_ring_accepted() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let ring_id = group_call::RingId::from(42);
+
+    let message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
+
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    match &messages[..] {
+        [message] => {
+            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(
+                group_call::SignalingMessageUrgency::HandleImmediately,
+                message.urgency
+            );
+            let call_message = protobuf::signaling::CallMessage::decode(&message.message[..])
+                .expect(error_line!());
+            assert_eq!(
+                protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(group_id.to_vec()),
+                        ring_id:  Some(ring_id.into()),
+                        r#type:   Some(
+                            protobuf::signaling::call_message::ring_response::Type::Accepted.into()
+                        ),
+                    }),
+                    ..Default::default()
+                },
+                call_message
+            );
+        }
+        _ => panic!("unexpected messages: {:?}", messages),
+    }
+}
+
+#[test]
+fn group_call_ring_too_old() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let ring_id = group_call::RingId::from(42);
+
+    let message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    cm.age_all_outstanding_group_rings(Duration::from_secs(600));
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
+}
+
+#[test]
+fn group_call_ring_message_age_does_not_affect_ring_expiration() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let ring_id = group_call::RingId::from(42);
+
+    let message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    // 90 seconds means the ring isn't expired yet...
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::from_secs(90))
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    // ...and adding another 90 won't make it expire, since the ages don't stack.
+    cm.age_all_outstanding_group_rings(Duration::from_secs(90));
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    match &messages[..] {
+        [message] => {
+            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(
+                group_call::SignalingMessageUrgency::HandleImmediately,
+                message.urgency
+            );
+            let call_message = protobuf::signaling::CallMessage::decode(&message.message[..])
+                .expect(error_line!());
+            assert_eq!(
+                protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(group_id.to_vec()),
+                        ring_id:  Some(ring_id.into()),
+                        r#type:   Some(
+                            protobuf::signaling::call_message::ring_response::Type::Accepted.into()
+                        ),
+                    }),
+                    ..Default::default()
+                },
+                call_message
+            );
+        }
+        _ => panic!("unexpected messages: {:?}", messages),
+    }
+}
+
+#[test]
+fn group_call_ring_first_ring_wins() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let first_ring_id = group_call::RingId::from(42);
+    let second_ring_id = group_call::RingId::from(525_600);
+
+    let first_message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(first_ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    first_message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let second_message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(second_ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    second_message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    match &messages[..] {
+        [message] => {
+            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(
+                group_call::SignalingMessageUrgency::HandleImmediately,
+                message.urgency
+            );
+            let call_message = protobuf::signaling::CallMessage::decode(&message.message[..])
+                .expect(error_line!());
+            assert_eq!(
+                protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(group_id.to_vec()),
+                        ring_id:  Some(first_ring_id.into()),
+                        r#type:   Some(
+                            protobuf::signaling::call_message::ring_response::Type::Accepted.into()
+                        ),
+                    }),
+                    ..Default::default()
+                },
+                call_message
+            );
+        }
+        _ => panic!("unexpected messages: {:?}", messages),
+    }
+}
+
+#[test]
+fn group_call_ring_cancelled_locally_before_join() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let ring_id = group_call::RingId::from(42);
+
+    let message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    cm.cancel_group_ring(group_id.clone(), ring_id, None)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
+}
+
+#[test]
+fn group_call_ring_cancelled_by_ringer_before_join() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let ring_id = group_call::RingId::from(42);
+
+    let message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+
+    let cancel_message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(
+                protobuf::signaling::call_message::ring_intention::Type::Cancelled.into(),
+            ),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    cancel_message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
+}
+
+#[test]
+fn group_call_ring_cancelled_by_another_device_before_join() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let ring_id = group_call::RingId::from(42);
+
+    let message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+
+    let cancel_message = protobuf::signaling::CallMessage {
+        ring_response: Some(protobuf::signaling::call_message::RingResponse {
+            group_id: Some(group_id.clone()),
+            ring_id:  Some(ring_id.into()),
+            r#type:   Some(protobuf::signaling::call_message::ring_response::Type::Declined.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    cancel_message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(self_uuid.clone(), 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
 }

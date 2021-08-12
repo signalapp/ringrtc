@@ -23,7 +23,7 @@ use ringrtc::common::{ApplicationEvent, CallMediaType, DeviceId, FeatureLevel};
 use ringrtc::core::call::Call;
 use ringrtc::core::call_manager::CallManager;
 use ringrtc::core::connection::Connection;
-use ringrtc::core::signaling;
+use ringrtc::core::{group_call, signaling};
 use ringrtc::protobuf;
 use ringrtc::sim::sim_platform::SimPlatform;
 
@@ -244,6 +244,19 @@ impl TestContext {
     pub fn call_concluded_count(&self) -> usize {
         let platform = self.call_manager.platform().unwrap();
         platform.call_concluded_count()
+    }
+
+    pub fn create_group_call(
+        &self,
+        group_id: group_call::GroupId,
+    ) -> Result<group_call::ClientId, failure::Error> {
+        self.cm().create_group_call_client(
+            group_id.clone(),
+            "".to_owned(),
+            None,
+            ringrtc::webrtc::media::AudioTrack::unowned(std::ptr::null()),
+            ringrtc::webrtc::media::VideoTrack::unowned(std::ptr::null()),
+        )
     }
 }
 

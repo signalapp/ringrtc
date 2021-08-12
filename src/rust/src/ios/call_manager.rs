@@ -51,6 +51,15 @@ pub fn create(app_call_manager: *mut c_void, app_interface: AppInterface) -> Res
     Ok(Box::into_raw(call_manager_box) as *mut c_void)
 }
 
+/// Updates the current user's UUID.
+pub fn set_self_uuid(call_manager: *mut IosCallManager, uuid: group_call::UserId) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+
+    info!("set_self_uuid():");
+
+    call_manager.set_self_uuid(uuid)
+}
+
 /// Application notification to start a new call.
 pub fn call(
     call_manager: *mut IosCallManager,
@@ -108,6 +117,19 @@ pub fn hangup(call_manager: *mut IosCallManager) -> Result<()> {
 
     info!("hangup():");
     call_manager.hangup()
+}
+
+/// Application notification cancelling a group ring.
+pub fn cancel_group_ring(
+    call_manager: *mut IosCallManager,
+    group_id: group_call::GroupId,
+    ring_id: group_call::RingId,
+    reason: Option<group_call::RingCancelReason>
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+
+    info!("cancel_group_ring(): ring_id: {}", ring_id);
+    call_manager.cancel_group_ring(group_id, ring_id, reason)
 }
 
 /// Application notification of received answer message
@@ -315,7 +337,7 @@ pub fn received_call_message(
     sender_device_id: DeviceId,
     local_device_id: DeviceId,
     message: Vec<u8>,
-    message_age_sec: u64,
+    message_age_sec: Duration,
 ) -> Result<()> {
     info!(
         "received_call_message(): sender_device_id: {}",
@@ -513,6 +535,18 @@ pub fn disconnect(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.disconnect(client_id);
+    Ok(())
+}
+
+pub fn group_ring(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    recipient: Option<group_call::UserId>,
+) -> Result<()> {
+    info!("group_ring(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.group_ring(client_id, recipient);
     Ok(())
 }
 

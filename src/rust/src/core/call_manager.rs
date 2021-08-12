@@ -11,7 +11,7 @@ use std::fmt;
 use std::stringify;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use bytes::{Bytes, BytesMut};
 use futures::future::lazy;
@@ -36,6 +36,7 @@ use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
+use crate::core::group_call::Observer;
 use crate::core::http_client::HttpClient;
 use crate::core::platform::Platform;
 use crate::core::sfu_client::SfuClient;
@@ -46,8 +47,8 @@ use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
 use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 
-const TIME_OUT_PERIOD_SEC: u64 = 120;
-pub const MAX_MESSAGE_AGE_SEC: u64 = 120;
+const TIME_OUT_PERIOD: Duration = Duration::from_secs(120);
+pub const MAX_MESSAGE_AGE: Duration = Duration::from_secs(120);
 
 /// Spawns a task on the worker runtime thread to handle an API
 /// request with error handling.
@@ -176,12 +177,27 @@ struct HttpRequestTracker {
     next_request_id:    u32,
 }
 
+/// Information about a received group ring that hasn't yet been accepted or cancelled.
+#[derive(Debug)]
+struct OutstandingGroupRing {
+    ring_id:  group_call::RingId,
+    received: Instant,
+}
+
+impl OutstandingGroupRing {
+    fn has_expired(&self) -> bool {
+        self.received.elapsed() >= TIME_OUT_PERIOD
+    }
+}
+
 pub struct CallManager<T>
 where
     T: Platform,
 {
     /// Interface to platform specific methods.
     platform:                  Arc<CallMutex<T>>,
+    /// The current user's UUID, or None if it's unknown.
+    self_uuid:                 Arc<CallMutex<Option<group_call::UserId>>>,
     /// Map of all 1:1 calls.
     call_by_call_id:           Arc<CallMutex<HashMap<CallId, Call<T>>>>,
     /// CallId of the active call.
@@ -190,6 +206,8 @@ where
     group_call_by_client_id:   Arc<CallMutex<HashMap<group_call::ClientId, group_call::Client>>>,
     /// Next value of the group call client id (sequential).
     next_group_call_client_id: Arc<CallMutex<u32>>,
+    /// Recent outstanding group rings, keyed by group ID.
+    outstanding_group_rings:   Arc<CallMutex<HashMap<group_call::GroupId, OutstandingGroupRing>>>,
     /// Busy indication if in either a direct or group call.
     busy:                      Arc<CallMutex<bool>>,
     /// Tokio runtime for back ground task execution.
@@ -252,10 +270,12 @@ where
     fn clone(&self) -> Self {
         Self {
             platform:                  Arc::clone(&self.platform),
+            self_uuid:                 Arc::clone(&self.self_uuid),
             call_by_call_id:           Arc::clone(&self.call_by_call_id),
             active_call_id:            Arc::clone(&self.active_call_id),
             group_call_by_client_id:   Arc::clone(&self.group_call_by_client_id),
             next_group_call_client_id: Arc::clone(&self.next_group_call_client_id),
+            outstanding_group_rings:   Arc::clone(&self.outstanding_group_rings),
             busy:                      Arc::clone(&self.busy),
             worker_runtime:            Arc::clone(&self.worker_runtime),
             message_queue:             Arc::clone(&self.message_queue),
@@ -323,6 +343,7 @@ where
 
         Ok(Self {
             platform:                  Arc::new(CallMutex::new(platform, "platform")),
+            self_uuid:                 Arc::new(CallMutex::new(None, "self_uuid")),
             call_by_call_id:           Arc::new(CallMutex::new(HashMap::new(), "call_by_call_id")),
             active_call_id:            Arc::new(CallMutex::new(None, "active_call_id")),
             group_call_by_client_id:   Arc::new(CallMutex::new(
@@ -330,6 +351,10 @@ where
                 "group_call_by_client_id",
             )),
             next_group_call_client_id: Arc::new(CallMutex::new(0, "next_group_call_client_id")),
+            outstanding_group_rings:   Arc::new(CallMutex::new(
+                HashMap::new(),
+                "outstanding_group_rings",
+            )),
             busy:                      Arc::new(CallMutex::new(false, "busy")),
             worker_runtime:            Arc::new(CallMutex::new(
                 Some(TaskQueueRuntime::new("call-manager-worker")?),
@@ -347,6 +372,13 @@ where
                 "http_request_tracker",
             )),
         })
+    }
+
+    /// Updates the current user's UUID.
+    pub fn set_self_uuid(&mut self, uuid: group_call::UserId) -> Result<()> {
+        info!("set_self_uuid():");
+        *self.self_uuid.lock()? = Some(uuid);
+        Ok(())
     }
 
     /// Create an outgoing call.
@@ -425,6 +457,65 @@ where
         handle_active_call_api!(self, CallManager::handle_hangup)
     }
 
+    fn remove_outstanding_group_ring(
+        &mut self,
+        group_id: group_call::GroupIdRef,
+        ring_id: group_call::RingId,
+    ) -> Result<()> {
+        let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
+        if let Some(ring) = outstanding_group_rings.get(group_id) {
+            if ring.ring_id == ring_id {
+                outstanding_group_rings.remove(group_id);
+            }
+        }
+        Ok(())
+    }
+
+    /// Cancel a group ring.
+    pub fn cancel_group_ring(
+        &mut self,
+        group_id: group_call::GroupId,
+        ring_id: group_call::RingId,
+        reason: Option<group_call::RingCancelReason>,
+    ) -> Result<()> {
+        info!("cancel_group_ring(): ring_id: {}", ring_id);
+
+        self.remove_outstanding_group_ring(&group_id, ring_id)?;
+
+        if let Some(reason) = reason {
+            let self_uuid = self
+                .self_uuid
+                .lock()
+                .expect("get self UUID")
+                .as_ref()
+                .cloned();
+            if let Some(self_uuid) = self_uuid {
+                use protobuf::signaling::call_message::ring_response::Type as ResponseType;
+                let response_type = match reason {
+                    group_call::RingCancelReason::DeclinedByUser => ResponseType::Declined,
+                    group_call::RingCancelReason::Busy => ResponseType::Busy,
+                };
+                let message = protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(group_id),
+                        ring_id:  Some(ring_id.into()),
+                        r#type:   Some(response_type.into()),
+                    }),
+                    ..Default::default()
+                };
+                self.send_signaling_message(
+                    self_uuid,
+                    message,
+                    group_call::SignalingMessageUrgency::HandleImmediately,
+                );
+            } else {
+                error!("self UUID unknown; cannot notify other devices of cancellation");
+            }
+        }
+
+        Ok(())
+    }
+
     /// Received offer from application.
     pub fn received_offer(
         &mut self,
@@ -489,7 +580,7 @@ where
         sender_device_id: DeviceId,
         local_device_id: DeviceId,
         message: Vec<u8>,
-        message_age_sec: u64,
+        message_age: Duration,
     ) -> Result<()> {
         handle_api!(
             self,
@@ -498,7 +589,7 @@ where
             sender_device_id,
             local_device_id,
             message,
-            message_age_sec
+            message_age
         )
     }
 
@@ -606,10 +697,16 @@ where
         // events on the FSMs.
         for i in 0..3 {
             info!("synchronize(): pass: {}", i);
-            let mut map_clone = self.call_by_call_id.lock()?.clone();
-            for (_, call) in map_clone.iter_mut() {
+            let mut calls = self.call_by_call_id.lock()?.clone();
+            for (_, call) in calls.iter_mut() {
                 info!("synchronize(): syncing call: {}", call.call_id());
                 call.synchronize()?;
+            }
+
+            let mut group_calls = self.group_call_by_client_id.lock()?.clone();
+            for (client_id, call) in group_calls.iter_mut() {
+                info!("synchronize(): syncing group call: {}", client_id);
+                call.synchronize();
             }
 
             self.sync_runtime()?;
@@ -640,6 +737,16 @@ where
             warn!("worker_spawn(): worker_runtime unavailable");
         }
         Ok(())
+    }
+
+    #[cfg(feature = "sim")]
+    pub fn pause_clock(&mut self) -> Result<crate::core::util::ClockPauseGuard> {
+        let mut worker_runtime = self.worker_runtime.lock()?;
+        if let Some(worker_runtime) = &mut *worker_runtime {
+            Ok(worker_runtime.pause_clock())
+        } else {
+            bail!("worker_spawn(): worker_runtime unavailable");
+        }
     }
 
     fn runtime_start_sync(&mut self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
@@ -872,7 +979,10 @@ where
         ringbench!(
             RingBench::App,
             RingBench::Cm,
-            format!("call()\t{}\t{}\t{}", call_id, call_media_type, local_device_id)
+            format!(
+                "call()\t{}\t{}\t{}",
+                call_id, call_media_type, local_device_id
+            )
         );
 
         // If not busy, create a new direct call.
@@ -901,7 +1011,7 @@ where
 
                     *busy = true;
                     *active_call_id = Some(call_id);
-                    call.start_timeout_timer(TIME_OUT_PERIOD_SEC)?;
+                    call.start_timeout_timer(TIME_OUT_PERIOD)?;
                     call.inject_start_call()
                 }
             }
@@ -1102,7 +1212,7 @@ where
             )
         );
 
-        if received.age > Duration::from_secs(MAX_MESSAGE_AGE_SEC) {
+        if received.age > MAX_MESSAGE_AGE {
             ringbenchx!(RingBench::Cm, RingBench::App, "offer expired");
             self.notify_application(&remote_peer, ApplicationEvent::ReceivedOfferExpired)?;
             // Notify application we are completely done with this remote.
@@ -1277,7 +1387,7 @@ where
 
                 *busy = true;
                 *active_call_id = Some(incoming_call_id);
-                incoming_call.start_timeout_timer(TIME_OUT_PERIOD_SEC)?;
+                incoming_call.start_timeout_timer(TIME_OUT_PERIOD)?;
                 incoming_call.handle_received_offer(received)?;
                 incoming_call.inject_start_call()?
             }
@@ -1413,7 +1523,7 @@ where
         _sender_device_id: DeviceId,
         _local_device_id: DeviceId,
         message: Vec<u8>,
-        _message_age_sec: u64,
+        message_age: Duration,
     ) -> Result<()> {
         info!("handle_received_call_message():");
 
@@ -1437,11 +1547,162 @@ where
                     };
                 }
             }
+            protobuf::signaling::CallMessage {
+                ring_intention: Some(mut ring_intention),
+                ..
+            } => {
+                use protobuf::signaling::call_message::ring_intention::Type as IntentionType;
+                match (
+                    &mut ring_intention.group_id,
+                    ring_intention.r#type.and_then(IntentionType::from_i32),
+                    ring_intention.ring_id,
+                ) {
+                    (Some(group_id), Some(ring_type), Some(ring_id)) => {
+                        let ring_update = match ring_type {
+                            IntentionType::Ring => {
+                                if message_age >= MAX_MESSAGE_AGE {
+                                    group_call::RingUpdate::ExpiredRequest
+                                } else if *self.busy.lock()? {
+                                    // Let your other devices know.
+                                    self.cancel_group_ring(
+                                        group_id.clone(),
+                                        ring_id.into(),
+                                        Some(group_call::RingCancelReason::Busy),
+                                    )?;
+                                    group_call::RingUpdate::BusyLocally
+                                } else {
+                                    self.start_group_ring(
+                                        group_id.clone(),
+                                        ring_id.into(),
+                                        sender_uuid.clone(),
+                                    )?;
+                                    group_call::RingUpdate::Requested
+                                }
+                            }
+                            IntentionType::Cancelled => {
+                                self.remove_outstanding_group_ring(group_id, ring_id.into())?;
+                                group_call::RingUpdate::CancelledByRinger
+                            }
+                        };
+
+                        self.platform.lock()?.group_call_ring_update(
+                            std::mem::take(group_id),
+                            ring_id.into(),
+                            sender_uuid,
+                            ring_update,
+                        );
+                    }
+                    _ => {
+                        warn!("Received malformed RingIntention: {:?}", ring_intention);
+                    }
+                }
+            }
+            protobuf::signaling::CallMessage {
+                ring_response: Some(mut ring_response),
+                ..
+            } => {
+                {
+                    let self_uuid = self.self_uuid.lock().expect("get self UUID");
+                    if self_uuid.as_ref() != Some(&sender_uuid) {
+                        info!(
+                            concat!(
+                                "Discarding ring response from another user {} for ring ID {}.",
+                                "If that's the current user, make sure you told CallManager the ",
+                                "current user's UUID!"
+                            ),
+                            uuid_to_string(&sender_uuid),
+                            ring_response.ring_id.unwrap_or(0)
+                        );
+                        return Ok(());
+                    }
+                }
+
+                use protobuf::signaling::call_message::ring_response::Type as ResponseType;
+                match (
+                    &mut ring_response.group_id,
+                    ring_response.r#type.and_then(ResponseType::from_i32),
+                    ring_response.ring_id,
+                ) {
+                    (Some(_), Some(ResponseType::Ringing), Some(_)) => {
+                        warn!("should not be notified of our own other devices ringing");
+                    }
+                    (Some(group_id), Some(response_type), Some(ring_id)) => {
+                        let ring_update = match response_type {
+                            ResponseType::Accepted => {
+                                group_call::RingUpdate::AcceptedOnAnotherDevice
+                            }
+                            ResponseType::Busy => group_call::RingUpdate::BusyOnAnotherDevice,
+                            ResponseType::Declined => {
+                                group_call::RingUpdate::DeclinedOnAnotherDevice
+                            }
+                            ResponseType::Ringing => unreachable!("handled above"),
+                        };
+                        self.remove_outstanding_group_ring(group_id, ring_id.into())?;
+                        self.platform.lock()?.group_call_ring_update(
+                            std::mem::take(group_id),
+                            ring_id.into(),
+                            sender_uuid,
+                            ring_update,
+                        );
+                    }
+                    _ => {
+                        warn!("Received malformed RingResponse: {:?}", ring_response);
+                    }
+                }
+            }
             _ => {
                 warn!("Received unknown CallMessage - ignoring");
             }
         };
         Ok(())
+    }
+
+    fn start_group_ring(
+        &mut self,
+        group_id: group_call::GroupId,
+        ring_id: group_call::RingId,
+        sender_uuid: group_call::UserId,
+    ) -> Result<()> {
+        {
+            let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
+            // Take this opportunity to clear the outstanding rings table
+            // (which should be small).
+            outstanding_group_rings.retain(|_group_id, ring| !ring.has_expired());
+            // If there's an existing, non-expired ring, don't replace it.
+            outstanding_group_rings
+                .entry(group_id.clone())
+                .or_insert(OutstandingGroupRing {
+                    ring_id,
+                    received: Instant::now(),
+                });
+        }
+
+        let mut self_for_timeout = self.clone();
+        self.worker_spawn(
+            async move {
+                tokio::time::sleep(TIME_OUT_PERIOD).await;
+                self_for_timeout.remove_outstanding_group_ring(&group_id, ring_id)?;
+                self_for_timeout.platform.lock()?.group_call_ring_update(
+                    group_id,
+                    ring_id,
+                    sender_uuid,
+                    group_call::RingUpdate::ExpiredRequest,
+                );
+                Ok(())
+            }
+            .map_err(|err: failure::Error| {
+                error!("error handling group ring timeout: {}", err);
+            }),
+        )?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "sim")]
+    pub fn age_all_outstanding_group_rings(&mut self, age: Duration) {
+        for (_group_id, ring) in self.outstanding_group_rings.lock().unwrap().iter_mut() {
+            ring.received -= age;
+        }
     }
 
     /// Handle receiving an HTTP response from the application.
@@ -2181,21 +2442,45 @@ where
     fn send_signaling_message(
         &mut self,
         recipient: group_call::UserId,
-        message: protobuf::group_call::DeviceToDevice,
+        call_message: protobuf::signaling::CallMessage,
+        urgency: group_call::SignalingMessageUrgency,
     ) {
         info!("send_signaling_message():");
         debug!("  recipient: {}", uuid_to_string(&recipient));
 
         let platform = self.platform.lock().expect("platform.lock()");
-        let call_message = protobuf::signaling::CallMessage {
-            group_call_message: Some(message),
-        };
         let mut bytes = BytesMut::with_capacity(call_message.encoded_len());
         let result = call_message.encode(&mut bytes);
         match result {
             Ok(()) => {
                 platform
-                    .send_call_message(recipient, bytes.to_vec())
+                    .send_call_message(recipient, bytes.to_vec(), urgency)
+                    .unwrap_or_else(|_| {
+                        error!("failed to send signaling message",);
+                    });
+            }
+            Err(_) => {
+                error!("Failed to encode signaling message");
+            }
+        }
+    }
+
+    fn send_signaling_message_to_group(
+        &mut self,
+        group_id: group_call::GroupId,
+        call_message: protobuf::signaling::CallMessage,
+        urgency: group_call::SignalingMessageUrgency,
+    ) {
+        info!("send_signaling_messag_to_group():");
+        debug!("  group ID: {}", uuid_to_string(&group_id));
+
+        let platform = self.platform.lock().expect("platform.lock()");
+        let mut bytes = BytesMut::with_capacity(call_message.encoded_len());
+        let result = call_message.encode(&mut bytes);
+        match result {
+            Ok(()) => {
+                platform
+                    .send_call_message_to_group(group_id, bytes.to_vec(), urgency)
                     .unwrap_or_else(|_| {
                         error!("failed to send signaling message",);
                     });
@@ -2280,6 +2565,13 @@ where
         let client_id = *next_group_call_client_id;
         *next_group_call_client_id += 1;
 
+        let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
+        // Take this opportunity to clear the outstanding rings table (which should be small).
+        outstanding_group_rings.retain(|_group_id, ring| !ring.has_expired());
+        let ring_id = outstanding_group_rings
+            .get(&group_id)
+            .map(|ring| ring.ring_id);
+
         let sfu_client = SfuClient::new(Box::new(self.clone()), sfu_url);
         let client = group_call::Client::start(
             group_id,
@@ -2287,9 +2579,11 @@ where
             Box::new(sfu_client),
             Box::new(self.clone()),
             self.busy.clone(),
+            self.self_uuid.clone(),
             peer_connection_factory,
             outgoing_audio_track,
             Some(outgoing_video_track),
+            ring_id,
         )?;
 
         let mut client_by_id = self.group_call_by_client_id.lock()?;
@@ -2373,6 +2667,15 @@ where
     pub fn disconnect(&mut self, client_id: group_call::ClientId) {
         info!("disconnect(): id: {}", client_id);
         group_call_api_handler!(self, client_id, disconnect);
+    }
+
+    pub fn group_ring(
+        &mut self,
+        client_id: group_call::ClientId,
+        recipient: Option<group_call::UserId>,
+    ) {
+        info!("group_ring(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, ring, recipient);
     }
 
     pub fn set_outgoing_audio_muted(&mut self, client_id: group_call::ClientId, muted: bool) {

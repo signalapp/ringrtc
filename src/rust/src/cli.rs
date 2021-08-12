@@ -537,7 +537,21 @@ impl SignalingSender for CallEndpoint {
         Ok(())
     }
 
-    fn send_call_message(&self, _recipient_id: group_call::UserId, _msg: Vec<u8>) -> Result<()> {
+    fn send_call_message(
+        &self,
+        _recipient_id: group_call::UserId,
+        _msg: Vec<u8>,
+        _urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn send_call_message_to_group(
+        &self,
+        _group_id: group_call::GroupId,
+        _msg: Vec<u8>,
+        _urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
         unimplemented!()
     }
 }

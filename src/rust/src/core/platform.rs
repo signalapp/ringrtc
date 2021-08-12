@@ -106,7 +106,21 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
 
     /// Send a generic call message to a recipient using the
     /// signaling channel.
-    fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()>;
+    fn send_call_message(
+        &self,
+        recipient_uuid: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()>;
+
+    /// Send a generic call message to all other members of a group using the
+    /// signaling channel.
+    fn send_call_message_to_group(
+        &self,
+        group_id: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()>;
 
     /// Send a generic HTTP request to the service using the application's
     /// HTTP stack and connection.
@@ -158,6 +172,14 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     }
 
     // Group Calls
+
+    fn group_call_ring_update(
+        &self,
+        group_id: group_call::GroupId,
+        ring_id: group_call::RingId,
+        sender: group_call::UserId,
+        update: group_call::RingUpdate,
+    );
 
     fn handle_peek_response(
         &self,

@@ -109,7 +109,7 @@ impl fmt::Display for CallState {
 /// client application.
 ///
 #[repr(C)]
-#[derive(Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ApplicationEvent {
     /// Inbound call only: The call signaling (ICE) is complete.
     LocalRinging = 0,
@@ -192,12 +192,6 @@ pub enum ApplicationEvent {
 
     /// Received an offer on a linked device from one that doesn't support multi-ring.
     IgnoreCallsFromNonMultiringCallers,
-}
-
-impl Clone for ApplicationEvent {
-    fn clone(&self) -> Self {
-        *self
-    }
 }
 
 impl fmt::Display for ApplicationEvent {

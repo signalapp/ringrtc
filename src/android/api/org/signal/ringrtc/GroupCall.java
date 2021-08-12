@@ -340,6 +340,21 @@ public final class GroupCall {
 
     /**
      *
+     * Sends a ring request to everyone in the group.
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void ringAll()
+        throws CallException
+    {
+        Log.i(TAG, "ring():");
+
+        ringrtcRing(nativeCallManager, this.clientId, null);
+    }
+
+    /**
+     *
      * Forces the group call object to send the latest media keys to
      * the SFU. This is useful when the application knows that a key
      * will have changed and needs the SFU to be updated.
@@ -931,6 +946,12 @@ public final class GroupCall {
         void ringrtcSetOutgoingVideoMuted(long nativeCallManager,
                                           long clientId,
                                           boolean muted)
+        throws CallException;
+
+    private native
+        void ringrtcRing(          long   nativeCallManager,
+                                   long   clientId,
+                         @Nullable byte[] recipient)
         throws CallException;
 
     private native

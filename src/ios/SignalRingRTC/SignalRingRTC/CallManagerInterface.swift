@@ -15,7 +15,8 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [Data])
     func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool)
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
-    func sendCallMessage(recipientUuid: UUID, message: Data)
+    func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
+    func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency)
     func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?)
     func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
@@ -24,6 +25,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
 
     // Group Calls
 
+    func groupCallRingUpdate(groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate)
     func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo)
 
     func requestMembershipProof(clientId: UInt32)
@@ -64,6 +66,7 @@ class CallManagerInterface {
             onSendHangup: callManagerInterfaceOnSendHangup,
             onSendBusy: callManagerInterfaceOnSendBusy,
             sendCallMessage: callManagerInterfaceSendCallMessage,
+            sendCallMessageToGroup: callManagerInterfaceSendCallMessageToGroup,
             sendHttpRequest: callManagerInterfaceSendHttpRequest,
             onCreateConnectionInterface: callManagerInterfaceOnCreateConnectionInterface,
             onCreateMediaStreamInterface: callManagerInterfaceOnCreateMediaStreamInterface,
@@ -73,6 +76,7 @@ class CallManagerInterface {
 
             // Group Calls
 
+            groupCallRingUpdate: callManagerInterfaceGroupCallRingUpdate,
             handlePeekResponse: callManagerInterfaceHandlePeekResponse,
 
             requestMembershipProof: callManagerInterfaceRequestMembershipProof,
@@ -148,12 +152,20 @@ class CallManagerInterface {
         delegate.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
     }
 
-    func sendCallMessage(recipientUuid: UUID, message: Data) {
+    func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.sendCallMessage(recipientUuid: recipientUuid, message: message)
+        delegate.sendCallMessage(recipientUuid: recipientUuid, message: message, urgency: urgency)
+    }
+
+    func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.sendCallMessageToGroup(groupId: groupId, message: message, urgency: urgency)
     }
 
     func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
@@ -197,6 +209,14 @@ class CallManagerInterface {
     }
 
     // Group Calls
+
+    func groupCallRingUpdate(groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.groupCallRingUpdate(groupId: groupId, ringId: ringId, sender: sender, update: update)
+    }
 
     func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo) {
         guard let delegate = self.callManagerObserverDelegate else {
@@ -469,7 +489,7 @@ func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UI
     obj.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
 }
 
-func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recipientUuid: AppByteSlice, message: AppByteSlice) {
+func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recipientUuid: AppByteSlice, message: AppByteSlice, urgency: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -484,7 +504,35 @@ func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recip
         return
     }
 
-    obj.sendCallMessage(recipientUuid: recipient.uuid, message: message)
+    guard let urgency = CallMessageUrgency(rawValue: urgency) else {
+        owsFailDebug("unexpected urgency")
+        return
+    }
+
+    obj.sendCallMessage(recipientUuid: recipient.uuid, message: message, urgency: urgency)
+}
+
+func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, message: AppByteSlice, urgency: Int32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let groupId = groupId.asData() else {
+        return
+    }
+
+    guard let message = message.asData() else {
+        return
+    }
+
+    guard let urgency = CallMessageUrgency(rawValue: urgency) else {
+        owsFailDebug("unexpected urgency")
+        return
+    }
+
+    obj.sendCallMessageToGroup(groupId: groupId, message: message, urgency: urgency)
 }
 
 func callManagerInterfaceSendHttpRequest(object: UnsafeMutableRawPointer?, requestId: UInt32, url: AppByteSlice, method: Int32, headerArray: AppHeaderArray, body: AppByteSlice) {
@@ -795,6 +843,31 @@ func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointe
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     obj.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
+}
+
+func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, ringId: UInt64, sender: AppByteSlice, update: Int32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let groupId = groupId.asData() else {
+        owsFailDebug("groupId was unexpectedly empty")
+        return
+    }
+
+    guard let sender = sender.asData() else {
+        owsFailDebug("sender was unexpectedly empty")
+        return
+    }
+
+    guard let update = RingUpdate(rawValue: update) else {
+        owsFailDebug("unrecognized update")
+        return
+    }
+
+    obj.groupCallRingUpdate(groupId: groupId, ringId: ringId, sender: sender.uuid, update: update)
 }
 
 func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32) {

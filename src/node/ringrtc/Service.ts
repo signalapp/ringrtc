@@ -29,12 +29,15 @@ class NativeCallManager {
 
 // Mirror methods onto NativeCallManager.
 // This is done through direct assignment rather than wrapper methods to avoid indirection.
+(NativeCallManager.prototype as any).setSelfUuid = Native.cm_setSelfUuid;
 (NativeCallManager.prototype as any).createOutgoingCall =
   Native.cm_createOutgoingCall;
 (NativeCallManager.prototype as any).proceed = Native.cm_proceed;
 (NativeCallManager.prototype as any).accept = Native.cm_accept;
 (NativeCallManager.prototype as any).ignore = Native.cm_ignore;
 (NativeCallManager.prototype as any).hangup = Native.cm_hangup;
+(NativeCallManager.prototype as any).cancelGroupRing =
+  Native.cm_cancelGroupRing;
 (NativeCallManager.prototype as any).signalingMessageSent =
   Native.cm_signalingMessageSent;
 (NativeCallManager.prototype as any).signalingMessageSendFailed =
@@ -72,6 +75,7 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).join = Native.cm_join;
 (NativeCallManager.prototype as any).leave = Native.cm_leave;
 (NativeCallManager.prototype as any).disconnect = Native.cm_disconnect;
+(NativeCallManager.prototype as any).groupRing = Native.cm_groupRing;
 (NativeCallManager.prototype as any).setOutgoingAudioMuted =
   Native.cm_setOutgoingAudioMuted;
 (NativeCallManager.prototype as any).setOutgoingVideoMuted =
@@ -168,7 +172,26 @@ export class RingRTCType {
       ) => void)
     | null = null;
   handleSendCallMessage:
-    | ((recipientUuid: Buffer, message: Buffer) => void)
+    | ((
+        recipientUuid: Buffer,
+        message: Buffer,
+        urgency: CallMessageUrgency
+      ) => void)
+    | null = null;
+  handleSendCallMessageToGroup:
+    | ((
+        groupId: Buffer,
+        message: Buffer,
+        urgency: CallMessageUrgency
+      ) => void)
+    | null = null;
+  handleGroupCallRingUpdate:
+    | ((
+        groupId: Buffer,
+        ringId: string,
+        sender: Buffer,
+        update: RingUpdate
+      ) => void)
     | null = null;
 
   constructor() {
@@ -184,6 +207,13 @@ export class RingRTCType {
     setTimeout(() => {
       this.pollEvery(intervalMs);
     }, intervalMs);
+  }
+
+  // Called by UX
+  setSelfUuid(
+    uuid: UserId
+  ): void {
+    this.callManager.setSelfUuid(uuid)
   }
 
   // Called by UX
@@ -213,6 +243,13 @@ export class RingRTCType {
     call.outgoingAudioEnabled = true;
     call.outgoingVideoEnabled = isVideoCall;
     return call;
+  }
+
+  // Called by UX
+  cancelGroupRing(groupId: GroupId, ringId: string, reason: RingCancelReason | null): void {
+    silly_deadlock_protection(() => {
+      this.callManager.cancelGroupRing(groupId, ringId, reason);
+    });
   }
 
   // Called by Rust
@@ -747,6 +784,22 @@ export class RingRTCType {
   }
 
   // Called by Rust
+  groupCallRingUpdate(
+    groupId: GroupId,
+    ringId: string,
+    sender: GroupCallUserId,
+    state: RingUpdate
+  ): void {
+    silly_deadlock_protection(() => {
+      if (this.handleGroupCallRingUpdate) {
+        this.handleGroupCallRingUpdate(groupId, ringId, sender, state);
+      } else {
+        console.log('RingRTC.handleGroupCallRingUpdate is not set!');
+      }
+    });
+  }
+
+  // Called by Rust
   onLogMessage(
     level: number,
     fileName: string,
@@ -948,11 +1001,36 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  sendCallMessage(recipientUuid: Buffer, message: Buffer): void {
+  sendCallMessage(
+    recipientUuid: Buffer,
+    message: Buffer,
+    urgency: CallMessageUrgency
+  ): void {
     if (this.handleSendCallMessage) {
-      this.handleSendCallMessage(recipientUuid, message);
+      this.handleSendCallMessage(
+        recipientUuid,
+        message,
+        urgency
+      );
     } else {
       console.log('RingRTC.handleSendCallMessage is not set!');
+    }
+  }
+
+  // Called by Rust
+  sendCallMessageToGroup(
+    groupId: Buffer,
+    message: Buffer,
+    urgency: CallMessageUrgency
+  ): void {
+    if (this.handleSendCallMessageToGroup) {
+      this.handleSendCallMessageToGroup(
+        groupId,
+        message,
+        urgency
+      );
+    } else {
+      console.log('RingRTC.handleSendCallMessageToGroup is not set!');
     }
   }
 
@@ -1396,6 +1474,28 @@ export enum GroupCallEndReason {
   HasMaxDevices = 14,
 }
 
+export enum CallMessageUrgency {
+  Droppable = 0,
+  HandleImmediately,
+}
+
+export enum RingUpdate {
+  /// The sender is trying to ring this user.
+  Requested = 0,
+  /// The sender tried to ring this user, but it's been too long.
+  ExpiredRequest,
+  /// Call was accepted elsewhere by a different device.
+  AcceptedOnAnotherDevice,
+  /// Call was declined elsewhere by a different device.
+  DeclinedOnAnotherDevice,
+  /// This device is currently on a different call.
+  BusyLocally,
+  /// A different device is currently on a different call.
+  BusyOnAnotherDevice,
+  /// The sender cancelled the ring request.
+  CancelledByRinger,
+}
+
 // HTTP request methods.
 export enum HttpMethod {
   Get = 0,
@@ -1579,6 +1679,11 @@ export class GroupCall {
       isScreenShare
     );
     this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by UI
+  ringAll(): void {
+    this._callManager.groupRing(this._clientId, undefined);
   }
 
   // Called by UI
@@ -1805,7 +1910,16 @@ export enum BandwidthMode {
   Normal = 2,
 }
 
+/// Describes why a ring was cancelled.
+export enum RingCancelReason {
+  /// The user explicitly clicked "Decline".
+  DeclinedByUser = 0,
+  /// The device is busy with another call.
+  Busy,
+}
+
 export interface CallManager {
+  setSelfUuid(uuid: UserId): void;
   createOutgoingCall(
     remoteUserId: UserId,
     isVideoCall: boolean,
@@ -1822,6 +1936,7 @@ export interface CallManager {
   accept(callId: CallId): void;
   ignore(callId: CallId): void;
   hangup(): void;
+  cancelGroupRing(groupId: GroupId, ringId: string, reason: RingCancelReason | null): void;
   signalingMessageSent(callId: CallId): void;
   signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
@@ -1895,6 +2010,7 @@ export interface CallManager {
     clientId: GroupCallClientId,
     isScreenShare: boolean
   ): void;
+  groupRing(clientId: GroupCallClientId, recipient: Buffer | undefined): void;
   resendMediaKeys(clientId: GroupCallClientId): void;
   setBandwidthMode(
     clientId: GroupCallClientId,
@@ -1985,7 +2101,16 @@ export interface CallManagerCallbacks {
     callId: CallId,
     broadcast: boolean
   ): void;
-  sendCallMessage(recipientUuid: Buffer, message: Buffer): void;
+  sendCallMessage(
+    recipientUuid: Buffer,
+    message: Buffer,
+    urgency: CallMessageUrgency
+  ): void;
+  sendCallMessageToGroup(
+    groupId: Buffer,
+    message: Buffer,
+    urgency: CallMessageUrgency
+  ): void;
   sendHttpRequest(
     requestId: number,
     url: string,

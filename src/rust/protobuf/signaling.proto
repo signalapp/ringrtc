@@ -58,5 +58,31 @@ message ConnectionParametersV4 {
 // A serialized one of these goes into the "Opaque" field in the CallingMessage variant
 // in Signal protocol messages.
 message CallMessage {
+  message RingIntention {
+    enum Type {
+      RING = 0;
+      CANCELLED = 1;
+    }
+
+    optional bytes group_id = 1;
+    optional Type type = 2;
+    optional fixed64 ring_id = 3;
+  }
+
+  message RingResponse {
+    enum Type {
+      RINGING = 0;
+      ACCEPTED = 1;
+      DECLINED = 2;
+      BUSY = 3;
+    }
+
+    optional bytes group_id = 1;
+    optional Type type = 2;
+    optional fixed64 ring_id = 3;
+  }
+
   optional group_call.DeviceToDevice group_call_message = 1;
+  optional RingIntention ring_intention = 2;
+  optional RingResponse ring_response = 3;
 }

@@ -65,6 +65,21 @@ struct SimStats {
     stream_count:                 AtomicUsize,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct GroupCallRingUpdate {
+    pub group_id: group_call::GroupId,
+    pub ring_id:  group_call::RingId,
+    pub sender:   group_call::UserId,
+    pub update:   group_call::RingUpdate,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct OutgoingCallMessage {
+    pub recipient: group_call::UserId,
+    pub message:   Vec<u8>,
+    pub urgency:   group_call::SignalingMessageUrgency,
+}
+
 /// Simulation implementation of platform::Platform.
 #[derive(Clone, Default)]
 pub struct SimPlatform {
@@ -79,6 +94,10 @@ pub struct SimPlatform {
     event_map:                    Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
     /// Track whether disconnecting of incoming media happened
     incoming_media_disconnected:  Arc<AtomicBool>,
+    /// Track group call ring updates
+    group_call_ring_updates:      Arc<Mutex<Vec<GroupCallRingUpdate>>>,
+    /// Track outgoing opaque messages
+    outgoing_call_messages:       Arc<Mutex<Vec<OutgoingCallMessage>>>,
     /// Call Manager
     call_manager:                 Arc<Mutex<Option<CallManager<Self>>>>,
     /// True to manually require message_sent() to be invoked for Ice messages.
@@ -334,7 +353,29 @@ impl Platform for SimPlatform {
         }
     }
 
-    fn send_call_message(&self, _recipient_uuid: Vec<u8>, _message: Vec<u8>) -> Result<()> {
+    fn send_call_message(
+        &self,
+        recipient: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
+        self.outgoing_call_messages
+            .lock()
+            .unwrap()
+            .push(OutgoingCallMessage {
+                recipient,
+                message,
+                urgency,
+            });
+        Ok(())
+    }
+
+    fn send_call_message_to_group(
+        &self,
+        _group_id: Vec<u8>,
+        _message: Vec<u8>,
+        _urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
         unimplemented!()
     }
 
@@ -346,7 +387,8 @@ impl Platform for SimPlatform {
         _headers: HashMap<String, String>,
         _body: Option<Vec<u8>>,
     ) -> Result<()> {
-        unimplemented!()
+        // Do nothing.
+        Ok(())
     }
 
     fn create_incoming_media(
@@ -414,12 +456,14 @@ impl Platform for SimPlatform {
         }
     }
 
-    fn request_membership_proof(&self, _client_id: group_call::ClientId) {
-        unimplemented!()
+    fn request_membership_proof(&self, client_id: group_call::ClientId) {
+        let mut cm = self.call_manager.lock().unwrap();
+        cm.as_mut().unwrap().set_membership_proof(client_id, vec![]);
     }
 
-    fn request_group_members(&self, _client_id: group_call::ClientId) {
-        unimplemented!()
+    fn request_group_members(&self, client_id: group_call::ClientId) {
+        let mut cm = self.call_manager.lock().unwrap();
+        cm.as_mut().unwrap().set_group_members(client_id, vec![]);
     }
 
     fn handle_connection_state_changed(
@@ -435,7 +479,6 @@ impl Platform for SimPlatform {
         _client_id: group_call::ClientId,
         _join_state: group_call::JoinState,
     ) {
-        unimplemented!()
     }
 
     fn handle_remote_devices_changed(
@@ -444,7 +487,6 @@ impl Platform for SimPlatform {
         _remote_device_states: &[group_call::RemoteDeviceState],
         _reason: group_call::RemoteDevicesChangedReason,
     ) {
-        unimplemented!()
     }
 
     fn handle_incoming_video_track(
@@ -482,6 +524,24 @@ impl Platform for SimPlatform {
 
     fn handle_ended(&self, _client_id: group_call::ClientId, _reason: group_call::EndReason) {
         unimplemented!()
+    }
+
+    fn group_call_ring_update(
+        &self,
+        group_id: group_call::GroupId,
+        ring_id: group_call::RingId,
+        sender: group_call::UserId,
+        update: group_call::RingUpdate,
+    ) {
+        self.group_call_ring_updates
+            .lock()
+            .unwrap()
+            .push(GroupCallRingUpdate {
+                group_id,
+                ring_id,
+                sender,
+                update,
+            });
     }
 }
 
@@ -622,5 +682,13 @@ impl SimPlatform {
 
     pub fn call_concluded_count(&self) -> usize {
         self.stats.call_concluded.load(Ordering::Acquire)
+    }
+
+    pub fn take_group_call_ring_updates(&self) -> Vec<GroupCallRingUpdate> {
+        std::mem::take(&mut *self.group_call_ring_updates.lock().unwrap())
+    }
+
+    pub fn take_outgoing_call_messages(&self) -> Vec<OutgoingCallMessage> {
+        std::mem::take(&mut *self.outgoing_call_messages.lock().unwrap())
     }
 }

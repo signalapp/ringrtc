@@ -94,6 +94,22 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetSelfUuid(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    uuid: jbyteArray,
+) {
+    match call_manager::set_self_uuid(&env, call_manager as *mut AndroidCallManager, uuid) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCall(
     env: JNIEnv,
     _object: JObject,
@@ -180,6 +196,30 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcHangup(
     call_manager: jlong,
 ) {
     match call_manager::hangup(call_manager as *mut AndroidCallManager) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCancelGroupRing(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    group_id: jbyteArray,
+    ring_id: jlong,
+    reason: jint,
+) {
+    match call_manager::cancel_group_ring(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        group_id,
+        ring_id,
+        reason,
+    ) {
         Ok(v) => v,
         Err(e) => {
             error::throw_error(&env, e);
@@ -720,6 +760,28 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingVid
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
         muted,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRing(
+    env: JNIEnv<'static>,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    recipient: jbyteArray,
+) {
+    match call_manager::group_ring(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        recipient,
     ) {
         Ok(v) => v,
         Err(e) => {

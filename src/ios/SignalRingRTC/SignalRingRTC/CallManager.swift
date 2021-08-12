@@ -106,6 +106,36 @@ public enum HangupType: Int32 {
     case needPermission = 4
 }
 
+public enum CallMessageUrgency: Int32 {
+    case droppable = 0
+    case handleImmediately
+}
+
+/// Describes why a ring was cancelled.
+public enum RingCancelReason: Int32 {
+    /// The user explicitly clicked "Decline".
+    case declinedByUser = 0
+    /// The device is busy with another call.
+    case busy
+}
+
+public enum RingUpdate: Int32 {
+    /// The sender is trying to ring this user.
+    case requested = 0
+    /// The sender tried to ring this user, but it's been too long.
+    case expiredRing
+    /// Call was accepted elsewhere by a different device.
+    case acceptedOnAnotherDevice
+    /// Call was declined elsewhere by a different device.
+    case declinedOnAnotherDevice
+    /// This device is currently on a different call.
+    case busyLocally
+    /// A different device is currently on a different call.
+    case busyOnAnotherDevice
+    /// The sender cancelled the ring request.
+    case cancelledByRinger
+}
+
 /// Contains the list of currently joined participants and related info about the call in progress.
 public struct PeekInfo {
     public let joinedMembers: [UUID]
@@ -221,7 +251,14 @@ public protocol CallManagerDelegate: AnyObject {
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessage recipientUuid: UUID, message: Data)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessage recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
+
+    /**
+     * A call message should be sent to all other members of the given group.
+     * Invoked on the main thread, asynchronously.
+     * If there is any error, the UI can reset UI state and invoke the reset() API.
+     */
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency)
 
     /**
      * A HTTP request should be sent to the given url.
@@ -250,6 +287,15 @@ public protocol CallManagerDelegate: AnyObject {
      * Invoked on the main thread, asychronously.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onAddRemoteVideoTrack call: CallManagerDelegateCallType, track: RTCVideoTrack)
+
+    /**
+     * An update from `sender` has come in for the ring in `groupId` identified by `ringId`.
+     *
+     * `sender` will be the current user's ID if the update came from another device.
+     *
+     * Invoked on the main thread, asynchronously.
+     */
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, didUpdateRingForGroup groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate)
 }
 
 public protocol CallManagerCallReference: AnyObject { }
@@ -294,6 +340,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         self.ringRtcCallManager = ringRtcCallManager
 
         Logger.debug("object! CallManager created... \(ObjectIdentifier(self))")
+    }
+
+    public func setSelfUuid(_ uuid: UUID) {
+        AssertIsOnMainThread()
+        Logger.debug("setSelfUuid")
+
+        let uuidSlice = allocatedAppByteSliceFromData(maybe_data: uuid.data)
+        defer { uuidSlice.bytes?.deallocate() }
+
+        let retPtr = ringrtcSetSelfUuid(ringRtcCallManager, uuidSlice)
+        if retPtr == nil {
+            owsFailDebug("setSelfUuid had an error")
+        }
     }
 
     deinit {
@@ -346,6 +405,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let retPtr = ringrtcHangup(ringRtcCallManager)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "hangup() function failure")
+        }
+    }
+
+    public func cancelGroupRing(groupId: Data, ringId: UInt64, reason: RingCancelReason?) throws {
+        AssertIsOnMainThread()
+        Logger.debug("cancelGroupRing")
+
+        let groupId = allocatedAppByteSliceFromData(maybe_data: groupId)
+        defer { groupId.bytes?.deallocate() }
+
+        let retPtr = ringrtcCancelGroupRing(ringRtcCallManager, groupId, ringId, reason?.rawValue ?? -1)
+        if retPtr == nil {
+            throw CallManagerError.apiFailed(description: "cancelGroupRing() function failure")
         }
     }
 
@@ -819,7 +891,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func sendCallMessage(recipientUuid: UUID, message: Data) {
+    func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency) {
         Logger.debug("sendCallMessage")
 
         DispatchQueue.main.async {
@@ -827,7 +899,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
             guard let delegate = self.delegate else { return }
 
-            delegate.callManager(self, shouldSendCallMessage: recipientUuid, message: message)
+            delegate.callManager(self, shouldSendCallMessage: recipientUuid, message: message, urgency: urgency)
+        }
+    }
+
+    func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency) {
+        Logger.debug("sendCallMessageToGroup")
+
+        DispatchQueue.main.async {
+            Logger.debug("sendCallMessageToGroup - main.async")
+
+            guard let delegate = self.delegate else { return }
+
+            delegate.callManager(self, shouldSendCallMessageToGroup: groupId, message: message, urgency: urgency)
         }
     }
 
@@ -840,6 +924,16 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             delegate.callManager(self, shouldSendHttpRequest: requestId, url: url, method: method, headers: headers, body: body)
+        }
+    }
+
+    func groupCallRingUpdate(groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate) {
+        Logger.debug("onSendHttpRequest")
+
+        DispatchQueue.main.async {
+            Logger.debug("onSendHttpRequest - main.async")
+
+            self.delegate?.callManager(self, didUpdateRingForGroup: groupId, ringId: ringId, sender: sender, update: update)
         }
     }
 

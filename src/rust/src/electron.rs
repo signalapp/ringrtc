@@ -6,6 +6,7 @@
 use lazy_static::lazy_static;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
+use std::convert::TryFrom;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -22,7 +23,7 @@ use crate::common::{
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::group_call;
-use crate::core::group_call::UserId;
+use crate::core::group_call::{GroupId, SignalingMessageUrgency, UserId};
 use crate::core::signaling;
 use crate::native::{
     CallState,
@@ -98,7 +99,18 @@ pub enum Event {
     SendSignaling(PeerId, Option<DeviceId>, CallId, signaling::Message),
     // The JavaScript should send the following opaque call message to the
     // given recipient UUID.
-    SendCallMessage(UserId, Vec<u8>),
+    SendCallMessage {
+        recipient_uuid: UserId,
+        message:        Vec<u8>,
+        urgency:        group_call::SignalingMessageUrgency,
+    },
+    // The JavaScript should send the following opaque call message to all
+    // other members of the given group
+    SendCallMessageToGroup {
+        group_id: GroupId,
+        message:  Vec<u8>,
+        urgency:  group_call::SignalingMessageUrgency,
+    },
     // The call with the given remote PeerId has changed state.
     // We assume only one call per remote PeerId at a time.
     CallState(PeerId, CallState),
@@ -111,13 +123,13 @@ pub enum Event {
     // The group call has an update.
     GroupUpdate(GroupUpdate),
     // JavaScript should initiate an HTTP request.
-    SendHttpRequest(
-        u32,
-        String,
-        HttpMethod,
-        HashMap<String, String>,
-        Option<Vec<u8>>,
-    ),
+    SendHttpRequest {
+        request_id: u32,
+        url:        String,
+        method:     HttpMethod,
+        headers:    HashMap<String, String>,
+        body:       Option<Vec<u8>>,
+    },
 }
 
 impl SignalingSender for Sender<Event> {
@@ -137,8 +149,31 @@ impl SignalingSender for Sender<Event> {
         Ok(())
     }
 
-    fn send_call_message(&self, recipient_uuid: UserId, msg: Vec<u8>) -> Result<()> {
-        self.send(Event::SendCallMessage(recipient_uuid, msg))?;
+    fn send_call_message(
+        &self,
+        recipient_uuid: UserId,
+        message: Vec<u8>,
+        urgency: SignalingMessageUrgency,
+    ) -> Result<()> {
+        self.send(Event::SendCallMessage {
+            recipient_uuid,
+            message,
+            urgency,
+        })?;
+        Ok(())
+    }
+
+    fn send_call_message_to_group(
+        &self,
+        group_id: GroupId,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
+        self.send(Event::SendCallMessageToGroup {
+            group_id,
+            message,
+            urgency,
+        })?;
         Ok(())
     }
 }
@@ -172,9 +207,13 @@ impl HttpClient for Sender<Event> {
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
     ) -> Result<()> {
-        self.send(Event::SendHttpRequest(
-            request_id, url, method, headers, body,
-        ))?;
+        self.send(Event::SendHttpRequest {
+            request_id,
+            url,
+            method,
+            headers,
+            body,
+        })?;
         Ok(())
     }
 }
@@ -398,6 +437,21 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn setSelfUuid(mut cx: FunctionContext) -> JsResult<JsValue> {
+    debug!("JsCallManager.setSelfUuid()");
+
+    let uuid = cx.argument::<JsBuffer>(0)?;
+    let uuid = cx.borrow(&uuid, |handle| handle.as_slice().to_vec());
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint.call_manager.set_self_uuid(uuid)?;
+        Ok(())
+    })
+    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn createOutgoingCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     let peer_id = cx.argument::<JsString>(0)?.value(&mut cx) as PeerId;
     let video_enabled = cx.argument::<JsBoolean>(1)?.value(&mut cx);
@@ -426,6 +480,42 @@ fn createOutgoingCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     })
     .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
     Ok(create_id_arg(&mut cx, call_id.as_u64()))
+}
+
+#[allow(non_snake_case)]
+fn cancelGroupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
+    debug!("JsCallManager.cancelGroupRing()");
+
+    let group_id = cx.argument::<JsBuffer>(0)?;
+    let group_id = cx.borrow(&group_id, |handle| handle.as_slice().to_vec());
+    let ring_id = cx
+        .argument::<JsString>(1)?
+        .value(&mut cx)
+        .parse::<u64>()
+        .or_else(|_| cx.throw_error("invalid serial number"))?;
+    let reason_or_null = cx.argument::<JsValue>(2)?;
+    let reason = match reason_or_null.downcast::<JsNull, _>(&mut cx) {
+        Ok(_) => None,
+        Err(_) => {
+            // By checking 'null' first, we get an error message that mentions 'number'.
+            let reason = reason_or_null
+                .downcast_or_throw::<JsNumber, _>(&mut cx)?
+                .value(&mut cx);
+            Some(
+                group_call::RingCancelReason::try_from(reason as i32)
+                    .or_else(|err| cx.throw_error(err.to_string()))?,
+            )
+        }
+    };
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .call_manager
+            .cancel_group_ring(group_id, ring_id.into(), reason)?;
+        Ok(())
+    })
+    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
 }
 
 #[allow(non_snake_case)]
@@ -762,7 +852,7 @@ fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
             remote_device_id,
             local_device_id,
             data,
-            message_age_sec,
+            Duration::from_secs(message_age_sec),
         )?;
         Ok(())
     })
@@ -1093,6 +1183,27 @@ fn setOutgoingGroupCallVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<J
         endpoint
             .call_manager
             .set_sharing_screen(client_id, is_screenshare);
+        Ok(())
+    })
+    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn groupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let recipient_or_undef = cx.argument::<JsValue>(1)?;
+    let recipient = match recipient_or_undef.downcast::<JsUndefined, _>(&mut cx) {
+        Ok(_) => None,
+        Err(_) => {
+            // By checking 'undefined' first, we get an error message that mentions Buffer.
+            let recipient_buffer = recipient_or_undef.downcast_or_throw::<JsBuffer, _>(&mut cx)?;
+            Some(cx.borrow(&recipient_buffer, |handle| handle.as_slice().to_vec()))
+        }
+    };
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint.call_manager.group_ring(client_id, recipient);
         Ok(())
     })
     .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
@@ -1624,7 +1735,13 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::SendHttpRequest(request_id, url, method, headers, body) => {
+            Event::SendHttpRequest {
+                request_id,
+                url,
+                method,
+                headers,
+                body,
+            } => {
                 let method_name = "sendHttpRequest";
                 // Pass headers as an object with the Fetch API. Only the last value will be sent
                 // in case of duplicate headers.
@@ -1659,15 +1776,37 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::SendCallMessage(remote_user_uuid, message) => {
+            Event::SendCallMessage {
+                recipient_uuid,
+                message,
+                urgency,
+            } => {
                 let method_name = "sendCallMessage";
-                let remote_user_uuid = to_js_buffer(&mut cx, &remote_user_uuid);
+                let recipient_uuid = to_js_buffer(&mut cx, &recipient_uuid);
                 let message = to_js_buffer(&mut cx, &message);
-                let args: Vec<Handle<JsValue>> = vec![remote_user_uuid, message];
+                let urgency = cx.number(urgency as i32).upcast();
+                let args: Vec<Handle<JsValue>> = vec![recipient_uuid, message, urgency];
                 let method = *observer
                     .get(&mut cx, method_name)?
                     .downcast::<JsFunction, _>(&mut cx)
                     .expect("sendCallMessage is a function");
+                method.call(&mut cx, observer, args)?;
+            }
+
+            Event::SendCallMessageToGroup {
+                group_id,
+                message,
+                urgency,
+            } => {
+                let method_name = "sendCallMessageToGroup";
+                let group_id = to_js_buffer(&mut cx, &group_id);
+                let message = to_js_buffer(&mut cx, &message);
+                let urgency = cx.number(urgency as i32).upcast();
+                let args: Vec<Handle<JsValue>> = vec![group_id, message, urgency];
+                let method = *observer
+                    .get(&mut cx, method_name)?
+                    .downcast::<JsFunction, _>(&mut cx)
+                    .expect("sendCallMessageToGroup is a function");
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1720,7 +1859,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let args: Vec<Handle<JsValue>> = vec![
                     cx.number(client_id).upcast(),
                     cx.number(match join_state {
-                        group_call::JoinState::NotJoined => 0,
+                        group_call::JoinState::NotJoined(_) => 0,
                         group_call::JoinState::Joining => 1,
                         group_call::JoinState::Joined(_, _) => 2,
                     })
@@ -1829,14 +1968,14 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
             }
 
-            Event::GroupUpdate(GroupUpdate::PeekChanged(
+            Event::GroupUpdate(GroupUpdate::PeekChanged {
                 client_id,
                 members,
                 creator,
                 era_id,
                 max_devices,
                 device_count,
-            )) => {
+            }) => {
                 let method_name = "handlePeekChanged";
 
                 let js_members = JsArray::new(&mut cx, members.len() as u32);
@@ -1881,14 +2020,14 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::GroupUpdate(GroupUpdate::PeekResponse(
+            Event::GroupUpdate(GroupUpdate::PeekResponse {
                 request_id,
                 members,
                 creator,
                 era_id,
                 max_devices,
                 device_count,
-            )) => {
+            }) => {
                 let method_name = "handlePeekResponse";
                 let js_info = cx.empty_object();
                 let js_members = JsArray::new(&mut cx, members.len() as u32);
@@ -1953,6 +2092,28 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     .expect(&error_message);
                 method.call(&mut cx, observer, args)?;
             }
+
+            Event::GroupUpdate(GroupUpdate::Ring {
+                group_id,
+                ring_id,
+                sender,
+                update,
+            }) => {
+                let method_name = "groupCallRingUpdate";
+
+                let args = [
+                    to_js_buffer(&mut cx, &group_id).upcast::<JsValue>(),
+                    cx.string(ring_id.to_string()).upcast(),
+                    to_js_buffer(&mut cx, &sender).upcast(),
+                    cx.number(update as i32).upcast(),
+                ];
+                let error_message = format!("{} is a function", method_name);
+                let method = *observer
+                    .get(&mut cx, method_name)?
+                    .downcast::<JsFunction, _>(&mut cx)
+                    .expect(&error_message);
+                method.call(&mut cx, observer, args)?;
+            }
         }
     }
     Ok(cx.undefined().upcast())
@@ -1963,7 +2124,9 @@ register_module!(mut cx, {
     let js_property_key = cx.string(CALL_ENDPOINT_PROPERTY_KEY);
     cx.export_value("callEndpointPropertyKey", js_property_key)?;
 
+    cx.export_function("cm_setSelfUuid", setSelfUuid)?;
     cx.export_function("cm_createOutgoingCall", createOutgoingCall)?;
+    cx.export_function("cm_cancelGroupRing", cancelGroupRing)?;
     cx.export_function("cm_proceed", proceed)?;
     cx.export_function("cm_accept", accept)?;
     cx.export_function("cm_ignore", ignore)?;
@@ -2001,6 +2164,7 @@ register_module!(mut cx, {
         "cm_setOutgoingGroupCallVideoIsScreenShare",
         setOutgoingGroupCallVideoIsScreenShare,
     )?;
+    cx.export_function("cm_groupRing", groupRing)?;
     cx.export_function("cm_resendMediaKeys", resendMediaKeys)?;
     cx.export_function("cm_setBandwidthMode", setBandwidthMode)?;
     cx.export_function("cm_requestVideo", requestVideo)?;

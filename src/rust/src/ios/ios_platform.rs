@@ -343,13 +343,37 @@ impl Platform for IosPlatform {
         Ok(())
     }
 
-    fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()> {
+    fn send_call_message(
+        &self,
+        recipient_uuid: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
         info!("send_call_message():");
 
         (self.app_interface.sendCallMessage)(
             self.app_interface.object,
             app_slice_from_bytes(Some(&recipient_uuid)),
             app_slice_from_bytes(Some(&message)),
+            urgency as i32,
+        );
+
+        Ok(())
+    }
+
+    fn send_call_message_to_group(
+        &self,
+        group_id: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
+        info!("send_call_message_to_group():");
+
+        (self.app_interface.sendCallMessageToGroup)(
+            self.app_interface.object,
+            app_slice_from_bytes(Some(&group_id)),
+            app_slice_from_bytes(Some(&message)),
+            urgency as i32,
         );
 
         Ok(())
@@ -464,6 +488,24 @@ impl Platform for IosPlatform {
 
     // Group Calls
 
+    fn group_call_ring_update(
+        &self,
+        group_id: group_call::GroupId,
+        ring_id: group_call::RingId,
+        sender: group_call::UserId,
+        update: group_call::RingUpdate,
+    ) {
+        let group_id = app_slice_from_bytes(Some(&group_id));
+        let sender = app_slice_from_bytes(Some(&sender));
+        (self.app_interface.groupCallRingUpdate)(
+            self.app_interface.object,
+            group_id,
+            ring_id.into(),
+            sender,
+            update as i32,
+        );
+    }
+
     fn handle_peek_response(
         &self,
         request_id: u32,
@@ -531,7 +573,7 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             client_id,
             match join_state {
-                group_call::JoinState::NotJoined => 0,
+                group_call::JoinState::NotJoined(_) => 0,
                 group_call::JoinState::Joining => 1,
                 group_call::JoinState::Joined(_, _) => 2,
             },

@@ -65,7 +65,9 @@ final class TestDelegate: CallManagerDelegate {
     var shouldSendHangupNeedPermissionInvoked = false
     var shouldSendBusyInvoked = false
     var shouldSendCallMessageInvoked = false
+    var shouldSendCallMessageToGroupInvoked = false
     var shouldSendHttpRequestInvoked = false
+    var didUpdateRingForGroupInvoked = false
     var shouldCompareCallsInvoked = false
 //    var shouldConcludeCallInvoked = false
 //    var concludedCallCount = 0
@@ -108,12 +110,22 @@ final class TestDelegate: CallManagerDelegate {
 
     var sentCallMessageRecipientUuid: UUID?
     var sentCallMessageMessage: Data?
+    var sentCallMessageUrgency: CallMessageUrgency?
+
+    var sentCallMessageToGroupGroupId: Data?
+    var sentCallMessageToGroupMessage: Data?
+    var sentCallMessageToGroupUrgency: CallMessageUrgency?
 
     var sentHttpRequestId: UInt32?
     var sentHttpRequestUrl: String?
     var sentHttpRequestMethod: CallManagerHttpMethod?
     var sentHttpRequestHeaders: [String: String]?
     var sentHttpRequestBody: Data?
+
+    var didUpdateRingForGroupGroupId: Data?
+    var didUpdateRingForGroupRingId: UInt64?
+    var didUpdateRingForGroupSender: UUID?
+    var didUpdateRingForGroupUpdate: RingUpdate?
 
     var remoteCompareResult: Bool? = .none
 
@@ -497,7 +509,7 @@ final class TestDelegate: CallManagerDelegate {
         }
     }
 
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendCallMessage recipientUuid: UUID, message: Data) {
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendCallMessage recipientUuid: UUID, message: Data, urgency: CallMessageUrgency) {
         Logger.debug("TestDelegate:shouldSendCallMessage")
         generalInvocationDetected = true
 
@@ -505,6 +517,18 @@ final class TestDelegate: CallManagerDelegate {
 
         sentCallMessageRecipientUuid = recipientUuid
         sentCallMessageMessage = message
+        sentCallMessageUrgency = urgency
+    }
+
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency) {
+        Logger.debug("TestDelegate:shouldSendCallMessageToGroup")
+        generalInvocationDetected = true
+
+        shouldSendCallMessageToGroupInvoked = true
+
+        sentCallMessageToGroupGroupId = groupId
+        sentCallMessageToGroupMessage = message
+        sentCallMessageToGroupUrgency = urgency
     }
 
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendHttpRequest requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
@@ -527,6 +551,18 @@ final class TestDelegate: CallManagerDelegate {
             Logger.debug("key: \(header.key) value: \(header.value)")
         }
         Logger.debug("body: \(body)")
+    }
+
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, didUpdateRingForGroup groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate) {
+        Logger.debug("TestDelegate:didUpdateRingForGroup")
+        generalInvocationDetected = true
+
+        didUpdateRingForGroupInvoked = true
+
+        didUpdateRingForGroupGroupId = groupId
+        didUpdateRingForGroupRingId = ringId
+        didUpdateRingForGroupSender = sender
+        didUpdateRingForGroupUpdate = update
     }
 
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldCompareCalls call1: OpaqueCallData, call2: OpaqueCallData) -> Bool {

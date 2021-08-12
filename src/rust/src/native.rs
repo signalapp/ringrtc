@@ -20,7 +20,7 @@ use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{
-    group_call::{self, UserId},
+    group_call::{self, GroupId, SignalingMessageUrgency, UserId},
     signaling,
 };
 use crate::webrtc::media::MediaStream;
@@ -96,7 +96,19 @@ pub trait SignalingSender {
         msg: signaling::Message,
     ) -> Result<()>;
 
-    fn send_call_message(&self, recipient_id: UserId, msg: Vec<u8>) -> Result<()>;
+    fn send_call_message(
+        &self,
+        recipient_id: UserId,
+        msg: Vec<u8>,
+        urgency: SignalingMessageUrgency,
+    ) -> Result<()>;
+
+    fn send_call_message_to_group(
+        &self,
+        group_id: GroupId,
+        msg: Vec<u8>,
+        urgency: SignalingMessageUrgency,
+    ) -> Result<()>;
 }
 
 pub trait CallStateHandler {
@@ -223,23 +235,29 @@ pub enum GroupUpdate {
     JoinStateChanged(group_call::ClientId, group_call::JoinState),
     RemoteDeviceStatesChanged(group_call::ClientId, Vec<group_call::RemoteDeviceState>),
     IncomingVideoTrack(group_call::ClientId, group_call::DemuxId, VideoTrack),
-    PeekChanged(
-        group_call::ClientId,
-        Vec<group_call::UserId>,
-        Option<group_call::UserId>,
-        Option<String>,
-        Option<u32>,
-        u32,
-    ),
-    PeekResponse(
-        u32,
-        Vec<group_call::UserId>,
-        Option<group_call::UserId>,
-        Option<String>,
-        Option<u32>,
-        u32,
-    ),
+    PeekChanged {
+        client_id:    group_call::ClientId,
+        members:      Vec<group_call::UserId>,
+        creator:      Option<group_call::UserId>,
+        era_id:       Option<String>,
+        max_devices:  Option<u32>,
+        device_count: u32,
+    },
+    PeekResponse {
+        request_id:   u32,
+        members:      Vec<group_call::UserId>,
+        creator:      Option<group_call::UserId>,
+        era_id:       Option<String>,
+        max_devices:  Option<u32>,
+        device_count: u32,
+    },
     Ended(group_call::ClientId, group_call::EndReason),
+    Ring {
+        group_id: group_call::GroupId,
+        ring_id:  group_call::RingId,
+        sender:   group_call::UserId,
+        update:   group_call::RingUpdate,
+    },
 }
 
 impl fmt::Display for GroupUpdate {
@@ -251,9 +269,10 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::JoinStateChanged(_, _) => "JoinStateChanged".to_string(),
             GroupUpdate::RemoteDeviceStatesChanged(_, _) => "RemoteDeviceStatesChanged".to_string(),
             GroupUpdate::IncomingVideoTrack(_, _, _) => "IncomingVideoTrack".to_string(),
-            GroupUpdate::PeekChanged(_, _, _, _, _, _) => "PeekChanged".to_string(),
-            GroupUpdate::PeekResponse(_, _, _, _, _, _) => "PeekResponse".to_string(),
+            GroupUpdate::PeekChanged { .. } => "PeekChanged".to_string(),
+            GroupUpdate::PeekResponse { .. } => "PeekResponse".to_string(),
             GroupUpdate::Ended(_, reason) => format!("Ended({:?})", reason),
+            GroupUpdate::Ring { update, .. } => format!("Ring({:?})", update),
         };
         write!(f, "({})", display)
     }
@@ -655,10 +674,26 @@ impl Platform for NativePlatform {
         Ok(())
     }
 
-    fn send_call_message(&self, recipient_uuid: Vec<u8>, message: Vec<u8>) -> Result<()> {
+    fn send_call_message(
+        &self,
+        recipient_uuid: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
         info!("NativePlatform::send_call_message():");
         self.signaling_sender
-            .send_call_message(recipient_uuid, message)
+            .send_call_message(recipient_uuid, message, urgency)
+    }
+
+    fn send_call_message_to_group(
+        &self,
+        group_id: Vec<u8>,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+    ) -> Result<()> {
+        info!("NativePlatform::send_call_message_to_group():");
+        self.signaling_sender
+            .send_call_message_to_group(group_id, message, urgency)
     }
 
     fn send_http_request(
@@ -789,14 +824,14 @@ impl Platform for NativePlatform {
             device_count
         );
 
-        let result = self.send_group_update(GroupUpdate::PeekChanged(
+        let result = self.send_group_update(GroupUpdate::PeekChanged {
             client_id,
-            joined_members.to_vec(),
+            members: joined_members.to_vec(),
             creator,
-            era_id.map(String::from),
+            era_id: era_id.map(String::from),
             max_devices,
             device_count,
-        ));
+        });
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -814,14 +849,14 @@ impl Platform for NativePlatform {
     ) {
         info!("NativePlatform::handle_peek_response(): id: {}", request_id,);
 
-        let result = self.send_group_update(GroupUpdate::PeekResponse(
+        let result = self.send_group_update(GroupUpdate::PeekResponse {
             request_id,
-            joined_members.to_vec(),
+            members: joined_members.to_vec(),
             creator,
-            era_id.map(String::from),
+            era_id: era_id.map(String::from),
             max_devices,
             device_count,
-        ));
+        });
         if result.is_err() {
             error!("{:?}", result.err());
         }
@@ -831,6 +866,26 @@ impl Platform for NativePlatform {
         info!("NativePlatform::handle_ended(): id: {}", client_id);
 
         let result = self.send_group_update(GroupUpdate::Ended(client_id, reason));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn group_call_ring_update(
+        &self,
+        group_id: group_call::GroupId,
+        ring_id: group_call::RingId,
+        sender: group_call::UserId,
+        update: group_call::RingUpdate,
+    ) {
+        info!("NativePlatform::group_call_ring_update(): id: {}", ring_id);
+
+        let result = self.send_group_update(GroupUpdate::Ring {
+            group_id,
+            ring_id,
+            sender,
+            update,
+        });
         if result.is_err() {
             error!("{:?}", result.err());
         }

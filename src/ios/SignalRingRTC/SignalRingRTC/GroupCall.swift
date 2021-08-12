@@ -358,6 +358,18 @@ public class GroupCall {
         }
     }
 
+    public func ringAll() {
+        AssertIsOnMainThread()
+        Logger.debug("ring")
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        ringrtcGroupRing(self.ringRtcCallManager, clientId, AppByteSlice(bytes: nil, len: 0))
+    }
+
     public func resendMediaKeys() {
         AssertIsOnMainThread()
         Logger.debug("resendMediaKeys")

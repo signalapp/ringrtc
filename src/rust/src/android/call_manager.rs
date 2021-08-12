@@ -5,6 +5,7 @@
 
 //! Android CallManager Interface.
 
+use std::convert::TryFrom;
 use std::panic;
 use std::time::Duration;
 
@@ -127,6 +128,18 @@ pub fn create_peer_connection(
     Ok(jni_owned_pc)
 }
 
+/// Application notification updating the current user's UUID
+pub fn set_self_uuid(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    uuid: jbyteArray,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+
+    info!("set_self_uuid():");
+    call_manager.set_self_uuid(env.convert_byte_array(uuid)?)
+}
+
 /// Application notification to start a new call
 pub fn call(
     env: &JNIEnv,
@@ -188,6 +201,29 @@ pub fn hangup(call_manager: *mut AndroidCallManager) -> Result<()> {
 
     info!("hangup():");
     call_manager.hangup()
+}
+
+/// Application notification cancelling a group call ring
+pub fn cancel_group_ring(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    group_id: jbyteArray,
+    ring_id: jlong,
+    reason: jint,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+
+    info!("cancel_group_ring():");
+    let reason = if reason == -1 {
+        None
+    } else {
+        Some(group_call::RingCancelReason::try_from(reason)?)
+    };
+    call_manager.cancel_group_ring(
+        env.convert_byte_array(group_id)?,
+        group_call::RingId::from(ring_id as u64),
+        reason,
+    )
 }
 
 /// Application notification of received answer message
@@ -400,7 +436,7 @@ pub fn received_call_message(
         sender_device_id,
         local_device_id,
         message,
-        message_age_sec,
+        Duration::from_secs(message_age_sec),
     )
 }
 
@@ -674,6 +710,25 @@ pub fn set_outgoing_video_muted(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_outgoing_video_muted(client_id, muted);
+    Ok(())
+}
+
+pub fn group_ring(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    recipient: jbyteArray,
+) -> Result<()> {
+    info!("group_ring(): id: {}", client_id);
+
+    let recipient = if recipient.is_null() {
+        None
+    } else {
+        Some(env.convert_byte_array(recipient)?)
+    };
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.group_ring(client_id, recipient);
     Ok(())
 }
 

@@ -240,6 +240,25 @@ public class CallManager {
   }
 
   /**
+   * 
+   * Updates the UUID used for the current user.
+   * 
+   * @param uuid  The new UUID to use
+   *
+   * @throws CallException for native code failures
+   * 
+   */
+  public void setSelfUuid(@NonNull UUID uuid)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    Log.i(TAG, "setSelfUuid():");
+
+    ringrtcSetSelfUuid(nativeCallManager, Util.getBytesFromUuid(uuid));
+  }
+
+  /**
    *
    * Indication from application to start a new outgoing call
    *
@@ -743,6 +762,36 @@ public class CallManager {
     ringrtcHangup(nativeCallManager);
   }
 
+  /** Describes why a ring was cancelled. */
+  public enum RingCancelReason {
+    /** The user explicitly clicked "Decline". */
+    DeclinedByUser,
+    /** The device is busy with another call. */
+    Busy
+  }
+
+  /**
+   *
+   * Notification from application that a group ring is being cancelled.
+   * 
+   * @param groupId the unique identifier for the group
+   * @param ringId  identifies the ring being declined
+   * @param reason  if non-null, a reason for the cancellation that should be communicated to the
+   *                user's other devices
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  public void cancelGroupRing(@NonNull byte[] groupId, long ringId, @Nullable RingCancelReason reason)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    Log.i(TAG, "cancelGroupRing():");
+    int rawReason = reason != null ? reason.ordinal() : -1;
+    ringrtcCancelGroupRing(nativeCallManager, groupId, ringId, rawReason);
+  }
+
   // Group Calls
 
   public interface ResponseHandler<T> {
@@ -1056,9 +1105,15 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void sendCallMessage(@NonNull byte[] recipientUuid, @NonNull byte[] message) {
+  private void sendCallMessage(@NonNull byte[] recipientUuid, @NonNull byte[] message, int urgency) {
     Log.i(TAG, "sendCallMessage():");
-    observer.onSendCallMessage(Util.getUuidFromBytes(recipientUuid), message);
+    observer.onSendCallMessage(Util.getUuidFromBytes(recipientUuid), message, CallMessageUrgency.values()[urgency]);
+  }
+
+  @CalledByNative
+  private void sendCallMessageToGroup(@NonNull byte[] groupId, @NonNull byte[] message, int urgency) {
+    Log.i(TAG, "sendCallMessageToGroup():");
+    observer.onSendCallMessageToGroup(groupId, message, CallMessageUrgency.values()[urgency]);
   }
 
   @CalledByNative
@@ -1077,6 +1132,12 @@ public class CallManager {
   }
 
   // Group Calls
+
+  @CalledByNative
+  private void groupCallRingUpdate(@NonNull byte[] groupId, long ringId, @NonNull byte[] sender, int state) {
+    Log.i(TAG, "groupCallRingUpdate():");
+    observer.onGroupCallRingUpdate(groupId, ringId, Util.getUuidFromBytes(sender), RingUpdate.values()[state]);
+  }
 
   @CalledByNative
   private void handlePeekResponse(long requestId, List<byte[]> joinedMembers, @Nullable byte[] creator, @Nullable String eraId, @Nullable Long maxDevices, long deviceCount) {
@@ -1504,6 +1565,28 @@ public class CallManager {
     }
   }
 
+  public enum CallMessageUrgency {
+    DROPPABLE,
+    HANDLE_IMMEDIATELY,
+  }
+
+  public enum RingUpdate {
+    /** The sender is trying to ring this user. */
+    REQUESTED,
+    /** The sender tried to ring this user, but it's been too long. */
+    EXPIRED_REQUEST,
+    /** Call was accepted elsewhere by a different device. */
+    ACCEPTED_ON_ANOTHER_DEVICE,
+    /** Call was declined elsewhere by a different device. */
+    DECLINED_ON_ANOTHER_DEVICE,
+    /** This device is currently on a different call. */
+    BUSY_LOCALLY,
+    /** A different device is currently on a different call. */
+    BUSY_ON_ANOTHER_DEVICE,
+    /** The sender cancelled the ring request. */
+    CANCELLED_BY_RINGER,
+  }
+
   /**
    *
    * Interface for handling CallManager events and errors
@@ -1615,8 +1698,21 @@ public class CallManager {
      *
      * @param recipientUuid  UUID for the user to send the message to
      * @param message        the opaque bytes to send
+     * @param urgency        controls whether recipients should immediately handle this message.
+     *                       Affects out-of-app message processing.
      */
-    void onSendCallMessage(@NonNull UUID recipientUuid, @NonNull byte[] message);
+    void onSendCallMessage(@NonNull UUID recipientUuid, @NonNull byte[] message, @NonNull CallMessageUrgency urgency);
+
+    /**
+     *
+     * A message that should be sent to all members of the given group as a CallMessage.
+     *
+     * @param groupId                  the ID of the group in question
+     * @param message                  the opaque bytes to send
+     * @param urgency        controls whether recipients should immediately handle this message.
+     *                       Affects out-of-app message processing.
+     */
+    void onSendCallMessageToGroup(@NonNull byte[] groupId, @NonNull byte[] message, @NonNull CallMessageUrgency urgency);
 
     /**
      *
@@ -1630,6 +1726,17 @@ public class CallManager {
      *
      */
     void onSendHttpRequest(long requestId, @NonNull String url, @NonNull HttpMethod method, @Nullable List<HttpHeader> headers, @Nullable byte[] body);
+
+    /**
+     *
+     * A group ring request or cancellation should be handled.
+     *
+     * @param groupId the ID of the group
+     * @param ringId  uniquely identifies the original ring request
+     * @param sender  the user responsible for the update (which may be the local user)
+     * @param update  the updated state to handle
+     */
+    void onGroupCallRingUpdate(@NonNull byte[] groupId, long ringId, @NonNull UUID sender, RingUpdate update);
 
   }
 
@@ -1661,6 +1768,10 @@ public class CallManager {
     throws CallException;
 
   private native
+    void ringrtcSetSelfUuid(long nativeCallManager, byte[] uuid)
+    throws CallException;
+
+  private native
     long ringrtcCreatePeerConnection(long                            nativePeerConnectionFactory,
                                      long                            nativeConnection,
                                      PeerConnection.RTCConfiguration rtcConfig,
@@ -1688,6 +1799,10 @@ public class CallManager {
 
   private native
     void ringrtcHangup(long nativeCallManager)
+    throws CallException;
+
+  private native
+    void ringrtcCancelGroupRing(long nativeCallManager, byte[] groupId, long ringId, int reason)
     throws CallException;
 
   private native

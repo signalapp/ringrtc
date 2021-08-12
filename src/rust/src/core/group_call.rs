@@ -15,6 +15,7 @@ use std::{
 };
 
 use bytes::{Bytes, BytesMut};
+use num_enum::TryFromPrimitive;
 use prost::Message;
 use rand::Rng;
 
@@ -49,6 +50,7 @@ use crate::{
 pub type ClientId = u32;
 // Group UUID
 pub type GroupId = Vec<u8>;
+pub type GroupIdRef<'a> = &'a [u8];
 // An opaque value obtained from a Groups server and provided to an SFU
 pub type MembershipProof = Vec<u8>;
 // User UUID plaintext
@@ -70,6 +72,64 @@ pub type DemuxId = u32;
 //  auto identity = SSLIdentity::Create("name", rtc::KeyParams(), 3153600000);
 //  auto fingerprint = rtc::SSLFingerprint::CreateUnique("sha-256", *identity);
 pub type DtlsFingerprint = [u8; 32];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RingId(u64);
+
+impl From<u64> for RingId {
+    fn from(raw_id: u64) -> Self {
+        Self(raw_id)
+    }
+}
+
+impl From<RingId> for u64 {
+    fn from(id: RingId) -> Self {
+        id.0
+    }
+}
+
+impl std::fmt::Display for RingId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RingUpdate {
+    /// The sender is trying to ring this user.
+    Requested = 0,
+    /// The sender tried to ring this user, but it's been too long.
+    ExpiredRequest,
+    /// Call was accepted elsewhere by a different device.
+    AcceptedOnAnotherDevice,
+    /// Call was declined elsewhere by a different device.
+    DeclinedOnAnotherDevice,
+    /// This device is currently on a different call.
+    BusyLocally,
+    /// A different device is currently on a different call.
+    BusyOnAnotherDevice,
+    /// The sender cancelled the ring request.
+    CancelledByRinger,
+}
+
+/// Describes why a ring was cancelled.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive)]
+pub enum RingCancelReason {
+    /// The user explicitly clicked "Decline".
+    DeclinedByUser = 0,
+    /// The device is busy with another call.
+    Busy,
+}
+
+/// Indicates whether a signaling message should be marked for immediate processing
+/// even if the receiving app isn't running.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignalingMessageUrgency {
+    Droppable,
+    HandleImmediately,
+}
 
 /// Converts the DTLS fingerprint into a SDP-format hex string.
 /// ```
@@ -138,7 +198,15 @@ pub trait Observer {
     fn send_signaling_message(
         &mut self,
         recipient: UserId,
-        message: protobuf::group_call::DeviceToDevice,
+        message: protobuf::signaling::CallMessage,
+        urgency: SignalingMessageUrgency,
+    );
+    // Send a signaling message to all members of the group.
+    fn send_signaling_message_to_group(
+        &mut self,
+        group: GroupId,
+        message: protobuf::signaling::CallMessage,
+        urgency: SignalingMessageUrgency,
     );
 
     // The following notify the observer of state changes to the local device.
@@ -247,7 +315,10 @@ pub enum JoinState {
     /// Join() has not yet been called
     /// or leave() has been called
     /// or join() was called but failed.
-    NotJoined,
+    ///
+    /// If the ring ID is present,
+    /// joining will sent an "accepted" message to your other devices.
+    NotJoined(Option<RingId>),
 
     /// Join() has been called but a response from the SFU is pending.
     Joining,
@@ -548,8 +619,9 @@ struct State {
     sfu_client: Box<dyn SfuClient>,
     observer:   Box<dyn Observer>,
 
-    // Shared busy flag with the CallManager that might change
-    busy: Arc<CallMutex<bool>>,
+    // Shared state with the CallManager that might change
+    busy:      Arc<CallMutex<bool>>,
+    self_uuid: Arc<CallMutex<Option<UserId>>>,
 
     // State that changes regularly and is sent to the observer
     connection_state: ConnectionState,
@@ -616,7 +688,13 @@ struct State {
     on_demand_video_request_sent_since_last_tick: bool,
     speaker_rtp_timestamp:                        Option<rtp::Timestamp>,
 
-    send_rates: SendRates,
+    send_rates:               SendRates,
+
+    /// A ring sent to the whole group when the call was created.
+    ///
+    /// If present, the ring is still cancellable, and the cancellation will be sent
+    /// to the whole group if the current client leaves before anyone else joins.
+    cancellable_initial_ring: Option<RingId>,
 
     actor: Actor<State>,
 }
@@ -677,9 +755,11 @@ impl Client {
         sfu_client: Box<dyn SfuClient + Send>,
         observer: Box<dyn Observer + Send>,
         busy: Arc<CallMutex<bool>>,
+        self_uuid: Arc<CallMutex<Option<UserId>>>,
         peer_connection_factory: Option<PeerConnectionFactory>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
+        ring_id: Option<RingId>,
     ) -> Result<Self> {
         debug!("group_call::Client(outer)::new(client_id: {})", client_id);
         let stopper = Stopper::new();
@@ -748,11 +828,12 @@ impl Client {
                     sfu_client,
                     observer,
                     busy,
+                    self_uuid,
                     local_ice_ufrag,
                     local_ice_pwd,
 
                     connection_state: ConnectionState::NotConnected,
-                    join_state: JoinState::NotJoined,
+                    join_state: JoinState::NotJoined(ring_id),
                     remote_devices: Default::default(),
 
                     remote_devices_request_state:
@@ -784,6 +865,7 @@ impl Client {
                     speaker_rtp_timestamp: None,
 
                     send_rates: SendRates::default(),
+                    cancellable_initial_ring: None,
 
                     actor,
                 })
@@ -1008,7 +1090,7 @@ impl Client {
                 JoinState::Joining => {
                     warn!("Can't join when already joining.");
                 }
-                JoinState::NotJoined => {
+                JoinState::NotJoined(ring_id) => {
                     if let Some(PeekInfo{device_count, max_devices: Some(max_devices), ..}) = &state.last_peek_info {
                         if device_count >= max_devices {
                             info!("Ending group call client because there are {}/{} devices in the call.", device_count, max_devices);
@@ -1018,6 +1100,7 @@ impl Client {
                     }
                     if Self::take_busy(state) {
                         Self::set_join_state_and_notify_observer(state, JoinState::Joining);
+                        Self::accept_ring_if_needed(state, ring_id);
 
                         // Request group membership refresh before joining.
                         // The Join request will then proceed once SfuClient has the token.
@@ -1035,6 +1118,31 @@ impl Client {
                 }
             }
         });
+    }
+
+    fn accept_ring_if_needed(state: &mut State, ring_id: Option<RingId>) {
+        if let Some(ring_id) = ring_id {
+            if let Some(self_uuid) = state.self_uuid.lock().expect("can read UUID").clone() {
+                let accept_message = protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(state.group_id.clone()),
+                        ring_id:  Some(ring_id.into()),
+                        r#type:   Some(
+                            protobuf::signaling::call_message::ring_response::Type::Accepted.into(),
+                        ),
+                    }),
+                    ..Default::default()
+                };
+
+                state.observer.send_signaling_message(
+                    self_uuid,
+                    accept_message,
+                    SignalingMessageUrgency::HandleImmediately,
+                );
+            } else {
+                error!("self UUID unknown; cannot notify other devices of accept");
+            }
+        }
     }
 
     // Pulled into a named private method because it might be called by leave_inner().
@@ -1065,8 +1173,10 @@ impl Client {
             state.client_id, state.join_state
         );
 
+        Self::cancel_full_group_ring_if_needed(state);
+
         match state.join_state {
-            JoinState::NotJoined => {
+            JoinState::NotJoined(_) => {
                 warn!("Can't leave when not joined.");
             }
             JoinState::Joining | JoinState::Joined(_, _) => {
@@ -1079,7 +1189,7 @@ impl Client {
                     state.sfu_client.leave(long_device_id);
                     Self::send_leaving_through_sfu_and_over_signaling(state, local_demux_id);
                 }
-                Self::set_join_state_and_notify_observer(state, JoinState::NotJoined);
+                Self::set_join_state_and_notify_observer(state, JoinState::NotJoined(None));
                 state.next_stats_time = None;
             }
         }
@@ -1096,6 +1206,51 @@ impl Client {
                 state.client_id
             );
             Self::end(state, EndReason::DeviceExplicitlyDisconnected);
+        });
+    }
+
+    pub fn ring(&self, recipient: Option<UserId>) {
+        debug!(
+            "group_call::Client(outer)::ring(client_id: {}, recipient: {:?})",
+            self.client_id,
+            recipient,
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::ring(client_id: {}, recipient: {:?})",
+                state.client_id,
+                recipient
+            );
+
+            // All ring IDs are possible except "0".
+            let ring_id = RingId::from(rand::rngs::OsRng.gen_range(0, u64::MAX) + 1);
+
+            let message = protobuf::signaling::CallMessage {
+                ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+                    group_id: Some(state.group_id.clone()),
+                    ring_id:  Some(ring_id.into()),
+                    r#type:   Some(
+                        protobuf::signaling::call_message::ring_intention::Type::Ring.into()
+                    ),
+                }),
+                ..Default::default()
+            };
+
+            if let Some(_recipient) = recipient {
+                unimplemented!("cannot ring just one person yet");
+            } else {
+                state.observer.send_signaling_message_to_group(
+                    state.group_id.clone(),
+                    message,
+                    SignalingMessageUrgency::HandleImmediately,
+                );
+
+                // If you're the only one in the call at the time of the ring,
+                // and then you leave before anyone joins, the ring is auto-cancelled.
+                if state.joined_members.is_empty() {
+                    state.cancellable_initial_ring = Some(ring_id)
+                }
+            }
         });
     }
 
@@ -1383,7 +1538,7 @@ impl Client {
 
         let joining_or_joined = match state.join_state {
             JoinState::Joined(_, _) | JoinState::Joining => true,
-            JoinState::NotJoined => false,
+            JoinState::NotJoined(_) => false,
         };
         if joining_or_joined {
             // This will send an update after changing the join state.
@@ -1445,7 +1600,7 @@ impl Client {
                     }
                 };
                 match state.join_state {
-                    JoinState::NotJoined => {
+                    JoinState::NotJoined(_) => {
                         warn!("The SFU completed joining before join() was requested.");
                     }
                     JoinState::Joining => {
@@ -1808,6 +1963,7 @@ impl Client {
         // Do this later so that we can use new_user_ids above without running into
         // referencing issues
         state.joined_members = new_user_ids;
+        state.cancellable_initial_ring = None;
 
         if should_request_again {
             // Something occured while we were waiting for this update.
@@ -2037,8 +2193,16 @@ impl Client {
             media_key: Some(media_key),
             ..Default::default()
         };
+        let call_message = protobuf::signaling::CallMessage {
+            group_call_message: Some(message),
+            ..Default::default()
+        };
 
-        state.observer.send_signaling_message(recipient_id, message);
+        state.observer.send_signaling_message(
+            recipient_id,
+            call_message,
+            SignalingMessageUrgency::Droppable
+        );
     }
 
     fn send_pending_media_send_key_to_users_with_added_devices(
@@ -2283,21 +2447,52 @@ impl Client {
             warn!("Could not encode leaving message")
         }
 
-        let msg = DeviceToDevice {
-            group_id: Some(state.group_id.clone()),
-            leaving: Some(Leaving {
-                demux_id: Some(local_demux_id),
+        let msg = protobuf::signaling::CallMessage {
+            group_call_message: Some(DeviceToDevice {
+                group_id: Some(state.group_id.clone()),
+                leaving: Some(Leaving {
+                    demux_id: Some(local_demux_id),
+                }),
+                ..Default::default()
             }),
-            ..DeviceToDevice::default()
+            ..Default::default()
         };
         debug!(
             "Send leaving message to everyone over signaling (recipients: {:?}).",
             state.joined_members
         );
         for user_id in &state.joined_members {
-            state
-                .observer
-                .send_signaling_message(user_id.clone(), msg.clone());
+            state.observer.send_signaling_message(
+                user_id.clone(),
+                msg.clone(),
+                SignalingMessageUrgency::Droppable,
+            );
+        }
+    }
+
+    fn cancel_full_group_ring_if_needed(state: &mut State) {
+        debug!(
+            "group_call::Client(inner)::cancel_full_group_ring_if_needed(client_id: {})",
+            state.client_id,
+        );
+
+        if let Some(ring_id) = state.cancellable_initial_ring {
+            let message = protobuf::signaling::CallMessage {
+                ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+                    group_id: Some(state.group_id.clone()),
+                    ring_id:  Some(ring_id.into()),
+                    r#type:   Some(
+                        protobuf::signaling::call_message::ring_intention::Type::Cancelled.into()
+                    ),
+                }),
+                ..Default::default()
+            };
+
+            state.observer.send_signaling_message_to_group(
+                state.group_id.clone(),
+                message,
+                SignalingMessageUrgency::HandleImmediately,
+            );
         }
     }
 
@@ -2535,6 +2730,18 @@ impl Client {
                     });
             }
         }
+    }
+
+    #[cfg(feature = "sim")]
+    pub fn synchronize(&self) {
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let barrier_for_task = barrier.clone();
+
+        self.actor.send(move |_| {
+            barrier_for_task.wait();
+        });
+
+        barrier.wait();
     }
 }
 
@@ -2957,9 +3164,10 @@ mod tests {
     #[derive(Clone)]
     struct FakeObserver {
         // For sending messages
-        user_id:                    UserId,
-        recipients:                 Arc<CallMutex<Vec<TestClient>>>,
-        outgoing_signaling_blocked: Arc<CallMutex<bool>>,
+        user_id:                       UserId,
+        recipients:                    Arc<CallMutex<Vec<TestClient>>>,
+        outgoing_signaling_blocked:    Arc<CallMutex<bool>>,
+        sent_group_signaling_messages: Arc<CallMutex<Vec<protobuf::signaling::CallMessage>>>,
 
         joined:                      Event,
         remote_devices:              Arc<CallMutex<Vec<RemoteDeviceState>>>,
@@ -2980,6 +3188,10 @@ mod tests {
                 outgoing_signaling_blocked: Arc::new(CallMutex::new(
                     false,
                     "FakeObserver outgoing_signaling_blocked",
+                )),
+                sent_group_signaling_messages: Arc::new(CallMutex::new(
+                    Vec::new(),
+                    "FakeObserver sent group messages",
                 )),
                 joined: Event::default(),
                 remote_devices: Arc::new(CallMutex::new(Vec::new(), "FakeObserver remote devices")),
@@ -3125,7 +3337,8 @@ mod tests {
         fn send_signaling_message(
             &mut self,
             recipient_id: UserId,
-            message: protobuf::group_call::DeviceToDevice,
+            call_message: protobuf::signaling::CallMessage,
+            _urgency: SignalingMessageUrgency,
         ) {
             if self.outgoing_signaling_blocked() {
                 info!(
@@ -3139,12 +3352,14 @@ mod tests {
                 .lock()
                 .expect("Lock recipients to add recipient");
             let mut sent = false;
-            for recipient in recipients.iter() {
-                if recipient.user_id == recipient_id {
-                    recipient
-                        .client
-                        .on_signaling_message_received(self.user_id.clone(), message.clone());
-                    sent = true;
+            if let Some(message) = call_message.group_call_message {
+                for recipient in recipients.iter() {
+                    if recipient.user_id == recipient_id {
+                        recipient
+                            .client
+                            .on_signaling_message_received(self.user_id.clone(), message.clone());
+                        sent = true;
+                    }
                 }
             }
             if sent {
@@ -3158,6 +3373,22 @@ mod tests {
                     self.user_id, recipient_id
                 );
             }
+        }
+        fn send_signaling_message_to_group(
+            &mut self,
+            _group: GroupId,
+            call_message: protobuf::signaling::CallMessage,
+            _urgency: SignalingMessageUrgency,
+        ) {
+            if self.outgoing_signaling_blocked() {
+                info!(
+                    "Dropping message from {:?} to group because we blocked signaling.",
+                    self.user_id,
+                );
+                return;
+            }
+            self.sent_group_signaling_messages.lock().expect("adding message").push(call_message);
+            info!("Recorded group-wide call message from {:?}", self.user_id);
         }
         fn handle_incoming_video_track(
             &mut self,
@@ -3205,6 +3436,7 @@ mod tests {
             );
             let observer = FakeObserver::new(user_id.clone());
             let fake_busy = Arc::new(CallMutex::new(false, "fake_busy"));
+            let fake_self_uuid = Arc::new(CallMutex::new(Some(user_id.clone()), "fake_self_uuid"));
             let fake_audio_track = AudioTrack::owned(FAKE_AUDIO_TRACK as *const u32);
             let client = Client::start(
                 b"fake group ID".to_vec(),
@@ -3212,8 +3444,10 @@ mod tests {
                 Box::new(sfu_client.clone()),
                 Box::new(observer.clone()),
                 fake_busy,
+                fake_self_uuid,
                 None,
                 fake_audio_track,
+                None,
                 None,
             )
             .expect("Start Client");
@@ -4513,6 +4747,189 @@ mod tests {
         );
 
         client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn group_ring() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        // Ring twice to make sure we get different IDs.
+        client1.client.ring(None);
+        client1.client.ring(None);
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing")
+        );
+        match &sent_messages[..] {
+            [protobuf::signaling::CallMessage {
+                ring_intention:
+                    Some(protobuf::signaling::call_message::RingIntention {
+                        ring_id: first_ring_id,
+                        ..
+                    }),
+                ..
+            }, protobuf::signaling::CallMessage {
+                ring_intention:
+                    Some(protobuf::signaling::call_message::RingIntention {
+                        ring_id: second_ring_id,
+                        ..
+                    }),
+                ..
+            }] => {
+                assert_ne!(first_ring_id, second_ring_id, "ring IDs were the same");
+            }
+            _ => {
+                panic!("group messages not as expected; here's what we got: {:?}", sent_messages);
+            }
+        }
+    }
+
+    #[test]
+    fn group_ring_cancel() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        client1.client.ring(None);
+        client1.client.leave();
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing")
+        );
+        match &sent_messages[..] {
+            [protobuf::signaling::CallMessage {
+                ring_intention: Some(ring),
+                ..
+            }, protobuf::signaling::CallMessage {
+                ring_intention: Some(cancel),
+                ..
+            }] => {
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+                    ring.r#type,
+                );
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Cancelled.into()),
+                    cancel.r#type,
+                );
+                assert_eq!(ring.ring_id, cancel.ring_id, "ring IDs should be the same");
+            }
+            _ => {
+                panic!("group messages not as expected; here's what we got: {:#?}", sent_messages);
+            }
+        }
+    }
+
+    #[test]
+    fn group_ring_no_cancel_if_someone_joins() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        client1.client.ring(None);
+
+        let client2 = TestClient::new(vec![2], 2, None);
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+
+        client1.client.leave();
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing")
+        );
+        match &sent_messages[..] {
+            [protobuf::signaling::CallMessage {
+                ring_intention: Some(ring),
+                ..
+            }] => {
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+                    ring.r#type,
+                );
+            }
+            _ => {
+                panic!("group messages not as expected; here's what we got: {:#?}", sent_messages);
+            }
+        }
+    }
+
+    #[test]
+    fn group_ring_no_cancel_if_call_was_not_empty() {
+        let client1 = TestClient::new(vec![1], 1, None);
+
+        let client2 = TestClient::new(vec![2], 2, None);
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+
+        client1.client.ring(None);
+        client1.client.leave();
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing")
+        );
+        match &sent_messages[..] {
+            [protobuf::signaling::CallMessage {
+                ring_intention: Some(ring),
+                ..
+            }] => {
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+                    ring.r#type,
+                );
+            }
+            _ => {
+                panic!("group messages not as expected; here's what we got: {:#?}", sent_messages);
+            }
+        }
+    }
+
+    #[test]
+    fn group_ring_cancel_if_call_is_currently_empty() {
+        let client1 = TestClient::new(vec![1], 1, None);
+
+        let client2 = TestClient::new(vec![2], 2, None);
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+        client1.set_remotes_and_wait_until_applied(&[]);
+
+        client1.client.ring(None);
+        client1.client.leave();
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing")
+        );
+        match &sent_messages[..] {
+            [protobuf::signaling::CallMessage {
+                ring_intention: Some(ring),
+                ..
+            }, protobuf::signaling::CallMessage {
+                ring_intention: Some(cancel),
+                ..
+            }] => {
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+                    ring.r#type,
+                );
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Cancelled.into()),
+                    cancel.r#type,
+                );
+                assert_eq!(ring.ring_id, cancel.ring_id, "ring IDs should be the same");
+            }
+            _ => {
+                panic!("group messages not as expected; here's what we got: {:#?}", sent_messages);
+            }
+        }
     }
 }
 
