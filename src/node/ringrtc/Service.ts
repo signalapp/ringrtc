@@ -188,7 +188,7 @@ export class RingRTCType {
   handleGroupCallRingUpdate:
     | ((
         groupId: Buffer,
-        ringId: string,
+        ringId: bigint,
         sender: Buffer,
         update: RingUpdate
       ) => void)
@@ -246,9 +246,9 @@ export class RingRTCType {
   }
 
   // Called by UX
-  cancelGroupRing(groupId: GroupId, ringId: string, reason: RingCancelReason | null): void {
+  cancelGroupRing(groupId: GroupId, ringId: bigint, reason: RingCancelReason | null): void {
     silly_deadlock_protection(() => {
-      this.callManager.cancelGroupRing(groupId, ringId, reason);
+      this.callManager.cancelGroupRing(groupId, ringId.toString(), reason);
     });
   }
 
@@ -786,12 +786,13 @@ export class RingRTCType {
   // Called by Rust
   groupCallRingUpdate(
     groupId: GroupId,
-    ringId: string,
+    ringIdString: string,
     sender: GroupCallUserId,
     state: RingUpdate
   ): void {
     silly_deadlock_protection(() => {
       if (this.handleGroupCallRingUpdate) {
+        const ringId = BigInt(ringIdString);
         this.handleGroupCallRingUpdate(groupId, ringId, sender, state);
       } else {
         console.log('RingRTC.handleGroupCallRingUpdate is not set!');
