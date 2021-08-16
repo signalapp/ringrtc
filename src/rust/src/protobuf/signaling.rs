@@ -65,8 +65,8 @@ pub mod call_message {
         pub group_id: ::std::option::Option<std::vec::Vec<u8>>,
         #[prost(enumeration="ring_intention::Type", optional, tag="2")]
         pub r#type: ::std::option::Option<i32>,
-        #[prost(fixed64, optional, tag="3")]
-        pub ring_id: ::std::option::Option<u64>,
+        #[prost(sfixed64, optional, tag="3")]
+        pub ring_id: ::std::option::Option<i64>,
     }
     pub mod ring_intention {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -82,8 +82,8 @@ pub mod call_message {
         pub group_id: ::std::option::Option<std::vec::Vec<u8>>,
         #[prost(enumeration="ring_response::Type", optional, tag="2")]
         pub r#type: ::std::option::Option<i32>,
-        #[prost(fixed64, optional, tag="3")]
-        pub ring_id: ::std::option::Option<u64>,
+        #[prost(sfixed64, optional, tag="3")]
+        pub ring_id: ::std::option::Option<i64>,
     }
     pub mod ring_response {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

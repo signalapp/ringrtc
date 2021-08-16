@@ -413,7 +413,7 @@ pub struct AppInterface {
     pub groupCallRingUpdate: extern "C" fn(
         object: *mut c_void,
         groupId: AppByteSlice,
-        ringId: u64,
+        ringId: i64,
         senderUuid: AppByteSlice,
         ringUpdate: i32,
     ),
@@ -626,7 +626,7 @@ pub extern "C" fn ringrtcHangup(callManager: *mut c_void) -> *mut c_void {
 pub extern "C" fn ringrtcCancelGroupRing(
     callManager: *mut c_void,
     groupId: AppByteSlice,
-    ringId: u64,
+    ringId: i64,
     reason: i32,
 ) -> *mut c_void {
     info!("ringrtcCancelGroupRing():");

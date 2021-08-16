@@ -221,7 +221,7 @@ pub fn cancel_group_ring(
     };
     call_manager.cancel_group_ring(
         env.convert_byte_array(group_id)?,
-        group_call::RingId::from(ring_id as u64),
+        group_call::RingId::from(ring_id),
         reason,
     )
 }

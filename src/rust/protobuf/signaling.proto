@@ -66,7 +66,8 @@ message CallMessage {
 
     optional bytes group_id = 1;
     optional Type type = 2;
-    optional fixed64 ring_id = 3;
+    // This is signed so it fits in a SQLite integer column.
+    optional sfixed64 ring_id = 3;
   }
 
   message RingResponse {
@@ -79,7 +80,8 @@ message CallMessage {
 
     optional bytes group_id = 1;
     optional Type type = 2;
-    optional fixed64 ring_id = 3;
+    // This is signed so it fits in a SQLite integer column.
+    optional sfixed64 ring_id = 3;
   }
 
   optional group_call.DeviceToDevice group_call_message = 1;

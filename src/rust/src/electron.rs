@@ -491,7 +491,7 @@ fn cancelGroupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
     let ring_id = cx
         .argument::<JsString>(1)?
         .value(&mut cx)
-        .parse::<u64>()
+        .parse::<i64>()
         .or_else(|_| cx.throw_error("invalid serial number"))?;
     let reason_or_null = cx.argument::<JsValue>(2)?;
     let reason = match reason_or_null.downcast::<JsNull, _>(&mut cx) {

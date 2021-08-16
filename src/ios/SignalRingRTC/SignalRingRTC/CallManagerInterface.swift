@@ -25,7 +25,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
 
     // Group Calls
 
-    func groupCallRingUpdate(groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate)
+    func groupCallRingUpdate(groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate)
     func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo)
 
     func requestMembershipProof(clientId: UInt32)
@@ -210,7 +210,7 @@ class CallManagerInterface {
 
     // Group Calls
 
-    func groupCallRingUpdate(groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate) {
+    func groupCallRingUpdate(groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
@@ -845,7 +845,7 @@ func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointe
     obj.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
 }
 
-func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, ringId: UInt64, sender: AppByteSlice, update: Int32) {
+func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, ringId: Int64, sender: AppByteSlice, update: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return

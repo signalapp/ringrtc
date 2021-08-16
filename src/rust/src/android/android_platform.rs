@@ -998,7 +998,7 @@ impl Platform for AndroidPlatform {
                 return;
             }
         };
-        let ring_id = u64::from(ring_id) as jlong;
+        let ring_id = jlong::from(ring_id);
         let sender = match env.byte_array_from_slice(&sender) {
             Ok(slice) => JObject::from(slice),
             Err(error) => {

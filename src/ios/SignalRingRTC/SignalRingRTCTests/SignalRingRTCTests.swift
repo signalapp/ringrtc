@@ -123,7 +123,7 @@ final class TestDelegate: CallManagerDelegate {
     var sentHttpRequestBody: Data?
 
     var didUpdateRingForGroupGroupId: Data?
-    var didUpdateRingForGroupRingId: UInt64?
+    var didUpdateRingForGroupRingId: Int64?
     var didUpdateRingForGroupSender: UUID?
     var didUpdateRingForGroupUpdate: RingUpdate?
 
@@ -553,7 +553,7 @@ final class TestDelegate: CallManagerDelegate {
         Logger.debug("body: \(body)")
     }
 
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, didUpdateRingForGroup groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate) {
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, didUpdateRingForGroup groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate) {
         Logger.debug("TestDelegate:didUpdateRingForGroup")
         generalInvocationDetected = true
 

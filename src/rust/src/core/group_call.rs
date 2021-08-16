@@ -74,15 +74,15 @@ pub type DemuxId = u32;
 pub type DtlsFingerprint = [u8; 32];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RingId(u64);
+pub struct RingId(i64);
 
-impl From<u64> for RingId {
-    fn from(raw_id: u64) -> Self {
+impl From<i64> for RingId {
+    fn from(raw_id: i64) -> Self {
         Self(raw_id)
     }
 }
 
-impl From<RingId> for u64 {
+impl From<RingId> for i64 {
     fn from(id: RingId) -> Self {
         id.0
     }
@@ -1223,8 +1223,10 @@ impl Client {
             );
 
             // All ring IDs are possible except "0".
-            let ring_id = RingId::from(rand::rngs::OsRng.gen_range(0, u64::MAX) + 1);
-
+            let ring_id = RingId::from(
+                rand::rngs::OsRng
+                    .gen_range(i64::MIN, i64::MAX)
+                    .wrapping_sub(i64::MAX));
             let message = protobuf::signaling::CallMessage {
                 ring_intention: Some(protobuf::signaling::call_message::RingIntention {
                     group_id: Some(state.group_id.clone()),

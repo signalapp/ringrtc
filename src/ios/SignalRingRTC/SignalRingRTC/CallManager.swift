@@ -295,7 +295,7 @@ public protocol CallManagerDelegate: AnyObject {
      *
      * Invoked on the main thread, asynchronously.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, didUpdateRingForGroup groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, didUpdateRingForGroup groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate)
 }
 
 public protocol CallManagerCallReference: AnyObject { }
@@ -408,7 +408,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    public func cancelGroupRing(groupId: Data, ringId: UInt64, reason: RingCancelReason?) throws {
+    public func cancelGroupRing(groupId: Data, ringId: Int64, reason: RingCancelReason?) throws {
         AssertIsOnMainThread()
         Logger.debug("cancelGroupRing")
 
@@ -927,7 +927,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func groupCallRingUpdate(groupId: Data, ringId: UInt64, sender: UUID, update: RingUpdate) {
+    func groupCallRingUpdate(groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate) {
         Logger.debug("onSendHttpRequest")
 
         DispatchQueue.main.async {
