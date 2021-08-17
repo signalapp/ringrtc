@@ -211,7 +211,7 @@ export class RingRTCType {
 
   // Called by UX
   setSelfUuid(
-    uuid: UserId
+    uuid: Buffer
   ): void {
     this.callManager.setSelfUuid(uuid)
   }
@@ -1920,7 +1920,7 @@ export enum RingCancelReason {
 }
 
 export interface CallManager {
-  setSelfUuid(uuid: UserId): void;
+  setSelfUuid(uuid: Buffer): void;
   createOutgoingCall(
     remoteUserId: UserId,
     isVideoCall: boolean,
