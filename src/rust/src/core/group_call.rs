@@ -1249,7 +1249,10 @@ impl Client {
 
                 // If you're the only one in the call at the time of the ring,
                 // and then you leave before anyone joins, the ring is auto-cancelled.
-                if state.joined_members.is_empty() {
+                // Note that this means the ring will be cancelled if you *never*
+                // join the call, even if others do, but that's probably correct
+                // (and extremely unlikely).
+                if state.remote_devices.is_empty() {
                     state.cancellable_initial_ring = Some(ring_id)
                 }
             }
@@ -1959,13 +1962,17 @@ impl Client {
                 );
                 Self::set_send_rates_inner(state, send_rates);
             }
+
+            // If anyone has joined besides us, we won't cancel the ring on leave.
+            if !new_demux_ids.is_empty() {
+                state.cancellable_initial_ring = None;
+            }
         }
         state.last_peek_info = Some(peek_info_to_remember);
 
         // Do this later so that we can use new_user_ids above without running into
         // referencing issues
         state.joined_members = new_user_ids;
-        state.cancellable_initial_ring = None;
 
         if should_request_again {
             // Something occured while we were waiting for this update.
@@ -4829,6 +4836,7 @@ mod tests {
     #[test]
     fn group_ring_no_cancel_if_someone_joins() {
         let client1 = TestClient::new(vec![1], 1, None);
+        client1.connect_join_and_wait_until_joined();
         client1.client.ring(None);
 
         let client2 = TestClient::new(vec![2], 2, None);
@@ -4862,6 +4870,7 @@ mod tests {
     #[test]
     fn group_ring_no_cancel_if_call_was_not_empty() {
         let client1 = TestClient::new(vec![1], 1, None);
+        client1.connect_join_and_wait_until_joined();
 
         let client2 = TestClient::new(vec![2], 2, None);
         client1.set_remotes_and_wait_until_applied(&[&client2]);
@@ -4895,10 +4904,52 @@ mod tests {
     #[test]
     fn group_ring_cancel_if_call_is_currently_empty() {
         let client1 = TestClient::new(vec![1], 1, None);
+        client1.connect_join_and_wait_until_joined();
 
         let client2 = TestClient::new(vec![2], 2, None);
         client1.set_remotes_and_wait_until_applied(&[&client2]);
         client1.set_remotes_and_wait_until_applied(&[]);
+
+        client1.client.ring(None);
+        client1.client.leave();
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing")
+        );
+        match &sent_messages[..] {
+            [protobuf::signaling::CallMessage {
+                ring_intention: Some(ring),
+                ..
+            }, protobuf::signaling::CallMessage {
+                ring_intention: Some(cancel),
+                ..
+            }] => {
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+                    ring.r#type,
+                );
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Cancelled.into()),
+                    cancel.r#type,
+                );
+                assert_eq!(ring.ring_id, cancel.ring_id, "ring IDs should be the same");
+            }
+            _ => {
+                panic!("group messages not as expected; here's what we got: {:#?}", sent_messages);
+            }
+        }
+    }
+
+    #[test]
+    fn group_ring_cancel_if_call_is_just_you() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        client1.connect_join_and_wait_until_joined();
+
+        client1.set_remotes_and_wait_until_applied(&[&client1]);
 
         client1.client.ring(None);
         client1.client.leave();
