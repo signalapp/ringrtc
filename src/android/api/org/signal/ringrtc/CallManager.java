@@ -192,7 +192,7 @@ public class CallManager {
     this.observer            = observer;
     this.nativeCallManager   = 0;
     this.groupCallByClientId = new LongSparseArray<>();
-    this.peekInfoRequests    = new Requests();
+    this.peekInfoRequests    = new Requests<>();
   }
 
   @Nullable
@@ -451,11 +451,11 @@ public class CallManager {
     ringrtcReceivedOffer(nativeCallManager,
                          callId.longValue(),
                          remote,
-                         remoteDeviceId.intValue(),
+                         remoteDeviceId,
                          opaque,
-                         messageAgeSec.longValue(),
+                         messageAgeSec,
                          callMediaType.ordinal(),
-                         localDeviceId.intValue(),
+                         localDeviceId,
                          remoteSupportsMultiRing,
                          isLocalDevicePrimary,
                          senderIdentityKey,
@@ -490,7 +490,7 @@ public class CallManager {
 
     ringrtcReceivedAnswer(nativeCallManager,
                           callId.longValue(),
-                          remoteDeviceId.intValue(),
+                          remoteDeviceId,
                           opaque,
                           remoteSupportsMultiRing,
                           senderIdentityKey,
@@ -519,7 +519,7 @@ public class CallManager {
 
     ringrtcReceivedIceCandidates(nativeCallManager,
                                  callId.longValue(),
-                                 remoteDeviceId.intValue(),
+                                 remoteDeviceId,
                                  iceCandidates);
   }
 
@@ -547,9 +547,9 @@ public class CallManager {
 
     ringrtcReceivedHangup(nativeCallManager,
                           callId.longValue(),
-                          remoteDeviceId.intValue(),
+                          remoteDeviceId,
                           hangupType.ordinal(),
-                          deviceId.intValue());
+                          deviceId);
   }
 
   /**
@@ -571,7 +571,7 @@ public class CallManager {
 
     ringrtcReceivedBusy(nativeCallManager,
                         callId.longValue(),
-                        remoteDeviceId.intValue());
+                        remoteDeviceId);
   }
 
   /**
@@ -601,10 +601,10 @@ public class CallManager {
 
     ringrtcReceivedCallMessage(nativeCallManager,
                                Util.getBytesFromUuid(senderUuid),
-                               senderDeviceId.intValue(),
-                               localDeviceId.intValue(),
+                               senderDeviceId,
+                               localDeviceId,
                                message,
-                               messageAgeSec.longValue());
+                               messageAgeSec);
   }
 
   /**
@@ -1060,7 +1060,7 @@ public class CallManager {
   @CalledByNative
   private void onStartCall(Remote remote, long callId, boolean isOutgoing, CallMediaType callMediaType) {
     Log.i(TAG, "onStartCall():");
-    observer.onStartCall(remote, new CallId(callId), Boolean.valueOf(isOutgoing), callMediaType);
+    observer.onStartCall(remote, new CallId(callId), isOutgoing, callMediaType);
   }
 
   @CalledByNative
@@ -1078,31 +1078,31 @@ public class CallManager {
   @CalledByNative
   private void onSendOffer(long callId, Remote remote, int remoteDeviceId, boolean broadcast, @NonNull byte[] opaque, CallMediaType callMediaType) {
     Log.i(TAG, "onSendOffer():");
-    observer.onSendOffer(new CallId(callId), remote, Integer.valueOf(remoteDeviceId), Boolean.valueOf(broadcast), opaque, callMediaType);
+    observer.onSendOffer(new CallId(callId), remote, remoteDeviceId, broadcast, opaque, callMediaType);
   }
 
   @CalledByNative
   private void onSendAnswer(long callId, Remote remote, int remoteDeviceId, boolean broadcast, @NonNull byte[] opaque) {
     Log.i(TAG, "onSendAnswer():");
-    observer.onSendAnswer(new CallId(callId), remote, Integer.valueOf(remoteDeviceId), Boolean.valueOf(broadcast), opaque);
+    observer.onSendAnswer(new CallId(callId), remote, remoteDeviceId, broadcast, opaque);
   }
 
   @CalledByNative
   private void onSendIceCandidates(long callId, Remote remote, int remoteDeviceId, boolean broadcast, List<byte[]> iceCandidates) {
     Log.i(TAG, "onSendIceCandidates():");
-    observer.onSendIceCandidates(new CallId(callId), remote, Integer.valueOf(remoteDeviceId), Boolean.valueOf(broadcast), iceCandidates);
+    observer.onSendIceCandidates(new CallId(callId), remote, remoteDeviceId, broadcast, iceCandidates);
   }
 
   @CalledByNative
   private void onSendHangup(long callId, Remote remote, int remoteDeviceId, boolean broadcast, HangupType hangupType, int deviceId, boolean useLegacyHangupMessage) {
     Log.i(TAG, "onSendHangup():");
-    observer.onSendHangup(new CallId(callId), remote, Integer.valueOf(remoteDeviceId), Boolean.valueOf(broadcast), hangupType, Integer.valueOf(deviceId), Boolean.valueOf(useLegacyHangupMessage));
+    observer.onSendHangup(new CallId(callId), remote, remoteDeviceId, broadcast, hangupType, deviceId, useLegacyHangupMessage);
   }
 
   @CalledByNative
   private void onSendBusy(long callId, Remote remote, int remoteDeviceId, boolean broadcast) {
     Log.i(TAG, "onSendBusy():");
-    observer.onSendBusy(new CallId(callId), remote, Integer.valueOf(remoteDeviceId), Boolean.valueOf(broadcast));
+    observer.onSendBusy(new CallId(callId), remote, remoteDeviceId, broadcast);
   }
 
   @CalledByNative
