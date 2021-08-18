@@ -778,6 +778,32 @@ Rust_addIceCandidateFromSdp(PeerConnectionInterface* peer_connection,
 }
 
 RUSTEXPORT bool
+Rust_removeIceCandidates(PeerConnectionInterface* pc, IpPort* removed_addresses_data, size_t removed_addresses_len) {
+  std::vector<IpPort> removed_addresses;
+  removed_addresses.assign(removed_addresses_data, removed_addresses_data + removed_addresses_len);
+
+  std::vector<cricket::Candidate> candidates_removed;
+  for (const auto& address_removed : removed_addresses) {
+    // This only needs to contain the correct transport_name, component, protocol, and address.
+    // SeeCandidate::MatchesForRemoval and JsepTransportController::RemoveRemoteCandidates
+    // and JsepTransportController::RemoveRemoteCandidates.
+    // But we know (because we bundle/rtcp-mux everything) that the transport name is "audio",
+    // and the component is 1.  We also know (because we don't use TCP candidates) that the
+    // protocol is UDP.  So we only need to know the address.
+    cricket::Candidate candidate_removed;
+    candidate_removed.set_transport_name("audio");
+    candidate_removed.set_component(cricket::ICE_CANDIDATE_COMPONENT_RTP);
+    candidate_removed.set_protocol(cricket::UDP_PROTOCOL_NAME);
+    candidate_removed.set_address(IpPortToRtcSocketAddress(address_removed));
+
+    candidates_removed.push_back(candidate_removed);
+  }
+
+  return pc->RemoveIceCandidates(candidates_removed);
+}
+
+
+RUSTEXPORT bool
 Rust_addIceCandidateFromServer(PeerConnectionInterface* pc, Ip ip, uint16_t port, bool tcp) {
   cricket::Candidate candidate;
   // The default foundation is "", which is fine because we bundle.

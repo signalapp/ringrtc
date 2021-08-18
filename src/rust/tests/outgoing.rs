@@ -10,6 +10,7 @@ extern crate ringrtc;
 #[macro_use]
 extern crate log;
 
+use std::net::SocketAddr;
 use std::ptr;
 use std::thread;
 use std::time::Duration;
@@ -759,6 +760,51 @@ fn receive_remote_ice_candidate() {
 
     // TODO -- verify the ice candidate was buffered
     // TODO -- verify the ice candidate was applied to the peer_connection
+}
+
+#[test]
+fn ice_candidate_removal() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+    let mut active_connection = context.active_connection();
+
+    let removed_addresses: Vec<SocketAddr> =
+        vec!["1.2.3.4:5".parse().unwrap(), "6.7.8.9:0".parse().unwrap()];
+    let force_send = true;
+    active_connection
+        .inject_local_ice_candidates_removed(removed_addresses.clone(), force_send)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ice_candidates_sent(), 2);
+    let last_sent = context
+        .last_ice_sent()
+        .expect("ICE candidate removal was sent");
+
+    let active_call = context.active_call();
+    let call_id = active_call.call_id();
+    cm.received_ice(
+        call_id,
+        signaling::ReceivedIce {
+            ice:              last_sent.ice,
+            sender_device_id: 1 as DeviceId,
+        },
+    )
+    .expect("receive_ice");
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+
+    assert_eq!(
+        removed_addresses,
+        active_connection
+            .app_connection()
+            .unwrap()
+            .removed_ice_candidates()
+    );
 }
 
 #[test]

@@ -8,10 +8,10 @@
 use std::ffi::CStr;
 use std::fmt;
 use std::marker::PhantomData;
+use std::net::SocketAddr;
 use std::os::raw::c_char;
 use std::slice;
 use std::time::SystemTime;
-
 use bytes::Bytes;
 use libc::size_t;
 
@@ -22,6 +22,7 @@ use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
 use crate::webrtc::media::{RffiAudioTrack, RffiMediaStream, RffiVideoTrack};
+use crate::webrtc::network::RffiIpPort;
 use crate::webrtc::peer_connection::RffiDataChannel;
 use crate::webrtc::rtp;
 
@@ -58,6 +59,10 @@ pub trait PeerConnectionObserverTrait {
         &mut self,
         ice_candidate: signaling::IceCandidate,
         sdp_for_logging: &str,
+    ) -> Result<()>;
+    fn handle_ice_candidates_removed(
+        &mut self,
+        removed_addresses: Vec<SocketAddr>,
     ) -> Result<()>;
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()>;
 
@@ -143,6 +148,34 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
     } else {
         warn!("Ignoring null IceCandidate pointer");
     }
+}
+
+/// PeerConnectionObserver OnIceCandidatesRemoved() callback.
+#[allow(non_snake_case)]
+extern "C" fn pc_observer_OnIceCandidatesRemoved<T>(
+    observer_ptr: *mut T,
+    removed_addresses: *const RffiIpPort,
+    length: size_t,
+) where
+    T: PeerConnectionObserverTrait,
+{
+    let observer = unsafe { &mut *observer_ptr };
+    info!("pc_observer_OnIceCandidatesRemoved: {}", observer.log_id());
+
+    if removed_addresses.is_null() {
+        if length > 0 {
+            warn!("ICE candidates removed is null");
+        }
+        return;
+    }
+
+    trace!("pc_observer_OnIceCandidatesRemoved(): length: {}", length);
+
+    let removed_addresses = unsafe { slice::from_raw_parts(removed_addresses, length as usize) }.iter().map(|address| address.into()).collect();
+
+    let observer = unsafe { &mut *observer_ptr };
+    observer.handle_ice_candidates_removed(removed_addresses).unwrap_or_else(|e| error!("Problems handling ice candidates removed: {}", e));
+
 }
 
 /// PeerConnectionObserver OnIceConnectionChange() callback.
@@ -422,8 +455,9 @@ where
     T: PeerConnectionObserverTrait,
 {
     // ICE events
-    onIceCandidate:        extern "C" fn(*mut T, *const CppIceCandidate),
-    onIceConnectionChange: extern "C" fn(*mut T, IceConnectionState),
+    onIceCandidate:         extern "C" fn(*mut T, *const CppIceCandidate),
+    onIceCandidatesRemoved: extern "C" fn(*mut T, *const RffiIpPort, size_t),
+    onIceConnectionChange:  extern "C" fn(*mut T, IceConnectionState),
 
     // Media events
     onAddStream:           extern "C" fn(*mut T, *const RffiMediaStream),
@@ -497,8 +531,9 @@ where
 
         let pc_observer_callbacks = PeerConnectionObserverCallbacks::<T> {
             // ICE events
-            onIceCandidate:        pc_observer_OnIceCandidate::<T>,
-            onIceConnectionChange: pc_observer_OnIceConnectionChange::<T>,
+            onIceCandidate:         pc_observer_OnIceCandidate::<T>,
+            onIceCandidatesRemoved: pc_observer_OnIceCandidatesRemoved::<T>,
+            onIceConnectionChange:  pc_observer_OnIceConnectionChange::<T>,
 
             // Media events
             onAddStream:           pc_observer_OnAddStream::<T>,

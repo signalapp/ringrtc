@@ -2802,6 +2802,13 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         Ok(())
     }
 
+    fn handle_ice_candidates_removed(
+        &mut self,
+        _removed_addresses: Vec<SocketAddr>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     fn handle_ice_connection_state_changed(
         &mut self,
         ice_connection_state: IceConnectionState,

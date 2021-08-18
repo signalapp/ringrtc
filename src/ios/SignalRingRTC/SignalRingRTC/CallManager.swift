@@ -959,6 +959,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         configuration.bundlePolicy = .maxBundle
         configuration.rtcpMuxPolicy = .require
         configuration.tcpCandidatePolicy = .disabled
+        configuration.continualGatheringPolicy = .gatherContinually
 
         if appCallContext.hideIp {
             configuration.iceTransportPolicy = .relay

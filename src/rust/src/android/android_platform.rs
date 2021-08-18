@@ -547,7 +547,7 @@ impl Platform for AndroidPlatform {
         let jni_call_manager = self.jni_call_manager.as_obj();
 
         // Set a frame capacity of min (5) + objects (3) + elements (N * 3 object per element).
-        let capacity = (8 + send.ice.candidates_added.len() * 3) as i32;
+        let capacity = (8 + send.ice.candidates.len() * 3) as i32;
         let _ = env.with_local_frame(capacity, || {
             let jni_remote = remote_peer.as_obj();
             let call_id_jlong = u64::from(call_id) as jlong;
@@ -561,7 +561,7 @@ impl Platform for AndroidPlatform {
                 }
             };
 
-            for candidate in send.ice.candidates_added {
+            for candidate in send.ice.candidates {
                 let jni_opaque = JObject::from(env.byte_array_from_slice(&candidate.opaque)?);
                 let result = ice_candidate_list.add(jni_opaque);
                 if result.is_err() {

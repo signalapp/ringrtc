@@ -12,16 +12,45 @@ pub struct Answer {
     pub v4: ::std::option::Option<ConnectionParametersV4>,
 }
 /// A serialized one these goes in the "opaque" field of the CallingMessage::Ice in SignalService.proto
+/// Unlike other message types, the ICE message contains many of these, not just one.
+/// We should perhaps rename this to "IceUpdate" since it can either be a candidate
+/// or a removal of a candidate.  But it would require a lot of FFI code to be renamed
+/// which doesn't seem worth it at the moment.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IceCandidate {
     /// Use a field value of 2 for compatibility since both V2 and V3 have the same format.
     #[prost(message, optional, tag="2")]
-    pub v3: ::std::option::Option<IceCandidateV3>,
+    pub added_v3: ::std::option::Option<IceCandidateV3>,
+    /// ICE candidate removal identifies the removed candidate
+    /// by (transport_name, component, ip, port, udp/tcp).
+    /// But we assume transport_name = "audio", component = 1, and udp
+    /// So we just need (ip, port)
+    #[prost(message, optional, tag="3")]
+    pub removed: ::std::option::Option<SocketAddr>,
+}
+/// The V2 protocol uses SDP, DTLS, but not SCTP.
+/// The V3 protocol uses SDP, but not DTLS, but not SCTP.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConnectionParametersV3OrV2 {
+    #[prost(string, optional, tag="1")]
+    pub sdp: ::std::option::Option<std::string::String>,
+    /// V2 has this unset.
+    /// V3 has this set
+    #[prost(bytes, optional, tag="2")]
+    pub public_key: ::std::option::Option<std::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IceCandidateV3 {
     #[prost(string, optional, tag="1")]
     pub sdp: ::std::option::Option<std::string::String>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SocketAddr {
+    /// IPv4: 4 bytes; IPv6: 16 bytes
+    #[prost(bytes, optional, tag="1")]
+    pub ip: ::std::option::Option<std::vec::Vec<u8>>,
+    #[prost(uint32, optional, tag="2")]
+    pub port: ::std::option::Option<u32>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VideoCodec {

@@ -624,7 +624,7 @@ where
             info!("received_ice(): storing in pending_call");
             pending_call
                 .ice_candidates
-                .append(&mut received.ice.candidates_added);
+                .append(&mut received.ice.candidates);
             Ok(())
         } else {
             let mut connection_map = self.connection_map.lock()?;

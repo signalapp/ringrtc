@@ -36,7 +36,13 @@ void PeerConnectionObserverRffi::OnIceCandidate(const IceCandidateInterface* can
 
 void PeerConnectionObserverRffi::OnIceCandidatesRemoved(
     const std::vector<cricket::Candidate>& candidates) {
-  RTC_LOG(LS_INFO) << "OnIceCandidatesRemoved()";
+
+  std::vector<IpPort> removed_addresses;
+  for (const auto& candidate: candidates) {
+    removed_addresses.push_back(RtcSocketAddressToIpPort(candidate.address()));
+  }
+
+  callbacks_.onIceCandidatesRemoved(observer_, removed_addresses.data(), removed_addresses.size());
 }
 
 void PeerConnectionObserverRffi::OnSignalingChange(

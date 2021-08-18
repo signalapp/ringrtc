@@ -1432,7 +1432,7 @@ where
             RingBench::Cm,
             format!(
                 "received_ice_candidates({})\t{}\t{}",
-                received.ice.candidates_added.len(),
+                received.ice.candidates.len(),
                 call_id,
                 received.sender_device_id,
             )
@@ -2305,8 +2305,8 @@ where
                     } else {
                         Some(connection.remote_device_id())
                     },
-                    ice:                signaling::Ice {
-                        candidates_added: local_candidates,
+                    ice: signaling::Ice {
+                        candidates: local_candidates,
                     },
                 },
             )?;

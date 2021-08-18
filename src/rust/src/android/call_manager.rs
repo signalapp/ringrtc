@@ -354,7 +354,7 @@ pub fn received_ice(
         call_id,
         signaling::ReceivedIce {
             ice: signaling::Ice {
-                candidates_added: ice_candidates,
+                candidates: ice_candidates,
             },
             sender_device_id,
         },

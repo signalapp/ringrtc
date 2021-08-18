@@ -118,6 +118,12 @@ impl From<SocketAddr> for RffiIpPort {
     }
 }
 
+impl From<&RffiIpPort> for SocketAddr {
+    fn from(rffi: &RffiIpPort) -> SocketAddr {
+        SocketAddr::new(rffi.ip.ip(), rffi.port)
+    }
+}
+
 impl Debug for RffiIpPort {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.socket_addr().fmt(f)

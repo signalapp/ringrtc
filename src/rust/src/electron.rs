@@ -761,9 +761,7 @@ fn receivedIceCandidates(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.received_ice(
             call_id,
             signaling::ReceivedIce {
-                ice: signaling::Ice {
-                    candidates_added: candidates,
-                },
+                ice: signaling::Ice { candidates },
                 sender_device_id,
             },
         )?;
@@ -1560,9 +1558,8 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                         )
                     }
                     signaling::Message::Ice(ice) => {
-                        let js_candidates =
-                            JsArray::new(&mut cx, ice.candidates_added.len() as u32);
-                        for (i, candidate) in ice.candidates_added.iter().enumerate() {
+                        let js_candidates = JsArray::new(&mut cx, ice.candidates.len() as u32);
+                        for (i, candidate) in ice.candidates.iter().enumerate() {
                             let opaque: neon::handle::Handle<JsValue> = {
                                 let mut js_opaque = cx.buffer(candidate.opaque.len() as u32)?;
                                 cx.borrow_mut(&mut js_opaque, |handle| {

@@ -23,13 +23,27 @@ message Answer {
 }
 
 // A serialized one these goes in the "opaque" field of the CallingMessage::Ice in SignalService.proto
+// Unlike other message types, the ICE message contains many of these, not just one.
+// We should perhaps rename this to "IceUpdate" since it can either be a candidate
+// or a removal of a candidate.  But it would require a lot of FFI code to be renamed
+// which doesn't seem worth it at the moment.
 message IceCandidate {
   // Use a field value of 2 for compatibility since both V2 and V3 have the same format.
-  optional IceCandidateV3 V3 = 2;
+  optional IceCandidateV3OrV2 added_V3 = 2;
+  // ICE candidate removal identifies the removed candidate
+  // by (transport_name, component, ip, port, udp/tcp).
+  // But we assume transport_name = "audio", component = 1, and udp
+  // So we just need (ip, port)
+  optional SocketAddr removed = 3;
 }
 
 message IceCandidateV3 {
   optional string sdp = 1;
+}
+
+message SocketAddr {
+  optional bytes ip = 1;  // IPv4: 4 bytes; IPv6: 16 bytes
+  optional uint32 port = 2;
 }
 
 enum VideoCodecType {

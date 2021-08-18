@@ -283,7 +283,7 @@ pub fn received_ice(
         "received_ice(): call_id: {} sender_device_id: {} candidates len: {}",
         call_id,
         received.sender_device_id,
-        received.ice.candidates_added.len()
+        received.ice.candidates.len()
     );
 
     call_manager.received_ice(call_id, received)

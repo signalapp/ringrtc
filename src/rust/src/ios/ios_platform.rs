@@ -264,13 +264,13 @@ impl Platform for IosPlatform {
             call_id, receiver_device_id, broadcast
         );
 
-        if send.ice.candidates_added.is_empty() {
+        if send.ice.candidates.is_empty() {
             return Ok(());
         }
 
         let mut app_ice_candidates: Vec<AppByteSlice> = Vec::new();
 
-        for candidate in &send.ice.candidates_added {
+        for candidate in &send.ice.candidates {
             let app_ice_candidate = app_slice_from_bytes(Some(&candidate.opaque));
             app_ice_candidates.push(app_ice_candidate);
         }

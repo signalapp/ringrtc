@@ -5,6 +5,7 @@
 
 //! WebRTC Simulation Peer Connection Interface
 
+use std::net::SocketAddr;
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
@@ -16,6 +17,7 @@ use crate::webrtc::sdp_observer::{
     RffiSessionDescription,
     RffiSetSessionDescriptionObserver,
 };
+use crate::webrtc::network::RffiIpPort;
 use crate::webrtc::sim::ice_gatherer::{RffiIceGatherer, FAKE_ICE_GATHERER};
 use crate::webrtc::sim::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::stats_observer::RffiStatsObserver;
@@ -50,6 +52,7 @@ impl RffiPeerConnection {
                 remote_description_set: false,
                 outgoing_audio_enabled: true,
                 rtp_packet_sink:        None,
+                removed_ice_candidates: vec![],
             })),
         }
     }
@@ -86,6 +89,15 @@ impl RffiPeerConnection {
         let mut state = self.state.lock().unwrap();
         state.rtp_packet_sink = Some(rtp_packet_sink);
     }
+
+    fn remove_ice_candidates(&self, removed_addresses: impl Iterator<Item=SocketAddr>) {
+        self.state.lock().unwrap().removed_ice_candidates.extend(removed_addresses);
+    }
+
+    pub fn removed_ice_candidates(&self) -> Vec<SocketAddr> {
+        let state = self.state.lock().unwrap();
+        state.removed_ice_candidates.clone()
+    }
 }
 
 pub type BoxedRtpPacketSink = Box<dyn Fn(rtp::Header, &[u8]) + Send + 'static>;
@@ -95,6 +107,7 @@ struct RffiPeerConnectionState {
     remote_description_set: bool,
     outgoing_audio_enabled: bool,
     rtp_packet_sink:        Option<BoxedRtpPacketSink>,
+    removed_ice_candidates: Vec<SocketAddr>,
 }
 
 /// Simulation type for DataChannelInterface.
@@ -183,6 +196,18 @@ pub unsafe fn Rust_addIceCandidateFromServer(
     _tcp: bool,
 ) -> bool {
     info!("Rust_addIceCandidateFromServer():");
+    true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_removeIceCandidates(
+    peer_connection: *const RffiPeerConnection,
+    removed_addresses_data: *const RffiIpPort,
+    removed_addresses_len: usize,
+) -> bool {
+    info!("Rust_removeIceCandidates():");
+    let removed_addresses = std::slice::from_raw_parts(removed_addresses_data, removed_addresses_len).iter().map(|ip_port| ip_port.into());
+    (*peer_connection).remove_ice_candidates(removed_addresses);
     true
 }
 

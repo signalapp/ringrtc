@@ -627,7 +627,7 @@ impl Platform for NativePlatform {
     ) -> Result<()> {
         info!(
             "NativePlatform::on_send_ice(): remote_peer: {}, call_id: {}, receiver_device_id: {:?}, candidates: {}",
-            remote_peer, call_id, send.receiver_device_id, send.ice.candidates_added.len()
+            remote_peer, call_id, send.receiver_device_id, send.ice.candidates.len()
         );
         self.send_signaling(
             remote_peer,

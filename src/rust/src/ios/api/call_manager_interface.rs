@@ -782,7 +782,7 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
         callId,
         signaling::ReceivedIce {
             ice:              signaling::Ice {
-                candidates_added: ice_candidates,
+                candidates: ice_candidates,
             },
             sender_device_id: senderDeviceId as DeviceId,
         },

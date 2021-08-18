@@ -923,6 +923,7 @@ public class CallManager {
     configuration.bundlePolicy  = PeerConnection.BundlePolicy.MAXBUNDLE;
     configuration.rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE;
     configuration.tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED;
+    configuration.continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY;
 
     if (callContext.hideIp) {
       configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;

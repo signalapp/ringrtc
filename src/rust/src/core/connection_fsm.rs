@@ -104,10 +104,10 @@ pub enum ConnectionEvent {
     /// Source: app (user setting)
     /// Action: Update and send bitrate via a receiver status message over the data channel.
     UpdateBandwidthMode(BandwidthMode),
-    /// Local ICE candidate from PeerConnection
+    /// Local ICE candidates added or removed from PeerConnection
     /// Source: PeerConnection
-    /// Action: Send ICE candidate over signaling.
-    LocalIceCandidate(signaling::IceCandidate),
+    /// Action: Send ICE candidate (addition or removal) over signaling.
+    LocalIceCandidates(Vec<signaling::IceCandidate>),
     /// ICE state changed.
     /// Source: PeerConnection
     /// Action: Bubble up to Connection and Call objects.
@@ -176,7 +176,7 @@ impl fmt::Display for ConnectionEvent {
                 "UpdateBandwidthMode, mode: {:?}",
                 mode
             ),
-            ConnectionEvent::LocalIceCandidate(_) => "LocalIceCandidate".to_string(),
+            ConnectionEvent::LocalIceCandidates(_) => "LocalIceCandidates".to_string(),
             ConnectionEvent::IceConnected => "IceConnected".to_string(),
             ConnectionEvent::IceFailed => "IceConnectionFailed".to_string(),
             ConnectionEvent::IceDisconnected => "IceDisconnected".to_string(),
@@ -421,8 +421,8 @@ where
             ConnectionEvent::UpdateBandwidthMode(mode) => {
                 self.handle_update_bandwidth_mode(connection, state, mode)
             }
-            ConnectionEvent::LocalIceCandidate(candidate) => {
-                self.handle_local_ice_candidate(connection, state, candidate)
+            ConnectionEvent::LocalIceCandidates(candidates) => {
+                self.handle_local_ice_candidates(connection, state, candidates)
             }
             ConnectionEvent::IceConnected => self.handle_ice_connected(connection, state),
             ConnectionEvent::IceFailed => self.handle_ice_failed(connection, state),
@@ -646,7 +646,7 @@ where
             | ConnectionState::ReconnectingAfterAccepted
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => {
-                connection.add_remote_ice_candidates(&ice.candidates_added)?
+                connection.handle_received_ice(ice)?;
             }
             _ => self.unexpected_state(state, "RemoteIceCandidate"),
         }
@@ -762,11 +762,11 @@ where
         Ok(())
     }
 
-    fn handle_local_ice_candidate(
+    fn handle_local_ice_candidates(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
-        candidate: signaling::IceCandidate,
+        candidates: Vec<signaling::IceCandidate>,
     ) -> Result<()> {
         ringbench!(
             RingBench::WebRtc,
@@ -788,7 +788,7 @@ where
                     if connection.terminating()? {
                         return Ok(());
                     }
-                    connection.buffer_local_ice_candidate(candidate)
+                    connection.buffer_local_ice_candidates(candidates)
                 })
                 .map_err(move |err| {
                     err_connection.inject_internal_error(err, "IceFuture failed");

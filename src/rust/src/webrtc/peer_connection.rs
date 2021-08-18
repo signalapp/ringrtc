@@ -6,15 +6,16 @@
 //! WebRTC Peer Connection Interface
 use std::ffi::CString;
 use std::fmt;
+use std::net::SocketAddr;
 
-use crate::common::{units::DataRate, Result};
-use crate::core::signaling;
 use crate::core::util::redact_string;
+use crate::common::{units::DataRate, Result};
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::{AudioEncoderConfig, RffiAudioEncoderConfig};
-use crate::webrtc::peer_connection_observer::RffiPeerConnectionObserver;
+use crate::webrtc::network::RffiIpPort;
+use crate::webrtc::peer_connection_observer::{RffiPeerConnectionObserver};
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver,
@@ -194,13 +195,10 @@ impl PeerConnection {
     }
 
     /// Rust wrapper around C++ PeerConnection::AddIceCandidate().
-    pub fn add_ice_candidate(&self, candidate: &signaling::IceCandidate) -> Result<()> {
-        let sdp = candidate.to_v3_sdp()?;
-
+    pub fn add_ice_candidate_from_sdp(&self, sdp: &str) -> Result<()> {
         info!(
-            "Remote ICE candidate: {}; {}",
-            candidate.to_info_string(),
-            redact_string(sdp.as_str())
+            "Remote ICE candidate: {}",
+            redact_string(sdp)
         );
 
         let sdp_c = CString::new(sdp)?;
@@ -224,6 +222,13 @@ impl PeerConnection {
         } else {
             Err(RingRtcError::AddIceCandidate.into())
         }
+    }
+
+    /// Rust wrapper around C++ PeerConnection::RemoveIceCandidates.
+    pub fn remove_ice_candidates(&self, removed_addresses: impl Iterator<Item=SocketAddr>) {
+        let removed_addresses: Vec<RffiIpPort> = removed_addresses.map(|address| address.into()).collect();
+
+        unsafe { pc::Rust_removeIceCandidates(self.rffi, removed_addresses.as_ptr(), removed_addresses.len()) };
     }
 
     // Rust wrapper around C++ PeerConnection::CreateSharedIceGatherer().

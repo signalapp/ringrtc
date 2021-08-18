@@ -102,6 +102,8 @@ pub struct SimPlatform {
     call_manager:                 Arc<Mutex<Option<CallManager<Self>>>>,
     /// True to manually require message_sent() to be invoked for Ice messages.
     no_auto_message_sent_for_ice: Arc<AtomicBool>,
+    /// Last sent message from on_send_ice
+    last_ice_sent:                Arc<Mutex<Option<signaling::SendIce>>>,
 }
 
 impl fmt::Display for SimPlatform {
@@ -264,13 +266,15 @@ impl Platform for SimPlatform {
             remote_peer, call_id, receiver_device_id
         );
 
+        *self.last_ice_sent.lock().unwrap() = Some(send.clone());
+
         if self.force_internal_fault.load(Ordering::Acquire) {
             Err(SimError::SendIceCandidateError.into())
         } else {
             let _ = self
                 .stats
                 .ice_candidates_sent
-                .fetch_add(send.ice.candidates_added.len(), Ordering::AcqRel);
+                .fetch_add(send.ice.candidates.len(), Ordering::AcqRel);
             if self.force_internal_fault.load(Ordering::Acquire) {
                 if !self.no_auto_message_sent_for_ice.load(Ordering::Acquire) {
                     self.message_send_failure(call_id).unwrap();
@@ -636,6 +640,10 @@ impl SimPlatform {
 
     pub fn ice_candidates_sent(&self) -> usize {
         self.stats.ice_candidates_sent.load(Ordering::Acquire)
+    }
+
+    pub fn last_ice_sent(&self) -> Option<signaling::SendIce> {
+        self.last_ice_sent.lock().unwrap().clone()
     }
 
     pub fn normal_hangups_sent(&self) -> usize {

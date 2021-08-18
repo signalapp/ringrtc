@@ -10,7 +10,7 @@ use std::os::raw::c_char;
 use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::media::RffiAudioEncoderConfig;
-use crate::webrtc::network::RffiIp;
+use crate::webrtc::network::{RffiIp, RffiIpPort};
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver,
@@ -76,6 +76,12 @@ extern "C" {
         ip: RffiIp,
         port: u16,
         tcp: bool,
+    ) -> bool;
+
+    pub fn Rust_removeIceCandidates(
+        peer_connection: *const RffiPeerConnection,
+        removed_addresses_data: *const RffiIpPort,
+        removed_addresses_len: usize,
     ) -> bool;
 
     pub fn Rust_createSharedIceGatherer(

@@ -122,6 +122,11 @@ Rust_addIceCandidateFromServer(webrtc::PeerConnectionInterface* peer_connection,
                                uint16_t port,
                                bool tcp);
 
+RUSTEXPORT bool
+Rust_removeIceCandidates(webrtc::PeerConnectionInterface* peer_connection,
+                         webrtc::rffi::IpPort* removed_addresses,
+                         size_t length);
+
 RUSTEXPORT webrtc::IceGathererInterface*
 Rust_createSharedIceGatherer(webrtc::PeerConnectionInterface* peer_connection);
 

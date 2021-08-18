@@ -6,7 +6,9 @@
 /// The messages we send over the signaling channel to establish a call.
 
 use std::{
+    convert::TryInto,
     fmt,
+    net::{IpAddr, SocketAddr},
     time::Duration,
 };
 
@@ -14,7 +16,6 @@ use bytes::{Bytes, BytesMut};
 use prost::Message as _;
 
 use crate::common::{CallMediaType, DeviceId, FeatureLevel, Result};
-use crate::error::RingRtcError;
 use crate::protobuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,7 +95,6 @@ pub enum MessageType {
     Ice,
     Hangup,
     Busy,
-    MediaKey,
 }
 
 /// The caller sends this to several callees to initiate the call.
@@ -218,13 +218,51 @@ impl Answer {
 /// Each side can send these at any time after the offer and answer are sent.
 #[derive(Clone)]
 pub struct Ice {
-    pub candidates_added: Vec<IceCandidate>,
+    pub candidates: Vec<IceCandidate>,
 }
 
 /// Each side sends these to setup an ICE connection
+/// and throughout the call ("continual gathering").
+/// This can represent either an ICE candidate being added
+/// or one being removed.
 #[derive(Clone)]
 pub struct IceCandidate {
     pub opaque: Vec<u8>,
+}
+
+impl From<SocketAddr> for protobuf::signaling::SocketAddr {
+    fn from(addr: SocketAddr) -> Self {
+        Self {
+            ip: Some(match addr.ip() {
+                IpAddr::V4(v4) => v4.octets().to_vec(),
+                IpAddr::V6(v6) => v6.octets().to_vec(),
+            }),
+            port: Some(addr.port() as u32),
+        }
+    }
+}
+
+impl protobuf::signaling::SocketAddr {
+    fn to_std(&self) -> Option<SocketAddr> {
+        let octets = &self.ip.as_ref()?[..];
+        let ip = if octets.len() == 4 {
+            let octets: [u8; 4] = octets.try_into().unwrap();
+            IpAddr::V4(octets.into())
+        } else if octets.len() == 16 {
+            let octets: [u8; 16] = octets.try_into().unwrap();
+            IpAddr::V6(octets.into())
+        } else {
+            return None
+        };
+
+        let port = self.port?;
+        if port > (u16::MAX as u32) {
+            return None;
+        }
+        let port = port as u16;
+
+        Some(SocketAddr::new(ip, port))
+    }
 }
 
 impl IceCandidate {
@@ -237,24 +275,72 @@ impl IceCandidate {
         let ice_candidate_proto_v3 =
             protobuf::signaling::IceCandidateV3 { sdp: Some(sdp) };
         let ice_candidate_proto = protobuf::signaling::IceCandidate {
-            v3: Some(ice_candidate_proto_v3),
+            added_v3: Some(ice_candidate_proto_v3),
+            removed: None,
         };
 
-        let mut opaque = BytesMut::with_capacity(ice_candidate_proto.encoded_len());
+        let mut opaque = Vec::with_capacity(ice_candidate_proto.encoded_len());
         ice_candidate_proto.encode(&mut opaque)?;
 
-        Ok(Self::new(opaque.to_vec()))
+        Ok(Self::new(opaque))
     }
 
-    pub fn to_v3_sdp(&self) -> Result<String> {
-        match protobuf::signaling::IceCandidate::decode(Bytes::from(self.opaque.clone()))? {
+    pub fn from_removed_address(removed_address: SocketAddr) -> Result<Self> {
+        let ice_candidate_proto = protobuf::signaling::IceCandidate {
+            removed: Some(removed_address.into()),
+            // Old clients blow up if they don't find an added candidate,
+            // so we need to put something here.
+            // It must pass WebRTC's ParseCandidate, VerifyCandidate,
+            // JsepTransport::AddRemoteCandidates,
+            // and P2PTransportChannel::AddRemoteCandidate.
+            // ParseCandidate requires all of the following:
+            // - the format (with an optional "a=" prefix):
+            //   "candidate:$foundation $component $protocol $priority $ip $port typ %type
+            // - component must be an int
+            // - protocol be "udp", "tcp", "ssltcp", or "tls"
+            // - priority must be an uint32
+            // - port must be a uint16
+            // - type must be "local", "stun", "prflx", or "relay"
+            // VerifyCandidate requires all of the following:
+            // - (a non-zero port) or (a non-zero IP)
+            // - (TCP with port 0) or (port > 1024) or ... who cares ...
+            // JsepTransport::AddRemoteCandidates requires component = 1.
+            // P2PTransportChannel::AddRemoteCandidate requires
+            // - An unset ufrag (or you might get a warning or worse)
+            // - An IP instead of a hostname (or you might trigger a DNS query)
+            // - A protocol (UDP/TCP) that doesn't pair with anything (or you might create new pairs)
+            // - Either an unset generation (for no warnings) or a set generation (for warnings, but no memory of the candidate)
+            // So it's not paired, the foundation, IP, port, and type don't matter except to pass parsing
+            added_v3: Some(protobuf::signaling::IceCandidateV3 {sdp: Some("candidate:FAKE 1 tcp 0 127.0.0.1 0 typ host".to_owned()) }),
+        };
+
+        let mut opaque = Vec::with_capacity(ice_candidate_proto.encoded_len());
+        ice_candidate_proto.encode(&mut opaque)?;
+
+        Ok(Self::new(opaque))
+    }
+
+    // ICE candidates are the same for V2 and V3 and V4.
+    pub fn v3_sdp(&self) -> Option<String> {
+        match protobuf::signaling::IceCandidate::decode(Bytes::from(self.opaque.clone())).ok()? {
             protobuf::signaling::IceCandidate {
-                v3:
+                added_v3:
                     Some(protobuf::signaling::IceCandidateV3 {
                         sdp: Some(v3_sdp),
                     }),
-            } => Ok(v3_sdp),
-            _ => Err(RingRtcError::UnknownSignaledProtocolVersion.into()),
+                ..
+            } => Some(v3_sdp),
+            _ => None,
+        }
+    }
+
+    pub fn removed_address(&self) -> Option<SocketAddr> {
+        match protobuf::signaling::IceCandidate::decode(Bytes::from(self.opaque.clone())).ok()? {
+            protobuf::signaling::IceCandidate {
+                removed: Some(removed_address),
+                ..
+            } => removed_address.to_std(),
+            _ => None
         }
     }
 
@@ -355,6 +441,7 @@ pub struct SendAnswer {
 /// An ICE message with extra info specific to sending
 /// ICE messages can either target a particular device (callee only)
 /// or broadcast (caller only).
+#[derive(Clone)]
 pub struct SendIce {
     pub ice:                Ice,
     pub receiver_device_id: Option<DeviceId>,

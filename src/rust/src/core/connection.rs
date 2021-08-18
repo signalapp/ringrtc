@@ -7,6 +7,7 @@
 
 use std::cmp;
 use std::fmt;
+use std::net::SocketAddr;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -796,9 +797,8 @@ where
                 RingBench::WebRtc,
                 format!("ice_candidates({})", remote_ice_candidates.len())
             );
-            for remote_ice_candidate in remote_ice_candidates {
-                peer_connection.add_ice_candidate(&remote_ice_candidate)?;
-            }
+
+            self.add_and_remove_remote_ice_candidates(peer_connection, &remote_ice_candidates)?;
 
             self.set_state(ConnectionState::ConnectingBeforeAccepted)?;
             Ok(answer_to_send)
@@ -1130,17 +1130,21 @@ where
     }
 
     /// Buffer local ICE candidates, and maybe send them immediately
-    pub fn buffer_local_ice_candidate(&self, candidate: signaling::IceCandidate) -> Result<()> {
-        let num_ice_candidates = {
-            let mut buffered_local_ice_candidates = self.buffered_local_ice_candidates.lock()?;
-            buffered_local_ice_candidates.push(candidate);
-            buffered_local_ice_candidates.len()
+    pub fn buffer_local_ice_candidates(&self, candidates: Vec<signaling::IceCandidate>) -> Result<()> {
+        let (buffered_count_before, buffered_count_after) = {
+            let mut buffered_candidates = self.buffered_local_ice_candidates.lock()?;
+            let buffered_count_before = buffered_candidates.len();
+            for candidate in candidates {
+                buffered_candidates.push(candidate);
+            }
+            let buffered_count_after = buffered_candidates.len();
+            (buffered_count_before, buffered_count_after)
         };
 
-        // Only when we transition from no candidates to one do we
+        // Only when we transition from no candidates to some do we
         // need to signal the message queue that there is something
         // to send for this Connection.
-        if num_ice_candidates == 1 {
+        if buffered_count_before == 0 && buffered_count_after > 0 {
             let call = self.call()?;
             let broadcast = self.connection_type == ConnectionType::OutgoingParent;
             call.send_buffered_local_ice_candidates(self.clone(), broadcast)?
@@ -1161,21 +1165,44 @@ where
         Ok(copy_candidates)
     }
 
-    pub fn add_remote_ice_candidates(
+    pub fn handle_received_ice(
         &self,
-        remote_ice_candidates: &[signaling::IceCandidate],
+        ice: signaling::Ice,
     ) -> Result<()> {
+        let webrtc = self.webrtc.lock()?;
+        let pc = webrtc.peer_connection()?;
+
+        self.add_and_remove_remote_ice_candidates(pc, &ice.candidates)
+    }
+
+    // This is where we differentiate between received candiate additions and removals.
+    fn add_and_remove_remote_ice_candidates(&self, pc: &PeerConnection, remote_ice_candidates: &[signaling::IceCandidate]) -> Result<()> {
+        let mut added_sdps = vec![];
+        let mut removed_addresses = vec![];
+        for candidate in remote_ice_candidates {
+            if let Some(removed_address) = candidate.removed_address() {
+                removed_addresses.push(removed_address);
+                // We don't add a candidate if it's both added and removed because of
+                // the backwards-compatibility mechanism we have that contains a dummy
+                // candidate.
+            } else if let Some(sdp) = candidate.v3_sdp() {
+                added_sdps.push(sdp);
+            }
+        }
+
         ringbench!(
             RingBench::Conn,
             RingBench::WebRtc,
-            format!("ice_candidates({})", remote_ice_candidates.len())
+            format!("ice_candidates({}); ice_candidates_removed({})", added_sdps.len(), removed_addresses.len())
         );
 
-        let webrtc = self.webrtc.lock()?;
-        for remote_ice_candidate in remote_ice_candidates {
-            webrtc
-                .peer_connection()?
-                .add_ice_candidate(remote_ice_candidate)?;
+        for added_sdp in added_sdps {
+            if let Err(e) = pc.add_ice_candidate_from_sdp(&added_sdp) {
+                warn!("Failed to add ICE candidate: {:?}", e);
+            }
+        }
+        if !removed_addresses.is_empty() {
+            pc.remove_ice_candidates(removed_addresses.into_iter());
         }
         Ok(())
     }
@@ -1507,7 +1534,42 @@ where
             redact_string(sdp_for_logging)
         );
 
-        self.inject_event(ConnectionEvent::LocalIceCandidate(candidate))?;
+        self.inject_event(ConnectionEvent::LocalIceCandidates(vec![candidate]))?;
+        Ok(())
+    }
+
+    /// Inject a `LocalIceCandidatesRemoved` event into the FSM.
+    ///
+    /// `Called By:` WebRTC `PeerConnectionObserver` call back thread.
+    ///
+    /// # Arguments
+    ///
+    /// * `removed_addresses` - Locally removed candidate addresses
+    pub fn inject_local_ice_candidates_removed(
+        &mut self,
+        removed_addresses: Vec<SocketAddr>,
+        force_send: bool,
+    ) -> Result<()> {
+        if !force_send && self.connection_type == ConnectionType::OutgoingChild {
+            return Ok(());
+        }
+
+        let removed_ports: Vec<u16> = removed_addresses.iter().map(|address| address.port()).collect();
+        info!(
+            "Local ICE candidates removed; ports: {:?}",
+            removed_ports,
+        );
+
+        let candidates = removed_addresses.into_iter().filter_map(|removed_address| {
+            signaling::IceCandidate::from_removed_address(removed_address).map_err(|e| {
+                warn!("Failed to signal removed candidate: {:?}", e);
+                e
+            }).ok()
+        }).collect();
+
+        // This is where we make additions and removals look the same in signaling
+        // where a "candidate" (really, an update) can be either an addition or removal.
+        self.inject_event(ConnectionEvent::LocalIceCandidates(candidates))?;
         Ok(())
     }
 
@@ -1840,6 +1902,14 @@ where
     ) -> Result<()> {
         let force_send = false;
         self.inject_local_ice_candidate(ice_candidate, force_send, sdp_for_logging)
+    }
+
+    fn handle_ice_candidates_removed(
+        &mut self,
+        removed_addresses: Vec<SocketAddr>,
+    ) -> Result<()> {
+        let force_send = false;
+        self.inject_local_ice_candidates_removed(removed_addresses, force_send)
     }
 
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()> {

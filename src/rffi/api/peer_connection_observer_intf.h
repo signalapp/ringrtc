@@ -8,6 +8,7 @@
 
 #include "api/peer_connection_interface.h"
 #include "rffi/api/rffi_defs.h"
+#include "rffi/api/network.h"
 
 /**
  * Rust friendly wrapper around a custom class that implements the
@@ -25,6 +26,7 @@ namespace rffi {
 typedef struct {
   // ICE events
   void (*onIceCandidate)(rust_object, const RustIceCandidate*);
+  void (*onIceCandidatesRemoved)(rust_object, const webrtc::rffi::IpPort*, size_t);
   void (*onIceConnectionChange)(rust_object, webrtc::PeerConnectionInterface::IceConnectionState);
 
   // Media events

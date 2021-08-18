@@ -264,6 +264,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     config.crypto_options->sframe.require_frame_encryption = true;
   }
   config.crypto_options->srtp.enable_gcm_crypto_suites = true;
+  config.continual_gathering_policy =  PeerConnectionInterface::ContinualGatheringPolicy::GATHER_CONTINUALLY;
 
   PeerConnectionDependencies deps(observer);
   if (factory_owner->injectable_network()) {
