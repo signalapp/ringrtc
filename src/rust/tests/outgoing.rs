@@ -2068,12 +2068,12 @@ fn group_call_ring_message_age_does_not_affect_ring_expiration() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    // 90 seconds means the ring isn't expired yet...
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::from_secs(90))
+    // 45 seconds means the ring isn't expired yet...
+    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::from_secs(45))
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
-    // ...and adding another 90 won't make it expire, since the ages don't stack.
-    cm.age_all_outstanding_group_rings(Duration::from_secs(90));
+    // ...and adding another 45 won't make it expire, since the ages don't stack.
+    cm.age_all_outstanding_group_rings(Duration::from_secs(45));
 
     let group_call_id = context
         .create_group_call(group_id.clone())

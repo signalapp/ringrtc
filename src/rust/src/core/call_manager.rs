@@ -47,8 +47,8 @@ use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
 use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 
-const TIME_OUT_PERIOD: Duration = Duration::from_secs(120);
-pub const MAX_MESSAGE_AGE: Duration = Duration::from_secs(120);
+const TIME_OUT_PERIOD: Duration = Duration::from_secs(60);
+pub const MAX_MESSAGE_AGE: Duration = Duration::from_secs(60);
 
 /// Spawns a task on the worker runtime thread to handle an API
 /// request with error handling.
