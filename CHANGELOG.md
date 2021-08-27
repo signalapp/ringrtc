@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.12.0
+
+- Enable ICE continual gathering
+
+- Add signaling for the removal of ICE candidates
+
+- Add notifications for network route changes
+
+- Adjust ringing timeout to 60 seconds
+
+- iOS: Fixes to address resource leaks
+
+- Reference signalapp/webrtc@4389h
+  - iOS: AudioSession adjustments for volume issues
+
+- Update builds and documentation
+
 ## v2.11.1
 
 - Update Group Ringing feature
