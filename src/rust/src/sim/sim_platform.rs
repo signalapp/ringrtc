@@ -28,6 +28,7 @@ use crate::core::{group_call, signaling};
 use crate::sim::error::SimError;
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::PeerConnection;
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 use crate::webrtc::sim::peer_connection::RffiPeerConnection;
 
 /// Simulation implementation for platform::Platform::{AppIncomingMedia,
@@ -193,6 +194,11 @@ impl Platform for SimPlatform {
         let mut map = self.event_map.lock().unwrap();
         map.entry(event).and_modify(|e| *e += 1).or_insert(1);
 
+        Ok(())
+    }
+
+    fn on_network_route_changed(&self, _remote_peer: &Self::AppRemotePeer, network_route: NetworkRoute) -> Result<()> {
+        info!("on_network_route_changed(): {:?}", network_route);
         Ok(())
     }
 
@@ -476,6 +482,15 @@ impl Platform for SimPlatform {
         _connection_state: group_call::ConnectionState,
     ) {
         unimplemented!()
+    }
+
+
+    fn handle_network_route_changed(
+        &self,
+        _client_id: group_call::ClientId,
+        network_route: NetworkRoute,
+    ) {
+        info!("handle_network_route_changed(): {:?}", network_route);
     }
 
     fn handle_join_state_changed(

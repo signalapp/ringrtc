@@ -116,6 +116,41 @@ export class PeekInfo {
   }
 }
 
+// In sync with WebRTC's PeerConnection.AdapterType.
+// Despite how it looks, this is not an option set.
+// A network adapter type can only be one of the listed values.
+// And there are a few oddities to note:
+// - Cellular means we don't know if it's 2G, 3G, 4G, 5G, ...
+//   If we know, it will be one of those corresponding enum values.
+//   This means to know if something is cellular or not, you must
+//   check all of those values.
+// - Default means we don't know the adapter type (like Unknown)
+//   but it's because we bound to the default IP address (0.0.0.0)
+//   so it's probably the default adapter (wifi if available, for example)
+//   This is unlikely to happen in practice.
+enum NetworkAdapterType {
+  Unknown = 0,
+  Ethernet = 1 << 0,
+  Wifi = 1 << 1,
+  Cellular = 1 << 2,
+  Vpn = 1 << 3,
+  Loopback = 1 << 4,
+  Default = 1 << 5,
+  Cellular2G = 1 << 6,
+  Cellular3G = 1 << 7,
+  Cellular4G = 1 << 8,
+  Cellular5G = 1 << 9,
+}
+
+// Information about the network route being used for sending audio/video/data
+export class NetworkRoute {
+  localAdapterType: NetworkAdapterType;
+
+  constructor() {
+    this.localAdapterType = NetworkAdapterType.Unknown;
+  }
+}
+
 class Requests<T> {
   private _resolveById: Map<number, (response: T) => void> = new Map();
   private _nextId: number = 1;
@@ -386,6 +421,18 @@ export class RingRTCType {
     call.remoteSharingScreen = enabled;
     if (call.handleRemoteSharingScreen) {
       call.handleRemoteSharingScreen();
+    }
+  }
+
+  onNetworkRouteChanged(remoteUserId: UserId, localNetworkAdapterType: NetworkAdapterType): void {
+    const call = this._call;
+    if (!call || call.remoteUserId !== remoteUserId) {
+      return;
+    }
+
+    call.networkRoute.localAdapterType = localNetworkAdapterType;
+    if (call.handleNetworkRouteChanged) {
+      call.handleNetworkRouteChanged();
     }
   }
 
@@ -704,6 +751,27 @@ export class RingRTCType {
       }
 
       groupCall.handleJoinStateChanged(joinState);
+    });
+  }
+
+  // Called by Rust
+  handleNetworkRouteChanged(
+    clientId: GroupCallClientId,
+    localNetworkAdapterType: NetworkAdapterType,
+  ): void {
+    silly_deadlock_protection(() => {
+      let groupCall = this._groupCallByClientId.get(clientId);
+      if (!groupCall) {
+        this.onLogMessage(
+          CallLogLevel.Error,
+          'Service.ts',
+          0,
+          'handleNetworkRouteChanged(): GroupCall not found in map!'
+        );
+        return;
+      }
+
+      groupCall.handleNetworkRouteChanged(localNetworkAdapterType);
     });
   }
 
@@ -1206,6 +1274,7 @@ export class Call {
   private _outgoingVideoIsScreenShare: boolean = false;
   private _remoteVideoEnabled: boolean = false;
   remoteSharingScreen: boolean = false;
+  networkRoute: NetworkRoute = new NetworkRoute();
   private _videoCapturer: VideoCapturer | null = null;
   private _videoRenderer: VideoRenderer | null = null;
   endedReason?: CallEndedReason;
@@ -1214,6 +1283,7 @@ export class Call {
   handleStateChanged?: () => void;
   handleRemoteVideoEnabled?: () => void;
   handleRemoteSharingScreen?: () => void;
+  handleNetworkRouteChanged?: () => void;
 
   // This callback should be set by the VideoCapturer,
   // But could also be set by the UX.
@@ -1513,6 +1583,7 @@ export class LocalDeviceState {
   videoMuted: boolean;
   presenting: boolean;
   sharingScreen: boolean;
+  networkRoute: NetworkRoute;
 
   constructor() {
     this.connectionState = ConnectionState.NotConnected;
@@ -1522,6 +1593,7 @@ export class LocalDeviceState {
     this.videoMuted = true;
     this.presenting = false;
     this.sharingScreen = false;
+    this.networkRoute = new NetworkRoute();
   }
 }
 
@@ -1732,6 +1804,13 @@ export class GroupCall {
   // Called by Rust via RingRTC object
   handleJoinStateChanged(joinState: JoinState): void {
     this._localDeviceState.joinState = joinState;
+
+    this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by Rust via RingRTC object
+  handleNetworkRouteChanged(localNetworkAdapterType: NetworkAdapterType): void {
+    this._localDeviceState.networkRoute.localAdapterType = localNetworkAdapterType;
 
     this._observer.onLocalDeviceStateChanged(this);
   }

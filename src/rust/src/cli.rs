@@ -576,6 +576,18 @@ impl CallStateHandler for CallEndpoint {
         Ok(())
     }
 
+    fn handle_network_route(
+        &self,
+        remote_peer_id: &str,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
+        info!(
+            "Network route changed for {} => {}: {:?}",
+            self.peer_id, remote_peer_id, network_route
+        );
+        Ok(())
+    }
+
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         info!(
             "Video State for {} => {}: {}",

@@ -300,6 +300,10 @@ final class TestDelegate: CallManagerDelegate {
         }
     }
 
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, onNetworkRouteChangedFor call: OpaqueCallData, networkRoute: NetworkRoute) {
+        Logger.debug("TestDelegate:onNetworkRouteChangedFor - \(networkRoute.localAdapterType)")
+    }
+
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendOffer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
         Logger.debug("TestDelegate:shouldSendOffer")
         generalInvocationDetected = true

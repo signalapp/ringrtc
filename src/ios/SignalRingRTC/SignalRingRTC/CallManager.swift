@@ -71,6 +71,41 @@ public enum CallManagerEvent: Int32 {
     case ignoreCallsFromNonMultiringCallers
 }
 
+// In sync with WebRTC's PeerConnection.AdapterType.
+// Despite how it looks, this is not an option set.
+// A network adapter type can only be one of the listed values.
+// And there are a few oddities to note:
+// - "cellular" means we don't know if it's 2G, 3G, 4G, 5G, ...
+//   If we know, it will be one of those corresponding enum values.
+//   This means to know if something is cellular or not, you must
+//   check all of those values.
+// - "anyAddress" means we don't know the adapter type (like "unknown")
+//   but it's because we bound to the default IP address (0.0.0.0)
+//   so it's probably the default adapter (wifi if available, for example)
+//   This is unlikely to happen in practice.
+public enum NetworkAdapterType: Int32 {
+  case unknown = 0
+  case ethernet = 1
+  case wifi = 2
+  case cellular = 4
+  case vpn = 8
+  case loopback = 16
+  case anyAddress = 32
+  case cellular2G = 64
+  case cellular3G = 128
+  case cellular4G = 256
+  case cellular5G = 512
+}
+
+/// Info about the current network route for sending audio/video/data
+public struct NetworkRoute {
+    public let localAdapterType: NetworkAdapterType
+
+    public init(localAdapterType: NetworkAdapterType) {
+        self.localAdapterType = localAdapterType
+    }
+}
+
 /// Type of media for call at time of origination.
 public enum CallMediaType: Int32 {
     /// Call should start as audio only.
@@ -210,6 +245,12 @@ public protocol CallManagerDelegate: AnyObject {
      * Invoked on the main thread, asychronously.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onEvent call: CallManagerDelegateCallType, event: CallManagerEvent)
+
+    /**
+     * onNetworkRouteChangedFor will be invoked when changes to the network routing (e.g. wifi/cellular) are detected.
+     * Invoked on the main thread, asychronously.
+     */
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onNetworkRouteChangedFor call: CallManagerDelegateCallType, networkRoute: NetworkRoute)
 
     /**
      * An Offer message should be sent to the given remote.
@@ -824,6 +865,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    func onNetworkRouteChangedFor(remote: UnsafeRawPointer, networkRoute: NetworkRoute) {
+        Logger.debug("onNetworkRouteChanged")
+
+        DispatchQueue.main.async {
+            Logger.debug("onNetworkRouteChanged - main.async")
+
+            guard let delegate = self.delegate else { return }
+
+            let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
+            delegate.callManager(self, onNetworkRouteChangedFor: callReference, networkRoute: networkRoute)
+        }
+    }
+
     // MARK: - Signaling Observers
 
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
@@ -1095,6 +1149,20 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             }
 
             groupCall.handleConnectionStateChanged(connectionState: connectionState)
+        }
+    }
+
+    func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute) {
+        Logger.debug("handleNetworkRouteChanged")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleNetworkRouteChanged - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleNetworkRouteChanged(networkRoute: networkRoute)
         }
     }
 

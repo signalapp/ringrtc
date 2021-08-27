@@ -71,6 +71,7 @@ use crate::core::connection::ConnectionObserverEvent;
 use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::core::util::TaskQueueRuntime;
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// The different types of CallEvents.
 #[allow(clippy::large_enum_variant)]
@@ -357,6 +358,21 @@ where
         }
         .map_err(move |err| {
             err_call.inject_internal_error(err, "Notify Application Future failed");
+        });
+
+        self.notify_spawn(notify_app_future);
+    }
+
+    fn notify_network_route_changed(&mut self, call: Call<T>, network_route: NetworkRoute) {
+        let mut err_call = call.clone();
+        let notify_app_future = async move {
+            if call.terminating()? {
+                return Ok(());
+            }
+            call.notify_network_route_changed(network_route)
+        }
+        .map_err(move |err| {
+            err_call.inject_internal_error(err, "Notify Network Route Changed Future failed");
         });
 
         self.notify_spawn(notify_app_future);
@@ -725,6 +741,9 @@ where
                                 connection.connect_incoming_media()?;
                                 connection.start_tick()?;
                                 call.notify_application(ApplicationEvent::RemoteAccepted)?;
+                                // Now that we've picked a connection, we can notify the app of the
+                                // network route.
+                                call.notify_network_route_changed(connection.network_route()?)?;
 
                                 // If the remote device of the active connection can support
                                 // multi-ring, we send a "legacy" Hangup message. The callee
@@ -896,6 +915,24 @@ where
                         .inject_internal_error(err, "Processing connection_failed request failed");
                 });
                 self.worker_spawn(future);
+                Ok(())
+            }
+            ConnectionObserverEvent::IceNetworkRouteChanged(network_route) => {
+                match call.active_device_id() {
+                    Err(_) => {
+                        // Wait until we've settled on one Connection and then
+                        // report the network route of that Connection.
+                    }
+                    Ok(active_device_id) if active_device_id == remote_device_id => {
+                        self.notify_network_route_changed(call, network_route);
+                    }
+                    _ => {
+                        debug!(
+                            "call_id: {} remote_device_id: {} Ignoring network route changed from inactive connection.",
+                            call_id, remote_device_id
+                        );    
+                    }
+                }
                 Ok(())
             }
         }

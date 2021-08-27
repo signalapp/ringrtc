@@ -45,6 +45,7 @@ use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 
 const TIME_OUT_PERIOD: Duration = Duration::from_secs(60);
@@ -2065,6 +2066,22 @@ where
         platform.on_event(remote_peer, event)
     }
 
+    /// Notify application that the network route changed
+    pub(super) fn notify_network_route_changed(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
+        ringbench!(
+            RingBench::Cm,
+            RingBench::App,
+            format!("network_route_changed()\tnetwork_route: {:?}", network_route)
+        );
+
+        let platform = self.platform.lock()?;
+        platform.on_network_route_changed(remote_peer, network_route)
+    }
+
     /// Create a new connection to a remote device
     pub(super) fn create_connection(
         &self,
@@ -2368,6 +2385,20 @@ where
             handle_connection_state_changed,
             client_id,
             connection_state
+        );
+    }
+
+    fn handle_network_route_changed(
+        &self,
+        client_id: group_call::ClientId,
+        network_route: NetworkRoute,
+    ) {
+        info!("handle_network_route_changed():");
+        platform_handler!(
+            self,
+            handle_network_route_changed,
+            client_id,
+            network_route
         );
     }
 

@@ -10,6 +10,7 @@ import SignalCoreKit
 protocol CallManagerInterfaceDelegate: AnyObject {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
+    func onNetworkRouteChangedFor(remote: UnsafeRawPointer, networkRoute: NetworkRoute)
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType)
     func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data)
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [Data])
@@ -31,6 +32,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func requestMembershipProof(clientId: UInt32)
     func requestGroupMembers(clientId: UInt32)
     func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState)
+    func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute)
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?)
@@ -60,6 +62,7 @@ class CallManagerInterface {
             destroy: callManagerInterfaceDestroy,
             onStartCall: callManagerInterfaceOnStartCall,
             onEvent: callManagerInterfaceOnCallEvent,
+            onNetworkRouteChanged: callManagerInterfaceOnNetworkRouteChanged,
             onSendOffer: callManagerInterfaceOnSendOffer,
             onSendAnswer: callManagerInterfaceOnSendAnswer,
             onSendIceCandidates: callManagerInterfaceOnSendIceCandidates,
@@ -82,6 +85,7 @@ class CallManagerInterface {
             requestMembershipProof: callManagerInterfaceRequestMembershipProof,
             requestGroupMembers: callManagerInterfaceRequestGroupMembers,
             handleConnectionStateChanged: callManagerInterfaceHandleConnectionStateChanged,
+            handleNetworkRouteChanged: callManagerInterfaceHandleNetworkRouteChanged,
             handleJoinStateChanged: callManagerInterfaceHandleJoinStateChanged,
             handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
@@ -110,6 +114,20 @@ class CallManagerInterface {
         } else {
             owsFailDebug("invalid event: \(event)")
         }
+    }
+
+    func onNetworkRouteChangedFor(remote: UnsafeRawPointer, localNetworkAdapterType: Int32) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        guard let validLocalNetworkAdapterType = NetworkAdapterType(rawValue: localNetworkAdapterType) else {
+            owsFailDebug("invalid network adapter type: \(localNetworkAdapterType)")
+            return
+        }
+
+        let networkRoute = NetworkRoute(localAdapterType: validLocalNetworkAdapterType)
+        delegate.onNetworkRouteChangedFor(remote: remote, networkRoute: networkRoute)
     }
 
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
@@ -250,6 +268,14 @@ class CallManagerInterface {
         delegate.handleConnectionStateChanged(clientId: clientId, connectionState: connectionState)
     }
 
+    func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleNetworkRouteChanged(clientId: clientId, networkRoute: networkRoute)
+    }
+
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
@@ -338,6 +364,21 @@ func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: U
     }
 
     obj.onEvent(remote: remote, event: event)
+}
+
+func callManagerInterfaceOnNetworkRouteChanged(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, localNetworkAdapterType: Int32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let remote = remote else {
+        owsFailDebug("remote was unexpectedly nil")
+        return
+    }
+
+    obj.onNetworkRouteChangedFor(remote: remote, localNetworkAdapterType: localNetworkAdapterType)
 }
 
 func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, mediaType: Int32) {
@@ -774,6 +815,22 @@ func callManagerInterfaceHandleConnectionStateChanged(object: UnsafeMutableRawPo
     }
 
     obj.handleConnectionStateChanged(clientId: clientId, connectionState: _connectionState)
+}
+
+func callManagerInterfaceHandleNetworkRouteChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, localNetworkAdapterType: Int32) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let localNetworkAdapterType = NetworkAdapterType(rawValue: localNetworkAdapterType) else {
+        owsFailDebug("unexpected connection state")
+        return
+    }
+
+    let networkRoute = NetworkRoute(localAdapterType: localNetworkAdapterType)
+    obj.handleNetworkRouteChanged(clientId: clientId, networkRoute: networkRoute)
 }
 
 func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinState: Int32) {

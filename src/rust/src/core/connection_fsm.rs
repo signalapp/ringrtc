@@ -65,6 +65,7 @@ use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::media::MediaStream;
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// The different types of Connection Events.
 pub enum ConnectionEvent {
@@ -120,6 +121,10 @@ pub enum ConnectionEvent {
     /// Source: PeerConnection
     /// Action: Bubble up to Connection and Call objects.
     IceDisconnected,
+    /// ICE network path (selected candidate pair) changed.
+    /// Source: PeerConnection
+    /// Action: Bubble up to Connection and Call objects.
+    IceNetworkRouteChanged(NetworkRoute),
     /// Send the observer an internal error message.
     /// Source: all kinds of things that can go wrong internally
     /// Action: Terminate the call.
@@ -180,6 +185,7 @@ impl fmt::Display for ConnectionEvent {
             ConnectionEvent::IceConnected => "IceConnected".to_string(),
             ConnectionEvent::IceFailed => "IceConnectionFailed".to_string(),
             ConnectionEvent::IceDisconnected => "IceDisconnected".to_string(),
+            ConnectionEvent::IceNetworkRouteChanged(network_route) => format!("IceNetworkRouteChanged, network_route: {:?})", network_route),
             ConnectionEvent::InternalError(e) => format!("InternalError: {}", e),
             ConnectionEvent::ReceivedIncomingMedia(stream) => {
                 format!("ReceivedIncomingMedia, stream: {:}", stream)
@@ -427,6 +433,7 @@ where
             ConnectionEvent::IceConnected => self.handle_ice_connected(connection, state),
             ConnectionEvent::IceFailed => self.handle_ice_failed(connection, state),
             ConnectionEvent::IceDisconnected => self.handle_ice_disconnected(connection, state),
+            ConnectionEvent::IceNetworkRouteChanged(network_route) => self.handle_ice_network_route_changed(connection, network_route),
             ConnectionEvent::InternalError(error) => self.handle_internal_error(connection, error),
             ConnectionEvent::ReceivedIncomingMedia(stream) => {
                 self.handle_received_incoming_media(connection, state, stream)
@@ -879,6 +886,15 @@ where
             }
             _ => self.unexpected_state(state, "IceDisconnected"),
         };
+        Ok(())
+    }
+
+    fn handle_ice_network_route_changed(
+        &mut self,
+        connection: Connection<T>,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
+        self.notify_observer(connection, ConnectionObserverEvent::IceNetworkRouteChanged(network_route));
         Ok(())
     }
 

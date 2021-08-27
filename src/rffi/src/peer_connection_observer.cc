@@ -62,6 +62,13 @@ void PeerConnectionObserverRffi::OnIceConnectionReceivingChange(bool receiving) 
   RTC_LOG(LS_INFO) << "OnIceConnectionReceivingChange()";
 }
 
+void PeerConnectionObserverRffi::OnIceSelectedCandidatePairChanged(
+    const cricket::CandidatePairChangeEvent& event) {
+  auto local_adapter_type = event.selected_candidate_pair.local_candidate().network_type();
+  auto network_route = webrtc::rffi::NetworkRoute{ local_adapter_type, };
+  callbacks_.onIceNetworkRouteChange(observer_, network_route);
+}
+
 void PeerConnectionObserverRffi::OnIceGatheringChange(
     PeerConnectionInterface::IceGatheringState new_state) {
   RTC_LOG(LS_INFO) << "OnIceGatheringChange()";

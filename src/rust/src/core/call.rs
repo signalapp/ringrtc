@@ -35,6 +35,7 @@ use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// Encapsulates the FSM and runtime upon which a Call runs.
 struct Context {
@@ -423,6 +424,16 @@ where
         let remote_peer = self.remote_peer()?;
 
         call_manager.notify_application(&*remote_peer, event)
+    }
+
+    /// Notify application of a change to the network route.
+    ///
+    /// This is a pass through to the CallManager.
+    pub fn notify_network_route_changed(&self, network_route: NetworkRoute) -> Result<()> {
+        let call_manager = self.call_manager()?;
+        let remote_peer = self.remote_peer()?;
+
+        call_manager.notify_network_route_changed(&*remote_peer, network_route)
     }
 
     /// Notify call manager of an internal error.

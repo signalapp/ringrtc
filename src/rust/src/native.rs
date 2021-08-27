@@ -26,7 +26,7 @@ use crate::core::{
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
 use crate::webrtc::peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory};
-use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
+use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
 // This serves as the Platform::AppCallContext
 // Users of the native platform must provide these things
@@ -115,6 +115,8 @@ pub trait CallStateHandler {
     fn handle_call_state(&self, remote_peer_id: &str, state: CallState) -> Result<()>;
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
+    fn handle_network_route(&self, remote_peer_id: &str, network_route: NetworkRoute)
+        -> Result<()>;
 }
 
 // Starts an HTTP request. CallManager is notified of the result via a separate callback.
@@ -258,6 +260,7 @@ pub enum GroupUpdate {
         sender:   group_call::UserId,
         update:   group_call::RingUpdate,
     },
+    NetworkRouteChanged(group_call::ClientId, NetworkRoute),
 }
 
 impl fmt::Display for GroupUpdate {
@@ -273,6 +276,9 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::PeekResponse { .. } => "PeekResponse".to_string(),
             GroupUpdate::Ended(_, reason) => format!("Ended({:?})", reason),
             GroupUpdate::Ring { update, .. } => format!("Ring({:?})", update),
+            GroupUpdate::NetworkRouteChanged(_, network_route) => {
+                format!("NetworkRouteChanged({:?})", network_route)
+            }
         };
         write!(f, "({})", display)
     }
@@ -326,6 +332,11 @@ impl NativePlatform {
 
     fn send_state(&self, peer_id: &str, state: CallState) -> Result<()> {
         self.state_handler.handle_call_state(peer_id, state)
+    }
+
+    fn send_network_route(&self, peer_id: &str, network_route: NetworkRoute) -> Result<()> {
+        self.state_handler
+            .handle_network_route(peer_id, network_route)
     }
 
     fn send_group_update(&self, update: GroupUpdate) -> Result<()> {
@@ -566,6 +577,19 @@ impl Platform for NativePlatform {
         Ok(())
     }
 
+    fn on_network_route_changed(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
+        info!(
+            "NativePlatform::on_network_route_changed(): {:?}",
+            network_route
+        );
+
+        self.send_network_route(remote_peer, network_route)
+    }
+
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()> {
         info!(
             "NativePlatform::on_call_concluded(): remote_peer: {}",
@@ -745,6 +769,22 @@ impl Platform for NativePlatform {
             client_id,
             connection_state,
         ));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_network_route_changed(
+        &self,
+        client_id: group_call::ClientId,
+        network_route: NetworkRoute,
+    ) {
+        info!(
+            "NativePlatformhandle_network_route_changed(): {:?}",
+            network_route
+        );
+        let result =
+            self.send_group_update(GroupUpdate::NetworkRouteChanged(client_id, network_route));
         if result.is_err() {
             error!("{:?}", result.err());
         }

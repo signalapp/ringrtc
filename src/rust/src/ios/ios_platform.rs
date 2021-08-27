@@ -43,7 +43,7 @@ use crate::ios::error::IosError;
 use crate::ios::ios_media_stream::IosMediaStream;
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnection};
-use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
+use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
 /// Concrete type for iOS AppIncomingMedia objects.
 impl PlatformItem for IosMediaStream {}
@@ -191,6 +191,15 @@ impl Platform for IosPlatform {
         info!("on_event(): {}", event);
 
         (self.app_interface.onEvent)(self.app_interface.object, remote_peer.ptr, event as i32);
+
+        Ok(())
+    }
+
+
+    fn on_network_route_changed(&self, remote_peer: &Self::AppRemotePeer, network_route: NetworkRoute) -> Result<()> {
+        info!("on_network_route_changed(): {:?}", network_route);
+
+       (self.app_interface.onNetworkRouteChanged)(self.app_interface.object, remote_peer.ptr, network_route.local_adapter_type as i32);
 
         Ok(())
     }
@@ -561,6 +570,19 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             client_id,
             connection_state as i32,
+        );
+    }
+
+    fn handle_network_route_changed(
+        &self,
+        client_id: group_call::ClientId,
+        network_route: NetworkRoute,
+    ) {
+        info!("handle_network_route_changed(): {:?}", network_route);
+        (self.app_interface.handleNetworkRouteChanged)(
+            self.app_interface.object,
+            client_id,
+            network_route.local_adapter_type as i32,
         );
     }
 

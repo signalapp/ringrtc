@@ -5,6 +5,7 @@
 
 //! Android Platform Interface.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -30,7 +31,7 @@ use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::webrtc::media::{MediaStream, VideoTrack};
-use std::collections::HashMap;
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 const RINGRTC_PACKAGE: &str = "org/signal/ringrtc";
 const CALL_MANAGER_CLASS: &str = "CallManager";
@@ -406,6 +407,26 @@ impl Platform for AndroidPlatform {
             &args,
         )?;
 
+        Ok(())
+    }
+
+
+    // Network route changes for 1:1 calls
+    fn on_network_route_changed(&self, remote_peer: &Self::AppRemotePeer, network_route: NetworkRoute) -> Result<()> {
+        info!("on_network_route_changed(): network_route: {:?}", network_route);
+
+        let env = self.java_env()?;
+
+        let _ = jni_call_method(
+            &env,
+            self.jni_call_manager.as_obj(),
+            "onNetworkRouteChanged",
+            "(Lorg/signal/ringrtc/Remote;I)V",
+            &[
+                remote_peer.as_obj().into(),
+                (network_route.local_adapter_type as i32).into(),
+            ],
+        )?;
         Ok(())
     }
 
@@ -1154,6 +1175,27 @@ impl Platform for AndroidPlatform {
             client_id,
             connection_state
         );
+    }
+
+    fn handle_network_route_changed(
+        &self,
+        client_id: group_call::ClientId,
+        network_route: NetworkRoute,
+    ) {
+        info!("handle_network_route_changed(): client_id: {}, network_route: {:?}", client_id, network_route);
+
+        if let Ok(env) = self.java_env() {
+            let _ = jni_call_method(
+                &env,
+                self.jni_call_manager.as_obj(),
+                "handleNetworkRouteChanged",
+                "(JI)V",
+                &[
+                    (client_id as jlong).into(),
+                    (network_route.local_adapter_type as i32).into(),
+                ],
+            );
+        }
     }
 
     fn handle_join_state_changed(

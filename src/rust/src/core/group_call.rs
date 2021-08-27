@@ -36,6 +36,7 @@ use crate::{
         peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory},
         peer_connection_observer::{
             IceConnectionState,
+            NetworkRoute,
             PeerConnectionObserver,
             PeerConnectionObserverTrait,
         },
@@ -214,6 +215,11 @@ pub trait Observer {
         &self,
         client_id: ClientId,
         connection_state: ConnectionState,
+    );
+    fn handle_network_route_changed(
+        &self,
+        client_id: ClientId,
+        network_route: NetworkRoute,
     );
     fn handle_join_state_changed(&self, client_id: ClientId, join_state: JoinState);
     fn handle_send_rates_changed(&self, _client_id: ClientId, _send_rates: SendRates) {}
@@ -2864,6 +2870,25 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         Ok(())
     }
 
+    fn handle_ice_network_route_changed(&mut self, network_route: NetworkRoute) -> Result<()> {
+        debug!(
+            "group_call::Client(outer)::handle_ice_network_route_changed(client_id: {}, network_route: {:?})",
+            self.log_id(),
+            network_route
+        );
+        if let Some(client) = &self.client {
+            client.actor.send(move |state| {
+                debug!("group_call::Client(inner)::handle_ice_network_route_changed(client_id: {}, network_route: {:?})", state.client_id, network_route);
+                state
+                    .observer
+                    .handle_network_route_changed(state.client_id, network_route);
+            });
+        } else {
+            warn!("Call isn't setup yet!");
+        }
+        Ok(())
+    }
+
     fn handle_incoming_video_added(&mut self, incoming_video_track: VideoTrack) -> Result<()> {
         debug!(
             "group_call::Client(outer)::handle_incoming_video_track(client_id: {})",
@@ -3306,6 +3331,9 @@ mod tests {
                 *owned_remote_devices_at_join_time = self.remote_devices();
                 self.joined.set();
             }
+        }
+
+        fn handle_network_route_changed(&self, _client_id: ClientId, _network_route: NetworkRoute) {
         }
 
         fn handle_remote_devices_changed(

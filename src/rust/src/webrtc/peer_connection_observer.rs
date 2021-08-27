@@ -49,6 +49,51 @@ pub struct CppIceCandidate {
     sdp: *const c_char,
 }
 
+/// Rust version of WebRTC AdapterType
+///
+/// See webrtc/rtc_base/network_constants.h
+// Despite how it looks, this is not an option set.
+// A network adapter type can only be one of the listed values.
+// And there are a few oddities to note:
+// - Cellular means we don't know if it's 2G, 3G, 4G, 5G, ...
+//   If we know, it will be one of those corresponding enum values.
+//   This means to know if something is cellular or not, you must
+//   check all of those values.
+// - Default means we don't know the adapter type (like Unknown)
+//   but it's because we bound to the default IP address (0.0.0.0)
+//   so it's probably the default adapter (wifi if available, for example)
+//   This is unlikely to happen in practice.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum NetworkAdapterType {
+    Unknown = 0,
+    Ethernet = 1 << 0,
+    Wifi = 1 << 1,
+    Cellular = 1 << 2,
+    Vpn = 1 << 3,
+    Loopback = 1 << 4,
+    Default = 1 << 5,
+    Cellular2G = 1 << 6,
+    Cellular3G = 1 << 7,
+    Cellular4G = 1 << 8,
+    Cellular5G = 1 << 9,
+}
+
+/// Ice Network Route structure passed between Rust and C++.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct NetworkRoute {
+    pub local_adapter_type: NetworkAdapterType,
+}
+
+impl Default for NetworkRoute {
+    fn default() -> Self {
+        Self {
+            local_adapter_type: NetworkAdapterType::Unknown,
+        }
+    }
+}
+
 /// The callbacks from C++ will ultimately go to an impl of this.
 /// I can't think of a better name :).
 pub trait PeerConnectionObserverTrait {
@@ -65,6 +110,7 @@ pub trait PeerConnectionObserverTrait {
         removed_addresses: Vec<SocketAddr>,
     ) -> Result<()>;
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()>;
+    fn handle_ice_network_route_changed(&mut self, network_route: NetworkRoute) -> Result<()>;
 
     // Media Events
     // Defaults allow an impl to choose between handling streams or tracks.
@@ -200,6 +246,30 @@ extern "C" fn pc_observer_OnIceConnectionChange<T>(
     observer
         .handle_ice_connection_state_changed(new_state)
         .unwrap_or_else(|e| error!("Problems handling ICE connection state change: {}", e));
+}
+
+/// PeerConnectionObserver OnIceSelectedCandidatePairChanged() callback.
+#[allow(non_snake_case)]
+extern "C" fn pc_observer_OnIceNetworkRouteChange<T>(
+    observer_ptr: *mut T,
+    network_route: NetworkRoute,
+) where
+    T: PeerConnectionObserverTrait,
+{
+    let observer = unsafe { &mut *observer_ptr };
+    ringbench!(
+        RingBench::WebRtc,
+        RingBench::Conn,
+        format!(
+            "ice_network_route_change({:?})\t{}",
+            network_route,
+            observer.log_id()
+        )
+    );
+
+    observer
+        .handle_ice_network_route_changed(network_route)
+        .unwrap_or_else(|e| error!("Problems handling ICE network route change: {}", e));
 }
 
 /// PeerConnectionObserver OnAddStream() callback.
@@ -455,9 +525,10 @@ where
     T: PeerConnectionObserverTrait,
 {
     // ICE events
-    onIceCandidate:         extern "C" fn(*mut T, *const CppIceCandidate),
-    onIceCandidatesRemoved: extern "C" fn(*mut T, *const RffiIpPort, size_t),
-    onIceConnectionChange:  extern "C" fn(*mut T, IceConnectionState),
+    onIceCandidate:          extern "C" fn(*mut T, *const CppIceCandidate),
+    onIceCandidatesRemoved:  extern "C" fn(*mut T, *const RffiIpPort, size_t),
+    onIceConnectionChange:   extern "C" fn(*mut T, IceConnectionState),
+    onIceNetworkRouteChange: extern "C" fn(*mut T, NetworkRoute),
 
     // Media events
     onAddStream:           extern "C" fn(*mut T, *const RffiMediaStream),
@@ -531,9 +602,10 @@ where
 
         let pc_observer_callbacks = PeerConnectionObserverCallbacks::<T> {
             // ICE events
-            onIceCandidate:         pc_observer_OnIceCandidate::<T>,
-            onIceCandidatesRemoved: pc_observer_OnIceCandidatesRemoved::<T>,
-            onIceConnectionChange:  pc_observer_OnIceConnectionChange::<T>,
+            onIceCandidate:          pc_observer_OnIceCandidate::<T>,
+            onIceCandidatesRemoved:  pc_observer_OnIceCandidatesRemoved::<T>,
+            onIceConnectionChange:   pc_observer_OnIceConnectionChange::<T>,
+            onIceNetworkRouteChange: pc_observer_OnIceNetworkRouteChange::<T>,
 
             // Media events
             onAddStream:           pc_observer_OnAddStream::<T>,

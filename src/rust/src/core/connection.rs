@@ -51,7 +51,7 @@ use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::{PeerConnection, SendRates};
-use crate::webrtc::peer_connection_observer::{IceConnectionState, PeerConnectionObserverTrait};
+use crate::webrtc::peer_connection_observer::{IceConnectionState, NetworkRoute, PeerConnectionObserverTrait};
 use crate::webrtc::sdp_observer::{
     create_csd_observer,
     create_ssd_observer,
@@ -94,6 +94,9 @@ pub enum ConnectionObserverEvent {
 
     /// The connection temporarily disconnected and has now reconnecting.
     ReconnectedAfterAccepted,
+
+    /// The ICE network route changed
+    IceNetworkRouteChanged(NetworkRoute),
 }
 
 impl Clone for ConnectionObserverEvent {
@@ -333,6 +336,8 @@ where
     direction:                     CallDirection,
     /// The current state of the call connection
     state:                         Arc<CallMutex<ConnectionState>>,
+    /// The current network route of the connection
+    network_route:                 Arc<CallMutex<NetworkRoute>>,
     /// Execution context for the call connection FSM
     context:                       Arc<CallMutex<Context>>,
     /// Ancillary WebRTC data.
@@ -422,6 +427,7 @@ where
             connection_id:                 self.connection_id,
             direction:                     self.direction,
             state:                         Arc::clone(&self.state),
+            network_route:                 Arc::clone(&self.network_route),
             context:                       Arc::clone(&self.context),
             webrtc:                        Arc::clone(&self.webrtc),
             bandwidth_modes:               Arc::clone(&self.bandwidth_modes),
@@ -475,6 +481,7 @@ where
             direction,
             call: Arc::new(CallMutex::new(call, "call")),
             state: Arc::new(CallMutex::new(ConnectionState::NotYetStarted, "state")),
+            network_route: Arc::new(CallMutex::new(NetworkRoute::default(), "network_route")),
             context: Arc::new(CallMutex::new(context, "context")),
             webrtc: Arc::new(CallMutex::new(webrtc, "webrtc")),
             bandwidth_modes: Arc::new(CallMutex::new(
@@ -858,6 +865,19 @@ where
             pc.set_outgoing_media_enabled(true);
             pc.set_incoming_media_enabled(true);
         }
+        Ok(())
+    }
+
+    /// Return the current network route
+    pub fn network_route(&self) -> Result<NetworkRoute> {
+        let network_route = self.network_route.lock()?;
+        Ok(*network_route)
+    }
+
+    /// Update the current network route.
+    pub fn set_network_route(&self, new_network_route: NetworkRoute) -> Result<()> {
+        let mut network_route = self.network_route.lock()?;
+        *network_route = new_network_route;
         Ok(())
     }
 
@@ -1594,6 +1614,14 @@ where
         self.inject_event(ConnectionEvent::IceDisconnected)
     }
 
+    /// Inject an `IceNetworkRouteChanged` event into the FSM.
+    ///
+    /// `Called By:` WebRTC `IceNetworkRouteChanged` call back thread.
+    pub fn inject_ice_network_route_changed(&mut self, network_route: NetworkRoute) -> Result<()> {
+        self.set_network_route(network_route)?;
+        self.inject_event(ConnectionEvent::IceNetworkRouteChanged(network_route))
+    }
+
     /// Inject a `InternalError` event into the FSM.
     ///
     /// This is used to send an internal error notification to the
@@ -1921,6 +1949,10 @@ where
             IceConnectionState::Disconnected => self.inject_ice_disconnected(),
             _ => Ok(()),
         }
+    }
+
+    fn handle_ice_network_route_changed(&mut self, network_route: NetworkRoute) -> Result<()> {
+        self.inject_ice_network_route_changed(network_route)
     }
 
     fn handle_incoming_media_added(&mut self, stream: MediaStream) -> Result<()> {

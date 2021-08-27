@@ -44,6 +44,7 @@ use crate::webrtc::peer_connection_factory::{
     IceServer,
     PeerConnectionFactory,
 };
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 use neon::prelude::*;
 
@@ -130,6 +131,8 @@ pub enum Event {
         headers:    HashMap<String, String>,
         body:       Option<Vec<u8>>,
     },
+    // The network route changed for a 1:1 call
+    NetworkRouteChange(PeerId, NetworkRoute),
 }
 
 impl SignalingSender for Sender<Event> {
@@ -181,6 +184,18 @@ impl SignalingSender for Sender<Event> {
 impl CallStateHandler for Sender<Event> {
     fn handle_call_state(&self, remote_peer_id: &str, call_state: CallState) -> Result<()> {
         self.send(Event::CallState(remote_peer_id.to_string(), call_state))?;
+        Ok(())
+    }
+
+    fn handle_network_route(
+        &self,
+        remote_peer_id: &str,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
+        self.send(Event::NetworkRouteChange(
+            remote_peer_id.to_string(),
+            network_route,
+        ))?;
         Ok(())
     }
 
@@ -1710,6 +1725,19 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
+            Event::NetworkRouteChange(peer_id, network_route) => {
+                let method_name = "onNetworkRouteChanged";
+                let args = [
+                    cx.string(peer_id).upcast::<JsValue>(),
+                    cx.number(network_route.local_adapter_type as i32).upcast(),
+                ];
+                let method = *observer
+                    .get(&mut cx, method_name)?
+                    .downcast::<JsFunction, _>(&mut cx)
+                    .expect("onNetworkRouteChanged is a function");
+                method.call(&mut cx, observer, args)?;
+            }
+
             Event::RemoteVideoState(peer_id, enabled) => {
                 let method_name = "onRemoteVideoEnabled";
                 let args: Vec<Handle<JsValue>> =
@@ -1841,6 +1869,21 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let args: Vec<Handle<JsValue>> = vec![
                     cx.number(client_id).upcast(),
                     cx.number(connection_state as i32).upcast(),
+                ];
+                let error_message = format!("{} is a function", method_name);
+                let method = *observer
+                    .get(&mut cx, method_name)?
+                    .downcast::<JsFunction, _>(&mut cx)
+                    .expect(&error_message);
+                method.call(&mut cx, observer, args)?;
+            }
+
+            Event::GroupUpdate(GroupUpdate::NetworkRouteChanged(client_id, network_route)) => {
+                let method_name = "handleNetworkRouteChanged";
+
+                let args = [
+                    cx.number(client_id).upcast::<JsValue>(),
+                    cx.number(network_route.local_adapter_type as i32).upcast(),
                 ];
                 let error_message = format!("{} is a function", method_name);
                 let method = *observer

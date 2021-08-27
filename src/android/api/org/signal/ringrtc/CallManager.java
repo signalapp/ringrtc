@@ -1070,6 +1070,46 @@ public class CallManager {
   }
 
   @CalledByNative
+  private void onNetworkRouteChanged(Remote remote, int localNetworkAdapterType) {
+    Log.i(TAG, "onNetworkRouteChange():");
+
+    NetworkRoute networkRoute = new NetworkRoute(NetworkAdapterTypeFromRawValue(localNetworkAdapterType));
+
+    observer.onNetworkRouteChanged(remote, networkRoute);
+  }
+
+  // A faster version of PeerConnection.AdapterType.fromNativeIndex.
+  // It also won't return null.
+  @NonNull
+  private PeerConnection.AdapterType NetworkAdapterTypeFromRawValue(int localNetworkAdapterType) {
+    switch(localNetworkAdapterType) {
+      case 0:
+        return PeerConnection.AdapterType.UNKNOWN;
+      case 1:
+        return PeerConnection.AdapterType.ETHERNET;
+      case 2:
+        return PeerConnection.AdapterType.WIFI;
+      case 4:
+        return PeerConnection.AdapterType.CELLULAR;
+      case 8:
+        return PeerConnection.AdapterType.VPN;
+      case 16:
+        return PeerConnection.AdapterType.LOOPBACK;
+      case 32:
+        return PeerConnection.AdapterType.ADAPTER_TYPE_ANY;
+      case 64:
+        return PeerConnection.AdapterType.CELLULAR_2G;
+      case 128:
+        return PeerConnection.AdapterType.CELLULAR_3G;
+      case 256:
+        return PeerConnection.AdapterType.CELLULAR_4G;
+      case 512:
+        return PeerConnection.AdapterType.CELLULAR_5G;
+    }
+    return PeerConnection.AdapterType.UNKNOWN;
+  }
+
+  @CalledByNative
   private void onCallConcluded(Remote remote) {
     Log.i(TAG, "onCallConcluded():");
     observer.onCallConcluded(remote);
@@ -1198,6 +1238,20 @@ public class CallManager {
     }
 
     groupCall.handleConnectionStateChanged(connectionState);
+  }
+
+  @CalledByNative
+  private void handleNetworkRouteChanged(long clientId, int localNetworkAdapterType) {
+    Log.i(TAG, "handleNetworkRouteChanged():");
+
+    GroupCall groupCall = this.groupCallByClientId.get(clientId);
+    if (groupCall == null) {
+      Log.w(TAG, "groupCall not found by clientId: " + clientId);
+      return;
+    }
+
+    NetworkRoute networkRoute = new NetworkRoute(NetworkAdapterTypeFromRawValue(localNetworkAdapterType));
+    groupCall.handleNetworkRouteChanged(networkRoute);
   }
 
   @CalledByNative
@@ -1619,6 +1673,15 @@ public class CallManager {
 
     /**
      *
+     * Notification that the network route changed
+     *
+     * @param remote        remote peer of the incoming busy call
+     * @param networkRoute  the current network route
+     */
+    void onNetworkRouteChanged(Remote remote, NetworkRoute networkRoute);
+
+    /**
+     *
      * Notification of that the call is completely concluded
      *
      * @param remote  remote peer of the call
@@ -1738,7 +1801,6 @@ public class CallManager {
      * @param update  the updated state to handle
      */
     void onGroupCallRingUpdate(@NonNull byte[] groupId, long ringId, @NonNull UUID sender, RingUpdate update);
-
   }
 
   /**

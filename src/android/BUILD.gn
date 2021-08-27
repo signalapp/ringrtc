@@ -53,6 +53,7 @@ if (is_android) {
       "api/org/signal/ringrtc/GroupCall.java",
       "api/org/signal/ringrtc/HttpHeader.java",
       "api/org/signal/ringrtc/Log.java",
+      "api/org/signal/ringrtc/NetworkRoute.java",
       "api/org/signal/ringrtc/PeekInfo.java",
       "api/org/signal/ringrtc/Remote.java",
       "api/org/signal/ringrtc/Testing.java",

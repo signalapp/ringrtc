@@ -313,6 +313,8 @@ pub struct AppInterface {
     /// Swift event callback method.
     pub onEvent: extern "C" fn(object: *mut c_void, remote: *const c_void, event: i32),
     ///
+    pub onNetworkRouteChanged: extern "C" fn(object: *mut c_void, remote: *const c_void, localNetworkAdapterType: i32),
+    ///
     pub onSendOffer: extern "C" fn(
         object: *mut c_void,
         callId: u64,
@@ -434,6 +436,8 @@ pub struct AppInterface {
     ///
     pub handleConnectionStateChanged:
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, connectionState: i32),
+    pub handleNetworkRouteChanged:
+        extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, localNetworkAdapterType: i32),
     ///
     pub handleJoinStateChanged:
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, joinState: i32),

@@ -9,6 +9,7 @@
 #include "api/peer_connection_interface.h"
 #include "rffi/api/rffi_defs.h"
 #include "rffi/api/network.h"
+#include "rtc_base/network_constants.h"
 
 /**
  * Rust friendly wrapper around a custom class that implements the
@@ -19,6 +20,11 @@
 namespace webrtc {
 namespace rffi {
   class PeerConnectionObserverRffi;
+
+  /* NetworkRoute structure passed between Rust and C++ */
+  typedef struct {
+     rtc::AdapterType local_adapter_type;
+  } NetworkRoute;
 } // namespace rffi
 } // namespace webrtc
 
@@ -28,6 +34,7 @@ typedef struct {
   void (*onIceCandidate)(rust_object, const RustIceCandidate*);
   void (*onIceCandidatesRemoved)(rust_object, const webrtc::rffi::IpPort*, size_t);
   void (*onIceConnectionChange)(rust_object, webrtc::PeerConnectionInterface::IceConnectionState);
+  void (*onIceNetworkRouteChange)(rust_object, webrtc::rffi::NetworkRoute);
 
   // Media events
   void (*onAddStream)(rust_object, webrtc::MediaStreamInterface*);
