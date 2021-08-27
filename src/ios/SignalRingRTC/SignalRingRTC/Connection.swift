@@ -16,24 +16,16 @@ public class Connection {
 
     init(pcObserver: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, configuration: RTCConfiguration, constraints: RTCMediaConstraints) {
         self.peerConnection = factory.peerConnection(with: configuration, constraints: constraints, observer: pcObserver)
-        self.nativePeerConnection = self.peerConnection.getRawPeerConnection()
+        self.nativePeerConnection = self.peerConnection.getNativePeerConnectionPointer()
 
         Logger.debug("object! Connection created... \(ObjectIdentifier(self))")
     }
 
     deinit {
-        Logger.debug("object! Connection destroyed... \(ObjectIdentifier(self))")
-    }
-
-    func close() {
-        // Give the native pointer back...
-        Logger.debug("Releasing PeerConnection")
-        self.peerConnection.releaseRawPeerConnection(self.nativePeerConnection)
-
         Logger.debug("Closing PeerConnection")
         self.peerConnection.close()
 
-        Logger.debug("Done")
+        Logger.debug("object! Connection destroyed... \(ObjectIdentifier(self))")
     }
 
     func getRawPeerConnection() -> UnsafeMutableRawPointer? {
@@ -72,9 +64,7 @@ func connectionDestroy(object: UnsafeMutableRawPointer?) {
         return
     }
 
-    let connection = Unmanaged<Connection>.fromOpaque(object).takeRetainedValue()
+    let _ = Unmanaged<Connection>.fromOpaque(object).takeRetainedValue()
     // @note There should not be any retainers left for the object
     // so deinit should be called implicitly.
-
-    connection.close()
 }
