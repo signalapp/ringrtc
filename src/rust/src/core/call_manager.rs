@@ -1101,27 +1101,23 @@ where
 
     /// Handle message_send_failure() API from application.
     fn handle_message_send_failure(&mut self, call_id: CallId) -> Result<()> {
-        // Get the last sent message type and see if it was for Ice.
-        let mut last_sent_message_ice = false;
-        if let Ok(message_queue) = self.message_queue.lock() {
-            if message_queue.last_sent_message_type == Some(signaling::MessageType::Ice) {
-                last_sent_message_ice = true
-            }
-        }
+        let mut is_active_call = false;
+        let mut should_handle = true;
 
-        let mut handle_active_call = false;
         if let Ok(active_call) = self.active_call() {
             if active_call.call_id() == call_id {
-                handle_active_call = true;
+                is_active_call = true;
                 if let Ok(state) = active_call.state() {
                     match state {
                         CallState::ConnectedWithDataChannelBeforeAccepted
                         | CallState::ConnectedAndAccepted
                         | CallState::ReconnectingAfterAccepted => {
-                            // We are in some connected state, ignore if the failed message
-                            // was an Ice message.
-                            if last_sent_message_ice {
-                                handle_active_call = false;
+                            // Get the last sent message type and see if it was for ICE.
+                            // Since we are in a connected state, don't handle it if so.
+                            if let Ok(message_queue) = self.message_queue.lock() {
+                                if message_queue.last_sent_message_type == Some(signaling::MessageType::Ice) {
+                                    should_handle = false
+                                }
                             }
                         }
                         _ => {}
@@ -1130,38 +1126,40 @@ where
             }
         }
 
-        if handle_active_call {
-            info!(
-                "handle_message_send_failure(): id: {}, concluding active call",
-                call_id
-            );
+        if should_handle {
+            if is_active_call {
+                info!(
+                    "handle_message_send_failure(): id: {}, concluding active call",
+                    call_id
+                );
 
-            let _ = self.terminate_active_call(true, ApplicationEvent::EndedSignalingFailure);
-        } else {
-            // See if the associated call is in the call map.
-            let mut call = None;
-            {
-                if let Ok(call_map) = self.call_by_call_id.lock() {
-                    if let Some(v) = call_map.get(&call_id) {
-                        call = Some(v.clone());
-                    };
+                let _ = self.terminate_active_call(true, ApplicationEvent::EndedSignalingFailure);
+            } else {
+                // See if the associated call is in the call map.
+                let mut call = None;
+                {
+                    if let Ok(call_map) = self.call_by_call_id.lock() {
+                        if let Some(v) = call_map.get(&call_id) {
+                            call = Some(v.clone());
+                        };
+                    }
                 }
-            }
 
-            match call {
-                Some(call) => {
-                    info!(
+                match call {
+                    Some(call) => {
+                        info!(
                         "handle_message_send_failure(): id: {}, concluding call",
                         call_id
                     );
-                    self.terminate_call(
-                        call,
-                        Some(signaling::Hangup::Normal),
-                        Some(ApplicationEvent::EndedSignalingFailure),
-                    )?;
-                }
-                None => {
-                    info!("handle_message_send_failure(): no matching call found");
+                        self.terminate_call(
+                            call,
+                            Some(signaling::Hangup::Normal),
+                            Some(ApplicationEvent::EndedSignalingFailure),
+                        )?;
+                    }
+                    None => {
+                        info!("handle_message_send_failure(): no matching call found");
+                    }
                 }
             }
         }

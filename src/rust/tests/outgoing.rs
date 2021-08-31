@@ -808,6 +808,101 @@ fn ice_candidate_removal() {
 }
 
 #[test]
+fn ice_send_failures_cause_error_before_connection() {
+    test_init();
+
+    let context = start_outbound_call();
+    let mut cm = context.cm();
+    let mut active_connection = context.active_connection();
+    let active_call = context.active_call();
+
+    // The active call should be in the connecting before accepted state.
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::ConnectingBeforeAccepted
+    );
+
+    // Simulate sending of an ICE candidate message and getting it 'in-flight'.
+    context.no_auto_message_sent_for_ice(true);
+
+    let ice_candidate = random_ice_candidate(&context.prng);
+    let force_send = true;
+    active_connection
+        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ice_candidates_sent(), 1);
+
+    // Now indicate that the signaling mechanism failed to send the message.
+    cm.message_send_failure(active_call.call_id())
+        .expect(error_line!());
+
+    // There should be a signaling failure.
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        1
+    );
+
+    // The active call should be terminated.
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+}
+
+#[test]
+fn ignore_ice_send_failures_after_connection() {
+    test_init();
+
+    let context = connect_outbound_call();
+    let mut cm = context.cm();
+    let mut active_connection = context.active_connection();
+    let active_call = context.active_call();
+
+    // The active call should be in the connected and accepted state.
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::ConnectedAndAccepted
+    );
+
+    // Simulate sending of an ICE candidate message and getting it 'in-flight'.
+    context.no_auto_message_sent_for_ice(true);
+
+    let ice_candidate = random_ice_candidate(&context.prng);
+    let force_send = true;
+    active_connection
+        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ice_candidates_sent(), 1);
+
+    // Now indicate that the signaling mechanism failed to send the message.
+    cm.message_send_failure(active_call.call_id())
+        .expect(error_line!());
+
+    // There should not be any failures due to ICE messages not being sent
+    // after we are connected.
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        0
+    );
+
+    // Check that there is still an active call.
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::ConnectedAndAccepted
+    );
+}
+
+#[test]
 fn received_remote_hangup_before_connection() {
     test_init();
 

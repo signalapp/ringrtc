@@ -635,6 +635,7 @@ impl SimPlatform {
             ApplicationEvent::EndedRemoteBusy,
             ApplicationEvent::EndedTimeout,
             ApplicationEvent::EndedInternalFailure,
+            ApplicationEvent::EndedSignalingFailure,
             ApplicationEvent::EndedConnectionFailure,
             ApplicationEvent::EndedAppDroppedCall,
         ];
