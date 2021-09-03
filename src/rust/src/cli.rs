@@ -38,6 +38,7 @@ use ringrtc::{
         media::{VideoFrame, VideoSink, VideoSource},
         network::NetworkInterfaceType,
         peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory},
+        peer_connection_observer::NetworkRoute,
     },
 };
 use std::{collections::HashMap, thread, time::Duration};
@@ -250,9 +251,9 @@ impl CallEndpoint {
                 // Option<CallManager> thing that we have to set later.
                 let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
-                // Set up packet flow
-                let use_injectable_network = true;
-                let pcf = PeerConnectionFactory::new(use_injectable_network)?;
+                let adm = None; // Use the default
+                let use_injectable_network = true; // Set up packet flow
+                let pcf = PeerConnectionFactory::new(adm, use_injectable_network)?;
                 info!(
                     "Audio playout devices: {:?}",
                     pcf.get_audio_playout_devices()

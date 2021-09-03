@@ -23,8 +23,16 @@ pub struct RffiCertificate {
     _private: [u8; 0],
 }
 
+/// Incomplete type for C++ PeerConnectionFactory.
+#[repr(C)]
+pub struct RffiAudioDeviceModule {
+    _private: [u8; 0],
+}
+
+
 extern "C" {
     pub fn Rust_createPeerConnectionFactory(
+        adm: *const RffiAudioDeviceModule,
         use_injectable_network: bool,
     ) -> *const RffiPeerConnectionFactory;
     #[cfg(feature = "simnet")]

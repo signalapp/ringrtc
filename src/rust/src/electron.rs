@@ -313,8 +313,7 @@ impl CallEndpoint {
     fn new() -> Result<Self> {
         // Relevant for both group calls and 1:1 calls
         let (events_sender, events_receiver) = channel::<Event>();
-        let use_injectable_network = false;
-        let peer_connection_factory = PeerConnectionFactory::new(use_injectable_network)?;
+        let peer_connection_factory = PeerConnectionFactory::default()?;
         let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
         outgoing_audio_track.set_enabled(false);
         let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;

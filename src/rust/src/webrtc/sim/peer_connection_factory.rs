@@ -26,8 +26,11 @@ pub type RffiCertificate = u32;
 
 pub static FAKE_CERTIFICATE: RffiCertificate = 11;
 
+pub type RffiAudioDeviceModule = u32;
+
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createPeerConnectionFactory(
+    _adm: *const RffiAudioDeviceModule,
     _use_injectable_network: bool,
 ) -> *const RffiPeerConnectionFactory {
     info!("Rust_createPeerConnectionFactory()");

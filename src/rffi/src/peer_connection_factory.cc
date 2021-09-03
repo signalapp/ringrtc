@@ -25,13 +25,19 @@
 #include "rtc_base/message_digest.h"
 #include "rtc_base/rtc_certificate_generator.h"
 
+#if defined(WEBRTC_ANDROID)
+#include "sdk/android/src/jni/pc/android_network_monitor.h"
+#endif
+
 namespace webrtc {
 namespace rffi {
 
 class PeerConnectionFactoryWithOwnedThreads
     : public PeerConnectionFactoryOwner {
  public:
-  static rtc::scoped_refptr<PeerConnectionFactoryWithOwnedThreads> Create(bool use_injectable_network) {
+  // If the adm is null, a default one will be created.
+  // But you probably want a specific one for Android or iOS.
+  static rtc::scoped_refptr<PeerConnectionFactoryWithOwnedThreads> Create(rtc::scoped_refptr<AudioDeviceModule> adm, bool use_injectable_network) {
     // Creating a PeerConnectionFactory is a little complex.  To make sure we're doing it right, we read several examples:
     // Android SDK:
     //  https://cs.chromium.org/chromium/src/third_party/webrtc/sdk/android/src/jni/pc/peer_connection_factory.cc
@@ -63,16 +69,21 @@ class PeerConnectionFactoryWithOwnedThreads
     dependencies.task_queue_factory = CreateDefaultTaskQueueFactory();
     dependencies.call_factory = CreateCallFactory();
     dependencies.event_log_factory = std::make_unique<RtcEventLogFactory>(dependencies.task_queue_factory.get());
-
+#if defined(WEBRTC_ANDROID)
+    dependencies.network_monitor_factory = std::make_unique<jni::AndroidNetworkMonitorFactory>();
+#endif
     cricket::MediaEngineDependencies media_dependencies;
     media_dependencies.task_queue_factory = dependencies.task_queue_factory.get();
 
-    // The audio device module must be created (and destroyed) on the _worker_ thread.
-    // It is safe to release the reference on this thread, however, because the PeerConnectionFactory keeps its own reference.
-    rtc::scoped_refptr<AudioDeviceModule> adm = worker_thread->Invoke<rtc::scoped_refptr<AudioDeviceModule>>(RTC_FROM_HERE, [&]() {
-      return AudioDeviceModule::Create(
-        AudioDeviceModule::kPlatformDefaultAudio, dependencies.task_queue_factory.get());
-    });
+
+    if (!adm) {
+      // The audio device module must be created (and destroyed) on the _worker_ thread.
+      // It is safe to release the reference on this thread, however, because the PeerConnectionFactory keeps its own reference.
+      adm = worker_thread->Invoke<rtc::scoped_refptr<AudioDeviceModule>>(RTC_FROM_HERE, [&]() {
+        return AudioDeviceModule::Create(
+          AudioDeviceModule::kPlatformDefaultAudio, dependencies.task_queue_factory.get());
+      });
+    }
     media_dependencies.adm = adm;
     media_dependencies.audio_encoder_factory = CreateBuiltinAudioEncoderFactory();
     media_dependencies.audio_decoder_factory = CreateBuiltinAudioDecoderFactory();
@@ -81,6 +92,7 @@ class PeerConnectionFactoryWithOwnedThreads
     media_dependencies.video_encoder_factory = CreateBuiltinVideoEncoderFactory();
     media_dependencies.video_decoder_factory = CreateBuiltinVideoDecoderFactory();
     dependencies.media_engine = cricket::CreateMediaEngine(std::move(media_dependencies));
+
     auto factory = CreateModularPeerConnectionFactory(std::move(dependencies));
     auto owner = new rtc::RefCountedObject<PeerConnectionFactoryWithOwnedThreads>(
         std::move(factory),
@@ -222,8 +234,9 @@ class PeerConnectionFactoryWithOwnedThreads
   const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
 };
 
-RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(bool use_injectable_network) {
-  auto factory_owner = PeerConnectionFactoryWithOwnedThreads::Create(use_injectable_network);
+RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(AudioDeviceModule* adm, bool use_injectable_network) {
+  // Wrapping the ADM in a scoped_refptr increments the ref count so the PCF owns one reference to the ADM.
+  auto factory_owner = PeerConnectionFactoryWithOwnedThreads::Create(rtc::scoped_refptr<AudioDeviceModule>(adm), use_injectable_network);
   return factory_owner.release();
 }
 

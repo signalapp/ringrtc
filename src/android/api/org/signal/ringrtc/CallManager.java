@@ -14,6 +14,7 @@ import android.os.Build;
 
 import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
+import org.webrtc.ContextUtils;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.SoftwareVideoEncoderFactory;
@@ -30,6 +31,8 @@ import org.webrtc.VideoEncoderFactory;
 import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 import org.webrtc.VideoSink;
+import org.webrtc.audio.AudioDeviceModule;
+import org.webrtc.audio.JavaAudioDeviceModule;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -178,6 +181,19 @@ public class CallManager {
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
             .createPeerConnectionFactory();
+  }
+
+  // Returns an AndroidAudioDeviceModule with 1 reference owned by the caller.
+  public static long createAudioDeviceModuleOwnedPointer() {
+    AudioDeviceModule adm = createAudioDeviceModule();
+    // The Java ADM keeps the pointer to the native ADM, and thus owns one reference to the native ADM.
+    // But the only thing it does with that pointer is release a ref to it if we call adm.release().
+    // But we don't call adm.release(), so we effectively take ownership of that reference.
+    return adm.getNativeAudioDeviceModulePointer();
+  }
+
+  static JavaAudioDeviceModule createAudioDeviceModule() {
+    return JavaAudioDeviceModule.builder(ContextUtils.getApplicationContext()).createAudioDeviceModule();
   }
 
   private void checkCallManagerExists() {

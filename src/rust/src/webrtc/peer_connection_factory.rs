@@ -4,7 +4,7 @@
 //
 
 //! WebRTC Peer Connection
-use std::fmt;
+use std::{fmt, mem::drop};
 
 use crate::common::Result;
 use crate::core::util::CppObject;
@@ -175,6 +175,29 @@ impl AudioDevice {
     }
 }
 
+/// Rust wrapper around WebRTC C++ AudioDeviceModule object.
+#[derive(Debug)]
+pub struct AudioDeviceModule {
+    /// Pointer to C++ AudioDeviceModule.
+    rffi: *const pcf::RffiAudioDeviceModule,
+}
+
+impl AudioDeviceModule {
+    pub fn owned(ptr: *const u8) -> Self {
+        let rffi = ptr as *const pcf::RffiAudioDeviceModule;
+        Self { rffi, }
+    }
+}
+
+impl Drop for AudioDeviceModule {
+    fn drop(&mut self) {
+        debug!("AudioDeviceModule::drop()");
+        if !self.rffi.is_null() {
+            ref_count::release_ref(self.rffi as CppObject);
+        }
+    }
+}
+
 /// Rust wrapper around WebRTC C++ PeerConnectionFactory object.
 pub struct PeerConnectionFactory {
     /// Pointer to C++ PeerConnectionFactory.
@@ -208,13 +231,25 @@ unsafe impl Sync for PeerConnectionFactory {}
 impl PeerConnectionFactory {
     /// Create a new Rust PeerConnectionFactory object from a WebRTC C++
     /// PeerConnectionFactory object.
-    pub fn new(use_injectable_network: bool) -> Result<Self> {
-        debug!("PeerConnectionFactory::new()");
-        let rffi = unsafe { pcf::Rust_createPeerConnectionFactory(use_injectable_network) };
+    pub fn new(adm: Option<AudioDeviceModule>, use_injectable_network: bool) -> Result<Self> {
+        let rffi = {
+            let adm_rffi = adm.as_ref().map_or_else(std::ptr::null, |adm| adm.rffi);
+            let rffi = unsafe { pcf::Rust_createPeerConnectionFactory(adm_rffi, use_injectable_network) };
+            // This is actually to keep the adm around so that adm_rffi is still valid
+            // until after the call to Rust_createPeerConnectionFactory
+            drop(adm);
+            rffi
+        };
         if rffi.is_null() {
             return Err(RingRtcError::CreatePeerConnectionFactory.into());
         }
         Ok(Self { rffi })
+    }
+
+    pub fn default() -> Result<Self> {
+        let adm = None;
+        let use_injectable_network = false;
+        Self::new(adm, use_injectable_network)
     }
 
     #[cfg(feature = "simnet")]

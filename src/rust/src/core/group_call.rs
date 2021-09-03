@@ -784,7 +784,7 @@ impl Client {
 
                 let peer_connection_factory = match peer_connection_factory {
                     None => {
-                        match PeerConnectionFactory::new(false /* use_injectable network */) {
+                        match PeerConnectionFactory::default() {
                             Ok(v) => v,
                             Err(err) => {
                                 observer.handle_ended(

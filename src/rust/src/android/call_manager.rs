@@ -30,6 +30,7 @@ use crate::error::RingRtcError;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
+use crate::webrtc::peer_connection_factory::{AudioDeviceModule, PeerConnectionFactory};
 
 /// Public type for Android CallManager
 pub type AndroidCallManager = CallManager<AndroidPlatform>;
@@ -630,14 +631,23 @@ pub fn create_group_call_client(
     let outgoing_video_track =
         media::VideoTrack::unowned(native_video_track as *const media::RffiVideoTrack);
 
+    let adm = Some(create_audio_device_module(env)?);
+    let use_injectable_network = false;
+    let peer_connection_factory = PeerConnectionFactory::new(adm, use_injectable_network)?;
+
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(
         group_id,
         sfu_url,
-        None,
+        Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,
     )
+}
+
+fn create_audio_device_module(env: &JNIEnv) -> Result<AudioDeviceModule> {
+    let owned_adm = jni_call_static_method(env, "org/signal/ringrtc/CallManager", "createAudioDeviceModuleOwnedPointer", "()J", &[])?.j()? as *const u8;
+    Ok(AudioDeviceModule::owned(owned_adm))
 }
 
 pub fn delete_group_call_client(
