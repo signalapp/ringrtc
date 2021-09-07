@@ -2,17 +2,8 @@ PODS:
   - CocoaLumberjack (3.7.2):
     - CocoaLumberjack/Core (= 3.7.2)
   - CocoaLumberjack/Core (3.7.2)
-  - Nimble (9.2.0)
-  - OpenSSL-Universal (1.1.1100)
-  - PromiseKit (6.13.1):
-    - PromiseKit/CorePromise (= 6.13.1)
-    - PromiseKit/Foundation (= 6.13.1)
-    - PromiseKit/UIKit (= 6.13.1)
-  - PromiseKit/CorePromise (6.13.1)
-  - PromiseKit/Foundation (6.13.1):
-    - PromiseKit/CorePromise
-  - PromiseKit/UIKit (6.13.1):
-    - PromiseKit/CorePromise
+  - Nimble (9.2.1)
+  - OpenSSL-Universal (1.1.1200)
   - SignalCoreKit (1.0.0):
     - CocoaLumberjack
     - OpenSSL-Universal
@@ -23,14 +14,11 @@ PODS:
 
 DEPENDENCIES:
   - Nimble (~> 9.0)
-  - PromiseKit
   - SignalCoreKit (from `https://github.com/signalapp/SignalCoreKit.git`)
   - SignalCoreKit/Tests (from `https://github.com/signalapp/SignalCoreKit.git`)
   - WebRTCForTesting (from `../../../out/`)
 
 SPEC REPOS:
-  https://github.com/CocoaPods/Specs.git:
-    - PromiseKit
   trunk:
     - CocoaLumberjack
     - Nimble
@@ -44,17 +32,16 @@ EXTERNAL SOURCES:
 
 CHECKOUT OPTIONS:
   SignalCoreKit:
-    :commit: 06cefb43c13cac5d95c40fe7c8c0324f8fa9b410
+    :commit: 5f3b598b21c1a5ee9a1fa88b1b86e49840b8a8b7
     :git: https://github.com/signalapp/SignalCoreKit.git
 
 SPEC CHECKSUMS:
   CocoaLumberjack: b7e05132ff94f6ae4dfa9d5bce9141893a21d9da
-  Nimble: 4f4a345c80b503b3ea13606a4f98405974ee4d0b
-  OpenSSL-Universal: ebc357f1e6bc71fa463ccb2fe676756aff50e88c
-  PromiseKit: 28fda91c973cc377875d8c0ea4f973013c05b6db
+  Nimble: e7e615c0335ee4bf5b0d786685451e62746117d5
+  OpenSSL-Universal: 3b8c0d6268fbd5d3ac44f97338e2fd16a73d9dbf
   SignalCoreKit: 87da14c58d57760793b892ff03838c5ef2ce1167
   WebRTCForTesting: c4f8817c946482026b342faebbfb7b4cae4e5764
 
-PODFILE CHECKSUM: 5d972a51d7e762bafb45e5e8cbb8f1a7dddaeecc
+PODFILE CHECKSUM: d9a26014e24edad116e4998d4042cf687f109873
 
 COCOAPODS: 1.10.1

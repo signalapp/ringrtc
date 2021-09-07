@@ -6,7 +6,6 @@
 import SignalRingRTC.RingRTC
 import WebRTC
 import SignalCoreKit
-import PromiseKit
 
 // Errors that the Call Manager APIs can throw.
 public enum CallManagerError: Error {
@@ -208,23 +207,23 @@ class GroupCallByClientId {
 }
 
 class Requests<T> {
-    private var sealById: [UInt32: Resolver<T>] = [:]
+    private var sealById: [UInt32: (T) -> Void] = [:]
     private var nextId: UInt32 = 1
 
-    func add() -> (UInt32, Promise<T>) {
+    func add() -> (UInt32, Guarantee<T>) {
         let id = self.nextId
         self.nextId += 1
-        let promise: Promise<T> = Promise { seal in
+        let guarantee: Guarantee<T> = Guarantee { seal in
             self.sealById[id] = seal
         }
-        return (id, promise)
+        return (id, guarantee)
     }
 
     func resolve(id: UInt32, response: T) -> Bool {
         guard let seal = self.sealById[id] else {
             return false
         }
-        seal.fulfill(response)
+        seal(response)
         self.sealById[id] = nil
         return true
     }
@@ -790,7 +789,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         return groupCall
     }
 
-    public func peekGroupCall(sfuUrl: String, membershipProof: Data, groupMembers: [GroupMemberInfo]) -> Promise<PeekInfo> {
+    public func peekGroupCall(sfuUrl: String, membershipProof: Data, groupMembers: [GroupMemberInfo]) -> Guarantee<PeekInfo> {
         AssertIsOnMainThread()
         Logger.debug("peekGroupCall")
 
@@ -832,9 +831,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             )
         }
 
-        let (requestId, promise) = self.peekInfoRequests.add()
+        let (requestId, seal) = self.peekInfoRequests.add()
         ringrtcPeekGroupCall(self.ringRtcCallManager, requestId, sfuUrlSlice, membershipProofSlice, &appGroupMemberInfoArray)
-        return promise
+        return seal
     }
 
     // MARK: - Event Observers

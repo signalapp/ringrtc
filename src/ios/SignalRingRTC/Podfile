@@ -4,12 +4,10 @@ use_frameworks!
 
 target 'SignalRingRTC' do
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', testspecs: ["Tests"]
-  pod 'PromiseKit'
   pod 'WebRTCForTesting', path: '../../../out/'
 end
 
 target 'SignalRingRTCTests' do
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', testspecs: ["Tests"]
-  pod 'PromiseKit'
   pod 'Nimble', '~> 9.0'
 end
