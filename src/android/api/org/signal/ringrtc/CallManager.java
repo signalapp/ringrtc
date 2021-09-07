@@ -176,11 +176,19 @@ public class CallManager {
 
     VideoDecoderFactory decoderFactory = new DefaultVideoDecoderFactory(eglBase.getEglBaseContext());
 
-    return PeerConnectionFactory.builder()
+    // This is a workaround to what appears to a bug in WebRTC.
+    // If you don't call setAudioDeviceModule, then the default ADM created by WebRTC will not
+    // have .release() called, and the ADM will be leaked.
+    // This also lets us control the use of hardware AEC.
+    JavaAudioDeviceModule adm = createAudioDeviceModule();
+    PeerConnectionFactory factory = PeerConnectionFactory.builder()
             .setOptions(new PeerConnectionFactoryOptions())
+            .setAudioDeviceModule(adm)
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
             .createPeerConnectionFactory();
+    adm.release();
+    return factory;
   }
 
   // Returns an AndroidAudioDeviceModule with 1 reference owned by the caller.
@@ -193,7 +201,26 @@ public class CallManager {
   }
 
   static JavaAudioDeviceModule createAudioDeviceModule() {
-    return JavaAudioDeviceModule.builder(ContextUtils.getApplicationContext()).createAudioDeviceModule();
+    Set<String> HARDWARE_AEC_BLOCKLIST = new HashSet<String>() {{
+      add("Pixel");
+      add("Pixel XL");
+      add("Moto G5");
+      add("Moto G (5S) Plus");
+      add("Moto G4");
+      add("TA-1053");
+      add("Mi A1");
+      add("Mi A2");
+      add("E5823"); // Sony z5 compact
+      add("Redmi Note 5");
+      add("FP2"); // Fairphone FP2
+      add("MI 5");
+    }};
+
+    boolean useHardwareAec = !HARDWARE_AEC_BLOCKLIST.contains(Build.MODEL);
+    // Note: There is currently no way to enable the use of OpenSLES.
+    return JavaAudioDeviceModule.builder(ContextUtils.getApplicationContext())
+      .setUseHardwareAcousticEchoCanceler(useHardwareAec)
+      .createAudioDeviceModule();
   }
 
   private void checkCallManagerExists() {
