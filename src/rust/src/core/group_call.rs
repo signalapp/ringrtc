@@ -663,6 +663,8 @@ struct State {
     next_stats_time: Option<Instant>,
     stats_observer:  Box<StatsObserver>,
 
+    next_membership_proof_request_time: Option<Instant>,
+
     // We have to put this inside the actor state also because
     // we change the keys from within the actor.
     frame_crypto_context: Arc<CallMutex<frame_crypto::Context>>,
@@ -746,12 +748,15 @@ impl RemoteDevices {
     }
 }
 
-// The time between ticks to do periodic things like
-// Request updated membership list from the SfuClient
-const TICK_INTERVAL_SECS: u64 = 1;
+// The time between ticks to do periodic things like request updated
+// membership list from the SfuClient
+const TICK_INTERVAL: Duration = Duration::from_secs(1);
 
 // The stats period, how often to get and log them.
-const STATS_INTERVAL_SECS: u64 = 10;
+const STATS_INTERVAL: Duration = Duration::from_secs(10);
+
+// How often to request an updated membership proof (24 hours).
+const MEMBERSHIP_PROOF_REQUEST_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 impl Client {
     #[allow(clippy::too_many_arguments)]
@@ -862,6 +867,8 @@ impl Client {
                     next_stats_time: None,
                     stats_observer: create_stats_observer(),
 
+                    next_membership_proof_request_time: None,
+
                     frame_crypto_context,
                     pending_media_receive_keys: Vec::new(),
                     media_send_key_rotation_state: KeyRotationState::Applied,
@@ -910,7 +917,14 @@ impl Client {
                 let _ = state
                     .peer_connection
                     .get_stats(state.stats_observer.as_ref());
-                state.next_stats_time = Some(now + Duration::from_secs(STATS_INTERVAL_SECS));
+                state.next_stats_time = Some(now + STATS_INTERVAL);
+            }
+        }
+
+        if let Some(next_membership_proof_request_time) = state.next_membership_proof_request_time {
+            if now >= next_membership_proof_request_time {
+                state.observer.request_membership_proof(state.client_id);
+                state.next_membership_proof_request_time = Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
             }
         }
 
@@ -919,7 +933,7 @@ impl Client {
 
         state
             .actor
-            .send_delayed(Duration::from_secs(TICK_INTERVAL_SECS), move |state| {
+            .send_delayed(TICK_INTERVAL, move |state| {
                 Self::tick(state)
             });
     }
@@ -960,7 +974,7 @@ impl Client {
             RemoteDevicesRequestState::Updated { at: update_time } => now >= update_time + max_age,
             RemoteDevicesRequestState::Failed { at: failure_time } => {
                 // Don't hammer server during failures
-                now > failure_time + Duration::from_secs(1)
+                now > failure_time + Duration::from_secs(5)
             }
         };
         if should_request_now {
@@ -1020,6 +1034,7 @@ impl Client {
 
                     // Request group membership refresh as we start polling the participant list.
                     state.observer.request_membership_proof(state.client_id);
+                    state.next_membership_proof_request_time = Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
 
                     // Request the list of all group members
                     state.observer.request_group_members(state.client_id);
@@ -1111,6 +1126,7 @@ impl Client {
                         // Request group membership refresh before joining.
                         // The Join request will then proceed once SfuClient has the token.
                         state.observer.request_membership_proof(state.client_id);
+                        state.next_membership_proof_request_time = Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
 
                         state.sfu_client.join(
                             &state.local_ice_ufrag,
@@ -1197,6 +1213,7 @@ impl Client {
                 }
                 Self::set_join_state_and_notify_observer(state, JoinState::NotJoined(None));
                 state.next_stats_time = None;
+                state.next_membership_proof_request_time = None;
             }
         }
     }
@@ -1633,7 +1650,7 @@ impl Client {
                         // the eraId.
                         Self::request_remote_devices_as_soon_as_possible(state);
                         state.next_stats_time =
-                            Some(Instant::now() + Duration::from_secs(STATS_INTERVAL_SECS));
+                            Some(Instant::now() + STATS_INTERVAL);
                     }
                     JoinState::Joined(_, _) => {
                         warn!("The SFU completed joining more than once.");
@@ -2710,7 +2727,7 @@ impl Client {
                         state
                             .observer
                             .handle_remote_devices_changed(state.client_id, &state.remote_devices, RemoteDevicesChangedReason::HeartbeatStateChanged(demux_id));
-                    } 
+                    }
                 }
             } else {
                 warn!(
@@ -3218,6 +3235,7 @@ mod tests {
         ended:                       Waitable<EndReason>,
         era_id:                      Option<String>,
 
+        request_membership_proof_invocation_count:      Arc<AtomicU64>,
         handle_remote_devices_changed_invocation_count: Arc<AtomicU64>,
     }
 
@@ -3247,6 +3265,7 @@ mod tests {
                 send_rates: Arc::new(CallMutex::new(None, "FakeObserver send rates")),
                 ended: Waitable::default(),
                 era_id: None,
+                request_membership_proof_invocation_count: Default::default(),
                 handle_remote_devices_changed_invocation_count: Default::default(),
             }
         }
@@ -3306,6 +3325,11 @@ mod tests {
             send_rates.clone()
         }
 
+        /// Gets the number of `request_membership_proof` since last checked.
+        fn request_membership_proof_invocation_count(&self) -> u64 {
+            self.request_membership_proof_invocation_count.swap(0, Ordering::Relaxed)
+        }
+
         /// Gets the number of `handle_remote_devices_changed` since last checked.
         fn handle_remote_devices_changed_invocation_count(&self) -> u64 {
             self.handle_remote_devices_changed_invocation_count.swap(0, Ordering::Relaxed)
@@ -3313,7 +3337,10 @@ mod tests {
     }
 
     impl Observer for FakeObserver {
-        fn request_membership_proof(&self, _client_id: ClientId) {}
+        fn request_membership_proof(&self, _client_id: ClientId) {
+            self.request_membership_proof_invocation_count.fetch_add(1, Ordering::Relaxed);
+        }
+
         fn request_group_members(&self, _client_id: ClientId) {}
         fn handle_connection_state_changed(
             &self,
@@ -4534,6 +4561,36 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Because it's too slow
+    fn membership_proof_requests() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        client1.client.set_peek_info(Ok(PeekInfo {
+            devices:      vec![PeekDeviceInfo {
+                demux_id:        2,
+                user_id:         None,
+                short_device_id: demux_id_to_short_device_id(2),
+                long_device_id:  demux_id_to_long_device_id(2),
+            }],
+            device_count: 1,
+            max_devices:  Some(2),
+            creator:      None,
+            era_id:       None,
+        }));
+        assert_eq!(0, client1.observer.request_membership_proof_invocation_count());
+
+        // Expect a request for connect and join.
+        client1.connect_join_and_wait_until_joined();
+        assert_eq!(2, client1.observer.request_membership_proof_invocation_count());
+
+        // TODO: Make Actors use tokio so we can use fake time
+        std::thread::sleep(std::time::Duration::from_millis(2000) + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+        assert_eq!(1, client1.observer.request_membership_proof_invocation_count());
+
+        client1.disconnect_and_wait_until_ended();
+        assert_eq!(0, client1.observer.request_membership_proof_invocation_count());
+    }
+
+    #[test]
     fn speakers() {
         let client1 = TestClient::new(vec![1], 1, None);
         let client2 = TestClient::new(vec![2], 2, None);
@@ -5068,7 +5125,7 @@ mod remote_devices_tests {
         let remote_devices = RemoteDevices::from_iter(vec![device_1, device_2.clone(), device_3]);
         assert_eq!(Some(&device_2), remote_devices.find_by_demux_id(device_2.demux_id));
     }
-    
+
     #[test]
     fn find_by_demux_id_mut_when_key_is_not_found() {
         let device_1 = remote_device_state(1, None);
@@ -5092,7 +5149,7 @@ mod remote_devices_tests {
         let device_state = remote_devices.find_by_demux_id_mut(device_2_demux_id).unwrap();
         assert_eq!(Some(time(300)), device_state.speaker_time);
     }
-    
+
     #[test]
     fn find_by_long_device_id_mut_when_key_is_not_found() {
         let device_1 = remote_device_state(1, None);
