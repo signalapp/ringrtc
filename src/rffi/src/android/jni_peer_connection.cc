@@ -12,7 +12,7 @@ namespace webrtc {
 namespace rffi {
 
 RUSTEXPORT PeerConnectionInterface*
-Rust_getPeerConnectionFromJniOwnedPeerConnection(jlong owned_peer_connection) {
+Rust_borrowPeerConnectionFromJniOwnedPeerConnection(jlong owned_peer_connection) {
   return reinterpret_cast<jni::OwnedPeerConnection*>(owned_peer_connection)->pc();
 }
 

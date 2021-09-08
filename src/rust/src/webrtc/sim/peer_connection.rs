@@ -10,6 +10,7 @@ use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
 use crate::core::platform::PlatformItem;
+use crate::webrtc;
 use crate::webrtc::media::RffiAudioEncoderConfig;
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
@@ -43,6 +44,8 @@ impl From<std::net::IpAddr> for RffiIp {
 }
 
 impl PlatformItem for RffiPeerConnection {}
+
+impl webrtc::RefCounted for RffiPeerConnection {}
 
 impl RffiPeerConnection {
     pub fn new() -> Self {

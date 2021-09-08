@@ -30,7 +30,7 @@ extern "C" {
 /// Retrieve the underlying PeerConnection object from the
 /// JNI OwnedPeerConnection object.
 extern "C" {
-    pub fn Rust_getPeerConnectionFromJniOwnedPeerConnection(
+    pub fn Rust_borrowPeerConnectionFromJniOwnedPeerConnection(
         jni_owned_pc: i64,
     ) -> *const RffiPeerConnection;
 }

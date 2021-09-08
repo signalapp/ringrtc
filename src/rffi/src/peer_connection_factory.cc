@@ -94,15 +94,14 @@ class PeerConnectionFactoryWithOwnedThreads
     dependencies.media_engine = cricket::CreateMediaEngine(std::move(media_dependencies));
 
     auto factory = CreateModularPeerConnectionFactory(std::move(dependencies));
-    auto owner = new rtc::RefCountedObject<PeerConnectionFactoryWithOwnedThreads>(
+    // TODO: Use rtc::make_ref_counted once it's available.
+    return rtc::scoped_refptr<PeerConnectionFactoryWithOwnedThreads>(new rtc::RefCountedObject<PeerConnectionFactoryWithOwnedThreads>(
         std::move(factory),
         std::move(network_thread),
         std::move(worker_thread),
         std::move(signaling_thread),
         std::move(injectable_network),
-        adm);
-    owner->AddRef();
-    return owner;
+        adm));
   }
 
   ~PeerConnectionFactoryWithOwnedThreads() override {

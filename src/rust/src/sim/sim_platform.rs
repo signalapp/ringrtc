@@ -157,8 +157,9 @@ impl Platform for SimPlatform {
         .unwrap();
         connection.set_app_connection(fake_pc).unwrap();
 
+        let peer_connection_factory = None;
         let peer_connection =
-            PeerConnection::unowned(connection.app_connection_ptr_for_tests(), std::ptr::null());
+            PeerConnection::new(connection.peer_connection_rffi(), std::ptr::null(), peer_connection_factory);
 
         connection.set_peer_connection(peer_connection).unwrap();
 

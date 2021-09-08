@@ -97,6 +97,8 @@ pub mod native;
 
 /// Foreign Function Interface (FFI) to WebRTC C++ library.
 pub mod webrtc {
+    pub mod arc;
+    pub use arc::{Arc, RefCounted};
     pub mod data_channel;
     pub mod ice_gatherer;
     #[cfg(feature = "simnet")]

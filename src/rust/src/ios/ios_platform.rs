@@ -41,6 +41,7 @@ use crate::ios::api::call_manager_interface::{
 };
 use crate::ios::error::IosError;
 use crate::ios::ios_media_stream::IosMediaStream;
+use crate::webrtc;
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnection};
 use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
@@ -149,12 +150,14 @@ impl Platform for IosPlatform {
 
         // Retrieve the underlying PeerConnection object from the
         // application owned RTCPeerConnection object.
-        let rffi_peer_connection = app_connection_interface.pc as *const RffiPeerConnection;
+        let rffi_peer_connection = webrtc::Arc::from_borrowed_ptr(app_connection_interface.pc as *const RffiPeerConnection);
         if rffi_peer_connection.is_null() {
             return Err(IosError::ExtractNativePeerConnection.into());
         }
 
-        let peer_connection = PeerConnection::unowned(rffi_peer_connection, pc_observer.rffi());
+        // Note: We have to make sure the PeerConnectionFactory outlives this PC because we're not getting
+        // any help from the type system when passing in a None for the PeerConnectionFactory here.
+        let peer_connection = PeerConnection::new(rffi_peer_connection, pc_observer.rffi(), None);
 
         connection.set_peer_connection(peer_connection)?;
 

@@ -10,12 +10,10 @@
 #include <jni.h>
 
 /**
- * Rust friendly wrapper to return the underlying
- * PeerConnectionInterface object from a Java jni::OwnedPeerConnection
- * object.
- *
+ * Return a borrowed pointer to the native PeerConnection inside of the
+ * Java wrapper.  Should be consumed with webrtc::Arc::from_borrowed_ptr().
  */
 RUSTEXPORT webrtc::PeerConnectionInterface*
-Rust_getPeerConnectionFromJniOwnedPeerConnection(jlong owned_peer_connection);
+Rust_borrowPeerConnectionFromJniOwnedPeerConnection(jlong owned_peer_connection);
 
 #endif /* ANDROID_PEER_CONNECTION_H__ */

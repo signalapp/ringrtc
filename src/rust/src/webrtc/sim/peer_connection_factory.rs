@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use crate::webrtc;
 use crate::webrtc::peer_connection_factory::RffiIceServer;
 use crate::webrtc::sim::media::{
     RffiAudioTrack,
@@ -19,6 +20,8 @@ use std::os::raw::c_char;
 use std::ptr::copy_nonoverlapping;
 
 pub type RffiPeerConnectionFactory = u32;
+
+impl webrtc::RefCounted for RffiPeerConnectionFactory {}
 
 pub static FAKE_PEER_CONNECTION_FACTORY: RffiPeerConnectionFactory = 10;
 

@@ -7,6 +7,7 @@
 
 use std::os::raw::c_char;
 
+use crate::webrtc;
 use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::media::RffiAudioEncoderConfig;
@@ -24,6 +25,8 @@ use crate::webrtc::stats_observer::RffiStatsObserver;
 pub struct RffiPeerConnection {
     _private: [u8; 0],
 }
+
+impl webrtc::RefCounted for RffiPeerConnection {}
 
 /// Incomplete type for C++ DataChannelInterface.
 #[repr(C)]

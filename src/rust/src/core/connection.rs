@@ -968,12 +968,6 @@ where
         }
     }
 
-    // Only for tests
-    pub fn app_connection_ptr_for_tests(&self) -> *const <T as Platform>::AppConnection {
-        let webrtc = self.webrtc.lock().unwrap();
-        webrtc.app_connection.as_ref().unwrap()
-    }
-
     /// Returns `true` if the call is terminating.
     pub fn terminating(&self) -> Result<bool> {
         if let ConnectionState::Terminating = self.state()? {
@@ -1912,6 +1906,14 @@ where
             .unwrap()
             .sender_status
             .clone()
+    }
+}
+
+#[cfg(feature = "sim")]
+impl Connection<crate::sim::sim_platform::SimPlatform> {
+    pub fn peer_connection_rffi(&self) -> crate::webrtc::Arc<crate::webrtc::sim::peer_connection::RffiPeerConnection> {
+        let webrtc = self.webrtc.lock().unwrap();
+        crate::webrtc::Arc::from_borrowed_ptr(webrtc.app_connection.as_ref().unwrap() as *const crate::webrtc::sim::peer_connection::RffiPeerConnection)
     }
 }
 

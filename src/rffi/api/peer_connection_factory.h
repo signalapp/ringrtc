@@ -52,6 +52,7 @@ typedef struct {
   size_t urls_size;
 } RffiIceServer;
 
+// Returns an owned pointer that should be used with webrtc::Arc::from_owned_ptr().
 // Technically creates a PeerConnectionFactoryOwner, but if you only use the
 // functions below, that won't matter to you.
 // You can create more than one, but you should probably only have one unless
@@ -64,8 +65,8 @@ RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
 RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
     webrtc::PeerConnectionFactoryOwner*);
 
-// Creates a PeerConnection using a fairly small set of controls.  It assumes you
-// want all the normal stuff like
+// Creates a PeerConnection, returning an owned ptr
+// (should be consumed with webrtc::Arc::from_owned_ptr).
 RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   webrtc::PeerConnectionFactoryOwner*,
   webrtc::rffi::PeerConnectionObserverRffi*,

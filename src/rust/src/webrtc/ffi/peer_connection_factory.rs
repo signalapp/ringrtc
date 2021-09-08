@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use crate::webrtc;
 use crate::webrtc::ffi::media::{RffiAudioTrack, RffiVideoSource, RffiVideoTrack};
 use crate::webrtc::ffi::peer_connection::RffiPeerConnection;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
@@ -16,6 +17,8 @@ use std::os::raw::c_char;
 pub struct RffiPeerConnectionFactory {
     _private: [u8; 0],
 }
+
+impl webrtc::RefCounted for RffiPeerConnectionFactory {}
 
 /// Incomplete type for C++ RTCCertificate.
 #[repr(C)]

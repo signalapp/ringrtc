@@ -27,10 +27,11 @@ use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::webrtc;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
-use crate::webrtc::peer_connection_factory::{AudioDeviceModule, PeerConnectionFactory};
+use crate::webrtc::peer_connection_factory::{AudioDeviceModule, PeerConnectionFactory, RffiPeerConnectionFactory};
 
 /// Public type for Android CallManager
 pub type AndroidCallManager = CallManager<AndroidPlatform>;
@@ -113,14 +114,17 @@ pub fn create_peer_connection(
         return Err(AndroidError::CreateJniPeerConnection.into());
     }
 
-    // Retrieve the underlying PeerConnection object from the
-    // JNI OwnedPeerConnection object.
-    let rffi_pc = unsafe { Rust_getPeerConnectionFromJniOwnedPeerConnection(jni_owned_pc) };
+    let rffi_pc = webrtc::Arc::from_borrowed_ptr(unsafe { Rust_borrowPeerConnectionFromJniOwnedPeerConnection(jni_owned_pc) });
     if rffi_pc.is_null() {
         return Err(AndroidError::ExtractNativePeerConnection.into());
     }
 
-    let peer_connection = PeerConnection::unowned(rffi_pc, pc_observer.rffi());
+    // Note: We have to make sure the PeerConnectionFactory outlives this PC because we're not getting
+    // any help from the type system when passing in a None for the PeerConnectionFactory here.
+    // We can't "webrtc::Arc::from_borrowed_ptr(peer_connection_factory" here because
+    // peer_connection_factory is actually a OwnedFactoryAndThreads, not a PeerConnectionFactory.
+    // We'd need to unwrap it with something like Rust_borrowPeerConnectionFromJniOwnedPeerConnection.
+    let peer_connection = PeerConnection::new(rffi_pc, pc_observer.rffi(), None);
 
     connection.set_peer_connection(peer_connection)?;
 
