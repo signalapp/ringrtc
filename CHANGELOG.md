@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.13.0
+
+- Desktop: Option to use new or default audio device module on Windows
+
+- Reference signalapp/webrtc@4389i
+  - Support new Windows ADM
+
+- Desktop: Support glare scenarios
+
+- Request updated membership proof for group calls at least once a day
+
+- Request bitrate constraints for group calls according to BandwidthMode
+
+- Fix PeerConnectionFactory leaks
+
+- iOS: Remove dependency on PromiseKit
+
+- Android: Enable a Hardware AEC blocklist and fix a memory leak
+
+- Android: Native PeerConnectionFactory uses AndroidNetworkMonitor and JavaAudioDeviceModule
+
 ## v2.12.0
 
 - Enable ICE continual gathering
