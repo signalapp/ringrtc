@@ -69,6 +69,7 @@ public class RemoteDeviceState: Hashable {
     public internal(set) var sharingScreen: Bool?
     public internal(set) var addedTime: UInt64  // unix millis
     public internal(set) var speakerTime: UInt64  // unix millis; 0 if they've never spoken
+    public internal(set) var forwardingVideo: Bool?
 
     public internal(set) var videoTrack: RTCVideoTrack?
 

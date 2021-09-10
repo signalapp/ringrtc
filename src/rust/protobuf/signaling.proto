@@ -29,7 +29,7 @@ message Answer {
 // which doesn't seem worth it at the moment.
 message IceCandidate {
   // Use a field value of 2 for compatibility since both V2 and V3 have the same format.
-  optional IceCandidateV3OrV2 added_V3 = 2;
+  optional IceCandidateV3 added_V3 = 2;
   // ICE candidate removal identifies the removed candidate
   // by (transport_name, component, ip, port, udp/tcp).
   // But we assume transport_name = "audio", component = 1, and udp

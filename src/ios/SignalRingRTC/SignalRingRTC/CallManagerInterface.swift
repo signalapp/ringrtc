@@ -886,6 +886,10 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
             deviceState.sharingScreen = remoteDeviceState.sharingScreen.value
         }
 
+        if remoteDeviceState.forwardingVideo.valid {
+            deviceState.forwardingVideo = remoteDeviceState.forwardingVideo.value
+        }
+
         finalRemoteDeviceStates.append(deviceState)
     }
 

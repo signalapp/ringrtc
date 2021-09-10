@@ -632,6 +632,9 @@ impl Platform for IosPlatform {
                 ),
                 addedTime:         remote_device_state.added_time_as_unix_millis(),
                 speakerTime:       remote_device_state.speaker_time_as_unix_millis(),
+                forwardingVideo:   app_option_from_bool(
+                    remote_device_state.forwarding_video,
+                ),
             };
 
             app_remote_device_states.push(app_remote_device_state);

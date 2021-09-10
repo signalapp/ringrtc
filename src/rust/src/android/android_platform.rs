@@ -1318,7 +1318,16 @@ impl Platform for AndroidPlatform {
                 };
                 let jni_added_time = remote_device_state.added_time_as_unix_millis() as jlong;
                 let jni_speaker_time = remote_device_state.speaker_time_as_unix_millis() as jlong;
-
+                let jni_forwarding_video = match self.get_optional_boolean_object(
+                    &env,
+                    remote_device_state.forwarding_video,
+                ) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("jni_forwarding_video: {:?}", error);
+                        continue;
+                    }
+                };
                 let args = [
                     jni_demux_id.into(),
                     jni_user_id_byte_array.into(),
@@ -1329,6 +1338,7 @@ impl Platform for AndroidPlatform {
                     jni_sharing_screen.into(),
                     jni_added_time.into(),
                     jni_speaker_time.into(),
+                    jni_forwarding_video.into(),
                 ];
 
                 let remote_device_state_obj = match env.new_object(

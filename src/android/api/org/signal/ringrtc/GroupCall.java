@@ -785,6 +785,7 @@ public final class GroupCall {
         @Nullable Boolean    sharingScreen;
         long                 addedTime;   // unix millis
         long                 speakerTime; // unix millis; 0 if was never the speaker
+        @Nullable Boolean    forwardingVideo;
 
         @Nullable VideoTrack videoTrack;
 
@@ -796,7 +797,8 @@ public final class GroupCall {
                                  @Nullable Boolean presenting,
                                  @Nullable Boolean sharingScreen,
                                            long    addedTime,
-                                           long    speakerTime) {
+                                           long    speakerTime,
+                                 @Nullable Boolean forwardingVideo) {
             this.demuxId = demuxId;
             this.userIdByteArray = userIdByteArray;
             this.mediaKeysReceived = mediaKeysReceived;
@@ -807,6 +809,7 @@ public final class GroupCall {
             this.sharingScreen = sharingScreen;
             this.addedTime = addedTime;
             this.speakerTime = speakerTime;
+            this.forwardingVideo = forwardingVideo;
         }
 
         public long getDemuxId() {
@@ -845,6 +848,10 @@ public final class GroupCall {
 
         public long getSpeakerTime() {
             return speakerTime;
+        }
+
+        public @Nullable Boolean getForwardingVideo() {
+            return forwardingVideo;
         }
 
         public @Nullable VideoTrack getVideoTrack() {

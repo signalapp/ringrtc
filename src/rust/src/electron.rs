@@ -1955,6 +1955,11 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                                 .to_string(),
                         )
                         .upcast();
+                    let forwarding_video: neon::handle::Handle<JsValue> =
+                        match remote_device_state.forwarding_video {
+                            None => cx.undefined().upcast(),
+                            Some(forwarding_video) => cx.boolean(forwarding_video).upcast(),
+                        };
 
                     let js_remote_device_state = cx.empty_object();
                     js_remote_device_state.set(&mut cx, "demuxId", demux_id)?;
@@ -1970,6 +1975,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_remote_device_state.set(&mut cx, "sharingScreen", sharing_screen)?;
                     js_remote_device_state.set(&mut cx, "addedTime", added_time)?;
                     js_remote_device_state.set(&mut cx, "speakerTime", speaker_time)?;
+                    js_remote_device_state.set(&mut cx, "forwardingVideo", forwarding_video)?;
 
                     js_remote_device_states.set(&mut cx, i as u32, js_remote_device_state)?;
                 }

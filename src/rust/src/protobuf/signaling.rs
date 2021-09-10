@@ -28,17 +28,6 @@ pub struct IceCandidate {
     #[prost(message, optional, tag="3")]
     pub removed: ::std::option::Option<SocketAddr>,
 }
-/// The V2 protocol uses SDP, DTLS, but not SCTP.
-/// The V3 protocol uses SDP, but not DTLS, but not SCTP.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConnectionParametersV3OrV2 {
-    #[prost(string, optional, tag="1")]
-    pub sdp: ::std::option::Option<std::string::String>,
-    /// V2 has this unset.
-    /// V3 has this set
-    #[prost(bytes, optional, tag="2")]
-    pub public_key: ::std::option::Option<std::vec::Vec<u8>>,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IceCandidateV3 {
     #[prost(string, optional, tag="1")]
@@ -94,6 +83,7 @@ pub mod call_message {
         pub group_id: ::std::option::Option<std::vec::Vec<u8>>,
         #[prost(enumeration="ring_intention::Type", optional, tag="2")]
         pub r#type: ::std::option::Option<i32>,
+        /// This is signed so it fits in a SQLite integer column.
         #[prost(sfixed64, optional, tag="3")]
         pub ring_id: ::std::option::Option<i64>,
     }
@@ -111,6 +101,7 @@ pub mod call_message {
         pub group_id: ::std::option::Option<std::vec::Vec<u8>>,
         #[prost(enumeration="ring_response::Type", optional, tag="2")]
         pub r#type: ::std::option::Option<i32>,
+        /// This is signed so it fits in a SQLite integer column.
         #[prost(sfixed64, optional, tag="3")]
         pub ring_id: ::std::option::Option<i64>,
     }

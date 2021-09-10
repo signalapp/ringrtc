@@ -2734,10 +2734,11 @@ where
 
     pub fn set_bandwidth_mode(
         &mut self,
-        _client_id: group_call::ClientId,
-        _bandwidth_mode: BandwidthMode,
+        client_id: group_call::ClientId,
+        bandwidth_mode: BandwidthMode,
     ) {
-        // TODO: Respect bandwidth mode for both send and receive
+        info!("set_bandwidth_mode(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_bandwidth_mode, bandwidth_mode);
     }
 
     pub fn request_video(

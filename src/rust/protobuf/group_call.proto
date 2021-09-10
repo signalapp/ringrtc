@@ -35,109 +35,45 @@
    optional Leaving leaving = 4;
  }
  
- // Called RtpDataChannelMessage in the SFU's RtpDataChannelMessages.proto
  message DeviceToSfu {
-   // Called ResolutionRequestMessage in the SFU's RtpDataChannelMessages.proto
    message VideoRequestMessage {
-     // Called Constraint in the SFU's RtpDataChannelMessages.proto
      message VideoRequest {
        // Functionally the same as a DemuxId, but oddly different.
-       // Called endpointSuffix in the SFU's RtpDataChannelMessages.proto
        optional uint64 short_device_id = 1;
-       // Called idealHeight in the SFU's RtpDataChannelMessages.proto
-       // This does not allocate bits eagerly.
        optional uint32 height = 2;
      }
    
      repeated VideoRequest requests = 1;
-     // Don't send more than this many, even if they are in the list above
-     // or if they aren't in the list above.
-     // Called lastN in the SFU's RtpDataChannelMessages.proto
-     optional uint32 max = 2;
-   }
- 
-   // Called EndpointToEndpointMessage in the SFU's RtpDataChannelMessages.proto
-   message SendToDevices {
-     // Functionally the same as a DemuxId, but oddly different.
-     // If not set, it will broadcast
-     optional string long_device_id = 1;
-     optional bytes  payload        = 3;
+     // tag 2 was previously "max_count", which is no longer used
+     optional uint32 max_kbps = 3;
    }
  
    // Called resolutionRequest in the SFU's RtpDataChannelMessages.proto
    optional VideoRequestMessage video_request = 1;
- 
-   // Called endpointMessage in the SFU's RtpDataChannelMessages.proto
-   optional SendToDevices send_to_devices = 7;
  }
  
  // Called RtpDataChannelMessage in the SFU's RtpDataChannelMessages.proto
  message SfuToDevice {
-   // Called EndpointChangedMessage in the SFU's RtpDataChannelMessages.proto
    message DeviceJoinedOrLeft {
-     // Functionally the same as a DemuxId, but oddly different.
-     // Called endpoint in the SFU's RtpDataChannelMessages.proto
-     optional string long_device_id = 1;
-     optional bool   joined         = 2;
    }
  
-   // The current primary/active speaker as calculated by rather complex logic by the SFU.
-   // Called DominantSpeakerMessage in the SFU's RtpDataChannelMessages.proto
    message Speaker {
      // Functionally the same as a DemuxId, but oddly different.
-     // Called endpoint in the SFU's RtpDataChannelMessages.proto
      optional string long_device_id = 1;
    } 
  
    // The resolution the SFU wants you to send to it to satisfy the requests
    // of all of the other devices.
-   // Called SenderVideoConstraintMessage in the SFU's RtpDataChannelMessages.proto
    message VideoRequest {
-       // Called idealHeight in the SFU's RtpDataChannelMessages.proto
        optional uint32 height = 1;
    }
  
-   // Called EndpointConnectionStatusMessage in the SFU's RtpDataChannelMessages.proto
-   message DeviceConnectionStatus {
-     // Functionally the same as a DemuxId, but oddly different.
-     optional string long_device_id = 1;
-     optional bool   active         = 2;
+   message ForwardingVideo {
+       repeated uint32 demux_ids = 1;
    }
  
-   // Called EndpointToEndpointMessage in the SFU's RtpDataChannelMessages.proto
-   message ReceivedFromDevice {
-     // Functionally the same as a DemuxId, but oddly different.
-     optional string long_device_id = 1;
-     optional bytes  payload        = 3;
-   }
- 
-   // Called ForwardedEndpointsMessage in the SFU's RtpDataChannelMessages.proto
-   message Forwarding {
-     // The remote devices from which video is being forwarded.
-     // Functionally the same as a DemuxId, but oddly different.
-     // Called suffixEndpointsBeingForwarded in the SFU's RtpDataChannelMessages.proto
-     repeated uint64 video_forwarded_short_device_ids = 1;
-     // The remote devices from which video is being forwarded, but from which
-     // video was not being forwarded in the last Forwarding message.
-     // Functionally the same as a DemuxId, but oddly different.
-     // Called suffixEndpointsEnteringLastN in the SFU's RtpDataChannelMessages.proto
-     repeated uint64 newly_forwarded_short_device_ids  = 2;
-     // All the of devices.  The same as the "Devices" messages.
-     // Functionally the same as a DemuxId, but oddly different.
-     // Called suffixEndpointsInConference in the SFU's RtpDataChannelMessages.proto
-     repeated uint64 all_devices_short_device_ids      = 3;
-   }
- 
-   // Called senderVideoConstraint in the SFU's RtpDataChannelMessages.proto
-   optional VideoRequest video_request                      = 2;
-   // Called endpointConnectionStatus in the SFU's RtpDataChannelMessages.proto
-   optional DeviceConnectionStatus device_connection_status = 3;
-   // Called dominantSpeaker in the SFU's RtpDataChannelMessages.proto
-   optional Speaker speaker                                 = 4;
-   // Called forwardedEndpoints in the SFU's RtpDataChannelMessages.proto
-   optional Forwarding  forwarding                          = 5;
-   // Called endpointChanged in the SFU's RtpDataChannelMessages.proto
-   optional DeviceJoinedOrLeft device_joined_or_left        = 6;
-   // Called forwardedEndpoints in the SFU's RtpDataChannelMessages.proto
-   optional ReceivedFromDevice received_from_device         = 7;
+   optional VideoRequest video_request               = 2;
+   optional Speaker speaker                          = 4;
+   optional DeviceJoinedOrLeft device_joined_or_left = 6;
+   optional ForwardingVideo forwarding_video         = 7;
  }

@@ -9,7 +9,7 @@ use std::{
     iter::FromIterator,
     mem::size_of,
     net::SocketAddr,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
@@ -26,7 +26,7 @@ use crate::{
         units::DataRate,
         Result,
     },
-    core::{call_mutex::CallMutex, crypto as frame_crypto, signaling},
+    core::{call_mutex::CallMutex, crypto as frame_crypto, signaling, bandwidth_mode::BandwidthMode},
     error::RingRtcError,
     protobuf,
     webrtc::{
@@ -185,6 +185,7 @@ pub enum RemoteDevicesChangedReason {
     MediaKeyReceived(DemuxId),
     SpeakerTimeChanged(DemuxId),
     HeartbeatStateChanged(DemuxId),
+    ForwardeVideosChanged,
 }
 
 // The callbacks from the Call to the Observer of the call.
@@ -458,6 +459,7 @@ pub struct RemoteDeviceState {
     // Sorting using this value will give a history of who spoke.
     pub speaker_time:        Option<SystemTime>,
     pub leaving_received:    bool,
+    pub forwarding_video:     Option<bool>,
 }
 
 fn as_unix_millis(t: Option<SystemTime>) -> u64 {
@@ -492,6 +494,7 @@ impl RemoteDeviceState {
             added_time,
             speaker_time: None,
             leaving_received: false,
+            forwarding_video: None,
         }
     }
 
@@ -596,6 +599,12 @@ impl Deref for RemoteDevices {
     }
 }
 
+impl DerefMut for RemoteDevices {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 impl Default for RemoteDevices {
     fn default() -> Self {
         Self(Default::default())
@@ -697,6 +706,8 @@ struct State {
     speaker_rtp_timestamp:                        Option<rtp::Timestamp>,
 
     send_rates:               SendRates,
+    max_receive_rate: Option<DataRate>,
+    forwarding_video_demux_ids: HashSet<DemuxId>,
 
     /// A ring sent to the whole group when the call was created.
     ///
@@ -878,6 +889,9 @@ impl Client {
                     speaker_rtp_timestamp: None,
 
                     send_rates: SendRates::default(),
+                    max_receive_rate: None,
+                    forwarding_video_demux_ids: HashSet::default(),
+
                     cancellable_initial_ring: None,
 
                     actor,
@@ -1409,6 +1423,33 @@ impl Client {
         });
     }
 
+    pub fn set_bandwidth_mode(&self, bandwidth_mode: BandwidthMode) {
+        debug!(
+            "group_call::Client(outer)::set_bandwidth_mode(client_id: {}, bandwidth_mode: {:?})",
+            self.client_id, bandwidth_mode
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::set_bandwidth_mode(client_id: {}), bandwidth_mode: {:?}",
+                state.client_id,
+                bandwidth_mode,
+            );
+
+            state.max_receive_rate = Some(match bandwidth_mode {
+                // Effectively force audio-only
+                BandwidthMode::VeryLow => DataRate::from_kbps(1),
+                // Effectively only allow one low quality video
+                BandwidthMode::Low => DataRate::from_kbps(500),
+                // Effectively allow a lot of video 
+                BandwidthMode::Normal => DataRate::from_kbps(20_000_000),
+            });
+            if !state.on_demand_video_request_sent_since_last_tick {
+                Self::send_video_requests_to_sfu(state);
+                state.on_demand_video_request_sent_since_last_tick = true;
+            }
+        });
+    }
+
     fn set_send_rates_inner(state: &mut State, send_rates: SendRates) {
         if state.send_rates != send_rates {
             if send_rates.max == Some(DataRate::from_kbps(ALL_ALONE_MAX_SEND_RATE_KBPS)) {
@@ -1497,10 +1538,9 @@ impl Client {
                     //         .filter(|request| request.height.unwrap() > 0)
                     //         .count() as u32,
                     // ),
-                    max: Some(1000000),
+                    max_kbps: state.max_receive_rate.map(|rate| rate.as_kbps() as u32),
                     requests,
                 }),
-                ..DeviceToSfu::default()
             }) {
                 Err(e) => {
                     warn!("Failed to encode video request: {:?}", e);
@@ -2578,8 +2618,7 @@ impl Client {
 
     fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
         use protobuf::group_call::{
-            sfu_to_device::DeviceJoinedOrLeft,
-            sfu_to_device::Speaker,
+            sfu_to_device::{DeviceJoinedOrLeft, Speaker, ForwardingVideo},
             DeviceToDevice,
             SfuToDevice,
         };
@@ -2601,10 +2640,11 @@ impl Client {
                     if let Some(DeviceJoinedOrLeft { .. }) = msg.device_joined_or_left {
                         self.handle_remote_device_joined_or_left();
                     }
+                    if let Some(ForwardingVideo { demux_ids }) = &msg.forwarding_video {
+                        self.handle_forwarding_video_received(demux_ids.iter().copied().collect());
+                        handled = true;
+                    }
                     if !handled {
-                        // TODO: Handle msg.devices to trigger a remote devices request.
-                        // TODO: Handle msg.video_request to trigger a change to the resolution/bitrate we send.
-                        // TODO: Handle msg.device_connection_status to add it to state.remote_devices so the UI can draw something
                         info!("Received message from SFU over RTP data: {:?}", msg);
                     }
                 }
@@ -2703,6 +2743,20 @@ impl Client {
         self.actor.send(move |state| {
             info!("SFU notified that a remote device has joined or left, requesting update");
             Self::request_remote_devices_as_soon_as_possible(state);
+        })
+    }
+
+    fn handle_forwarding_video_received(&self, forwarding_video_demux_ids: HashSet<DemuxId>) {
+        self.actor.send(move |state| {
+            let forwarding_video_demux_ids = forwarding_video_demux_ids.into_iter().collect();
+            if state.forwarding_video_demux_ids != forwarding_video_demux_ids {
+                info!("SFU notified that the set of forwardinge videos has changed");
+                for remote_device in state.remote_devices.iter_mut() {
+                    remote_device.forwarding_video = Some(forwarding_video_demux_ids.contains(&remote_device.demux_id));
+                }
+                state.forwarding_video_demux_ids = forwarding_video_demux_ids;
+                state.observer.handle_remote_devices_changed(state.client_id, &state.remote_devices, RemoteDevicesChangedReason::ForwardeVideosChanged)
+            }
         })
     }
 
@@ -4380,15 +4434,15 @@ mod tests {
                             height:          Some(1080),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            short_device_id: Some(demux_id_to_short_device_id(3)),
                             height:          Some(80),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            short_device_id: Some(demux_id_to_short_device_id(4)),
                             height:          Some(0),
                         },
                     ],
-                    max:      Some(2),
+                    max_kbps:  None,
                 }),
                 ..DeviceToSfu::default()
             },
@@ -4426,6 +4480,93 @@ mod tests {
             .expect("Get RTP packet to SFU");
         let elapsed = Instant::now() - before;
         assert!(elapsed > Duration::from_millis(1000));
+
+        client1.client.set_bandwidth_mode(BandwidthMode::VeryLow);
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                video_request: Some(VideoRequestMessage {
+                    requests: vec![
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            height:          Some(1080),
+                        },
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(3)),
+                            height:          Some(80),
+                        },
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(4)),
+                            height:          Some(0),
+                        },
+                    ],
+                    max_kbps:  Some(1),
+                }),
+                ..DeviceToSfu::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
+
+        client1.client.set_bandwidth_mode(BandwidthMode::Low);
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                video_request: Some(VideoRequestMessage {
+                    requests: vec![
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            height:          Some(1080),
+                        },
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(3)),
+                            height:          Some(80),
+                        },
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(4)),
+                            height:          Some(0),
+                        },
+                    ],
+                    max_kbps:  Some(500),
+                }),
+                ..DeviceToSfu::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
+
+        client1.client.set_bandwidth_mode(BandwidthMode::Normal);
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                video_request: Some(VideoRequestMessage {
+                    requests: vec![
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            height:          Some(1080),
+                        },
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(3)),
+                            height:          Some(80),
+                        },
+                        VideoRequestProto {
+                            short_device_id: Some(demux_id_to_short_device_id(4)),
+                            height:          Some(0),
+                        },
+                    ],
+                    max_kbps:  Some(20_000_000),
+                }),
+                ..DeviceToSfu::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
 
         client1.disconnect_and_wait_until_ended();
     }
@@ -4666,6 +4807,34 @@ mod tests {
         client1.receive_speaker(10, 3);
         assert_eq!(vec![3, 2, 4], client1.speakers());
         assert_eq!(0, client1.observer.handle_remote_devices_changed_invocation_count());
+
+        client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn forwarding_video() {
+        let get_forwarding_videos = |client: &TestClient| -> Vec<(DemuxId, Option<bool>)> {
+            client.observer.remote_devices().iter().map(|remote| (remote.demux_id, remote.forwarding_video)).collect()
+        };
+
+        let client1 = TestClient::new(vec![1], 1, None);
+        let client2 = TestClient::new(vec![2], 2, None);
+        let client3 = TestClient::new(vec![3], 3, None);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[&client2, &client3]);
+
+
+        assert_eq!(vec![(2, None), (3, None)], get_forwarding_videos(&client1));
+
+        client1.client.handle_forwarding_video_received([2, 3].iter().copied().collect());
+        client1.wait_for_client_to_process();
+
+        assert_eq!(vec![(2, Some(true)), (3, Some(true))], get_forwarding_videos(&client1));
+
+        client1.client.handle_forwarding_video_received([2].iter().copied().collect());
+        client1.wait_for_client_to_process();
+
+        assert_eq!(vec![(2, Some(true)), (3, Some(false))], get_forwarding_videos(&client1));
 
         client1.disconnect_and_wait_until_ended();
     }
