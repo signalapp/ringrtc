@@ -31,7 +31,7 @@ use crate::webrtc;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
-use crate::webrtc::peer_connection_factory::{AudioDeviceModule, PeerConnectionFactory, RffiPeerConnectionFactory};
+use crate::webrtc::peer_connection_factory::{self as pcf, AudioDeviceModule, PeerConnectionFactory};
 
 /// Public type for Android CallManager
 pub type AndroidCallManager = CallManager<AndroidPlatform>;
@@ -635,9 +635,10 @@ pub fn create_group_call_client(
     let outgoing_video_track =
         media::VideoTrack::unowned(native_video_track as *const media::RffiVideoTrack);
 
-    let adm = Some(create_audio_device_module(env)?);
-    let use_injectable_network = false;
-    let peer_connection_factory = PeerConnectionFactory::new(adm, use_injectable_network)?;
+    let peer_connection_factory = PeerConnectionFactory::new(pcf::Config{
+        adm: Some(create_audio_device_module(env)?), 
+        ..Default::default()
+    })?;
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(

@@ -17,12 +17,25 @@ const Native = require('../../build/' +
   process.arch +
   '.node');
 
+class Config {
+  use_new_audio_device_module: boolean = false;
+}
+
 // tslint:disable-next-line no-unnecessary-class
 class NativeCallManager {
   constructor() {
-    const callEndpoint = Native.createCallEndpoint();
+    this.createCallEndpoint(true, new Config());
+  };
+
+  setConfig(config: Config) {
+    this.createCallEndpoint(false, config);
+  }
+
+  private createCallEndpoint(first_time: boolean, config: Config) {
+    const callEndpoint = Native.createCallEndpoint(first_time, config.use_new_audio_device_module);
     Object.defineProperty(this, Native.callEndpointPropertyKey, {
       value: callEndpoint,
+      configurable: true,  // allows it to be changed
     });
   }
 }
@@ -235,6 +248,10 @@ export class RingRTCType {
     this._groupCallByClientId = new Map();
     this._peekRequests = new Requests<PeekInfo>();
     this.pollEvery(50);
+  }
+
+  setConfig(config: Config) {
+    this.callManager.setConfig(config);
   }
 
   private pollEvery(intervalMs: number): void {
@@ -2012,6 +2029,7 @@ export enum RingCancelReason {
 }
 
 export interface CallManager {
+  setConfig(config: Config): void;
   setSelfUuid(uuid: Buffer): void;
   createOutgoingCall(
     remoteUserId: UserId,

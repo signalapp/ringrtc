@@ -36,6 +36,7 @@ pub struct RffiAudioDeviceModule {
 extern "C" {
     pub fn Rust_createPeerConnectionFactory(
         adm: *const RffiAudioDeviceModule,
+        use_new_audio_device_module: bool,
         use_injectable_network: bool,
     ) -> *const RffiPeerConnectionFactory;
     #[cfg(feature = "simnet")]

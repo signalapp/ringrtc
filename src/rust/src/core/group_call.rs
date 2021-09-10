@@ -33,7 +33,7 @@ use crate::{
         data_channel::DataChannel,
         media::{AudioTrack, VideoTrack},
         peer_connection::{PeerConnection, SendRates},
-        peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory},
+        peer_connection_factory::{self as pcf, Certificate, IceServer, PeerConnectionFactory},
         peer_connection_observer::{
             IceConnectionState,
             NetworkRoute,
@@ -800,7 +800,7 @@ impl Client {
 
                 let peer_connection_factory = match peer_connection_factory {
                     None => {
-                        match PeerConnectionFactory::default() {
+                        match PeerConnectionFactory::new(pcf::Config::default()) {
                             Ok(v) => v,
                             Err(err) => {
                                 observer.handle_ended(

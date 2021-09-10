@@ -61,7 +61,10 @@ typedef struct {
 // and Rust_createPeerConnectionFactory will increment the pointer.
 // If the ADM is null, a default one will be created.
 // But you probably want a specific one for Android or iOS.
-RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(webrtc::AudioDeviceModule* adm, bool use_injectable_network);
+RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
+  webrtc::AudioDeviceModule* adm, 
+  bool use_new_audio_device_module, 
+  bool use_injectable_network);
 RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
     webrtc::PeerConnectionFactoryOwner*);
 

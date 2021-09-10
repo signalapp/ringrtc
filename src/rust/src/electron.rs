@@ -39,6 +39,7 @@ use crate::native::{
 };
 use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource, VideoTrack};
 use crate::webrtc::peer_connection_factory::{
+    self as pcf,
     AudioDevice,
     Certificate,
     IceServer,
@@ -310,10 +311,13 @@ pub struct CallEndpoint {
 }
 
 impl CallEndpoint {
-    fn new() -> Result<Self> {
+    fn new(use_new_audio_device_module: bool) -> Result<Self> {
         // Relevant for both group calls and 1:1 calls
         let (events_sender, events_receiver) = channel::<Event>();
-        let peer_connection_factory = PeerConnectionFactory::default()?;
+        let peer_connection_factory = PeerConnectionFactory::new(pcf::Config {
+            use_new_audio_device_module,
+            ..Default::default()
+        })?;
         let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
         outgoing_audio_track.set_enabled(false);
         let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;
@@ -427,7 +431,10 @@ impl Finalize for CallEndpoint {}
 
 #[allow(non_snake_case)]
 fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
-    if ENABLE_LOGGING {
+    let first_time = cx.argument::<JsBoolean>(0)?.value(&mut cx);
+    let use_new_audio_device_module = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+
+    if ENABLE_LOGGING && first_time {
         log::set_logger(&LOG).expect("set logger");
 
         #[cfg(debug_assertions)]
@@ -445,8 +452,8 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     }
 
     debug!("JsCallManager()");
-    let endpoint =
-        CallEndpoint::new().or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    let endpoint = CallEndpoint::new(use_new_audio_device_module)
+        .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.boxed(RefCell::new(endpoint)).upcast())
 }
 

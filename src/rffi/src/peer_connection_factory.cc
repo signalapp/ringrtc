@@ -29,6 +29,12 @@
 #include "sdk/android/src/jni/pc/android_network_monitor.h"
 #endif
 
+#if defined(WEBRTC_WIN)
+#include "modules/audio_device/win/core_audio_utility_win.h"
+#include "modules/audio_device/include/audio_device_factory.h"
+#include "rtc_base/win/scoped_com_initializer.h"
+#endif
+
 namespace webrtc {
 namespace rffi {
 
@@ -37,7 +43,10 @@ class PeerConnectionFactoryWithOwnedThreads
  public:
   // If the adm is null, a default one will be created.
   // But you probably want a specific one for Android or iOS.
-  static rtc::scoped_refptr<PeerConnectionFactoryWithOwnedThreads> Create(rtc::scoped_refptr<AudioDeviceModule> adm, bool use_injectable_network) {
+  static rtc::scoped_refptr<PeerConnectionFactoryWithOwnedThreads> Create(
+      rtc::scoped_refptr<AudioDeviceModule> adm,
+      bool use_new_audio_device_module,
+      bool use_injectable_network) {
     // Creating a PeerConnectionFactory is a little complex.  To make sure we're doing it right, we read several examples:
     // Android SDK:
     //  https://cs.chromium.org/chromium/src/third_party/webrtc/sdk/android/src/jni/pc/peer_connection_factory.cc
@@ -75,11 +84,24 @@ class PeerConnectionFactoryWithOwnedThreads
     cricket::MediaEngineDependencies media_dependencies;
     media_dependencies.task_queue_factory = dependencies.task_queue_factory.get();
 
+#if defined(WEBRTC_WIN)
+    std::unique_ptr<ScopedCOMInitializer> com_initializer;
+#endif
 
     if (!adm) {
       // The audio device module must be created (and destroyed) on the _worker_ thread.
       // It is safe to release the reference on this thread, however, because the PeerConnectionFactory keeps its own reference.
       adm = worker_thread->Invoke<rtc::scoped_refptr<AudioDeviceModule>>(RTC_FROM_HERE, [&]() {
+        if (use_new_audio_device_module) {
+#if defined(WEBRTC_WIN)
+          com_initializer = std::make_unique<ScopedCOMInitializer>(ScopedCOMInitializer::kMTA);
+          if (com_initializer->Succeeded()) {
+            return CreateWindowsCoreAudioAudioDeviceModule(dependencies.task_queue_factory.get());
+          } else {
+            RTC_LOG(LS_WARNING) << "Failed to initialize ScopedCOMInitializer. Will use the default.";
+          }
+#endif
+        }
         return AudioDeviceModule::Create(
           AudioDeviceModule::kPlatformDefaultAudio, dependencies.task_queue_factory.get());
       });
@@ -101,6 +123,9 @@ class PeerConnectionFactoryWithOwnedThreads
         std::move(worker_thread),
         std::move(signaling_thread),
         std::move(injectable_network),
+#if defined(WEBRTC_WIN)
+        std::move(com_initializer),
+#endif
         adm));
   }
 
@@ -201,11 +226,17 @@ class PeerConnectionFactoryWithOwnedThreads
       std::unique_ptr<rtc::Thread> owned_worker_thread,
       std::unique_ptr<rtc::Thread> owned_signaling_thread,
       std::unique_ptr<rffi::InjectableNetwork> injectable_network,
+#if defined(WEBRTC_WIN)
+      std::unique_ptr<ScopedCOMInitializer> com_initializer,
+#endif
       AudioDeviceModule* audio_device_module) :
     owned_network_thread_(std::move(owned_network_thread)),
     owned_worker_thread_(std::move(owned_worker_thread)),
     owned_signaling_thread_(std::move(owned_signaling_thread)),
     injectable_network_(std::move(injectable_network)),
+#if defined(WEBRTC_WIN)
+    com_initializer_(std::move(com_initializer)),
+#endif
     audio_device_module_(audio_device_module),
     factory_(std::move(factory)) {
   }
@@ -229,13 +260,22 @@ class PeerConnectionFactoryWithOwnedThreads
   const std::unique_ptr<rtc::Thread> owned_worker_thread_;
   const std::unique_ptr<rtc::Thread> owned_signaling_thread_;
   std::unique_ptr<rffi::InjectableNetwork> injectable_network_;
+#if defined(WEBRTC_WIN)
+  std::unique_ptr<ScopedCOMInitializer> com_initializer_;
+#endif
   webrtc::AudioDeviceModule* audio_device_module_;
   const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
 };
 
-RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(AudioDeviceModule* adm, bool use_injectable_network) {
+RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
+    AudioDeviceModule* adm,
+    bool use_new_audio_device_module,
+    bool use_injectable_network) {
   // Wrapping the ADM in a scoped_refptr increments the ref count so the PCF owns one reference to the ADM.
-  auto factory_owner = PeerConnectionFactoryWithOwnedThreads::Create(rtc::scoped_refptr<AudioDeviceModule>(adm), use_injectable_network);
+  auto factory_owner = PeerConnectionFactoryWithOwnedThreads::Create(
+    rtc::scoped_refptr<AudioDeviceModule>(adm),
+    use_new_audio_device_module,
+    use_injectable_network);
   return factory_owner.release();
 }
 

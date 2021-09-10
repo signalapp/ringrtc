@@ -34,6 +34,7 @@ pub type RffiAudioDeviceModule = u32;
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createPeerConnectionFactory(
     _adm: *const RffiAudioDeviceModule,
+    _use_new_audio_device_module: bool,
     _use_injectable_network: bool,
 ) -> *const RffiPeerConnectionFactory {
     info!("Rust_createPeerConnectionFactory()");
