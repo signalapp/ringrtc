@@ -309,7 +309,15 @@ export class RingRTCType {
     // after the outgoing call is ended. In that case, ignore it once.
     if (this._call && this._call.endedReason === CallEndedReason.Glare) {
       this._call.endedReason = undefined;
-      this.ignore(callId);
+      // EVIL HACK: We are the "loser" of a glare collision and have ended the outgoing call
+      // and are now receiving the incoming call from the remote side (the "winner").
+      // However, the Desktop client has a bug where it re-orders the events so that
+      // instead of seeing ("outgoing call ended", "incoming call"), it sees
+      // ("incoming call", "call ended") and it gets messed up.
+      // The solution?  Delay processing the incoming call.
+      setTimeout(() => {
+        this.onStartIncomingCall(remoteUserId, callId, isVideoCall);
+      }, 500);
       return;
     }
 
@@ -368,14 +376,18 @@ export class RingRTCType {
   // Called by Rust
   onCallEnded(remoteUserId: UserId, reason: CallEndedReason) {
     const call = this._call;
+    if (call && reason == CallEndedReason.ReceivedOfferWithGlare) {
+      // The current call is the outgoing call.
+      // The ended call is the incoming call.
+      // We're the "winner", so ignore the incoming call and keep going with the outgoing call.
+      return;
+    }
 
-    // Temporary: Force hangup in all glare scenarios until handled gracefully.
-    if (
-      call &&
-      (reason === CallEndedReason.ReceivedOfferWithGlare ||
-        reason === CallEndedReason.Glare)
-    ) {
-      call.hangup();
+    if (call && reason === CallEndedReason.Glare) {
+      // The current call is the outgoing call.
+      // The ended call is the outgoing call.
+      // We're the "loser", so end the outgoing/current call and wait for a new incoming call.
+      // (proceeded down to the code below)
     }
 
     // If there is no call or the remoteUserId doesn't match that of
