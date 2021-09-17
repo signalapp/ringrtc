@@ -2171,7 +2171,8 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
-register_module!(mut cx, {
+#[neon::main]
+fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("createCallEndpoint", createCallEndpoint)?;
     let js_property_key = cx.string(CALL_ENDPOINT_PROPERTY_KEY);
     cx.export_value("callEndpointPropertyKey", js_property_key)?;
@@ -2229,4 +2230,4 @@ register_module!(mut cx, {
     cx.export_function("cm_setAudioOutput", setAudioOutput)?;
     cx.export_function("cm_poll", poll)?;
     Ok(())
-});
+}
