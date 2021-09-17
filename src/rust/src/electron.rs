@@ -1689,7 +1689,7 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     EndReason::Declined => "Declined",
                     EndReason::Busy => "Busy",
                     EndReason::Glare => "Glare",
-                    EndReason::ReceivedOfferExpired => "ReceivedOfferExpired",
+                    EndReason::ReceivedOfferExpired { .. } => "ReceivedOfferExpired",
                     EndReason::ReceivedOfferWhileActive => "ReceivedOfferWhileActive",
                     EndReason::ReceivedOfferWithGlare => "ReceivedOfferWithGlare",
                     EndReason::SignalingFailure => "SignalingFailure",
@@ -1701,7 +1701,15 @@ fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
                     EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
                     EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
                 };
-                let args = vec![cx.string(peer_id), cx.string(reason_string)];
+                let age = match reason {
+                    EndReason::ReceivedOfferExpired { age } => age,
+                    _ => Duration::ZERO,
+                };
+                let args = vec![
+                    cx.string(peer_id).upcast::<JsValue>(),
+                    cx.string(reason_string).upcast(),
+                    cx.number(age.as_secs_f64()).upcast(),
+                ];
                 let method = *observer
                     .get(&mut cx, method_name)?
                     .downcast::<JsFunction, _>(&mut cx)

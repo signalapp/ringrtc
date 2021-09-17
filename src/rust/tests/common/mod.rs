@@ -246,6 +246,11 @@ impl TestContext {
         platform.start_incoming_count()
     }
 
+    pub fn offer_expired_count(&self) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.offer_expired_count()
+    }
+
     pub fn call_concluded_count(&self) -> usize {
         let platform = self.call_manager.platform().unwrap();
         platform.call_concluded_count()

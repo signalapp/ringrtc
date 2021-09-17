@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use jni::objects::{AutoLocal, GlobalRef, JObject, JValue};
 use jni::sys::{jboolean, jint, jlong};
@@ -967,6 +968,11 @@ impl Platform for AndroidPlatform {
         .z()?;
 
         Ok(result)
+    }
+
+    fn on_offer_expired(&self, remote_peer: &Self::AppRemotePeer, _age: Duration) -> Result<()> {
+        // Android already keeps track of the offer timestamp, so no need to pass the age through.
+        self.on_event(remote_peer, ApplicationEvent::ReceivedOfferExpired)
     }
 
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()> {

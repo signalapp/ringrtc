@@ -181,6 +181,11 @@ pub enum ApplicationEvent {
     Reconnected,
 
     /// The received offer is expired.
+    ///
+    /// This event should not be sent directly. Instead, use [`on_offer_expired`][],
+    /// which preserves the age of the offer for platforms that need it.
+    ///
+    /// [`on_offer_expired`]: crate::core::platform::Platform::on_offer_expired
     ReceivedOfferExpired,
 
     /// Received an offer while already handling an active call.

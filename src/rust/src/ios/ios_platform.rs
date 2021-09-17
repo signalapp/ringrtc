@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::common::{
     ApplicationEvent,
@@ -488,6 +489,11 @@ impl Platform for IosPlatform {
         );
 
         Ok(result)
+    }
+
+    fn on_offer_expired(&self, remote_peer: &Self::AppRemotePeer, _age: Duration) -> Result<()> {
+        // iOS already keeps track of the offer timestamp, so no need to pass the age through.
+        self.on_event(remote_peer, ApplicationEvent::ReceivedOfferExpired)
     }
 
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()> {

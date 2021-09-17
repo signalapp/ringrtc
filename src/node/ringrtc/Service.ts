@@ -203,7 +203,7 @@ export class RingRTCType {
   handleIncomingCall: ((call: Call) => Promise<CallSettings | null>) | null =
     null;
   handleAutoEndedIncomingCallRequest:
-    | ((remoteUserId: UserId, reason: CallEndedReason) => void)
+    | ((remoteUserId: UserId, reason: CallEndedReason, ageSec: number) => void)
     | null = null;
   handleLogMessage:
     | ((
@@ -392,7 +392,7 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  onCallEnded(remoteUserId: UserId, reason: CallEndedReason) {
+  onCallEnded(remoteUserId: UserId, reason: CallEndedReason, ageSec: number) {
     const call = this._call;
     if (call && reason == CallEndedReason.ReceivedOfferWithGlare) {
       // The current call is the outgoing call.
@@ -409,7 +409,7 @@ export class RingRTCType {
     }
 
     // If there is no call or the remoteUserId doesn't match that of
-    // the current call, or if one of the "receive offer while alread
+    // the current call, or if one of the "receive offer while already
     // in a call" reasons are provided, don't end the current call,
     // just update the call history.
     if (
@@ -419,7 +419,7 @@ export class RingRTCType {
       reason === CallEndedReason.ReceivedOfferExpired
     ) {
       if (this.handleAutoEndedIncomingCallRequest) {
-        this.handleAutoEndedIncomingCallRequest(remoteUserId, reason);
+        this.handleAutoEndedIncomingCallRequest(remoteUserId, reason, ageSec);
       }
       return;
     }
@@ -2166,7 +2166,11 @@ export interface CallManagerCallbacks {
     isVideoCall: boolean
   ): void;
   onCallState(remoteUserId: UserId, state: CallState): void;
-  onCallEnded(remoteUserId: UserId, endedReason: CallEndedReason): void;
+  onCallEnded(
+    remoteUserId: UserId,
+    endedReason: CallEndedReason,
+    ageSec: number
+  ): void;
   onRemoteVideoEnabled(remoteUserId: UserId, enabled: boolean): void;
   onRemoteSharingScreen(remoteUserId: UserId, enabled: boolean): void;
   onSendOffer(

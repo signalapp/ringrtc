@@ -45,8 +45,8 @@ use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
-use crate::webrtc::peer_connection_observer::NetworkRoute;
 use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
+use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 const TIME_OUT_PERIOD: Duration = Duration::from_secs(60);
 pub const MAX_MESSAGE_AGE: Duration = Duration::from_secs(60);
@@ -1115,7 +1115,9 @@ where
                             // Get the last sent message type and see if it was for ICE.
                             // Since we are in a connected state, don't handle it if so.
                             if let Ok(message_queue) = self.message_queue.lock() {
-                                if message_queue.last_sent_message_type == Some(signaling::MessageType::Ice) {
+                                if message_queue.last_sent_message_type
+                                    == Some(signaling::MessageType::Ice)
+                                {
                                     should_handle = false
                                 }
                             }
@@ -1148,9 +1150,9 @@ where
                 match call {
                     Some(call) => {
                         info!(
-                        "handle_message_send_failure(): id: {}, concluding call",
-                        call_id
-                    );
+                            "handle_message_send_failure(): id: {}, concluding call",
+                            call_id
+                        );
                         self.terminate_call(
                             call,
                             Some(signaling::Hangup::Normal),
@@ -1213,7 +1215,7 @@ where
 
         if received.age > MAX_MESSAGE_AGE {
             ringbenchx!(RingBench::Cm, RingBench::App, "offer expired");
-            self.notify_application(&remote_peer, ApplicationEvent::ReceivedOfferExpired)?;
+            self.notify_offer_expired(&remote_peer, incoming_call_id, received.age)?;
             // Notify application we are completely done with this remote.
             self.notify_call_concluded(&remote_peer, incoming_call_id)?;
             return Ok(());
@@ -2073,7 +2075,10 @@ where
         ringbench!(
             RingBench::Cm,
             RingBench::App,
-            format!("network_route_changed()\tnetwork_route: {:?}", network_route)
+            format!(
+                "network_route_changed()\tnetwork_route: {:?}",
+                network_route
+            )
         );
 
         let platform = self.platform.lock()?;
@@ -2146,6 +2151,23 @@ where
             info!("remote_hangup(): ignoring for inactive call");
             Ok(())
         }
+    }
+
+    /// Notify application that the call is concluded.
+    pub(super) fn notify_offer_expired(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        _call_id: CallId,
+        age: Duration,
+    ) -> Result<()> {
+        ringbench!(
+            RingBench::Cm,
+            RingBench::App,
+            format!("offer_expired()\t{}", _call_id)
+        );
+
+        let platform = self.platform.lock()?;
+        platform.on_offer_expired(remote_peer, age)
     }
 
     /// Notify application that the call is concluded.
@@ -2320,7 +2342,7 @@ where
                     } else {
                         Some(connection.remote_device_id())
                     },
-                    ice: signaling::Ice {
+                    ice:                signaling::Ice {
                         candidates: local_candidates,
                     },
                 },
@@ -2392,12 +2414,7 @@ where
         network_route: NetworkRoute,
     ) {
         info!("handle_network_route_changed():");
-        platform_handler!(
-            self,
-            handle_network_route_changed,
-            client_id,
-            network_route
-        );
+        platform_handler!(self, handle_network_route_changed, client_id, network_route);
     }
 
     fn handle_join_state_changed(

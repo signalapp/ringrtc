@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::time::Duration;
 
 use crate::common::{
     ApplicationEvent,
@@ -173,6 +174,7 @@ impl fmt::Debug for CallState {
 // These are the different reasons a call can end.
 // Closely tied to call_manager::ApplicationEvent.
 // TODO: Should we unify with ApplicationEvent?
+#[derive(Debug)]
 pub enum EndReason {
     LocalHangup,
     RemoteHangup,
@@ -180,7 +182,7 @@ pub enum EndReason {
     Declined,
     Busy, // Remote side is busy
     Glare,
-    ReceivedOfferExpired,
+    ReceivedOfferExpired { age: Duration },
     ReceivedOfferWhileActive,
     ReceivedOfferWithGlare,
     SignalingFailure,
@@ -202,7 +204,7 @@ impl fmt::Display for EndReason {
             EndReason::Declined => "Declined",
             EndReason::Busy => "Busy",
             EndReason::Glare => "Glare",
-            EndReason::ReceivedOfferExpired => "ReceivedOfferExpired",
+            EndReason::ReceivedOfferExpired { .. } => "ReceivedOfferExpired",
             EndReason::ReceivedOfferWhileActive => "ReceivedOfferWhileActive",
             EndReason::ReceivedOfferWithGlare => "ReceivedOfferWithGlare",
             EndReason::SignalingFailure => "SignalingFailure",
@@ -215,12 +217,6 @@ impl fmt::Display for EndReason {
             EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
         };
         write!(f, "({})", display)
-    }
-}
-
-impl fmt::Debug for EndReason {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
     }
 }
 
@@ -535,10 +531,10 @@ impl Platform for NativePlatform {
             ApplicationEvent::EndedAppDroppedCall => {
                 self.send_state(remote_peer, CallState::Ended(EndReason::Declined))
             }
-            ApplicationEvent::ReceivedOfferExpired => self.send_state(
-                remote_peer,
-                CallState::Ended(EndReason::ReceivedOfferExpired),
-            ),
+            ApplicationEvent::ReceivedOfferExpired => {
+                debug_assert!(false, "should use on_offer_expired instead");
+                self.on_offer_expired(remote_peer, Duration::ZERO)
+            }
             ApplicationEvent::ReceivedOfferWhileActive => self.send_state(
                 remote_peer,
                 CallState::Ended(EndReason::ReceivedOfferWhileActive),
@@ -588,6 +584,19 @@ impl Platform for NativePlatform {
         );
 
         self.send_network_route(remote_peer, network_route)
+    }
+
+    fn on_offer_expired(&self, remote_peer: &Self::AppRemotePeer, age: Duration) -> Result<()> {
+        info!(
+            "NativePlatform::on_offer_expired(): remote_peer: {}, age: {:?}",
+            remote_peer, age
+        );
+
+        self.send_state(
+            remote_peer,
+            CallState::Ended(EndReason::ReceivedOfferExpired { age }),
+        )?;
+        Ok(())
     }
 
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()> {

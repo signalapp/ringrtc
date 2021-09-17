@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::common::{
     ApplicationEvent,
@@ -60,6 +61,8 @@ struct SimStats {
     start_outgoing:               AtomicUsize,
     /// Number of start incoming call events
     start_incoming:               AtomicUsize,
+    /// Number of offer expired events
+    offer_expired:                AtomicUsize,
     /// Number of call concluded events
     call_concluded:               AtomicUsize,
     /// Track stream counts
@@ -457,6 +460,12 @@ impl Platform for SimPlatform {
         Ok(remote_peer1 == remote_peer2)
     }
 
+    fn on_offer_expired(&self, _remote_peer: &Self::AppRemotePeer, _age: Duration) -> Result<()> {
+        info!("on_offer_expired():");
+        let _ = self.stats.offer_expired.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
     fn on_call_concluded(&self, _remote_peer: &Self::AppRemotePeer) -> Result<()> {
         info!("on_call_concluded():");
         if self.force_internal_fault.load(Ordering::Acquire) {
@@ -703,6 +712,10 @@ impl SimPlatform {
 
     pub fn start_incoming_count(&self) -> usize {
         self.stats.start_incoming.load(Ordering::Acquire)
+    }
+
+    pub fn offer_expired_count(&self) -> usize {
+        self.stats.offer_expired.load(Ordering::Acquire)
     }
 
     pub fn call_concluded_count(&self) -> usize {

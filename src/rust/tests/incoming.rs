@@ -377,20 +377,18 @@ fn receive_expired_offer() {
 
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     let call_id = CallId::new(context.prng.gen::<u64>());
+    let age = Duration::from_secs(86400); // one whole day
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(&context.prng, Duration::from_secs(86400)), // one whole day
+        random_received_offer(&context.prng, age),
     )
     .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::ReceivedOfferExpired),
-        1
-    );
+    assert_eq!(context.offer_expired_count(), 1);
 }
 
 #[test]
@@ -400,23 +398,20 @@ fn receive_offer_before_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    // create off way in the past
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     let call_id = CallId::new(context.prng.gen::<u64>());
+    let age = MAX_MESSAGE_AGE - Duration::from_secs(1);
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(&context.prng, MAX_MESSAGE_AGE - Duration::from_secs(1)),
+        random_received_offer(&context.prng, age),
     )
     .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::ReceivedOfferExpired),
-        0
-    );
+    assert_eq!(context.offer_expired_count(), 0);
 }
 
 #[test]
@@ -426,23 +421,20 @@ fn receive_offer_at_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    // create off way in the past
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     let call_id = CallId::new(context.prng.gen::<u64>());
+    let age = MAX_MESSAGE_AGE;
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(&context.prng, MAX_MESSAGE_AGE),
+        random_received_offer(&context.prng, age),
     )
     .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::ReceivedOfferExpired),
-        0
-    );
+    assert_eq!(context.offer_expired_count(), 0);
 }
 
 #[test]
@@ -452,23 +444,20 @@ fn receive_expired_offer_after_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    // create off way in the past
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
     let call_id = CallId::new(context.prng.gen::<u64>());
+    let age = MAX_MESSAGE_AGE + Duration::from_secs(1);
     cm.received_offer(
         remote_peer,
         call_id,
-        random_received_offer(&context.prng, MAX_MESSAGE_AGE + Duration::from_secs(1)),
+        random_received_offer(&context.prng, age),
     )
     .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::ReceivedOfferExpired),
-        1
-    );
+    assert_eq!(context.offer_expired_count(), 1);
 }
 
 #[test]

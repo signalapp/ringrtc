@@ -7,6 +7,7 @@
 /// implement for calling.
 use std::collections::HashMap;
 use std::fmt;
+use std::time::Duration;
 
 use crate::common::{
     ApplicationEvent,
@@ -165,6 +166,9 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         remote_peer1: &Self::AppRemotePeer,
         remote_peer2: &Self::AppRemotePeer,
     ) -> Result<bool>;
+
+    /// Notify the application that an offer is too old.
+    fn on_offer_expired(&self, remote_peer: &Self::AppRemotePeer, age: Duration) -> Result<()>;
 
     /// Notify the application that the call is completely concluded
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()>;
