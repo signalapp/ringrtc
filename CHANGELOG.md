@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.13.1
+
+- Desktop: Add support for auto-ended call timestamps
+
+- Desktop: Formatting and other updates
+
+- Android: Fix signature for new argument
+
 ## v2.13.0
 
 - Desktop: Option to use new or default audio device module on Windows
