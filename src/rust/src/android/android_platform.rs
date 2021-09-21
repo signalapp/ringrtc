@@ -1270,7 +1270,7 @@ impl Platform for AndroidPlatform {
 
             for remote_device_state in remote_device_states {
                 const REMOTE_DEVICE_STATE_CTOR_SIG: &str =
-                    "(J[BZLjava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;JJ)V";
+                    "(J[BZLjava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;JJLjava/lang/Boolean;)V";
 
                 let jni_demux_id = remote_device_state.demux_id as jlong;
                 let jni_user_id_byte_array =
