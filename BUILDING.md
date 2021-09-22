@@ -119,18 +119,11 @@ WebRTC dependencies and then a long time to build WebRTC and RingRTC.</i>
 
 ### Android
 
-To build an AAR suitable for including in an Android project, first
-setup the gradle file
-`${PROJECT_ROOT}/publish/android/local.properties`, specifying the
-location of the Android SDK:
-
-    sdk.dir=/path/to/Android/Sdk
-
-To perform the build run:
+To build an AAR suitable for including in an Android project, run:
 
     make android
     
-This will produce release and debug builds for all architectures.
+This will produce release and debug builds for all architectures. The first time you run the build for a particular version, it may ask you to accept license agreements for the Android SDK bundled with WebRTC.
 
 When the build is complete, the AAR file is available here:
 

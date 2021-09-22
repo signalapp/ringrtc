@@ -130,6 +130,14 @@ def ParseArgs():
 
     return parser.parse_args()
 
+def RunSdkmanagerLicenses(dry_run):
+    executable = os.path.join('third_party', 'android_sdk', 'public',
+                              'cmdline-tools', 'latest', 'bin', 'sdkmanager')
+    cmd = [ executable, '--licenses' ]
+    logging.debug('Running: {}'.format(cmd))
+    if dry_run is False:
+        subprocess.check_call(cmd)
+
 def RunGn(dry_run, args):
     cmd = [ 'gn' ] + args
     logging.debug('Running: {}'.format(cmd))
@@ -390,6 +398,7 @@ def main():
         return 0
 
     os.chdir(os.path.abspath(args.webrtc_src_dir))
+    RunSdkmanagerLicenses(args.dry_run)
 
     if args.upload_sonatype_repo is not None:
         if args.debug_build is True or args.release_build is True:
