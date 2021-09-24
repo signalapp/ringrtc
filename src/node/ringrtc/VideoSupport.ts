@@ -53,7 +53,14 @@ export class GumVideoCapturer {
   }
 
   setLocalPreview(localPreview: Ref<HTMLVideoElement> | undefined) {
+    const oldLocalPreview = this.localPreview?.current;
+    if (oldLocalPreview) {
+      oldLocalPreview.srcObject = null;
+    }
+
     this.localPreview = localPreview;
+
+    this.updateLocalPreviewSourceObject();
   }
 
   enableCapture(): void {
@@ -150,10 +157,9 @@ export class GumVideoCapturer {
         return;
       }
 
-      if (this.localPreview && !!this.localPreview.current && !!mediaStream) {
-        this.setLocalPreviewSourceObject(mediaStream);
-      }
       this.mediaStream = mediaStream;
+
+      this.updateLocalPreviewSourceObject();
     } catch (e) {
       // It's possible video was disabled, switched to screenshare, or
       // switched to a different camera while awaiting a response, in
@@ -177,9 +183,8 @@ export class GumVideoCapturer {
       }
       this.mediaStream = undefined;
     }
-    if (this.localPreview && !!this.localPreview.current) {
-      this.localPreview.current.srcObject = null;
-    }
+
+    this.updateLocalPreviewSourceObject();
   }
 
   private startSending(sender: VideoFrameSender): void {
@@ -213,7 +218,7 @@ export class GumVideoCapturer {
     }
   }
 
-  private setLocalPreviewSourceObject(mediaStream: MediaStream): void {
+  private updateLocalPreviewSourceObject(): void {
     if (!this.localPreview) {
       return;
     }
@@ -222,13 +227,22 @@ export class GumVideoCapturer {
       return;
     }
 
-    localPreview.srcObject = mediaStream;
-    // I don't know why this is necessary
-    if (localPreview.width === 0) {
-      localPreview.width = this.captureOptions!.maxWidth;
+    const { mediaStream = null } = this;
+
+    if (localPreview.srcObject === mediaStream) {
+      return;
     }
-    if (localPreview.height === 0) {
-      localPreview.height = this.captureOptions!.maxHeight;
+
+    if (mediaStream) {
+      localPreview.srcObject = mediaStream;
+      if (localPreview.width === 0) {
+        localPreview.width = this.captureOptions!.maxWidth;
+      }
+      if (localPreview.height === 0) {
+        localPreview.height = this.captureOptions!.maxHeight;
+      }
+    } else {
+      localPreview.srcObject = null;
     }
   }
 
@@ -266,9 +280,8 @@ export class GumVideoCapturer {
     }
 
     if (this.localPreview && this.localPreview.current) {
-      if (!this.localPreview.current.srcObject && !!this.mediaStream) {
-        this.setLocalPreviewSourceObject(this.mediaStream);
-      }
+      this.updateLocalPreviewSourceObject();
+
       const width = this.localPreview.current.videoWidth;
       const height = this.localPreview.current.videoHeight;
       if (width === 0 || height === 0) {
