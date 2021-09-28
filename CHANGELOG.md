@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.13.2
+
+- Desktop: Update local preview source object correctly
+
+- Android: Build Java against the same SDK/NDK that WebRTC uses
+
 ## v2.13.1
 
 - Desktop: Add support for auto-ended call timestamps
