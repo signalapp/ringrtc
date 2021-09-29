@@ -4,7 +4,10 @@
 //
 
 //! WebRTC Peer Connection
-use std::{fmt, mem::drop};
+
+use std::ffi::CString;
+use std::fmt;
+use std::os::raw::c_char;
 
 use crate::common::Result;
 use crate::core::util::CppObject;
@@ -18,8 +21,6 @@ use crate::webrtc::peer_connection_observer::{
     PeerConnectionObserver,
     PeerConnectionObserverTrait,
 };
-use std::ffi::CString;
-use std::os::raw::c_char;
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection_factory as pcf;
@@ -227,8 +228,6 @@ impl fmt::Debug for PeerConnectionFactory {
 
 #[derive(Default)]
 pub struct Config {
-    pub adm: Option<AudioDeviceModule>,
-    // This only takes affect if adm == None
     pub use_new_audio_device_module: bool,
     pub use_injectable_network: bool,
 }
@@ -241,16 +240,11 @@ impl PeerConnectionFactory {
 
         let (rffi, use_new_audio_device_module) = {
             let use_new_audio_device_module = config.use_new_audio_device_module;
-            let adm_rffi = config.adm.as_ref().map_or_else(std::ptr::null, |adm| adm.rffi);
             let rffi = webrtc::Arc::from_owned_ptr(unsafe {
                  pcf::Rust_createPeerConnectionFactory(
-                     adm_rffi, 
                      config.use_new_audio_device_module,
                      config.use_injectable_network) 
             });
-            // This is actually to keep the adm around so that adm_rffi is still valid
-            // until after the call to Rust_createPeerConnectionFactory
-            drop(config);
 
             #[cfg(target_os = "windows")]
             if use_new_audio_device_module {

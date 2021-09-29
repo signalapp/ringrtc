@@ -71,12 +71,7 @@ typedef struct {
 // functions below, that won't matter to you.
 // You can create more than one, but you should probably only have one unless
 // you want to test separate endpoints that are as independent as possible.
-// If non-null, the ADM is a borrowed pointer to a ref-counted object
-// and Rust_createPeerConnectionFactory will increment the pointer.
-// If the ADM is null, a default one will be created.
-// But you probably want a specific one for Android or iOS.
 RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
-  webrtc::AudioDeviceModule* adm, 
   bool use_new_audio_device_module, 
   bool use_injectable_network);
 
