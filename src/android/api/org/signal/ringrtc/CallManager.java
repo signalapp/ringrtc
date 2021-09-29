@@ -191,15 +191,6 @@ public class CallManager {
     return factory;
   }
 
-  // Returns an AndroidAudioDeviceModule with 1 reference owned by the caller.
-  public static long createAudioDeviceModuleOwnedPointer() {
-    AudioDeviceModule adm = createAudioDeviceModule();
-    // The Java ADM keeps the pointer to the native ADM, and thus owns one reference to the native ADM.
-    // But the only thing it does with that pointer is release a ref to it if we call adm.release().
-    // But we don't call adm.release(), so we effectively take ownership of that reference.
-    return adm.getNativeAudioDeviceModulePointer();
-  }
-
   static JavaAudioDeviceModule createAudioDeviceModule() {
     Set<String> HARDWARE_AEC_BLOCKLIST = new HashSet<String>() {{
       add("Pixel");

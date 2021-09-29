@@ -30,8 +30,8 @@ use crate::error::RingRtcError;
 use crate::webrtc;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection::PeerConnection;
+use crate::webrtc::peer_connection_factory::{self as pcf, PeerConnectionFactory};
 use crate::webrtc::peer_connection_observer::PeerConnectionObserver;
-use crate::webrtc::peer_connection_factory::{self as pcf, AudioDeviceModule, PeerConnectionFactory};
 
 /// Public type for Android CallManager
 pub type AndroidCallManager = CallManager<AndroidPlatform>;
@@ -114,7 +114,9 @@ pub fn create_peer_connection(
         return Err(AndroidError::CreateJniPeerConnection.into());
     }
 
-    let rffi_pc = webrtc::Arc::from_borrowed_ptr(unsafe { Rust_borrowPeerConnectionFromJniOwnedPeerConnection(jni_owned_pc) });
+    let rffi_pc = webrtc::Arc::from_borrowed_ptr(unsafe {
+        Rust_borrowPeerConnectionFromJniOwnedPeerConnection(jni_owned_pc)
+    });
     if rffi_pc.is_null() {
         return Err(AndroidError::ExtractNativePeerConnection.into());
     }
@@ -621,6 +623,7 @@ pub fn create_group_call_client(
     call_manager: *mut AndroidCallManager,
     group_id: jbyteArray,
     sfu_url: JString,
+    native_peer_connection_factory: jlong,
     native_audio_track: jlong,
     native_video_track: jlong,
 ) -> Result<group_call::ClientId> {
@@ -635,10 +638,11 @@ pub fn create_group_call_client(
     let outgoing_video_track =
         media::VideoTrack::unowned(native_video_track as *const media::RffiVideoTrack);
 
-    let peer_connection_factory = PeerConnectionFactory::new(pcf::Config{
-        adm: Some(create_audio_device_module(env)?), 
-        ..Default::default()
-    })?;
+    let peer_connection_factory = unsafe {
+        PeerConnectionFactory::from_native_factory(
+            native_peer_connection_factory as *const pcf::RffiPeerConnectionFactoryInterface,
+        )
+    };
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(
@@ -648,11 +652,6 @@ pub fn create_group_call_client(
         outgoing_audio_track,
         outgoing_video_track,
     )
-}
-
-fn create_audio_device_module(env: &JNIEnv) -> Result<AudioDeviceModule> {
-    let owned_adm = jni_call_static_method(env, "org/signal/ringrtc/CallManager", "createAudioDeviceModuleOwnedPointer", "()J", &[])?.j()? as *const u8;
-    Ok(AudioDeviceModule::owned(owned_adm))
 }
 
 pub fn delete_group_call_client(

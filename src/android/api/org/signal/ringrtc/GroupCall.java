@@ -122,6 +122,7 @@ public final class GroupCall {
                 nativeCallManager,
                 groupId,
                 sfuUrl,
+                factory.getNativePeerConnectionFactory(),
                 this.outgoingAudioTrack.getNativeAudioTrack(),
                 this.outgoingVideoTrack.getNativeVideoTrack());
         } catch  (CallException e) {
@@ -937,6 +938,7 @@ public final class GroupCall {
         long ringrtcCreateGroupCallClient(long nativeCallManager,
                                           byte[] groupId,
                                           String sfuUrl,
+                                          long nativePeerConnectionFactory,
                                           long nativeAudioTrack,
                                           long nativeVideoTrack)
         throws CallException;
