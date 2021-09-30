@@ -10,25 +10,29 @@ fn main() {
     let target = env::var("TARGET").unwrap();
     let profile = env::var("PROFILE").unwrap();
     let out_dir = env::var("OUTPUT_DIR");
+    // TARGET and PROFILE are set by Cargo, but OUTPUT_DIR is external.
+    println!("cargo:rerun-if-env-changed=OUTPUT_DIR");
+
     let debug = profile.contains("debug");
     let build_type = if debug { "debug" } else { "release" };
 
     eprintln!("build.rs: target: {}, profile: {}", target, profile);
 
+    // We only depend on environment variables, not any files.
+    // Explicitly state that by depending on build.rs itself, as recommended.
+    println!("cargo:rerun-if-changed=build.rs");
+
     if cfg!(feature = "native") {
-        if out_dir.is_err() {
-            panic!("No output directory (OUTPUT_DIR) defined!");
+        if let Ok(out_dir) = out_dir {
+            println!(
+                "cargo:rustc-link-search=native={}/{}/obj/",
+                out_dir, build_type,
+            );
+        } else {
+            println!("cargo:warning=No WebRTC output directory (OUTPUT_DIR) defined!");
         }
 
         println!("cargo:rustc-link-lib=webrtc");
-        println!(
-            "{}",
-            format!(
-                "cargo:rustc-link-search=native={}/{}/obj/",
-                out_dir.unwrap(),
-                build_type,
-            )
-        );
 
         if cfg!(target_os = "macos") {
             println!("cargo:rustc-link-lib=dylib=c++");

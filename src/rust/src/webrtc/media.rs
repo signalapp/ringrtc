@@ -157,7 +157,7 @@ pub enum VideoRotation {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct VideoFrameMetadata {
     width:    u32,
     height:   u32,
@@ -188,6 +188,10 @@ pub struct VideoFrame {
 }
 
 impl VideoFrame {
+    pub fn metadata(&self) -> VideoFrameMetadata {
+        self.metadata
+    }
+
     pub fn width(&self) -> u32 {
         self.metadata.width
     }

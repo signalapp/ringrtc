@@ -35,21 +35,15 @@ jobs:
     - name: Clippy (Android)
       run: cargo clippy --target aarch64-linux-android -- -D warnings
       working-directory: src/rust
-      env:
-        # Must be set to something, but will be ignored for check/clippy
-        OUTPUT_DIR: out
     - name: Clippy (iOS)
       run: cargo clippy --target aarch64-apple-ios -- -D warnings
       working-directory: src/rust
-      env:
-        # Must be set to something, but will be ignored for check/clippy
-        OUTPUT_DIR: out
     - name: Clippy (Electron)
       run: cargo clippy --features electron -- -D warnings
       working-directory: src/rust
-      env:
-        # Must be set to something, but will be ignored for check/clippy
-        OUTPUT_DIR: out
+    - name: Clippy (gctc)
+      run: cargo clippy --bin gctc --features native,http -- -D warnings
+      working-directory: src/rust
 
   tests:
     name: Tests
