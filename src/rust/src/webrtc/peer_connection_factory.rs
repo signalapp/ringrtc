@@ -419,7 +419,7 @@ impl PeerConnectionFactory {
         }
 
         #[cfg(target_os = "windows")]
-        if self.use_new_audio_device_module {
+        if self.use_new_audio_device_module && devices.len() > 1 {
             // For the new ADM, swap the first two devices, so that the
             // "default communications" device is first and the "default"
             // device is second. The UI treats the first index as the
@@ -555,7 +555,7 @@ impl PeerConnectionFactory {
         }
 
         #[cfg(target_os = "windows")]
-        if self.use_new_audio_device_module {
+        if self.use_new_audio_device_module && devices.len() > 1 {
             // For the new ADM, swap the first two devices, so that the
             // "default communications" device is first and the "default"
             // device is second. The UI treats the first index as the
