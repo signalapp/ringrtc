@@ -168,6 +168,10 @@ impl PeerConnection {
         }
     }
 
+    pub fn set_audio_playout_enabled(&self, enabled: bool) {
+        unsafe { pc::Rust_setAudioPlayoutEnabled(self.rffi.as_borrowed_ptr(), enabled) };
+    }
+
     /// Rust wrapper around C++ PeerConnection::AddIceCandidate().
     pub fn add_ice_candidate_from_sdp(&self, sdp: &str) -> Result<()> {
         info!(

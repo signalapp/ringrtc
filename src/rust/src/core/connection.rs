@@ -606,6 +606,9 @@ where
 
             peer_connection.use_shared_ice_gatherer(ice_gatherer)?;
 
+            // TODO: Don't enable audio playout until the call is accepted.
+            // peer_connection.set_audio_playout_enabled(false);
+
             // The caller is responsible for creating the data channel (the callee listens for it).
             // Both sides will observe it.
             let data_channel = peer_connection.create_signaling_data_channel()?;
@@ -703,6 +706,9 @@ where
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;
+
+            // TODO: Don't enable audio playout until the call is accepted.
+            // peer_connection.set_audio_playout_enabled(false);
 
             let mut bandwidth_modes = self.bandwidth_modes.lock()?;
 
@@ -859,9 +865,12 @@ where
         let mut state = self.state.lock()?;
         *state = new_state;
         if new_state == ConnectionState::ConnectedAndAccepted {
-            // Now that we are accepted, we can enable outgoing audio and incoming RTP
+            // Now that we are accepted, we can start rendering audio
+            // and enable outgoing and incoming RTP.
             let webrtc = self.webrtc.lock()?;
             let pc = webrtc.peer_connection()?;
+            // TODO: Enable audio playout once the call is accepted.
+            // pc.set_audio_playout_enabled(true);
             pc.set_outgoing_media_enabled(true);
             pc.set_incoming_media_enabled(true);
         }

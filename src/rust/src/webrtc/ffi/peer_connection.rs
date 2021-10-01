@@ -64,6 +64,11 @@ extern "C" {
         enabled: bool,
     ) -> bool;
 
+    pub fn Rust_setAudioPlayoutEnabled(
+        peer_connection: *const RffiPeerConnection,
+        enabled: bool,
+    );
+
     pub fn Rust_createSignalingDataChannel(
         peer_connection: *const RffiPeerConnection,
         pc_observer: *const RffiPeerConnectionObserver,

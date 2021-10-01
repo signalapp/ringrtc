@@ -749,9 +749,16 @@ Rust_setOutgoingMediaEnabled(PeerConnectionInterface* peer_connection,
 
 RUSTEXPORT bool
 Rust_setIncomingMediaEnabled(PeerConnectionInterface* peer_connection,
-                           bool                     enabled) {
+                             bool                     enabled) {
   RTC_LOG(LS_INFO) << "Rust_setIncomingMediaEnabled(" << enabled << ")";
   return peer_connection->SetIncomingRtpEnabled(enabled);
+}
+
+RUSTEXPORT void
+Rust_setAudioPlayoutEnabled(webrtc::PeerConnectionInterface* peer_connection,
+                            bool                             enabled) {
+  RTC_LOG(LS_INFO) << "Rust_setAudioPlayoutEnabled(" << enabled << ")";
+  peer_connection->SetAudioPlayout(enabled);
 }
 
 RUSTEXPORT DataChannelInterface*

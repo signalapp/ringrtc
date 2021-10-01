@@ -174,6 +174,14 @@ pub unsafe fn Rust_setIncomingMediaEnabled(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_setAudioPlayoutEnabled(
+    _peer_connection: *const RffiPeerConnection,
+    _enabled: bool,
+) {
+    info!("Rust_setAudioPlayoutEnabled:");
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createSignalingDataChannel(
     _peer_connection: *const RffiPeerConnection,
     _pc_observer: *const RffiPeerConnectionObserver,
