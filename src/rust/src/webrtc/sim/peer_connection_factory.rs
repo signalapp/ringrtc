@@ -19,11 +19,13 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::ptr::copy_nonoverlapping;
 
-pub type RffiPeerConnectionFactory = u32;
+pub type RffiPeerConnectionFactoryOwner = u32;
 
-impl webrtc::RefCounted for RffiPeerConnectionFactory {}
+impl webrtc::RefCounted for RffiPeerConnectionFactoryOwner {}
 
-pub static FAKE_PEER_CONNECTION_FACTORY: RffiPeerConnectionFactory = 10;
+pub static FAKE_PEER_CONNECTION_FACTORY: RffiPeerConnectionFactoryOwner = 10;
+
+pub type RffiPeerConnectionFactoryInterface = u32;
 
 pub type RffiCertificate = u32;
 
@@ -36,14 +38,21 @@ pub unsafe fn Rust_createPeerConnectionFactory(
     _adm: *const RffiAudioDeviceModule,
     _use_new_audio_device_module: bool,
     _use_injectable_network: bool,
-) -> *const RffiPeerConnectionFactory {
+) -> *const RffiPeerConnectionFactoryOwner {
     info!("Rust_createPeerConnectionFactory()");
     &FAKE_PEER_CONNECTION_FACTORY
 }
 
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_createPeerConnectionFactoryWrapper(
+    _interface: *const RffiPeerConnectionFactoryInterface,
+) -> *const RffiPeerConnectionFactoryOwner {
+    panic!("no interface to wrap in sim!")
+}
+
 #[allow(non_snake_case, clippy::missing_safety_doc, clippy::too_many_arguments)]
 pub unsafe fn Rust_createPeerConnection(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
     _observer: *const RffiPeerConnectionObserver,
     _certificate: *const RffiCertificate,
     _hide_ip: bool,
@@ -59,7 +68,7 @@ pub unsafe fn Rust_createPeerConnection(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createAudioTrack(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
 ) -> *const RffiAudioTrack {
     info!("Rust_createVideoSource()");
     &FAKE_AUDIO_TRACK
@@ -67,7 +76,7 @@ pub unsafe fn Rust_createAudioTrack(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createVideoSource(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
 ) -> *const RffiVideoSource {
     info!("Rust_createVideoSource()");
     &FAKE_VIDEO_SOURCE
@@ -75,7 +84,7 @@ pub unsafe fn Rust_createVideoSource(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createVideoTrack(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
     _source: *const RffiVideoSource,
 ) -> *const RffiVideoTrack {
     info!("Rust_createVideoTrack()");
@@ -98,13 +107,13 @@ pub unsafe fn Rust_computeCertificateFingerprintSha256(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getAudioPlayoutDevices(_factory: *const RffiPeerConnectionFactory) -> i16 {
+pub unsafe fn Rust_getAudioPlayoutDevices(_factory: *const RffiPeerConnectionFactoryOwner) -> i16 {
     1
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_getAudioPlayoutDeviceName(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
     index: u16,
     out_name: *mut c_char,
     out_uuid: *mut c_char,
@@ -119,20 +128,22 @@ pub unsafe fn Rust_getAudioPlayoutDeviceName(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setAudioPlayoutDevice(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
     index: u16,
 ) -> bool {
     index == 0
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getAudioRecordingDevices(_factory: *const RffiPeerConnectionFactory) -> i16 {
+pub unsafe fn Rust_getAudioRecordingDevices(
+    _factory: *const RffiPeerConnectionFactoryOwner,
+) -> i16 {
     1
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_getAudioRecordingDeviceName(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
     index: u16,
     out_name: *mut c_char,
     out_uuid: *mut c_char,
@@ -147,7 +158,7 @@ pub unsafe fn Rust_getAudioRecordingDeviceName(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setAudioRecordingDevice(
-    _factory: *const RffiPeerConnectionFactory,
+    _factory: *const RffiPeerConnectionFactoryOwner,
     index: u16,
 ) -> bool {
     index == 0

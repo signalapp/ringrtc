@@ -20,7 +20,9 @@ use crate::core::call_manager::CallManager;
 use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::webrtc;
 use crate::webrtc::media;
+use crate::webrtc::peer_connection_factory::{self as pcf, PeerConnectionFactory};
 
 /// Public type for iOS CallManager
 pub type IosCallManager = CallManager<IosPlatform>;
@@ -124,7 +126,7 @@ pub fn cancel_group_ring(
     call_manager: *mut IosCallManager,
     group_id: group_call::GroupId,
     ring_id: group_call::RingId,
-    reason: Option<group_call::RingCancelReason>
+    reason: Option<group_call::RingCancelReason>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
@@ -472,21 +474,28 @@ pub fn create_group_call_client(
     call_manager: *mut IosCallManager,
     group_id: group_call::GroupId,
     sfu_url: String,
-    native_audio_track: *const c_void,
-    native_video_track: *const c_void,
+    native_owned_pcf: *const c_void,
+    native_owned_audio_track: *const c_void,
+    native_owned_video_track: *const c_void,
 ) -> Result<group_call::ClientId> {
     info!("create_group_call_client():");
 
     let outgoing_audio_track =
-        media::AudioTrack::owned(native_audio_track as *const media::RffiAudioTrack);
+        media::AudioTrack::owned(native_owned_audio_track as *const media::RffiAudioTrack);
     let outgoing_video_track =
-        media::VideoTrack::owned(native_video_track as *const media::RffiVideoTrack);
+        media::VideoTrack::owned(native_owned_video_track as *const media::RffiVideoTrack);
+
+    let native_pcf_ref = webrtc::Arc::from_owned_ptr(
+        native_owned_pcf as *const pcf::RffiPeerConnectionFactoryInterface,
+    );
+    let peer_connection_factory =
+        unsafe { PeerConnectionFactory::from_native_factory(native_pcf_ref.as_borrowed_ptr()) };
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(
         group_id,
         sfu_url,
-        None,
+        Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,
     )

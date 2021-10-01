@@ -1196,6 +1196,18 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
         Logger.debug("handleIncomingVideoTrack")
 
+        guard let factory = self.factory else {
+            owsFailDebug("factory was unexpectedly nil")
+            return
+        }
+
+        guard let nativeVideoTrack = nativeVideoTrack else {
+            owsFailDebug("videoTrack was unexpectedly nil")
+            return
+        }
+
+        let videoTrack = factory.videoTrack(fromNativeTrack: nativeVideoTrack)
+
         DispatchQueue.main.async {
             Logger.debug("handleIncomingVideoTrack - main.async")
 
@@ -1203,7 +1215,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
                 return
             }
 
-            groupCall.handleIncomingVideoTrack(remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
+            groupCall.handleIncomingVideoTrack(remoteDemuxId: remoteDemuxId, videoTrack: videoTrack)
         }
     }
 

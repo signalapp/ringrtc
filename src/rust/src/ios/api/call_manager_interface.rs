@@ -1082,10 +1082,14 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
     callManager: *mut c_void,
     groupId: AppByteSlice,
     sfuUrl: AppByteSlice,
-    nativeAudioTrack: *const c_void,
-    nativeVideoTrack: *const c_void,
+    nativeOwnedPeerConnectionFactory: *const c_void,
+    nativeOwnedAudioTrack: *const c_void,
+    nativeOwnedVideoTrack: *const c_void,
 ) -> group_call::ClientId {
     info!("ringrtcCreateGroupCallClient():");
+
+    // Note that failing these checks will result in the native objects being leaked.
+    // So...don't do that!
 
     let group_id = byte_vec_from_app_slice(&groupId);
     if group_id.is_none() {
@@ -1102,8 +1106,9 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
         callManager as *mut IosCallManager,
         group_id.unwrap(),
         sfu_url.unwrap(),
-        nativeAudioTrack,
-        nativeVideoTrack,
+        nativeOwnedPeerConnectionFactory,
+        nativeOwnedAudioTrack,
+        nativeOwnedVideoTrack,
     ) {
         Ok(client_id) => client_id,
         Err(_e) => 0,

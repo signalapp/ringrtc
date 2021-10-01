@@ -279,6 +279,27 @@ RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
   return factory_owner.release();
 }
 
+RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
+    PeerConnectionFactoryInterface* pcf) {
+  class PeerConnectionFactoryWrapper : public PeerConnectionFactoryOwner {
+  public:
+    PeerConnectionFactoryInterface* peer_connection_factory() override {
+      return factory_.get();
+    }
+
+    PeerConnectionFactoryWrapper(
+        rtc::scoped_refptr<PeerConnectionFactoryInterface> factory) :
+      factory_(std::move(factory)) {
+    }
+
+  private:
+    const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
+  };
+
+  auto result = new rtc::RefCountedObject<PeerConnectionFactoryWrapper>{pcf};
+  return rtc::scoped_refptr<PeerConnectionFactoryWrapper>(result).release();
+}
+
 RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     PeerConnectionFactoryOwner* factory_owner,
     PeerConnectionObserverRffi* observer,

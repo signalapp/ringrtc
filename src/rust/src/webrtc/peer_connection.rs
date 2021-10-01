@@ -16,7 +16,7 @@ use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::{AudioEncoderConfig, RffiAudioEncoderConfig};
 use crate::webrtc::network::RffiIpPort;
-use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactory;
+use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
 use crate::webrtc::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
@@ -50,7 +50,7 @@ pub struct PeerConnection {
     // owns the threads that the PC relies on.  If the PCF closes those threads,
     // not only will the PC do nothing, but methods called on it will block
     // indefinitely.
-    _rffi_pcf: Option<webrtc::Arc<RffiPeerConnectionFactory>>,
+    _rffi_pcf: Option<webrtc::Arc<RffiPeerConnectionFactoryOwner>>,
 }
 
 // See PeerConnection::SetSendRates for more info.
@@ -77,7 +77,7 @@ unsafe impl Send for PeerConnection {}
 unsafe impl Sync for PeerConnection {}
 
 impl PeerConnection {
-    pub fn new(rffi: webrtc::Arc<RffiPeerConnection>, rffi_pc_observer: *const RffiPeerConnectionObserver, rffi_pcf: Option<webrtc::Arc<RffiPeerConnectionFactory>>) -> Self {
+    pub fn new(rffi: webrtc::Arc<RffiPeerConnection>, rffi_pc_observer: *const RffiPeerConnectionObserver, rffi_pcf: Option<webrtc::Arc<RffiPeerConnectionFactoryOwner>>) -> Self {
         Self {
             rffi,
             rffi_pc_observer,

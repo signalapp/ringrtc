@@ -248,7 +248,7 @@ public class GroupCall {
 
             self.videoCaptureController.capturerDelegate = videoSource
 
-            let clientId = ringrtcCreateGroupCallClient(self.ringRtcCallManager, groupIdSlice, sfuUrlSlice, audioTrack.getNativeAudioTrack(), videoTrack.getNativeVideoTrack())
+            let clientId = ringrtcCreateGroupCallClient(self.ringRtcCallManager, groupIdSlice, sfuUrlSlice, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
             if clientId != 0 {
                 // Add this instance to the shared dictionary.
                 self.groupCallByClientId[clientId] = self
@@ -549,21 +549,16 @@ public class GroupCall {
         self.delegate?.groupCall(onRemoteDeviceStatesChanged: self)
     }
 
-    func handleIncomingVideoTrack(remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
+    func handleIncomingVideoTrack(remoteDemuxId: UInt32, videoTrack: RTCVideoTrack) {
         AssertIsOnMainThread()
         Logger.debug("handleIncomingVideoTrack() for remoteDemuxId: \(remoteDemuxId)")
-
-        guard let nativeVideoTrack = nativeVideoTrack else {
-            owsFailDebug("videoTrack was unexpectedly nil")
-            return
-        }
 
         guard let remoteDeviceState = self.remoteDeviceStates[remoteDemuxId] else {
             Logger.debug("No remote device state found for remoteDemuxId")
             return
         }
 
-        remoteDeviceState.videoTrack = self.factory.videoTrack(fromNativeTrack: nativeVideoTrack)
+        remoteDeviceState.videoTrack = videoTrack
 
         self.delegate?.groupCall(onRemoteDeviceStatesChanged: self)
     }
