@@ -41,6 +41,9 @@ pub struct RffiAudioDeviceModule {
     _private: [u8; 0],
 }
 
+// See "class AudioDeviceModule : public rtc::RefCountInterface"
+// in webrtc/modules/audio_device/include/audio_device.h
+impl webrtc::RefCounted for RffiAudioDeviceModule {}
 
 extern "C" {
     pub fn Rust_createPeerConnectionFactory(

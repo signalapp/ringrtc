@@ -186,23 +186,12 @@ impl AudioDevice {
 /// Rust wrapper around WebRTC C++ AudioDeviceModule object.
 #[derive(Debug)]
 pub struct AudioDeviceModule {
-    /// Pointer to C++ AudioDeviceModule.
-    rffi: *const pcf::RffiAudioDeviceModule,
+    rffi: webrtc::Arc<pcf::RffiAudioDeviceModule>,
 }
 
 impl AudioDeviceModule {
-    pub fn owned(ptr: *const u8) -> Self {
-        let rffi = ptr as *const pcf::RffiAudioDeviceModule;
+    pub fn new(rffi: webrtc::Arc<pcf::RffiAudioDeviceModule>) -> Self {
         Self { rffi, }
-    }
-}
-
-impl Drop for AudioDeviceModule {
-    fn drop(&mut self) {
-        debug!("AudioDeviceModule::drop()");
-        if !self.rffi.is_null() {
-            ref_count::release_ref(self.rffi as CppObject);
-        }
     }
 }
 

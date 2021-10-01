@@ -6,7 +6,7 @@
 //! Rust-friendly wrapper around rtc::RefCountInterface, similar to 
 //! WebRTC's scoped_refptr.
 
-use std::marker::{Send, Sync};
+use std::{fmt, marker::{Send, Sync}};
 
 use crate::core::util::CppObject;
 
@@ -35,6 +35,12 @@ pub trait RefCounted {}
 
 pub struct Arc<T: RefCounted> {
     ptr: *const T,
+}
+
+impl<T: RefCounted> fmt::Debug for Arc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("webrtc::Arc({:p})", self.ptr))
+    }
 }
 
 impl<T: RefCounted> Arc<T> {
