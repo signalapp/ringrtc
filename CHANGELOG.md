@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.13.3
+
+- iOS & Android: Pass PeerConnectionFactory down to Rust for group calls
+
+- Desktop: Fix an issue generating device lists on Windows
+
+- Add test client for group calls
+
+- Adjust some interfaces between RingRTC and WebRTC
+
+- Reference signalapp/webrtc@4389j
+  - Cleanup iOS interfaces
+
 ## v2.13.2
 
 - Desktop: Update local preview source object correctly
