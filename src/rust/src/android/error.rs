@@ -5,10 +5,11 @@
 
 //! Android Error Codes and Utilities.
 
-use failure::Error;
+use anyhow::Error;
 use jni::errors;
 use jni::objects::JObject;
 use jni::JNIEnv;
+use thiserror::Error;
 
 const CALL_EXCEPTION_CLASS: &str = "org/signal/ringrtc/CallException";
 
@@ -59,55 +60,43 @@ pub fn throw_error(env: &JNIEnv, error: Error) {
 }
 
 /// Android specific error codes.
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum AndroidError {
     // Android JNI error codes
-    #[fail(
-        display = "JNI: static method lookup failed.  Class: {}, Method: {}, Sig: {}",
-        _0, _1, _2
-    )]
+    #[error("JNI: static method lookup failed.  Class: {0}, Method: {1}, Sig: {2}")]
     JniStaticMethodLookup(String, String, String),
-    #[fail(
-        display = "JNI: calling method failed.  Method: {}, Sig: {}, Error: {}",
-        _0, _1, _2
-    )]
+    #[error("JNI: calling method failed.  Method: {0}, Sig: {1}, Error: {2}")]
     JniCallMethod(String, String, errors::Error),
-    #[fail(
-        display = "JNI: calling static method failed.  Class: {}, Method: {}, Sig: {}",
-        _0, _1, _2
-    )]
+    #[error("JNI: calling static method failed.  Class: {0}, Method: {1}, Sig: {2}")]
     JniCallStaticMethod(String, String, String),
-    #[fail(
-        display = "JNI: calling constructor failed.  Constructor: {}, Sig: {}",
-        _0, _1
-    )]
+    #[error("JNI: calling constructor failed.  Constructor: {0}, Sig: {1}")]
     JniCallConstructor(String, String),
-    #[fail(display = "JNI: getting field failed.  Field: {}, Type: {}", _0, _1)]
+    #[error("JNI: getting field failed.  Field: {0}, Type: {1}")]
     JniGetField(String, String),
-    #[fail(display = "JNI: class not found.  Type: {} Add to the cache?", _0)]
+    #[error("JNI: class not found.  Type: {0} Add to the cache?")]
     JniGetLangClassNotFound(String),
-    #[fail(display = "JNI: new object failed.  Type: {}", _0)]
+    #[error("JNI: new object failed.  Type: {0}")]
     JniNewLangObjectFailed(String),
-    #[fail(display = "JNI: invalid serialized buffer.")]
+    #[error("JNI: invalid serialized buffer.")]
     JniInvalidSerializedBuffer,
 
     // Android Class Cache error codes
-    #[fail(display = "ClassCache: Class is already in cache: {}", _0)]
+    #[error("ClassCache: Class is already in cache: {0}")]
     ClassCacheDuplicate(String),
-    #[fail(display = "ClassCache: class not found in jvm: {}", _0)]
+    #[error("ClassCache: class not found in jvm: {0}")]
     ClassCacheNotFound(String),
-    #[fail(display = "ClassCache: class not found in cache: {}", _0)]
+    #[error("ClassCache: class not found in cache: {0}")]
     ClassCacheLookup(String),
 
     // Android Misc error codes
-    #[fail(display = "Creating JNI PeerConnection failed")]
+    #[error("Creating JNI PeerConnection failed")]
     CreateJniPeerConnection,
-    #[fail(display = "Extracting native PeerConnection failed")]
+    #[error("Extracting native PeerConnection failed")]
     ExtractNativePeerConnection,
-    #[fail(display = "Creating JNI Connection failed")]
+    #[error("Creating JNI Connection failed")]
     CreateJniConnection,
 
     // WebRTC / JNI C++ error codes
-    #[fail(display = "Unable to create C++ JavaMediaStream")]
+    #[error("Unable to create C++ JavaMediaStream")]
     CreateJavaMediaStream,
 }

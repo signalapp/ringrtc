@@ -17,6 +17,7 @@ use bytes::{Bytes, BytesMut};
 use futures::future::lazy;
 use futures::future::TryFutureExt;
 use futures::Future;
+use lazy_static::lazy_static;
 use prost::Message;
 
 use crate::common::{
@@ -48,8 +49,19 @@ use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
 use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
-const TIME_OUT_PERIOD: Duration = Duration::from_secs(60);
 pub const MAX_MESSAGE_AGE: Duration = Duration::from_secs(60);
+const TIME_OUT_PERIOD: Duration = Duration::from_secs(60);
+
+lazy_static! {
+    static ref INCOMING_GROUP_CALL_RING_TIME: Duration =
+        std::env::var("INCOMING_GROUP_CALL_RING_SECS")
+            .ok()
+            .map(|secs| secs
+                .parse()
+                .expect("INCOMING_GROUP_CALL_RING_SECS must be an integer"))
+            .map(Duration::from_secs)
+            .unwrap_or(TIME_OUT_PERIOD);
+}
 
 /// Spawns a task on the worker runtime thread to handle an API
 /// request with error handling.
@@ -740,16 +752,6 @@ where
         Ok(())
     }
 
-    #[cfg(feature = "sim")]
-    pub fn pause_clock(&mut self) -> Result<crate::core::util::ClockPauseGuard> {
-        let mut worker_runtime = self.worker_runtime.lock()?;
-        if let Some(worker_runtime) = &mut *worker_runtime {
-            Ok(worker_runtime.pause_clock())
-        } else {
-            bail!("worker_spawn(): worker_runtime unavailable");
-        }
-    }
-
     fn runtime_start_sync(&mut self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
         let future = lazy(move |_| {
             // signal the condvar
@@ -766,7 +768,7 @@ where
                 .into())
             }
         })
-        .map_err(move |err: failure::Error| {
+        .map_err(move |err: anyhow::Error| {
             error!("Close call manager future failed: {}", err);
             // Not much else to do here.
         });
@@ -1681,7 +1683,7 @@ where
         let mut self_for_timeout = self.clone();
         self.worker_spawn(
             async move {
-                tokio::time::sleep(TIME_OUT_PERIOD).await;
+                tokio::time::sleep(*INCOMING_GROUP_CALL_RING_TIME).await;
                 self_for_timeout.remove_outstanding_group_ring(&group_id, ring_id)?;
                 self_for_timeout.platform.lock()?.group_call_ring_update(
                     group_id,
@@ -1691,7 +1693,7 @@ where
                 );
                 Ok(())
             }
-            .map_err(|err: failure::Error| {
+            .map_err(|err: anyhow::Error| {
                 error!("error handling group ring timeout: {}", err);
             }),
         )?;
@@ -1869,7 +1871,7 @@ where
         &mut self,
         remote_peer: &<T as Platform>::AppRemotePeer,
         call_id: CallId,
-        error: failure::Error,
+        error: anyhow::Error,
     ) {
         info!("internal_create_api_error(): error: {}", error);
         if let Ok(active_call) = self.active_call() {
@@ -1892,7 +1894,7 @@ where
     ///
     /// This shuts down the specified call if active and notifies the
     /// application.
-    fn internal_api_error(&mut self, error: failure::Error) -> Result<()> {
+    fn internal_api_error(&mut self, error: anyhow::Error) -> Result<()> {
         info!("internal_api_error(): error: {}", error);
         if let Ok(call) = self.active_call() {
             self.internal_error(call.call_id(), error)
@@ -1944,7 +1946,7 @@ where
         // Loop in case a sending error is encountered and jump to the next
         // message item if so.
         loop {
-            let mut closure_error: Option<(failure::Error, CallId)> = None;
+            let mut closure_error: Option<(anyhow::Error, CallId)> = None;
 
             match self.message_queue.lock() {
                 Ok(mut message_queue) => {
@@ -2214,7 +2216,7 @@ where
     ///
     /// This shuts down the specified call if active and notifies the
     /// application.
-    pub(super) fn internal_error(&mut self, call_id: CallId, error: failure::Error) -> Result<()> {
+    pub(super) fn internal_error(&mut self, call_id: CallId, error: anyhow::Error) -> Result<()> {
         info!("internal_error(): call_id: {}, error: {}", call_id, error);
 
         if self.call_is_active(call_id)? {

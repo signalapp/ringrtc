@@ -128,7 +128,7 @@ pub enum ConnectionEvent {
     /// Send the observer an internal error message.
     /// Source: all kinds of things that can go wrong internally
     /// Action: Terminate the call.
-    InternalError(failure::Error),
+    InternalError(anyhow::Error),
     /// Receive incoming media from PeerConnection
     /// Source: PeerConnection (OnAddStream)
     /// Action: remember the MediaStream so we can "connect" to it after the call is accepted
@@ -901,7 +901,7 @@ where
     fn handle_internal_error(
         &mut self,
         connection: Connection<T>,
-        error: failure::Error,
+        error: anyhow::Error,
     ) -> Result<()> {
         let notify_error_future = lazy(move |_| {
             if connection.terminating()? {

@@ -5,21 +5,23 @@
 
 //! iOS Error Codes
 
+use thiserror::Error;
+
 /// iOS specific error codes.
 #[allow(non_camel_case_types)]
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum IosError {
     // iOS error codes
-    #[fail(display = "Couldn't allocate memory for logging object")]
+    #[error("Couldn't allocate memory for logging object")]
     InitializeLogging,
-    #[fail(display = "Creating RTCPeerConnection in App failed")]
+    #[error("Creating RTCPeerConnection in App failed")]
     CreateAppPeerConnection,
-    #[fail(display = "Creating MediaStream in App failed")]
+    #[error("Creating MediaStream in App failed")]
     CreateAppMediaStream,
-    #[fail(display = "Creating IosMediaStream failed")]
+    #[error("Creating IosMediaStream failed")]
     CreateIosMediaStream,
 
     // iOS Misc error codes
-    #[fail(display = "Extracting native PeerConnection failed")]
+    #[error("Extracting native PeerConnection failed")]
     ExtractNativePeerConnection,
 }

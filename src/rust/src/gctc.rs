@@ -4,6 +4,7 @@
 //
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 use log::info;
@@ -61,32 +62,46 @@ impl http_client::HttpClient for HttpClient {
         on_response: Box<dyn FnOnce(Option<HttpResponse>) + Send>,
     ) {
         self.actor.send(move |_| {
-            let mut request = match method {
-                HttpMethod::Get => ureq::get(&url),
-                HttpMethod::Put => ureq::put(&url),
-                HttpMethod::Delete => ureq::delete(&url),
-                HttpMethod::Post => ureq::post(&url),
-            };
             let mut tls_config = rustls::ClientConfig::new();
             tls_config
                 .dangerous()
-                .set_certificate_verifier(std::sync::Arc::new(ServerCertVerifier {}));
-            request.set_tls_config(std::sync::Arc::new(tls_config));
+                .set_certificate_verifier(Arc::new(ServerCertVerifier {}));
+            let agent = ureq::builder().tls_config(Arc::new(tls_config)).build();
+
+            let mut request = match method {
+                HttpMethod::Get => agent.get(&url),
+                HttpMethod::Put => agent.put(&url),
+                HttpMethod::Delete => agent.delete(&url),
+                HttpMethod::Post => agent.post(&url),
+            };
             for (key, value) in headers.iter() {
-                request.set(key, value);
+                request = request.set(key, value);
             }
-            let response = match body {
+            let request_result = match body {
                 Some(body) => request.send_bytes(&body),
                 None => request.call(),
             };
-            let status_code = response.status();
-            if let Ok(body) = response.into_string() {
-                on_response(Some(HttpResponse {
-                    status_code,
-                    body: body.as_bytes().to_vec(),
-                }));
-            } else {
-                on_response(None);
+            match request_result {
+                Ok(response) => {
+                    let status_code = response.status();
+                    let mut body = Vec::new();
+                    if response.into_reader().read_to_end(&mut body).is_ok() {
+                        on_response(Some(HttpResponse { status_code, body }));
+                    } else {
+                        on_response(None);
+                    }
+                }
+                Err(ureq::Error::Status(status_code, response)) => {
+                    let mut body = Vec::new();
+                    if response.into_reader().read_to_end(&mut body).is_ok() {
+                        on_response(Some(HttpResponse { status_code, body }));
+                    } else {
+                        on_response(None);
+                    }
+                }
+                Err(ureq::Error::Transport(_)) => {
+                    on_response(None);
+                }
             }
         });
     }

@@ -872,14 +872,9 @@ fn group_call_ring_timeout() {
         _ => panic!("unexpected ring updates: {:?}", ring_updates),
     }
 
-    // It would be nice to test that the timer *hasn't* gone off after 30 seconds
-    // and *has* gone off at, say, 5 minutes, but sadly a Tokio runtime that's *only*
-    // waiting on timers will will auto-advance time as soon as you pause the clock.
-    // So we'll just make sure the timer was scheduled at all.
-    let clock_guard = cm.pause_clock().expect(error_line!());
+    // We set the timeout to 1 second for testing, so we only need to sleep a bit longer than that.
+    std::thread::sleep(Duration::from_millis(1_200));
     cm.synchronize().expect(error_line!());
-    std::thread::sleep(Duration::from_millis(100)); // Yield to the runtime.
-    drop(clock_guard);
 
     let ring_updates = cm
         .platform()

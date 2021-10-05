@@ -99,11 +99,11 @@ pub enum CallEvent {
     /// Connection observer event
     ConnectionObserverEvent(ConnectionObserverEvent, DeviceId),
     /// Connection observer error
-    ConnectionObserverError(failure::Error, DeviceId),
+    ConnectionObserverError(anyhow::Error, DeviceId),
 
     // Internally generated events
     /// Notify the call manager of an internal error condition.
-    InternalError(failure::Error),
+    InternalError(anyhow::Error),
     /// The call timed out while establishing a connection.
     CallTimeout,
     /// Synchronize the FSM.
@@ -938,11 +938,11 @@ where
         }
     }
 
-    fn handle_internal_error(&mut self, call: Call<T>, error: failure::Error) -> Result<()> {
+    fn handle_internal_error(&mut self, call: Call<T>, error: anyhow::Error) -> Result<()> {
         info!("handle_internal_error():");
 
         let internal_error_future =
-            lazy(move |_| call.internal_error(error)).map_err(move |err: failure::Error| {
+            lazy(move |_| call.internal_error(error)).map_err(move |err: anyhow::Error| {
                 error!("Processing internal error future failed: {}", err);
             });
 
@@ -953,7 +953,7 @@ where
     fn handle_connection_observer_error(
         &mut self,
         call: Call<T>,
-        error: failure::Error,
+        error: anyhow::Error,
         remote_device_id: DeviceId,
     ) -> Result<()> {
         info!(

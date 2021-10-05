@@ -365,7 +365,7 @@ impl TaskQueueRuntime {
         let rt = Some(
             runtime::Builder::new_multi_thread()
                 .worker_threads(1)
-                .max_threads(1)
+                .max_blocking_threads(1)
                 .enable_all()
                 .thread_name(name)
                 .build()?,
@@ -379,28 +379,6 @@ impl TaskQueueRuntime {
         F::Output: Send + 'static,
     {
         self.rt.as_ref().unwrap().spawn(future);
-    }
-
-    #[cfg(feature = "sim")]
-    pub fn pause_clock(&self) -> ClockPauseGuard {
-        let _guard = self.rt.as_ref().unwrap().enter();
-        tokio::time::pause();
-        ClockPauseGuard {
-            handle: self.rt.as_ref().unwrap().handle().clone(),
-        }
-    }
-}
-
-#[cfg(feature = "sim")]
-pub struct ClockPauseGuard {
-    handle: runtime::Handle,
-}
-
-#[cfg(feature = "sim")]
-impl Drop for ClockPauseGuard {
-    fn drop(&mut self) {
-        let _guard = self.handle.enter();
-        tokio::time::resume();
     }
 }
 

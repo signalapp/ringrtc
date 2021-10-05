@@ -15,16 +15,10 @@
 #![allow(clippy::unnecessary_wraps)]
 
 #[macro_use]
-extern crate failure;
-
-#[macro_use]
 extern crate futures;
 
 #[macro_use]
 extern crate log;
-
-#[cfg(feature = "sim")]
-extern crate simplelog;
 
 #[macro_use]
 extern crate static_assertions;

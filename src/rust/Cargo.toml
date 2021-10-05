@@ -25,17 +25,17 @@ path = "src/gctc.rs"
 required-features = ["native", "http"]
 
 [dependencies]
-aes-ctr           = { version = "0.6.0"  }
+aes               = { version = "0.7", features = ["ctr"] }
+anyhow            = { version = "1.0"    }
 base64            = { version = "0.13"   }
-bytes             = { version = "0.5"    }
-failure           = { version = "0.1"    }
+bytes             = { version = "1.0"    }
 futures           = { version = "0.3"    }
 hmac              = { version = "0.11"   }
 lazy_static       = { version = "1.4"    }
 libc              = { version = "0.2"    }
 log               = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
 num_enum          = { version = "0.5"    }
-prost             = { version = "0.6"    }
+prost             = { version = "0.8"    }
 rand              = { version = "0.7", features = [] }
 regex             = { version = "1.3"    }
 hkdf              = { version = "0.11"   }
@@ -45,13 +45,13 @@ sha2              = { version = "0.9"    }
 static_assertions = { version = "1.1.0"  }
 subtle            = { version = "2.3.0"  }
 thiserror         = { version = "1.0.20" }
-tokio             = { version = "0.3", features = ["rt-multi-thread", "time"] }
+tokio             = { version = "1.0", features = ["rt-multi-thread", "time"] }
+x25519-dalek      = { version = "1.1"    }
 
 # Optional, needed to build protobufs
-prost-build = { version = "0.6.1", optional = true }
+prost-build = { version = "0.8", optional = true }
 
 # Optional, needed by the 'sim' feature
-simplelog   = { version = "0.7", optional = true, default-features = false }
 rand_chacha = { version = "0.2", optional = true }
 
 # Optional, needed by the "electron" feature
@@ -61,17 +61,14 @@ neon = { version = "0.9.1", optional = true, default-features = false, features 
 jni = { version = "0.17.0", optional = true, default-features = false }
 
 # Optional, needed by the "http" feature
-ureq = { version = "1.5.2", optional = true }
+ureq = { version = "2.2", optional = true }
 rustls = { version = "0.19.1", optional = true, features = ["dangerous_configuration"] }
 webpki = { version = "0.21", optional = true }
-
-[dependencies.x25519-dalek]
-version = "1.1"
 
 [features]
 default = []
 protobuf_gen_deps = ["prost-build"]
-sim = ["simplelog", "rand_chacha", "tokio/test-util"]
+sim = ["rand_chacha"]
 electron = ["neon", "native"]
 native = []  # We have this so we can more easily disable things only native clients need
 simnet = []  # We have this so we can more easily disable things only simulated native client need

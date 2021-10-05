@@ -12,12 +12,9 @@ use std::env;
 use std::time::{Duration, SystemTime};
 
 use lazy_static::lazy_static;
-use log::LevelFilter;
 use rand::distributions::{Distribution, Standard};
 use rand::{Rng, SeedableRng};
-
 use rand_chacha::ChaCha20Rng;
-use simplelog::{Config, ConfigBuilder, SimpleLogger};
 
 use ringrtc::common::{ApplicationEvent, CallMediaType, DeviceId, FeatureLevel};
 use ringrtc::core::call::Call;
@@ -79,20 +76,8 @@ lazy_static! {
 }
 
 pub fn test_init() {
-    let (log_level, config) = if env::var("DEBUG_TESTS").is_ok() {
-        (
-            LevelFilter::Info,
-            ConfigBuilder::new()
-                .set_thread_level(LevelFilter::Info)
-                .set_target_level(LevelFilter::Info)
-                .set_location_level(LevelFilter::Info)
-                .build(),
-        )
-    } else {
-        (LevelFilter::Error, Config::default())
-    };
-
-    let _ = SimpleLogger::init(log_level, config);
+    let _ = env_logger::try_init();
+    env::set_var("INCOMING_GROUP_CALL_RING_SECS", "1");
 }
 
 pub struct TestContext {
@@ -259,7 +244,7 @@ impl TestContext {
     pub fn create_group_call(
         &self,
         group_id: group_call::GroupId,
-    ) -> Result<group_call::ClientId, failure::Error> {
+    ) -> Result<group_call::ClientId, anyhow::Error> {
         self.cm().create_group_call_client(
             group_id.clone(),
             "".to_owned(),

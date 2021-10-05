@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use aes_ctr::cipher::{NewStreamCipher, SyncStreamCipher};
-use aes_ctr::Aes256Ctr;
+use aes::cipher::{NewCipher, StreamCipher};
+use aes::Aes256Ctr;
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac as _, NewMac};
 use rand::{CryptoRng, Rng};

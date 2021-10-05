@@ -438,7 +438,7 @@ where
 
     /// Notify call manager of an internal error.
     ///
-    pub fn internal_error(&self, error: failure::Error) -> Result<()> {
+    pub fn internal_error(&self, error: anyhow::Error) -> Result<()> {
         let mut call_manager = self.call_manager()?;
 
         call_manager.internal_error(self.call_id, error)
@@ -916,7 +916,7 @@ where
     ///
     /// Note: this function does not fail, as there is not much one
     /// can do in this case.
-    pub fn inject_internal_error(&mut self, error: failure::Error, msg: &str) {
+    pub fn inject_internal_error(&mut self, error: anyhow::Error, msg: &str) {
         error!("{}: {}", msg, error);
         let _ = self.inject_event(CallEvent::InternalError(error));
     }
@@ -981,7 +981,7 @@ where
     pub fn on_connection_observer_error(
         &mut self,
         remote_device_id: DeviceId,
-        error: failure::Error,
+        error: anyhow::Error,
     ) -> Result<()> {
         info!(
             "on_connection_observer_error(): call_id: {}, remote_device_id: {} error: {}",

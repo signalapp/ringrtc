@@ -1368,7 +1368,7 @@ where
     }
 
     /// Notify the parent call observer about an internal error.
-    pub fn internal_error(&self, error: failure::Error) -> Result<()> {
+    pub fn internal_error(&self, error: anyhow::Error) -> Result<()> {
         let mut call = self.call.lock()?;
         call.on_connection_observer_error(self.remote_device_id(), error)
     }
@@ -1633,7 +1633,7 @@ where
     ///
     /// Note: this function does not fail, as there is not much one
     /// can do in this case.
-    pub fn inject_internal_error(&mut self, error: failure::Error, msg: &str) {
+    pub fn inject_internal_error(&mut self, error: anyhow::Error, msg: &str) {
         error!("{}: {}", msg, error);
         let _ = self.inject_event(ConnectionEvent::InternalError(error));
     }

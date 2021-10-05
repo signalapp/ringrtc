@@ -5,148 +5,132 @@
 
 //! Common error codes.
 
+use thiserror::Error;
+
 use crate::common::{CallId, DeviceId};
 
 /// Platform independent error conditions.
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum RingRtcError {
     // Project wide common error codes
-    #[fail(display = "Mutex poisoned: {}", _0)]
+    #[error("Mutex poisoned: {0}")]
     MutexPoisoned(String),
-    #[fail(display = "Null pointer in: {}, var: {}", _0, _1)]
+    #[error("Null pointer in: {0}, var: {1}")]
     NullPointer(String, String),
-    #[fail(display = "Expecting non-none option value in: {}, var: {}", _0, _1)]
+    #[error("Expecting non-none option value in: {0}, var: {1}")]
     OptionValueNotSet(String, String),
-    #[fail(display = "Couldn't register an actor")]
+    #[error("Couldn't register an actor")]
     RegisterActor,
 
     // Call Manager error codes
-    #[fail(display = "Active call already in progress, id: {}", _0)]
+    #[error("Active call already in progress, id: {0}")]
     CallAlreadyInProgress(CallId),
-    #[fail(display = "Call Manager is busy")]
+    #[error("Call Manager is busy")]
     CallManagerIsBusy,
-    #[fail(display = "No active call found")]
+    #[error("No active call found")]
     NoActiveCall,
-    #[fail(display = "CallID not found in call_map: {}", _0)]
+    #[error("CallID not found in call_map: {0}")]
     CallIdNotFound(CallId),
-    #[fail(display = "Connection not found in connection_map: {}", _0)]
+    #[error("Connection not found in connection_map: {0}")]
     ConnectionNotFound(DeviceId),
-    #[fail(display = "Active device ID is already set, remote_device: {}", _0)]
+    #[error("Active device ID is already set, remote_device: {0}")]
     ActiveDeviceIdAlreadySet(DeviceId),
-    #[fail(display = "Active Media Stream is already set, remote_device: {}", _0)]
+    #[error("Active Media Stream is already set, remote_device: {0}")]
     ActiveMediaStreamAlreadySet(DeviceId),
-    #[fail(
-        display = "Pending incoming call is already set, remote_device: {}",
-        _0
-    )]
+    #[error("Pending incoming call is already set, remote_device: {0}")]
     PendingCallAlreadySet(DeviceId),
-    #[fail(
-        display = "Application Connection is already set, remote_device: {}",
-        _0
-    )]
+    #[error("Application Connection is already set, remote_device: {0}")]
     AppConnectionAlreadySet(DeviceId),
-    #[fail(display = "Application Call Context is already set, call_id: {}", _0)]
+    #[error("Application Call Context is already set, call_id: {0}")]
     AppCallContextAlreadySet(CallId),
 
     // WebRTC / C++ error codes
-    #[fail(display = "Unable to create C++ PeerConnectionObserver")]
+    #[error("Unable to create C++ PeerConnectionObserver")]
     CreatePeerConnectionObserver,
-    #[fail(display = "Unable to create C++ signaling DataChannel")]
+    #[error("Unable to create C++ signaling DataChannel")]
     CreateSignalingDataChannel,
-    #[fail(display = "Unable to create C++ PeerConnectionFactory")]
+    #[error("Unable to create C++ PeerConnectionFactory")]
     CreatePeerConnectionFactory,
-    #[fail(display = "Unable to create C++ PeerConnection")]
+    #[error("Unable to create C++ PeerConnection")]
     CreatePeerConnection,
-    #[fail(display = "Unable to create C++ VideoSource")]
+    #[error("Unable to create C++ VideoSource")]
     CreateVideoSource,
-    #[fail(display = "Unable to create C++ VideoTrack")]
+    #[error("Unable to create C++ VideoTrack")]
     CreateVideoTrack,
-    #[fail(display = "Unable to create C++ AudioTrack")]
+    #[error("Unable to create C++ AudioTrack")]
     CreateAudioTrack,
-    #[fail(display = "Unable to generate C++ RTCCertificate")]
+    #[error("Unable to generate C++ RTCCertificate")]
     GenerateCertificate,
-    #[fail(display = "Unable to compute C++ RTCCertificate fingerprint")]
+    #[error("Unable to compute C++ RTCCertificate fingerprint")]
     ComputeCertificateFingerprint,
-    #[fail(display = "Unable to query Audio Devices")]
+    #[error("Unable to query Audio Devices")]
     #[allow(dead_code)]
     QueryAudioDevices,
     #[allow(dead_code)]
-    #[fail(display = "Unable to set Audio Device")]
+    #[error("Unable to set Audio Device")]
     SetAudioDevice,
 
     // WebRTC / C++ session description error codes
-    #[fail(
-        display = "CreateSessionDescriptionObserver failure. error msg: {}, type: {}",
-        _0, _1
-    )]
+    #[error("CreateSessionDescriptionObserver failure. error msg: {0}, type: {1}")]
     CreateSessionDescriptionObserver(String, i32),
-    #[fail(
-        display = "CreateSessionDescriptionObserver get result failure. error msg: {}",
-        _0
-    )]
+    #[error("CreateSessionDescriptionObserver get result failure. error msg: {0}")]
     CreateSessionDescriptionObserverResult(String),
-    #[fail(
-        display = "SetSessionDescriptionObserver failure. error msg: {}, type: {}",
-        _0, _1
-    )]
+    #[error("SetSessionDescriptionObserver failure. error msg: {0}, type: {1}")]
     SetSessionDescriptionObserver(String, i32),
-    #[fail(
-        display = "SetSessionDescriptionObserver get result failure. error msg: {}",
-        _0
-    )]
+    #[error("SetSessionDescriptionObserver get result failure. error msg: {0}")]
     SetSessionDescriptionObserverResult(String),
-    #[fail(display = "AddIceCandidate failure")]
+    #[error("AddIceCandidate failure")]
     AddIceCandidate,
 
     // WebRTC / C++ offer / answer error codes
-    #[fail(display = "Unable to convert offer or answer to SDP")]
+    #[error("Unable to convert offer or answer to SDP")]
     ToSdp,
-    #[fail(display = "Unable to convert sdp to answer")]
+    #[error("Unable to convert sdp to answer")]
     ConvertSdpAnswer,
-    #[fail(display = "Unable to convert sdp to offer")]
+    #[error("Unable to convert sdp to offer")]
     ConvertSdpOffer,
-    #[fail(display = "Unable to munge SDP")]
+    #[error("Unable to munge SDP")]
     MungeSdp,
-    #[fail(display = "Unknown signaled protocol version")]
+    #[error("Unknown signaled protocol version")]
     UnknownSignaledProtocolVersion,
 
     // DataChannel error codes
-    #[fail(display = "Unable to send data channel message")]
+    #[error("Unable to send data channel message")]
     DataChannelSend,
-    #[fail(display = "Data channel protocol error: {}", _0)]
+    #[error("Data channel protocol error: {0}")]
     DataChannelProtocol(String),
-    #[fail(display = "Unable to send RTP data")]
+    #[error("Unable to send RTP data")]
     SendRtp,
-    #[fail(display = "Unable to receive RTP data")]
+    #[error("Unable to receive RTP data")]
     ReceiveRtp,
 
     // IceGatherer error codes
-    #[fail(display = "UseSharedIceGatherer failure")]
+    #[error("UseSharedIceGatherer failure")]
     UseIceGatherer,
-    #[fail(display = "CreateIceGatherer failure")]
+    #[error("CreateIceGatherer failure")]
     CreateIceGatherer,
 
     // SFU client error codes
-    #[fail(display = "SfuClient received unexpected response status code {}", _0)]
+    #[error("SfuClient received unexpected response status code {0}")]
     SfuClientReceivedUnexpectedResponseStatusCode(u16),
-    #[fail(display = "SfuClient request failed")]
+    #[error("SfuClient request failed")]
     SfuClientRequestFailed,
-    #[fail(display = "SfuClient asked to make a request with no auth token")]
+    #[error("SfuClient asked to make a request with no auth token")]
     SfuClientHasNotAuthToken,
-    #[fail(display = "The maximum number of participants has been reached")]
+    #[error("The maximum number of participants has been reached")]
     MaxParticipantsReached,
 
     // Frame encryption error codes
-    #[fail(display = "Frame Counter too big")]
+    #[error("Frame Counter too big")]
     FrameCounterTooBig,
-    #[fail(display = "Failed to encrypt")]
+    #[error("Failed to encrypt")]
     FailedToEncrypt,
-    #[fail(display = "Failed to decrypt")]
+    #[error("Failed to decrypt")]
     FailedToDecrypt,
 
     // Misc error codes
-    #[fail(display = "Failed to negotiate SRTP keys")]
+    #[error("Failed to negotiate SRTP keys")]
     SrtpKeyNegotiationFailure,
-    #[fail(display = "Buffer too small")]
+    #[error("Buffer too small")]
     BufferTooSmall,
 }

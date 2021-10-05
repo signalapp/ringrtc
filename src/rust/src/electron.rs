@@ -558,7 +558,7 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     debug!("JsCallManager()");
     let endpoint = CallEndpoint::new(&mut cx, js_call_manager, use_new_audio_device_module)
-        .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+        .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.boxed(RefCell::new(endpoint)).upcast())
 }
 
@@ -573,7 +573,7 @@ fn setSelfUuid(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.set_self_uuid(uuid)?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -604,7 +604,7 @@ fn createOutgoingCall(mut cx: FunctionContext) -> JsResult<JsValue> {
         )?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(create_id_arg(&mut cx, call_id.as_u64()))
 }
 
@@ -640,7 +640,7 @@ fn cancelGroupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
             .cancel_group_ring(group_id, ring_id.into(), reason)?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -686,7 +686,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         )?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -699,7 +699,7 @@ fn accept(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.accept_call(call_id)?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -712,7 +712,7 @@ fn ignore(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.drop_call(call_id)?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -724,7 +724,7 @@ fn hangup(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.hangup()?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -737,7 +737,7 @@ fn signalingMessageSent(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.message_sent(call_id)?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -750,7 +750,7 @@ fn signalingMessageSendFailed(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.message_send_failure(call_id)?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -764,7 +764,7 @@ fn updateBandwidthMode(mut cx: FunctionContext) -> JsResult<JsValue> {
         active_connection.update_bandwidth_mode(BandwidthMode::from_i32(bandwidth_mode))?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -816,7 +816,7 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
         )?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -855,7 +855,7 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
         )?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -893,7 +893,7 @@ fn receivedIceCandidates(mut cx: FunctionContext) -> JsResult<JsValue> {
         )?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -936,7 +936,7 @@ fn receivedHangup(mut cx: FunctionContext) -> JsResult<JsValue> {
         )?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -956,7 +956,7 @@ fn receivedBusy(mut cx: FunctionContext) -> JsResult<JsValue> {
             .received_busy(call_id, signaling::ReceivedBusy { sender_device_id })?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -980,7 +980,7 @@ fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
         )?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -998,7 +998,7 @@ fn receivedHttpResponse(mut cx: FunctionContext) -> JsResult<JsValue> {
             .received_http_response(request_id, Some(response))?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1017,7 +1017,7 @@ fn httpRequestFailed(mut cx: FunctionContext) -> JsResult<JsValue> {
             .received_http_response(request_id, None)?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1030,7 +1030,7 @@ fn setOutgoingAudioEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.outgoing_audio_track.set_enabled(enabled);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1048,7 +1048,7 @@ fn setOutgoingVideoEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
         })?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1071,7 +1071,7 @@ fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
         })?;
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1088,7 +1088,7 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.outgoing_video_source.push_frame(frame);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1177,7 +1177,7 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
 
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.number(client_id).upcast())
 }
 
@@ -1189,7 +1189,7 @@ fn deleteGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.delete_group_call_client(client_id);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1201,7 +1201,7 @@ fn connect(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.connect(client_id);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1214,7 +1214,7 @@ fn join(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.join(client_id);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1230,7 +1230,7 @@ fn leave(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.leave(client_id);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1246,7 +1246,7 @@ fn disconnect(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.disconnect(client_id);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1262,7 +1262,7 @@ fn setOutgoingAudioMuted(mut cx: FunctionContext) -> JsResult<JsValue> {
             .set_outgoing_audio_muted(client_id, muted);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1278,7 +1278,7 @@ fn setOutgoingVideoMuted(mut cx: FunctionContext) -> JsResult<JsValue> {
             .set_outgoing_video_muted(client_id, muted);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1291,7 +1291,7 @@ fn setPresenting(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.set_presenting(client_id, presenting);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1309,7 +1309,7 @@ fn setOutgoingGroupCallVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<J
             .set_sharing_screen(client_id, is_screenshare);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1330,7 +1330,7 @@ fn groupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.group_ring(client_id, recipient);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1342,7 +1342,7 @@ fn resendMediaKeys(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.resend_media_keys(client_id);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1357,7 +1357,7 @@ fn setBandwidthMode(mut cx: FunctionContext) -> JsResult<JsValue> {
             .set_bandwidth_mode(client_id, BandwidthMode::from_i32(bandwidth_mode));
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1418,7 +1418,7 @@ fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.request_video(client_id, resolutions);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1465,7 +1465,7 @@ fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.set_group_members(client_id, members);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1485,7 +1485,7 @@ fn setMembershipProof(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.set_membership_proof(client_id, proof);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -1539,7 +1539,7 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
             .peek_group_call(request_id, sfu_url, membership_proof, members);
         Ok(())
     })
-    .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
 }
 
@@ -2133,7 +2133,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         .insert((client_id, remote_demux_id), incoming_video_sink);
                     Ok(())
                 })
-                .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+                .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
             }
 
             Event::GroupUpdate(GroupUpdate::PeekChanged {
@@ -2252,7 +2252,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     );
                     Ok(())
                 })
-                .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
+                .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
                 let error_message = format!("{} is a function", method_name);
                 let method = *observer
                     .get(&mut cx, method_name)?
