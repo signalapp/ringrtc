@@ -27,17 +27,16 @@ class NativeCallManager {
   private readonly observer: CallManagerCallbacks;
   constructor(observer: CallManagerCallbacks) {
     this.observer = observer;
-    this.createCallEndpoint(true, new Config());
+    this.createCallEndpoint(new Config());
   }
 
   setConfig(config: Config) {
-    this.createCallEndpoint(false, config);
+    this.createCallEndpoint(config);
   }
 
-  private createCallEndpoint(first_time: boolean, config: Config) {
+  private createCallEndpoint(config: Config) {
     const callEndpoint = Native.createCallEndpoint(
       this,
-      first_time,
       config.use_new_audio_device_module
     );
     Object.defineProperty(this, Native.callEndpointPropertyKey, {

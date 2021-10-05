@@ -536,24 +536,24 @@ impl Finalize for CallEndpoint {
 #[allow(non_snake_case)]
 fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     let js_call_manager = cx.argument::<JsObject>(0)?;
-    let first_time = cx.argument::<JsBoolean>(1)?.value(&mut cx);
-    let use_new_audio_device_module = cx.argument::<JsBoolean>(2)?.value(&mut cx);
+    let use_new_audio_device_module = cx.argument::<JsBoolean>(1)?.value(&mut cx);
 
-    if ENABLE_LOGGING && first_time {
-        log::set_logger(&LOG).expect("set logger");
+    if ENABLE_LOGGING {
+        let is_first_time_initializing_logger = log::set_logger(&LOG).is_ok();
+        if is_first_time_initializing_logger {
+            #[cfg(debug_assertions)]
+            log::set_max_level(log::LevelFilter::Debug);
 
-        #[cfg(debug_assertions)]
-        log::set_max_level(log::LevelFilter::Debug);
+            #[cfg(not(debug_assertions))]
+            log::set_max_level(log::LevelFilter::Info);
 
-        #[cfg(not(debug_assertions))]
-        log::set_max_level(log::LevelFilter::Info);
+            // Show WebRTC logs via application Logger while debugging.
+            #[cfg(debug_assertions)]
+            crate::webrtc::logging::set_logger(log::LevelFilter::Debug);
 
-        // Show WebRTC logs via application Logger while debugging.
-        #[cfg(debug_assertions)]
-        crate::webrtc::logging::set_logger(log::LevelFilter::Debug);
-
-        #[cfg(not(debug_assertions))]
-        crate::webrtc::logging::set_logger(log::LevelFilter::Off);
+            #[cfg(not(debug_assertions))]
+            crate::webrtc::logging::set_logger(log::LevelFilter::Off);
+        }
     }
 
     debug!("JsCallManager()");
