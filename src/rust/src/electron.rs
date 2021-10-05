@@ -5,8 +5,9 @@
 
 use lazy_static::lazy_static;
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -59,12 +60,14 @@ pub struct LogMessage {
     message: String,
 }
 
-// We store the log messages in a queue to be given to JavaScript when it polls so
+// We store the log messages in a queue to be given to JavaScript when it processes events so
 // it can show the messages in the console.
-// I'd like to use a channel, but they seem difficult to create statically.
+// We could report these as Events, but then logging during event processing would cause
+// the event handler to be rescheduled over and over.
 static LOG: Log = Log;
 lazy_static! {
-    static ref LOG_MESSAGES: Mutex<VecDeque<LogMessage>> = Mutex::new(VecDeque::new());
+    static ref LOG_MESSAGES: Mutex<Vec<LogMessage>> = Mutex::new(Vec::new());
+    static ref CURRENT_EVENT_REPORTER: Mutex<Option<EventReporter>> = Mutex::new(None);
 }
 
 struct Log;
@@ -80,19 +83,36 @@ impl log::Log for Log {
                 level:   record.level() as i8,
                 file:    record.file().unwrap().to_string(),
                 line:    record.line().unwrap(),
-                message: format!("{}", record.args()),
+                message: record.args().to_string(),
             };
 
-            let mut messages = LOG_MESSAGES.lock().expect("lock log messages");
-            messages.push_back(message);
+            match CURRENT_EVENT_REPORTER.lock() {
+                Ok(reporter) => {
+                    if let Some(ref reporter) = *reporter {
+                        {
+                            let mut messages = LOG_MESSAGES.lock().expect("lock log messages");
+                            messages.push(message);
+                        }
+                        reporter.report()
+                    }
+                }
+                Err(e) => {
+                    // The reporter panicked previously. At this point it might not be safe to log.
+                    eprintln!("error: could not log to JavaScript: {}", e);
+                    eprintln!(
+                        "note: message contents: {}:{}: {}",
+                        message.file, message.line, message.message
+                    );
+                }
+            }
         }
     }
 
     fn flush(&self) {}
 }
 
-// When JavaScripts polls, we want everything to go through a common queue that
-// combines all the things we want to "push" (through polling) to it.
+// When JavaScript processes events, we want everything to go through a common queue that
+// combines all the things we want to "push" to it.
 // (Well, everything except log messages.  See above as to why).
 pub enum Event {
     // The JavaScript should send the following signaling message to the given
@@ -136,7 +156,33 @@ pub enum Event {
     NetworkRouteChange(PeerId, NetworkRoute),
 }
 
-impl SignalingSender for Sender<Event> {
+/// Wraps a [`std::sync::mpsc::Sender`] with a callback to report new events.
+#[derive(Clone)]
+struct EventReporter {
+    sender: Sender<Event>,
+    report: Arc<dyn Fn() + Send + Sync>,
+}
+
+impl EventReporter {
+    fn new(sender: Sender<Event>, report: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            sender,
+            report: Arc::new(report),
+        }
+    }
+
+    fn send(&self, event: Event) -> Result<()> {
+        self.sender.send(event)?;
+        self.report();
+        Ok(())
+    }
+
+    fn report(&self) {
+        (self.report)();
+    }
+}
+
+impl SignalingSender for EventReporter {
     fn send_signaling(
         &self,
         recipient_id: &str,
@@ -182,7 +228,7 @@ impl SignalingSender for Sender<Event> {
     }
 }
 
-impl CallStateHandler for Sender<Event> {
+impl CallStateHandler for EventReporter {
     fn handle_call_state(&self, remote_peer_id: &str, call_state: CallState) -> Result<()> {
         self.send(Event::CallState(remote_peer_id.to_string(), call_state))?;
         Ok(())
@@ -214,7 +260,7 @@ impl CallStateHandler for Sender<Event> {
     }
 }
 
-impl HttpClient for Sender<Event> {
+impl HttpClient for EventReporter {
     fn send_http_request(
         &self,
         request_id: u32,
@@ -234,7 +280,7 @@ impl HttpClient for Sender<Event> {
     }
 }
 
-impl GroupUpdateHandler for Sender<Event> {
+impl GroupUpdateHandler for EventReporter {
     fn handle_group_update(&self, update: GroupUpdate) -> Result<()> {
         self.send(Event::GroupUpdate(update))?;
         Ok(())
@@ -308,10 +354,21 @@ pub struct CallEndpoint {
         HashMap<(group_call::ClientId, group_call::DemuxId), Box<OneFrameBuffer>>,
 
     peer_connection_factory: PeerConnectionFactory,
+
+    // NOTE: This creates a reference cycle, since the JS-side NativeCallManager has a reference
+    // to the CallEndpoint box. Since we use the NativeCallManager as a singleton, though, this
+    // isn't a problem in practice (except maybe for tests).
+    // If Neon ever adds a Weak type, we should use that instead.
+    // See https://github.com/neon-bindings/neon/issues/674.
+    js_object: Arc<Root<JsObject>>,
 }
 
 impl CallEndpoint {
-    fn new(use_new_audio_device_module: bool) -> Result<Self> {
+    fn new<'a>(
+        cx: &mut impl Context<'a>,
+        js_object: Handle<'a, JsObject>,
+        use_new_audio_device_module: bool,
+    ) -> Result<Self> {
         // Relevant for both group calls and 1:1 calls
         let (events_sender, events_receiver) = channel::<Event>();
         let peer_connection_factory = PeerConnectionFactory::new(pcf::Config {
@@ -325,16 +382,60 @@ impl CallEndpoint {
             peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
         outgoing_video_track.set_enabled(false);
 
+        let event_reported = Arc::new(AtomicBool::new(false));
+        let js_object = Arc::new(Root::new(cx, &*js_object));
+        let js_object_weak = Arc::downgrade(&js_object);
+        let mut js_channel = cx.channel();
+        js_channel.unref(cx); // Don't keep Node alive just for this channel.
+        let event_reporter = EventReporter::new(events_sender, move || {
+            // First check to see if an event has been reported recently.
+            // We aren't using this for synchronizing any other memory state,
+            // so Relaxed is good enough.
+            if event_reported.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
+
+            // Then signal the event through the JavaScript channel.
+            // Ignore any failures; maybe we're resetting the CallEndpoint,
+            // or in the process of quitting the app.
+            if let Some(js_object) = js_object_weak.upgrade() {
+                let event_reported_for_callback = event_reported.clone();
+                let _ = js_channel.try_send(move |mut cx| {
+                    // We aren't using this for synchronizing any other memory state,
+                    // so Relaxed is good enough.
+                    // But we have to do it before the items are actually processed,
+                    // because otherwise a new event could come in *during* the processing.
+                    event_reported_for_callback.store(false, std::sync::atomic::Ordering::Relaxed);
+
+                    let observer = js_object.as_ref().to_inner(&mut cx);
+                    let method_name = "processEvents";
+                    let method = *observer
+                        .get(&mut cx, method_name)?
+                        .downcast::<JsFunction, _>(&mut cx)
+                        .expect("processEvents is a function");
+                    method.call(&mut cx, observer, Vec::<Handle<JsValue>>::new())?;
+                    Ok(())
+                });
+            }
+        });
+
+        {
+            let event_reporter_for_logging = &mut *CURRENT_EVENT_REPORTER
+                .lock()
+                .expect("lock event reporter for logging");
+            *event_reporter_for_logging = Some(event_reporter.clone());
+        }
+
         // Only relevant for 1:1 calls
-        let signaling_sender = Box::new(events_sender.clone());
+        let signaling_sender = Box::new(event_reporter.clone());
         let should_assume_messages_sent = false; // Use async notification from app to send next message.
-        let state_handler = Box::new(events_sender.clone());
+        let state_handler = Box::new(event_reporter.clone());
         let incoming_video_buffer = OneFrameBuffer::new(false /* enabled */);
         let incoming_video_sink = Box::new(incoming_video_buffer.clone());
 
         // Only relevant for group calls
-        let http_client = Box::new(events_sender.clone());
-        let group_handler = Box::new(events_sender);
+        let http_client = Box::new(event_reporter.clone());
+        let group_handler = Box::new(event_reporter);
         let incoming_video_buffer_by_remote_demux_id = HashMap::new();
 
         let platform = NativePlatform::new(
@@ -357,6 +458,7 @@ impl CallEndpoint {
             incoming_video_buffer,
             incoming_video_buffer_by_remote_demux_id,
             peer_connection_factory,
+            js_object,
         })
     }
 }
@@ -425,14 +527,17 @@ fn with_call_endpoint<T>(cx: &mut FunctionContext, body: impl FnOnce(&mut CallEn
     body(&mut *endpoint)
 }
 
-// CallEndpoint doesn't need any custom finalization on the JavaScript side;
-// the default implementation (just Drop it) is sufficient.
-impl Finalize for CallEndpoint {}
+impl Finalize for CallEndpoint {
+    fn finalize<'a, C: Context<'a>>(self, cx: &mut C) {
+        self.js_object.finalize(cx)
+    }
+}
 
 #[allow(non_snake_case)]
 fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let first_time = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-    let use_new_audio_device_module = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let js_call_manager = cx.argument::<JsObject>(0)?;
+    let first_time = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let use_new_audio_device_module = cx.argument::<JsBoolean>(2)?.value(&mut cx);
 
     if ENABLE_LOGGING && first_time {
         log::set_logger(&LOG).expect("set logger");
@@ -452,7 +557,7 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     }
 
     debug!("JsCallManager()");
-    let endpoint = CallEndpoint::new(use_new_audio_device_module)
+    let endpoint = CallEndpoint::new(&mut cx, js_call_manager, use_new_audio_device_module)
         .or_else(|err: failure::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.boxed(RefCell::new(endpoint)).upcast())
 }
@@ -1521,8 +1626,11 @@ fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
-fn poll(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let observer = cx.argument::<JsObject>(0)?;
+fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let this = cx.this();
+    let observer = this
+        .get(&mut cx, "observer")?
+        .downcast_or_throw::<JsObject, _>(&mut cx)?;
 
     let log_entries = std::mem::take(&mut *LOG_MESSAGES.lock().expect("lock log messages"));
     for log_entry in log_entries {
@@ -2236,6 +2344,6 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_setAudioInput", setAudioInput)?;
     cx.export_function("cm_getAudioOutputs", getAudioOutputs)?;
     cx.export_function("cm_setAudioOutput", setAudioOutput)?;
-    cx.export_function("cm_poll", poll)?;
+    cx.export_function("cm_processEvents", processEvents)?;
     Ok(())
 }

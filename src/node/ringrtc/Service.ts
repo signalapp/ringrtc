@@ -23,7 +23,10 @@ class Config {
 
 // tslint:disable-next-line no-unnecessary-class
 class NativeCallManager {
-  constructor() {
+  // Read by Rust
+  private readonly observer: CallManagerCallbacks;
+  constructor(observer: CallManagerCallbacks) {
+    this.observer = observer;
     this.createCallEndpoint(true, new Config());
   }
 
@@ -33,6 +36,7 @@ class NativeCallManager {
 
   private createCallEndpoint(first_time: boolean, config: Config) {
     const callEndpoint = Native.createCallEndpoint(
+      this,
       first_time,
       config.use_new_audio_device_module
     );
@@ -114,7 +118,7 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).getAudioOutputs =
   Native.cm_getAudioOutputs;
 (NativeCallManager.prototype as any).setAudioOutput = Native.cm_setAudioOutput;
-(NativeCallManager.prototype as any).poll = Native.cm_poll;
+(NativeCallManager.prototype as any).processEvents = Native.cm_processEvents;
 
 type GroupId = Buffer;
 type GroupCallUserId = Buffer;
@@ -242,22 +246,14 @@ export class RingRTCType {
     | null = null;
 
   constructor() {
-    this.callManager = new NativeCallManager() as unknown as CallManager;
+    this.callManager = new NativeCallManager(this) as unknown as CallManager;
     this._call = null;
     this._groupCallByClientId = new Map();
     this._peekRequests = new Requests<PeekInfo>();
-    this.pollEvery(50);
   }
 
   setConfig(config: Config) {
     this.callManager.setConfig(config);
-  }
-
-  private pollEvery(intervalMs: number): void {
-    this.callManager.poll(this);
-    setTimeout(() => {
-      this.pollEvery(intervalMs);
-    }, intervalMs);
   }
 
   // Called by UX
@@ -2155,7 +2151,6 @@ export interface CallManager {
   setAudioInput(index: number): void;
   getAudioOutputs(): AudioDevice[];
   setAudioOutput(index: number): void;
-  poll(callbacks: CallManagerCallbacks): void;
 }
 
 export interface CallManagerCallbacks {
