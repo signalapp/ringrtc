@@ -127,7 +127,7 @@ impl TestContext {
         let active_call = self.call_manager.active_call().unwrap();
         match active_call.active_connection() {
             Ok(v) => v,
-            Err(_) => active_call.get_connection(1 as DeviceId).unwrap(),
+            Err(_) => active_call.get_connection(1).unwrap(),
         }
     }
 
@@ -246,7 +246,7 @@ impl TestContext {
         group_id: group_call::GroupId,
     ) -> Result<group_call::ClientId, anyhow::Error> {
         self.cm().create_group_call_client(
-            group_id.clone(),
+            group_id,
             "".to_owned(),
             None,
             ringrtc::webrtc::media::AudioTrack::unowned(std::ptr::null()),
@@ -272,9 +272,9 @@ pub fn random_received_offer(_prng: &Prng, age: Duration) -> signaling::Received
     signaling::ReceivedOffer {
         offer,
         age,
-        sender_device_id: 1 as DeviceId,
+        sender_device_id: 1,
         sender_device_feature_level: FeatureLevel::MultiRing,
-        receiver_device_id: 1 as DeviceId,
+        receiver_device_id: 1,
         receiver_device_is_primary: true,
         sender_identity_key: Vec::new(),
         receiver_identity_key: Vec::new(),
@@ -306,7 +306,7 @@ pub fn random_received_answer(
 }
 
 pub fn random_ice_candidate(prng: &Prng) -> signaling::IceCandidate {
-    let sdp = format!("ICE-CANDIDATE-{}", prng.gen::<u16>()).to_owned();
+    let sdp = format!("ICE-CANDIDATE-{}", prng.gen::<u16>());
     // V1 and V2 are the same for ICE candidates
     let ice_candidate = signaling::IceCandidate::from_v3_sdp(sdp).unwrap();
     signaling::IceCandidate::new(ice_candidate.opaque)
@@ -318,6 +318,6 @@ pub fn random_received_ice_candidate(prng: &Prng) -> signaling::ReceivedIce {
         ice:              signaling::Ice {
             candidates: vec![candidate],
         },
-        sender_device_id: 1 as DeviceId,
+        sender_device_id: 1,
     }
 }

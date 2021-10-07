@@ -564,7 +564,7 @@ enum RemoteDevicesRequestState {
     WaitingForMembershipProof,
     NeverRequested,
     Requested {
-        // While waiting, something happend that makes us think we should ask again.
+        // While waiting, something happened that makes us think we should ask again.
         should_request_again: bool,
         at:                   Instant,
     },
@@ -589,6 +589,7 @@ pub struct Client {
     actor:                Actor<State>,
 }
 
+#[derive(Default)]
 struct RemoteDevices(Vec<RemoteDeviceState>);
 
 impl Deref for RemoteDevices {
@@ -602,12 +603,6 @@ impl Deref for RemoteDevices {
 impl DerefMut for RemoteDevices {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-impl Default for RemoteDevices {
-    fn default() -> Self {
-        Self(Default::default())
     }
 }
 
@@ -3274,6 +3269,7 @@ mod tests {
     }
 
     #[derive(Clone)]
+    #[allow(dead_code)]  // Ignore clippy warning for era_id due to compile error.
     struct FakeObserver {
         // For sending messages
         user_id:                       UserId,
@@ -3366,7 +3362,7 @@ mod tests {
 
         fn joined_members(&self) -> Vec<UserId> {
             let peek_state = self.peek_state.lock().expect("Lock peek state to read it");
-            peek_state.joined_members.iter().cloned().collect()
+            peek_state.joined_members.to_vec()
         }
 
         fn peek_state(&self) -> FakeObserverPeekState {
@@ -3427,7 +3423,7 @@ mod tests {
                 .remote_devices
                 .lock()
                 .expect("Lock recipients to set remote devices");
-            *owned_remote_devices = remote_devices.iter().cloned().collect();
+            *owned_remote_devices = remote_devices.to_vec();
             self.handle_remote_devices_changed_invocation_count.fetch_add(1, Ordering::Relaxed);
         }
 
@@ -3444,8 +3440,8 @@ mod tests {
                 .peek_state
                 .lock()
                 .expect("Lock peek state to handle update");
-            owned_state.joined_members = joined_members.iter().cloned().collect();
-            owned_state.creator = creator.clone();
+            owned_state.joined_members = joined_members.to_vec();
+            owned_state.creator = creator;
             owned_state.era_id = era_id.map(String::from);
             owned_state.max_devices = max_devices;
             owned_state.device_count = device_count;
@@ -3545,7 +3541,7 @@ mod tests {
 
     // Just so it's something different
     fn demux_id_to_long_device_id(demux_id: DemuxId) -> String {
-        format!("long-{}", demux_id).to_string()
+        format!("long-{}", demux_id)
     }
 
     impl TestClient {
@@ -3604,7 +3600,7 @@ mod tests {
                 })
                 .collect();
             // Need to clone to pass over to the actor and set in observer.
-            let clients: Vec<TestClient> = clients.into_iter().copied().cloned().collect();
+            let clients: Vec<TestClient> = clients.iter().copied().cloned().collect();
             self.observer.set_recipients(clients.clone());
             let peek_info = PeekInfo {
                 devices: remote_devices,
@@ -3657,7 +3653,7 @@ mod tests {
             assert_eq!(
                 ciphertext.len(),
                 self.client
-                    .encrypt_media(is_audio, &plaintext, &mut ciphertext)?
+                    .encrypt_media(is_audio, plaintext, &mut ciphertext)?
             );
             Ok(ciphertext)
         }
@@ -3683,7 +3679,7 @@ mod tests {
                 self.client.decrypt_media(
                     remote_demux_id,
                     is_audio,
-                    &ciphertext,
+                    ciphertext,
                     &mut plaintext
                 )?
             );
@@ -3698,7 +3694,7 @@ mod tests {
 
         // DemuxIds sorted by speaker_time, then added_time, then demux_id.
         fn speakers(&self) -> Vec<DemuxId> {
-            let mut devices = self.observer.remote_devices().clone();
+            let mut devices = self.observer.remote_devices();
             devices.sort_by_key(|device| {
                 (
                     std::cmp::Reverse(device.speaker_time_as_unix_millis()),
@@ -3997,7 +3993,7 @@ mod tests {
 
         let remote_devices = client2.observer.remote_devices();
         assert_eq!(1, remote_devices.len());
-        assert_eq!(false, remote_devices[0].media_keys_received);
+        assert!(!remote_devices[0].media_keys_received);
 
         let is_audio = false;
         let plaintext = &b"Fake Video is big"[..];
@@ -4014,7 +4010,7 @@ mod tests {
 
         let remote_devices = client2.observer.remote_devices();
         assert_eq!(1, remote_devices.len());
-        assert_eq!(true, remote_devices[0].media_keys_received);
+        assert!(remote_devices[0].media_keys_received);
 
         assert_eq!(
             plaintext,
@@ -4264,7 +4260,7 @@ mod tests {
 
         peeker.set_remotes_and_wait_until_applied(&[&joiner1, &joiner2]);
         assert_eq!(
-            hash_set(&[joiner1.user_id.clone(), joiner2.user_id.clone()]),
+            hash_set(&[joiner1.user_id, joiner2.user_id]),
             hash_set(&peeker.observer.joined_members())
         );
 
@@ -4443,8 +4439,7 @@ mod tests {
                         },
                     ],
                     max_kbps:  None,
-                }),
-                ..DeviceToSfu::default()
+                })
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
@@ -4465,7 +4460,7 @@ mod tests {
         client1.client.request_video(requests.clone());
         client1.client.request_video(requests.clone());
         client1.client.request_video(requests.clone());
-        client1.client.request_video(requests.clone());
+        client1.client.request_video(requests);
 
         let before = Instant::now();
         let _ = receiver
@@ -4504,8 +4499,7 @@ mod tests {
                         },
                     ],
                     max_kbps:  Some(1),
-                }),
-                ..DeviceToSfu::default()
+                })
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
@@ -4533,8 +4527,7 @@ mod tests {
                         },
                     ],
                     max_kbps:  Some(500),
-                }),
-                ..DeviceToSfu::default()
+                })
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
@@ -4562,8 +4555,7 @@ mod tests {
                         },
                     ],
                     max_kbps:  Some(20_000_000),
-                }),
-                ..DeviceToSfu::default()
+                })
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
@@ -4583,7 +4575,7 @@ mod tests {
 
         client1.set_remotes_and_wait_until_applied(&[&client2, &client3]);
         assert_eq!(
-            hash_set(vec![client2.user_id.clone(), client3.user_id.clone()]),
+            hash_set(vec![client2.user_id, client3.user_id]),
             hash_set(client1.observer.joined_members())
         );
 
@@ -4651,12 +4643,12 @@ mod tests {
         // Setting the same list again - even in a different order - does not trigger a poll
         client1
             .client
-            .set_group_members(vec![user_b.clone(), user_a.clone()]);
+            .set_group_members(vec![user_b, user_a.clone()]);
         client1.wait_for_client_to_process();
         assert_eq!(initial_count + 1, client1.sfu_client.request_count());
 
         // Setting a different list triggers a poll
-        client1.client.set_group_members(vec![user_a.clone()]);
+        client1.client.set_group_members(vec![user_a]);
         client1.wait_for_client_to_process();
         assert_eq!(initial_count + 2, client1.sfu_client.request_count());
 

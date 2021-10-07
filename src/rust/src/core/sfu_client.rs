@@ -46,9 +46,6 @@ struct SfuTransport {
 struct SfuCandidate {
     ip:             String,
     port:           u16,
-    /// Candidate type ('host', 'srflx' etc.)
-    #[serde(rename = "type")]
-    candidate_type: String,
 }
 
 #[derive(Deserialize, Debug)]

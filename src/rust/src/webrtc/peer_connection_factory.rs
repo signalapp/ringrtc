@@ -119,7 +119,7 @@ pub struct IceServer {
     username: CString,
     password: CString,
     // To own the strings
-    urls:     Vec<CString>,
+    _urls:    Vec<CString>,
     // To hand the strings to C
     url_ptrs: Vec<*const c_char>,
 }
@@ -137,7 +137,7 @@ impl IceServer {
         Self {
             username: CString::new(username).expect("CString of username"),
             password: CString::new(password).expect("CString of password"),
-            urls,
+            _urls: urls,
             url_ptrs,
         }
     }
@@ -183,20 +183,9 @@ impl AudioDevice {
     }
 }
 
-/// Rust wrapper around WebRTC C++ AudioDeviceModule object.
-#[derive(Debug)]
-pub struct AudioDeviceModule {
-    rffi: webrtc::Arc<pcf::RffiAudioDeviceModule>,
-}
-
-impl AudioDeviceModule {
-    pub fn new(rffi: webrtc::Arc<pcf::RffiAudioDeviceModule>) -> Self {
-        Self { rffi, }
-    }
-}
-
 /// Rust wrapper around WebRTC C++ PeerConnectionFactory object.
 #[derive(Clone, Debug)]
+#[allow(dead_code)] // use_new_audio_device_module is currently used only for Windows builds.
 pub struct PeerConnectionFactory {
     rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
     use_new_audio_device_module: bool,

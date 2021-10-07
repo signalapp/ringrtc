@@ -14,7 +14,7 @@ use std::ptr;
 use std::time::Duration;
 
 use prost::Message;
-use ringrtc::common::{ApplicationEvent, CallId, CallState, ConnectionState, DeviceId};
+use ringrtc::common::{ApplicationEvent, CallId, CallState, ConnectionState};
 use ringrtc::core::bandwidth_mode::BandwidthMode;
 use ringrtc::core::call_manager::MAX_MESSAGE_AGE;
 use ringrtc::core::group_call;
@@ -43,7 +43,7 @@ fn start_inbound_call() -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
@@ -54,7 +54,7 @@ fn start_inbound_call() -> TestContext {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(cm.active_call().is_ok(), true);
+    assert!(cm.active_call().is_ok());
     assert_eq!(context.start_outgoing_count(), 0);
     assert_eq!(context.start_incoming_count(), 1);
 
@@ -66,7 +66,7 @@ fn start_inbound_call() -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -74,7 +74,7 @@ fn start_inbound_call() -> TestContext {
     cm.synchronize().expect(error_line!());
 
     let connection = active_call
-        .get_connection(1 as DeviceId)
+        .get_connection(1)
         .expect(error_line!());
 
     cm.received_ice(
@@ -153,9 +153,8 @@ fn connect_inbound_call() -> TestContext {
     assert_eq!(context.event_count(ApplicationEvent::LocalRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
-    assert_eq!(
-        false,
-        active_connection
+    assert!(
+        !active_connection
             .app_connection()
             .unwrap()
             .outgoing_audio_enabled(),
@@ -183,8 +182,7 @@ fn connect_inbound_call() -> TestContext {
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
-    assert_eq!(
-        true,
+    assert!(
         active_connection
             .app_connection()
             .unwrap()
@@ -212,8 +210,8 @@ fn inbound_call_hangup_accepted() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
-            hangup:           signaling::Hangup::AcceptedOnAnotherDevice(2 as DeviceId),
+            sender_device_id: 1,
+            hangup:           signaling::Hangup::AcceptedOnAnotherDevice(2),
         },
     )
     .expect(error_line!());
@@ -238,8 +236,8 @@ fn inbound_call_hangup_declined() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
-            hangup:           signaling::Hangup::DeclinedOnAnotherDevice(2 as DeviceId),
+            sender_device_id: 1,
+            hangup:           signaling::Hangup::DeclinedOnAnotherDevice(2),
         },
     )
     .expect(error_line!());
@@ -264,8 +262,8 @@ fn inbound_call_hangup_busy() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
-            hangup:           signaling::Hangup::BusyOnAnotherDevice(2 as DeviceId),
+            sender_device_id: 1,
+            hangup:           signaling::Hangup::BusyOnAnotherDevice(2),
         },
     )
     .expect(error_line!());
@@ -286,7 +284,7 @@ fn start_inbound_call_with_error() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
@@ -297,7 +295,7 @@ fn start_inbound_call_with_error() {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(cm.active_call().is_ok(), true);
+    assert!(cm.active_call().is_ok());
     assert_eq!(context.start_outgoing_count(), 0);
     assert_eq!(context.start_incoming_count(), 1);
 
@@ -312,7 +310,7 @@ fn start_inbound_call_with_error() {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -322,7 +320,7 @@ fn start_inbound_call_with_error() {
     context.force_internal_fault(false);
 
     let connection = active_call
-        .get_connection(1 as DeviceId)
+        .get_connection(1)
         .expect(error_line!());
 
     assert_eq!(
@@ -348,7 +346,7 @@ fn receive_offer_while_active() {
     let context = connect_inbound_call();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
         remote_peer,
@@ -375,7 +373,7 @@ fn receive_expired_offer() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     let age = Duration::from_secs(86400); // one whole day
     cm.received_offer(
@@ -398,7 +396,7 @@ fn receive_offer_before_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     let age = MAX_MESSAGE_AGE - Duration::from_secs(1);
     cm.received_offer(
@@ -421,7 +419,7 @@ fn receive_offer_at_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     let age = MAX_MESSAGE_AGE;
     cm.received_offer(
@@ -444,7 +442,7 @@ fn receive_expired_offer_after_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     let age = MAX_MESSAGE_AGE + Duration::from_secs(1);
     cm.received_offer(
@@ -800,7 +798,7 @@ fn group_call_ring_responses() {
     // We should ignore "ringing" messages regardless.
     let message = protobuf::signaling::CallMessage {
         ring_response: Some(protobuf::signaling::call_message::RingResponse {
-            group_id: Some(group_id.clone()),
+            group_id: Some(group_id),
             ring_id:  Some(ring_id.into()),
             r#type:   Some(protobuf::signaling::call_message::ring_response::Type::Ringing.into()),
         }),
@@ -811,7 +809,7 @@ fn group_call_ring_responses() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 

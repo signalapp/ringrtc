@@ -63,13 +63,13 @@ fn start_outbound_and_proceed() -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
-    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    cm.call(remote_peer, CallMediaType::Audio, 1)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(cm.active_call().is_ok(), true);
+    assert!(cm.active_call().is_ok());
     assert_eq!(context.start_outgoing_count(), 1);
     assert_eq!(context.start_incoming_count(), 0);
 
@@ -79,12 +79,9 @@ fn start_outbound_and_proceed() -> TestContext {
         CallState::WaitingToProceed
     );
 
-    let mut remote_devices = Vec::<DeviceId>::new();
-    remote_devices.push(1);
-
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -122,13 +119,13 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     // don't go nuts
     assert!(n_remotes < 20);
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
-    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    cm.call(remote_peer, CallMediaType::Audio, 1)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(cm.active_call().is_ok(), true);
+    assert!(cm.active_call().is_ok());
     assert_eq!(context.start_outgoing_count(), 1);
     assert_eq!(context.start_incoming_count(), 0);
 
@@ -140,7 +137,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -790,7 +787,7 @@ fn ice_candidate_removal() {
         call_id,
         signaling::ReceivedIce {
             ice:              last_sent.ice,
-            sender_device_id: 1 as DeviceId,
+            sender_device_id: 1,
         },
     )
     .expect("receive_ice");
@@ -914,7 +911,7 @@ fn received_remote_hangup_before_connection() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
+            sender_device_id: 1,
             hangup:           signaling::Hangup::Normal,
         },
     )
@@ -957,7 +954,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
+            sender_device_id: 1,
             hangup:           signaling::Hangup::Normal,
         },
     )
@@ -993,8 +990,8 @@ fn received_remote_hangup_before_connection_for_permission() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
-            hangup:           signaling::Hangup::NeedPermission(Some(1 as DeviceId)),
+            sender_device_id: 1,
+            hangup:           signaling::Hangup::NeedPermission(Some(1)),
         },
     )
     .expect(error_line!());
@@ -1041,8 +1038,8 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
-            hangup:           signaling::Hangup::NeedPermission(Some(1 as DeviceId)),
+            sender_device_id: 1,
+            hangup:           signaling::Hangup::NeedPermission(Some(1)),
         },
     )
     .expect(error_line!());
@@ -1079,7 +1076,7 @@ fn received_remote_hangup_after_connection() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
+            sender_device_id: 1,
             hangup:           signaling::Hangup::Normal,
         },
     )
@@ -1103,7 +1100,7 @@ fn received_remote_needs_permission() {
     cm.received_hangup(
         active_call.call_id(),
         signaling::ReceivedHangup {
-            sender_device_id: 1 as DeviceId,
+            sender_device_id: 1,
             hangup:           signaling::Hangup::NeedPermission(None),
         },
     )
@@ -1376,13 +1373,13 @@ fn outbound_proceed_with_error() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
-    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    cm.call(remote_peer, CallMediaType::Audio, 1)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(cm.active_call().is_ok(), true);
+    assert!(cm.active_call().is_ok());
     assert_eq!(context.start_outgoing_count(), 1);
     assert_eq!(context.start_incoming_count(), 0);
 
@@ -1398,7 +1395,7 @@ fn outbound_proceed_with_error() {
     let active_call = context.active_call();
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -1529,9 +1526,8 @@ fn outbound_multiple_remote_devices() {
         "test:active_remote:{}: injecting call connected",
         active_remote
     );
-    assert_eq!(
-        false,
-        active_connection
+    assert!(
+        !active_connection
             .app_connection()
             .unwrap()
             .outgoing_audio_enabled(),
@@ -1550,8 +1546,7 @@ fn outbound_multiple_remote_devices() {
         active_call.state().expect(error_line!()),
         CallState::ConnectedAndAccepted
     );
-    assert_eq!(
-        true,
+    assert!(
         active_connection
             .app_connection()
             .unwrap()
@@ -1883,13 +1878,13 @@ fn start_outbound_receive_busy() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>()).to_owned();
-    cm.call(remote_peer, CallMediaType::Audio, 1 as DeviceId)
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    cm.call(remote_peer, CallMediaType::Audio, 1)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(cm.active_call().is_ok(), true);
+    assert!(cm.active_call().is_ok());
     assert_eq!(context.start_outgoing_count(), 1);
     assert_eq!(context.start_incoming_count(), 0);
 
@@ -1904,7 +1899,7 @@ fn start_outbound_receive_busy() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()).to_owned(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
     )
     .expect(error_line!());
@@ -1915,7 +1910,7 @@ fn start_outbound_receive_busy() {
     cm.received_busy(
         call_id,
         signaling::ReceivedBusy {
-            sender_device_id: 1 as DeviceId,
+            sender_device_id: 1,
         },
     )
     .expect(error_line!());
@@ -2036,7 +2031,7 @@ fn group_call_ring_accepted() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -2096,7 +2091,7 @@ fn group_call_ring_too_old() {
     let mut cm = context.cm();
 
     let self_uuid = vec![1, 0, 1];
-    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+    cm.set_self_uuid(self_uuid).expect(error_line!());
 
     let group_id = vec![1, 1, 1];
     let sender = vec![1, 2, 3];
@@ -2115,13 +2110,13 @@ fn group_call_ring_too_old() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     cm.age_all_outstanding_group_rings(Duration::from_secs(600));
 
     let group_call_id = context
-        .create_group_call(group_id.clone())
+        .create_group_call(group_id)
         .expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
@@ -2164,7 +2159,7 @@ fn group_call_ring_message_age_does_not_affect_ring_expiration() {
         .expect("cannot fail encoding to Vec");
 
     // 45 seconds means the ring isn't expired yet...
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::from_secs(45))
+    cm.received_call_message(sender, 1, 2, buf, Duration::from_secs(45))
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     // ...and adding another 45 won't make it expire, since the ages don't stack.
@@ -2252,7 +2247,7 @@ fn group_call_ring_first_ring_wins() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -2301,7 +2296,7 @@ fn group_call_ring_cancelled_locally_before_join() {
     let mut cm = context.cm();
 
     let self_uuid = vec![1, 0, 1];
-    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+    cm.set_self_uuid(self_uuid).expect(error_line!());
 
     let group_id = vec![1, 1, 1];
     let sender = vec![1, 2, 3];
@@ -2320,7 +2315,7 @@ fn group_call_ring_cancelled_locally_before_join() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     cm.cancel_group_ring(group_id.clone(), ring_id, None)
@@ -2328,7 +2323,7 @@ fn group_call_ring_cancelled_locally_before_join() {
     cm.synchronize().expect(error_line!());
 
     let group_call_id = context
-        .create_group_call(group_id.clone())
+        .create_group_call(group_id)
         .expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
@@ -2351,7 +2346,7 @@ fn group_call_ring_cancelled_by_ringer_before_join() {
     let mut cm = context.cm();
 
     let self_uuid = vec![1, 0, 1];
-    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+    cm.set_self_uuid(self_uuid).expect(error_line!());
 
     let group_id = vec![1, 1, 1];
     let sender = vec![1, 2, 3];
@@ -2388,13 +2383,13 @@ fn group_call_ring_cancelled_by_ringer_before_join() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
 
     let group_call_id = context
-        .create_group_call(group_id.clone())
+        .create_group_call(group_id)
         .expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
@@ -2436,7 +2431,7 @@ fn group_call_ring_cancelled_by_another_device_before_join() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
 
     let cancel_message = protobuf::signaling::CallMessage {
@@ -2452,12 +2447,12 @@ fn group_call_ring_cancelled_by_another_device_before_join() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(self_uuid.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(self_uuid, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
     let group_call_id = context
-        .create_group_call(group_id.clone())
+        .create_group_call(group_id)
         .expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
