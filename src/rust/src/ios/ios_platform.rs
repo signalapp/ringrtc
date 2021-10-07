@@ -151,7 +151,9 @@ impl Platform for IosPlatform {
 
         // Retrieve the underlying PeerConnection object from the
         // application owned RTCPeerConnection object.
-        let rffi_peer_connection = webrtc::Arc::from_borrowed_ptr(app_connection_interface.pc as *const RffiPeerConnection);
+        let rffi_peer_connection = unsafe {
+            webrtc::Arc::from_borrowed(webrtc::ptr::BorrowedRc::from_ptr(app_connection_interface.pc as *const RffiPeerConnection))
+        };
         if rffi_peer_connection.is_null() {
             return Err(IosError::ExtractNativePeerConnection.into());
         }

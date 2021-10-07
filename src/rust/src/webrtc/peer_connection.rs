@@ -5,7 +5,6 @@
 
 //! WebRTC Peer Connection Interface
 use std::ffi::CString;
-use std::fmt;
 use std::net::SocketAddr;
 
 use crate::core::util::redact_string;
@@ -41,6 +40,7 @@ pub use crate::webrtc::sim::peer_connection::{
 };
 
 /// Rust wrapper around WebRTC C++ PeerConnection object.
+#[derive(Debug)]
 pub struct PeerConnection {
     rffi:          webrtc::Arc<RffiPeerConnection>,
     /// Pointer to C++ PeerConnectionObserverInterface (never owned)
@@ -60,21 +60,6 @@ pub struct SendRates {
     pub start: Option<DataRate>,
     pub max:   Option<DataRate>,
 }
-
-impl fmt::Display for PeerConnection {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "rffi_peer_connection: {:p}", self.rffi.as_borrowed_ptr())
-    }
-}
-
-impl fmt::Debug for PeerConnection {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-unsafe impl Send for PeerConnection {}
-unsafe impl Sync for PeerConnection {}
 
 impl PeerConnection {
     pub fn new(rffi: webrtc::Arc<RffiPeerConnection>, rffi_pc_observer: *const RffiPeerConnectionObserver, rffi_pcf: Option<webrtc::Arc<RffiPeerConnectionFactoryOwner>>) -> Self {

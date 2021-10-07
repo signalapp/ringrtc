@@ -612,7 +612,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
     call_manager: jlong,
     group_id: jbyteArray,
     sfu_url: JString,
-    native_peer_connection_factory: jlong,
+    native_peer_connection_factory_borrowed_rc: jlong,
     native_audio_track: jlong,
     native_video_track: jlong,
 ) -> jlong {
@@ -621,7 +621,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
         call_manager as *mut AndroidCallManager,
         group_id,
         sfu_url,
-        native_peer_connection_factory,
+        native_peer_connection_factory_borrowed_rc,
         native_audio_track,
         native_video_track,
     ) {

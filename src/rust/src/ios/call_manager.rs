@@ -474,7 +474,7 @@ pub fn create_group_call_client(
     call_manager: *mut IosCallManager,
     group_id: group_call::GroupId,
     sfu_url: String,
-    native_owned_pcf: *const c_void,
+    native_pcf_owned_rc: *const c_void,
     native_owned_audio_track: *const c_void,
     native_owned_video_track: *const c_void,
 ) -> Result<group_call::ClientId> {
@@ -485,11 +485,8 @@ pub fn create_group_call_client(
     let outgoing_video_track =
         media::VideoTrack::owned(native_owned_video_track as *const media::RffiVideoTrack);
 
-    let native_pcf_ref = webrtc::Arc::from_owned_ptr(
-        native_owned_pcf as *const pcf::RffiPeerConnectionFactoryInterface,
-    );
     let peer_connection_factory =
-        unsafe { PeerConnectionFactory::from_native_factory(native_pcf_ref.as_borrowed_ptr()) };
+        unsafe { PeerConnectionFactory::from_native_factory(webrtc::Arc::from_owned(webrtc::ptr::OwnedRc::from_ptr(native_pcf_owned_rc as *const pcf::RffiPeerConnectionFactoryInterface))) };
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(

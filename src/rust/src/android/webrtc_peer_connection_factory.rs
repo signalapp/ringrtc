@@ -9,6 +9,7 @@ use jni::objects::{JClass, JObject};
 use jni::sys::{jboolean, jlong};
 use jni::JNIEnv;
 
+use crate::webrtc;
 use crate::webrtc::peer_connection::RffiPeerConnection;
 
 extern "C" {
@@ -27,10 +28,9 @@ extern "C" {
     ) -> jlong;
 }
 
-/// Retrieve the underlying PeerConnection object from the
-/// JNI OwnedPeerConnection object.
+/// Get the native PeerConnection inside of the Java wrapper.
 extern "C" {
     pub fn Rust_borrowPeerConnectionFromJniOwnedPeerConnection(
         jni_owned_pc: i64,
-    ) -> *const RffiPeerConnection;
+    ) -> webrtc::ptr::BorrowedRc<RffiPeerConnection>;
 }

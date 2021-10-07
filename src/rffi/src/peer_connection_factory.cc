@@ -20,6 +20,7 @@
 #include "rffi/api/peer_connection_observer_intf.h"
 #include "rffi/api/injectable_network.h"
 #include "rffi/src/peer_connection_observer.h"
+#include "rffi/src/ptr.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/log_sinks.h"
 #include "rtc_base/message_digest.h"
@@ -111,8 +112,7 @@ class PeerConnectionFactoryWithOwnedThreads
     dependencies.media_engine = cricket::CreateMediaEngine(std::move(media_dependencies));
 
     auto factory = CreateModularPeerConnectionFactory(std::move(dependencies));
-    // TODO: Use rtc::make_ref_counted once it's available.
-    return rtc::scoped_refptr<PeerConnectionFactoryWithOwnedThreads>(new rtc::RefCountedObject<PeerConnectionFactoryWithOwnedThreads>(
+    return make_ref_counted<PeerConnectionFactoryWithOwnedThreads>(
         std::move(factory),
         std::move(network_thread),
         std::move(worker_thread),
@@ -121,7 +121,7 @@ class PeerConnectionFactoryWithOwnedThreads
 #if defined(WEBRTC_WIN)
         std::move(com_initializer),
 #endif
-        adm));
+        adm);
   }
 
   ~PeerConnectionFactoryWithOwnedThreads() override {
@@ -262,17 +262,20 @@ class PeerConnectionFactoryWithOwnedThreads
   const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
 };
 
+// Returns an owned RC to a PeerConnectionFactory.
 RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
     bool use_new_audio_device_module,
     bool use_injectable_network) {
   auto factory_owner = PeerConnectionFactoryWithOwnedThreads::Create(
     use_new_audio_device_module,
     use_injectable_network);
-  return factory_owner.release();
+  return take_owned_rc(std::move(factory_owner));
 }
 
+// Takes a borrowed RC to a PeerConnectionFactory.
+// Returns an owned RC to a PeerConnectionFactoryOwner.
 RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
-    PeerConnectionFactoryInterface* pcf) {
+    PeerConnectionFactoryInterface* pcf_borrowed_rc) {
   class PeerConnectionFactoryWrapper : public PeerConnectionFactoryOwner {
   public:
     PeerConnectionFactoryInterface* peer_connection_factory() override {
@@ -288,8 +291,7 @@ RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
     const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
   };
 
-  auto result = new rtc::RefCountedObject<PeerConnectionFactoryWrapper>{pcf};
-  return rtc::scoped_refptr<PeerConnectionFactoryWrapper>(result).release();
+  return take_owned_rc(make_ref_counted<PeerConnectionFactoryWrapper>(clone_borrowed_rc(pcf_borrowed_rc)));
 }
 
 RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
@@ -367,7 +369,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     }
   }
 
-  return pc.release();
+  return take_owned_rc(pc);
 }
 
 RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
@@ -375,6 +377,8 @@ RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
   return factory_owner->injectable_network();
 }
 
+// Takes a borrowed RC to a PeerConnectionFactory
+// Returns an owned RC to an AudioTrack.
 RUSTEXPORT AudioTrackInterface* Rust_createAudioTrack(
     PeerConnectionFactoryOwner* factory_owner) {
   auto factory = factory_owner->peer_connection_factory();

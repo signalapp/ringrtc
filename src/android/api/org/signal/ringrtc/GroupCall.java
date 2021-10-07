@@ -122,6 +122,7 @@ public final class GroupCall {
                 nativeCallManager,
                 groupId,
                 sfuUrl,
+                // Returns a borrowed RC.
                 factory.getNativePeerConnectionFactory(),
                 this.outgoingAudioTrack.getNativeAudioTrack(),
                 this.outgoingVideoTrack.getNativeVideoTrack());

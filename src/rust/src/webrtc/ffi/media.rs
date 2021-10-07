@@ -5,6 +5,7 @@
 
 #[cfg(feature = "native")]
 use crate::core::util::{CppObject, RustObject};
+use crate::webrtc;
 pub use crate::webrtc::media::VideoRotation;
 
 /// Incomplete type for WebRTC C++ MediaStream.
@@ -19,6 +20,11 @@ pub struct RffiMediaStream {
 pub struct RffiAudioTrack {
     _private: [u8; 0],
 }
+
+// See "class MediaStreamTrackInterface : public rtc::RefCountInterface"
+// and "class AudioTrackInterface: public MediaStreamTrackInterface"
+// in webrtc/api/media_stream_interface.h
+impl webrtc::RefCounted for RffiAudioTrack {}
 
 /// Incomplete type for C++ VideoSource.
 #[repr(C)]

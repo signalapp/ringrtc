@@ -196,24 +196,11 @@ impl AudioDeviceModule {
 }
 
 /// Rust wrapper around WebRTC C++ PeerConnectionFactory object.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PeerConnectionFactory {
     rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
     use_new_audio_device_module: bool,
 }
-
-impl fmt::Display for PeerConnectionFactory {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PeerConnectionFactory: {:p}", self.rffi.as_borrowed_ptr())
-    }
-}
-
-impl fmt::Debug for PeerConnectionFactory {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
 
 #[derive(Default)]
 pub struct Config {
@@ -229,11 +216,11 @@ impl PeerConnectionFactory {
 
         let (rffi, use_new_audio_device_module) = {
             let use_new_audio_device_module = config.use_new_audio_device_module;
-            let rffi = webrtc::Arc::from_owned_ptr(unsafe {
+            let rffi = unsafe {webrtc::Arc::from_owned(
                  pcf::Rust_createPeerConnectionFactory(
                      config.use_new_audio_device_module,
-                     config.use_injectable_network) 
-            });
+                     config.use_injectable_network)
+            )};
 
             #[cfg(target_os = "windows")]
             if use_new_audio_device_module {
@@ -256,10 +243,10 @@ impl PeerConnectionFactory {
     ///
     /// `native` must point to a C++ PeerConnectionFactory.
     pub unsafe fn from_native_factory(
-        native: *const RffiPeerConnectionFactoryInterface
+        native: webrtc::Arc<RffiPeerConnectionFactoryInterface>,
     ) -> Self {
-        let rffi = webrtc::Arc::from_owned_ptr(
-            pcf::Rust_createPeerConnectionFactoryWrapper(native)
+        let rffi = webrtc::Arc::from_owned(
+            pcf::Rust_createPeerConnectionFactoryWrapper(native.as_borrowed())
         );
         Self { rffi, use_new_audio_device_module: false }
     }
@@ -286,10 +273,10 @@ impl PeerConnectionFactory {
         enable_rtp_data_channel: bool,
     ) -> Result<PeerConnection> {
         debug!(
-            "PeerConnectionFactory::create_peer_connection() {:p}",
-            self.rffi.as_borrowed_ptr()
+            "PeerConnectionFactory::create_peer_connection() {:?}",
+            self.rffi
         );
-        let rffi = webrtc::Arc::from_owned_ptr(unsafe {
+        let rffi = webrtc::Arc::from_owned(unsafe {
             pcf::Rust_createPeerConnection(
                 self.rffi.as_borrowed_ptr(),
                 observer.rffi(),
@@ -305,8 +292,8 @@ impl PeerConnectionFactory {
             )
         });
         debug!(
-            "PeerConnectionFactory::create_peer_connection() finished: {:p}",
-            rffi.as_borrowed_ptr()
+            "PeerConnectionFactory::create_peer_connection() finished: {:?}",
+            rffi
         );
         if rffi.is_null() {
             return Err(RingRtcError::CreatePeerConnection.into());
@@ -316,11 +303,11 @@ impl PeerConnectionFactory {
 
     pub fn create_outgoing_audio_track(&self) -> Result<AudioTrack> {
         debug!("PeerConnectionFactory::create_outgoing_audio_track()");
-        let rffi = unsafe { pcf::Rust_createAudioTrack(self.rffi.as_borrowed_ptr()) };
+        let rffi = unsafe { pcf::Rust_createAudioTrack(self.rffi.as_borrowed()) };
         if rffi.is_null() {
             return Err(RingRtcError::CreateAudioTrack.into());
         }
-        Ok(AudioTrack::owned(rffi))
+        Ok(AudioTrack::owned(rffi.as_ptr()))
     }
 
     pub fn create_outgoing_video_source(&self) -> Result<VideoSource> {

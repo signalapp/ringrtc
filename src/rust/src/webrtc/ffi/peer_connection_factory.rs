@@ -49,10 +49,10 @@ extern "C" {
     pub fn Rust_createPeerConnectionFactory(
         use_new_audio_device_module: bool,
         use_injectable_network: bool,
-    ) -> *const RffiPeerConnectionFactoryOwner;
+    ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner>;
     pub fn Rust_createPeerConnectionFactoryWrapper(
-        factory: *const RffiPeerConnectionFactoryInterface,
-    ) -> *const RffiPeerConnectionFactoryOwner;
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryInterface>,
+    ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner>;
     #[cfg(feature = "simnet")]
     pub fn Rust_getInjectableNetwork(
         factory: *const RffiPeerConnectionFactoryOwner,
@@ -68,10 +68,10 @@ extern "C" {
         outgoing_video_track: *const RffiVideoTrack,
         enable_dtls: bool,
         enable_rtp_data_channel: bool,
-    ) -> *const RffiPeerConnection;
+    ) -> webrtc::ptr::OwnedRc<RffiPeerConnection>;
     pub fn Rust_createAudioTrack(
-        factory: *const RffiPeerConnectionFactoryOwner,
-    ) -> *const RffiAudioTrack;
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+    ) -> webrtc::ptr::OwnedRc<RffiAudioTrack>;
     pub fn Rust_createVideoSource(
         factory: *const RffiPeerConnectionFactoryOwner,
     ) -> *const RffiVideoSource;

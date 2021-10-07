@@ -66,23 +66,22 @@ typedef struct {
   size_t urls_size;
 } RffiIceServer;
 
-// Returns an owned pointer that should be used with webrtc::Arc::from_owned_ptr().
-// Technically creates a PeerConnectionFactoryOwner, but if you only use the
-// functions below, that won't matter to you.
+// Returns an owned RC to a PeerConnectionFactory.
 // You can create more than one, but you should probably only have one unless
 // you want to test separate endpoints that are as independent as possible.
 RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
   bool use_new_audio_device_module, 
   bool use_injectable_network);
 
+// Takes a borrowed RC to a PeerConnectionFactory.
+// Returns an owned RC to a PeerConnectionFactoryOwner.
 RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
   webrtc::PeerConnectionFactoryInterface*);
 
 RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
     webrtc::PeerConnectionFactoryOwner*);
 
-// Creates a PeerConnection, returning an owned ptr
-// (should be consumed with webrtc::Arc::from_owned_ptr).
+// Returns an owned RC to a PeerConnection.
 RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   webrtc::PeerConnectionFactoryOwner*,
   webrtc::rffi::PeerConnectionObserverRffi*,
@@ -93,6 +92,8 @@ RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   webrtc::VideoTrackInterface*,
   bool enable_dtls,
   bool enable_rtp_data_channel);
+// Takes a borrowed RC to a PeerConnectionFactory
+// Returns an owned RC to an AudioTrack.
 RUSTEXPORT webrtc::AudioTrackInterface* Rust_createAudioTrack(webrtc::PeerConnectionFactoryOwner*);
 RUSTEXPORT webrtc::VideoTrackSourceInterface* Rust_createVideoSource(webrtc::PeerConnectionFactoryOwner*);
 RUSTEXPORT webrtc::VideoTrackInterface* Rust_createVideoTrack(webrtc::PeerConnectionFactoryOwner*, webrtc::VideoTrackSourceInterface* source);

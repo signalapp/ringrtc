@@ -1921,7 +1921,11 @@ where
 impl Connection<crate::sim::sim_platform::SimPlatform> {
     pub fn peer_connection_rffi(&self) -> crate::webrtc::Arc<crate::webrtc::sim::peer_connection::RffiPeerConnection> {
         let webrtc = self.webrtc.lock().unwrap();
-        crate::webrtc::Arc::from_borrowed_ptr(webrtc.app_connection.as_ref().unwrap() as *const crate::webrtc::sim::peer_connection::RffiPeerConnection)
+        // This is safe because the webrtc.app_connection() is still alive when this is called.
+        // Plus, this is only used by unit tests.
+        unsafe {
+            crate::webrtc::Arc::from_borrowed(crate::webrtc::ptr::BorrowedRc::from_ptr(webrtc.app_connection.as_ref().unwrap() as *const crate::webrtc::sim::peer_connection::RffiPeerConnection))
+        }
     }
 }
 

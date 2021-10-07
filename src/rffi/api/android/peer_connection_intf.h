@@ -9,10 +9,7 @@
 #include "rffi/api/rffi_defs.h"
 #include <jni.h>
 
-/**
- * Return a borrowed pointer to the native PeerConnection inside of the
- * Java wrapper.  Should be consumed with webrtc::Arc::from_borrowed_ptr().
- */
+// Return a borrowed RC to the native PeerConnection inside of the Java wrapper.
 RUSTEXPORT webrtc::PeerConnectionInterface*
 Rust_borrowPeerConnectionFromJniOwnedPeerConnection(jlong owned_peer_connection);
 
