@@ -1,6 +1,6 @@
 # Building RingRTC
 
-RingRTC currently supports building for Android on a Linux platform (Ubuntu 20.04 recommended) or iOS on a Mac using Xcode (12.5.0), and for the host platform as a Node.js module for use in Electron apps.
+RingRTC currently supports building for Android on a Linux platform (Ubuntu 20.04 recommended) or iOS on a Mac using Xcode (13.0), and for the host platform as a Node.js module for use in Electron apps.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ Install Rust target support for Android via `rustup`:
 
 Install Rust target support for iOS, including compiling the stdlib from source, via `rustup`:
 
-    rustup target add aarch64-apple-ios x86_64-apple-ios
+    rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
     rustup component add rust-src
 
 Install cbindgen via `cargo`:
