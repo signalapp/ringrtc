@@ -680,6 +680,15 @@ where
         }
     }
 
+    /// Checks if the CallManager is busy with either a 1:1 or group call.
+    #[cfg(feature = "sim")]
+    pub fn busy(&self) -> bool {
+        *self
+            .busy
+            .lock()
+            .expect("panicked in busy lock during testing")
+    }
+
     /// Return the platform, under a locked mutex.
     pub fn platform(&self) -> Result<MutexGuard<'_, T>> {
         self.platform.lock()

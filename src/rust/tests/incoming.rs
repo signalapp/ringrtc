@@ -94,6 +94,7 @@ fn start_inbound_call() -> TestContext {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert!(cm.busy());
 
     context
 }
@@ -181,7 +182,8 @@ fn connect_inbound_call() -> TestContext {
     assert!(active_connection
         .app_connection()
         .unwrap()
-        .outgoing_audio_enabled(),);
+        .outgoing_audio_enabled());
+    assert!(cm.busy());
 
     context
 }
@@ -217,6 +219,7 @@ fn inbound_call_hangup_accepted() {
         context.event_count(ApplicationEvent::EndedRemoteHangupAccepted),
         1
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -243,6 +246,7 @@ fn inbound_call_hangup_declined() {
         context.event_count(ApplicationEvent::EndedRemoteHangupDeclined),
         1
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -269,6 +273,7 @@ fn inbound_call_hangup_busy() {
         context.event_count(ApplicationEvent::EndedRemoteHangupBusy),
         1
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -329,6 +334,7 @@ fn start_inbound_call_with_error() {
         active_call.state().expect(error_line!()),
         CallState::Terminated
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -356,6 +362,7 @@ fn receive_offer_while_active() {
     );
     assert_eq!(context.busys_sent(), 1);
     assert_eq!(context.call_concluded_count(), 1);
+    assert!(cm.busy());
 }
 
 #[test]
@@ -379,6 +386,7 @@ fn receive_expired_offer() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.offer_expired_count(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -402,6 +410,7 @@ fn receive_offer_before_age_limit() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.offer_expired_count(), 0);
+    assert!(cm.busy());
 }
 
 #[test]
@@ -425,6 +434,7 @@ fn receive_offer_at_age_limit() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.offer_expired_count(), 0);
+    assert!(cm.busy());
 }
 
 #[test]
@@ -448,6 +458,7 @@ fn receive_expired_offer_after_age_limit() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.offer_expired_count(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -496,6 +507,8 @@ fn group_call_ring() {
         }
         _ => panic!("unexpected ring updates: {:?}", ring_updates),
     }
+
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -550,6 +563,8 @@ fn group_call_ring_expired() {
         }
         _ => panic!("unexpected ring updates: {:?}", ring_updates),
     }
+
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -631,6 +646,8 @@ fn group_call_ring_busy_in_direct_call() {
         }
         _ => panic!("unexpected messages: {:?}", messages),
     }
+
+    assert!(cm.busy());
 }
 
 #[test]
@@ -650,6 +667,7 @@ fn group_call_ring_busy_in_group_call() {
         .expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
+    assert!(cm.busy());
 
     let group_id = vec![1, 1, 1];
     let sender = vec![1, 2, 3];
@@ -720,6 +738,8 @@ fn group_call_ring_busy_in_group_call() {
         }
         _ => panic!("unexpected messages: {:?}", messages),
     }
+
+    assert!(cm.busy());
 }
 
 #[test]
@@ -861,6 +881,7 @@ fn group_call_ring_timeout() {
         }
         _ => panic!("unexpected ring updates: {:?}", ring_updates),
     }
+    assert!(!cm.busy());
 
     // We set the timeout to 1 second for testing, so we only need to sleep a bit longer than that.
     std::thread::sleep(Duration::from_millis(1_200));

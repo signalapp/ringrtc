@@ -86,6 +86,7 @@ fn start_outbound_and_proceed() -> TestContext {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert!(cm.busy());
 
     context
 }
@@ -164,6 +165,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert!(cm.busy());
 
     context
 }
@@ -248,6 +250,7 @@ fn connect_outbound_call() -> TestContext {
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert!(cm.busy());
 
     context
 }
@@ -287,6 +290,7 @@ fn outbound_local_hang_up() {
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
+    assert!(!cm.busy());
 
     // TODO - verify that the data_channel sent a hangup message
 }
@@ -319,6 +323,7 @@ fn outbound_ice_failed() {
         context.event_count(ApplicationEvent::EndedConnectionFailure),
         1
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -364,6 +369,7 @@ fn outbound_ice_disconnected_before_call_accepted() {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert!(cm.busy());
 }
 
 #[test]
@@ -414,6 +420,7 @@ fn outbound_call_accepted_with_stale_call_id() {
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
+    assert!(cm.busy());
 }
 
 #[test]
@@ -443,6 +450,7 @@ fn outbound_call_connected_ice_failed() {
         context.event_count(ApplicationEvent::EndedConnectionFailure),
         1
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -467,6 +475,7 @@ fn outbound_call_connected_local_hangup() {
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
+    assert!(!cm.busy());
 
     // TODO - verify that the data_channel sent a hangup message
 }
@@ -516,6 +525,7 @@ fn outbound_ice_disconnected_after_call_connected_and_reconnect() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
     assert_eq!(context.event_count(ApplicationEvent::Reconnected), 1);
+    assert!(cm.busy());
 }
 
 #[test]
@@ -560,6 +570,7 @@ fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -578,6 +589,7 @@ fn inject_connection_error() {
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 1);
     assert_eq!(context.ended_count(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -596,6 +608,7 @@ fn inject_call_error() {
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 1);
     assert_eq!(context.ended_count(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -840,6 +853,7 @@ fn ice_send_failures_cause_error_before_connection() {
         active_call.state().expect(error_line!()),
         CallState::Terminated
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -888,6 +902,7 @@ fn ignore_ice_send_failures_after_connection() {
         active_call.state().expect(error_line!()),
         CallState::ConnectedAndAccepted
     );
+    assert!(cm.busy());
 }
 
 #[test]
@@ -915,6 +930,7 @@ fn received_remote_hangup_before_connection() {
     assert_eq!(context.normal_hangups_sent(), 0);
     // Other callees should get Hangup/Declined.
     assert_eq!(context.declined_hangups_sent(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -966,6 +982,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
 
     // We expect that a Hangup/Declined still goes out via Signal messaging.
     assert_eq!(context.declined_hangups_sent(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -998,6 +1015,7 @@ fn received_remote_hangup_before_connection_for_permission() {
     // Other callees should get Hangup/Normal.
     assert_eq!(context.need_permission_hangups_sent(), 1);
     assert_eq!(context.declined_hangups_sent(), 0);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -1054,6 +1072,7 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     // Other callees should get Hangup/Normal.
     assert_eq!(context.need_permission_hangups_sent(), 1);
     assert_eq!(context.declined_hangups_sent(), 0);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -1078,6 +1097,7 @@ fn received_remote_hangup_after_connection() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -1104,6 +1124,7 @@ fn received_remote_needs_permission() {
         context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
         1
     );
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -1355,6 +1376,7 @@ fn call_timeout_after_connect() {
     // The call is already connected, so the timeout is ignored.
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.event_count(ApplicationEvent::EndedTimeout), 0);
+    assert!(cm.busy());
 }
 
 #[test]
@@ -1406,6 +1428,7 @@ fn outbound_proceed_with_error() {
         2
     );
     assert_eq!(context.offers_sent(), 0);
+    assert!(!cm.busy());
 
     context.force_internal_fault(false);
 }
@@ -1437,6 +1460,7 @@ fn outbound_call_connected_local_hangup_with_error() {
     );
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
+    assert!(!cm.busy());
 }
 
 #[test]
@@ -1468,6 +1492,7 @@ fn local_ice_candidate_with_error() {
     );
     // We should see that no ICE candidates were sent
     assert_eq!(context.ice_candidates_sent(), 0);
+    assert!(!cm.busy());
 }
 
 fn outbound_multiple_remote_devices() {
@@ -1545,6 +1570,7 @@ fn outbound_multiple_remote_devices() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
     assert_eq!(context.accepted_hangups_sent(), 1);
+    assert!(cm.busy());
 
     cm.hangup().expect(error_line!());
 
@@ -1558,6 +1584,7 @@ fn outbound_multiple_remote_devices() {
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
+    assert!(!cm.busy());
 }
 
 // Create multiple call managers, each managing one outbound call.
@@ -1907,6 +1934,7 @@ fn start_outbound_receive_busy() {
     assert_eq!(context.event_count(ApplicationEvent::EndedRemoteBusy), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.call_concluded_count(), 1);
+    assert!(!cm.busy());
 }
 
 #[test]
