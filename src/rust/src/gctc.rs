@@ -13,21 +13,13 @@ use ringrtc::webrtc::peer_connection_factory;
 use ringrtc::{
     common::{
         actor::{Actor, Stopper},
-        HttpMethod,
-        HttpResponse,
+        HttpMethod, HttpResponse,
     },
     core::{
         call_mutex::CallMutex,
         group_call::{
-            self,
-            ClientId,
-            ConnectionState,
-            DemuxId,
-            EndReason,
-            JoinState,
-            RemoteDeviceState,
-            RemoteDevicesChangedReason,
-            UserId,
+            self, ClientId, ConnectionState, DemuxId, EndReason, JoinState, RemoteDeviceState,
+            RemoteDevicesChangedReason, UserId,
         },
         http_client,
         sfu_client::SfuClient,
@@ -122,7 +114,7 @@ impl rustls::ServerCertVerifier for ServerCertVerifier {
 }
 #[derive(Clone, Default)]
 struct Observer {
-    remote_devices:         Arc<Mutex<Vec<group_call::RemoteDeviceState>>>,
+    remote_devices: Arc<Mutex<Vec<group_call::RemoteDeviceState>>>,
     video_sink_by_demux_id: Arc<Mutex<HashMap<DemuxId, VideoSink>>>,
 }
 

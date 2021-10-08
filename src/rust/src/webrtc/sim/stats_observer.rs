@@ -10,10 +10,7 @@ use std::ptr;
 
 use crate::core::util::RustObject;
 use crate::webrtc::stats_observer::{
-    ConnectionStatistics,
-    MediaStatistics,
-    StatsObserver,
-    StatsObserverCallbacks,
+    ConnectionStatistics, MediaStatistics, StatsObserver, StatsObserverCallbacks,
 };
 
 /// Simulation type for webrtc::rffi::StatsObserverRffi
@@ -29,17 +26,17 @@ pub unsafe fn Rust_createStatsObserver(
     info!("Rust_createStatsObserver():");
 
     let dummy = MediaStatistics {
-        timestamp_us:                   0,
-        audio_sender_statistics_size:   0,
-        audio_sender_statistics:        ptr::null(),
-        video_sender_statistics_size:   0,
-        video_sender_statistics:        ptr::null(),
+        timestamp_us: 0,
+        audio_sender_statistics_size: 0,
+        audio_sender_statistics: ptr::null(),
+        video_sender_statistics_size: 0,
+        video_sender_statistics: ptr::null(),
         audio_receiver_statistics_size: 0,
-        audio_receiver_statistics:      ptr::null(),
+        audio_receiver_statistics: ptr::null(),
         video_receiver_statistics_size: 0,
-        video_receiver_statistics:      ptr::null(),
-        connection_statistics:          ConnectionStatistics {
-            current_round_trip_time:    0.0,
+        video_receiver_statistics: ptr::null(),
+        connection_statistics: ConnectionStatistics {
+            current_round_trip_time: 0.0,
             available_outgoing_bitrate: 0.0,
         },
     };

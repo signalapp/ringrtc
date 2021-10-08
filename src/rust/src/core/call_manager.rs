@@ -21,17 +21,8 @@ use lazy_static::lazy_static;
 use prost::Message;
 
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    CallState,
-    DeviceId,
-    FeatureLevel,
-    HttpMethod,
-    HttpResponse,
-    Result,
-    RingBench,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DeviceId, FeatureLevel,
+    HttpMethod, HttpResponse, Result, RingBench,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -143,9 +134,9 @@ where
     T: Platform,
 {
     /// The CallId of the Call that the message belongs to.
-    call_id:         CallId,
+    call_id: CallId,
     /// The type of message the item corresponds to.
-    message_type:    signaling::MessageType,
+    message_type: signaling::MessageType,
     /// The closure to be called which will send the message.
     message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<MessageSendResult> + Send>,
 }
@@ -159,14 +150,14 @@ where
     T: Platform,
 {
     /// The message queue.
-    queue:                  VecDeque<SignalingMessageItem<T>>,
+    queue: VecDeque<SignalingMessageItem<T>>,
     /// The type of the last message sent from the message queue.
     last_sent_message_type: Option<signaling::MessageType>,
     /// Whether or not a message is still being handled by the
     /// application (true if a message is currently in the process
     /// of being sent). We will only send one at a time to the
     /// application.
-    messages_in_flight:     bool,
+    messages_in_flight: bool,
 }
 
 impl<T> SignalingMessageQueue<T>
@@ -176,9 +167,9 @@ where
     /// Create a new SignalingMessageQueue.
     pub fn new() -> Result<Self> {
         Ok(Self {
-            queue:                  VecDeque::new(),
+            queue: VecDeque::new(),
             last_sent_message_type: None,
-            messages_in_flight:     false,
+            messages_in_flight: false,
         })
     }
 }
@@ -187,13 +178,13 @@ where
 type HttpResponseCallback = Box<dyn FnOnce(Option<HttpResponse>) + Send>;
 struct HttpRequestTracker {
     response_callbacks: HashMap<u32, HttpResponseCallback>,
-    next_request_id:    u32,
+    next_request_id: u32,
 }
 
 /// Information about a received group ring that hasn't yet been accepted or cancelled.
 #[derive(Debug)]
 struct OutstandingGroupRing {
-    ring_id:  group_call::RingId,
+    ring_id: group_call::RingId,
     received: Instant,
 }
 
@@ -208,27 +199,27 @@ where
     T: Platform,
 {
     /// Interface to platform specific methods.
-    platform:                  Arc<CallMutex<T>>,
+    platform: Arc<CallMutex<T>>,
     /// The current user's UUID, or None if it's unknown.
-    self_uuid:                 Arc<CallMutex<Option<group_call::UserId>>>,
+    self_uuid: Arc<CallMutex<Option<group_call::UserId>>>,
     /// Map of all 1:1 calls.
-    call_by_call_id:           Arc<CallMutex<HashMap<CallId, Call<T>>>>,
+    call_by_call_id: Arc<CallMutex<HashMap<CallId, Call<T>>>>,
     /// CallId of the active call.
-    active_call_id:            Arc<CallMutex<Option<CallId>>>,
+    active_call_id: Arc<CallMutex<Option<CallId>>>,
     /// Map of all group calls.
-    group_call_by_client_id:   Arc<CallMutex<HashMap<group_call::ClientId, group_call::Client>>>,
+    group_call_by_client_id: Arc<CallMutex<HashMap<group_call::ClientId, group_call::Client>>>,
     /// Next value of the group call client id (sequential).
     next_group_call_client_id: Arc<CallMutex<u32>>,
     /// Recent outstanding group rings, keyed by group ID.
-    outstanding_group_rings:   Arc<CallMutex<HashMap<group_call::GroupId, OutstandingGroupRing>>>,
+    outstanding_group_rings: Arc<CallMutex<HashMap<group_call::GroupId, OutstandingGroupRing>>>,
     /// Busy indication if in either a direct or group call.
-    busy:                      Arc<CallMutex<bool>>,
+    busy: Arc<CallMutex<bool>>,
     /// Tokio runtime for back ground task execution.
-    worker_runtime:            Arc<CallMutex<Option<TaskQueueRuntime>>>,
+    worker_runtime: Arc<CallMutex<Option<TaskQueueRuntime>>>,
     /// Signaling message queue.
-    message_queue:             Arc<CallMutex<SignalingMessageQueue<T>>>,
+    message_queue: Arc<CallMutex<SignalingMessageQueue<T>>>,
     /// Outstanding HTTP requests
-    http_request_tracker:      Arc<CallMutex<HttpRequestTracker>>,
+    http_request_tracker: Arc<CallMutex<HttpRequestTracker>>,
 }
 
 impl<T> fmt::Display for CallManager<T>
@@ -282,17 +273,17 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            platform:                  Arc::clone(&self.platform),
-            self_uuid:                 Arc::clone(&self.self_uuid),
-            call_by_call_id:           Arc::clone(&self.call_by_call_id),
-            active_call_id:            Arc::clone(&self.active_call_id),
-            group_call_by_client_id:   Arc::clone(&self.group_call_by_client_id),
+            platform: Arc::clone(&self.platform),
+            self_uuid: Arc::clone(&self.self_uuid),
+            call_by_call_id: Arc::clone(&self.call_by_call_id),
+            active_call_id: Arc::clone(&self.active_call_id),
+            group_call_by_client_id: Arc::clone(&self.group_call_by_client_id),
             next_group_call_client_id: Arc::clone(&self.next_group_call_client_id),
-            outstanding_group_rings:   Arc::clone(&self.outstanding_group_rings),
-            busy:                      Arc::clone(&self.busy),
-            worker_runtime:            Arc::clone(&self.worker_runtime),
-            message_queue:             Arc::clone(&self.message_queue),
-            http_request_tracker:      Arc::clone(&self.http_request_tracker),
+            outstanding_group_rings: Arc::clone(&self.outstanding_group_rings),
+            busy: Arc::clone(&self.busy),
+            worker_runtime: Arc::clone(&self.worker_runtime),
+            message_queue: Arc::clone(&self.message_queue),
+            http_request_tracker: Arc::clone(&self.http_request_tracker),
         }
     }
 }
@@ -355,32 +346,32 @@ where
         );
 
         Ok(Self {
-            platform:                  Arc::new(CallMutex::new(platform, "platform")),
-            self_uuid:                 Arc::new(CallMutex::new(None, "self_uuid")),
-            call_by_call_id:           Arc::new(CallMutex::new(HashMap::new(), "call_by_call_id")),
-            active_call_id:            Arc::new(CallMutex::new(None, "active_call_id")),
-            group_call_by_client_id:   Arc::new(CallMutex::new(
+            platform: Arc::new(CallMutex::new(platform, "platform")),
+            self_uuid: Arc::new(CallMutex::new(None, "self_uuid")),
+            call_by_call_id: Arc::new(CallMutex::new(HashMap::new(), "call_by_call_id")),
+            active_call_id: Arc::new(CallMutex::new(None, "active_call_id")),
+            group_call_by_client_id: Arc::new(CallMutex::new(
                 HashMap::new(),
                 "group_call_by_client_id",
             )),
             next_group_call_client_id: Arc::new(CallMutex::new(0, "next_group_call_client_id")),
-            outstanding_group_rings:   Arc::new(CallMutex::new(
+            outstanding_group_rings: Arc::new(CallMutex::new(
                 HashMap::new(),
                 "outstanding_group_rings",
             )),
-            busy:                      Arc::new(CallMutex::new(false, "busy")),
-            worker_runtime:            Arc::new(CallMutex::new(
+            busy: Arc::new(CallMutex::new(false, "busy")),
+            worker_runtime: Arc::new(CallMutex::new(
                 Some(TaskQueueRuntime::new("call-manager-worker")?),
                 "worker_runtime",
             )),
-            message_queue:             Arc::new(CallMutex::new(
+            message_queue: Arc::new(CallMutex::new(
                 SignalingMessageQueue::new()?,
                 "message_queue",
             )),
-            http_request_tracker:      Arc::new(CallMutex::new(
+            http_request_tracker: Arc::new(CallMutex::new(
                 HttpRequestTracker {
                     response_callbacks: HashMap::new(),
-                    next_request_id:    0,
+                    next_request_id: 0,
                 },
                 "http_request_tracker",
             )),
@@ -511,8 +502,8 @@ where
                 let message = protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id),
-                        ring_id:  Some(ring_id.into()),
-                        r#type:   Some(response_type.into()),
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(response_type.into()),
                     }),
                     ..Default::default()
                 };
@@ -2344,7 +2335,7 @@ where
                     } else {
                         Some(connection.remote_device_id())
                     },
-                    ice:                signaling::Ice {
+                    ice: signaling::Ice {
                         candidates: local_candidates,
                     },
                 },

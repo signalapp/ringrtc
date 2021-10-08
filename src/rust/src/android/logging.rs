@@ -15,8 +15,8 @@ use crate::common::Result;
 
 /// Log object for interfacing with existing Android logger.
 struct AndroidLogger {
-    level:  Level,
-    jvm:    JavaVM,
+    level: Level,
+    jvm: JavaVM,
     logger: GlobalRef,
 }
 

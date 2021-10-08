@@ -10,8 +10,8 @@ pub type Timestamp = u32;
 
 #[derive(Clone, Debug)]
 pub struct Header {
-    pub pt:        PayloadType,
-    pub seqnum:    SequenceNumber,
+    pub pt: PayloadType,
+    pub seqnum: SequenceNumber,
     pub timestamp: Timestamp,
-    pub ssrc:      Ssrc,
+    pub ssrc: Ssrc,
 }

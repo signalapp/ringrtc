@@ -17,12 +17,7 @@ use std::time::Duration;
 
 use prost::Message;
 use ringrtc::common::{
-    ApplicationEvent,
-    CallId,
-    CallMediaType,
-    CallState,
-    ConnectionState,
-    DeviceId,
+    ApplicationEvent, CallId, CallMediaType, CallState, ConnectionState, DeviceId,
 };
 use ringrtc::core::bandwidth_mode::BandwidthMode;
 use ringrtc::core::{group_call, signaling};
@@ -33,12 +28,8 @@ use ringrtc::webrtc::media::MediaStream;
 #[macro_use]
 mod common;
 use common::{
-    random_ice_candidate,
-    random_received_answer,
-    random_received_ice_candidate,
-    random_received_offer,
-    test_init,
-    TestContext,
+    random_ice_candidate, random_received_answer, random_received_ice_candidate,
+    random_received_offer, test_init, TestContext,
 };
 
 // Simple test that:
@@ -619,7 +610,7 @@ fn update_sender_status() {
 
     active_connection
         .update_sender_status(signaling::SenderStatus {
-            video_enabled:  Some(false),
+            video_enabled: Some(false),
             sharing_screen: None,
         })
         .expect(error_line!());
@@ -629,8 +620,8 @@ fn update_sender_status() {
 
     assert_eq!(
         Some(protobuf::data_channel::SenderStatus {
-            id:             Some(active_connection.call_id().into()),
-            video_enabled:  Some(false),
+            id: Some(active_connection.call_id().into()),
+            video_enabled: Some(false),
             sharing_screen: None,
         }),
         active_connection.last_sent_sender_status()
@@ -638,14 +629,14 @@ fn update_sender_status() {
 
     active_connection
         .update_sender_status(signaling::SenderStatus {
-            video_enabled:  Some(true),
+            video_enabled: Some(true),
             sharing_screen: None,
         })
         .expect(error_line!());
 
     active_connection
         .update_sender_status(signaling::SenderStatus {
-            video_enabled:  None,
+            video_enabled: None,
             sharing_screen: Some(true),
         })
         .expect(error_line!());
@@ -655,8 +646,8 @@ fn update_sender_status() {
 
     assert_eq!(
         Some(protobuf::data_channel::SenderStatus {
-            id:             Some(active_connection.call_id().into()),
-            video_enabled:  Some(true),
+            id: Some(active_connection.call_id().into()),
+            video_enabled: Some(true),
             sharing_screen: Some(true),
         }),
         active_connection.last_sent_sender_status()
@@ -664,7 +655,7 @@ fn update_sender_status() {
 
     active_connection
         .update_sender_status(signaling::SenderStatus {
-            video_enabled:  None,
+            video_enabled: None,
             sharing_screen: Some(false),
         })
         .expect(error_line!());
@@ -674,8 +665,8 @@ fn update_sender_status() {
 
     assert_eq!(
         Some(protobuf::data_channel::SenderStatus {
-            id:             Some(active_connection.call_id().into()),
-            video_enabled:  Some(true),
+            id: Some(active_connection.call_id().into()),
+            video_enabled: Some(true),
             sharing_screen: Some(false),
         }),
         active_connection.last_sent_sender_status()
@@ -786,7 +777,7 @@ fn ice_candidate_removal() {
     cm.received_ice(
         call_id,
         signaling::ReceivedIce {
-            ice:              last_sent.ice,
+            ice: last_sent.ice,
             sender_device_id: 1,
         },
     )
@@ -912,7 +903,7 @@ fn received_remote_hangup_before_connection() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::Normal,
+            hangup: signaling::Hangup::Normal,
         },
     )
     .expect(error_line!());
@@ -955,7 +946,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::Normal,
+            hangup: signaling::Hangup::Normal,
         },
     )
     .expect(error_line!());
@@ -991,7 +982,7 @@ fn received_remote_hangup_before_connection_for_permission() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::NeedPermission(Some(1)),
+            hangup: signaling::Hangup::NeedPermission(Some(1)),
         },
     )
     .expect(error_line!());
@@ -1039,7 +1030,7 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::NeedPermission(Some(1)),
+            hangup: signaling::Hangup::NeedPermission(Some(1)),
         },
     )
     .expect(error_line!());
@@ -1077,7 +1068,7 @@ fn received_remote_hangup_after_connection() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::Normal,
+            hangup: signaling::Hangup::Normal,
         },
     )
     .expect(error_line!());
@@ -1101,7 +1092,7 @@ fn received_remote_needs_permission() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::NeedPermission(None),
+            hangup: signaling::Hangup::NeedPermission(None),
         },
     )
     .expect(error_line!());
@@ -1133,7 +1124,7 @@ fn received_remote_video_status() {
             .inject_received_sender_status_via_data_channel(
                 active_call.call_id(),
                 signaling::SenderStatus {
-                    video_enabled:  Some(enable),
+                    video_enabled: Some(enable),
                     sharing_screen: None,
                 },
                 Some(i),
@@ -1171,7 +1162,7 @@ fn received_remote_video_status() {
         .inject_received_sender_status_via_data_channel(
             active_call.call_id(),
             signaling::SenderStatus {
-                video_enabled:  Some(true),
+                video_enabled: Some(true),
                 sharing_screen: None,
             },
             Some(1),
@@ -1182,7 +1173,7 @@ fn received_remote_video_status() {
         .inject_received_sender_status_via_data_channel(
             active_call.call_id(),
             signaling::SenderStatus {
-                video_enabled:  Some(false),
+                video_enabled: Some(false),
                 sharing_screen: None,
             },
             Some(2),
@@ -1226,7 +1217,7 @@ fn received_remote_sharing_screen_status() {
             .inject_received_sender_status_via_data_channel(
                 active_call.call_id(),
                 signaling::SenderStatus {
-                    video_enabled:  None,
+                    video_enabled: None,
                     sharing_screen: Some(enable),
                 },
                 Some(i),
@@ -1258,7 +1249,7 @@ fn received_remote_sharing_screen_status() {
         .inject_received_sender_status_via_data_channel(
             active_call.call_id(),
             signaling::SenderStatus {
-                video_enabled:  None,
+                video_enabled: None,
                 sharing_screen: Some(true),
             },
             Some(1),
@@ -1269,7 +1260,7 @@ fn received_remote_sharing_screen_status() {
         .inject_received_sender_status_via_data_channel(
             active_call.call_id(),
             signaling::SenderStatus {
-                video_enabled:  None,
+                video_enabled: None,
                 sharing_screen: Some(false),
             },
             Some(2),
@@ -1303,7 +1294,7 @@ fn received_remote_multiple_status() {
         .inject_received_sender_status_via_data_channel(
             active_call.call_id(),
             signaling::SenderStatus {
-                video_enabled:  Some(false),
+                video_enabled: Some(false),
                 sharing_screen: Some(true),
             },
             Some(1),
@@ -1314,7 +1305,7 @@ fn received_remote_multiple_status() {
         .inject_received_sender_status_via_data_channel(
             active_call.call_id(),
             signaling::SenderStatus {
-                video_enabled:  Some(true),
+                video_enabled: Some(true),
                 sharing_screen: Some(false),
             },
             Some(2),
@@ -1526,12 +1517,10 @@ fn outbound_multiple_remote_devices() {
         "test:active_remote:{}: injecting call connected",
         active_remote
     );
-    assert!(
-        !active_connection
-            .app_connection()
-            .unwrap()
-            .outgoing_audio_enabled(),
-    );
+    assert!(!active_connection
+        .app_connection()
+        .unwrap()
+        .outgoing_audio_enabled(),);
     active_connection
         .inject_received_accepted_via_data_channel(active_call.call_id())
         .expect(error_line!());
@@ -1546,12 +1535,10 @@ fn outbound_multiple_remote_devices() {
         active_call.state().expect(error_line!()),
         CallState::ConnectedAndAccepted
     );
-    assert!(
-        active_connection
-            .app_connection()
-            .unwrap()
-            .outgoing_audio_enabled(),
-    );
+    assert!(active_connection
+        .app_connection()
+        .unwrap()
+        .outgoing_audio_enabled(),);
 
     assert_eq!(context.event_count(ApplicationEvent::RemoteAccepted), 1);
     assert_eq!(context.stream_count(), 1);
@@ -1977,8 +1964,8 @@ fn cancel_group_ring() {
                 protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id.to_vec()),
-                        ring_id:  Some(ring_id.into()),
-                        r#type:   Some(
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
                             protobuf::signaling::call_message::ring_response::Type::Declined.into()
                         ),
                     }),
@@ -2021,8 +2008,8 @@ fn group_call_ring_accepted() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2069,8 +2056,8 @@ fn group_call_ring_accepted() {
                 protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id.to_vec()),
-                        ring_id:  Some(ring_id.into()),
-                        r#type:   Some(
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
                             protobuf::signaling::call_message::ring_response::Type::Accepted.into()
                         ),
                     }),
@@ -2100,8 +2087,8 @@ fn group_call_ring_too_old() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2115,9 +2102,7 @@ fn group_call_ring_too_old() {
     cm.synchronize().expect(error_line!());
     cm.age_all_outstanding_group_rings(Duration::from_secs(600));
 
-    let group_call_id = context
-        .create_group_call(group_id)
-        .expect(error_line!());
+    let group_call_id = context.create_group_call(group_id).expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
 
@@ -2148,8 +2133,8 @@ fn group_call_ring_message_age_does_not_affect_ring_expiration() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2188,8 +2173,8 @@ fn group_call_ring_message_age_does_not_affect_ring_expiration() {
                 protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id.to_vec()),
-                        ring_id:  Some(ring_id.into()),
-                        r#type:   Some(
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
                             protobuf::signaling::call_message::ring_response::Type::Accepted.into()
                         ),
                     }),
@@ -2220,8 +2205,8 @@ fn group_call_ring_first_ring_wins() {
     let first_message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(first_ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(first_ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2237,8 +2222,8 @@ fn group_call_ring_first_ring_wins() {
     let second_message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(second_ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(second_ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2274,8 +2259,8 @@ fn group_call_ring_first_ring_wins() {
                 protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id.to_vec()),
-                        ring_id:  Some(first_ring_id.into()),
-                        r#type:   Some(
+                        ring_id: Some(first_ring_id.into()),
+                        r#type: Some(
                             protobuf::signaling::call_message::ring_response::Type::Accepted.into()
                         ),
                     }),
@@ -2305,8 +2290,8 @@ fn group_call_ring_cancelled_locally_before_join() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2322,9 +2307,7 @@ fn group_call_ring_cancelled_locally_before_join() {
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
-    let group_call_id = context
-        .create_group_call(group_id)
-        .expect(error_line!());
+    let group_call_id = context.create_group_call(group_id).expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
 
@@ -2355,8 +2338,8 @@ fn group_call_ring_cancelled_by_ringer_before_join() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2371,10 +2354,8 @@ fn group_call_ring_cancelled_by_ringer_before_join() {
     let cancel_message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(
-                protobuf::signaling::call_message::ring_intention::Type::Cancelled.into(),
-            ),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Cancelled.into()),
         }),
         ..Default::default()
     };
@@ -2388,9 +2369,7 @@ fn group_call_ring_cancelled_by_ringer_before_join() {
 
     cm.synchronize().expect(error_line!());
 
-    let group_call_id = context
-        .create_group_call(group_id)
-        .expect(error_line!());
+    let group_call_id = context.create_group_call(group_id).expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
 
@@ -2421,8 +2400,8 @@ fn group_call_ring_cancelled_by_another_device_before_join() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -2437,8 +2416,8 @@ fn group_call_ring_cancelled_by_another_device_before_join() {
     let cancel_message = protobuf::signaling::CallMessage {
         ring_response: Some(protobuf::signaling::call_message::RingResponse {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_response::Type::Declined.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_response::Type::Declined.into()),
         }),
         ..Default::default()
     };
@@ -2451,9 +2430,7 @@ fn group_call_ring_cancelled_by_another_device_before_join() {
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
-    let group_call_id = context
-        .create_group_call(group_id)
-        .expect(error_line!());
+    let group_call_id = context.create_group_call(group_id).expect(error_line!());
     cm.join(group_call_id);
     cm.synchronize().expect(error_line!());
 

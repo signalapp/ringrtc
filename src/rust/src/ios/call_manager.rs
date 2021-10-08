@@ -485,8 +485,13 @@ pub fn create_group_call_client(
     let outgoing_video_track =
         media::VideoTrack::owned(native_owned_video_track as *const media::RffiVideoTrack);
 
-    let peer_connection_factory =
-        unsafe { PeerConnectionFactory::from_native_factory(webrtc::Arc::from_owned(webrtc::ptr::OwnedRc::from_ptr(native_pcf_owned_rc as *const pcf::RffiPeerConnectionFactoryInterface))) };
+    let peer_connection_factory = unsafe {
+        PeerConnectionFactory::from_native_factory(webrtc::Arc::from_owned(
+            webrtc::ptr::OwnedRc::from_ptr(
+                native_pcf_owned_rc as *const pcf::RffiPeerConnectionFactoryInterface,
+            ),
+        ))
+    };
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(

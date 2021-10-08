@@ -20,7 +20,7 @@ use crate::ios::error::IosError;
 /// Log object for interfacing with swift.
 #[repr(C)]
 pub struct IosLogger {
-    pub object:  *mut c_void,
+    pub object: *mut c_void,
     pub destroy: extern "C" fn(object: *mut c_void),
     pub log: extern "C" fn(
         object: *mut c_void,
@@ -64,23 +64,23 @@ impl Log for IosLogger {
             let message_string = format!("{}", record.args());
             let message_byte_slice = AppByteSlice {
                 bytes: message_string.as_ptr(),
-                len:   message_string.len() as size_t,
+                len: message_string.len() as size_t,
             };
 
             let file_byte_slice = match record.file() {
                 Some(v) => AppByteSlice {
                     bytes: v.as_ptr(),
-                    len:   v.len() as size_t,
+                    len: v.len() as size_t,
                 },
                 None => AppByteSlice {
                     bytes: ptr::null_mut(),
-                    len:   0_usize,
+                    len: 0_usize,
                 },
             };
 
             let function_byte_slice = AppByteSlice {
                 bytes: record.target().as_ptr(),
-                len:   record.target().len() as size_t,
+                len: record.target().len() as size_t,
             };
 
             // Invoke the function in Swift to actually handle the log

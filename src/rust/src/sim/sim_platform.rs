@@ -12,13 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    DeviceId,
-    HttpMethod,
-    Result,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -40,74 +34,74 @@ impl PlatformItem for SimPlatformItem {}
 #[derive(Default)]
 struct SimStats {
     /// Number of offers sent
-    offers_sent:                  AtomicUsize,
+    offers_sent: AtomicUsize,
     /// Number of answers sent
-    answers_sent:                 AtomicUsize,
+    answers_sent: AtomicUsize,
     /// Number of ICE candidates sent
-    ice_candidates_sent:          AtomicUsize,
+    ice_candidates_sent: AtomicUsize,
     /// Number of normal hangups sent
-    normal_hangups_sent:          AtomicUsize,
+    normal_hangups_sent: AtomicUsize,
     /// Number of accepted hangups sent
-    accepted_hangups_sent:        AtomicUsize,
+    accepted_hangups_sent: AtomicUsize,
     /// Number of declined hangups sent
-    declined_hangups_sent:        AtomicUsize,
+    declined_hangups_sent: AtomicUsize,
     /// Number of busy hangups sent
-    busy_hangups_sent:            AtomicUsize,
+    busy_hangups_sent: AtomicUsize,
     /// Number of need permission hangups sent
     need_permission_hangups_sent: AtomicUsize,
     /// Number of busy messages sent
-    busys_sent:                   AtomicUsize,
+    busys_sent: AtomicUsize,
     /// Number of start outgoing call events
-    start_outgoing:               AtomicUsize,
+    start_outgoing: AtomicUsize,
     /// Number of start incoming call events
-    start_incoming:               AtomicUsize,
+    start_incoming: AtomicUsize,
     /// Number of offer expired events
-    offer_expired:                AtomicUsize,
+    offer_expired: AtomicUsize,
     /// Number of call concluded events
-    call_concluded:               AtomicUsize,
+    call_concluded: AtomicUsize,
     /// Track stream counts
-    stream_count:                 AtomicUsize,
+    stream_count: AtomicUsize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct GroupCallRingUpdate {
     pub group_id: group_call::GroupId,
-    pub ring_id:  group_call::RingId,
-    pub sender:   group_call::UserId,
-    pub update:   group_call::RingUpdate,
+    pub ring_id: group_call::RingId,
+    pub sender: group_call::UserId,
+    pub update: group_call::RingUpdate,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct OutgoingCallMessage {
     pub recipient: group_call::UserId,
-    pub message:   Vec<u8>,
-    pub urgency:   group_call::SignalingMessageUrgency,
+    pub message: Vec<u8>,
+    pub urgency: group_call::SignalingMessageUrgency,
 }
 
 /// Simulation implementation of platform::Platform.
 #[derive(Clone, Default)]
 pub struct SimPlatform {
     /// Platform API statistics
-    stats:                        Arc<SimStats>,
+    stats: Arc<SimStats>,
     /// True if the CallPlatform functions should simulate an internal failure.
-    force_internal_fault:         Arc<AtomicBool>,
+    force_internal_fault: Arc<AtomicBool>,
     /// True if the signaling functions should indicate a signaling
     /// failure to the call manager.
-    force_signaling_fault:        Arc<AtomicBool>,
+    force_signaling_fault: Arc<AtomicBool>,
     /// Track event frequencies
-    event_map:                    Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
+    event_map: Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
     /// Track whether disconnecting of incoming media happened
-    incoming_media_disconnected:  Arc<AtomicBool>,
+    incoming_media_disconnected: Arc<AtomicBool>,
     /// Track group call ring updates
-    group_call_ring_updates:      Arc<Mutex<Vec<GroupCallRingUpdate>>>,
+    group_call_ring_updates: Arc<Mutex<Vec<GroupCallRingUpdate>>>,
     /// Track outgoing opaque messages
-    outgoing_call_messages:       Arc<Mutex<Vec<OutgoingCallMessage>>>,
+    outgoing_call_messages: Arc<Mutex<Vec<OutgoingCallMessage>>>,
     /// Call Manager
-    call_manager:                 Arc<Mutex<Option<CallManager<Self>>>>,
+    call_manager: Arc<Mutex<Option<CallManager<Self>>>>,
     /// True to manually require message_sent() to be invoked for Ice messages.
     no_auto_message_sent_for_ice: Arc<AtomicBool>,
     /// Last sent message from on_send_ice
-    last_ice_sent:                Arc<Mutex<Option<signaling::SendIce>>>,
+    last_ice_sent: Arc<Mutex<Option<signaling::SendIce>>>,
 }
 
 impl fmt::Display for SimPlatform {
@@ -161,8 +155,11 @@ impl Platform for SimPlatform {
         connection.set_app_connection(fake_pc).unwrap();
 
         let peer_connection_factory = None;
-        let peer_connection =
-            PeerConnection::new(connection.peer_connection_rffi(), std::ptr::null(), peer_connection_factory);
+        let peer_connection = PeerConnection::new(
+            connection.peer_connection_rffi(),
+            std::ptr::null(),
+            peer_connection_factory,
+        );
 
         connection.set_peer_connection(peer_connection).unwrap();
 
@@ -201,7 +198,11 @@ impl Platform for SimPlatform {
         Ok(())
     }
 
-    fn on_network_route_changed(&self, _remote_peer: &Self::AppRemotePeer, network_route: NetworkRoute) -> Result<()> {
+    fn on_network_route_changed(
+        &self,
+        _remote_peer: &Self::AppRemotePeer,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
         info!("on_network_route_changed(): {:?}", network_route);
         Ok(())
     }
@@ -493,7 +494,6 @@ impl Platform for SimPlatform {
     ) {
         unimplemented!()
     }
-
 
     fn handle_network_route_changed(
         &self,

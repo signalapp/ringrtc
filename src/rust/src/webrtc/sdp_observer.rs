@@ -31,15 +31,15 @@ pub use crate::webrtc::sim::sdp_observer::RffiSessionDescription;
 #[derive(Clone, Copy, Debug)]
 pub enum SrtpCryptoSuite {
     // Matches webrtc/rtc_base/ssl_stream_adapter.h
-    Aes128CmSha1  = 1, // 16-byte key; 14-byte salt
+    Aes128CmSha1 = 1,  // 16-byte key; 14-byte salt
     AeadAes128Gcm = 7, // 16-byte key; 12-byte salt
     AeadAes256Gcm = 8, // 32-byte key; 12-byte salt
 }
 
 pub struct SrtpKey {
     pub suite: SrtpCryptoSuite,
-    pub key:   Vec<u8>,
-    pub salt:  Vec<u8>,
+    pub key: Vec<u8>,
+    pub salt: Vec<u8>,
 }
 /// Rust wrapper around WebRTC C++ SessionDescription.
 pub struct SessionDescription {
@@ -62,8 +62,8 @@ impl fmt::Debug for SessionDescription {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum RffiVideoCodecType {
-    Vp8                     = 8,
-    H264ConstrainedHigh     = 46,
+    Vp8 = 8,
+    H264ConstrainedHigh = 46,
     H264ConstrainedBaseline = 40,
 }
 
@@ -71,14 +71,14 @@ pub enum RffiVideoCodecType {
 #[repr(C)]
 pub struct RffiVideoCodec {
     r#type: RffiVideoCodecType,
-    level:  u32,
+    level: u32,
 }
 
 #[repr(C)]
 pub struct RffiConnectionParametersV4 {
-    pub ice_ufrag:                 *const c_char,
-    pub ice_pwd:                   *const c_char,
-    pub receive_video_codecs:      *const RffiVideoCodec,
+    pub ice_ufrag: *const c_char,
+    pub ice_pwd: *const c_char,
+    pub receive_video_codecs: *const RffiVideoCodec,
     pub receive_video_codecs_size: usize,
 }
 
@@ -239,15 +239,15 @@ impl SessionDescription {
                 if let Some(rffi_type) = rffi_type {
                     rffi_video_codecs.push(RffiVideoCodec {
                         r#type: rffi_type,
-                        level:  rffi_level,
+                        level: rffi_level,
                     });
                 }
             }
         }
         let rffi_v4 = RffiConnectionParametersV4 {
-            ice_ufrag:                 rffi_ice_ufrag.as_ptr(),
-            ice_pwd:                   rffi_ice_pwd.as_ptr(),
-            receive_video_codecs:      rffi_video_codecs.as_ptr(),
+            ice_ufrag: rffi_ice_ufrag.as_ptr(),
+            ice_pwd: rffi_ice_pwd.as_ptr(),
+            receive_video_codecs: rffi_video_codecs.as_ptr(),
             receive_video_codecs_size: rffi_video_codecs.len(),
         };
         let rffi = unsafe { sdp::Rust_sessionDescriptionFromV4(offer, &rffi_v4) };
@@ -334,7 +334,7 @@ pub struct CreateSessionDescriptionObserver {
     /// session description operation.
     condition: FutureResult<Result<*mut RffiSessionDescription>>,
     /// Pointer to C++ webrtc::rffi::RffiCreateSessionDescriptionObserver object
-    rffi:      *const RffiCreateSessionDescriptionObserver,
+    rffi: *const RffiCreateSessionDescriptionObserver,
 }
 
 impl CreateSessionDescriptionObserver {
@@ -342,7 +342,7 @@ impl CreateSessionDescriptionObserver {
     fn new() -> Self {
         Self {
             condition: Arc::new((Mutex::new((false, Ok(ptr::null_mut()))), Condvar::new())),
-            rffi:      ptr::null(),
+            rffi: ptr::null(),
         }
     }
 
@@ -508,7 +508,7 @@ pub struct SetSessionDescriptionObserver {
     /// session description operation.
     condition: FutureResult<Result<()>>,
     /// Pointer to C++ CreateSessionDescriptionObserver object
-    rffi:      *const RffiSetSessionDescriptionObserver,
+    rffi: *const RffiSetSessionDescriptionObserver,
 }
 
 impl SetSessionDescriptionObserver {
@@ -516,7 +516,7 @@ impl SetSessionDescriptionObserver {
     fn new() -> Self {
         Self {
             condition: Arc::new((Mutex::new((false, Ok(()))), Condvar::new())),
-            rffi:      ptr::null(),
+            rffi: ptr::null(),
         }
     }
 

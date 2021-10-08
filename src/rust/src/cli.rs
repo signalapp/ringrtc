@@ -9,24 +9,12 @@ use ringrtc::{
     common::{
         actor::{Actor, Stopper},
         units::DataRate,
-        CallId,
-        CallMediaType,
-        DeviceId,
-        FeatureLevel,
-        HttpMethod,
-        Result,
+        CallId, CallMediaType, DeviceId, FeatureLevel, HttpMethod, Result,
     },
     core::{bandwidth_mode::BandwidthMode, call_manager::CallManager, group_call, signaling},
     native::{
-        CallState,
-        CallStateHandler,
-        GroupUpdate,
-        GroupUpdateHandler,
-        HttpClient,
-        NativeCallContext,
-        NativePlatform,
-        PeerId,
-        SignalingSender,
+        CallState, CallStateHandler, GroupUpdate, GroupUpdateHandler, HttpClient,
+        NativeCallContext, NativePlatform, PeerId, SignalingSender,
     },
     simnet::{
         router,
@@ -61,20 +49,20 @@ fn main() {
     let signaling_server = SignalingServer::start(&stopper).expect("Start signaling server");
     let router = Router::start(&stopper).expect("Start router");
     let good_link = LinkConfig {
-        delay_min:                 Duration::from_millis(10),
-        delay_max:                 Duration::from_millis(20),
-        loss_probabilty:           0.00,
+        delay_min: Duration::from_millis(10),
+        delay_max: Duration::from_millis(20),
+        loss_probabilty: 0.00,
         repeated_loss_probability: 0.00,
-        rate:                      DataRate::from_mbps(5),
-        queue_size:                DataRate::from_mbps(5) * Duration::from_millis(500),
+        rate: DataRate::from_mbps(5),
+        queue_size: DataRate::from_mbps(5) * Duration::from_millis(500),
     };
     let bad_link = LinkConfig {
-        delay_min:                 Duration::from_millis(100),
-        delay_max:                 Duration::from_millis(200),
-        loss_probabilty:           0.005,
+        delay_min: Duration::from_millis(100),
+        delay_max: Duration::from_millis(200),
+        loss_probabilty: 0.005,
         repeated_loss_probability: 0.70,
-        rate:                      DataRate::from_kbps(256),
-        queue_size:                DataRate::from_kbps(256) * Duration::from_secs(500),
+        rate: DataRate::from_kbps(256),
+        queue_size: DataRate::from_kbps(256) * Duration::from_secs(500),
     };
 
     let caller = CallEndpoint::start(
@@ -193,32 +181,32 @@ fn main() {
 struct CallEndpoint {
     // We keep a copy of these outside of the actor state
     // so we can know them in any thread.
-    peer_id:   PeerId,
+    peer_id: PeerId,
     device_id: DeviceId,
     // There is probably a way to have a CallEndpoint without a thread,
     // but this is the easiest way to get around the nasty dependency cycle
     // of CallEndpoint -> CallManger -> NativePlatform -> CallEndpoint.
     // And it makes it pretty easy to schedule generation of video frames.
-    actor:     Actor<CallEndpointState>,
+    actor: Actor<CallEndpointState>,
 }
 
 struct CallEndpointState {
-    peer_id:   PeerId,
+    peer_id: PeerId,
     device_id: DeviceId,
 
     // How we send and receive signaling
     signaling_server: SignalingServer,
     // How we tell PeerConnections there are network interfaces and inject
     // packet into them
-    network:          InjectableNetwork,
+    network: InjectableNetwork,
     // How we simulate packets being routed around
-    router:           Router,
+    router: Router,
     // How we control calls
-    call_manager:     CallManager<NativePlatform>,
-    call_context:     NativeCallContext,
+    call_manager: CallManager<NativePlatform>,
+    call_context: NativeCallContext,
 
     // Keep a copy around to be able to schedule video frames
-    actor:                 Actor<Self>,
+    actor: Actor<Self>,
     // Keep a copy around to be able to push out video frames
     outgoing_video_source: VideoSource,
 }
@@ -269,8 +257,8 @@ impl CallEndpoint {
                 network.set_sender(Box::new(move |packet: injectable_network::Packet| {
                     router_as_sender.send_packet(router::Packet {
                         source: packet.source,
-                        dest:   packet.dest,
-                        data:   packet.data,
+                        dest: packet.dest,
+                        data: packet.data,
                     });
                 }));
 
@@ -368,8 +356,8 @@ impl CallEndpoint {
                     Box::new(move |packet: router::Packet| {
                         network_as_receiver.receive_udp(injectable_network::Packet {
                             source: packet.source,
-                            dest:   packet.dest,
-                            data:   packet.data,
+                            dest: packet.dest,
+                            data: packet.data,
                         });
                     }),
                 )

@@ -4,7 +4,6 @@
 //
 
 /// The messages we send over the signaling channel to establish a call.
-
 use std::{
     convert::TryInto,
     fmt,
@@ -101,9 +100,9 @@ pub enum MessageType {
 #[derive(Clone)]
 pub struct Offer {
     pub call_media_type: CallMediaType,
-    pub opaque:          Vec<u8>,
+    pub opaque: Vec<u8>,
     // We cache a deserialized opaque value to avoid deserializing it repeatedly.
-    proto:               protobuf::signaling::Offer,
+    proto: protobuf::signaling::Offer,
 }
 
 impl Offer {
@@ -130,9 +129,7 @@ impl Offer {
         call_media_type: CallMediaType,
         v4: protobuf::signaling::ConnectionParametersV4,
     ) -> Result<Self> {
-        let proto = protobuf::signaling::Offer {
-            v4: Some(v4),
-        };
+        let proto = protobuf::signaling::Offer { v4: Some(v4) };
 
         let mut opaque = BytesMut::with_capacity(proto.encoded_len());
         proto.encode(&mut opaque)?;
@@ -165,7 +162,7 @@ impl Offer {
 pub struct Answer {
     pub opaque: Vec<u8>,
     // We cache a deserialized opaque value to avoid deserializing it repeatedly.
-    proto:      protobuf::signaling::Answer,
+    proto: protobuf::signaling::Answer,
 }
 
 impl Answer {
@@ -185,9 +182,7 @@ impl Answer {
     }
 
     pub fn from_v4(v4: protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
-        let proto = protobuf::signaling::Answer {
-            v4: Some(v4),
-        };
+        let proto = protobuf::signaling::Answer { v4: Some(v4) };
 
         let mut opaque = BytesMut::with_capacity(proto.encoded_len());
         proto.encode(&mut opaque)?;
@@ -252,7 +247,7 @@ impl protobuf::signaling::SocketAddr {
             let octets: [u8; 16] = octets.try_into().unwrap();
             IpAddr::V6(octets.into())
         } else {
-            return None
+            return None;
         };
 
         let port = self.port?;
@@ -272,8 +267,7 @@ impl IceCandidate {
 
     // The plan is to switch ICE candidates to V4, but they currently still use SDP (V3).
     pub fn from_v3_sdp(sdp: String) -> Result<Self> {
-        let ice_candidate_proto_v3 =
-            protobuf::signaling::IceCandidateV3 { sdp: Some(sdp) };
+        let ice_candidate_proto_v3 = protobuf::signaling::IceCandidateV3 { sdp: Some(sdp) };
         let ice_candidate_proto = protobuf::signaling::IceCandidate {
             added_v3: Some(ice_candidate_proto_v3),
             removed: None,
@@ -311,7 +305,9 @@ impl IceCandidate {
             // - A protocol (UDP/TCP) that doesn't pair with anything (or you might create new pairs)
             // - Either an unset generation (for no warnings) or a set generation (for warnings, but no memory of the candidate)
             // So it's not paired, the foundation, IP, port, and type don't matter except to pass parsing
-            added_v3: Some(protobuf::signaling::IceCandidateV3 {sdp: Some("candidate:FAKE 1 tcp 0 127.0.0.1 0 typ host".to_owned()) }),
+            added_v3: Some(protobuf::signaling::IceCandidateV3 {
+                sdp: Some("candidate:FAKE 1 tcp 0 127.0.0.1 0 typ host".to_owned()),
+            }),
         };
 
         let mut opaque = Vec::with_capacity(ice_candidate_proto.encoded_len());
@@ -324,10 +320,7 @@ impl IceCandidate {
     pub fn v3_sdp(&self) -> Option<String> {
         match protobuf::signaling::IceCandidate::decode(Bytes::from(self.opaque.clone())).ok()? {
             protobuf::signaling::IceCandidate {
-                added_v3:
-                    Some(protobuf::signaling::IceCandidateV3 {
-                        sdp: Some(v3_sdp),
-                    }),
+                added_v3: Some(protobuf::signaling::IceCandidateV3 { sdp: Some(v3_sdp) }),
                 ..
             } => Some(v3_sdp),
             _ => None,
@@ -340,7 +333,7 @@ impl IceCandidate {
                 removed: Some(removed_address),
                 ..
             } => removed_address.to_std(),
-            _ => None
+            _ => None,
         }
     }
 
@@ -410,12 +403,12 @@ impl fmt::Display for Hangup {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum HangupType {
     // On this device
-    Normal                  = 0,
+    Normal = 0,
     AcceptedOnAnotherDevice = 1,
     DeclinedOnAnotherDevice = 2,
-    BusyOnAnotherDevice     = 3,
+    BusyOnAnotherDevice = 3,
     // On either another device or this device
-    NeedPermission          = 4,
+    NeedPermission = 4,
 }
 
 impl HangupType {
@@ -434,7 +427,7 @@ impl HangupType {
 /// An Answer with extra info specific to sending
 /// Answers are always sent to one device, never broadcast
 pub struct SendAnswer {
-    pub answer:             Answer,
+    pub answer: Answer,
     pub receiver_device_id: DeviceId,
 }
 
@@ -443,52 +436,52 @@ pub struct SendAnswer {
 /// or broadcast (caller only).
 #[derive(Clone)]
 pub struct SendIce {
-    pub ice:                Ice,
+    pub ice: Ice,
     pub receiver_device_id: Option<DeviceId>,
 }
 
 /// A hangup message with extra info specific to sending
 /// Hangup messages are always broadcast to all devices.
 pub struct SendHangup {
-    pub hangup:     Hangup,
+    pub hangup: Hangup,
     pub use_legacy: bool,
 }
 
 /// An Offer with extra info specific to receiving
 pub struct ReceivedOffer {
-    pub offer:                       Offer,
+    pub offer: Offer,
     /// The approximate age of the offer
-    pub age:                         Duration,
-    pub sender_device_id:            DeviceId,
+    pub age: Duration,
+    pub sender_device_id: DeviceId,
     /// The feature level supported by the sender device
     pub sender_device_feature_level: FeatureLevel,
-    pub receiver_device_id:          DeviceId,
+    pub receiver_device_id: DeviceId,
     /// If true, the receiver (local) device is the primary device, otherwise a linked device
-    pub receiver_device_is_primary:  bool,
-    pub sender_identity_key:         Vec<u8>,
-    pub receiver_identity_key:       Vec<u8>,
+    pub receiver_device_is_primary: bool,
+    pub sender_identity_key: Vec<u8>,
+    pub receiver_identity_key: Vec<u8>,
 }
 
 /// An Answer with extra info specific to receiving
 pub struct ReceivedAnswer {
-    pub answer:                      Answer,
-    pub sender_device_id:            DeviceId,
+    pub answer: Answer,
+    pub sender_device_id: DeviceId,
     /// The feature level supported by the sender device
     pub sender_device_feature_level: FeatureLevel,
-    pub sender_identity_key:         Vec<u8>,
-    pub receiver_identity_key:       Vec<u8>,
+    pub sender_identity_key: Vec<u8>,
+    pub receiver_identity_key: Vec<u8>,
 }
 
 /// An Ice message with extra info specific to receiving
 pub struct ReceivedIce {
-    pub ice:              Ice,
+    pub ice: Ice,
     pub sender_device_id: DeviceId,
 }
 
 /// A Hangup message with extra info specific to receiving
 #[derive(Clone, Copy, Debug)]
 pub struct ReceivedHangup {
-    pub hangup:           Hangup,
+    pub hangup: Hangup,
     pub sender_device_id: DeviceId,
 }
 
@@ -499,6 +492,6 @@ pub struct ReceivedBusy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct SenderStatus {
-    pub video_enabled:  Option<bool>,
+    pub video_enabled: Option<bool>,
     pub sharing_screen: Option<bool>,
 }

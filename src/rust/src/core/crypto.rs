@@ -46,10 +46,10 @@ pub fn random_secret<R: Rng + CryptoRng + ?Sized>(rng: &mut R) -> Secret {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct SenderState {
-    current_aes_key:  AesKey,
+    current_aes_key: AesKey,
     current_hmac_key: HmacKey,
-    current_secret:   Secret,
-    ratchet_counter:  RatchetCounter,
+    current_secret: Secret,
+    ratchet_counter: RatchetCounter,
 }
 
 impl SenderState {
@@ -164,8 +164,8 @@ fn decrypt_internal(state: &SenderState, frame_counter: FrameCounter, data: &mut
 }
 
 pub struct Context {
-    sender_state:               SenderState,
-    next_frame_counter:         FrameCounter,
+    sender_state: SenderState,
+    next_frame_counter: FrameCounter,
     remote_sender_states_by_id: HashMap<SenderId, Vec<SenderState>>,
 }
 

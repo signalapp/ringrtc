@@ -18,13 +18,7 @@ use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::webrtc_java_media_stream::JavaMediaStream;
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    DeviceId,
-    HttpMethod,
-    Result,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -50,7 +44,7 @@ impl PlatformItem for AndroidGlobalRef {}
 /// Android implementation for platform::Platform::AppCallContext
 struct JavaCallContext {
     /// Java JVM object.
-    platform:         AndroidPlatform,
+    platform: AndroidPlatform,
     /// Java CallContext object.
     jni_call_context: GlobalRef,
 }
@@ -105,7 +99,7 @@ impl AndroidCallContext {
 /// Android implementation for platform::Platform::AppConnection
 struct JavaConnection {
     /// Java JVM object.
-    platform:       AndroidPlatform,
+    platform: AndroidPlatform,
     /// Java Connection object.
     jni_connection: GlobalRef,
 }
@@ -160,11 +154,11 @@ impl AndroidConnection {
 /// Android implementation of platform::Platform.
 pub struct AndroidPlatform {
     /// Java JVM object.
-    jvm:              JavaVM,
+    jvm: JavaVM,
     /// Java org.signal.ringrtc.CallManager object.
     jni_call_manager: GlobalRef,
     /// Cache of Java classes needed at runtime
-    class_cache:      ClassCache,
+    class_cache: ClassCache,
 }
 
 unsafe impl Sync for AndroidPlatform {}
@@ -305,7 +299,7 @@ impl Platform for AndroidPlatform {
             jni_remote_device_id.into(),
             jni_call_context.as_obj().into(),
             false.into(), /* always disable DTLS */
-            true.into(), /* always enable the RTP data channel */
+            true.into(),  /* always enable the RTP data channel */
         ];
         let result = jni_call_method(
             &env,
@@ -411,10 +405,16 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-
     // Network route changes for 1:1 calls
-    fn on_network_route_changed(&self, remote_peer: &Self::AppRemotePeer, network_route: NetworkRoute) -> Result<()> {
-        info!("on_network_route_changed(): network_route: {:?}", network_route);
+    fn on_network_route_changed(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
+        info!(
+            "on_network_route_changed(): network_route: {:?}",
+            network_route
+        );
 
         let env = self.java_env()?;
 
@@ -1188,7 +1188,10 @@ impl Platform for AndroidPlatform {
         client_id: group_call::ClientId,
         network_route: NetworkRoute,
     ) {
-        info!("handle_network_route_changed(): client_id: {}, network_route: {:?}", client_id, network_route);
+        info!(
+            "handle_network_route_changed(): client_id: {}, network_route: {:?}",
+            client_id, network_route
+        );
 
         if let Ok(env) = self.java_env() {
             let _ = jni_call_method(
@@ -1573,9 +1576,9 @@ impl AndroidPlatform {
     pub fn try_clone(&self) -> Result<Self> {
         let env = self.java_env()?;
         Ok(Self {
-            jvm:              env.get_java_vm()?,
+            jvm: env.get_java_vm()?,
             jni_call_manager: self.jni_call_manager.clone(),
-            class_cache:      self.class_cache.clone(),
+            class_cache: self.class_cache.clone(),
         })
     }
 

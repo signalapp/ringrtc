@@ -13,13 +13,7 @@ use serde_json::json;
 
 use crate::common::{HttpMethod, HttpResponse, Result};
 use crate::core::group_call::{
-    BoxedPeekInfoHandler,
-    DemuxId,
-    GroupMemberInfo,
-    MembershipProof,
-    PeekInfo,
-    SfuInfo,
-    UserId,
+    BoxedPeekInfoHandler, DemuxId, GroupMemberInfo, MembershipProof, PeekInfo, SfuInfo, UserId,
 };
 use crate::core::util::sha256_as_hexstring;
 use crate::core::{group_call, http_client::HttpClient};
@@ -31,26 +25,26 @@ struct JoinResponse {
     endpoint_id: String,
     #[serde(rename = "ssrcPrefix")]
     ssrc_prefix: u32,
-    transport:   SfuTransport,
+    transport: SfuTransport,
 }
 
 #[derive(Deserialize, Debug)]
 struct SfuTransport {
-    ufrag:        String,
-    pwd:          String,
+    ufrag: String,
+    pwd: String,
     fingerprints: Vec<SfuFingerprint>,
-    candidates:   Vec<SfuCandidate>,
+    candidates: Vec<SfuCandidate>,
 }
 
 #[derive(Deserialize, Debug)]
 struct SfuCandidate {
-    ip:             String,
-    port:           u16,
+    ip: String,
+    port: u16,
 }
 
 #[derive(Deserialize, Debug)]
 struct SfuFingerprint {
-    hash:        String,
+    hash: String,
     fingerprint: String,
 }
 
@@ -78,14 +72,14 @@ struct SfuParticipant {
 // Keeps track of which SFU-assigned endpoint ID prefix corresponds to which member's UUID.
 #[derive(Clone, Debug)]
 struct UuidEndpointPrefix {
-    uuid:   UserId,
+    uuid: UserId,
     prefix: String,
 }
 
 pub struct SfuClient {
-    url:             String,
-    http_client:     Box<dyn HttpClient + Send>,
-    auth_header:     Option<String>,
+    url: String,
+    http_client: Box<dyn HttpClient + Send>,
+    auth_header: Option<String>,
     member_prefixes: Vec<UuidEndpointPrefix>,
     deferred_join: Option<(
         String,
@@ -347,10 +341,10 @@ impl SfuClient {
             Some(r) if r.status_code == RESPONSE_CODE_NO_CONFERENCE => {
                 info!("SfuClient: no participants joined");
                 return Ok(PeekInfo {
-                    devices:      vec![],
-                    creator:      None,
-                    era_id:       None,
-                    max_devices:  None,
+                    devices: vec![],
+                    creator: None,
+                    era_id: None,
+                    max_devices: None,
                     device_count: 0,
                 });
             }

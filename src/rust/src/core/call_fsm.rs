@@ -57,13 +57,7 @@ use futures::{Future, Stream};
 use crate::error::RingRtcError;
 
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallState,
-    DeviceId,
-    FeatureLevel,
-    Result,
+    ApplicationEvent, CallDirection, CallId, CallState, DeviceId, FeatureLevel, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::{Call, EventStream};
@@ -177,7 +171,7 @@ where
     T: Platform,
 {
     /// Receiving end of EventPump.
-    event_stream:   EventStream<T>,
+    event_stream: EventStream<T>,
     /// Runtime for processing long running requests.
     worker_runtime: Option<TaskQueueRuntime>,
     /// Runtime for processing client application notification events.
@@ -930,7 +924,7 @@ where
                         debug!(
                             "call_id: {} remote_device_id: {} Ignoring network route changed from inactive connection.",
                             call_id, remote_device_id
-                        );    
+                        );
                     }
                 }
                 Ok(())

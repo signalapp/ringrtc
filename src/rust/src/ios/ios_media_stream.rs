@@ -18,7 +18,7 @@ use crate::webrtc::media::MediaStream;
 /// Rust wrapper around application stream interface and RTCMediaStream object.
 pub struct IosMediaStream {
     app_media_stream_interface: AppMediaStreamInterface,
-    app_media_stream:           *mut c_void,
+    app_media_stream: *mut c_void,
 }
 
 unsafe impl Sync for IosMediaStream {}

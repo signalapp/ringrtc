@@ -27,8 +27,8 @@ const OVERHEAD_IN_BYTES_TCP: u64 = 20;
 #[derive(Debug)]
 pub struct Packet {
     pub source: SocketAddr,
-    pub dest:   SocketAddr,
-    pub data:   Vec<u8>,
+    pub dest: SocketAddr,
+    pub data: Vec<u8>,
 }
 
 // Just assume UDP for now.
@@ -67,13 +67,13 @@ pub struct LinkConfig {
     // Could also be mean + std_dev
     // pub delay_mean:                Duration,
     // pub delay_std_dev:             Duration,
-    pub delay_min:                 Duration,
-    pub delay_max:                 Duration,
-    pub loss_probabilty:           f64,
+    pub delay_min: Duration,
+    pub delay_max: Duration,
+    pub loss_probabilty: f64,
     // If a packet is lost, the probably of the next one being a loss
     pub repeated_loss_probability: f64,
-    pub rate:                      DataRate,
-    pub queue_size:                DataSize,
+    pub rate: DataRate,
+    pub queue_size: DataSize,
 }
 
 #[derive(Clone)]
@@ -82,7 +82,7 @@ pub struct Router {
 }
 
 struct RouterState {
-    send_link_by_ip:    HashMap<IpAddr, Link>,
+    send_link_by_ip: HashMap<IpAddr, Link>,
     receive_link_by_ip: HashMap<IpAddr, Link>,
 }
 
@@ -101,7 +101,7 @@ impl Router {
         Ok(Self {
             actor: Actor::start(stopper.clone(), move |_| {
                 Ok(RouterState {
-                    send_link_by_ip:    HashMap::new(),
+                    send_link_by_ip: HashMap::new(),
                     receive_link_by_ip: HashMap::new(),
                 })
             })?,
@@ -242,8 +242,8 @@ impl Link {
 }
 
 struct LeakyBucket {
-    config:      LinkConfig,
-    actor:       Actor<LeakyBucketState>,
+    config: LinkConfig,
+    actor: Actor<LeakyBucketState>,
     // Shared with LeakyBucketState so we can
     // see the queued size on both sides.
     queued_size: Arc<AtomicU64>,
@@ -251,7 +251,7 @@ struct LeakyBucket {
 
 struct LeakyBucketState {
     queued_size: Arc<AtomicU64>,
-    receiver:    Box<dyn PacketReceiver>,
+    receiver: Box<dyn PacketReceiver>,
 }
 
 impl LeakyBucket {

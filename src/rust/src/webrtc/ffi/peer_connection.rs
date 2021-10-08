@@ -14,9 +14,7 @@ use crate::webrtc::media::RffiAudioEncoderConfig;
 use crate::webrtc::network::{RffiIp, RffiIpPort};
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
-    RffiCreateSessionDescriptionObserver,
-    RffiSessionDescription,
-    RffiSetSessionDescriptionObserver,
+    RffiCreateSessionDescriptionObserver, RffiSessionDescription, RffiSetSessionDescriptionObserver,
 };
 use crate::webrtc::stats_observer::RffiStatsObserver;
 
@@ -64,10 +62,7 @@ extern "C" {
         enabled: bool,
     ) -> bool;
 
-    pub fn Rust_setAudioPlayoutEnabled(
-        peer_connection: *const RffiPeerConnection,
-        enabled: bool,
-    );
+    pub fn Rust_setAudioPlayoutEnabled(peer_connection: *const RffiPeerConnection, enabled: bool);
 
     pub fn Rust_createSignalingDataChannel(
         peer_connection: *const RffiPeerConnection,

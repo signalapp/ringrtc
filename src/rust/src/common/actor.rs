@@ -10,8 +10,7 @@ use std::{
         atomic,
         atomic::AtomicBool,
         mpsc::{channel, RecvError, RecvTimeoutError, Sender},
-        Arc,
-        Mutex,
+        Arc, Mutex,
     },
     thread,
     time::{Duration, Instant},
@@ -21,7 +20,7 @@ use crate::common::Result;
 use crate::error::RingRtcError;
 
 pub struct Actor<State> {
-    sender:  Sender<Task<State>>,
+    sender: Sender<Task<State>>,
     stopper: Stopper,
 }
 
@@ -119,7 +118,7 @@ impl<State: 'static> Actor<State> {
 impl<State> Clone for Actor<State> {
     fn clone(&self) -> Self {
         Self {
-            sender:  self.sender.clone(),
+            sender: self.sender.clone(),
             stopper: self.stopper.clone(),
         }
     }
@@ -136,7 +135,7 @@ impl<State> Stop for Actor<State> {
 type BoxedTaskFn<State> = Box<dyn FnOnce(&mut State) + Send>;
 
 struct Task<State> {
-    run:      BoxedTaskFn<State>,
+    run: BoxedTaskFn<State>,
     deadline: Option<Instant>, // None == Immediately
 }
 
@@ -157,7 +156,7 @@ impl<State> Task<State> {
 
     fn into_immediate(self) -> Self {
         Self {
-            run:      self.run,
+            run: self.run,
             deadline: None,
         }
     }
@@ -217,8 +216,8 @@ pub struct Stopper {
 }
 
 struct StoppableActorHandle {
-    actor:       Box<dyn Stop>,
-    stopped:     Arc<AtomicBool>,
+    actor: Box<dyn Stop>,
+    stopped: Arc<AtomicBool>,
     join_handle: thread::JoinHandle<()>,
 }
 

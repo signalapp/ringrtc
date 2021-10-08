@@ -85,7 +85,7 @@ impl<T> Borrowed<T> {
 pub struct OwnedRc<T: RefCounted>(*const T);
 
 impl<T: RefCounted> OwnedRc<T> {
-    /// # Safety 
+    /// # Safety
     /// The pointee must own a ref count.
     pub unsafe fn from_ptr(ptr: *const T) -> Self {
         Self(ptr)

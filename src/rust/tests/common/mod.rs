@@ -81,9 +81,9 @@ pub fn test_init() {
 }
 
 pub struct TestContext {
-    platform:     SimPlatform,
+    platform: SimPlatform,
     call_manager: CallManager<SimPlatform>,
-    pub prng:     Prng,
+    pub prng: Prng,
 }
 
 impl Drop for TestContext {
@@ -260,11 +260,11 @@ pub fn random_received_offer(_prng: &Prng, age: Duration) -> signaling::Received
     let offer = signaling::Offer::from_v4(
         CallMediaType::Audio,
         protobuf::signaling::ConnectionParametersV4 {
-            public_key:           Some(local_public_key),
-            ice_ufrag:            None,
-            ice_pwd:              None,
+            public_key: Some(local_public_key),
+            ice_ufrag: None,
+            ice_pwd: None,
             receive_video_codecs: vec![],
-            max_bitrate_bps:      None,
+            max_bitrate_bps: None,
         },
     )
     .unwrap();
@@ -289,11 +289,11 @@ pub fn random_received_answer(
 ) -> signaling::ReceivedAnswer {
     let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
     let answer = signaling::Answer::from_v4(protobuf::signaling::ConnectionParametersV4 {
-        public_key:           Some(local_public_key),
-        ice_ufrag:            None,
-        ice_pwd:              None,
+        public_key: Some(local_public_key),
+        ice_ufrag: None,
+        ice_pwd: None,
         receive_video_codecs: vec![],
-        max_bitrate_bps:      None,
+        max_bitrate_bps: None,
     })
     .unwrap();
     signaling::ReceivedAnswer {
@@ -315,7 +315,7 @@ pub fn random_ice_candidate(prng: &Prng) -> signaling::IceCandidate {
 pub fn random_received_ice_candidate(prng: &Prng) -> signaling::ReceivedIce {
     let candidate = random_ice_candidate(prng);
     signaling::ReceivedIce {
-        ice:              signaling::Ice {
+        ice: signaling::Ice {
             candidates: vec![candidate],
         },
         sender_device_id: 1,

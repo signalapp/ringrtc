@@ -7,8 +7,8 @@
 
 use std::convert::TryFrom;
 use std::ffi::c_void;
-use std::{fmt, ptr, slice, str};
 use std::time::Duration;
+use std::{fmt, ptr, slice, str};
 
 use libc::size_t;
 
@@ -77,7 +77,7 @@ impl From<*const c_void> for AppObject {
 #[allow(non_snake_case)]
 pub struct AppByteSlice {
     pub bytes: *const u8,
-    pub len:   size_t,
+    pub len: size_t,
 }
 
 /// Structure for passing optional u16 values to/from Swift.
@@ -113,7 +113,7 @@ pub struct AppOptionalBool {
 #[allow(non_snake_case)]
 pub struct AppIceCandidateArray {
     pub candidates: *const AppByteSlice,
-    pub count:      size_t,
+    pub count: size_t,
 }
 
 /// Structure for passing name/value strings to/from Swift.
@@ -121,7 +121,7 @@ pub struct AppIceCandidateArray {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppHeader {
-    pub name:  AppByteSlice,
+    pub name: AppByteSlice,
     pub value: AppByteSlice,
 }
 
@@ -131,7 +131,7 @@ pub struct AppHeader {
 #[allow(non_snake_case)]
 pub struct AppHeaderArray {
     pub headers: *const AppHeader,
-    pub count:   size_t,
+    pub count: size_t,
 }
 
 /// Structure for passing connection details from the application.
@@ -139,8 +139,8 @@ pub struct AppHeaderArray {
 #[derive(Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct AppConnectionInterface {
-    pub object:  *mut c_void,
-    pub pc:      *mut c_void,
+    pub object: *mut c_void,
+    pub pc: *mut c_void,
     /// Swift object clean up method.
     pub destroy: extern "C" fn(object: *mut c_void),
 }
@@ -170,7 +170,7 @@ impl Drop for AppConnectionInterface {
 #[derive(Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct AppCallContext {
-    pub object:  *mut c_void,
+    pub object: *mut c_void,
     /// Swift object clean up method.
     pub destroy: extern "C" fn(object: *mut c_void),
 }
@@ -200,9 +200,9 @@ impl Drop for AppCallContext {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppMediaStreamInterface {
-    pub object:            *mut c_void,
+    pub object: *mut c_void,
     /// Swift object clean up method.
-    pub destroy:           extern "C" fn(object: *mut c_void),
+    pub destroy: extern "C" fn(object: *mut c_void),
     /// Returns a pointer to a RTCMediaStream object.
     pub createMediaStream:
         extern "C" fn(object: *mut c_void, nativeStream: *mut c_void) -> *mut c_void,
@@ -232,16 +232,16 @@ impl Drop for AppMediaStreamInterface {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppRemoteDeviceState {
-    pub demuxId:           group_call::DemuxId,
-    pub user_id:           AppByteSlice,
+    pub demuxId: group_call::DemuxId,
+    pub user_id: AppByteSlice,
     pub mediaKeysReceived: bool,
-    pub audioMuted:        AppOptionalBool,
-    pub videoMuted:        AppOptionalBool,
-    pub presenting:        AppOptionalBool,
-    pub sharingScreen:     AppOptionalBool,
-    pub addedTime:         u64, // unix millis
-    pub speakerTime:       u64, // unix millis; 0 if never was a speaker
-    pub forwardingVideo:   AppOptionalBool,
+    pub audioMuted: AppOptionalBool,
+    pub videoMuted: AppOptionalBool,
+    pub presenting: AppOptionalBool,
+    pub sharingScreen: AppOptionalBool,
+    pub addedTime: u64,   // unix millis
+    pub speakerTime: u64, // unix millis; 0 if never was a speaker
+    pub forwardingVideo: AppOptionalBool,
 }
 
 #[repr(C)]
@@ -249,14 +249,14 @@ pub struct AppRemoteDeviceState {
 #[allow(non_snake_case)]
 pub struct AppRemoteDeviceStateArray {
     pub states: *const AppRemoteDeviceState,
-    pub count:  size_t,
+    pub count: size_t,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppGroupMemberInfo {
-    pub userId:           AppByteSlice,
+    pub userId: AppByteSlice,
     pub userIdCipherText: AppByteSlice,
 }
 
@@ -265,7 +265,7 @@ pub struct AppGroupMemberInfo {
 #[allow(non_snake_case)]
 pub struct AppGroupMemberInfoArray {
     pub members: *const AppGroupMemberInfo,
-    pub count:   size_t,
+    pub count: size_t,
 }
 
 #[repr(C)]
@@ -280,9 +280,9 @@ pub struct AppUuidArray {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppVideoRequest {
-    pub demux_id:  group_call::DemuxId,
-    pub width:     u16,
-    pub height:    u16,
+    pub demux_id: group_call::DemuxId,
+    pub width: u16,
+    pub height: u16,
     pub framerate: AppOptionalUInt16,
 }
 
@@ -291,7 +291,7 @@ pub struct AppVideoRequest {
 #[allow(non_snake_case)]
 pub struct AppVideoRequestArray {
     pub resolutions: *const AppVideoRequest,
-    pub count:       size_t,
+    pub count: size_t,
 }
 
 #[repr(C)]
@@ -300,9 +300,9 @@ pub struct AppVideoRequestArray {
 /// iOS Interface for communicating with the Swift application.
 pub struct AppInterface {
     /// Raw Swift object pointer.
-    pub object:                       *mut c_void,
+    pub object: *mut c_void,
     /// Swift object clean up method.
-    pub destroy:                      extern "C" fn(object: *mut c_void),
+    pub destroy: extern "C" fn(object: *mut c_void),
     ///
     pub onStartCall: extern "C" fn(
         object: *mut c_void,
@@ -314,7 +314,8 @@ pub struct AppInterface {
     /// Swift event callback method.
     pub onEvent: extern "C" fn(object: *mut c_void, remote: *const c_void, event: i32),
     ///
-    pub onNetworkRouteChanged: extern "C" fn(object: *mut c_void, remote: *const c_void, localNetworkAdapterType: i32),
+    pub onNetworkRouteChanged:
+        extern "C" fn(object: *mut c_void, remote: *const c_void, localNetworkAdapterType: i32),
     ///
     pub onSendOffer: extern "C" fn(
         object: *mut c_void,
@@ -409,7 +410,7 @@ pub struct AppInterface {
     pub onCompareRemotes:
         extern "C" fn(object: *mut c_void, remote1: *const c_void, remote2: *const c_void) -> bool,
     ///
-    pub onCallConcluded:              extern "C" fn(object: *mut c_void, remote: *const c_void),
+    pub onCallConcluded: extern "C" fn(object: *mut c_void, remote: *const c_void),
 
     // Group Calls
     ///
@@ -437,8 +438,11 @@ pub struct AppInterface {
     ///
     pub handleConnectionStateChanged:
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, connectionState: i32),
-    pub handleNetworkRouteChanged:
-        extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, localNetworkAdapterType: i32),
+    pub handleNetworkRouteChanged: extern "C" fn(
+        object: *mut c_void,
+        clientId: group_call::ClientId,
+        localNetworkAdapterType: i32,
+    ),
     ///
     pub handleJoinStateChanged:
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, joinState: i32),
@@ -649,7 +653,7 @@ pub extern "C" fn ringrtcCancelGroupRing(
     } else {
         match group_call::RingCancelReason::try_from(reason) {
             Ok(reason) => Some(reason),
-            Err(e) => { 
+            Err(e) => {
                 error!("Invalid reason: {}", e);
                 return ptr::null_mut();
             }
@@ -786,7 +790,7 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
         callManager as *mut IosCallManager,
         callId,
         signaling::ReceivedIce {
-            ice:              signaling::Ice {
+            ice: signaling::Ice {
                 candidates: ice_candidates,
             },
             sender_device_id: senderDeviceId as DeviceId,
@@ -899,7 +903,7 @@ pub extern "C" fn ringrtcReceivedHttpResponse(
 
     let response = HttpResponse {
         status_code: statusCode,
-        body:        body.unwrap(),
+        body: body.unwrap(),
     };
 
     let result = call_manager::received_http_response(
@@ -1059,7 +1063,7 @@ pub extern "C" fn ringrtcPeekGroupCall(
         }
 
         group_members.push(group_call::GroupMemberInfo {
-            user_id:            user_id.unwrap(),
+            user_id: user_id.unwrap(),
             user_id_ciphertext: user_id_ciphertext.unwrap(),
         })
     }
@@ -1275,9 +1279,9 @@ pub extern "C" fn ringrtcRequestVideo(
         };
 
         rendered_resolutions.push(group_call::VideoRequest {
-            demux_id:  resolution.demux_id as group_call::DemuxId,
-            width:     resolution.width,
-            height:    resolution.height,
+            demux_id: resolution.demux_id as group_call::DemuxId,
+            width: resolution.width,
+            height: resolution.height,
             framerate: optional_framerate,
         });
     }
@@ -1321,7 +1325,7 @@ pub extern "C" fn ringrtcSetGroupMembers(
         }
 
         group_members.push(group_call::GroupMemberInfo {
-            user_id:            user_id.unwrap(),
+            user_id: user_id.unwrap(),
             user_id_ciphertext: user_id_ciphertext.unwrap(),
         })
     }

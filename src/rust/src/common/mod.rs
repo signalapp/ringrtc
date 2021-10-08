@@ -354,7 +354,7 @@ impl fmt::Display for HttpMethod {
 /// A response to an HTTP request.
 pub struct HttpResponse {
     pub status_code: u16,
-    pub body:        Vec<u8>,
+    pub body: Vec<u8>,
 }
 
 // Benchmarking component list.

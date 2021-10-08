@@ -268,14 +268,14 @@ impl StatsObserver {
 #[repr(C)]
 #[derive(Debug)]
 pub struct AudioSenderStatistics {
-    pub ssrc:                   u32,
-    pub packets_sent:           u32,
-    pub bytes_sent:             u64,
-    pub remote_packets_lost:    i32,
-    pub remote_jitter:          f64,
+    pub ssrc: u32,
+    pub packets_sent: u32,
+    pub bytes_sent: u64,
+    pub remote_packets_lost: i32,
+    pub remote_jitter: f64,
     pub remote_round_trip_time: f64,
-    pub audio_level:            f64,
-    pub total_audio_energy:     f64,
+    pub audio_level: f64,
+    pub total_audio_energy: f64,
 }
 
 #[repr(C)]
@@ -305,36 +305,36 @@ pub struct VideoSenderStatistics {
 #[repr(C)]
 #[derive(Debug)]
 pub struct AudioReceiverStatistics {
-    pub ssrc:               u32,
-    pub packets_received:   u32,
-    pub packets_lost:       i32,
-    pub bytes_received:     u64,
-    pub jitter:             f64,
-    pub frames_decoded:     u32,
-    pub total_decode_time:  f64,
-    pub audio_level:        f64,
+    pub ssrc: u32,
+    pub packets_received: u32,
+    pub packets_lost: i32,
+    pub bytes_received: u64,
+    pub jitter: f64,
+    pub frames_decoded: u32,
+    pub total_decode_time: f64,
+    pub audio_level: f64,
     pub total_audio_energy: f64,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct VideoReceiverStatistics {
-    pub ssrc:               u32,
-    pub packets_received:   u32,
-    pub packets_lost:       i32,
-    pub packets_repaired:   u32,
-    pub bytes_received:     u64,
-    pub frames_decoded:     u32,
+    pub ssrc: u32,
+    pub packets_received: u32,
+    pub packets_lost: i32,
+    pub packets_repaired: u32,
+    pub bytes_received: u64,
+    pub frames_decoded: u32,
     pub key_frames_decoded: u32,
-    pub total_decode_time:  f64,
-    pub frame_width:        u32,
-    pub frame_height:       u32,
+    pub total_decode_time: f64,
+    pub frame_width: u32,
+    pub frame_height: u32,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct ConnectionStatistics {
-    pub current_round_trip_time:    f64,
+    pub current_round_trip_time: f64,
     pub available_outgoing_bitrate: f64,
 }
 
@@ -342,16 +342,16 @@ pub struct ConnectionStatistics {
 #[repr(C)]
 #[derive(Debug)]
 pub struct MediaStatistics {
-    pub timestamp_us:                   i64,
-    pub audio_sender_statistics_size:   u32,
-    pub audio_sender_statistics:        *const AudioSenderStatistics,
-    pub video_sender_statistics_size:   u32,
-    pub video_sender_statistics:        *const VideoSenderStatistics,
+    pub timestamp_us: i64,
+    pub audio_sender_statistics_size: u32,
+    pub audio_sender_statistics: *const AudioSenderStatistics,
+    pub video_sender_statistics_size: u32,
+    pub video_sender_statistics: *const VideoSenderStatistics,
     pub audio_receiver_statistics_size: u32,
-    pub audio_receiver_statistics:      *const AudioReceiverStatistics,
+    pub audio_receiver_statistics: *const AudioReceiverStatistics,
     pub video_receiver_statistics_size: u32,
-    pub video_receiver_statistics:      *const VideoReceiverStatistics,
-    pub connection_statistics:          ConnectionStatistics,
+    pub video_receiver_statistics: *const VideoReceiverStatistics,
+    pub connection_statistics: ConnectionStatistics,
 }
 
 /// StatsObserver OnStatsComplete() callback.

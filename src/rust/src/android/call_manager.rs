@@ -114,8 +114,10 @@ pub fn create_peer_connection(
         return Err(AndroidError::CreateJniPeerConnection.into());
     }
 
-    let rffi_pc = unsafe { webrtc::Arc::from_borrowed(
-        Rust_borrowPeerConnectionFromJniOwnedPeerConnection(jni_owned_pc))
+    let rffi_pc = unsafe {
+        webrtc::Arc::from_borrowed(Rust_borrowPeerConnectionFromJniOwnedPeerConnection(
+            jni_owned_pc,
+        ))
     };
     if rffi_pc.is_null() {
         return Err(AndroidError::ExtractNativePeerConnection.into());
@@ -586,7 +588,7 @@ fn deserialize_to_group_member_info(
     let mut group_members = Vec::new();
     for chunk in serialized_group_members.chunks_exact_mut(81) {
         group_members.push(group_call::GroupMemberInfo {
-            user_id:            chunk[..16].into(),
+            user_id: chunk[..16].into(),
             user_id_ciphertext: chunk[16..].into(),
         })
     }
@@ -638,8 +640,13 @@ pub fn create_group_call_client(
     let outgoing_video_track =
         media::VideoTrack::unowned(native_video_track as *const media::RffiVideoTrack);
 
-    let peer_connection_factory =
-        unsafe { PeerConnectionFactory::from_native_factory(webrtc::Arc::from_borrowed(webrtc::ptr::BorrowedRc::from_ptr(native_pcf_borrowed_rc as *const pcf::RffiPeerConnectionFactoryInterface))) };
+    let peer_connection_factory = unsafe {
+        PeerConnectionFactory::from_native_factory(webrtc::Arc::from_borrowed(
+            webrtc::ptr::BorrowedRc::from_ptr(
+                native_pcf_borrowed_rc as *const pcf::RffiPeerConnectionFactoryInterface,
+            ),
+        ))
+    };
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(

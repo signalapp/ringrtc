@@ -16,13 +16,7 @@ use futures::future::TryFutureExt;
 use x25519_dalek::StaticSecret;
 
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    CallState,
-    DeviceId,
-    Result,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DeviceId, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
@@ -40,7 +34,7 @@ use crate::webrtc::peer_connection_observer::NetworkRoute;
 /// Encapsulates the FSM and runtime upon which a Call runs.
 struct Context {
     /// Runtime upon which the CallStateMachine runs.
-    pub worker_runtime:  TaskQueueRuntime,
+    pub worker_runtime: TaskQueueRuntime,
     /// Runtime that manages timing out a call.
     pub timeout_runtime: Option<TaskQueueRuntime>,
 }
@@ -48,7 +42,7 @@ struct Context {
 impl Context {
     fn new() -> Result<Self> {
         Ok(Self {
-            worker_runtime:  TaskQueueRuntime::new("fsm-worker")?,
+            worker_runtime: TaskQueueRuntime::new("fsm-worker")?,
             timeout_runtime: None,
         })
     }
@@ -63,7 +57,7 @@ impl Context {
 /// Container for incoming call data, retained briefly while an
 /// underlying Connection object is created and initialized.
 struct PendingCall {
-    pub received:       signaling::ReceivedOffer,
+    pub received: signaling::ReceivedOffer,
     /// Buffer to hold received ICE candidates before the Connection
     /// object is ready.
     pub ice_candidates: Vec<signaling::IceCandidate>,
@@ -82,9 +76,9 @@ where
     parent_connection: Connection<T>,
     // Used to negotiate SRTP keys with
     // the remote public key derived from the remote local secret.
-    local_secret:      StaticSecret,
-    ice_gatherer:      IceGatherer,
-    offer:             signaling::Offer,
+    local_secret: StaticSecret,
+    ice_gatherer: IceGatherer,
+    offer: signaling::Offer,
 }
 
 /// Represents the set of connections between a local client and
@@ -94,39 +88,39 @@ where
     T: Platform,
 {
     /// Platform specific call manager
-    call_manager:      Arc<CallMutex<CallManager<T>>>,
+    call_manager: Arc<CallMutex<CallManager<T>>>,
     /// Unique 64-bit number identifying the call.
-    call_id:           CallId,
+    call_id: CallId,
     /// The call direction, inbound or outbound.
-    direction:         CallDirection,
+    direction: CallDirection,
     /// The call media type at time of origination.
-    media_type:        CallMediaType,
+    media_type: CallMediaType,
     /// The local DeviceId of the client.
-    local_device_id:   DeviceId,
+    local_device_id: DeviceId,
     /// The application specific remote peer of this call
-    app_remote_peer:   Arc<CallMutex<<T as Platform>::AppRemotePeer>>,
+    app_remote_peer: Arc<CallMutex<<T as Platform>::AppRemotePeer>>,
     /// The application specific context for this call
-    app_call_context:  Arc<CallMutex<Option<<T as Platform>::AppCallContext>>>,
+    app_call_context: Arc<CallMutex<Option<<T as Platform>::AppCallContext>>>,
     /// The current state of the call
-    state:             Arc<CallMutex<CallState>>,
+    state: Arc<CallMutex<CallState>>,
     /// The actively connected connection.
-    active_device_id:  Arc<CallMutex<Option<DeviceId>>>,
+    active_device_id: Arc<CallMutex<Option<DeviceId>>>,
     /// Pending remote offer and associated data.  Incoming calls only.
-    pending_call:      Arc<CallMutex<Option<PendingCall>>>,
+    pending_call: Arc<CallMutex<Option<PendingCall>>>,
     /// Injects events into the [CallStateMachine](../call_fsm/struct.CallStateMachine.html).
-    fsm_sender:        Sender<(Call<T>, CallEvent)>,
+    fsm_sender: Sender<(Call<T>, CallEvent)>,
     /// Execution context for the call FSM
-    fsm_context:       Arc<CallMutex<Context>>,
+    fsm_context: Arc<CallMutex<Context>>,
     /// Collection of connections for this call
-    connection_map:    Arc<CallMutex<HashMap<DeviceId, Connection<T>>>>,
+    connection_map: Arc<CallMutex<HashMap<DeviceId, Connection<T>>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
     terminate_condvar: Arc<(Mutex<bool>, Condvar)>,
     /// Whether or not an offer has been sent via messaging for this call.
-    did_send_offer:    Arc<AtomicBool>,
+    did_send_offer: Arc<AtomicBool>,
     /// When doing call forking, the parent that must be kept alive to keep
     /// ICE candidates and signaling alive.
     /// And we also need to keep around that parent's offer that it created.
-    forking:           Arc<CallMutex<Option<ForkingState<T>>>>,
+    forking: Arc<CallMutex<Option<ForkingState<T>>>>,
 }
 
 impl<T> fmt::Display for Call<T>
@@ -189,22 +183,22 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            call_manager:      Arc::clone(&self.call_manager),
-            call_id:           self.call_id,
-            direction:         self.direction,
-            media_type:        self.media_type,
-            local_device_id:   self.local_device_id,
-            app_remote_peer:   Arc::clone(&self.app_remote_peer),
-            app_call_context:  Arc::clone(&self.app_call_context),
-            state:             Arc::clone(&self.state),
-            active_device_id:  Arc::clone(&self.active_device_id),
-            pending_call:      Arc::clone(&self.pending_call),
-            fsm_sender:        self.fsm_sender.clone(),
-            fsm_context:       Arc::clone(&self.fsm_context),
-            connection_map:    Arc::clone(&self.connection_map),
+            call_manager: Arc::clone(&self.call_manager),
+            call_id: self.call_id,
+            direction: self.direction,
+            media_type: self.media_type,
+            local_device_id: self.local_device_id,
+            app_remote_peer: Arc::clone(&self.app_remote_peer),
+            app_call_context: Arc::clone(&self.app_call_context),
+            state: Arc::clone(&self.state),
+            active_device_id: Arc::clone(&self.active_device_id),
+            pending_call: Arc::clone(&self.pending_call),
+            fsm_sender: self.fsm_sender.clone(),
+            fsm_context: Arc::clone(&self.fsm_context),
+            connection_map: Arc::clone(&self.connection_map),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
-            did_send_offer:    Arc::clone(&self.did_send_offer),
-            forking:           Arc::clone(&self.forking),
+            did_send_offer: Arc::clone(&self.did_send_offer),
+            forking: Arc::clone(&self.forking),
         }
     }
 }

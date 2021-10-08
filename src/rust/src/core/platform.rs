@@ -10,13 +10,7 @@ use std::fmt;
 use std::time::Duration;
 
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    DeviceId,
-    HttpMethod,
-    Result,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -67,7 +61,11 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     fn on_event(&self, remote_peer: &Self::AppRemotePeer, event: ApplicationEvent) -> Result<()>;
 
     /// Notify the client application that the network route has changed (1:1 calls)
-    fn on_network_route_changed(&self, remote_peer: &Self::AppRemotePeer, network_route: NetworkRoute) -> Result<()>;
+    fn on_network_route_changed(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        network_route: NetworkRoute,
+    ) -> Result<()>;
 
     /// Send an offer to a remote peer using the signaling
     /// channel.  Offers are always broadcast to all devices.

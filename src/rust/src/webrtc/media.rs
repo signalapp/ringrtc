@@ -90,7 +90,7 @@ impl MediaStream {
 
 /// Rust wrapper around WebRTC C++ AudioTrackInterface object.
 pub struct AudioTrack {
-    rffi:  *const media::RffiAudioTrack,
+    rffi: *const media::RffiAudioTrack,
     // If owned, release ref count when Dropped
     owned: bool,
 }
@@ -150,8 +150,8 @@ unsafe impl Sync for AudioTrack {}
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum VideoRotation {
-    None         = 0,
-    Clockwise90  = 90,
+    None = 0,
+    Clockwise90 = 90,
     Clockwise180 = 180,
     Clockwise270 = 270,
 }
@@ -159,8 +159,8 @@ pub enum VideoRotation {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct VideoFrameMetadata {
-    width:    u32,
-    height:   u32,
+    width: u32,
+    height: u32,
     rotation: VideoRotation,
 }
 
@@ -168,13 +168,13 @@ impl VideoFrameMetadata {
     pub fn apply_rotation(&self) -> Self {
         match self.rotation {
             VideoRotation::None | VideoRotation::Clockwise180 => Self {
-                width:    self.width,
-                height:   self.height,
+                width: self.width,
+                height: self.height,
                 rotation: VideoRotation::None,
             },
             VideoRotation::Clockwise90 | VideoRotation::Clockwise270 => Self {
-                width:    self.height,
-                height:   self.width,
+                width: self.height,
+                height: self.width,
                 rotation: VideoRotation::None,
             },
         }
@@ -182,7 +182,7 @@ impl VideoFrameMetadata {
 }
 
 pub struct VideoFrame {
-    metadata:    VideoFrameMetadata,
+    metadata: VideoFrameMetadata,
     // Owns this
     rffi_buffer: *const media::RffiVideoFrameBuffer,
 }
@@ -205,7 +205,7 @@ impl VideoFrame {
             return self;
         }
         Self {
-            metadata:    self.metadata.apply_rotation(),
+            metadata: self.metadata.apply_rotation(),
             rffi_buffer: unsafe {
                 media::Rust_copyAndRotateVideoFrameBuffer(self.rffi_buffer, self.metadata.rotation)
             },
@@ -224,7 +224,7 @@ impl VideoFrame {
 
     pub fn from_rgba(width: u32, height: u32, rgba_buffer: &[u8]) -> Self {
         Self {
-            metadata:    VideoFrameMetadata {
+            metadata: VideoFrameMetadata {
                 width,
                 height,
                 rotation: VideoRotation::None,
@@ -325,7 +325,7 @@ unsafe impl Sync for VideoSource {}
 
 /// Rust wrapper around WebRTC C++ VideoTrackInterface object.
 pub struct VideoTrack {
-    rffi:  *const media::RffiVideoTrack,
+    rffi: *const media::RffiVideoTrack,
     // If owned, release ref count when Dropped
     owned: bool,
 }
@@ -449,14 +449,14 @@ unsafe impl Sync for VideoTrack {}
 pub struct RffiAudioEncoderConfig {
     packet_size_ms: u32,
 
-    bandwidth:         i32,
+    bandwidth: i32,
     start_bitrate_bps: i32,
-    min_bitrate_bps:   i32,
-    max_bitrate_bps:   i32,
-    complexity:        i32,
-    enable_vbr:        i32,
-    enable_dtx:        i32,
-    enable_fec:        i32,
+    min_bitrate_bps: i32,
+    max_bitrate_bps: i32,
+    complexity: i32,
+    enable_vbr: i32,
+    enable_dtx: i32,
+    enable_fec: i32,
 }
 
 // A nice form of RffiAudioEncoderConfig
@@ -473,17 +473,17 @@ pub struct AudioEncoderConfig {
     // Valid range: 500-192000
     // Default is to start at 40000 and move between 16000 and 40000.
     pub start_bitrate_bps: u16,
-    pub min_bitrate_bps:   u16,
-    pub max_bitrate_bps:   u16,
+    pub min_bitrate_bps: u16,
+    pub max_bitrate_bps: u16,
     // Valid range: 0-9 (9 must complex)
     // Default is 9
-    pub complexity:        u16,
+    pub complexity: u16,
     // Default is true.
-    pub enable_cbr:        bool,
+    pub enable_cbr: bool,
     // Default in false.
-    pub enable_dtx:        bool,
+    pub enable_dtx: bool,
     // Default in true.
-    pub enable_fec:        bool,
+    pub enable_fec: bool,
 }
 
 impl Default for AudioEncoderConfig {
@@ -494,12 +494,12 @@ impl Default for AudioEncoderConfig {
             bandwidth: AudioBandwidth::Auto,
 
             start_bitrate_bps: 40000,
-            min_bitrate_bps:   16000,
-            max_bitrate_bps:   40000,
-            complexity:        9,
-            enable_cbr:        true,
-            enable_dtx:        false,
-            enable_fec:        true,
+            min_bitrate_bps: 16000,
+            max_bitrate_bps: 40000,
+            complexity: 9,
+            enable_cbr: true,
+            enable_dtx: false,
+            enable_fec: true,
         }
     }
 }
@@ -509,14 +509,14 @@ impl From<&AudioEncoderConfig> for RffiAudioEncoderConfig {
         Self {
             packet_size_ms: config.packet_size_ms,
 
-            bandwidth:         config.bandwidth as i32,
+            bandwidth: config.bandwidth as i32,
             start_bitrate_bps: config.start_bitrate_bps as i32,
-            min_bitrate_bps:   config.min_bitrate_bps as i32,
-            max_bitrate_bps:   config.max_bitrate_bps as i32,
-            complexity:        config.complexity as i32,
-            enable_vbr:        if config.enable_cbr { 0 } else { 1 },
-            enable_dtx:        if config.enable_dtx { 1 } else { 0 },
-            enable_fec:        if config.enable_fec { 1 } else { 0 },
+            min_bitrate_bps: config.min_bitrate_bps as i32,
+            max_bitrate_bps: config.max_bitrate_bps as i32,
+            complexity: config.complexity as i32,
+            enable_vbr: if config.enable_cbr { 0 } else { 1 },
+            enable_dtx: if config.enable_dtx { 1 } else { 0 },
+            enable_fec: if config.enable_fec { 1 } else { 0 },
         }
     }
 }
@@ -525,10 +525,10 @@ impl From<&AudioEncoderConfig> for RffiAudioEncoderConfig {
 #[repr(i32)]
 pub enum AudioBandwidth {
     // Constants in libopus
-    Auto      = -1000,
-    Full      = 1105,
+    Auto = -1000,
+    Full = 1105,
     SuperWide = 1104,
-    Wide      = 1103,
-    Medium    = 1102,
-    Narrow    = 1101,
+    Wide = 1103,
+    Medium = 1102,
+    Narrow = 1101,
 }

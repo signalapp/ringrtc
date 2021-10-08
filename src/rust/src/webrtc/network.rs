@@ -11,13 +11,13 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum NetworkInterfaceType {
-    Unknown  = 0,
+    Unknown = 0,
     Ethernet = 1,
-    Wifi     = 1 << 1,
+    Wifi = 1 << 1,
     Cellular = 1 << 2, // 2G? 3G? 4G? Unknown.
-    Vpn      = 1 << 3,
+    Vpn = 1 << 3,
     Loopback = 1 << 4,
-    Any      = 1 << 5, // When using the "any address".  Not the same as "unknown"
+    Any = 1 << 5, // When using the "any address".  Not the same as "unknown"
 }
 
 /// Rust version of Web RFFI Ip,
@@ -26,7 +26,7 @@ pub enum NetworkInterfaceType {
 #[derive(Clone, Copy)]
 pub struct RffiIp {
     // If v6 == false, only use the first 4 bytes.
-    v6:      bool,
+    v6: bool,
     address: [u8; 16],
 }
 
@@ -60,7 +60,7 @@ impl From<IpAddr> for RffiIp {
             IpAddr::V4(ipv4) => {
                 let octets = ipv4.octets();
                 RffiIp {
-                    v6:      false,
+                    v6: false,
                     address: [
                         octets[0], octets[1], octets[2], octets[3], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0,
@@ -78,7 +78,7 @@ impl From<IpAddr> for RffiIp {
                 let [o12, o13] = segments[6].to_be_bytes();
                 let [o14, o15] = segments[7].to_be_bytes();
                 RffiIp {
-                    v6:      true,
+                    v6: true,
                     address: [
                         o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10, o11, o12, o13, o14, o15,
                     ],
@@ -99,7 +99,7 @@ impl Debug for RffiIp {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct RffiIpPort {
-    ip:   RffiIp,
+    ip: RffiIp,
     port: u16,
 }
 
@@ -112,7 +112,7 @@ impl RffiIpPort {
 impl From<SocketAddr> for RffiIpPort {
     fn from(addr: SocketAddr) -> RffiIpPort {
         RffiIpPort {
-            ip:   addr.ip().into(),
+            ip: addr.ip().into(),
             port: addr.port(),
         }
     }

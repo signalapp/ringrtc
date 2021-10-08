@@ -73,9 +73,7 @@ fn start_inbound_call() -> TestContext {
 
     cm.synchronize().expect(error_line!());
 
-    let connection = active_call
-        .get_connection(1)
-        .expect(error_line!());
+    let connection = active_call.get_connection(1).expect(error_line!());
 
     cm.received_ice(
         active_call.call_id(),
@@ -153,12 +151,10 @@ fn connect_inbound_call() -> TestContext {
     assert_eq!(context.event_count(ApplicationEvent::LocalRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
-    assert!(
-        !active_connection
-            .app_connection()
-            .unwrap()
-            .outgoing_audio_enabled(),
-    );
+    assert!(!active_connection
+        .app_connection()
+        .unwrap()
+        .outgoing_audio_enabled(),);
 
     info!("test: add media stream");
     active_connection
@@ -182,12 +178,10 @@ fn connect_inbound_call() -> TestContext {
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
-    assert!(
-        active_connection
-            .app_connection()
-            .unwrap()
-            .outgoing_audio_enabled(),
-    );
+    assert!(active_connection
+        .app_connection()
+        .unwrap()
+        .outgoing_audio_enabled(),);
 
     context
 }
@@ -211,7 +205,7 @@ fn inbound_call_hangup_accepted() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::AcceptedOnAnotherDevice(2),
+            hangup: signaling::Hangup::AcceptedOnAnotherDevice(2),
         },
     )
     .expect(error_line!());
@@ -237,7 +231,7 @@ fn inbound_call_hangup_declined() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::DeclinedOnAnotherDevice(2),
+            hangup: signaling::Hangup::DeclinedOnAnotherDevice(2),
         },
     )
     .expect(error_line!());
@@ -263,7 +257,7 @@ fn inbound_call_hangup_busy() {
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
-            hangup:           signaling::Hangup::BusyOnAnotherDevice(2),
+            hangup: signaling::Hangup::BusyOnAnotherDevice(2),
         },
     )
     .expect(error_line!());
@@ -319,9 +313,7 @@ fn start_inbound_call_with_error() {
 
     context.force_internal_fault(false);
 
-    let connection = active_call
-        .get_connection(1)
-        .expect(error_line!());
+    let connection = active_call.get_connection(1).expect(error_line!());
 
     assert_eq!(
         connection.state().expect(error_line!()),
@@ -472,8 +464,8 @@ fn group_call_ring() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -520,8 +512,8 @@ fn group_call_ring_expired() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -577,8 +569,8 @@ fn group_call_ring_busy_in_direct_call() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -627,8 +619,8 @@ fn group_call_ring_busy_in_direct_call() {
                 protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id),
-                        ring_id:  Some(ring_id.into()),
-                        r#type:   Some(
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
                             protobuf::signaling::call_message::ring_response::Type::Busy.into()
                         ),
                     }),
@@ -666,8 +658,8 @@ fn group_call_ring_busy_in_group_call() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };
@@ -716,8 +708,8 @@ fn group_call_ring_busy_in_group_call() {
                 protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id),
-                        ring_id:  Some(ring_id.into()),
-                        r#type:   Some(
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
                             protobuf::signaling::call_message::ring_response::Type::Busy.into()
                         ),
                     }),
@@ -744,8 +736,8 @@ fn group_call_ring_responses() {
     let message = protobuf::signaling::CallMessage {
         ring_response: Some(protobuf::signaling::call_message::RingResponse {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_response::Type::Declined.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_response::Type::Declined.into()),
         }),
         ..Default::default()
     };
@@ -799,8 +791,8 @@ fn group_call_ring_responses() {
     let message = protobuf::signaling::CallMessage {
         ring_response: Some(protobuf::signaling::call_message::RingResponse {
             group_id: Some(group_id),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_response::Type::Ringing.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_response::Type::Ringing.into()),
         }),
         ..Default::default()
     };
@@ -837,8 +829,8 @@ fn group_call_ring_timeout() {
     let message = protobuf::signaling::CallMessage {
         ring_intention: Some(protobuf::signaling::call_message::RingIntention {
             group_id: Some(group_id.clone()),
-            ring_id:  Some(ring_id.into()),
-            r#type:   Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
         }),
         ..Default::default()
     };

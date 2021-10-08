@@ -5,6 +5,8 @@
 
 //! WebRTC Peer Connection Observer
 
+use bytes::Bytes;
+use libc::size_t;
 use std::ffi::CStr;
 use std::fmt;
 use std::marker::PhantomData;
@@ -12,8 +14,6 @@ use std::net::SocketAddr;
 use std::os::raw::c_char;
 use std::slice;
 use std::time::SystemTime;
-use bytes::Bytes;
-use libc::size_t;
 
 use crate::common::{Result, RingBench};
 use crate::core::signaling;
@@ -105,10 +105,7 @@ pub trait PeerConnectionObserverTrait {
         ice_candidate: signaling::IceCandidate,
         sdp_for_logging: &str,
     ) -> Result<()>;
-    fn handle_ice_candidates_removed(
-        &mut self,
-        removed_addresses: Vec<SocketAddr>,
-    ) -> Result<()>;
+    fn handle_ice_candidates_removed(&mut self, removed_addresses: Vec<SocketAddr>) -> Result<()>;
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()>;
     fn handle_ice_network_route_changed(&mut self, network_route: NetworkRoute) -> Result<()>;
 
@@ -217,11 +214,15 @@ extern "C" fn pc_observer_OnIceCandidatesRemoved<T>(
 
     trace!("pc_observer_OnIceCandidatesRemoved(): length: {}", length);
 
-    let removed_addresses = unsafe { slice::from_raw_parts(removed_addresses, length as usize) }.iter().map(|address| address.into()).collect();
+    let removed_addresses = unsafe { slice::from_raw_parts(removed_addresses, length as usize) }
+        .iter()
+        .map(|address| address.into())
+        .collect();
 
     let observer = unsafe { &mut *observer_ptr };
-    observer.handle_ice_candidates_removed(removed_addresses).unwrap_or_else(|e| error!("Problems handling ice candidates removed: {}", e));
-
+    observer
+        .handle_ice_candidates_removed(removed_addresses)
+        .unwrap_or_else(|e| error!("Problems handling ice candidates removed: {}", e));
 }
 
 /// PeerConnectionObserver OnIceConnectionChange() callback.
@@ -525,26 +526,26 @@ where
     T: PeerConnectionObserverTrait,
 {
     // ICE events
-    onIceCandidate:          extern "C" fn(*mut T, *const CppIceCandidate),
-    onIceCandidatesRemoved:  extern "C" fn(*mut T, *const RffiIpPort, size_t),
-    onIceConnectionChange:   extern "C" fn(*mut T, IceConnectionState),
+    onIceCandidate: extern "C" fn(*mut T, *const CppIceCandidate),
+    onIceCandidatesRemoved: extern "C" fn(*mut T, *const RffiIpPort, size_t),
+    onIceConnectionChange: extern "C" fn(*mut T, IceConnectionState),
     onIceNetworkRouteChange: extern "C" fn(*mut T, NetworkRoute),
 
     // Media events
-    onAddStream:           extern "C" fn(*mut T, *const RffiMediaStream),
+    onAddStream: extern "C" fn(*mut T, *const RffiMediaStream),
     onAddAudioRtpReceiver: extern "C" fn(*mut T, *const RffiAudioTrack),
     onAddVideoRtpReceiver: extern "C" fn(*mut T, *const RffiVideoTrack),
 
     // Data channel events
-    onSignalingDataChannel:        extern "C" fn(*mut T, *const RffiDataChannel),
+    onSignalingDataChannel: extern "C" fn(*mut T, *const RffiDataChannel),
     onSignalingDataChannelMessage: extern "C" fn(*mut T, *const u8, size_t),
-    onRtpReceived:                 extern "C" fn(*mut T, u8, u16, u32, u32, *const u8, size_t),
+    onRtpReceived: extern "C" fn(*mut T, u8, u16, u32, u32, *const u8, size_t),
 
     // Frame encryption
     getMediaCiphertextBufferSize: extern "C" fn(*mut T, bool, size_t) -> size_t,
     encryptMedia:
         extern "C" fn(*mut T, bool, *const u8, size_t, *mut u8, size_t, *mut size_t) -> bool,
-    getMediaPlaintextBufferSize:  extern "C" fn(*mut T, u32, bool, size_t) -> size_t,
+    getMediaPlaintextBufferSize: extern "C" fn(*mut T, u32, bool, size_t) -> size_t,
     decryptMedia:
         extern "C" fn(*mut T, u32, bool, *const u8, size_t, *mut u8, size_t, *mut size_t) -> bool,
 }
@@ -565,7 +566,7 @@ where
     T: PeerConnectionObserverTrait,
 {
     /// Pointer to C++ webrtc::rffi::RffiPeerConnectionObserver.
-    rffi:          *const RffiPeerConnectionObserver,
+    rffi: *const RffiPeerConnectionObserver,
     observer_type: PhantomData<T>,
 }
 
@@ -602,26 +603,26 @@ where
 
         let pc_observer_callbacks = PeerConnectionObserverCallbacks::<T> {
             // ICE events
-            onIceCandidate:          pc_observer_OnIceCandidate::<T>,
-            onIceCandidatesRemoved:  pc_observer_OnIceCandidatesRemoved::<T>,
-            onIceConnectionChange:   pc_observer_OnIceConnectionChange::<T>,
+            onIceCandidate: pc_observer_OnIceCandidate::<T>,
+            onIceCandidatesRemoved: pc_observer_OnIceCandidatesRemoved::<T>,
+            onIceConnectionChange: pc_observer_OnIceConnectionChange::<T>,
             onIceNetworkRouteChange: pc_observer_OnIceNetworkRouteChange::<T>,
 
             // Media events
-            onAddStream:           pc_observer_OnAddStream::<T>,
+            onAddStream: pc_observer_OnAddStream::<T>,
             onAddAudioRtpReceiver: pc_observer_OnAddAudioRtpReceiver::<T>,
             onAddVideoRtpReceiver: pc_observer_OnAddVideoRtpReceiver::<T>,
 
             // Data channel events
-            onSignalingDataChannel:        pc_observer_OnSignalingDataChannel::<T>,
+            onSignalingDataChannel: pc_observer_OnSignalingDataChannel::<T>,
             onSignalingDataChannelMessage: pc_observer_OnSignalingDataChannelMessage::<T>,
-            onRtpReceived:                 pc_observer_OnRtpReceived::<T>,
+            onRtpReceived: pc_observer_OnRtpReceived::<T>,
 
             // Frame encryption
             getMediaCiphertextBufferSize: pc_observer_GetMediaCiphertextBufferSize::<T>,
-            encryptMedia:                 pc_observer_EncryptMedia::<T>,
-            getMediaPlaintextBufferSize:  pc_observer_GetMediaPlaintextBufferSize::<T>,
-            decryptMedia:                 pc_observer_DecryptMedia::<T>,
+            encryptMedia: pc_observer_EncryptMedia::<T>,
+            getMediaPlaintextBufferSize: pc_observer_GetMediaPlaintextBufferSize::<T>,
+            decryptMedia: pc_observer_DecryptMedia::<T>,
         };
         let pc_observer_callbacks_ptr: *const PeerConnectionObserverCallbacks<T> =
             &pc_observer_callbacks;

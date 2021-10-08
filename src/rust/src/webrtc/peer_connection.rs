@@ -7,8 +7,8 @@
 use std::ffi::CString;
 use std::net::SocketAddr;
 
-use crate::core::util::redact_string;
 use crate::common::{units::DataRate, Result};
+use crate::core::util::redact_string;
 use crate::error::RingRtcError;
 use crate::webrtc;
 use crate::webrtc::data_channel::DataChannel;
@@ -19,9 +19,7 @@ use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
 use crate::webrtc::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
-    CreateSessionDescriptionObserver,
-    SessionDescription,
-    SetSessionDescriptionObserver,
+    CreateSessionDescriptionObserver, SessionDescription, SetSessionDescriptionObserver,
 };
 use crate::webrtc::stats_observer::StatsObserver;
 
@@ -34,15 +32,13 @@ pub use crate::webrtc::ffi::peer_connection::{RffiDataChannel, RffiPeerConnectio
 use crate::webrtc::sim::peer_connection as pc;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::peer_connection::{
-    BoxedRtpPacketSink,
-    RffiDataChannel,
-    RffiPeerConnection,
+    BoxedRtpPacketSink, RffiDataChannel, RffiPeerConnection,
 };
 
 /// Rust wrapper around WebRTC C++ PeerConnection object.
 #[derive(Debug)]
 pub struct PeerConnection {
-    rffi:          webrtc::Arc<RffiPeerConnection>,
+    rffi: webrtc::Arc<RffiPeerConnection>,
     /// Pointer to C++ PeerConnectionObserverInterface (never owned)
     rffi_pc_observer: *const RffiPeerConnectionObserver,
     // We keep this around as an easy way to make sure the PeerConnectionFactory
@@ -56,13 +52,17 @@ pub struct PeerConnection {
 // See PeerConnection::SetSendRates for more info.
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct SendRates {
-    pub min:   Option<DataRate>,
+    pub min: Option<DataRate>,
     pub start: Option<DataRate>,
-    pub max:   Option<DataRate>,
+    pub max: Option<DataRate>,
 }
 
 impl PeerConnection {
-    pub fn new(rffi: webrtc::Arc<RffiPeerConnection>, rffi_pc_observer: *const RffiPeerConnectionObserver, rffi_pcf: Option<webrtc::Arc<RffiPeerConnectionFactoryOwner>>) -> Self {
+    pub fn new(
+        rffi: webrtc::Arc<RffiPeerConnection>,
+        rffi_pc_observer: *const RffiPeerConnectionObserver,
+        rffi_pcf: Option<webrtc::Arc<RffiPeerConnectionFactoryOwner>>,
+    ) -> Self {
         Self {
             rffi,
             rffi_pc_observer,
@@ -78,8 +78,9 @@ impl PeerConnection {
     /// Rust wrapper around C++ PeerConnection::CreateDataChannel().
     /// Assumes the label "signaling" and unordered/unreliable for RTP.
     pub fn create_signaling_data_channel(&self) -> Result<DataChannel> {
-        let rffi_data_channel =
-            unsafe { pc::Rust_createSignalingDataChannel(self.rffi.as_borrowed_ptr(), self.rffi_pc_observer) };
+        let rffi_data_channel = unsafe {
+            pc::Rust_createSignalingDataChannel(self.rffi.as_borrowed_ptr(), self.rffi_pc_observer)
+        };
         if rffi_data_channel.is_null() {
             return Err(RingRtcError::CreateSignalingDataChannel.into());
         }
@@ -159,13 +160,11 @@ impl PeerConnection {
 
     /// Rust wrapper around C++ PeerConnection::AddIceCandidate().
     pub fn add_ice_candidate_from_sdp(&self, sdp: &str) -> Result<()> {
-        info!(
-            "Remote ICE candidate: {}",
-            redact_string(sdp)
-        );
+        info!("Remote ICE candidate: {}", redact_string(sdp));
 
         let sdp_c = CString::new(sdp)?;
-        let add_ok = unsafe { pc::Rust_addIceCandidateFromSdp(self.rffi.as_borrowed_ptr(), sdp_c.as_ptr()) };
+        let add_ok =
+            unsafe { pc::Rust_addIceCandidateFromSdp(self.rffi.as_borrowed_ptr(), sdp_c.as_ptr()) };
         if add_ok {
             Ok(())
         } else {
@@ -179,7 +178,9 @@ impl PeerConnection {
         port: u16,
         tcp: bool,
     ) -> Result<()> {
-        let add_ok = unsafe { pc::Rust_addIceCandidateFromServer(self.rffi.as_borrowed_ptr(), ip.into(), port, tcp) };
+        let add_ok = unsafe {
+            pc::Rust_addIceCandidateFromServer(self.rffi.as_borrowed_ptr(), ip.into(), port, tcp)
+        };
         if add_ok {
             Ok(())
         } else {
@@ -188,15 +189,23 @@ impl PeerConnection {
     }
 
     /// Rust wrapper around C++ PeerConnection::RemoveIceCandidates.
-    pub fn remove_ice_candidates(&self, removed_addresses: impl Iterator<Item=SocketAddr>) {
-        let removed_addresses: Vec<RffiIpPort> = removed_addresses.map(|address| address.into()).collect();
+    pub fn remove_ice_candidates(&self, removed_addresses: impl Iterator<Item = SocketAddr>) {
+        let removed_addresses: Vec<RffiIpPort> =
+            removed_addresses.map(|address| address.into()).collect();
 
-        unsafe { pc::Rust_removeIceCandidates(self.rffi.as_borrowed_ptr(), removed_addresses.as_ptr(), removed_addresses.len()) };
+        unsafe {
+            pc::Rust_removeIceCandidates(
+                self.rffi.as_borrowed_ptr(),
+                removed_addresses.as_ptr(),
+                removed_addresses.len(),
+            )
+        };
     }
 
     // Rust wrapper around C++ PeerConnection::CreateSharedIceGatherer().
     pub fn create_shared_ice_gatherer(&self) -> Result<IceGatherer> {
-        let rffi_ice_gatherer = unsafe { pc::Rust_createSharedIceGatherer(self.rffi.as_borrowed_ptr()) };
+        let rffi_ice_gatherer =
+            unsafe { pc::Rust_createSharedIceGatherer(self.rffi.as_borrowed_ptr()) };
         if rffi_ice_gatherer.is_null() {
             return Err(RingRtcError::CreateIceGatherer.into());
         }
@@ -208,7 +217,9 @@ impl PeerConnection {
 
     // Rust wrapper around C++ PeerConnection::UseSharedIceGatherer().
     pub fn use_shared_ice_gatherer(&self, ice_gatherer: &IceGatherer) -> Result<()> {
-        let ok = unsafe { pc::Rust_useSharedIceGatherer(self.rffi.as_borrowed_ptr(), ice_gatherer.rffi()) };
+        let ok = unsafe {
+            pc::Rust_useSharedIceGatherer(self.rffi.as_borrowed_ptr(), ice_gatherer.rffi())
+        };
         if ok {
             Ok(())
         } else {
@@ -218,7 +229,12 @@ impl PeerConnection {
 
     // Rust wrapper around C++ PeerConnection::GetStats().
     pub fn get_stats(&self, stats_observer: &StatsObserver) -> Result<()> {
-        unsafe { pc::Rust_getStats(self.rffi.as_borrowed_ptr(), stats_observer.rffi_stats_observer()) };
+        unsafe {
+            pc::Rust_getStats(
+                self.rffi.as_borrowed_ptr(),
+                stats_observer.rffi_stats_observer(),
+            )
+        };
 
         Ok(())
     }

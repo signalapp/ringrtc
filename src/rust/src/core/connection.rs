@@ -27,15 +27,8 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::common::{
-    units::DataRate,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    ConnectionState,
-    DeviceId,
-    FeatureLevel,
-    Result,
-    RingBench,
+    units::DataRate, CallDirection, CallId, CallMediaType, ConnectionState, DeviceId, FeatureLevel,
+    Result, RingBench,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -51,13 +44,11 @@ use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::{PeerConnection, SendRates};
-use crate::webrtc::peer_connection_observer::{IceConnectionState, NetworkRoute, PeerConnectionObserverTrait};
+use crate::webrtc::peer_connection_observer::{
+    IceConnectionState, NetworkRoute, PeerConnectionObserverTrait,
+};
 use crate::webrtc::sdp_observer::{
-    create_csd_observer,
-    create_ssd_observer,
-    SessionDescription,
-    SrtpCryptoSuite,
-    SrtpKey,
+    create_csd_observer, create_ssd_observer, SessionDescription, SrtpCryptoSuite, SrtpKey,
 };
 use crate::webrtc::stats_observer::{create_stats_observer, StatsObserver};
 
@@ -120,15 +111,15 @@ where
     /// PeerConnection object
     peer_connection: Option<PeerConnection>,
     /// DataChannel object
-    data_channel:    Option<DataChannel>,
+    data_channel: Option<DataChannel>,
     /// Raw pointer to Connection object for PeerConnectionObserver
-    connection_ptr:  Option<*mut Connection<T>>,
+    connection_ptr: Option<*mut Connection<T>>,
     /// Application-specific incoming media
-    incoming_media:  Option<<T as Platform>::AppIncomingMedia>,
+    incoming_media: Option<<T as Platform>::AppIncomingMedia>,
     /// Application specific peer connection
-    app_connection:  Option<<T as Platform>::AppConnection>,
+    app_connection: Option<<T as Platform>::AppConnection>,
     /// Boxed copy of the stats collector object shared for callbacks.
-    stats_observer:  Option<Box<StatsObserver>>,
+    stats_observer: Option<Box<StatsObserver>>,
 }
 
 // Send and Sync needed to share *const pointer types across threads.
@@ -220,7 +211,7 @@ pub enum ConnectionType {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ConnectionId {
-    call_id:          CallId,
+    call_id: CallId,
     remote_device_id: DeviceId,
 }
 
@@ -250,7 +241,7 @@ impl ConnectionId {
 /// Encapsulates the tick timer and runtime.
 struct TickContext {
     /// Tokio runtime for background task execution of periodic ticks.
-    runtime:       Option<TaskQueueRuntime>,
+    runtime: Option<TaskQueueRuntime>,
     /// Sender for the "cancel" event.
     cancel_sender: Option<oneshot::Sender<()>>,
 }
@@ -259,7 +250,7 @@ impl TickContext {
     /// Create a new TickContext.
     pub fn new() -> Self {
         Self {
-            runtime:       None,
+            runtime: None,
             cancel_sender: None,
         }
     }
@@ -268,7 +259,7 @@ impl TickContext {
 /// Collection of bandwidth mode settings for the connection.
 struct BandwidthModes {
     /// The current bandwidth mode being used for the local endpoint.
-    local_bandwidth_mode:  BandwidthMode,
+    local_bandwidth_mode: BandwidthMode,
     /// The current bandwidth mode being used for the remote endpoint, only if known.
     remote_bandwidth_mode: Option<BandwidthMode>,
 }
@@ -320,40 +311,40 @@ where
     T: Platform,
 {
     /// The parent Call object of this connection.
-    call:                          Arc<CallMutex<Call<T>>>,
+    call: Arc<CallMutex<Call<T>>>,
     /// Injects events into the [ConnectionStateMachine](../call_fsm/struct.CallStateMachine.html).
-    fsm_sender:                    Sender<(Connection<T>, ConnectionEvent)>,
+    fsm_sender: Sender<(Connection<T>, ConnectionEvent)>,
     /// Kept around between new() and start() so we can delay the starting of the FSM
     /// but queue events that happen while starting.
-    fsm_receiver:                  Option<Receiver<(Connection<T>, ConnectionEvent)>>,
+    fsm_receiver: Option<Receiver<(Connection<T>, ConnectionEvent)>>,
     /// Unique 64-bit number identifying the call.
-    call_id:                       CallId,
+    call_id: CallId,
     /// The feature level supported by the remote device.
-    remote_feature_level:          Arc<CallMutex<FeatureLevel>>,
+    remote_feature_level: Arc<CallMutex<FeatureLevel>>,
     /// Connection ID, identifying the call and remote_device.
-    connection_id:                 ConnectionId,
+    connection_id: ConnectionId,
     /// The call direction, inbound or outbound.
-    direction:                     CallDirection,
+    direction: CallDirection,
     /// The current state of the call connection
-    state:                         Arc<CallMutex<ConnectionState>>,
+    state: Arc<CallMutex<ConnectionState>>,
     /// The current network route of the connection
-    network_route:                 Arc<CallMutex<NetworkRoute>>,
+    network_route: Arc<CallMutex<NetworkRoute>>,
     /// Execution context for the call connection FSM
-    context:                       Arc<CallMutex<Context>>,
+    context: Arc<CallMutex<Context>>,
     /// Ancillary WebRTC data.
-    webrtc:                        Arc<CallMutex<WebRtcData<T>>>,
+    webrtc: Arc<CallMutex<WebRtcData<T>>>,
     /// The bandwidth modes that have been set for the connection.
-    bandwidth_modes:               Arc<CallMutex<BandwidthModes>>,
+    bandwidth_modes: Arc<CallMutex<BandwidthModes>>,
     /// Local ICE candidates waiting to be sent over signaling.
     buffered_local_ice_candidates: Arc<CallMutex<Vec<signaling::IceCandidate>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
-    terminate_condvar:             Arc<(Mutex<bool>, Condvar)>,
+    terminate_condvar: Arc<(Mutex<bool>, Condvar)>,
     /// This is write-once configuration and will not change.
-    connection_type:               ConnectionType,
+    connection_type: ConnectionType,
     /// Execution context for the connection periodic timer tick
-    tick_context:                  Arc<CallMutex<TickContext>>,
+    tick_context: Arc<CallMutex<TickContext>>,
     /// The accumulated state of sending messages over the data channel
-    accumulated_dcm_state:         Arc<CallMutex<protobuf::data_channel::Data>>,
+    accumulated_dcm_state: Arc<CallMutex<protobuf::data_channel::Data>>,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -416,26 +407,26 @@ where
 {
     fn clone(&self) -> Self {
         Connection {
-            call:                          Arc::clone(&self.call),
-            fsm_sender:                    self.fsm_sender.clone(),
+            call: Arc::clone(&self.call),
+            fsm_sender: self.fsm_sender.clone(),
             // Clones shouldn't need the Receiver because it's only used
             // for the one reference that is used by the creator between
             // creation and starting.
-            fsm_receiver:                  None,
-            call_id:                       self.call_id,
-            remote_feature_level:          Arc::clone(&self.remote_feature_level),
-            connection_id:                 self.connection_id,
-            direction:                     self.direction,
-            state:                         Arc::clone(&self.state),
-            network_route:                 Arc::clone(&self.network_route),
-            context:                       Arc::clone(&self.context),
-            webrtc:                        Arc::clone(&self.webrtc),
-            bandwidth_modes:               Arc::clone(&self.bandwidth_modes),
+            fsm_receiver: None,
+            call_id: self.call_id,
+            remote_feature_level: Arc::clone(&self.remote_feature_level),
+            connection_id: self.connection_id,
+            direction: self.direction,
+            state: Arc::clone(&self.state),
+            network_route: Arc::clone(&self.network_route),
+            context: Arc::clone(&self.context),
+            webrtc: Arc::clone(&self.webrtc),
+            bandwidth_modes: Arc::clone(&self.bandwidth_modes),
             buffered_local_ice_candidates: Arc::clone(&self.buffered_local_ice_candidates),
-            terminate_condvar:             Arc::clone(&self.terminate_condvar),
-            connection_type:               self.connection_type,
-            tick_context:                  Arc::clone(&self.tick_context),
-            accumulated_dcm_state:         Arc::clone(&self.accumulated_dcm_state),
+            terminate_condvar: Arc::clone(&self.terminate_condvar),
+            connection_type: self.connection_type,
+            tick_context: Arc::clone(&self.tick_context),
+            accumulated_dcm_state: Arc::clone(&self.accumulated_dcm_state),
         }
     }
 }
@@ -461,11 +452,11 @@ where
 
         let webrtc = WebRtcData {
             peer_connection: None,
-            data_channel:    None,
-            connection_ptr:  None,
-            incoming_media:  None,
-            app_connection:  None,
-            stats_observer:  None,
+            data_channel: None,
+            connection_ptr: None,
+            incoming_media: None,
+            app_connection: None,
+            stats_observer: None,
         };
 
         let connection = Self {
@@ -486,7 +477,7 @@ where
             webrtc: Arc::new(CallMutex::new(webrtc, "webrtc")),
             bandwidth_modes: Arc::new(CallMutex::new(
                 BandwidthModes {
-                    local_bandwidth_mode:  bandwidth_mode,
+                    local_bandwidth_mode: bandwidth_mode,
                     remote_bandwidth_mode: None,
                 },
                 "webrtc",
@@ -773,8 +764,8 @@ where
                 )?;
 
                 info!(
-                        "Using V4 signaling for outgoing answer: {:?} {}",
-                        v4_answer, bandwidth_modes
+                    "Using V4 signaling for outgoing answer: {:?} {}",
+                    v4_answer, bandwidth_modes
                 );
 
                 // We have to change the local answer to match what we send back
@@ -1067,7 +1058,7 @@ where
         self.apply_bandwidth_mode(webrtc.peer_connection()?, &bandwidth_mode)?;
 
         let mut receiver_status = protobuf::data_channel::ReceiverStatus {
-            id:              Some(u64::from(self.call_id)),
+            id: Some(u64::from(self.call_id)),
             max_bitrate_bps: Some(bandwidth_modes.local_bandwidth_mode.max_bitrate().as_bps()),
         };
         receiver_status.id = Some(u64::from(self.call_id));
@@ -1152,7 +1143,10 @@ where
     }
 
     /// Buffer local ICE candidates, and maybe send them immediately
-    pub fn buffer_local_ice_candidates(&self, candidates: Vec<signaling::IceCandidate>) -> Result<()> {
+    pub fn buffer_local_ice_candidates(
+        &self,
+        candidates: Vec<signaling::IceCandidate>,
+    ) -> Result<()> {
         let (buffered_count_before, buffered_count_after) = {
             let mut buffered_candidates = self.buffered_local_ice_candidates.lock()?;
             let buffered_count_before = buffered_candidates.len();
@@ -1187,10 +1181,7 @@ where
         Ok(copy_candidates)
     }
 
-    pub fn handle_received_ice(
-        &self,
-        ice: signaling::Ice,
-    ) -> Result<()> {
+    pub fn handle_received_ice(&self, ice: signaling::Ice) -> Result<()> {
         let webrtc = self.webrtc.lock()?;
         let pc = webrtc.peer_connection()?;
 
@@ -1198,7 +1189,11 @@ where
     }
 
     // This is where we differentiate between received candiate additions and removals.
-    fn add_and_remove_remote_ice_candidates(&self, pc: &PeerConnection, remote_ice_candidates: &[signaling::IceCandidate]) -> Result<()> {
+    fn add_and_remove_remote_ice_candidates(
+        &self,
+        pc: &PeerConnection,
+        remote_ice_candidates: &[signaling::IceCandidate],
+    ) -> Result<()> {
         let mut added_sdps = vec![];
         let mut removed_addresses = vec![];
         for candidate in remote_ice_candidates {
@@ -1215,7 +1210,11 @@ where
         ringbench!(
             RingBench::Conn,
             RingBench::WebRtc,
-            format!("ice_candidates({}); ice_candidates_removed({})", added_sdps.len(), removed_addresses.len())
+            format!(
+                "ice_candidates({}); ice_candidates_removed({})",
+                added_sdps.len(),
+                removed_addresses.len()
+            )
         );
 
         for added_sdp in added_sdps {
@@ -1241,8 +1240,8 @@ where
         let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
 
         let hangup = protobuf::data_channel::Hangup {
-            id:        Some(u64::from(self.call_id)),
-            r#type:    Some(hangup_type as i32),
+            id: Some(u64::from(self.call_id)),
+            r#type: Some(hangup_type as i32),
             device_id: hangup_device_id,
         };
 
@@ -1300,8 +1299,8 @@ where
             let previous_sharing_screen =
                 previous.and_then(|sender_status| sender_status.sharing_screen);
             data.sender_status = Some(protobuf::data_channel::SenderStatus {
-                id:             Some(u64::from(self.call_id)),
-                video_enabled:  updated.video_enabled.or(previous_video_enabled),
+                id: Some(u64::from(self.call_id)),
+                video_enabled: updated.video_enabled.or(previous_video_enabled),
                 sharing_screen: updated.sharing_screen.or(previous_sharing_screen),
             });
         })
@@ -1576,18 +1575,23 @@ where
             return Ok(());
         }
 
-        let removed_ports: Vec<u16> = removed_addresses.iter().map(|address| address.port()).collect();
-        info!(
-            "Local ICE candidates removed; ports: {:?}",
-            removed_ports,
-        );
+        let removed_ports: Vec<u16> = removed_addresses
+            .iter()
+            .map(|address| address.port())
+            .collect();
+        info!("Local ICE candidates removed; ports: {:?}", removed_ports,);
 
-        let candidates = removed_addresses.into_iter().filter_map(|removed_address| {
-            signaling::IceCandidate::from_removed_address(removed_address).map_err(|e| {
-                warn!("Failed to signal removed candidate: {:?}", e);
-                e
-            }).ok()
-        }).collect();
+        let candidates = removed_addresses
+            .into_iter()
+            .filter_map(|removed_address| {
+                signaling::IceCandidate::from_removed_address(removed_address)
+                    .map_err(|e| {
+                        warn!("Failed to signal removed candidate: {:?}", e);
+                        e
+                    })
+                    .ok()
+            })
+            .collect();
 
         // This is where we make additions and removals look the same in signaling
         // where a "candidate" (really, an update) can be either an addition or removal.
@@ -1693,7 +1697,7 @@ where
             self.inject_received_sender_status_via_data_channel(
                 CallId::new(sender_status.id()),
                 signaling::SenderStatus {
-                    video_enabled:  sender_status.video_enabled,
+                    video_enabled: sender_status.video_enabled,
                     sharing_screen: sender_status.sharing_screen,
                 },
                 message.sequence_number,
@@ -1919,12 +1923,17 @@ where
 
 #[cfg(feature = "sim")]
 impl Connection<crate::sim::sim_platform::SimPlatform> {
-    pub fn peer_connection_rffi(&self) -> crate::webrtc::Arc<crate::webrtc::sim::peer_connection::RffiPeerConnection> {
+    pub fn peer_connection_rffi(
+        &self,
+    ) -> crate::webrtc::Arc<crate::webrtc::sim::peer_connection::RffiPeerConnection> {
         let webrtc = self.webrtc.lock().unwrap();
         // This is safe because the webrtc.app_connection() is still alive when this is called.
         // Plus, this is only used by unit tests.
         unsafe {
-            crate::webrtc::Arc::from_borrowed(crate::webrtc::ptr::BorrowedRc::from_ptr(webrtc.app_connection.as_ref().unwrap() as *const crate::webrtc::sim::peer_connection::RffiPeerConnection))
+            crate::webrtc::Arc::from_borrowed(crate::webrtc::ptr::BorrowedRc::from_ptr(
+                webrtc.app_connection.as_ref().unwrap()
+                    as *const crate::webrtc::sim::peer_connection::RffiPeerConnection,
+            ))
         }
     }
 }
@@ -1946,10 +1955,7 @@ where
         self.inject_local_ice_candidate(ice_candidate, force_send, sdp_for_logging)
     }
 
-    fn handle_ice_candidates_removed(
-        &mut self,
-        removed_addresses: Vec<SocketAddr>,
-    ) -> Result<()> {
+    fn handle_ice_candidates_removed(&mut self, removed_addresses: Vec<SocketAddr>) -> Result<()> {
         let force_send = false;
         self.inject_local_ice_candidates_removed(removed_addresses, force_send)
     }
@@ -1989,7 +1995,7 @@ fn generate_local_secret_and_public_key() -> Result<(StaticSecret, PublicKey)> {
 }
 
 struct NegotiatedSrtpKeys {
-    pub offer_key:  SrtpKey,
+    pub offer_key: SrtpKey,
     pub answer_key: SrtpKey,
 }
 
@@ -2032,15 +2038,15 @@ fn negotiate_srtp_keys(
     let (answer_salt, _) = okm.split_at(SALT_SIZE);
 
     Ok(NegotiatedSrtpKeys {
-        offer_key:  SrtpKey {
+        offer_key: SrtpKey {
             suite: SUITE,
-            key:   offer_key.to_vec(),
-            salt:  offer_salt.to_vec(),
+            key: offer_key.to_vec(),
+            salt: offer_salt.to_vec(),
         },
         answer_key: SrtpKey {
             suite: SUITE,
-            key:   answer_key.to_vec(),
-            salt:  answer_salt.to_vec(),
+            key: answer_key.to_vec(),
+            salt: answer_salt.to_vec(),
         },
     })
 }

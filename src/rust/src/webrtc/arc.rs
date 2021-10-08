@@ -3,13 +3,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-//! Rust-friendly wrapper around rtc::RefCountInterface, similar to 
+//! Rust-friendly wrapper around rtc::RefCountInterface, similar to
 //! WebRTC's scoped_refptr.
 
-use std::{fmt, marker::{Send, Sync}};
+use std::{
+    fmt,
+    marker::{Send, Sync},
+};
 
-use crate::webrtc;
 use crate::core::util::CppObject;
+use crate::webrtc;
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::ref_count::{add_ref, release_ref};
@@ -80,4 +83,3 @@ impl<T: webrtc::RefCounted> Drop for Arc<T> {
 
 unsafe impl<T: webrtc::RefCounted + Send + Sync> Send for Arc<T> {}
 unsafe impl<T: webrtc::RefCounted + Sync> Sync for Arc<T> {}
-

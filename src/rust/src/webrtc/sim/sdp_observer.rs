@@ -13,12 +13,9 @@ use libc::{size_t, strdup};
 
 use crate::core::util::RustObject;
 use crate::webrtc::sdp_observer::{
-    CreateSessionDescriptionObserver,
-    CreateSessionDescriptionObserverCallbacks,
-    RffiConnectionParametersV4,
-    SetSessionDescriptionObserver,
-    SetSessionDescriptionObserverCallbacks,
-    SrtpCryptoSuite,
+    CreateSessionDescriptionObserver, CreateSessionDescriptionObserverCallbacks,
+    RffiConnectionParametersV4, SetSessionDescriptionObserver,
+    SetSessionDescriptionObserverCallbacks, SrtpCryptoSuite,
 };
 
 /// Simulation type for SessionDescription.
@@ -109,9 +106,9 @@ pub unsafe fn Rust_sessionDescriptionToV4(
 ) -> *mut RffiConnectionParametersV4 {
     info!("Rust_sessionDescriptionToV4(): ");
     Box::leak(Box::new(RffiConnectionParametersV4 {
-        ice_ufrag:                 std::ptr::null(),
-        ice_pwd:                   std::ptr::null(),
-        receive_video_codecs:      std::ptr::null(),
+        ice_ufrag: std::ptr::null(),
+        ice_pwd: std::ptr::null(),
+        receive_video_codecs: std::ptr::null(),
         receive_video_codecs_size: 0,
     }))
 }

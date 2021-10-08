@@ -13,13 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::common::{
-    CallId,
-    CallMediaType,
-    DeviceId,
-    FeatureLevel,
-    HttpMethod,
-    HttpResponse,
-    Result,
+    CallId, CallMediaType, DeviceId, FeatureLevel, HttpMethod, HttpResponse, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
@@ -27,24 +21,12 @@ use crate::core::group_call;
 use crate::core::group_call::{GroupId, SignalingMessageUrgency, UserId};
 use crate::core::signaling;
 use crate::native::{
-    CallState,
-    CallStateHandler,
-    EndReason,
-    GroupUpdate,
-    GroupUpdateHandler,
-    HttpClient,
-    NativeCallContext,
-    NativePlatform,
-    PeerId,
-    SignalingSender,
+    CallState, CallStateHandler, EndReason, GroupUpdate, GroupUpdateHandler, HttpClient,
+    NativeCallContext, NativePlatform, PeerId, SignalingSender,
 };
 use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource, VideoTrack};
 use crate::webrtc::peer_connection_factory::{
-    self as pcf,
-    AudioDevice,
-    Certificate,
-    IceServer,
-    PeerConnectionFactory,
+    self as pcf, AudioDevice, Certificate, IceServer, PeerConnectionFactory,
 };
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
@@ -54,9 +36,9 @@ const ENABLE_LOGGING: bool = true;
 
 /// A structure for packing the contents of log messages.
 pub struct LogMessage {
-    level:   i8,
-    file:    String,
-    line:    u32,
+    level: i8,
+    file: String,
+    line: u32,
     message: String,
 }
 
@@ -80,9 +62,9 @@ impl log::Log for Log {
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
             let message = LogMessage {
-                level:   record.level() as i8,
-                file:    record.file().unwrap().to_string(),
-                line:    record.line().unwrap(),
+                level: record.level() as i8,
+                file: record.file().unwrap().to_string(),
+                line: record.line().unwrap(),
                 message: record.args().to_string(),
             };
 
@@ -123,15 +105,15 @@ pub enum Event {
     // given recipient UUID.
     SendCallMessage {
         recipient_uuid: UserId,
-        message:        Vec<u8>,
-        urgency:        group_call::SignalingMessageUrgency,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
     },
     // The JavaScript should send the following opaque call message to all
     // other members of the given group
     SendCallMessageToGroup {
         group_id: GroupId,
-        message:  Vec<u8>,
-        urgency:  group_call::SignalingMessageUrgency,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
     },
     // The call with the given remote PeerId has changed state.
     // We assume only one call per remote PeerId at a time.
@@ -147,10 +129,10 @@ pub enum Event {
     // JavaScript should initiate an HTTP request.
     SendHttpRequest {
         request_id: u32,
-        url:        String,
-        method:     HttpMethod,
-        headers:    HashMap<String, String>,
-        body:       Option<Vec<u8>>,
+        url: String,
+        method: HttpMethod,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
     },
     // The network route changed for a 1:1 call
     NetworkRouteChange(PeerId, NetworkRoute),
@@ -294,7 +276,7 @@ pub struct OneFrameBuffer {
 
 struct OneFrameBufferState {
     enabled: bool,
-    frame:   Option<VideoFrame>,
+    frame: Option<VideoFrame>,
 }
 
 impl VideoSink for OneFrameBuffer {
@@ -338,17 +320,17 @@ impl OneFrameBuffer {
 pub struct CallEndpoint {
     call_manager: CallManager<NativePlatform>,
 
-    events_receiver:                          Receiver<Event>,
+    events_receiver: Receiver<Event>,
     // This is what we use to control mute/not.
     // It should probably be per-call, but for now it's easier to have only one.
-    outgoing_audio_track:                     AudioTrack,
+    outgoing_audio_track: AudioTrack,
     // This is what we use to push video frames out.
-    outgoing_video_source:                    VideoSource,
+    outgoing_video_source: VideoSource,
     // We only keep this around so we can pass it to PeerConnectionFactory::create_peer_connection
     // via the NativeCallContext.
-    outgoing_video_track:                     VideoTrack,
+    outgoing_video_track: VideoTrack,
     // Pulled out by receiveVideoFrame for direct/1:1 calls
-    incoming_video_buffer:                    OneFrameBuffer,
+    incoming_video_buffer: OneFrameBuffer,
     // Pulled out by receiveGroupCalLVideoFrame for group calls
     incoming_video_buffer_by_remote_demux_id:
         HashMap<(group_call::ClientId, group_call::DemuxId), Box<OneFrameBuffer>>,

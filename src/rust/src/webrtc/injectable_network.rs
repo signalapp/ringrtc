@@ -15,8 +15,8 @@ use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 #[derive(Debug)]
 pub struct Packet {
     pub source: SocketAddr,
-    pub dest:   SocketAddr,
-    pub data:   Vec<u8>,
+    pub dest: SocketAddr,
+    pub data: Vec<u8>,
 }
 
 pub trait PacketSender {
@@ -34,7 +34,7 @@ pub struct InjectableNetwork {
     rffi: *const RffiInjectableNetwork,
     // We keep this around not to make sure the PCF doesn't get
     // destroyed before we do (the PCF is atomically ref-counted in C++).
-    pcf:  PeerConnectionFactory,
+    pcf: PeerConnectionFactory,
 }
 
 impl InjectableNetwork {
@@ -52,9 +52,9 @@ impl InjectableNetwork {
             // a non-dyn pointer to then point to the dyn pointer
             // because C++ wants normal pointers and dyn pointers
             // are fat (double size) pointers.
-            object:   Box::into_raw(Box::new(sender)),
+            object: Box::into_raw(Box::new(sender)),
             send_udp: Rust_InjectableNetworkSender_SendUdp,
-            release:  Rust_InjectableNetworkSender_Release,
+            release: Rust_InjectableNetworkSender_Release,
         } as *const RffiInjectableNetworkSender as CppObject;
         unsafe {
             Rust_InjectableNetwork_SetSender(self.rffi, sender_ptr);
@@ -134,7 +134,7 @@ extern "C" {
 
 #[repr(C)]
 struct RffiInjectableNetworkSender {
-    object:   *const Box<dyn PacketSender>,
+    object: *const Box<dyn PacketSender>,
     send_udp: extern "C" fn(
         object: *mut Box<dyn PacketSender>,
         source: RffiIpPort,
@@ -142,7 +142,7 @@ struct RffiInjectableNetworkSender {
         data: *const u8,
         size: usize,
     ),
-    release:  extern "C" fn(object: *mut Box<dyn PacketSender>),
+    release: extern "C" fn(object: *mut Box<dyn PacketSender>),
 }
 
 #[allow(non_snake_case)]

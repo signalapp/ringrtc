@@ -8,13 +8,7 @@ use std::fmt;
 use std::time::Duration;
 
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    DeviceId,
-    HttpMethod,
-    Result,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -34,9 +28,9 @@ use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserv
 // for each call.
 #[derive(Clone)]
 pub struct NativeCallContext {
-    certificate:          Certificate,
-    hide_ip:              bool,
-    ice_server:           IceServer,
+    certificate: Certificate,
+    hide_ip: bool,
+    ice_server: IceServer,
     outgoing_audio_track: AudioTrack,
     outgoing_video_track: VideoTrack,
 }
@@ -234,27 +228,27 @@ pub enum GroupUpdate {
     RemoteDeviceStatesChanged(group_call::ClientId, Vec<group_call::RemoteDeviceState>),
     IncomingVideoTrack(group_call::ClientId, group_call::DemuxId, VideoTrack),
     PeekChanged {
-        client_id:    group_call::ClientId,
-        members:      Vec<group_call::UserId>,
-        creator:      Option<group_call::UserId>,
-        era_id:       Option<String>,
-        max_devices:  Option<u32>,
+        client_id: group_call::ClientId,
+        members: Vec<group_call::UserId>,
+        creator: Option<group_call::UserId>,
+        era_id: Option<String>,
+        max_devices: Option<u32>,
         device_count: u32,
     },
     PeekResponse {
-        request_id:   u32,
-        members:      Vec<group_call::UserId>,
-        creator:      Option<group_call::UserId>,
-        era_id:       Option<String>,
-        max_devices:  Option<u32>,
+        request_id: u32,
+        members: Vec<group_call::UserId>,
+        creator: Option<group_call::UserId>,
+        era_id: Option<String>,
+        max_devices: Option<u32>,
         device_count: u32,
     },
     Ended(group_call::ClientId, group_call::EndReason),
     Ring {
         group_id: group_call::GroupId,
-        ring_id:  group_call::RingId,
-        sender:   group_call::UserId,
-        update:   group_call::RingUpdate,
+        ring_id: group_call::RingId,
+        sender: group_call::UserId,
+        update: group_call::RingUpdate,
     },
     NetworkRouteChanged(group_call::ClientId, NetworkRoute),
 }
@@ -291,13 +285,13 @@ pub struct NativePlatform {
     peer_connection_factory: PeerConnectionFactory,
 
     // Only relevant for 1:1 calls
-    signaling_sender:            Box<dyn SignalingSender + Send>,
+    signaling_sender: Box<dyn SignalingSender + Send>,
     should_assume_messages_sent: bool,
-    state_handler:               Box<dyn CallStateHandler + Send>,
-    incoming_video_sink:         Box<dyn VideoSink + Send>,
+    state_handler: Box<dyn CallStateHandler + Send>,
+    incoming_video_sink: Box<dyn VideoSink + Send>,
 
     // Only relevant for group calls
-    http_client:   Box<dyn HttpClient + Send>,
+    http_client: Box<dyn HttpClient + Send>,
     group_handler: Box<dyn GroupUpdateHandler + Send>,
 }
 

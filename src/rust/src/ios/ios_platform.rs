@@ -12,13 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::common::{
-    ApplicationEvent,
-    CallDirection,
-    CallId,
-    CallMediaType,
-    DeviceId,
-    HttpMethod,
-    Result,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -26,19 +20,9 @@ use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::ios::api::call_manager_interface::{
-    AppByteSlice,
-    AppCallContext,
-    AppConnectionInterface,
-    AppHeader,
-    AppHeaderArray,
-    AppIceCandidateArray,
-    AppInterface,
-    AppObject,
-    AppOptionalBool,
-    AppOptionalUInt32,
-    AppRemoteDeviceState,
-    AppRemoteDeviceStateArray,
-    AppUuidArray,
+    AppByteSlice, AppCallContext, AppConnectionInterface, AppHeader, AppHeaderArray,
+    AppIceCandidateArray, AppInterface, AppObject, AppOptionalBool, AppOptionalUInt32,
+    AppRemoteDeviceState, AppRemoteDeviceStateArray, AppUuidArray,
 };
 use crate::ios::error::IosError;
 use crate::ios::ios_media_stream::IosMediaStream;
@@ -138,7 +122,7 @@ impl Platform for IosPlatform {
             remote_device_id,
             call.call_context()?.object,
             false, /* always disable DTLS */
-            true, /* always enable the RTP data channel */
+            true,  /* always enable the RTP data channel */
         );
 
         if app_connection_interface.object.is_null() || app_connection_interface.pc.is_null() {
@@ -152,7 +136,9 @@ impl Platform for IosPlatform {
         // Retrieve the underlying PeerConnection object from the
         // application owned RTCPeerConnection object.
         let rffi_peer_connection = unsafe {
-            webrtc::Arc::from_borrowed(webrtc::ptr::BorrowedRc::from_ptr(app_connection_interface.pc as *const RffiPeerConnection))
+            webrtc::Arc::from_borrowed(webrtc::ptr::BorrowedRc::from_ptr(
+                app_connection_interface.pc as *const RffiPeerConnection,
+            ))
         };
         if rffi_peer_connection.is_null() {
             return Err(IosError::ExtractNativePeerConnection.into());
@@ -201,11 +187,18 @@ impl Platform for IosPlatform {
         Ok(())
     }
 
-
-    fn on_network_route_changed(&self, remote_peer: &Self::AppRemotePeer, network_route: NetworkRoute) -> Result<()> {
+    fn on_network_route_changed(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        network_route: NetworkRoute,
+    ) -> Result<()> {
         info!("on_network_route_changed(): {:?}", network_route);
 
-       (self.app_interface.onNetworkRouteChanged)(self.app_interface.object, remote_peer.ptr, network_route.local_adapter_type as i32);
+        (self.app_interface.onNetworkRouteChanged)(
+            self.app_interface.object,
+            remote_peer.ptr,
+            network_route.local_adapter_type as i32,
+        );
 
         Ok(())
     }
@@ -292,7 +285,7 @@ impl Platform for IosPlatform {
 
         let app_ice_candidates_array = AppIceCandidateArray {
             candidates: app_ice_candidates.as_ptr(),
-            count:      app_ice_candidates.len(),
+            count: app_ice_candidates.len(),
         };
 
         // The app_ice_candidates_array is passed up by reference and must
@@ -408,7 +401,7 @@ impl Platform for IosPlatform {
 
         for (name, value) in headers.iter() {
             let app_header = AppHeader {
-                name:  app_slice_from_str(Some(name)),
+                name: app_slice_from_str(Some(name)),
                 value: app_slice_from_str(Some(value)),
             };
 
@@ -417,7 +410,7 @@ impl Platform for IosPlatform {
 
         let app_header_array = AppHeaderArray {
             headers: app_headers.as_ptr(),
-            count:   app_headers.len(),
+            count: app_headers.len(),
         };
 
         (self.app_interface.sendHttpRequest)(
@@ -623,26 +616,18 @@ impl Platform for IosPlatform {
 
         for remote_device_state in remote_device_states {
             let app_remote_device_state = AppRemoteDeviceState {
-                demuxId:           remote_device_state.demux_id,
-                user_id:           app_slice_from_bytes(Some(remote_device_state.user_id.as_ref())),
+                demuxId: remote_device_state.demux_id,
+                user_id: app_slice_from_bytes(Some(remote_device_state.user_id.as_ref())),
                 mediaKeysReceived: remote_device_state.media_keys_received,
-                audioMuted:        app_option_from_bool(
-                    remote_device_state.heartbeat_state.audio_muted,
-                ),
-                videoMuted:        app_option_from_bool(
-                    remote_device_state.heartbeat_state.video_muted,
-                ),
-                presenting:        app_option_from_bool(
-                    remote_device_state.heartbeat_state.presenting,
-                ),
-                sharingScreen:     app_option_from_bool(
+                audioMuted: app_option_from_bool(remote_device_state.heartbeat_state.audio_muted),
+                videoMuted: app_option_from_bool(remote_device_state.heartbeat_state.video_muted),
+                presenting: app_option_from_bool(remote_device_state.heartbeat_state.presenting),
+                sharingScreen: app_option_from_bool(
                     remote_device_state.heartbeat_state.sharing_screen,
                 ),
-                addedTime:         remote_device_state.added_time_as_unix_millis(),
-                speakerTime:       remote_device_state.speaker_time_as_unix_millis(),
-                forwardingVideo:   app_option_from_bool(
-                    remote_device_state.forwarding_video,
-                ),
+                addedTime: remote_device_state.added_time_as_unix_millis(),
+                speakerTime: remote_device_state.speaker_time_as_unix_millis(),
+                forwardingVideo: app_option_from_bool(remote_device_state.forwarding_video),
             };
 
             app_remote_device_states.push(app_remote_device_state);
@@ -650,7 +635,7 @@ impl Platform for IosPlatform {
 
         let app_remote_device_states_array = AppRemoteDeviceStateArray {
             states: app_remote_device_states.as_ptr(),
-            count:  app_remote_device_states.len(),
+            count: app_remote_device_states.len(),
         };
 
         (self.app_interface.handleRemoteDevicesChanged)(
@@ -736,11 +721,11 @@ fn app_slice_from_bytes(bytes: Option<&Vec<u8>>) -> AppByteSlice {
     match bytes {
         None => AppByteSlice {
             bytes: std::ptr::null(),
-            len:   0,
+            len: 0,
         },
         Some(bytes) => AppByteSlice {
             bytes: bytes.as_ptr(),
-            len:   bytes.len(),
+            len: bytes.len(),
         },
     }
 }
@@ -749,11 +734,11 @@ fn app_slice_from_str(s: Option<&String>) -> AppByteSlice {
     match s {
         None => AppByteSlice {
             bytes: std::ptr::null(),
-            len:   0,
+            len: 0,
         },
         Some(s) => AppByteSlice {
             bytes: s.as_ptr(),
-            len:   s.len(),
+            len: s.len(),
         },
     }
 }

@@ -6,11 +6,7 @@
 use crate::webrtc;
 use crate::webrtc::peer_connection_factory::RffiIceServer;
 use crate::webrtc::sim::media::{
-    RffiAudioTrack,
-    RffiVideoSource,
-    RffiVideoTrack,
-    FAKE_AUDIO_TRACK,
-    FAKE_VIDEO_SOURCE,
+    RffiAudioTrack, RffiVideoSource, RffiVideoTrack, FAKE_AUDIO_TRACK, FAKE_VIDEO_SOURCE,
     FAKE_VIDEO_TRACK,
 };
 use crate::webrtc::sim::peer_connection::RffiPeerConnection;
