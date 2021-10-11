@@ -28,6 +28,7 @@ fn main() {
                 "cargo:rustc-link-search=native={}/{}/obj/",
                 out_dir, build_type,
             );
+            println!("cargo:rerun-if-changed={}/{}/obj/", out_dir, build_type,);
         } else {
             println!("cargo:warning=No WebRTC output directory (OUTPUT_DIR) defined!");
         }
