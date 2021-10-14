@@ -5,6 +5,8 @@
 
 //! WebRTC Peer Connection
 
+#[cfg(feature = "native")]
+use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt;
 use std::os::raw::c_char;
@@ -336,27 +338,28 @@ impl PeerConnectionFactory {
 
     #[cfg(feature = "native")]
     fn get_audio_playout_device(&self, index: u16) -> Result<AudioDevice> {
-        let (name, unique_id, rc) = unsafe {
-            let name = CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
-            let unique_id =
-                CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
-            let rc = pcf::Rust_getAudioPlayoutDeviceName(
+        let mut name_buf = [0; ADM_MAX_DEVICE_NAME_SIZE];
+        let mut unique_id_buf = [0; ADM_MAX_DEVICE_UUID_SIZE];
+        let rc = unsafe {
+            pcf::Rust_getAudioPlayoutDeviceName(
                 self.rffi.as_borrowed_ptr(),
                 index,
-                name,
-                unique_id,
-            );
-            // Take back ownership of the raw pointers before checking for errors.
-            let name = CString::from_raw(name);
-            let unique_id = CString::from_raw(unique_id);
-            (name, unique_id, rc)
+                name_buf.as_mut_ptr(),
+                unique_id_buf.as_mut_ptr(),
+            )
         };
         if rc != 0 {
             error!("getAudioPlayoutDeviceName({}) failed: {}", index, rc);
             return Err(RingRtcError::QueryAudioDevices.into());
         }
-        let name = name.into_string()?;
-        let unique_id = unique_id.into_string()?;
+        // SAFETY: the buffer pointers will be valid until the end of the scope,
+        // and they should contain valid C strings if the return code indicated success.
+        let name = unsafe { CStr::from_ptr(name_buf.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        let unique_id = unsafe { CStr::from_ptr(unique_id_buf.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
         Ok(AudioDevice {
             name,
             unique_id,
@@ -483,27 +486,28 @@ impl PeerConnectionFactory {
 
     #[cfg(feature = "native")]
     fn get_audio_recording_device(&self, index: u16) -> Result<AudioDevice> {
-        let (name, unique_id, rc) = unsafe {
-            let name = CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_NAME_SIZE]).into_raw();
-            let unique_id =
-                CString::from_vec_unchecked(vec![0u8; ADM_MAX_DEVICE_UUID_SIZE]).into_raw();
-            let rc = pcf::Rust_getAudioRecordingDeviceName(
+        let mut name_buf = [0; ADM_MAX_DEVICE_NAME_SIZE];
+        let mut unique_id_buf = [0; ADM_MAX_DEVICE_UUID_SIZE];
+        let rc = unsafe {
+            pcf::Rust_getAudioRecordingDeviceName(
                 self.rffi.as_borrowed_ptr(),
                 index,
-                name,
-                unique_id,
-            );
-            // Take back ownership of the raw pointers before checking for errors.
-            let name = CString::from_raw(name);
-            let unique_id = CString::from_raw(unique_id);
-            (name, unique_id, rc)
+                name_buf.as_mut_ptr(),
+                unique_id_buf.as_mut_ptr(),
+            )
         };
         if rc != 0 {
             error!("getAudioRecordingDeviceName({}) failed: {}", index, rc);
             return Err(RingRtcError::QueryAudioDevices.into());
         }
-        let name = name.into_string()?;
-        let unique_id = unique_id.into_string()?;
+        // SAFETY: the buffer pointers will be valid until the end of the scope,
+        // and they should contain valid C strings if the return code indicated success.
+        let name = unsafe { CStr::from_ptr(name_buf.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        let unique_id = unsafe { CStr::from_ptr(unique_id_buf.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
         Ok(AudioDevice {
             name,
             unique_id,
