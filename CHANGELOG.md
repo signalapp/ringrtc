@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.13.5
+
+- Improve how WebRTC pointer is tracked across FFI
+
+- Update Rust
+
+- Update dependencies
+
+- Update builds
+
 ## v2.13.4
 
 - Electron: Use Neon's Channel to avoid polling for events/logs
