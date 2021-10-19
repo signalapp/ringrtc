@@ -7,6 +7,8 @@ import SignalRingRTC.RingRTC
 import WebRTC
 import SignalCoreKit
 
+// See comment of IosMediaStream to understand
+// where this fits in the many layers of wrappers.
 public class ConnectionMediaStream {
 
     // Associate this application MediaStream object with a Connection.
@@ -46,7 +48,7 @@ func connectionMediaStreamDestroy(object: UnsafeMutableRawPointer?) {
     // so deinit should be called implicitly.
 }
 
-func connectionMediaStreamCreateMediaStream(object: UnsafeMutableRawPointer?, nativeStream: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer? {
+func connectionMediaStreamCreateMediaStream(object: UnsafeMutableRawPointer?, nativeStreamBorrowedRc: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer? {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return nil
@@ -56,12 +58,12 @@ func connectionMediaStreamCreateMediaStream(object: UnsafeMutableRawPointer?, na
 
     Logger.debug("")
 
-    guard let nativeStream = nativeStream else {
-        owsFailDebug("nativeStream was unexpectedly nil")
+    guard let nativeStreamBorrowedRc = nativeStreamBorrowedRc else {
+        owsFailDebug("nativeStreamBorrowedRc was unexpectedly nil")
         return nil
     }
 
-    let mediaStream = obj.connection.createStream(nativeStream: nativeStream)
+    let mediaStream = obj.connection.createStream(nativeStreamBorrowedRc: nativeStreamBorrowedRc)
     obj.mediaStream = mediaStream
 
     return UnsafeMutableRawPointer(Unmanaged.passUnretained(mediaStream).toOpaque())

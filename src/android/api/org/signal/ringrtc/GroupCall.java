@@ -124,7 +124,9 @@ public final class GroupCall {
                 sfuUrl,
                 // Returns a borrowed RC.
                 factory.getNativePeerConnectionFactory(),
+                // Returns a borrowed RC.
                 this.outgoingAudioTrack.getNativeAudioTrack(),
+                // Returns a borrowed RC.
                 this.outgoingVideoTrack.getNativeVideoTrack());
         } catch  (CallException e) {
             Log.w(TAG, "Unable to create group call client", e);
@@ -556,11 +558,11 @@ public final class GroupCall {
      * rendered for a specific member (by demuxId). Called via the CallManager.
      *
      */
-    void handleIncomingVideoTrack(long remoteDemuxId, long nativeVideoTrack) {
+    void handleIncomingVideoTrack(long remoteDemuxId, long nativeVideoTrackBorrowedRc) {
         Log.i(TAG, "handleIncomingVideoTrack():");
 
-        if (nativeVideoTrack == 0) {
-            Log.d(TAG, "nativeVideoTrack is null (0)");
+        if (nativeVideoTrackBorrowedRc == 0) {
+            Log.d(TAG, "nativeVideoTrackBorrowedRc is null (0)");
             return;
         }
 
@@ -570,8 +572,17 @@ public final class GroupCall {
             return;
         }
 
-        remoteDeviceState.videoTrack = new VideoTrack(nativeVideoTrack);
-
+        // Note: VideoTrack expects an owned RC, but only if VideoTrack.dispose
+        // is called (see webrtc/sdk/android/api/org/webrtc/MediaStreamTrack.java
+        // and webrtc/sdk/android/api/org/webrtc/VideoTrack.java).
+        // But we never call VideoTrack.dispose, so VideoTrack effectively expects
+        // a borrowed RC.  But that means this remoteDeviceState.videoTrack must not outlive
+        // the native VideoTrack, and there is no guarantee that it doesn't.
+        // LEAK: Further, when sinks are added to the VideoTrack, it creates
+        // native wrapper objects that are only deleted when VideoTrack.dispose()
+        // is called.  So we really should call VideoTrack.dispose(), and if we do
+        // that, we should pass in an owned RC instead of a borrowed RC.
+        remoteDeviceState.videoTrack = new VideoTrack(nativeVideoTrackBorrowedRc);
         this.observer.onRemoteDeviceStatesChanged(this);
     }
 

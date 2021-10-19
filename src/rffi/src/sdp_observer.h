@@ -19,7 +19,8 @@ namespace rffi {
 
 class CreateSessionDescriptionObserverRffi : public CreateSessionDescriptionObserver {
  public:
-  CreateSessionDescriptionObserverRffi(const rust_object                                csd_observer,
+  // Passed-in observer must live as long as the CreateSessionDescriptionRffi.
+  CreateSessionDescriptionObserverRffi(void*                                            csd_observer,
                                        const CreateSessionDescriptionObserverCallbacks* csd_observer_cbs);
   ~CreateSessionDescriptionObserverRffi() override;
 
@@ -29,7 +30,7 @@ class CreateSessionDescriptionObserverRffi : public CreateSessionDescriptionObse
   void OnFailure(RTCError error) override;
 
  private:
-  const rust_object csd_observer_;
+  void* csd_observer_;
   CreateSessionDescriptionObserverCallbacks csd_observer_cbs_;
 
 };
@@ -42,7 +43,8 @@ class CreateSessionDescriptionObserverRffi : public CreateSessionDescriptionObse
 
 class SetSessionDescriptionObserverRffi : public SetSessionDescriptionObserver {
  public:
-  SetSessionDescriptionObserverRffi(const rust_object                             ssd_observer,
+  // Passed-in observer must live as long as the SetSessionDescriptionRffi.
+  SetSessionDescriptionObserverRffi(void*                                         ssd_observer,
                                     const SetSessionDescriptionObserverCallbacks* ssd_observer_cbs);
   ~SetSessionDescriptionObserverRffi() override;
 
@@ -50,7 +52,7 @@ class SetSessionDescriptionObserverRffi : public SetSessionDescriptionObserver {
   void OnFailure(RTCError error) override;
 
  private:
-  const rust_object ssd_observer_;
+  void* ssd_observer_;
   SetSessionDescriptionObserverCallbacks ssd_observer_cbs_;
 
 };

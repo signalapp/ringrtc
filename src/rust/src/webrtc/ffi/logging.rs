@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use crate::core::util::CppObject;
+use crate::webrtc;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -16,7 +16,16 @@ pub enum LogSeverity {
     None,
 }
 
+#[repr(C)]
+#[allow(non_snake_case)]
+pub struct LoggerCallbacks {
+    pub onLogMessage: extern "C" fn(LogSeverity, webrtc::ptr::Borrowed<std::os::raw::c_char>),
+}
+
 extern "C" {
     #[allow(dead_code)]
-    pub fn Rust_setLogger(cbs: CppObject, min_severity: LogSeverity);
+    pub fn Rust_setLogger(
+        callbacks: webrtc::ptr::Borrowed<LoggerCallbacks>,
+        min_severity: LogSeverity,
+    );
 }

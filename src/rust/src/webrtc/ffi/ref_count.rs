@@ -5,22 +5,39 @@
 
 //! Wrapper around rtc::RefCountInterface
 
-use crate::core::util::CppObject;
+use crate::webrtc;
 
-/// Rust wrapper around RefCountInterface::AddRef()
-pub fn add_ref(ref_counted_pointer: CppObject) {
-    unsafe { Rust_addRef(ref_counted_pointer) };
+#[repr(C)]
+pub struct RffiRefCounted {
+    _private: [u8; 0],
 }
 
-/// Rust wrapper around RefCountInterface::Release()
-pub fn release_ref(ref_counted_pointer: CppObject) {
-    unsafe { Rust_releaseRef(ref_counted_pointer) };
+impl webrtc::RefCounted for RffiRefCounted {}
+
+/// Decrements the ref count.
+/// If the ref count goes to zero, the object is deleted.
+pub fn dec<T: webrtc::ptr::RefCounted>(rc: webrtc::ptr::OwnedRc<T>) {
+    unsafe {
+        Rust_decRc(webrtc::ptr::OwnedRc::from_ptr(
+            rc.as_ptr() as *const RffiRefCounted
+        ));
+    }
+}
+
+/// Increments the ref count.
+/// The borrowed RC becomes an owned RC.
+/// # Safety
+/// The pointee must still be alive
+pub unsafe fn inc<T: webrtc::ptr::RefCounted>(
+    rc: webrtc::ptr::BorrowedRc<T>,
+) -> webrtc::ptr::OwnedRc<T> {
+    Rust_incRc(webrtc::ptr::BorrowedRc::from_ptr(
+        rc.as_ptr() as *const RffiRefCounted
+    ));
+    webrtc::ptr::OwnedRc::from_ptr(rc.as_ptr())
 }
 
 extern "C" {
-
-    fn Rust_addRef(ref_counted_pointer: CppObject);
-
-    fn Rust_releaseRef(ref_counted_pointer: CppObject);
-
+    fn Rust_decRc(rc: webrtc::ptr::OwnedRc<RffiRefCounted>);
+    fn Rust_incRc(rc: webrtc::ptr::BorrowedRc<RffiRefCounted>);
 }

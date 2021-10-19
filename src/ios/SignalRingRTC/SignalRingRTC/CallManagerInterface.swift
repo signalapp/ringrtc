@@ -19,7 +19,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
     func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency)
     func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?)
-    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
+    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
     func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool
     func onCallConcluded(remote: UnsafeRawPointer)
@@ -35,7 +35,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute)
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
-    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?)
+    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
     func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo)
     func handleEnded(clientId: UInt32, reason: GroupCallEndReason)
 }
@@ -194,12 +194,12 @@ class CallManagerInterface {
         delegate.sendHttpRequest(requestId: requestId, url: url, method: method, headers: headers, body: body)
     }
 
-    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
+    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
         guard let delegate = self.callManagerObserverDelegate else {
             return nil
         }
 
-        return delegate.onCreateConnection(pcObserver: pcObserver, deviceId: deviceId, appCallContext: appCallContext, enableDtls: enableDtls, enableRtpDataChannel: enableRtpDataChannel)
+        return delegate.onCreateConnection(pcObserverOwned: pcObserverOwned, deviceId: deviceId, appCallContext: appCallContext, enableDtls: enableDtls, enableRtpDataChannel: enableRtpDataChannel)
     }
 
     func onConnectedMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream) {
@@ -292,12 +292,12 @@ class CallManagerInterface {
         delegate.handleRemoteDevicesChanged(clientId: clientId, remoteDeviceStates: remoteDeviceStates)
     }
 
-    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
+    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
+        delegate.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrackBorrowedRc: nativeVideoTrackBorrowedRc)
     }
 
     func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo) {
@@ -608,7 +608,7 @@ func callManagerInterfaceSendHttpRequest(object: UnsafeMutableRawPointer?, reque
     obj.sendHttpRequest(requestId: requestId, url: url, method: httpMethod, headers: finalHeaders, body: body.asData())
 }
 
-func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, observer: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?, enableDtls: Bool, enableRtpDataChannel: Bool) -> AppConnectionInterface {
+func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?, enableDtls: Bool, enableRtpDataChannel: Bool) -> AppConnectionInterface {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
 
@@ -637,7 +637,7 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
 
     let appCallContext: CallContext = Unmanaged.fromOpaque(callContext).takeUnretainedValue()
 
-    if let connectionDetails = obj.onCreateConnection(pcObserver: observer, deviceId: deviceId, appCallContext: appCallContext, enableDtls: enableDtls, enableRtpDataChannel: enableRtpDataChannel) {
+    if let connectionDetails = obj.onCreateConnection(pcObserverOwned: pcObserverOwned, deviceId: deviceId, appCallContext: appCallContext, enableDtls: enableDtls, enableRtpDataChannel: enableRtpDataChannel) {
         return connectionDetails.connection.getWrapper(pc: connectionDetails.pc)
     } else {
         // Swift was problematic to pass back some nullable structure, so we
@@ -896,14 +896,14 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
     obj.handleRemoteDevicesChanged(clientId: clientId, remoteDeviceStates: finalRemoteDeviceStates)
 }
 
-func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
+func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
-    obj.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrack: nativeVideoTrack)
+    obj.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrackBorrowedRc: nativeVideoTrackBorrowedRc)
 }
 
 func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, ringId: Int64, sender: AppByteSlice, update: Int32) {

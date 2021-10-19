@@ -142,9 +142,9 @@ class PeerConnectionFactoryWithOwnedThreads
     });
   }
 
-  int32_t AudioPlayoutDeviceName(uint16_t index, char *out_name, char *out_uuid) override {
+  int32_t AudioPlayoutDeviceName(uint16_t index, char* name_out, char* uuid_out) override {
     return owned_worker_thread_->Invoke<int32_t>(RTC_FROM_HERE, [&]() {
-      return audio_device_module_->PlayoutDeviceName(index, out_name, out_uuid);
+      return audio_device_module_->PlayoutDeviceName(index, name_out, uuid_out);
     });
   }
 
@@ -181,9 +181,9 @@ class PeerConnectionFactoryWithOwnedThreads
     });
   }
 
-  int32_t AudioRecordingDeviceName(uint16_t index, char *out_name, char *out_uuid) override {
+  int32_t AudioRecordingDeviceName(uint16_t index, char* name_out, char* uuid_out) override {
     return owned_worker_thread_->Invoke<int32_t>(RTC_FROM_HERE, [&]() {
-      return audio_device_module_->RecordingDeviceName(index, out_name, out_uuid);
+      return audio_device_module_->RecordingDeviceName(index, name_out, uuid_out);
     });
   }
 
@@ -262,18 +262,17 @@ class PeerConnectionFactoryWithOwnedThreads
   const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
 };
 
-// Returns an owned RC to a PeerConnectionFactory.
+// Returns an owned RC.
 RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
     bool use_new_audio_device_module,
     bool use_injectable_network) {
   auto factory_owner = PeerConnectionFactoryWithOwnedThreads::Create(
     use_new_audio_device_module,
     use_injectable_network);
-  return take_owned_rc(std::move(factory_owner));
+  return take_rc(std::move(factory_owner));
 }
 
-// Takes a borrowed RC to a PeerConnectionFactory.
-// Returns an owned RC to a PeerConnectionFactoryOwner.
+// Returns an owned RC.
 RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
     PeerConnectionFactoryInterface* pcf_borrowed_rc) {
   class PeerConnectionFactoryWrapper : public PeerConnectionFactoryOwner {
@@ -291,20 +290,21 @@ RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
     const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
   };
 
-  return take_owned_rc(make_ref_counted<PeerConnectionFactoryWrapper>(clone_borrowed_rc(pcf_borrowed_rc)));
+  return take_rc(make_ref_counted<PeerConnectionFactoryWrapper>(inc_rc(pcf_borrowed_rc)));
 }
 
+// Returns an owned RC.
 RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
-    PeerConnectionFactoryOwner* factory_owner,
-    PeerConnectionObserverRffi* observer,
-    rtc::RTCCertificate* certificate,
+    PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
+    PeerConnectionObserverRffi* observer_borrowed,
+    rtc::RTCCertificate* certificate_borrowed_rc,
     bool hide_ip,
     RffiIceServer ice_server,
-    webrtc::AudioTrackInterface* outgoing_audio_track,
-    webrtc::VideoTrackInterface* outgoing_video_track,
+    webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
+    webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc,
     bool enable_dtls,
     bool enable_rtp_data_channel) {
-  auto factory = factory_owner->peer_connection_factory();
+  auto factory = factory_owner_borrowed_rc->peer_connection_factory();
 
   PeerConnectionInterface::RTCConfiguration config;
   config.bundle_policy = PeerConnectionInterface::kBundlePolicyMaxBundle;
@@ -313,13 +313,13 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   if (hide_ip) {
     config.type = PeerConnectionInterface::kRelay;
   }
-  config.certificates.push_back(certificate);
+  config.certificates.push_back(inc_rc(certificate_borrowed_rc));
   if (ice_server.urls_size > 0) {
     webrtc::PeerConnectionInterface::IceServer rtc_ice_server;
-    rtc_ice_server.username = std::string(ice_server.username);
-    rtc_ice_server.password = std::string(ice_server.password);
+    rtc_ice_server.username = std::string(ice_server.username_borrowed);
+    rtc_ice_server.password = std::string(ice_server.password_borrowed);
     for (size_t i = 0; i < ice_server.urls_size; i++) {
-      rtc_ice_server.urls.push_back(std::string(ice_server.urls[i]));
+      rtc_ice_server.urls.push_back(std::string(ice_server.urls_borrowed[i]));
     }
     config.servers.push_back(rtc_ice_server);
   }
@@ -327,15 +327,17 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   config.enable_dtls_srtp = enable_dtls;
   config.enable_rtp_data_channel = enable_rtp_data_channel;
   config.crypto_options = webrtc::CryptoOptions{};
-  if (observer->enable_frame_encryption()) {
+  if (observer_borrowed->enable_frame_encryption()) {
     config.crypto_options->sframe.require_frame_encryption = true;
   }
   config.crypto_options->srtp.enable_gcm_crypto_suites = true;
   config.continual_gathering_policy =  PeerConnectionInterface::ContinualGatheringPolicy::GATHER_CONTINUALLY;
 
-  PeerConnectionDependencies deps(observer);
-  if (factory_owner->injectable_network()) {
-    deps.allocator = factory_owner->injectable_network()->CreatePortAllocator();
+  // PeerConnectionDependencies.observer is copied to PeerConnection.observer_.
+  // It must live as long as the PeerConnection.
+  PeerConnectionDependencies deps(observer_borrowed);
+  if (factory_owner_borrowed_rc->injectable_network()) {
+    deps.allocator = factory_owner_borrowed_rc->injectable_network()->CreatePortAllocator();
   }
   rtc::scoped_refptr<PeerConnectionInterface> pc = factory->CreatePeerConnection(
     config, std::move(deps));
@@ -345,115 +347,111 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   std::vector<std::string> stream_ids;
   stream_ids.push_back(stream_id);
 
-  if (outgoing_audio_track) {
-    auto result = pc->AddTrack(outgoing_audio_track, stream_ids);
+  if (outgoing_audio_track_borrowed_rc) {
+    auto result = pc->AddTrack(inc_rc(outgoing_audio_track_borrowed_rc), stream_ids);
     if (result.ok()) {
-      if (observer->enable_frame_encryption()) {
+      if (observer_borrowed->enable_frame_encryption()) {
         auto rtp_sender = result.MoveValue();
-        rtp_sender->SetFrameEncryptor(observer->CreateEncryptor());
+        rtp_sender->SetFrameEncryptor(observer_borrowed->CreateEncryptor());
       }
     } else {
       RTC_LOG(LS_ERROR) << "Failed to PeerConnection::AddTrack(audio)";
     }
   }
 
-  if (outgoing_video_track) {
-    auto result = pc->AddTrack(outgoing_video_track, stream_ids);
+  if (outgoing_video_track_borrowed_rc) {
+    auto result = pc->AddTrack(inc_rc(outgoing_video_track_borrowed_rc), stream_ids);
     if (result.ok()) {
-      if (observer->enable_frame_encryption()) {
+      if (observer_borrowed->enable_frame_encryption()) {
         auto rtp_sender = result.MoveValue();
-        rtp_sender->SetFrameEncryptor(observer->CreateEncryptor());
+        rtp_sender->SetFrameEncryptor(observer_borrowed->CreateEncryptor());
       }
     } else {
       RTC_LOG(LS_ERROR) << "Failed to PeerConnection::AddTrack(video)";
     }
   }
 
-  return take_owned_rc(pc);
+  return take_rc(pc);
 }
 
+// Returns a borrowed pointer.
 RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
-    PeerConnectionFactoryOwner* factory_owner) {
-  return factory_owner->injectable_network();
+    PeerConnectionFactoryOwner* factory_owner_borrowed_rc) {
+  return factory_owner_borrowed_rc->injectable_network();
 }
 
-// Takes a borrowed RC to a PeerConnectionFactory
-// Returns an owned RC to an AudioTrack.
+// Returns an owned RC.
 RUSTEXPORT AudioTrackInterface* Rust_createAudioTrack(
-    PeerConnectionFactoryOwner* factory_owner) {
-  auto factory = factory_owner->peer_connection_factory();
+    PeerConnectionFactoryOwner* factory_owner_borrowed_rc) {
+  auto factory = factory_owner_borrowed_rc->peer_connection_factory();
 
   cricket::AudioOptions options;
   auto source = factory->CreateAudioSource(options);
   // Note: This must stay "audio1" to stay in sync with V4 signaling.
-  auto track = factory->CreateAudioTrack("audio1", std::move(source));
-  return track.release();
+  return take_rc(factory->CreateAudioTrack("audio1", std::move(source)));
 }
 
-RUSTEXPORT VideoTrackSourceInterface* Rust_createVideoSource(
-    PeerConnectionFactoryOwner* factory_owner) {
-  auto source = new rtc::RefCountedObject<webrtc::rffi::VideoSource>();
-  source->AddRef();
-  return source;
+// Returns an owned RC.
+RUSTEXPORT VideoTrackSourceInterface* Rust_createVideoSource() {
+  return take_rc(make_ref_counted<webrtc::rffi::VideoSource>());
 }
 
-
+// Returns an owned RC.
 RUSTEXPORT VideoTrackInterface* Rust_createVideoTrack(
-    PeerConnectionFactoryOwner* factory_owner,
-    VideoTrackSourceInterface* source) {
-  auto factory = factory_owner->peer_connection_factory();
+    PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
+    VideoTrackSourceInterface* source_borrowed_rc) {
+  auto factory = factory_owner_borrowed_rc->peer_connection_factory();
 
   // PeerConnectionFactory::CreateVideoTrack increments the refcount on source.
   // Note: This must stay "video1" to stay in sync with V4 signaling.
-  auto track = factory->CreateVideoTrack("video1", source);
-  return track.release();
+  return take_rc(factory->CreateVideoTrack("video1", source_borrowed_rc));
 }
 
 // This could technically be in its own file because it's not part of PeerConnectionFactory,
 // but this is a convenient place to put it.
+// Returns an owned RC.
 RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate() {
   rtc::KeyParams params;  // default is ECDSA
   absl::optional<uint64_t> expires_ms;  // default is to never expire?
-  auto cert = rtc::RTCCertificateGenerator::GenerateCertificate(params, expires_ms);
-  return cert.release();
+  return take_rc(rtc::RTCCertificateGenerator::GenerateCertificate(params, expires_ms));
 }
 
-RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(rtc::RTCCertificate* cert, uint8_t fingerprint[32]) {
-  if (!cert || !fingerprint) {
+RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(rtc::RTCCertificate* cert_borrowed_rc, uint8_t fingerprint_out[32]) {
+  if (!cert_borrowed_rc || !fingerprint_out) {
     return false;
   }
 
   size_t digest_size;
-  return (cert->GetSSLCertificate().ComputeDigest(rtc::DIGEST_SHA_256, fingerprint, 32, &digest_size)
+  return (cert_borrowed_rc->GetSSLCertificate().ComputeDigest(rtc::DIGEST_SHA_256, fingerprint_out, 32, &digest_size)
           && (digest_size == 32));
 }
 
 RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(
-    PeerConnectionFactoryOwner* factory_owner) {
-  return factory_owner->AudioPlayoutDevices();
+    PeerConnectionFactoryOwner* factory_owner_borrowed_rc) {
+  return factory_owner_borrowed_rc->AudioPlayoutDevices();
 }
 
-RUSTEXPORT int32_t Rust_getAudioPlayoutDeviceName(webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index, char *out_name, char *out_uuid) {
-  return factory_owner->AudioPlayoutDeviceName(index, out_name, out_uuid);
+RUSTEXPORT int32_t Rust_getAudioPlayoutDeviceName(webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, uint16_t index, char* name_out, char* uuid_out) {
+  return factory_owner_borrowed_rc->AudioPlayoutDeviceName(index, name_out, uuid_out);
 }
 
 RUSTEXPORT bool Rust_setAudioPlayoutDevice(
-  webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index) {
-  return factory_owner->SetAudioPlayoutDevice(index);
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, uint16_t index) {
+  return factory_owner_borrowed_rc->SetAudioPlayoutDevice(index);
 }
 
 RUSTEXPORT int16_t Rust_getAudioRecordingDevices(
-    PeerConnectionFactoryOwner* factory_owner) {
-  return factory_owner->AudioRecordingDevices();
+    PeerConnectionFactoryOwner* factory_owner_borrowed_rc) {
+  return factory_owner_borrowed_rc->AudioRecordingDevices();
 }
 
-RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index, char *out_name, char *out_uuid) {
-  return factory_owner->AudioRecordingDeviceName(index, out_name, out_uuid);
+RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, uint16_t index, char* name_out, char* uuid_out) {
+  return factory_owner_borrowed_rc->AudioRecordingDeviceName(index, name_out, uuid_out);
 }
 
 RUSTEXPORT bool Rust_setAudioRecordingDevice(
-  webrtc::PeerConnectionFactoryOwner* factory_owner, uint16_t index) {
-  return factory_owner->SetAudioRecordingDevice(index);
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, uint16_t index) {
+  return factory_owner_borrowed_rc->SetAudioRecordingDevice(index);
 }
 
 } // namespace rffi

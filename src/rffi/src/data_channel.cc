@@ -14,12 +14,11 @@ namespace webrtc {
 namespace rffi {
 
 RUSTEXPORT bool
-Rust_dataChannelSend(DataChannelInterface* data_channel,
-                     const uint8_t*        buf,
+Rust_dataChannelSend(DataChannelInterface* data_channel_borrowed_rc,
+                     const uint8_t*        buf_borrowed,
                      size_t                len,
                      bool                  binary) {
-  bool ret = data_channel->Send(DataBuffer(rtc::CopyOnWriteBuffer(buf, len), binary));
-  return ret;
+  return data_channel_borrowed_rc->Send(DataBuffer(rtc::CopyOnWriteBuffer(buf_borrowed, len), binary));
 }
 
 } // namespace rffi

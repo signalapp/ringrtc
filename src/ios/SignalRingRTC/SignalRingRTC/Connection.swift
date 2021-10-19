@@ -14,8 +14,12 @@ public class Connection {
     private var peerConnection: RTCPeerConnection
     private var nativePeerConnection: UnsafeMutableRawPointer
 
-    init(pcObserver: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, configuration: RTCConfiguration, constraints: RTCMediaConstraints) {
-        self.peerConnection = factory.peerConnection(with: configuration, constraints: constraints, observer: pcObserver)
+    init(pcObserverOwned: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, configuration: RTCConfiguration, constraints: RTCMediaConstraints) {
+        // Takes an owned pointer to the observer.
+        // See "std::unique_ptr<webrtc::PeerConnectionObserver> _customObserver"
+        // in webrtc/src/sdk/objc/api/peerconnection/RTCPeerConnection.mm
+        // which is modified in RingRTC's fork of WebRTC.
+        self.peerConnection = factory.peerConnection(with: configuration, constraints: constraints, observer: pcObserverOwned)
         self.nativePeerConnection = self.peerConnection.getNativePeerConnectionPointer()
 
         Logger.debug("object! Connection created... \(ObjectIdentifier(self))")
@@ -39,8 +43,11 @@ public class Connection {
             destroy: connectionDestroy)
     }
 
-    func createStream(nativeStream: UnsafeMutableRawPointer) -> RTCMediaStream {
-        return self.peerConnection.createStream(fromNative: nativeStream)
+    func createStream(nativeStreamBorrowedRc: UnsafeMutableRawPointer) -> RTCMediaStream {
+        // This gets converted into a rtc::scoped_refptr<webrtc::MediaStreamInterface>.
+        // In other words, the ref count gets incremented,
+        // so what's passed in is a borrowed RC.
+        return self.peerConnection.createStream(fromNative: nativeStreamBorrowedRc)
     }
 
     func createAudioSender(audioTrack: RTCAudioTrack) {

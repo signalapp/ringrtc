@@ -11,7 +11,6 @@ extern crate ringrtc;
 extern crate log;
 
 use std::net::SocketAddr;
-use std::ptr;
 use std::thread;
 use std::time::Duration;
 
@@ -23,6 +22,7 @@ use ringrtc::core::bandwidth_mode::BandwidthMode;
 use ringrtc::core::{group_call, signaling};
 use ringrtc::protobuf;
 use ringrtc::sim::error::SimError;
+use ringrtc::webrtc;
 use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
@@ -225,7 +225,7 @@ fn connect_outbound_call() -> TestContext {
 
     info!("test: inject incoming stream");
     active_connection
-        .inject_received_incoming_media(MediaStream::new(ptr::null()))
+        .inject_received_incoming_media(MediaStream::new(webrtc::Arc::null()))
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1528,7 +1528,7 @@ fn outbound_multiple_remote_devices() {
 
         info!("test:{}: add media stream", i);
         connection
-            .handle_received_incoming_media(MediaStream::new(ptr::null()))
+            .handle_received_incoming_media(MediaStream::new(webrtc::Arc::null()))
             .expect(error_line!());
     }
 

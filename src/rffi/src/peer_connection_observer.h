@@ -21,7 +21,8 @@ namespace rffi {
 
 class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataChannelObserver {
  public:
-  PeerConnectionObserverRffi(const rust_object observer,
+  // Passed-in observer must live at least as long as the PeerConnectionObserverRffi.
+  PeerConnectionObserverRffi(void* observer,
                              const PeerConnectionObserverCallbacks* callbacks,
                              bool enable_frame_encryption);
   ~PeerConnectionObserverRffi() override;
@@ -70,7 +71,7 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataCha
   void OnStateChange() override {}
 
  private:
-  const rust_object observer_;
+  void* observer_;
   PeerConnectionObserverCallbacks callbacks_;
   bool enable_frame_encryption_ = false;
 };

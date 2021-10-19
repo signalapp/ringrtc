@@ -24,6 +24,8 @@ pub struct RffiPeerConnection {
     _private: [u8; 0],
 }
 
+// See "class PeerConnectionInterface: public rtc::RefCountInterface"
+// in webrtc/api/peer_connection_interface.h
 impl webrtc::RefCounted for RffiPeerConnection {}
 
 /// Incomplete type for C++ DataChannelInterface.
@@ -32,101 +34,113 @@ pub struct RffiDataChannel {
     _private: [u8; 0],
 }
 
+// See "class DataChannelInterface: public rtc::RefCountInterface"
+// in webrtc/api/data_channel_interface.h
+impl webrtc::RefCounted for RffiDataChannel {}
+
 extern "C" {
     pub fn Rust_createOffer(
-        peer_connection: *const RffiPeerConnection,
-        csd_observer: *const RffiCreateSessionDescriptionObserver,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        csd_observer: webrtc::ptr::BorrowedRc<RffiCreateSessionDescriptionObserver>,
     );
 
     pub fn Rust_setLocalDescription(
-        peer_connection: *const RffiPeerConnection,
-        ssd_observer: *const RffiSetSessionDescriptionObserver,
-        local_description: *const RffiSessionDescription,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        ssd_observer: webrtc::ptr::BorrowedRc<RffiSetSessionDescriptionObserver>,
+        local_description: webrtc::ptr::Owned<RffiSessionDescription>,
     );
 
     pub fn Rust_createAnswer(
-        peer_connection: *const RffiPeerConnection,
-        csd_observer: *const RffiCreateSessionDescriptionObserver,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        csd_observer: webrtc::ptr::BorrowedRc<RffiCreateSessionDescriptionObserver>,
     );
 
     pub fn Rust_setRemoteDescription(
-        peer_connection: *const RffiPeerConnection,
-        ssd_observer: *const RffiSetSessionDescriptionObserver,
-        remote_description: *const RffiSessionDescription,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        ssd_observer: webrtc::ptr::BorrowedRc<RffiSetSessionDescriptionObserver>,
+        remote_description: webrtc::ptr::Owned<RffiSessionDescription>,
     );
 
-    pub fn Rust_setOutgoingMediaEnabled(peer_connection: *const RffiPeerConnection, enabled: bool);
+    pub fn Rust_setOutgoingMediaEnabled(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        enabled: bool,
+    );
 
     pub fn Rust_setIncomingMediaEnabled(
-        peer_connection: *const RffiPeerConnection,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         enabled: bool,
     ) -> bool;
 
-    pub fn Rust_setAudioPlayoutEnabled(peer_connection: *const RffiPeerConnection, enabled: bool);
+    pub fn Rust_setAudioPlayoutEnabled(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        enabled: bool,
+    );
 
+    // The passed-in observer must live as long as the returned value.
     pub fn Rust_createSignalingDataChannel(
-        peer_connection: *const RffiPeerConnection,
-        pc_observer: *const RffiPeerConnectionObserver,
-    ) -> *const RffiDataChannel;
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        pc_observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
+    ) -> webrtc::ptr::OwnedRc<RffiDataChannel>;
 
     pub fn Rust_addIceCandidateFromSdp(
-        peer_connection: *const RffiPeerConnection,
-        sdp: *const c_char,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        sdp: webrtc::ptr::Borrowed<c_char>,
     ) -> bool;
 
     pub fn Rust_addIceCandidateFromServer(
-        peer_connection: *const RffiPeerConnection,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         ip: RffiIp,
         port: u16,
         tcp: bool,
     ) -> bool;
 
     pub fn Rust_removeIceCandidates(
-        peer_connection: *const RffiPeerConnection,
-        removed_addresses_data: *const RffiIpPort,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        removed_addresses_data: webrtc::ptr::Borrowed<RffiIpPort>,
         removed_addresses_len: usize,
     ) -> bool;
 
     pub fn Rust_createSharedIceGatherer(
-        peer_connection: *const RffiPeerConnection,
-    ) -> *const RffiIceGatherer;
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    ) -> webrtc::ptr::OwnedRc<RffiIceGatherer>;
 
     pub fn Rust_useSharedIceGatherer(
-        peer_connection: *const RffiPeerConnection,
-        ice_gatherer: *const RffiIceGatherer,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        ice_gatherer: webrtc::ptr::BorrowedRc<RffiIceGatherer>,
     ) -> bool;
 
+    // The observer must live until it is called.
     pub fn Rust_getStats(
-        peer_connection: *const RffiPeerConnection,
-        stats_observer: *const RffiStatsObserver,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        stats_observer: webrtc::ptr::BorrowedRc<RffiStatsObserver>,
     );
 
     pub fn Rust_setSendBitrates(
-        peer_connection: *const RffiPeerConnection,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         min_bitrate_bps: i32,
         start_bitrate_bps: i32,
         max_bitrate_bps: i32,
     );
 
     pub fn Rust_sendRtp(
-        peer_connection: *const RffiPeerConnection,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         pt: rtp::PayloadType,
         seqnum: rtp::SequenceNumber,
         timestamp: rtp::Timestamp,
         ssrc: rtp::Ssrc,
-        payload_data: *const u8,
+        payload_data: webrtc::ptr::Borrowed<u8>,
         payload_size: usize,
     ) -> bool;
 
     pub fn Rust_receiveRtp(
-        peer_connection: *const RffiPeerConnection,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         pt: rtp::PayloadType,
     ) -> bool;
 
     pub fn Rust_configureAudioEncoders(
-        peer_connection: *const RffiPeerConnection,
-        config: *const RffiAudioEncoderConfig,
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        config: webrtc::ptr::Borrowed<RffiAudioEncoderConfig>,
     );
 
-    pub fn Rust_closePeerConnection(peer_connection: *const RffiPeerConnection);
+    pub fn Rust_closePeerConnection(peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>);
 }

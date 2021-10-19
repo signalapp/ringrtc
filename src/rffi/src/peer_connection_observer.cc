@@ -7,11 +7,12 @@
 
 #include "rffi/api/media.h"
 #include "rffi/src/peer_connection_observer.h"
+#include "rffi/src/ptr.h"
 
 namespace webrtc {
 namespace rffi {
 
-PeerConnectionObserverRffi::PeerConnectionObserverRffi(const rust_object observer,
+PeerConnectionObserverRffi::PeerConnectionObserverRffi(void* observer,
                                                        const PeerConnectionObserverCallbacks* callbacks,
                                                        bool enable_frame_encryption)
   : observer_(observer), callbacks_(*callbacks), enable_frame_encryption_(enable_frame_encryption)
@@ -28,7 +29,7 @@ void PeerConnectionObserverRffi::OnIceCandidate(const IceCandidateInterface* can
 
   std::string sdp;
   candidate->ToString(&sdp);
-  rust_candidate.sdp = sdp.c_str();
+  rust_candidate.sdp_borrowed = sdp.c_str();
 
   callbacks_.onIceCandidate(observer_, &rust_candidate);
 
@@ -78,10 +79,7 @@ void PeerConnectionObserverRffi::OnAddStream(
     rtc::scoped_refptr<MediaStreamInterface> stream) {
   RTC_LOG(LS_INFO) << "OnAddStream()";
 
-  // Ownership of |stream| is transferred to the rust call back
-  // handler.  Someone must call RefCountInterface::Release()
-  // eventually.
-  callbacks_.onAddStream(observer_, stream.release());
+  callbacks_.onAddStream(observer_, take_rc(stream));
 }
 
 void PeerConnectionObserverRffi::OnRemoveStream(
@@ -94,9 +92,7 @@ void PeerConnectionObserverRffi::OnDataChannel(rtc::scoped_refptr<DataChannelInt
 
   if (channel->label() == "signaling") {
     channel->RegisterObserver(this);
-    // Ownership of |channel| is transferred to the rust call back
-    // handler.  Must call Rust_releaseRef() eventually.
-    callbacks_.onSignalingDataChannel(observer_, channel.release());
+    callbacks_.onSignalingDataChannel(observer_, take_rc(channel));
   }
 }
 
@@ -127,24 +123,24 @@ void PeerConnectionObserverRffi::OnAddTrack(
       uint32_t id = Rust_getTrackIdAsUint32(receiver->track());
       if (id != 0) {
         receiver->SetFrameDecryptor(CreateDecryptor(id));
-        callbacks_.onAddAudioRtpReceiver(observer_, receiver->track().release());
+        callbacks_.onAddAudioRtpReceiver(observer_, take_rc(receiver->track()));
       } else {
         RTC_LOG(LS_WARNING) << "Not sending decryptor for RtpReceiver with strange ID: " << receiver->track()->id();
       }
     } else {
-      callbacks_.onAddAudioRtpReceiver(observer_, receiver->track().release());
+      callbacks_.onAddAudioRtpReceiver(observer_, take_rc(receiver->track()));
     }
   } else if (receiver->media_type() == cricket::MEDIA_TYPE_VIDEO) {
     if (enable_frame_encryption_) {
       uint32_t id = Rust_getTrackIdAsUint32(receiver->track());
       if (id != 0) {
         receiver->SetFrameDecryptor(CreateDecryptor(id));
-        callbacks_.onAddVideoRtpReceiver(observer_, receiver->track().release());
+        callbacks_.onAddVideoRtpReceiver(observer_, take_rc(receiver->track()));
       } else {
         RTC_LOG(LS_WARNING) << "Not sending decryptor for RtpReceiver with strange ID: " << receiver->track()->id();
       }
     } else {
-      callbacks_.onAddVideoRtpReceiver(observer_, receiver->track().release());
+      callbacks_.onAddVideoRtpReceiver(observer_, take_rc(receiver->track()));
     }
   }
 }
@@ -161,7 +157,9 @@ void PeerConnectionObserverRffi::OnMessage(const DataBuffer& buffer) {
 
 class Encryptor : public webrtc::FrameEncryptorInterface {
  public:
-  Encryptor(const rust_object observer, PeerConnectionObserverCallbacks* callbacks) : observer_(observer), callbacks_(callbacks) {}
+  // Passed-in observer must live at least as long as the Encryptor,
+  // which likely means as long as the PeerConnection.
+  Encryptor(void* observer, PeerConnectionObserverCallbacks* callbacks) : observer_(observer), callbacks_(callbacks) {}
 
   // This is called just before Encrypt to get the size of the ciphertext
   // buffer that will be given to Encrypt.
@@ -197,7 +195,7 @@ class Encryptor : public webrtc::FrameEncryptorInterface {
   }
 
  private:
-  const rust_object observer_;
+  void* observer_;
   PeerConnectionObserverCallbacks* callbacks_;
 };
 
@@ -210,7 +208,9 @@ rtc::scoped_refptr<FrameEncryptorInterface> PeerConnectionObserverRffi::CreateEn
 
 class Decryptor : public webrtc::FrameDecryptorInterface {
  public:
-  Decryptor(uint32_t track_id, const rust_object observer, PeerConnectionObserverCallbacks* callbacks) : track_id_(track_id), observer_(observer), callbacks_(callbacks) {}
+  // Passed-in observer must live at least as long as the Decryptor,
+  // which likely means as long as the PeerConnection.
+  Decryptor(uint32_t track_id, void* observer, PeerConnectionObserverCallbacks* callbacks) : track_id_(track_id), observer_(observer), callbacks_(callbacks) {}
 
   // This is called just before Decrypt to get the size of the plaintext
   // buffer that will be given to Decrypt.
@@ -247,7 +247,7 @@ class Decryptor : public webrtc::FrameDecryptorInterface {
 
  private:
   uint32_t track_id_;
-  const rust_object observer_;
+  void* observer_;
   PeerConnectionObserverCallbacks* callbacks_;
 };
 
@@ -255,16 +255,22 @@ rtc::scoped_refptr<FrameDecryptorInterface> PeerConnectionObserverRffi::CreateDe
   // The PeerConnectionObserverRffi outlives the Decryptor because it outlives the PeerConnection,
   // which outlives the RtpReceiver, which owns the Decryptor.
   // So we know the PeerConnectionObserverRffi outlives the Decryptor.
-  return new rtc::RefCountedObject<Decryptor>(track_id, observer_, &callbacks_);
+  return make_ref_counted<Decryptor>(track_id, observer_, &callbacks_);
 }
 
+// Returns an owned pointer.
+// Passed-in observer must live at least as long as the returned value,
+// which in turn must live at least as long as the PeerConnection.
 RUSTEXPORT PeerConnectionObserverRffi*
-Rust_createPeerConnectionObserver(const rust_object observer,
-                                  const PeerConnectionObserverCallbacks* callbacks,
+Rust_createPeerConnectionObserver(void* observer_borrowed,
+                                  const PeerConnectionObserverCallbacks* callbacks_borrowed,
                                   bool enable_frame_encryption) {
-  // This observer will be freed automatically by the the
-  // PeerConnection object during its .close() method.
-  return new PeerConnectionObserverRffi(observer, callbacks, enable_frame_encryption);
+  return new PeerConnectionObserverRffi(observer_borrowed, callbacks_borrowed, enable_frame_encryption);
+}
+
+RUSTEXPORT void
+Rust_deletePeerConnectionObserver(PeerConnectionObserverRffi* observer_owned) {
+  delete observer_owned;
 }
 
 } // namespace rffi

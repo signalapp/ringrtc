@@ -9,21 +9,27 @@
 namespace webrtc {
 namespace rffi {
 
-/*
- * Release reference counted objects
- */
+// Decrements the ref count of a ref-counted object.
+// If the ref count goes to zero, the object is deleted.
 RUSTEXPORT void
-Rust_releaseRef(rtc::RefCountInterface* ref_counted_ptr) {
-  auto result = ref_counted_ptr->Release();
+Rust_decRc(rtc::RefCountInterface* owned_rc) {
+  if (!owned_rc) {
+    return;
+  }
+
+  auto result = owned_rc->Release();
   RTC_LOG(LS_VERBOSE) << "Did it get deleted? " << (result == rtc::RefCountReleaseStatus::kDroppedLastRef);
 }
 
-/*
- * Add reference to reference counted objects
- */
+// Increments the ref count of a ref-counted object.
+// The borrowed RC becomes an owned RC.
 RUSTEXPORT void
-Rust_addRef(rtc::RefCountInterface* ref_counted_ptr) {
-  ref_counted_ptr->AddRef();
+Rust_incRc(rtc::RefCountInterface* borrowed_rc) {
+  if (!borrowed_rc) {
+    return;
+  }
+
+  borrowed_rc->AddRef();
 }
 
 }

@@ -4,13 +4,14 @@
  */
 
 #include "rffi/api/sdp_observer_intf.h"
+#include "rffi/src/ptr.h"
 #include "rffi/src/sdp_observer.h"
 #include <regex>
 
 namespace webrtc {
 namespace rffi {
 
-CreateSessionDescriptionObserverRffi::CreateSessionDescriptionObserverRffi(const rust_object                                csd_observer,
+CreateSessionDescriptionObserverRffi::CreateSessionDescriptionObserverRffi(void*                                            csd_observer,
                                                                            const CreateSessionDescriptionObserverCallbacks* csd_observer_cbs)
   : csd_observer_(csd_observer), csd_observer_cbs_(*csd_observer_cbs)
 {
@@ -45,14 +46,14 @@ void CreateSessionDescriptionObserverRffi::OnFailure(RTCError error) {
 }
 
 RUSTEXPORT CreateSessionDescriptionObserverRffi*
-Rust_createCreateSessionDescriptionObserver(const rust_object                                csd_observer,
-                                            const CreateSessionDescriptionObserverCallbacks* csd_observer_cbs) {
-  return new rtc::RefCountedObject<CreateSessionDescriptionObserverRffi>(csd_observer, csd_observer_cbs);
+Rust_createCreateSessionDescriptionObserver(void*                                            csd_observer_borrowed,
+                                            const CreateSessionDescriptionObserverCallbacks* csd_observer_cbs_borrowed) {
+  return take_rc(make_ref_counted<CreateSessionDescriptionObserverRffi>(csd_observer_borrowed, csd_observer_cbs_borrowed));
 }
 
-SetSessionDescriptionObserverRffi::SetSessionDescriptionObserverRffi(const rust_object                             ssd_observer,
-                                                                     const SetSessionDescriptionObserverCallbacks* ssd_observer_cbs)
-  : ssd_observer_(ssd_observer), ssd_observer_cbs_(*ssd_observer_cbs)
+SetSessionDescriptionObserverRffi::SetSessionDescriptionObserverRffi(void*                                         ssd_observer_borrowed,
+                                                                     const SetSessionDescriptionObserverCallbacks* ssd_observer_cbs_borrowed)
+  : ssd_observer_(ssd_observer_borrowed), ssd_observer_cbs_(*ssd_observer_cbs_borrowed)
 {
   RTC_LOG(LS_INFO) << "SetSessionDescriptionObserverRffi:ctor(): " << this->ssd_observer_;
 }
@@ -71,10 +72,12 @@ void SetSessionDescriptionObserverRffi::OnFailure(RTCError error) {
   this->ssd_observer_cbs_.onFailure(this->ssd_observer_, error.message(), static_cast<int32_t>(error.type()));
 }
 
+// Returns an owned RC.
+// The passed-in values must outlive the returned value.
 RUSTEXPORT SetSessionDescriptionObserverRffi*
-Rust_createSetSessionDescriptionObserver(const rust_object                             ssd_observer,
-                                         const SetSessionDescriptionObserverCallbacks* ssd_observer_cbs) {
-  return new rtc::RefCountedObject<SetSessionDescriptionObserverRffi>(ssd_observer, ssd_observer_cbs);
+Rust_createSetSessionDescriptionObserver(void*                                         ssd_observer_borrowed,
+                                         const SetSessionDescriptionObserverCallbacks* ssd_observer_cbs_borrowed) {
+  return take_rc(make_ref_counted<SetSessionDescriptionObserverRffi>(ssd_observer_borrowed, ssd_observer_cbs_borrowed));
 }
 
 } // namespace rffi

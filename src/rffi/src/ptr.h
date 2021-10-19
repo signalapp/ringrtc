@@ -15,22 +15,23 @@ namespace rffi {
 // Calling the rtc::scoped_refptr constructor doesn't make it very clear that
 // it increments the ref count.
 template <typename T>
-rtc::scoped_refptr<T> clone_borrowed_rc(T* borrowed_rc) {
+rtc::scoped_refptr<T> inc_rc(T* borrowed_rc) {
     return rtc::scoped_refptr<T>(borrowed_rc);
 }
 
 // This just makes it easier to read.
 // Calling the rtc::scoped_refptr::release() doesn't make it very clear that
-// it prevents decrementing the ref count.
+// it prevents decrementing the RC.
+// The caller now owns an RC.
 template <typename T>
-T* take_owned_rc(rtc::scoped_refptr<T> scoped) {
+T* take_rc(rtc::scoped_refptr<T> scoped) {
     return scoped.release();
 }
 
-// Use rtc::make_ref_counted instead once we update WebRTC
+// Use rtc::make_ref_counted instead once we update WebRTC.
 template <typename T, typename... Args>
 rtc::scoped_refptr<T> make_ref_counted(Args&&... args) {
-  return rtc::scoped_refptr<T>(new rtc::RefCountedObject<T>(std::forward<Args>(args)...));
+  return inc_rc(new rtc::RefCountedObject<T>(std::forward<Args>(args)...));
 }
 
 } // namespace rffi

@@ -47,13 +47,13 @@ pub unsafe fn Rust_createPeerConnectionFactoryWrapper(
 
 #[allow(non_snake_case, clippy::missing_safety_doc, clippy::too_many_arguments)]
 pub unsafe fn Rust_createPeerConnection(
-    _factory: *const RffiPeerConnectionFactoryOwner,
-    _observer: *const RffiPeerConnectionObserver,
-    _certificate: *const RffiCertificate,
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+    _observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
+    _certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
     _hide_ip: bool,
     _ice_server: RffiIceServer,
-    _outgoing_audio_track: *const RffiAudioTrack,
-    _outgoing_video_track: *const RffiVideoTrack,
+    _outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
+    _outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
     _enable_dtls: bool,
     _enable_rtp_data_channel: bool,
 ) -> webrtc::ptr::OwnedRc<RffiPeerConnection> {
@@ -70,60 +70,60 @@ pub unsafe fn Rust_createAudioTrack(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_createVideoSource(
-    _factory: *const RffiPeerConnectionFactoryOwner,
-) -> *const RffiVideoSource {
+pub unsafe fn Rust_createVideoSource() -> webrtc::ptr::OwnedRc<RffiVideoSource> {
     info!("Rust_createVideoSource()");
-    &FAKE_VIDEO_SOURCE
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_SOURCE)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createVideoTrack(
-    _factory: *const RffiPeerConnectionFactoryOwner,
-    _source: *const RffiVideoSource,
-) -> *const RffiVideoTrack {
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+    _source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
+) -> webrtc::ptr::OwnedRc<RffiVideoTrack> {
     info!("Rust_createVideoTrack()");
-    &FAKE_VIDEO_TRACK
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_TRACK)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_generateCertificate() -> *const RffiCertificate {
+pub unsafe fn Rust_generateCertificate() -> webrtc::ptr::OwnedRc<RffiCertificate> {
     info!("Rust_generateCertificate()");
-    &FAKE_CERTIFICATE
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_CERTIFICATE)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_computeCertificateFingerprintSha256(
-    _cert: *const RffiCertificate,
-    _fingerprint: *mut [u8; 32],
+    _cert: webrtc::ptr::BorrowedRc<RffiCertificate>,
+    _fingerprint_out: *mut [u8; 32],
 ) -> bool {
     info!("Rust_computeCertificateFingerprintSha256()");
     true
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getAudioPlayoutDevices(_factory: *const RffiPeerConnectionFactoryOwner) -> i16 {
+pub unsafe fn Rust_getAudioPlayoutDevices(
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+) -> i16 {
     1
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_getAudioPlayoutDeviceName(
-    _factory: *const RffiPeerConnectionFactoryOwner,
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
     index: u16,
-    out_name: *mut c_char,
-    out_uuid: *mut c_char,
+    name_out: *mut c_char,
+    uuid_out: *mut c_char,
 ) -> i32 {
     if index != 0 {
         return -1;
     }
-    copy_to_c_buffer("FakeSpeaker", out_name);
-    copy_to_c_buffer("FakeSpeakerUuid", out_uuid);
+    copy_to_c_buffer("FakeSpeaker", name_out);
+    copy_to_c_buffer("FakeSpeakerUuid", uuid_out);
     0
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setAudioPlayoutDevice(
-    _factory: *const RffiPeerConnectionFactoryOwner,
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
     index: u16,
 ) -> bool {
     index == 0
@@ -131,29 +131,29 @@ pub unsafe fn Rust_setAudioPlayoutDevice(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_getAudioRecordingDevices(
-    _factory: *const RffiPeerConnectionFactoryOwner,
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
 ) -> i16 {
     1
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_getAudioRecordingDeviceName(
-    _factory: *const RffiPeerConnectionFactoryOwner,
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
     index: u16,
-    out_name: *mut c_char,
-    out_uuid: *mut c_char,
+    name_out: *mut c_char,
+    uuid_out: *mut c_char,
 ) -> i32 {
     if index != 0 {
         return -1;
     }
-    copy_to_c_buffer("FakeMicrophone", out_name);
-    copy_to_c_buffer("FakeMicrophoneUuid", out_uuid);
+    copy_to_c_buffer("FakeMicrophone", name_out);
+    copy_to_c_buffer("FakeMicrophoneUuid", uuid_out);
     0
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setAudioRecordingDevice(
-    _factory: *const RffiPeerConnectionFactoryOwner,
+    _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
     index: u16,
 ) -> bool {
     index == 0

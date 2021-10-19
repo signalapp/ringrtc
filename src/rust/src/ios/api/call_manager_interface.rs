@@ -20,6 +20,7 @@ use crate::common::{CallMediaType, DeviceId, FeatureLevel, HttpResponse};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::group_call;
 use crate::core::signaling;
+use crate::webrtc::{self, media, peer_connection_factory as pcf};
 
 ///
 #[repr(C)]
@@ -196,14 +197,19 @@ impl Drop for AppCallContext {
 }
 
 /// Structure for passing media stream instances from the application.
+// See comment of IosMediaStream to understand
+// where this fits in the many layers of wrappers.
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppMediaStreamInterface {
+    // Really a *mut ConnectionMediaStream.
     pub object: *mut c_void,
     /// Swift object clean up method.
+    // Really connectionMediaStreamDestroy
     pub destroy: extern "C" fn(object: *mut c_void),
     /// Returns a pointer to a RTCMediaStream object.
+    // Really connectionMediaStreamCreateMediaStream
     pub createMediaStream:
         extern "C" fn(object: *mut c_void, nativeStream: *mut c_void) -> *mut c_void,
 }
@@ -1086,9 +1092,9 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
     callManager: *mut c_void,
     groupId: AppByteSlice,
     sfuUrl: AppByteSlice,
-    nativeOwnedPeerConnectionFactory: *const c_void,
-    nativeOwnedAudioTrack: *const c_void,
-    nativeOwnedVideoTrack: *const c_void,
+    nativePeerConnectionFactoryOwnedRc: *const c_void,
+    nativeAudioTrackOwnedRc: *const c_void,
+    nativeVideoTrackOwnedRc: *const c_void,
 ) -> group_call::ClientId {
     info!("ringrtcCreateGroupCallClient():");
 
@@ -1110,9 +1116,18 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
         callManager as *mut IosCallManager,
         group_id.unwrap(),
         sfu_url.unwrap(),
-        nativeOwnedPeerConnectionFactory,
-        nativeOwnedAudioTrack,
-        nativeOwnedVideoTrack,
+        unsafe {
+            webrtc::ptr::OwnedRc::from_ptr(
+                nativePeerConnectionFactoryOwnedRc
+                    as *const pcf::RffiPeerConnectionFactoryInterface,
+            )
+        },
+        unsafe {
+            webrtc::ptr::OwnedRc::from_ptr(nativeAudioTrackOwnedRc as *const media::RffiAudioTrack)
+        },
+        unsafe {
+            webrtc::ptr::OwnedRc::from_ptr(nativeVideoTrackOwnedRc as *const media::RffiVideoTrack)
+        },
     ) {
         Ok(client_id) => client_id,
         Err(_e) => 0,

@@ -23,7 +23,7 @@ use ringrtc::core::connection::Connection;
 use ringrtc::core::{group_call, signaling};
 use ringrtc::protobuf;
 use ringrtc::sim::sim_platform::SimPlatform;
-
+use ringrtc::webrtc;
 /*
 use ringrtc::common::{CallDirection, CallId};
 
@@ -249,8 +249,8 @@ impl TestContext {
             group_id,
             "".to_owned(),
             None,
-            ringrtc::webrtc::media::AudioTrack::unowned(std::ptr::null()),
-            ringrtc::webrtc::media::VideoTrack::unowned(std::ptr::null()),
+            ringrtc::webrtc::media::AudioTrack::new(webrtc::Arc::null(), None),
+            ringrtc::webrtc::media::VideoTrack::new(webrtc::Arc::null(), None),
         )
     }
 }

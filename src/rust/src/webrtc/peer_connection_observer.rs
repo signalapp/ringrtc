@@ -8,7 +8,6 @@
 use bytes::Bytes;
 use libc::size_t;
 use std::ffi::CStr;
-use std::fmt;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::os::raw::c_char;
@@ -17,8 +16,8 @@ use std::time::SystemTime;
 
 use crate::common::{Result, RingBench};
 use crate::core::signaling;
-use crate::core::util::{CppObject, RustObject};
 use crate::error::RingRtcError;
+use crate::webrtc;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
 use crate::webrtc::media::{RffiAudioTrack, RffiMediaStream, RffiVideoTrack};
@@ -46,7 +45,7 @@ pub enum IceConnectionState {
 #[repr(C)]
 #[derive(Debug)]
 pub struct CppIceCandidate {
-    sdp: *const c_char,
+    sdp: webrtc::ptr::Borrowed<c_char>,
 }
 
 /// Rust version of WebRTC AdapterType
@@ -166,195 +165,232 @@ pub trait PeerConnectionObserverTrait {
 /// PeerConnectionObserver OnIceCandidate() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceCandidate<T>(
-    observer_ptr: *mut T,
-    cpp_candidate: *const CppIceCandidate,
+    observer: webrtc::ptr::Borrowed<T>,
+    cpp_candidate: webrtc::ptr::Borrowed<CppIceCandidate>,
 ) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    info!("pc_observer_OnIceCandidate: {}", observer.log_id());
-    if !cpp_candidate.is_null() {
-        let sdp = unsafe {
-            CStr::from_ptr((*cpp_candidate).sdp)
-                .to_string_lossy()
-                .into_owned()
-        };
-        // ICE candidates are the same for V2 and V3 and V4.
-        let ice_candidate = signaling::IceCandidate::from_v3_sdp(sdp.clone());
-        if let Ok(ice_candidate) = ice_candidate {
-            observer
-                .handle_ice_candidate_gathered(ice_candidate, sdp.as_str())
-                .unwrap_or_else(|e| error!("Problems handling ice candidate: {}", e));
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        info!("pc_observer_OnIceCandidate: {}", observer.log_id());
+        // Safe because the candidate should still be alive (it was just passed to us)
+        if let Some(cpp_candidate) = unsafe { cpp_candidate.as_ref() } {
+            let sdp = unsafe {
+                CStr::from_ptr(cpp_candidate.sdp.as_ptr())
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            // ICE candidates are the same for V2 and V3 and V4.
+            let ice_candidate = signaling::IceCandidate::from_v3_sdp(sdp.clone());
+            if let Ok(ice_candidate) = ice_candidate {
+                observer
+                    .handle_ice_candidate_gathered(ice_candidate, sdp.as_str())
+                    .unwrap_or_else(|e| error!("Problems handling ice candidate: {}", e));
+            } else {
+                warn!("Failed to handle local ICE candidate SDP");
+            }
         } else {
-            warn!("Failed to handle local ICE candidate SDP");
+            error!("pc_observer_OnIceCandidate called with null candidate");
         }
     } else {
-        warn!("Ignoring null IceCandidate pointer");
+        error!("pc_observer_OnIceCandidate called with null observer");
     }
 }
 
 /// PeerConnectionObserver OnIceCandidatesRemoved() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceCandidatesRemoved<T>(
-    observer_ptr: *mut T,
-    removed_addresses: *const RffiIpPort,
+    observer: webrtc::ptr::Borrowed<T>,
+    removed_addresses: webrtc::ptr::Borrowed<RffiIpPort>,
     length: size_t,
 ) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    info!("pc_observer_OnIceCandidatesRemoved: {}", observer.log_id());
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        info!("pc_observer_OnIceCandidatesRemoved: {}", observer.log_id());
 
-    if removed_addresses.is_null() {
-        if length > 0 {
-            warn!("ICE candidates removed is null");
+        if removed_addresses.is_null() {
+            if length > 0 {
+                warn!("ICE candidates removed is null");
+            }
+            return;
         }
-        return;
+
+        trace!("pc_observer_OnIceCandidatesRemoved(): length: {}", length);
+
+        let removed_addresses =
+            unsafe { slice::from_raw_parts(removed_addresses.as_ptr(), length as usize) }
+                .iter()
+                .map(|address| address.into())
+                .collect();
+
+        observer
+            .handle_ice_candidates_removed(removed_addresses)
+            .unwrap_or_else(|e| error!("Problems handling ice candidates removed: {}", e));
+    } else {
+        error!("pc_observer_OnIceCandidatesRemoved called with null observer");
     }
-
-    trace!("pc_observer_OnIceCandidatesRemoved(): length: {}", length);
-
-    let removed_addresses = unsafe { slice::from_raw_parts(removed_addresses, length as usize) }
-        .iter()
-        .map(|address| address.into())
-        .collect();
-
-    let observer = unsafe { &mut *observer_ptr };
-    observer
-        .handle_ice_candidates_removed(removed_addresses)
-        .unwrap_or_else(|e| error!("Problems handling ice candidates removed: {}", e));
 }
 
 /// PeerConnectionObserver OnIceConnectionChange() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceConnectionChange<T>(
-    observer_ptr: *mut T,
+    observer: webrtc::ptr::Borrowed<T>,
     new_state: IceConnectionState,
 ) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    ringbench!(
-        RingBench::WebRtc,
-        RingBench::Conn,
-        format!(
-            "ice_connection_change({:?})\t{}",
-            new_state,
-            observer.log_id()
-        )
-    );
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        ringbench!(
+            RingBench::WebRtc,
+            RingBench::Conn,
+            format!(
+                "ice_connection_change({:?})\t{}",
+                new_state,
+                observer.log_id()
+            )
+        );
 
-    observer
-        .handle_ice_connection_state_changed(new_state)
-        .unwrap_or_else(|e| error!("Problems handling ICE connection state change: {}", e));
+        observer
+            .handle_ice_connection_state_changed(new_state)
+            .unwrap_or_else(|e| error!("Problems handling ICE connection state change: {}", e));
+    } else {
+        error!("pc_observer_OnIceConnectionChange called with null observer");
+    }
 }
 
 /// PeerConnectionObserver OnIceSelectedCandidatePairChanged() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceNetworkRouteChange<T>(
-    observer_ptr: *mut T,
+    observer: webrtc::ptr::Borrowed<T>,
     network_route: NetworkRoute,
 ) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    ringbench!(
-        RingBench::WebRtc,
-        RingBench::Conn,
-        format!(
-            "ice_network_route_change({:?})\t{}",
-            network_route,
-            observer.log_id()
-        )
-    );
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        ringbench!(
+            RingBench::WebRtc,
+            RingBench::Conn,
+            format!(
+                "ice_network_route_change({:?})\t{}",
+                network_route,
+                observer.log_id()
+            )
+        );
 
-    observer
-        .handle_ice_network_route_changed(network_route)
-        .unwrap_or_else(|e| error!("Problems handling ICE network route change: {}", e));
+        observer
+            .handle_ice_network_route_changed(network_route)
+            .unwrap_or_else(|e| error!("Problems handling ICE network route change: {}", e));
+    } else {
+        error!("pc_observer_OnIceNetworkRouteChange called with null observer");
+    }
 }
 
 /// PeerConnectionObserver OnAddStream() callback.
 #[allow(non_snake_case)]
-extern "C" fn pc_observer_OnAddStream<T>(observer_ptr: *mut T, rffi_stream: *const RffiMediaStream)
-where
+extern "C" fn pc_observer_OnAddStream<T>(
+    observer: webrtc::ptr::Borrowed<T>,
+    rffi_stream: webrtc::ptr::OwnedRc<RffiMediaStream>,
+) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    info!(
-        "pc_observer_OnAddStream(): {}, rffi_stream: {:p}",
-        observer.log_id(),
-        rffi_stream
-    );
-    let stream = MediaStream::new(rffi_stream);
-    observer
-        .handle_incoming_media_added(stream)
-        .unwrap_or_else(|e| error!("Problems handling incoming media: {}", e));
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        info!(
+            "pc_observer_OnAddStream(): {}, rffi_stream: {:p}",
+            observer.log_id(),
+            rffi_stream.as_ptr()
+        );
+        let stream = MediaStream::new(webrtc::Arc::from_owned(rffi_stream));
+        observer
+            .handle_incoming_media_added(stream)
+            .unwrap_or_else(|e| error!("Problems handling incoming media: {}", e));
+    } else {
+        error!("pc_observer_OnAddStream called with null observer");
+    }
 }
 
 /// PeerConnectionObserver OnAddTrack() callback for audio tracks.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnAddAudioRtpReceiver<T>(
-    observer_ptr: *mut T,
-    rffi_track: *const RffiAudioTrack,
+    observer: webrtc::ptr::Borrowed<T>,
+    rffi_track: webrtc::ptr::OwnedRc<RffiAudioTrack>,
 ) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    info!(
-        "pc_observer_OnAddAudioRtpReceiver(): {}, rffi_track: {:p}",
-        observer.log_id(),
-        rffi_track
-    );
-    let track = AudioTrack::owned(rffi_track);
-    observer
-        .handle_incoming_audio_added(track)
-        .unwrap_or_else(|e| error!("Problems handling incoming audio: {}", e));
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        info!(
+            "pc_observer_OnAddAudioRtpReceiver(): {}, rffi_track: {:p}",
+            observer.log_id(),
+            rffi_track.as_ptr()
+        );
+        // TODO: Figure out how to pass in a PeerConnection as an owner.
+        let track = AudioTrack::new(webrtc::Arc::from_owned(rffi_track), None);
+        observer
+            .handle_incoming_audio_added(track)
+            .unwrap_or_else(|e| error!("Problems handling incoming audio: {}", e));
+    } else {
+        error!("pc_observer_OnAddAudioRtpReceiver called with null observer");
+    }
 }
 
 /// PeerConnectionObserver OnAddTrack() callback for video tracks.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
-    observer_ptr: *mut T,
-    rffi_track: *const RffiVideoTrack,
+    observer: webrtc::ptr::Borrowed<T>,
+    rffi_track: webrtc::ptr::OwnedRc<RffiVideoTrack>,
 ) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    info!(
-        "pc_observer_OnAddVideoRtpReceiver(): {}, rffi_track: {:p}",
-        observer.log_id(),
-        rffi_track
-    );
-    let track = VideoTrack::owned(rffi_track);
-    observer
-        .handle_incoming_video_added(track)
-        .unwrap_or_else(|e| error!("Problems handling incoming audio: {}", e));
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        info!(
+            "pc_observer_OnAddVideoRtpReceiver(): {}, rffi_track: {:p}",
+            observer.log_id(),
+            rffi_track.as_ptr()
+        );
+        // TODO: Figure out how to pass in a PeerConnection as an owner.
+        let track = VideoTrack::new(webrtc::Arc::from_owned(rffi_track), None);
+        observer
+            .handle_incoming_video_added(track)
+            .unwrap_or_else(|e| error!("Problems handling incoming audio: {}", e));
+    } else {
+        error!("pc_observer_OnAddVideoRtpReceiver called with null observer");
+    }
 }
 
 /// PeerConnectionObserver OnSignalingDataChannel() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnSignalingDataChannel<T>(
-    observer_ptr: *mut T,
-    rffi_data_channel: *const RffiDataChannel,
+    observer: webrtc::ptr::Borrowed<T>,
+    rffi_data_channel: webrtc::ptr::OwnedRc<RffiDataChannel>,
 ) where
     T: PeerConnectionObserverTrait,
 {
-    let observer = unsafe { &mut *observer_ptr };
-    info!(
-        "pc_observer_OnSignalingDataChannel(): {}",
-        observer.log_id()
-    );
-    let data_channel = unsafe { DataChannel::new(rffi_data_channel) };
-    observer
-        .handle_signaling_data_channel_connected(data_channel)
-        .unwrap_or_else(|e| error!("Problems handling signaling data channel: {}", e));
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        info!(
+            "pc_observer_OnSignalingDataChannel(): {}",
+            observer.log_id()
+        );
+        let data_channel = DataChannel::new(webrtc::Arc::from_owned(rffi_data_channel));
+        observer
+            .handle_signaling_data_channel_connected(data_channel)
+            .unwrap_or_else(|e| error!("Problems handling signaling data channel: {}", e));
+    } else {
+        error!("pc_observer_OnSignalingDataChannel called with null observer");
+    }
 }
 
 /// PeerConnectionObserver OnDataChannelMessage() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnSignalingDataChannelMessage<T>(
-    observer_ptr: *mut T,
-    buffer: *const u8,
+    observer: webrtc::ptr::Borrowed<T>,
+    buffer: webrtc::ptr::Borrowed<u8>,
     length: size_t,
 ) where
     T: PeerConnectionObserverTrait,
@@ -366,21 +402,25 @@ extern "C" fn pc_observer_OnSignalingDataChannelMessage<T>(
 
     trace!("pc_observer_OnDataChannelMessage(): length: {}", length);
 
-    let slice = unsafe { slice::from_raw_parts(buffer, length as usize) };
+    let slice = unsafe { slice::from_raw_parts(buffer.as_ptr(), length as usize) };
     let bytes = Bytes::from_static(slice);
 
-    let observer = unsafe { &mut *observer_ptr };
-    observer.handle_signaling_data_channel_message(bytes)
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        observer.handle_signaling_data_channel_message(bytes)
+    } else {
+        error!("pc_observer_OnSignalingDataChannelMessage called with null observer");
+    }
 }
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnRtpReceived<T>(
-    observer_ptr: *mut T,
+    observer: webrtc::ptr::Borrowed<T>,
     pt: u8,
     seqnum: u16,
     timestamp: u32,
     ssrc: u32,
-    payload_data: *const u8,
+    payload_data: webrtc::ptr::Borrowed<u8>,
     payload_size: size_t,
 ) where
     T: PeerConnectionObserverTrait,
@@ -389,20 +429,25 @@ extern "C" fn pc_observer_OnRtpReceived<T>(
         return;
     }
 
-    let observer = unsafe { &mut *observer_ptr };
-    let header = rtp::Header {
-        pt,
-        seqnum,
-        timestamp,
-        ssrc,
-    };
-    let payload = unsafe { slice::from_raw_parts(payload_data, payload_size as usize) };
-    observer.handle_rtp_received(header, payload)
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        let header = rtp::Header {
+            pt,
+            seqnum,
+            timestamp,
+            ssrc,
+        };
+        let payload =
+            unsafe { slice::from_raw_parts(payload_data.as_ptr(), payload_size as usize) };
+        observer.handle_rtp_received(header, payload)
+    } else {
+        error!("pc_observer_OnRtpReceived called with null observer");
+    }
 }
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_GetMediaCiphertextBufferSize<T>(
-    observer_ptr: *mut T,
+    observer: webrtc::ptr::Borrowed<T>,
     is_audio: bool,
     plaintext_size: size_t,
 ) -> size_t
@@ -415,54 +460,65 @@ where
         plaintext_size
     );
 
-    let observer = unsafe { &mut *observer_ptr };
-    observer.get_media_ciphertext_buffer_size(is_audio, plaintext_size)
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        observer.get_media_ciphertext_buffer_size(is_audio, plaintext_size)
+    } else {
+        error!("pc_observer_GetMediaCiphertextBufferSize called with null observer");
+        0
+    }
 }
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_EncryptMedia<T>(
-    observer_ptr: *mut T,
+    observer: webrtc::ptr::Borrowed<T>,
     is_audio: bool,
-    plaintext: *const u8,
+    plaintext: webrtc::ptr::Borrowed<u8>,
     plaintext_size: size_t,
-    ciphertext_buffer: *mut u8,
-    ciphertext_buffer_size: size_t,
-    ciphertext_size: *mut size_t,
+    ciphertext_out: *mut u8,
+    ciphertext_out_size: size_t,
+    ciphertext_size_out: *mut size_t,
 ) -> bool
 where
     T: PeerConnectionObserverTrait,
 {
-    if plaintext.is_null() || ciphertext_buffer.is_null() || ciphertext_size.is_null() {
+    if plaintext.is_null() || ciphertext_out.is_null() || ciphertext_size_out.is_null() {
         error!("nulls passed into pc_observer_EncryptMedia");
         return false;
     }
 
     trace!(
-        "pc_observer_EncryptMedia(): is_audio: {} plaintext_size: {}, ciphertext_buffer_size: {}",
+        "pc_observer_EncryptMedia(): is_audio: {} plaintext_size: {}, ciphertext_out_size: {}",
         is_audio,
         plaintext_size,
-        ciphertext_buffer_size
+        ciphertext_out_size
     );
 
-    let observer = unsafe { &mut *observer_ptr };
-    let plaintext = unsafe { slice::from_raw_parts(plaintext, plaintext_size as usize) };
-    let ciphertext_buffer =
-        unsafe { slice::from_raw_parts_mut(ciphertext_buffer, ciphertext_buffer_size as usize) };
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        let plaintext =
+            unsafe { slice::from_raw_parts(plaintext.as_ptr(), plaintext_size as usize) };
+        let ciphertext =
+            unsafe { slice::from_raw_parts_mut(ciphertext_out, ciphertext_out_size as usize) };
 
-    match observer.encrypt_media(is_audio, plaintext, ciphertext_buffer) {
-        Ok(size) => {
-            unsafe {
-                *ciphertext_size = size;
+        match observer.encrypt_media(is_audio, plaintext, ciphertext) {
+            Ok(size) => {
+                unsafe {
+                    *ciphertext_size_out = size;
+                }
+                true
             }
-            true
+            Err(_e) => false,
         }
-        Err(_e) => false,
+    } else {
+        error!("pc_observer_EncryptMedia called with null observer");
+        false
     }
 }
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_GetMediaPlaintextBufferSize<T>(
-    observer_ptr: *mut T,
+    observer: webrtc::ptr::Borrowed<T>,
     track_id: u32,
     is_audio: bool,
     ciphertext_size: size_t,
@@ -477,41 +533,52 @@ where
         ciphertext_size
     );
 
-    let observer = unsafe { &mut *observer_ptr };
-    observer.get_media_plaintext_buffer_size(track_id, is_audio, ciphertext_size)
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        observer.get_media_plaintext_buffer_size(track_id, is_audio, ciphertext_size)
+    } else {
+        error!("pc_observer_GetMediaPlaintextBufferSize called with null observer");
+        0
+    }
 }
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_DecryptMedia<T>(
-    observer_ptr: *mut T,
+    observer: webrtc::ptr::Borrowed<T>,
     track_id: u32,
     is_audio: bool,
-    ciphertext: *const u8,
+    ciphertext: webrtc::ptr::Borrowed<u8>,
     ciphertext_size: usize,
-    plaintext_buffer: *mut u8,
-    plaintext_buffer_size: size_t,
-    plaintext_size: *mut size_t,
+    plaintext_out: *mut u8,
+    plaintext_out_size: size_t,
+    plaintext_size_out: *mut size_t,
 ) -> bool
 where
     T: PeerConnectionObserverTrait,
 {
-    if ciphertext.is_null() || plaintext_buffer.is_null() || plaintext_size.is_null() {
+    if ciphertext.is_null() || plaintext_out.is_null() || plaintext_size_out.is_null() {
         return false;
     }
 
-    let observer = unsafe { &mut *observer_ptr };
-    let ciphertext = unsafe { slice::from_raw_parts(ciphertext, ciphertext_size as usize) };
-    let plaintext_buffer =
-        unsafe { slice::from_raw_parts_mut(plaintext_buffer, plaintext_buffer_size as usize) };
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        let ciphertext =
+            unsafe { slice::from_raw_parts(ciphertext.as_ptr(), ciphertext_size as usize) };
+        let plaintext =
+            unsafe { slice::from_raw_parts_mut(plaintext_out, plaintext_out_size as usize) };
 
-    match observer.decrypt_media(track_id, is_audio, ciphertext, plaintext_buffer) {
-        Ok(size) => {
-            unsafe {
-                *plaintext_size = size;
+        match observer.decrypt_media(track_id, is_audio, ciphertext, plaintext) {
+            Ok(size) => {
+                unsafe {
+                    *plaintext_size_out = size;
+                }
+                true
             }
-            true
+            Err(_e) => false,
         }
-        Err(_e) => false,
+    } else {
+        error!("pc_observer_DecryptMedia called with null observer");
+        false
     }
 }
 
@@ -526,28 +593,57 @@ where
     T: PeerConnectionObserverTrait,
 {
     // ICE events
-    onIceCandidate: extern "C" fn(*mut T, *const CppIceCandidate),
-    onIceCandidatesRemoved: extern "C" fn(*mut T, *const RffiIpPort, size_t),
-    onIceConnectionChange: extern "C" fn(*mut T, IceConnectionState),
-    onIceNetworkRouteChange: extern "C" fn(*mut T, NetworkRoute),
+    onIceCandidate: extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::Borrowed<CppIceCandidate>),
+    onIceCandidatesRemoved:
+        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::Borrowed<RffiIpPort>, size_t),
+    onIceConnectionChange: extern "C" fn(webrtc::ptr::Borrowed<T>, IceConnectionState),
+    onIceNetworkRouteChange: extern "C" fn(webrtc::ptr::Borrowed<T>, NetworkRoute),
 
     // Media events
-    onAddStream: extern "C" fn(*mut T, *const RffiMediaStream),
-    onAddAudioRtpReceiver: extern "C" fn(*mut T, *const RffiAudioTrack),
-    onAddVideoRtpReceiver: extern "C" fn(*mut T, *const RffiVideoTrack),
+    onAddStream: extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiMediaStream>),
+    onAddAudioRtpReceiver:
+        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiAudioTrack>),
+    onAddVideoRtpReceiver:
+        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiVideoTrack>),
 
     // Data channel events
-    onSignalingDataChannel: extern "C" fn(*mut T, *const RffiDataChannel),
-    onSignalingDataChannelMessage: extern "C" fn(*mut T, *const u8, size_t),
-    onRtpReceived: extern "C" fn(*mut T, u8, u16, u32, u32, *const u8, size_t),
+    onSignalingDataChannel:
+        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiDataChannel>),
+    onSignalingDataChannelMessage:
+        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::Borrowed<u8>, size_t),
+    onRtpReceived: extern "C" fn(
+        webrtc::ptr::Borrowed<T>,
+        u8,
+        u16,
+        u32,
+        u32,
+        webrtc::ptr::Borrowed<u8>,
+        size_t,
+    ),
 
     // Frame encryption
-    getMediaCiphertextBufferSize: extern "C" fn(*mut T, bool, size_t) -> size_t,
-    encryptMedia:
-        extern "C" fn(*mut T, bool, *const u8, size_t, *mut u8, size_t, *mut size_t) -> bool,
-    getMediaPlaintextBufferSize: extern "C" fn(*mut T, u32, bool, size_t) -> size_t,
-    decryptMedia:
-        extern "C" fn(*mut T, u32, bool, *const u8, size_t, *mut u8, size_t, *mut size_t) -> bool,
+    getMediaCiphertextBufferSize: extern "C" fn(webrtc::ptr::Borrowed<T>, bool, size_t) -> size_t,
+    encryptMedia: extern "C" fn(
+        webrtc::ptr::Borrowed<T>,
+        bool,
+        webrtc::ptr::Borrowed<u8>,
+        size_t,
+        *mut u8,
+        size_t,
+        *mut size_t,
+    ) -> bool,
+    getMediaPlaintextBufferSize:
+        extern "C" fn(webrtc::ptr::Borrowed<T>, u32, bool, size_t) -> size_t,
+    decryptMedia: extern "C" fn(
+        webrtc::ptr::Borrowed<T>,
+        u32,
+        bool,
+        webrtc::ptr::Borrowed<u8>,
+        size_t,
+        *mut u8,
+        size_t,
+        *mut size_t,
+    ) -> bool,
 }
 
 #[cfg(not(feature = "sim"))]
@@ -566,26 +662,8 @@ where
     T: PeerConnectionObserverTrait,
 {
     /// Pointer to C++ webrtc::rffi::RffiPeerConnectionObserver.
-    rffi: *const RffiPeerConnectionObserver,
+    rffi: webrtc::ptr::Unique<RffiPeerConnectionObserver>,
     observer_type: PhantomData<T>,
-}
-
-impl<T> fmt::Display for PeerConnectionObserver<T>
-where
-    T: PeerConnectionObserverTrait,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "rffi_peer_connection: {:p}", self.rffi)
-    }
-}
-
-impl<T> fmt::Debug for PeerConnectionObserver<T>
-where
-    T: PeerConnectionObserverTrait,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
 }
 
 impl<T> PeerConnectionObserver<T>
@@ -598,8 +676,11 @@ where
     /// registering the observer callbacks to this module, and wraps
     /// the result in a Rust PeerConnectionObserver object.
 
-    pub fn new(observer_ptr: *mut T, enable_frame_encryption: bool) -> Result<Self> {
-        debug!("create_pc_observer(): observer_ptr: {:p}", observer_ptr);
+    pub fn new(observer: webrtc::ptr::Borrowed<T>, enable_frame_encryption: bool) -> Result<Self> {
+        debug!(
+            "create_pc_observer(): observer_ptr: {:p}",
+            observer.as_ptr()
+        );
 
         let pc_observer_callbacks = PeerConnectionObserverCallbacks::<T> {
             // ICE events
@@ -626,13 +707,13 @@ where
         };
         let pc_observer_callbacks_ptr: *const PeerConnectionObserverCallbacks<T> =
             &pc_observer_callbacks;
-        let rffi = unsafe {
+        let rffi = webrtc::ptr::Unique::from(unsafe {
             pc_observer::Rust_createPeerConnectionObserver(
-                observer_ptr as RustObject,
-                pc_observer_callbacks_ptr as CppObject,
+                observer.to_void(),
+                webrtc::ptr::Borrowed::from_ptr(pc_observer_callbacks_ptr).to_void(),
                 enable_frame_encryption,
             )
-        };
+        });
 
         if rffi.is_null() {
             Err(RingRtcError::CreatePeerConnectionObserver.into())
@@ -644,8 +725,7 @@ where
         }
     }
 
-    /// Return the internal WebRTC C++ PeerConnectionObserver pointer.
-    pub fn rffi(&self) -> *const RffiPeerConnectionObserver {
-        self.rffi
+    pub fn take_rffi(mut self) -> webrtc::ptr::Unique<RffiPeerConnectionObserver> {
+        self.rffi.take()
     }
 }

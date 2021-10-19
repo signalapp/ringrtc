@@ -31,31 +31,35 @@ namespace rffi {
 /* Peer Connection Observer callback function pointers */
 typedef struct {
   // ICE events
-  void (*onIceCandidate)(rust_object, const RustIceCandidate*);
-  void (*onIceCandidatesRemoved)(rust_object, const webrtc::rffi::IpPort*, size_t);
-  void (*onIceConnectionChange)(rust_object, webrtc::PeerConnectionInterface::IceConnectionState);
-  void (*onIceNetworkRouteChange)(rust_object, webrtc::rffi::NetworkRoute);
+  void (*onIceCandidate)(void* observer_borrowed, const RustIceCandidate* candidate_borrowed);
+  void (*onIceCandidatesRemoved)(void* observer_borrowed, const webrtc::rffi::IpPort* addresses_borrowed, size_t);
+  void (*onIceConnectionChange)(void* observer_borrowed, webrtc::PeerConnectionInterface::IceConnectionState);
+  void (*onIceNetworkRouteChange)(void* observer_borrowed, webrtc::rffi::NetworkRoute);
 
   // Media events
-  void (*onAddStream)(rust_object, webrtc::MediaStreamInterface*);
-  void (*onAddAudioRtpReceiver)(rust_object, webrtc::MediaStreamTrackInterface*);
-  void (*onAddVideoRtpReceiver)(rust_object, webrtc::MediaStreamTrackInterface*);
+  void (*onAddStream)(void* observer_borrowed, webrtc::MediaStreamInterface* stream_owned_rc);
+  void (*onAddAudioRtpReceiver)(void* observer_borrowed, webrtc::MediaStreamTrackInterface* track_owned_rc);
+  void (*onAddVideoRtpReceiver)(void* observer_borrowed, webrtc::MediaStreamTrackInterface* track_owned_rc);
 
   // Data Channel events
-  void (*onSignalingDataChannel)(rust_object, webrtc::DataChannelInterface*);
-  void (*onSignalingDataChannelMessage)(rust_object, const uint8_t*, size_t);
-  void (*onRtpReceived)(rust_object, uint8_t, uint16_t, uint32_t, uint32_t, const uint8_t*, size_t);
+  void (*onSignalingDataChannel)(void* observer_borrowed, webrtc::DataChannelInterface* data_channel_owned_rc);
+  void (*onSignalingDataChannelMessage)(void* observer_borrowed, const uint8_t* data_borrowed, size_t);
+  void (*onRtpReceived)(void* observer_borrowed, uint8_t, uint16_t, uint32_t, uint32_t, const uint8_t* payload_borrowed, size_t);
 
   // Frame encryption
-  size_t (*getMediaCiphertextBufferSize)(rust_object, bool, size_t);
-  bool (*encryptMedia)(rust_object, bool, const uint8_t*, size_t, uint8_t*, size_t, size_t*);
-  size_t (*getMediaPlaintextBufferSize)(rust_object, uint32_t, bool, size_t);
-  bool (*decryptMedia)(rust_object, uint32_t, bool, const uint8_t*, size_t, uint8_t*, size_t, size_t*);
+  size_t (*getMediaCiphertextBufferSize)(void* observer_borrowed, bool, size_t);
+  bool (*encryptMedia)(void* observer_borrowed, bool, const uint8_t* plaintext_borrowed, size_t, uint8_t* ciphertext_out, size_t, size_t* ciphertext_size_out);
+  size_t (*getMediaPlaintextBufferSize)(void* observer_borrowed, uint32_t, bool, size_t);
+  bool (*decryptMedia)(void* observer_borrowed, uint32_t, bool, const uint8_t* ciphertext_borrowed, size_t, uint8_t* plaintext_out, size_t, size_t* plaintext_size_out);
 } PeerConnectionObserverCallbacks;
 
+// Passed-in observer must live at least as long as the PeerConnectionObserverRffi,
+// which is at least as long as the PeerConnection.
 RUSTEXPORT webrtc::rffi::PeerConnectionObserverRffi*
-Rust_createPeerConnectionObserver(const rust_object                      observer,
-                                  const PeerConnectionObserverCallbacks* callbacks,
-                                  bool enable_frame_encryption);
+Rust_createPeerConnectionObserver(void*                                  observer_borrowed,
+                                  const PeerConnectionObserverCallbacks* callbacks_borrowed,
+                                  bool                                   enable_frame_encryption);
 
+RUSTEXPORT void
+Rust_deletePeerConnectionObserver(webrtc::rffi::PeerConnectionObserverRffi* observer_owned);
 #endif /* RFFI_API_PEER_CONNECTION_OBSERVER_INTF_H__ */

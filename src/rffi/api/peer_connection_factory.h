@@ -37,7 +37,7 @@ namespace webrtc {
     virtual int16_t AudioPlayoutDevices() {
       return 0;
     }
-    virtual int32_t AudioPlayoutDeviceName(uint16_t index, char *out_name, char *out_uuid) {
+    virtual int32_t AudioPlayoutDeviceName(uint16_t index, char* name_out, char* uuid_out) {
       return -1;
     }
     virtual bool SetAudioPlayoutDevice(uint16_t index) {
@@ -46,7 +46,7 @@ namespace webrtc {
     virtual int16_t AudioRecordingDevices() {
       return 0;
     }
-    virtual int32_t AudioRecordingDeviceName(uint16_t index, char *out_name, char *out_uuid) {
+    virtual int32_t AudioRecordingDeviceName(uint16_t index, char* name_out, char* uuid_out) {
       return -1;
     }
     virtual bool SetAudioRecordingDevice(uint16_t index) {
@@ -60,50 +60,82 @@ namespace webrtc {
 }
 
 typedef struct {
-  const char* username;
-  const char* password;
-  const char** urls;
+  const char* username_borrowed;
+  const char* password_borrowed;
+  const char** urls_borrowed;
   size_t urls_size;
 } RffiIceServer;
 
-// Returns an owned RC to a PeerConnectionFactory.
+// Returns an owned RC.
 // You can create more than one, but you should probably only have one unless
 // you want to test separate endpoints that are as independent as possible.
 RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
   bool use_new_audio_device_module, 
   bool use_injectable_network);
 
-// Takes a borrowed RC to a PeerConnectionFactory.
-// Returns an owned RC to a PeerConnectionFactoryOwner.
+// Returns an owned RC.
 RUSTEXPORT webrtc::PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
-  webrtc::PeerConnectionFactoryInterface*);
+  webrtc::PeerConnectionFactoryInterface* factory_borrowed_rc);
 
+// Returns a borrowed pointer.
 RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
-    webrtc::PeerConnectionFactoryOwner*);
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc);
 
-// Returns an owned RC to a PeerConnection.
+// Returns an owned RC.
 RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
-  webrtc::PeerConnectionFactoryOwner*,
-  webrtc::rffi::PeerConnectionObserverRffi*,
-  rtc::RTCCertificate* certificate,
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
+  webrtc::rffi::PeerConnectionObserverRffi* observer_borrowed,
+  rtc::RTCCertificate* certificate_borrowed_rc,
   bool hide_ip,
   RffiIceServer ice_server,
-  webrtc::AudioTrackInterface*,
-  webrtc::VideoTrackInterface*,
+  webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
+  webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc,
   bool enable_dtls,
   bool enable_rtp_data_channel);
-// Takes a borrowed RC to a PeerConnectionFactory
-// Returns an owned RC to an AudioTrack.
-RUSTEXPORT webrtc::AudioTrackInterface* Rust_createAudioTrack(webrtc::PeerConnectionFactoryOwner*);
-RUSTEXPORT webrtc::VideoTrackSourceInterface* Rust_createVideoSource(webrtc::PeerConnectionFactoryOwner*);
-RUSTEXPORT webrtc::VideoTrackInterface* Rust_createVideoTrack(webrtc::PeerConnectionFactoryOwner*, webrtc::VideoTrackSourceInterface* source);
-RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(webrtc::PeerConnectionFactoryOwner*);
-RUSTEXPORT int32_t Rust_getAudioPlayoutDeviceName(webrtc::PeerConnectionFactoryOwner*, uint16_t index, char *out_name, char *out_uuid);
-RUSTEXPORT bool Rust_setAudioPlayoutDevice(webrtc::PeerConnectionFactoryOwner*, uint16_t index);
-RUSTEXPORT int16_t Rust_getAudioRecordingDevices(webrtc::PeerConnectionFactoryOwner*);
-RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(webrtc::PeerConnectionFactoryOwner*, uint16_t index, char *out_name, char *out_uuid);
-RUSTEXPORT bool Rust_setAudioRecordingDevice(webrtc::PeerConnectionFactoryOwner*, uint16_t index);
+
+// Returns an owned RC.
+RUSTEXPORT webrtc::AudioTrackInterface* Rust_createAudioTrack(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc);
+
+// Returns an owned RC.
+RUSTEXPORT webrtc::VideoTrackSourceInterface* Rust_createVideoSource();
+
+// Returns an owned RC.
+RUSTEXPORT webrtc::VideoTrackInterface* Rust_createVideoTrack(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
+  webrtc::VideoTrackSourceInterface* source_borrowed_rc);
+
+RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc);
+
+RUSTEXPORT int32_t Rust_getAudioPlayoutDeviceName(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, 
+  uint16_t index, 
+  char* name_out, 
+  char* uuid_out);
+
+RUSTEXPORT bool Rust_setAudioPlayoutDevice(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
+  uint16_t index);
+
+RUSTEXPORT int16_t Rust_getAudioRecordingDevices(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc);
+
+RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, 
+  uint16_t index, 
+  char* name_out, 
+  char* uuid_out);
+
+RUSTEXPORT bool Rust_setAudioRecordingDevice(
+  webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, 
+  uint16_t index);
+
+// Returns an owned RC.
 RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate();
-RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(rtc::RTCCertificate* cert, uint8_t fingerprint[32]);
+
+RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(
+  rtc::RTCCertificate* cert_borrowed_rc, 
+  uint8_t fingerprint_out[32]);
 
 #endif /* RFFI_API_PEER_CONNECTION_FACTORY_H__ */

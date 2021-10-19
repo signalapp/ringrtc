@@ -7,12 +7,13 @@
 
 use libc::size_t;
 
+use crate::webrtc;
 use crate::webrtc::peer_connection::RffiDataChannel;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_dataChannelSend(
-    _data_channel: *const RffiDataChannel,
-    _buffer: *const u8,
+    _data_channel: webrtc::ptr::BorrowedRc<RffiDataChannel>,
+    _buffer: webrtc::ptr::Borrowed<u8>,
     _len: size_t,
     _binary: bool,
 ) -> bool {

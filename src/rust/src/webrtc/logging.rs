@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use crate::core::util::CppObject;
-use crate::webrtc::ffi::logging::{LogSeverity, Rust_setLogger};
+use crate::webrtc::{
+    self,
+    ffi::logging::{LogSeverity, LoggerCallbacks, Rust_setLogger},
+};
 
 pub fn set_logger(filter: log::LevelFilter) {
     let cbs = LoggerCallbacks {
@@ -20,20 +22,17 @@ pub fn set_logger(filter: log::LevelFilter) {
         log::LevelFilter::Trace => LogSeverity::Verbose,
     };
     unsafe {
-        Rust_setLogger(cbs_ptr as CppObject, min_severity);
+        Rust_setLogger(webrtc::ptr::Borrowed::from_ptr(cbs_ptr), min_severity);
     }
 }
 
-#[repr(C)]
 #[allow(non_snake_case)]
-struct LoggerCallbacks {
-    onLogMessage: extern "C" fn(LogSeverity, *const std::os::raw::c_char),
-}
-
-#[allow(non_snake_case)]
-extern "C" fn log_sink_OnLogMessage(severity: LogSeverity, c_message: *const std::os::raw::c_char) {
+extern "C" fn log_sink_OnLogMessage(
+    severity: LogSeverity,
+    c_message: webrtc::ptr::Borrowed<std::os::raw::c_char>,
+) {
     let message = unsafe {
-        std::ffi::CStr::from_ptr(c_message)
+        std::ffi::CStr::from_ptr(c_message.as_ptr())
             .to_string_lossy()
             .into_owned()
     };

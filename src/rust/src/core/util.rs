@@ -5,7 +5,6 @@
 
 //! Foreign Function Interface utility helpers and types.
 
-use std::ffi::c_void;
 use std::mem;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -24,12 +23,6 @@ use crate::error::RingRtcError;
 
 /// Generic Mutex/Condvar pair for signaling async event completion.
 pub type FutureResult<T> = Arc<(Mutex<(bool, T)>, Condvar)>;
-
-/// Opaque pointer type for an object of C++ origin.
-pub type CppObject = *const c_void;
-
-/// Opaque pointer type for an object of Rust origin.
-pub type RustObject = *const c_void;
 
 /// # Safety
 ///
@@ -98,20 +91,6 @@ pub unsafe fn ptr_as_arc_ptr<T>(ptr: *mut T) -> Result<ArcPtr<T>> {
         .into());
     }
     Ok(ArcPtr::<T>::new(ptr))
-}
-
-/// # Safety
-///
-/// Casts a raw *mut T into a &T.
-pub unsafe fn ptr_as_ref<T>(ptr: *mut T) -> Result<&'static T> {
-    if ptr.is_null() {
-        return Err(
-            RingRtcError::NullPointer("ptr_as_ref<T>()".to_string(), "ptr".to_string()).into(),
-        );
-    }
-
-    let object = &*ptr;
-    Ok(object)
 }
 
 /// # Safety

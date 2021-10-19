@@ -248,6 +248,9 @@ public class GroupCall {
 
             self.videoCaptureController.capturerDelegate = videoSource
 
+            // Note: getOwnedNativeAudioTrack/getOwnedNativeVideoTrack/getOwnedNativeFactory
+            // return owned RCs the first time they are called, and null after that.
+            // TODO: Consider renaming getOwnedNativeX to takeNative.
             let clientId = ringrtcCreateGroupCallClient(self.ringRtcCallManager, groupIdSlice, sfuUrlSlice, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
             if clientId != 0 {
                 // Add this instance to the shared dictionary.

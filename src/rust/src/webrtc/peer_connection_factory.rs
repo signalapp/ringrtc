@@ -8,11 +8,9 @@
 #[cfg(feature = "native")]
 use std::ffi::CStr;
 use std::ffi::CString;
-use std::fmt;
 use std::os::raw::c_char;
 
 use crate::common::Result;
-use crate::core::util::CppObject;
 use crate::error::RingRtcError;
 use crate::webrtc;
 #[cfg(feature = "simnet")]
@@ -25,14 +23,10 @@ use crate::webrtc::peer_connection_observer::{
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection_factory as pcf;
-#[cfg(not(feature = "sim"))]
-use crate::webrtc::ffi::ref_count;
 
 // TODO: sim::pcf
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection_factory as pcf;
-#[cfg(feature = "sim")]
-use crate::webrtc::sim::ref_count;
 
 pub use pcf::{RffiPeerConnectionFactoryInterface, RffiPeerConnectionFactoryOwner};
 
@@ -45,13 +39,14 @@ const ADM_MAX_DEVICE_NAME_SIZE: usize = 128;
 const ADM_MAX_DEVICE_UUID_SIZE: usize = 128;
 
 /// Rust wrapper around WebRTC C++ RTCCertificate object.
+#[derive(Clone, Debug)]
 pub struct Certificate {
-    rffi: *const pcf::RffiCertificate,
+    rffi: webrtc::Arc<pcf::RffiCertificate>,
 }
 
 impl Certificate {
     pub fn generate() -> Result<Certificate> {
-        let rffi = unsafe { pcf::Rust_generateCertificate() };
+        let rffi = webrtc::Arc::from_owned(unsafe { pcf::Rust_generateCertificate() });
         if rffi.is_null() {
             return Err(RingRtcError::GenerateCertificate.into());
         }
@@ -60,58 +55,25 @@ impl Certificate {
 
     pub fn compute_fingerprint_sha256(&self) -> Result<[u8; 32]> {
         let mut fingerprint = [0u8; 32];
-        let ok =
-            unsafe { pcf::Rust_computeCertificateFingerprintSha256(self.rffi, &mut fingerprint) };
+        let ok = unsafe {
+            pcf::Rust_computeCertificateFingerprintSha256(self.rffi.as_borrowed(), &mut fingerprint)
+        };
         if !ok {
             return Err(RingRtcError::ComputeCertificateFingerprint.into());
         }
         Ok(fingerprint)
     }
 
-    pub fn rffi(&self) -> *const pcf::RffiCertificate {
-        self.rffi
+    pub fn rffi(&self) -> &webrtc::Arc<pcf::RffiCertificate> {
+        &self.rffi
     }
 }
-
-impl fmt::Display for Certificate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Certificate: {:p}", self.rffi)
-    }
-}
-
-impl fmt::Debug for Certificate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl Drop for Certificate {
-    fn drop(&mut self) {
-        debug!("Certificate::drop()");
-        if !self.rffi.is_null() {
-            ref_count::release_ref(self.rffi as CppObject);
-        }
-    }
-}
-
-impl Clone for Certificate {
-    fn clone(&self) -> Self {
-        debug!("Certificate::clone() {}", self.rffi as u64);
-        if !self.rffi.is_null() {
-            ref_count::add_ref(self.rffi as CppObject);
-        }
-        Self { rffi: self.rffi }
-    }
-}
-
-unsafe impl Send for Certificate {}
-unsafe impl Sync for Certificate {}
 
 #[repr(C)]
 pub struct RffiIceServer {
-    pub username: *const c_char,
-    pub password: *const c_char,
-    pub urls: *const *const c_char,
+    pub username: webrtc::ptr::Borrowed<c_char>,
+    pub password: webrtc::ptr::Borrowed<c_char>,
+    pub urls: webrtc::ptr::Borrowed<webrtc::ptr::Borrowed<c_char>>,
     pub urls_size: usize,
 }
 
@@ -122,7 +84,7 @@ pub struct IceServer {
     // To own the strings
     _urls: Vec<CString>,
     // To hand the strings to C
-    url_ptrs: Vec<*const c_char>,
+    url_ptrs: Vec<webrtc::ptr::Borrowed<c_char>>,
 }
 
 unsafe impl Send for IceServer {}
@@ -134,7 +96,10 @@ impl IceServer {
         for url in urls_in {
             urls.push(CString::new(url).expect("CString of URL"));
         }
-        let url_ptrs = urls.iter().map(|s| s.as_ptr()).collect();
+        let url_ptrs = urls
+            .iter()
+            .map(|s| webrtc::ptr::Borrowed::from_ptr(s.as_ptr()))
+            .collect();
         Self {
             username: CString::new(username).expect("CString of username"),
             password: CString::new(password).expect("CString of password"),
@@ -154,9 +119,9 @@ impl IceServer {
 
     pub fn rffi(&self) -> RffiIceServer {
         RffiIceServer {
-            username: self.username.as_ptr(),
-            password: self.password.as_ptr(),
-            urls: self.url_ptrs.as_ptr(),
+            username: webrtc::ptr::Borrowed::from_ptr(self.username.as_ptr()),
+            password: webrtc::ptr::Borrowed::from_ptr(self.password.as_ptr()),
+            urls: webrtc::ptr::Borrowed::from_ptr(self.url_ptrs.as_ptr()),
             urls_size: self.url_ptrs.len(),
         }
     }
@@ -231,6 +196,10 @@ impl PeerConnectionFactory {
         })
     }
 
+    pub fn rffi(&self) -> &webrtc::Arc<RffiPeerConnectionFactoryOwner> {
+        &self.rffi
+    }
+
     /// Wrap an existing C++ PeerConnectionFactory (not a PeerConnectionFactoryOwner).
     ///
     /// # Safety
@@ -250,17 +219,17 @@ impl PeerConnectionFactory {
 
     #[cfg(feature = "simnet")]
     pub fn injectable_network(&self) -> Option<InjectableNetwork> {
-        let rffi = unsafe { pcf::Rust_getInjectableNetwork(self.rffi.as_borrowed_ptr()) };
+        let rffi = unsafe { pcf::Rust_getInjectableNetwork(self.rffi.as_borrowed()) };
         if rffi.is_null() {
             return None;
         }
-        Some(InjectableNetwork::new(rffi, self))
+        Some(InjectableNetwork::new(rffi, self.rffi.clone()))
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn create_peer_connection<T: PeerConnectionObserverTrait>(
         &self,
-        observer: PeerConnectionObserver<T>,
+        pc_observer: PeerConnectionObserver<T>,
         certificate: Certificate,
         hide_ip: bool,
         ice_servers: &IceServer,
@@ -273,17 +242,28 @@ impl PeerConnectionFactory {
             "PeerConnectionFactory::create_peer_connection() {:?}",
             self.rffi
         );
+        // Unlike on Android (see call_manager::create_peer_connection)
+        // and iOS (see IosPlatform::create_connection),
+        // the RffiPeerConnectionObserver is *not* passed as owned
+        // by Rust_createPeerConnection, so we need to keep it alive
+        // for as long as the native PeerConnection is alive.
+        // we do this by passing a webrtc::ptr::Unique<RffiPeerConnectionObserver> to
+        // the Rust-level PeerConnection and let it own it.
+        let pc_observer_rffi_unique = pc_observer.take_rffi();
+        let pc_observer_rffi_borrowed = pc_observer_rffi_unique.borrow();
+
         let rffi = webrtc::Arc::from_owned(unsafe {
             pcf::Rust_createPeerConnection(
-                self.rffi.as_borrowed_ptr(),
-                observer.rffi(),
-                certificate.rffi(),
+                self.rffi.as_borrowed(),
+                pc_observer_rffi_borrowed,
+                certificate.rffi().as_borrowed(),
                 hide_ip,
                 ice_servers.rffi(),
-                outgoing_audio_track.rffi(),
-                outgoing_video_track.map_or_else(std::ptr::null, |outgoing_video_track| {
-                    outgoing_video_track.rffi()
-                }),
+                outgoing_audio_track.rffi().as_borrowed(),
+                outgoing_video_track
+                    .map_or_else(webrtc::ptr::BorrowedRc::null, |outgoing_video_track| {
+                        outgoing_video_track.rffi().as_borrowed()
+                    }),
                 enable_dtls,
                 enable_rtp_data_channel,
             )
@@ -297,23 +277,24 @@ impl PeerConnectionFactory {
         }
         Ok(PeerConnection::new(
             rffi,
-            observer.rffi(),
+            Box::new(pc_observer_rffi_unique),
             Some(self.rffi.clone()),
         ))
     }
 
     pub fn create_outgoing_audio_track(&self) -> Result<AudioTrack> {
         debug!("PeerConnectionFactory::create_outgoing_audio_track()");
-        let rffi = unsafe { pcf::Rust_createAudioTrack(self.rffi.as_borrowed()) };
+        let rffi =
+            webrtc::Arc::from_owned(unsafe { pcf::Rust_createAudioTrack(self.rffi.as_borrowed()) });
         if rffi.is_null() {
             return Err(RingRtcError::CreateAudioTrack.into());
         }
-        Ok(AudioTrack::owned(rffi.as_ptr()))
+        Ok(AudioTrack::new(rffi, Some(self.rffi.clone())))
     }
 
     pub fn create_outgoing_video_source(&self) -> Result<VideoSource> {
         debug!("PeerConnectionFactory::create_outgoing_video_source()");
-        let rffi = unsafe { pcf::Rust_createVideoSource(self.rffi.as_borrowed_ptr()) };
+        let rffi = webrtc::Arc::from_owned(unsafe { pcf::Rust_createVideoSource() });
         if rffi.is_null() {
             return Err(RingRtcError::CreateVideoSource.into());
         }
@@ -327,13 +308,16 @@ impl PeerConnectionFactory {
         outgoing_video_source: &VideoSource,
     ) -> Result<VideoTrack> {
         debug!("PeerConnectionFactory::create_outgoing_video_track()");
-        let rffi = unsafe {
-            pcf::Rust_createVideoTrack(self.rffi.as_borrowed_ptr(), outgoing_video_source.rffi())
-        };
+        let rffi = webrtc::Arc::from_owned(unsafe {
+            pcf::Rust_createVideoTrack(
+                self.rffi.as_borrowed(),
+                outgoing_video_source.rffi().as_borrowed(),
+            )
+        });
         if rffi.is_null() {
             return Err(RingRtcError::CreateVideoTrack.into());
         }
-        Ok(VideoTrack::owned(rffi))
+        Ok(VideoTrack::new(rffi, Some(self.rffi.clone())))
     }
 
     #[cfg(feature = "native")]
@@ -342,7 +326,7 @@ impl PeerConnectionFactory {
         let mut unique_id_buf = [0; ADM_MAX_DEVICE_UUID_SIZE];
         let rc = unsafe {
             pcf::Rust_getAudioPlayoutDeviceName(
-                self.rffi.as_borrowed_ptr(),
+                self.rffi.as_borrowed(),
                 index,
                 name_buf.as_mut_ptr(),
                 unique_id_buf.as_mut_ptr(),
@@ -369,7 +353,7 @@ impl PeerConnectionFactory {
 
     #[cfg(feature = "native")]
     pub fn get_audio_playout_devices(&self) -> Result<Vec<AudioDevice>> {
-        let device_count = unsafe { pcf::Rust_getAudioPlayoutDevices(self.rffi.as_borrowed_ptr()) };
+        let device_count = unsafe { pcf::Rust_getAudioPlayoutDevices(self.rffi.as_borrowed()) };
         if device_count < 0 {
             error!("getAudioPlayoutDevices() returned {}", device_count);
             return Err(RingRtcError::QueryAudioDevices.into());
@@ -475,7 +459,7 @@ impl PeerConnectionFactory {
 
         info!("PeerConnectionFactory::set_audio_playout_device({})", index);
 
-        let ok = unsafe { pcf::Rust_setAudioPlayoutDevice(self.rffi.as_borrowed_ptr(), index) };
+        let ok = unsafe { pcf::Rust_setAudioPlayoutDevice(self.rffi.as_borrowed(), index) };
         if ok {
             Ok(())
         } else {
@@ -490,7 +474,7 @@ impl PeerConnectionFactory {
         let mut unique_id_buf = [0; ADM_MAX_DEVICE_UUID_SIZE];
         let rc = unsafe {
             pcf::Rust_getAudioRecordingDeviceName(
-                self.rffi.as_borrowed_ptr(),
+                self.rffi.as_borrowed(),
                 index,
                 name_buf.as_mut_ptr(),
                 unique_id_buf.as_mut_ptr(),
@@ -517,8 +501,7 @@ impl PeerConnectionFactory {
 
     #[cfg(feature = "native")]
     pub fn get_audio_recording_devices(&self) -> Result<Vec<AudioDevice>> {
-        let device_count =
-            unsafe { pcf::Rust_getAudioRecordingDevices(self.rffi.as_borrowed_ptr()) };
+        let device_count = unsafe { pcf::Rust_getAudioRecordingDevices(self.rffi.as_borrowed()) };
         if device_count < 0 {
             error!("getAudioRecordingDevices() returned {}", device_count);
             return Err(RingRtcError::QueryAudioDevices.into());
@@ -627,7 +610,7 @@ impl PeerConnectionFactory {
             index
         );
 
-        let ok = unsafe { pcf::Rust_setAudioRecordingDevice(self.rffi.as_borrowed_ptr(), index) };
+        let ok = unsafe { pcf::Rust_setAudioRecordingDevice(self.rffi.as_borrowed(), index) };
         if ok {
             Ok(())
         } else {

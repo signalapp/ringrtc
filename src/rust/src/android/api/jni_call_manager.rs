@@ -20,6 +20,7 @@ use crate::common::{CallMediaType, DeviceId, FeatureLevel};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::connection::Connection;
 use crate::core::{group_call, signaling};
+use crate::webrtc;
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -69,7 +70,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
     env: JNIEnv,
     _object: JObject,
     peer_connection_factory: jlong,
-    native_connection: jlong,
+    native_connection_borrowed: jlong,
     jni_rtc_config: JObject,
     jni_media_constraints: JObject,
     enable_dtls: bool,
@@ -78,7 +79,9 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
     match call_manager::create_peer_connection(
         &env,
         peer_connection_factory,
-        native_connection as *mut Connection<AndroidPlatform>,
+        webrtc::ptr::Borrowed::from_ptr(
+            native_connection_borrowed as *mut Connection<AndroidPlatform>,
+        ),
         jni_rtc_config,
         jni_media_constraints,
         enable_dtls,
@@ -613,8 +616,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
     group_id: jbyteArray,
     sfu_url: JString,
     native_peer_connection_factory_borrowed_rc: jlong,
-    native_audio_track: jlong,
-    native_video_track: jlong,
+    native_audio_track_borrowed_rc: jlong,
+    native_video_track_borrowed_rc: jlong,
 ) -> jlong {
     match call_manager::create_group_call_client(
         &env,
@@ -622,8 +625,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
         group_id,
         sfu_url,
         native_peer_connection_factory_borrowed_rc,
-        native_audio_track,
-        native_video_track,
+        native_audio_track_borrowed_rc,
+        native_video_track_borrowed_rc,
     ) {
         Ok(v) => v as i64,
         Err(e) => {

@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use crate::webrtc;
+
 pub use crate::webrtc::media::VideoRotation;
 
 pub type RffiMediaStream = u32;
@@ -24,36 +26,47 @@ pub type RffiVideoFrameBuffer = u32;
 pub static FAKE_VIDEO_FRAME_BUFFER: RffiVideoFrameBuffer = 24;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getTrackIdAsUint32(_track: *const RffiVideoTrack) -> u32 {
+pub unsafe fn Rust_getTrackIdAsUint32(_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>) -> u32 {
     info!("Rust_getTrackIdAsUint32()");
     1
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_setAudioTrackEnabled(_track: *const RffiAudioTrack, _enabled: bool) {
+pub unsafe fn Rust_setAudioTrackEnabled(
+    _track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
+    _enabled: bool,
+) {
     info!("Rust_setAudioTrackEnabled()");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_setVideoTrackEnabled(_track: *const RffiVideoTrack, _enabled: bool) {
+pub unsafe fn Rust_setVideoTrackEnabled(
+    _track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
+    _enabled: bool,
+) {
     info!("Rust_setVideoTrackEnabled()");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_setVideoTrackContentHint(_track: *const RffiVideoTrack, _is_screenshare: bool) {
+pub unsafe fn Rust_setVideoTrackContentHint(
+    _track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
+    _is_screenshare: bool,
+) {
     info!("Rust_setVideoTrackContentHint()");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getFirstVideoTrack(_stream: *const RffiMediaStream) -> *const RffiVideoTrack {
+pub unsafe fn Rust_getFirstVideoTrack(
+    _stream: webrtc::ptr::BorrowedRc<RffiMediaStream>,
+) -> webrtc::ptr::OwnedRc<RffiVideoTrack> {
     info!("Rust_getFirstVideoTrack()");
-    &FAKE_VIDEO_TRACK
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_TRACK)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_pushVideoFrame(
-    _source: *const RffiVideoSource,
-    _buffer: *const RffiVideoFrameBuffer,
+    _source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
+    _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
 ) {
     info!("Rust_pushVideoFrame()");
 }
@@ -62,25 +75,25 @@ pub unsafe fn Rust_pushVideoFrame(
 pub unsafe fn Rust_createVideoFrameBufferFromRgba(
     _width: u32,
     _height: u32,
-    _rgba_buffer: *const u8,
-) -> *const RffiVideoFrameBuffer {
+    _rgba: webrtc::ptr::Borrowed<u8>,
+) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
     info!("Rust_createVideoFrameBufferFromRgba()");
-    &FAKE_VIDEO_FRAME_BUFFER
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_convertVideoFrameBufferToRgba(
-    _buffer: *const RffiVideoFrameBuffer,
-    _rgba_buffer: *mut u8,
+    _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
+    _rgba_out: *mut u8,
 ) {
     info!("Rust_convertVideoFrameBufferToRgba()");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_copyAndRotateVideoFrameBuffer(
-    _buffer: *const RffiVideoFrameBuffer,
+    _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     _rotation: VideoRotation,
-) -> *const RffiVideoFrameBuffer {
+) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
     info!("Rust_copyAndRotateVideoFrameBuffer()");
-    &FAKE_VIDEO_FRAME_BUFFER
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
 }

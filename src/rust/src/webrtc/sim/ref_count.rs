@@ -5,14 +5,17 @@
 
 //! Simulation of Wrapper around rtc::RefCountInterface
 
-use crate::core::util::CppObject;
+use crate::webrtc;
 
-/// Rust wrapper around RefCountInterface::AddRef()
-pub fn add_ref(_ref_counted_pointer: CppObject) {
-    info!("add_ref()");
+/// # Safety
+pub fn dec<T: webrtc::ptr::RefCounted>(_rc: webrtc::ptr::OwnedRc<T>) {
+    info!("ref_count::dec()");
 }
 
-/// Rust wrapper around RefCountInterface::Release()
-pub fn release_ref(_ref_counted_pointer: CppObject) {
-    info!("release_ref()");
+/// # Safety
+pub unsafe fn inc<T: webrtc::ptr::RefCounted>(
+    rc: webrtc::ptr::BorrowedRc<T>,
+) -> webrtc::ptr::OwnedRc<T> {
+    info!("ref_count::inc()");
+    webrtc::ptr::OwnedRc::from_ptr(rc.as_ptr())
 }

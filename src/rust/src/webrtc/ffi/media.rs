@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-#[cfg(feature = "native")]
-use crate::core::util::{CppObject, RustObject};
 use crate::webrtc;
 pub use crate::webrtc::media::VideoRotation;
 
@@ -13,6 +11,10 @@ pub use crate::webrtc::media::VideoRotation;
 pub struct RffiMediaStream {
     _private: [u8; 0],
 }
+
+// See "class MediaStreamInterface : public rtc::RefCountInterface"
+// in webrtc/api/media_stream_interface.h
+impl webrtc::RefCounted for RffiMediaStream {}
 
 /// Incomplete type for C++ AudioTrack.
 #[repr(C)]
@@ -33,6 +35,11 @@ pub struct RffiVideoSource {
     _private: [u8; 0],
 }
 
+// See "class MediaSourceInterface : public rtc::RefCountInterface"
+// and "class VideoSourceInterface: public MediaSourceInterface"
+// in webrtc/api/media_stream_interface.h
+impl webrtc::RefCounted for RffiVideoSource {}
+
 /// Incomplete type for C++ VideoTrack.
 #[repr(C)]
 #[allow(dead_code)]
@@ -40,32 +47,54 @@ pub struct RffiVideoTrack {
     _private: [u8; 0],
 }
 
+// See "class MediaStreamTrackInterface : public rtc::RefCountInterface"
+// and "class VideoTrackInterface: public MediaStreamTrackInterface"
+// in webrtc/api/media_stream_interface.h
+impl webrtc::RefCounted for RffiVideoTrack {}
+
 /// Incomplete type for C++ webrtc::VideoFrameBuffer.
 #[repr(C)]
 pub struct RffiVideoFrameBuffer {
     _private: [u8; 0],
 }
 
+// See "class VideoFrameBuffer : public rtc::RefCountInterface"
+// in webrtc/api/video/video_frame_buffer.h
+impl webrtc::RefCounted for RffiVideoFrameBuffer {}
+
 extern "C" {
-    pub fn Rust_getTrackIdAsUint32(track: *const RffiVideoTrack) -> u32;
-    pub fn Rust_setAudioTrackEnabled(track: *const RffiAudioTrack, enabled: bool);
-    pub fn Rust_setVideoTrackEnabled(track: *const RffiVideoTrack, enabled: bool);
-    pub fn Rust_setVideoTrackContentHint(track: *const RffiVideoTrack, is_screenshare: bool);
-    pub fn Rust_getFirstVideoTrack(stream: *const RffiMediaStream) -> *const RffiVideoTrack;
+    pub fn Rust_getTrackIdAsUint32(track: webrtc::ptr::BorrowedRc<RffiVideoTrack>) -> u32;
+    pub fn Rust_setAudioTrackEnabled(track: webrtc::ptr::BorrowedRc<RffiAudioTrack>, enabled: bool);
+    pub fn Rust_setVideoTrackEnabled(track: webrtc::ptr::BorrowedRc<RffiVideoTrack>, enabled: bool);
+    pub fn Rust_setVideoTrackContentHint(
+        track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
+        is_screenshare: bool,
+    );
+    pub fn Rust_getFirstVideoTrack(
+        stream: webrtc::ptr::BorrowedRc<RffiMediaStream>,
+    ) -> webrtc::ptr::OwnedRc<RffiVideoTrack>;
+    // The "obj" must outlive the VideoTrack (or the PeerConnection from which it came).
     #[cfg(feature = "native")]
-    pub fn Rust_addVideoSink(track: *const RffiVideoTrack, obj: RustObject, cb: CppObject);
-    pub fn Rust_pushVideoFrame(source: *const RffiVideoSource, buffer: *const RffiVideoFrameBuffer);
+    pub fn Rust_addVideoSink(
+        track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
+        obj: webrtc::ptr::Borrowed<std::ffi::c_void>,
+        cb: webrtc::ptr::Borrowed<std::ffi::c_void>,
+    );
+    pub fn Rust_pushVideoFrame(
+        source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
+        buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
+    );
     pub fn Rust_createVideoFrameBufferFromRgba(
         width: u32,
         height: u32,
-        rgba_buffer: *const u8,
-    ) -> *const RffiVideoFrameBuffer;
+        rgba: webrtc::ptr::Borrowed<u8>,
+    ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>;
     pub fn Rust_convertVideoFrameBufferToRgba(
-        buffer: *const RffiVideoFrameBuffer,
-        rgba_buffer: *mut u8,
+        buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
+        rgba_out: *mut u8,
     );
     pub fn Rust_copyAndRotateVideoFrameBuffer(
-        buffer: *const RffiVideoFrameBuffer,
+        buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
         rotation: VideoRotation,
-    ) -> *const RffiVideoFrameBuffer;
+    ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>;
 }

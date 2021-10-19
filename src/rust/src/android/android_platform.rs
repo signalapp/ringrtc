@@ -294,7 +294,8 @@ impl Platform for AndroidPlatform {
         const CREATE_CONNECTION_SIG: &str =
             "(JJILorg/signal/ringrtc/CallManager$CallContext;ZZ)Lorg/signal/ringrtc/Connection;";
         let args = [
-            (connection_ptr as jlong).into(),
+            // This is borrowed by the Java method.
+            (connection_ptr.as_ptr() as jlong).into(),
             call_id_jlong.into(),
             jni_remote_device_id.into(),
             jni_call_context.as_obj().into(),
@@ -1404,7 +1405,8 @@ impl Platform for AndroidPlatform {
 
         let jni_client_id = client_id as jlong;
         let jni_remote_demux_id = remote_demux_id as jlong;
-        let jni_native_video_track = incoming_video_track.rffi() as jlong;
+        let jni_native_video_track_borrowed_rc =
+            incoming_video_track.rffi().as_borrowed().as_ptr() as jlong;
 
         const METHOD: &str = "handleIncomingVideoTrack";
         const SIG: &str = "(JJJ)V";
@@ -1412,7 +1414,7 @@ impl Platform for AndroidPlatform {
         let args = [
             jni_client_id.into(),
             jni_remote_demux_id.into(),
-            jni_native_video_track.into(),
+            jni_native_video_track_borrowed_rc.into(),
         ];
         let result = jni_call_method(&env, jni_call_manager, METHOD, SIG, &args);
         if result.is_err() {

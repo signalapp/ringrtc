@@ -5,12 +5,13 @@
 
 //! WebRTC Simulation Create/Set SessionDescription
 
-use std::ffi::c_void;
 use std::ptr;
 
-use crate::core::util::RustObject;
-use crate::webrtc::stats_observer::{
-    ConnectionStatistics, MediaStatistics, StatsObserver, StatsObserverCallbacks,
+use crate::webrtc::{
+    self,
+    stats_observer::{
+        ConnectionStatistics, MediaStatistics, StatsObserver, StatsObserverCallbacks,
+    },
 };
 
 /// Simulation type for webrtc::rffi::StatsObserverRffi
@@ -20,9 +21,9 @@ static FAKE_STATS_OBSERVER: u32 = 21;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createStatsObserver(
-    stats_observer: RustObject,
-    stats_observer_cbs: *const c_void,
-) -> *const RffiStatsObserver {
+    stats_observer: webrtc::ptr::Borrowed<std::ffi::c_void>,
+    callbacks: webrtc::ptr::Borrowed<std::ffi::c_void>,
+) -> webrtc::ptr::OwnedRc<RffiStatsObserver> {
     info!("Rust_createStatsObserver():");
 
     let dummy = MediaStatistics {
@@ -42,8 +43,11 @@ pub unsafe fn Rust_createStatsObserver(
     };
 
     // Hit on the onComplete() callback
-    let callbacks = stats_observer_cbs as *const StatsObserverCallbacks;
-    ((*callbacks).onStatsComplete)(stats_observer as *mut StatsObserver, &dummy);
+    let callbacks = callbacks.as_ptr() as *const StatsObserverCallbacks;
+    ((*callbacks).onStatsComplete)(
+        webrtc::ptr::Borrowed::from_ptr(stats_observer.as_ptr() as *mut StatsObserver),
+        webrtc::ptr::Borrowed::from_ptr(&dummy),
+    );
 
-    &FAKE_STATS_OBSERVER
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_STATS_OBSERVER)
 }

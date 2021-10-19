@@ -15,16 +15,17 @@
 
 // Create a JavaMediaStream C++ object from a
 // webrtc::MediaStreamInterface* object.
+// Returns an owned pointer.
 RUSTEXPORT webrtc::jni::JavaMediaStream*
-Rust_createJavaMediaStream(webrtc::MediaStreamInterface* media_stream);
+Rust_createJavaMediaStream(webrtc::MediaStreamInterface* media_stream_borrowed_rc);
 
-// Free a JavaMediaStream C++ object.
+// Delete a JavaMediaStream C++ object.
 RUSTEXPORT void
-Rust_freeJavaMediaStream(webrtc::jni::JavaMediaStream* java_media_stream);
+Rust_deleteJavaMediaStream(webrtc::jni::JavaMediaStream* java_media_stream_owned);
 
 // Return the Java JNI object contained within the JavaMediaStream C++
 // object.
 RUSTEXPORT jobject
-Rust_getJavaMediaStreamObject(webrtc::jni::JavaMediaStream* java_media_stream);
+Rust_getJavaMediaStreamObject(webrtc::jni::JavaMediaStream* java_media_stream_borrowed);
 
 #endif /* ANDROID_MEDIA_STREAM_INTF_H__ */

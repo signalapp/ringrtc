@@ -10,7 +10,6 @@ extern crate ringrtc;
 #[macro_use]
 extern crate log;
 
-use std::ptr;
 use std::time::Duration;
 
 use prost::Message;
@@ -20,6 +19,7 @@ use ringrtc::core::call_manager::MAX_MESSAGE_AGE;
 use ringrtc::core::group_call;
 use ringrtc::core::signaling;
 use ringrtc::protobuf;
+use ringrtc::webrtc;
 use ringrtc::webrtc::data_channel::DataChannel;
 use ringrtc::webrtc::media::MediaStream;
 
@@ -134,7 +134,7 @@ fn connect_inbound_call() -> TestContext {
     );
 
     info!("test: injecting signaling data channel connected");
-    let data_channel = unsafe { DataChannel::new(ptr::null()) };
+    let data_channel = DataChannel::new(webrtc::Arc::null());
     active_connection
         .inject_received_signaling_data_channel(data_channel)
         .expect(error_line!());
@@ -159,7 +159,7 @@ fn connect_inbound_call() -> TestContext {
 
     info!("test: add media stream");
     active_connection
-        .handle_received_incoming_media(MediaStream::new(ptr::null()))
+        .handle_received_incoming_media(MediaStream::new(webrtc::Arc::null()))
         .expect(error_line!());
 
     info!("test: accepting call");

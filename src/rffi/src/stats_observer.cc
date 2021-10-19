@@ -4,14 +4,14 @@
  */
 
 #include "rffi/api/stats_observer_intf.h"
+#include "rffi/src/ptr.h"
 #include "rffi/src/stats_observer.h"
-
 #include "api/stats/rtcstats_objects.h"
 
 namespace webrtc {
 namespace rffi {
 
-StatsObserverRffi::StatsObserverRffi(const rust_object             stats_observer,
+StatsObserverRffi::StatsObserverRffi(void*                         stats_observer,
                                      const StatsObserverCallbacks* stats_observer_cbs)
         : stats_observer_(stats_observer), stats_observer_cbs_(*stats_observer_cbs)
 {
@@ -177,14 +177,12 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
   this->stats_observer_cbs_.OnStatsComplete(this->stats_observer_, &media_statistics);
 }
 
+// Returns an owned RC.
+// Pass-in values must outlive the returned value.
 RUSTEXPORT StatsObserverRffi*
-Rust_createStatsObserver(const rust_object             stats_observer,
-                         const StatsObserverCallbacks* stats_observer_cbs) {
-  StatsObserverRffi* rffi_observer = new rtc::RefCountedObject<StatsObserverRffi>(stats_observer, stats_observer_cbs);
-  rffi_observer->AddRef();
-
-  // rffi_observer is now owned by caller. Must call Rust_releaseRef() eventually.
-  return rffi_observer;
+Rust_createStatsObserver(void*                         stats_observer_borrowed,
+                         const StatsObserverCallbacks* stats_observer_cbs_borrowed) {
+  return take_rc(make_ref_counted<StatsObserverRffi>(stats_observer_borrowed, stats_observer_cbs_borrowed));
 }
 
 } // namespace rffi

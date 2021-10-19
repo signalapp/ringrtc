@@ -5,13 +5,12 @@
 
 //! WebRTC Simulation Create/Set SessionDescription
 
-use std::ffi::{c_void, CString};
+use std::ffi::CString;
 use std::os::raw::c_char;
-use std::ptr;
 
 use libc::{size_t, strdup};
 
-use crate::core::util::RustObject;
+use crate::webrtc;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver, CreateSessionDescriptionObserverCallbacks,
     RffiConnectionParametersV4, SetSessionDescriptionObserver,
@@ -37,63 +36,73 @@ static FAKE_SSD_OBSERVER: u32 = 15;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createSetSessionDescriptionObserver(
-    ssd_observer: RustObject,
-    ssd_observer_cb: *const c_void,
-) -> *const RffiSetSessionDescriptionObserver {
+    ssd_observer: webrtc::ptr::Borrowed<std::ffi::c_void>,
+    callbacks: webrtc::ptr::Borrowed<std::ffi::c_void>,
+) -> webrtc::ptr::OwnedRc<RffiSetSessionDescriptionObserver> {
     info!("Rust_createSetSessionDescriptionObserver():");
 
     // Hit the onSuccess() callback
-    let call_backs = ssd_observer_cb as *const SetSessionDescriptionObserverCallbacks;
-    ((*call_backs).onSuccess)(ssd_observer as *mut SetSessionDescriptionObserver);
+    let callbacks = callbacks.as_ptr() as *const SetSessionDescriptionObserverCallbacks;
+    ((*callbacks).onSuccess)(webrtc::ptr::Borrowed::from_ptr(
+        ssd_observer.as_ptr() as *mut SetSessionDescriptionObserver
+    ));
 
-    &FAKE_SSD_OBSERVER
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_SSD_OBSERVER)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createCreateSessionDescriptionObserver(
-    csd_observer: RustObject,
-    csd_observer_cb: *const c_void,
-) -> *const RffiCreateSessionDescriptionObserver {
+    csd_observer: webrtc::ptr::Borrowed<std::ffi::c_void>,
+    callbacks: webrtc::ptr::Borrowed<std::ffi::c_void>,
+) -> webrtc::ptr::OwnedRc<RffiCreateSessionDescriptionObserver> {
     info!("Rust_createCreateSessionDescriptionObserver():");
 
     // Hit the onSuccess() callback
-    let call_backs = csd_observer_cb as *const CreateSessionDescriptionObserverCallbacks;
-    ((*call_backs).onSuccess)(
-        csd_observer as *mut CreateSessionDescriptionObserver,
-        &mut FAKE_SDP,
+    let callbacks = callbacks.as_ptr() as *const CreateSessionDescriptionObserverCallbacks;
+    ((*callbacks).onSuccess)(
+        webrtc::ptr::Borrowed::from_ptr(
+            csd_observer.as_ptr() as *mut CreateSessionDescriptionObserver
+        ),
+        webrtc::ptr::Owned::from_ptr(&FAKE_SDP),
     );
 
-    &FAKE_CSD_OBSERVER
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_CSD_OBSERVER)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_toSdp(rffi: *const RffiSessionDescription) -> *const c_char {
+pub unsafe fn Rust_toSdp(
+    rffi: webrtc::ptr::Borrowed<RffiSessionDescription>,
+) -> webrtc::ptr::Owned<c_char> {
     info!("Rust_toSdp(): ");
-    match CString::new(*rffi) {
-        Ok(cstr) => strdup(cstr.as_ptr()),
-        Err(_) => ptr::null(),
+    match CString::new(*rffi.as_ptr()) {
+        Ok(cstr) => webrtc::ptr::Owned::from_ptr(strdup(cstr.as_ptr())),
+        Err(_) => webrtc::ptr::Owned::null(),
     }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_offerFromSdp(_sdp: *const c_char) -> *mut RffiSessionDescription {
+pub unsafe fn Rust_offerFromSdp(
+    _sdp: webrtc::ptr::Borrowed<c_char>,
+) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_offerFromSdp(): ");
-    &mut FAKE_SDP_ANSWER
+    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_ANSWER)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_answerFromSdp(_sdp: *const c_char) -> *mut RffiSessionDescription {
+pub unsafe fn Rust_answerFromSdp(
+    _sdp: webrtc::ptr::Borrowed<c_char>,
+) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_answerFromSdp(): ");
-    &mut FAKE_SDP_OFFER
+    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_OFFER)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
-    _session_description: *mut RffiSessionDescription,
+    _session_description: webrtc::ptr::Borrowed<RffiSessionDescription>,
     _crypto_suite: SrtpCryptoSuite,
-    _key_ptr: *const u8,
+    _key_data: webrtc::ptr::Borrowed<u8>,
     _key_len: size_t,
-    _salt_ptr: *const u8,
+    _salt_data: webrtc::ptr::Borrowed<u8>,
     _salt_len: size_t,
 ) -> bool {
     info!("Rust_disableDtlsAndSetSrtpKey(): ");
@@ -102,59 +111,61 @@ pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_sessionDescriptionToV4(
-    _session_description: *const RffiSessionDescription,
-) -> *mut RffiConnectionParametersV4 {
+    _session_description: webrtc::ptr::Borrowed<RffiSessionDescription>,
+) -> webrtc::ptr::Owned<RffiConnectionParametersV4> {
     info!("Rust_sessionDescriptionToV4(): ");
-    Box::leak(Box::new(RffiConnectionParametersV4 {
-        ice_ufrag: std::ptr::null(),
-        ice_pwd: std::ptr::null(),
-        receive_video_codecs: std::ptr::null(),
+    webrtc::ptr::Owned::from_ptr(Box::leak(Box::new(RffiConnectionParametersV4 {
+        ice_ufrag: webrtc::ptr::Borrowed::null(),
+        ice_pwd: webrtc::ptr::Borrowed::null(),
+        receive_video_codecs: webrtc::ptr::Borrowed::null(),
         receive_video_codecs_size: 0,
-    }))
+    })))
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_releaseV4(_v4: *mut RffiConnectionParametersV4) {
-    info!("Rust_releaseV4(): ");
+pub unsafe fn Rust_deleteV4(_v4: webrtc::ptr::Owned<RffiConnectionParametersV4>) {
+    info!("Rust_deleteV4(): ");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_sessionDescriptionFromV4(
     offer: bool,
-    _v4: *const RffiConnectionParametersV4,
-) -> *mut RffiSessionDescription {
+    _v4: webrtc::ptr::Borrowed<RffiConnectionParametersV4>,
+) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_sessionDescriptionFromV4(): ");
     if offer {
-        &mut FAKE_SDP_OFFER
+        webrtc::ptr::Owned::from_ptr(&FAKE_SDP_OFFER)
     } else {
-        &mut FAKE_SDP_ANSWER
+        webrtc::ptr::Owned::from_ptr(&FAKE_SDP_ANSWER)
     }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_localDescriptionForGroupCall(
-    _ice_ufrag: *const c_char,
-    _ice_pwd: *const c_char,
-    _dtls_fingerprint_sha256: *const [u8; 32],
+    _ice_ufrag: webrtc::ptr::Borrowed<c_char>,
+    _ice_pwd: webrtc::ptr::Borrowed<c_char>,
+    // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
+    _dtls_fingerprint_sha256_borrowed: *const [u8; 32],
     _demux_id: u32,
-) -> *mut RffiSessionDescription {
+) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_localDescriptionForGroupCall(): ");
-    &mut FAKE_SDP_OFFER
+    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_OFFER)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_remoteDescriptionForGroupCall(
-    _ice_ufrag: *const c_char,
-    _ice_pwd: *const c_char,
-    _dtls_fingerprint_sha256: *const [u8; 32],
-    _demux_ids_data: *const u32,
+    _ice_ufrag: webrtc::ptr::Borrowed<c_char>,
+    _ice_pwd: webrtc::ptr::Borrowed<c_char>,
+    // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
+    _dtls_fingerprint_sha256_borrowed: *const [u8; 32],
+    _demux_ids_data: webrtc::ptr::Borrowed<u32>,
     _demux_ids_len: size_t,
-) -> *mut RffiSessionDescription {
+) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_remoteDescriptionForGroupCall(): ");
-    &mut FAKE_SDP_ANSWER
+    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_ANSWER)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_releaseSessionDescription(_sdi: *mut RffiSessionDescription) {
-    info!("Rust_releaseSessionDescription(): ");
+pub unsafe fn Rust_deleteSessionDescription(_sdi: webrtc::ptr::Owned<RffiSessionDescription>) {
+    info!("Rust_deleteSessionDescription(): ");
 }

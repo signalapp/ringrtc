@@ -11,21 +11,20 @@ use std::{
     marker::{Send, Sync},
 };
 
-use crate::core::util::CppObject;
 use crate::webrtc;
 
 #[cfg(not(feature = "sim"))]
-use crate::webrtc::ffi::ref_count::{add_ref, release_ref};
+use crate::webrtc::ffi::ref_count;
 #[cfg(feature = "sim")]
-use crate::webrtc::sim::ref_count::{add_ref, release_ref};
+use crate::webrtc::sim::ref_count;
 
 pub struct Arc<T: webrtc::RefCounted> {
-    ptr: *const T,
+    owned: webrtc::ptr::OwnedRc<T>,
 }
 
 impl<T: webrtc::RefCounted> fmt::Debug for Arc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("webrtc::Arc({:p})", self.ptr))
+        f.write_fmt(format_args!("webrtc::Arc({:p})", self.owned.as_ptr()))
     }
 }
 
@@ -35,33 +34,44 @@ impl<T: webrtc::RefCounted> Arc<T> {
     // Should be called with a pointer returned from scoped_refptr<T>::release().
     // or from "auto t = new rtc::RefCountedObject<T>(...); t->AddRef()"
     pub fn from_owned(owned: webrtc::ptr::OwnedRc<T>) -> Self {
-        Self {
-            ptr: owned.borrow().as_ptr(),
-        }
+        Self { owned }
+    }
+
+    /// Convenience function which is the same as Arc::from_owned(webrtc::ptr::OwnedRc::from_ptr(stc::ptr::null()))
+    pub fn null() -> Self {
+        // Safe because a dropped null will do nothing.
+        Self::from_owned(webrtc::ptr::OwnedRc::null())
     }
 
     /// Clones ownership (increments the ref count).
     /// # Safety
     /// The pointee must be alive.
     pub unsafe fn from_borrowed(borrowed: webrtc::ptr::BorrowedRc<T>) -> Self {
-        let ptr = borrowed.as_ptr();
-        if !ptr.is_null() {
-            add_ref(ptr as CppObject);
-        }
-        Self::from_owned(webrtc::ptr::OwnedRc::from_ptr(ptr))
+        Self::from_owned(ref_count::inc(borrowed))
     }
 
     pub fn as_borrowed(&self) -> webrtc::ptr::BorrowedRc<T> {
-        webrtc::ptr::BorrowedRc::from_ptr(self.ptr)
+        self.owned.borrow()
     }
 
-    pub fn as_borrowed_ptr(&self) -> *const T {
-        self.as_borrowed().as_ptr()
+    pub fn take_owned(&mut self) -> webrtc::ptr::OwnedRc<T> {
+        std::mem::replace(&mut self.owned, webrtc::ptr::OwnedRc::null())
     }
 
-    // Convenience function which is the same as self.as_borrowed_ptr().is_null()
+    pub fn into_owned(mut self) -> webrtc::ptr::OwnedRc<T> {
+        self.take_owned()
+    }
+
+    /// Convenience function which is the same as self.as_borrowed().is_null()
     pub fn is_null(&self) -> bool {
-        self.ptr.is_null()
+        self.owned.is_null()
+    }
+
+    /// Convenience function which is the same as self.as_borrowed().as_ref()
+    /// # Safety
+    /// Just as safe as any pointer deref.
+    pub unsafe fn as_ref(&self) -> Option<&T> {
+        self.owned.as_ref()
     }
 }
 
@@ -75,9 +85,7 @@ impl<T: webrtc::RefCounted> Clone for Arc<T> {
 
 impl<T: webrtc::RefCounted> Drop for Arc<T> {
     fn drop(&mut self) {
-        if !self.ptr.is_null() {
-            release_ref(self.ptr as CppObject)
-        }
+        ref_count::dec(self.owned.take());
     }
 }
 

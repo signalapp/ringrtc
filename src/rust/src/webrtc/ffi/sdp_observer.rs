@@ -5,12 +5,13 @@
 
 //! WebRTC FFI Create / Set Session Description Interface.
 
-use crate::core::util::RustObject;
 use libc::size_t;
-use std::ffi::c_void;
 use std::os::raw::c_char;
 
-use crate::webrtc::sdp_observer::RffiConnectionParametersV4;
+use crate::webrtc::{
+    self,
+    sdp_observer::{RffiConnectionParametersV4, SrtpCryptoSuite},
+};
 
 /// Incomplete type for SessionDescription, used by
 /// CreateSessionDescriptionObserver callbacks.
@@ -25,63 +26,83 @@ pub struct RffiCreateSessionDescriptionObserver {
     _private: [u8; 0],
 }
 
+// See "class CreateSessionDescriptionObserver: public rtc::RefCountInterface
+// in webrtc/api/jsep.h
+impl webrtc::RefCounted for RffiCreateSessionDescriptionObserver {}
+
 /// Incomplete type for C++ CreateSessionDescriptionObserverRffi
 #[repr(C)]
 pub struct RffiSetSessionDescriptionObserver {
     _private: [u8; 0],
 }
 
+// See "class SetSessionDescriptionObserver: public rtc::RefCountInterface
+// in webrtc/api/jsep.h
+impl webrtc::RefCounted for RffiSetSessionDescriptionObserver {}
+
 extern "C" {
+    // The passed-in observer must live as long as the returned value,
+    // which in turn must live as long as the call to PeerConnection::SetLocalDescription/SetRemoteDescription.
     pub fn Rust_createSetSessionDescriptionObserver(
-        ssd_observer: RustObject,
-        ssd_observer_cb: *const c_void,
-    ) -> *const RffiSetSessionDescriptionObserver;
+        ssd_observer: webrtc::ptr::Borrowed<std::ffi::c_void>,
+        ssd_observer_cb: webrtc::ptr::Borrowed<std::ffi::c_void>,
+    ) -> webrtc::ptr::OwnedRc<RffiSetSessionDescriptionObserver>;
 
+    // The passed-in observer must live as long as the returned value,
+    // which in turn must live as long as the call to PeerConnection::CreateOffer/CreateAnswer.
     pub fn Rust_createCreateSessionDescriptionObserver(
-        csd_observer: RustObject,
-        csd_observer_cb: *const c_void,
-    ) -> *const RffiCreateSessionDescriptionObserver;
+        csd_observer: webrtc::ptr::Borrowed<std::ffi::c_void>,
+        csd_observer_cb: webrtc::ptr::Borrowed<std::ffi::c_void>,
+    ) -> webrtc::ptr::OwnedRc<RffiCreateSessionDescriptionObserver>;
 
-    pub fn Rust_toSdp(offer: *const RffiSessionDescription) -> *const c_char;
+    pub fn Rust_toSdp(
+        desc: webrtc::ptr::Borrowed<RffiSessionDescription>,
+    ) -> webrtc::ptr::Owned<c_char>;
 
-    pub fn Rust_answerFromSdp(sdp: *const c_char) -> *mut RffiSessionDescription;
+    pub fn Rust_answerFromSdp(
+        sdp: webrtc::ptr::Borrowed<c_char>,
+    ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
-    pub fn Rust_offerFromSdp(sdp: *const c_char) -> *mut RffiSessionDescription;
+    pub fn Rust_offerFromSdp(
+        sdp: webrtc::ptr::Borrowed<c_char>,
+    ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
     pub fn Rust_disableDtlsAndSetSrtpKey(
-        session_description: *mut RffiSessionDescription,
-        crypto_suite: crate::webrtc::sdp_observer::SrtpCryptoSuite,
-        key_ptr: *const u8,
+        session_description: webrtc::ptr::Borrowed<RffiSessionDescription>,
+        crypto_suite: SrtpCryptoSuite,
+        key_data: webrtc::ptr::Borrowed<u8>,
         key_len: size_t,
-        salt_ptr: *const u8,
+        salt_data: webrtc::ptr::Borrowed<u8>,
         salt_len: size_t,
     ) -> bool;
 
     pub fn Rust_sessionDescriptionToV4(
-        session_description: *const RffiSessionDescription,
-    ) -> *mut RffiConnectionParametersV4;
+        v4: webrtc::ptr::Borrowed<RffiSessionDescription>,
+    ) -> webrtc::ptr::Owned<RffiConnectionParametersV4>;
 
-    pub fn Rust_releaseV4(session_description: *mut RffiConnectionParametersV4);
+    pub fn Rust_deleteV4(session_description: webrtc::ptr::Owned<RffiConnectionParametersV4>);
 
     pub fn Rust_sessionDescriptionFromV4(
         offer: bool,
-        v4: *const RffiConnectionParametersV4,
-    ) -> *mut RffiSessionDescription;
+        v4: webrtc::ptr::Borrowed<RffiConnectionParametersV4>,
+    ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
     pub fn Rust_localDescriptionForGroupCall(
-        ice_ufrag: *const c_char,
-        ice_pwd: *const c_char,
-        _dtls_fingerprint_sha256: *const [u8; 32],
+        ice_ufrag: webrtc::ptr::Borrowed<c_char>,
+        ice_pwd: webrtc::ptr::Borrowed<c_char>,
+        // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
+        dtls_fingerprint_sha256_borrowed: *const [u8; 32],
         demux_id: u32,
-    ) -> *mut RffiSessionDescription;
+    ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
     pub fn Rust_remoteDescriptionForGroupCall(
-        ice_ufrag: *const c_char,
-        ice_pwd: *const c_char,
-        _dtls_fingerprint_sha256: *const [u8; 32],
-        demux_ids_data: *const u32,
+        ice_ufrag: webrtc::ptr::Borrowed<c_char>,
+        ice_pwd: webrtc::ptr::Borrowed<c_char>,
+        // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
+        dtls_fingerprint_sha256_borrowed: *const [u8; 32],
+        demux_ids_data: webrtc::ptr::Borrowed<u32>,
         demux_ids_len: size_t,
-    ) -> *mut RffiSessionDescription;
+    ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
-    pub fn Rust_releaseSessionDescription(sdi: *mut RffiSessionDescription);
+    pub fn Rust_deleteSessionDescription(sdi: webrtc::ptr::Owned<RffiSessionDescription>);
 }

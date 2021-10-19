@@ -21,6 +21,7 @@ use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::sim::error::SimError;
+use crate::webrtc;
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::PeerConnection;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
@@ -157,7 +158,7 @@ impl Platform for SimPlatform {
         let peer_connection_factory = None;
         let peer_connection = PeerConnection::new(
             connection.peer_connection_rffi(),
-            std::ptr::null(),
+            Box::new(webrtc::ptr::Borrowed::null()),
             peer_connection_factory,
         );
 

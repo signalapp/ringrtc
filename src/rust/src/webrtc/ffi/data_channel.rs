@@ -7,12 +7,12 @@
 
 use libc::size_t;
 
-use crate::webrtc::peer_connection::RffiDataChannel;
+use crate::webrtc::{self, peer_connection::RffiDataChannel};
 
 extern "C" {
     pub fn Rust_dataChannelSend(
-        data_channel: *const RffiDataChannel,
-        buffer: *const u8,
+        dc: webrtc::ptr::BorrowedRc<RffiDataChannel>,
+        buffer: webrtc::ptr::Borrowed<u8>,
         len: size_t,
         binary: bool,
     ) -> bool;

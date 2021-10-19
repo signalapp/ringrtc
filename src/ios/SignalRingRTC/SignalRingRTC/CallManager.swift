@@ -992,7 +992,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Utility Observers
 
-    func onCreateConnection(pcObserver: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
+    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
         Logger.debug("onCreateConnection")
 
         // We create default configuration settings here as per
@@ -1030,10 +1030,10 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
 
         Logger.debug("Create application connection object...")
-        let connection = Connection(pcObserver: pcObserver!,
-                                       factory: self.factory!,
-                                 configuration: configuration,
-                                   constraints: constraints)
+        let connection = Connection(pcObserverOwned: pcObserverOwned!,
+                                            factory: self.factory!,
+                                      configuration: configuration,
+                                        constraints: constraints)
 
         let pc = connection.getRawPeerConnection()
         // If pc is nil CallManager will handle it internally.
@@ -1193,7 +1193,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrack: UnsafeMutableRawPointer?) {
+    func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?) {
         Logger.debug("handleIncomingVideoTrack")
 
         guard let factory = self.factory else {
@@ -1201,12 +1201,13 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             return
         }
 
-        guard let nativeVideoTrack = nativeVideoTrack else {
+        guard let nativeVideoTrackBorrowedRc = nativeVideoTrackBorrowedRc else {
             owsFailDebug("videoTrack was unexpectedly nil")
             return
         }
 
-        let videoTrack = factory.videoTrack(fromNativeTrack: nativeVideoTrack)
+        // This takes a borrowed RC.
+        let videoTrack = factory.videoTrack(fromNativeTrack: nativeVideoTrackBorrowedRc)
 
         DispatchQueue.main.async {
             Logger.debug("handleIncomingVideoTrack - main.async")

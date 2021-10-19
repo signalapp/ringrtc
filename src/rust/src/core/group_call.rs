@@ -32,6 +32,7 @@ use crate::{
     error::RingRtcError,
     protobuf,
     webrtc::{
+        self,
         data_channel::DataChannel,
         media::{AudioTrack, VideoTrack},
         peer_connection::{PeerConnection, SendRates},
@@ -2843,9 +2844,9 @@ struct PeerConnectionObserverImpl {
 
 impl PeerConnectionObserverImpl {
     fn uninitialized() -> Result<(Box<Self>, PeerConnectionObserver<Self>)> {
-        let mut boxed_observer_impl = Box::new(Self { client: None });
+        let boxed_observer_impl = Box::new(Self { client: None });
         let observer = PeerConnectionObserver::new(
-            &mut *boxed_observer_impl,
+            webrtc::ptr::Borrowed::from_ptr(&*boxed_observer_impl),
             true, /* enable_frame_encryption */
         )?;
         Ok((boxed_observer_impl, observer))
@@ -3558,7 +3559,12 @@ mod tests {
             let observer = FakeObserver::new(user_id.clone());
             let fake_busy = Arc::new(CallMutex::new(false, "fake_busy"));
             let fake_self_uuid = Arc::new(CallMutex::new(Some(user_id.clone()), "fake_self_uuid"));
-            let fake_audio_track = AudioTrack::owned(FAKE_AUDIO_TRACK as *const u32);
+            let fake_audio_track = AudioTrack::new(
+                webrtc::Arc::from_owned(unsafe {
+                    webrtc::ptr::OwnedRc::from_ptr(&FAKE_AUDIO_TRACK as *const u32)
+                }),
+                None,
+            );
             let client = Client::start(
                 b"fake group ID".to_vec(),
                 demux_id,

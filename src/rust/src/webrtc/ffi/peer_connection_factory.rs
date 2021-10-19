@@ -27,6 +27,8 @@ pub struct RffiPeerConnectionFactoryInterface {
     _private: [u8; 0],
 }
 
+// See "class PeerConnectionFactoryInterface: public rtc::RefCountInterface"
+// in webrtc/api/peer_connection_interface.h
 impl webrtc::RefCounted for RffiPeerConnectionFactoryInterface {}
 
 /// Incomplete type for C++ RTCCertificate.
@@ -34,6 +36,12 @@ impl webrtc::RefCounted for RffiPeerConnectionFactoryInterface {}
 pub struct RffiCertificate {
     _private: [u8; 0],
 }
+
+// WARNING: RTCCertificate changed to "class RTCCertificate: public RefCountedNonVirtual"
+// in https://source.chromium.org/chromium/_/webrtc/src.git/+/86ee89f73e4f4799b3ebcc0b5c65837c9601fe6d
+// on 4/21/2021.  So when we update WebRTC, this must be
+// removed.
+impl webrtc::RefCounted for RffiCertificate {}
 
 /// Incomplete type for C++ AudioDeviceModule.
 #[repr(C)]
@@ -54,64 +62,65 @@ extern "C" {
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryInterface>,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner>;
     #[cfg(feature = "simnet")]
+    // The injectable network will live as long as the PeerConnectionFactoryOwner.
     pub fn Rust_getInjectableNetwork(
-        factory: *const RffiPeerConnectionFactoryOwner,
-    ) -> *const RffiInjectableNetwork;
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+    ) -> webrtc::ptr::Borrowed<RffiInjectableNetwork>;
     #[allow(clippy::too_many_arguments)]
     pub fn Rust_createPeerConnection(
-        factory: *const RffiPeerConnectionFactoryOwner,
-        observer: *const RffiPeerConnectionObserver,
-        certificate: *const RffiCertificate,
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+        observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
+        certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
         hide_ip: bool,
         ice_server: RffiIceServer,
-        outgoing_audio_track: *const RffiAudioTrack,
-        outgoing_video_track: *const RffiVideoTrack,
+        outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
+        outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
         enable_dtls: bool,
         enable_rtp_data_channel: bool,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnection>;
     pub fn Rust_createAudioTrack(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
     ) -> webrtc::ptr::OwnedRc<RffiAudioTrack>;
-    pub fn Rust_createVideoSource(
-        factory: *const RffiPeerConnectionFactoryOwner,
-    ) -> *const RffiVideoSource;
-    // PeerConnectionFactory::CreateVideoTrack increments the refcount on source,
-    // So there's no need to retain extra references to the source.
+    pub fn Rust_createVideoSource() -> webrtc::ptr::OwnedRc<RffiVideoSource>;
     pub fn Rust_createVideoTrack(
-        factory: *const RffiPeerConnectionFactoryOwner,
-        source: *const RffiVideoSource,
-    ) -> *const RffiVideoTrack;
-    pub fn Rust_generateCertificate() -> *const RffiCertificate;
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+        source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
+    ) -> webrtc::ptr::OwnedRc<RffiVideoTrack>;
+    pub fn Rust_generateCertificate() -> webrtc::ptr::OwnedRc<RffiCertificate>;
     pub fn Rust_computeCertificateFingerprintSha256(
-        cert: *const RffiCertificate,
-        fingerprint: *mut [u8; 32],
+        cert: webrtc::ptr::BorrowedRc<RffiCertificate>,
+        fingerprint_out: *mut [u8; 32],
     ) -> bool;
     #[cfg(feature = "native")]
-    pub fn Rust_getAudioPlayoutDevices(factory: *const RffiPeerConnectionFactoryOwner) -> i16;
+    pub fn Rust_getAudioPlayoutDevices(
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+    ) -> i16;
     #[cfg(feature = "native")]
     pub fn Rust_getAudioPlayoutDeviceName(
-        factory: *const RffiPeerConnectionFactoryOwner,
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         index: u16,
-        out_name: *mut c_char,
-        out_uuid: *mut c_char,
+        name_out: *mut c_char,
+        uuid_out: *mut c_char,
     ) -> i32;
     #[cfg(feature = "native")]
     pub fn Rust_setAudioPlayoutDevice(
-        factory: *const RffiPeerConnectionFactoryOwner,
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         index: u16,
     ) -> bool;
     #[cfg(feature = "native")]
-    pub fn Rust_getAudioRecordingDevices(factory: *const RffiPeerConnectionFactoryOwner) -> i16;
+    pub fn Rust_getAudioRecordingDevices(
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+    ) -> i16;
     #[cfg(feature = "native")]
     pub fn Rust_getAudioRecordingDeviceName(
-        factory: *const RffiPeerConnectionFactoryOwner,
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         index: u16,
-        out_name: *mut c_char,
-        out_uuid: *mut c_char,
+        name_out: *mut c_char,
+        uuid_out: *mut c_char,
     ) -> i32;
     #[cfg(feature = "native")]
     pub fn Rust_setAudioRecordingDevice(
-        factory: *const RffiPeerConnectionFactoryOwner,
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         index: u16,
     ) -> bool;
 }

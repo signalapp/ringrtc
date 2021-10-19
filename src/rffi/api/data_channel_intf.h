@@ -19,8 +19,8 @@
  */
 
 RUSTEXPORT bool
-Rust_dataChannelSend(webrtc::DataChannelInterface* data_channel,
-                     const uint8_t*                buf,
+Rust_dataChannelSend(webrtc::DataChannelInterface* data_channel_borrowed_rc,
+                     const uint8_t*                buf_borrowed,
                      size_t                        len,
                      bool                          binary);
 

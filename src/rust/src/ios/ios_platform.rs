@@ -116,9 +116,20 @@ impl Platform for IosPlatform {
         let pc_observer =
             PeerConnectionObserver::new(connection_ptr, false /* enable_frame_encryption */)?;
 
+        // onCreateConnectionInterface takes
+        // ownership of the RffiPeerConnectionObserver.  But we also pass
+        // a borrowed RffiPeerConnectionObserver into PeerConnection::new
+        // (for use with data channels).
+        // This is weird, but it works as long as the Java-level PeerConnection
+        // keeps the observer around as long as the data channel, which it does.
+        // TODO: See if we can clean this up.
+        let pc_observer_rffi_unique = pc_observer.take_rffi();
+        let pc_observer_rffi_borrowed = pc_observer_rffi_unique.borrow();
+
         let app_connection_interface = (self.app_interface.onCreateConnectionInterface)(
             self.app_interface.object,
-            pc_observer.rffi() as *mut c_void,
+            // This takes an owned pointer.
+            pc_observer_rffi_unique.into_owned().as_ptr() as *mut std::ffi::c_void,
             remote_device_id,
             call.call_context()?.object,
             false, /* always disable DTLS */
@@ -146,7 +157,11 @@ impl Platform for IosPlatform {
 
         // Note: We have to make sure the PeerConnectionFactory outlives this PC because we're not getting
         // any help from the type system when passing in a None for the PeerConnectionFactory here.
-        let peer_connection = PeerConnection::new(rffi_peer_connection, pc_observer.rffi(), None);
+        let peer_connection = PeerConnection::new(
+            rffi_peer_connection,
+            Box::new(pc_observer_rffi_borrowed),
+            None,
+        );
 
         connection.set_peer_connection(peer_connection)?;
 
@@ -464,7 +479,7 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             remote_peer.ptr,
             app_call_context.object,
-            app_media_stream,
+            app_media_stream.as_ptr(),
         );
 
         Ok(())
@@ -655,7 +670,8 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             client_id,
             remote_demux_id,
-            incoming_video_track.rffi() as *mut c_void,
+            // This takes a borrowed RC.
+            incoming_video_track.rffi().as_borrowed().as_ptr() as *mut std::ffi::c_void,
         );
     }
 

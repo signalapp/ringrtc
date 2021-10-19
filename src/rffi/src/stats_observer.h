@@ -19,15 +19,16 @@ namespace rffi {
 
 class StatsObserverRffi : public RTCStatsCollectorCallback {
 public:
-  StatsObserverRffi(const rust_object             stats_observer,
-                    const StatsObserverCallbacks* stats_observer_cbs);
+  // Passed-in observer must live as long as the StatsObserverRffi.
+  StatsObserverRffi(void*                         stats_observer_borrowed,
+                    const StatsObserverCallbacks* stats_observer_cbs_borrowed);
   ~StatsObserverRffi() override;
 
 protected:
   void OnStatsDelivered(const rtc::scoped_refptr<const RTCStatsReport>& report) override;
 
 private:
-  const rust_object stats_observer_;
+  void* stats_observer_;
   StatsObserverCallbacks stats_observer_cbs_;
 
   std::vector<AudioSenderStatistics> audio_sender_statistics_;

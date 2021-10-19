@@ -5,17 +5,16 @@
 
 //! WebRTC Create Session Description Interface.
 
-use std::ffi::{c_void, CStr, CString};
-use std::fmt;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::ptr;
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::common::Result;
 use crate::core::bandwidth_mode::BandwidthMode;
-use crate::core::util::{ptr_as_ref, FutureResult, RustObject};
+use crate::core::util::FutureResult;
 use crate::error::RingRtcError;
 use crate::protobuf;
+use crate::webrtc;
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::sdp_observer as sdp;
@@ -42,21 +41,10 @@ pub struct SrtpKey {
     pub salt: Vec<u8>,
 }
 /// Rust wrapper around WebRTC C++ SessionDescription.
+#[derive(Debug)]
 pub struct SessionDescription {
     /// Pointer to C++ SessionDescription object.
-    rffi: *mut RffiSessionDescription,
-}
-
-impl fmt::Display for SessionDescription {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "rffi_session_description: {:p}", self.rffi)
-    }
-}
-
-impl fmt::Debug for SessionDescription {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
+    rffi: webrtc::ptr::Unique<RffiSessionDescription>,
 }
 
 #[repr(C)]
@@ -76,48 +64,51 @@ pub struct RffiVideoCodec {
 
 #[repr(C)]
 pub struct RffiConnectionParametersV4 {
-    pub ice_ufrag: *const c_char,
-    pub ice_pwd: *const c_char,
-    pub receive_video_codecs: *const RffiVideoCodec,
+    pub ice_ufrag: webrtc::ptr::Borrowed<c_char>,
+    pub ice_pwd: webrtc::ptr::Borrowed<c_char>,
+    pub receive_video_codecs: webrtc::ptr::Borrowed<RffiVideoCodec>,
     pub receive_video_codecs_size: usize,
 }
 
-impl Drop for SessionDescription {
-    fn drop(&mut self) {
-        if !self.rffi.is_null() {
-            unsafe { sdp::Rust_releaseSessionDescription(self.rffi) };
-        }
+impl webrtc::ptr::Delete for RffiSessionDescription {
+    fn delete(owned: webrtc::ptr::Owned<Self>) {
+        unsafe { sdp::Rust_deleteSessionDescription(owned) }
+    }
+}
+
+impl webrtc::ptr::Delete for RffiConnectionParametersV4 {
+    fn delete(owned: webrtc::ptr::Owned<Self>) {
+        unsafe { sdp::Rust_deleteV4(owned) }
     }
 }
 
 impl SessionDescription {
     /// Create a new SessionDescription from a C++ SessionDescription object.
-    pub fn new(rffi: *mut RffiSessionDescription) -> Self {
+    pub fn new(rffi: webrtc::ptr::Unique<RffiSessionDescription>) -> Self {
         Self { rffi }
     }
 
-    pub fn take_rffi(mut self) -> *mut RffiSessionDescription {
-        let rffi = self.rffi;
-        // This makes it so drop() will not release it a second time.
-        self.rffi = std::ptr::null_mut();
-        rffi
+    pub fn take_rffi(mut self) -> webrtc::ptr::Unique<RffiSessionDescription> {
+        self.rffi.take()
     }
 
     /// Return SDP representation of this SessionDescription.
     pub fn to_sdp(&self) -> Result<String> {
-        let sdp_ptr = unsafe { sdp::Rust_toSdp(self.rffi) };
-        if sdp_ptr.is_null() {
+        let sdp = unsafe { sdp::Rust_toSdp(self.rffi.borrow()) };
+        if sdp.is_null() {
             return Err(RingRtcError::ToSdp.into());
         }
-        let sdp = unsafe { CStr::from_ptr(sdp_ptr).to_string_lossy().into_owned() };
-        unsafe { libc::free(sdp_ptr as *mut libc::c_void) };
-        Ok(sdp)
+        let sdp_copy = unsafe { CStr::from_ptr(sdp.as_ptr()).to_string_lossy().into_owned() };
+        unsafe { libc::free(sdp.as_ptr() as *mut libc::c_void) };
+        Ok(sdp_copy)
     }
 
     /// Create a SDP answer from the session description string.
     pub fn answer_from_sdp(sdp: String) -> Result<Self> {
         let sdp = CString::new(sdp)?;
-        let answer = unsafe { sdp::Rust_answerFromSdp(sdp.as_ptr()) };
+        let answer = webrtc::ptr::Unique::from(unsafe {
+            sdp::Rust_answerFromSdp(webrtc::ptr::Borrowed::from_ptr(sdp.as_ptr()))
+        });
         if answer.is_null() {
             return Err(RingRtcError::ConvertSdpAnswer.into());
         }
@@ -127,7 +118,9 @@ impl SessionDescription {
     /// Create a SDP offer from the session description string.
     pub fn offer_from_sdp(sdp: String) -> Result<Self> {
         let sdp = CString::new(sdp)?;
-        let offer = unsafe { sdp::Rust_offerFromSdp(sdp.as_ptr()) };
+        let offer = webrtc::ptr::Unique::from(unsafe {
+            sdp::Rust_offerFromSdp(webrtc::ptr::Borrowed::from_ptr(sdp.as_ptr()))
+        });
         if offer.is_null() {
             return Err(RingRtcError::ConvertSdpOffer.into());
         }
@@ -137,11 +130,11 @@ impl SessionDescription {
     pub fn disable_dtls_and_set_srtp_key(&mut self, key: &SrtpKey) -> Result<()> {
         let success = unsafe {
             sdp::Rust_disableDtlsAndSetSrtpKey(
-                self.rffi,
+                self.rffi.borrow(),
                 key.suite,
-                key.key.as_ptr(),
+                webrtc::ptr::Borrowed::from_ptr(key.key.as_ptr()),
                 key.key.len(),
-                key.salt.as_ptr(),
+                webrtc::ptr::Borrowed::from_ptr(key.salt.as_ptr()),
                 key.salt.len(),
             )
         };
@@ -157,18 +150,20 @@ impl SessionDescription {
         public_key: Vec<u8>,
         bandwidth_mode: BandwidthMode,
     ) -> Result<protobuf::signaling::ConnectionParametersV4> {
-        let rffi_v4_ptr = unsafe { sdp::Rust_sessionDescriptionToV4(self.rffi) };
-
-        if rffi_v4_ptr.is_null() {
+        let rffi_v4_ptr = webrtc::ptr::Unique::from(unsafe {
+            sdp::Rust_sessionDescriptionToV4(self.rffi.borrow())
+        });
+        let rffi_v4 = rffi_v4_ptr.as_ref();
+        if rffi_v4.is_none() {
             return Err(RingRtcError::MungeSdp.into());
         }
+        let rffi_v4 = rffi_v4.unwrap();
 
-        let rffi_v4 = unsafe { &*rffi_v4_ptr };
-        let ice_ufrag = from_cstr(rffi_v4.ice_ufrag);
-        let ice_pwd = from_cstr(rffi_v4.ice_pwd);
+        let ice_ufrag = from_cstr(rffi_v4.ice_ufrag.as_ptr());
+        let ice_pwd = from_cstr(rffi_v4.ice_pwd.as_ptr());
         let receive_video_codecs: Vec<protobuf::signaling::VideoCodec> = unsafe {
             std::slice::from_raw_parts(
-                rffi_v4.receive_video_codecs,
+                rffi_v4.receive_video_codecs.as_ptr(),
                 rffi_v4.receive_video_codecs_size,
             )
         }
@@ -194,8 +189,6 @@ impl SessionDescription {
             }
         })
         .collect();
-
-        unsafe { sdp::Rust_releaseV4(rffi_v4_ptr) };
 
         Ok(protobuf::signaling::ConnectionParametersV4 {
             public_key: Some(public_key),
@@ -245,12 +238,14 @@ impl SessionDescription {
             }
         }
         let rffi_v4 = RffiConnectionParametersV4 {
-            ice_ufrag: rffi_ice_ufrag.as_ptr(),
-            ice_pwd: rffi_ice_pwd.as_ptr(),
-            receive_video_codecs: rffi_video_codecs.as_ptr(),
+            ice_ufrag: webrtc::ptr::Borrowed::from_ptr(rffi_ice_ufrag.as_ptr()),
+            ice_pwd: webrtc::ptr::Borrowed::from_ptr(rffi_ice_pwd.as_ptr()),
+            receive_video_codecs: webrtc::ptr::Borrowed::from_ptr(rffi_video_codecs.as_ptr()),
             receive_video_codecs_size: rffi_video_codecs.len(),
         };
-        let rffi = unsafe { sdp::Rust_sessionDescriptionFromV4(offer, &rffi_v4) };
+        let rffi = webrtc::ptr::Unique::from(unsafe {
+            sdp::Rust_sessionDescriptionFromV4(offer, webrtc::ptr::Borrowed::from_ptr(&rffi_v4))
+        });
         if rffi.is_null() {
             return Err(RingRtcError::MungeSdp.into());
         }
@@ -266,14 +261,14 @@ impl SessionDescription {
         let rffi_ice_ufrag = CString::new(ice_ufrag.as_bytes())?;
         let rffi_ice_pwd = CString::new(ice_pwd.as_bytes())?;
 
-        let sdi = unsafe {
+        let sdi = webrtc::ptr::Unique::from(unsafe {
             sdp::Rust_localDescriptionForGroupCall(
-                rffi_ice_ufrag.as_ptr(),
-                rffi_ice_pwd.as_ptr(),
+                webrtc::ptr::Borrowed::from_ptr(rffi_ice_ufrag.as_ptr()),
+                webrtc::ptr::Borrowed::from_ptr(rffi_ice_pwd.as_ptr()),
                 dtls_fingerprint_sha256,
                 rtp_demux_id.unwrap_or(0),
             )
-        };
+        });
         if sdi.is_null() {
             return Err(RingRtcError::MungeSdp.into());
         }
@@ -289,15 +284,15 @@ impl SessionDescription {
         let rffi_ice_ufrag = CString::new(ice_ufrag.as_bytes())?;
         let rffi_ice_pwd = CString::new(ice_pwd.as_bytes())?;
 
-        let sdi = unsafe {
+        let sdi = webrtc::ptr::Unique::from(unsafe {
             sdp::Rust_remoteDescriptionForGroupCall(
-                rffi_ice_ufrag.as_ptr(),
-                rffi_ice_pwd.as_ptr(),
+                webrtc::ptr::Borrowed::from_ptr(rffi_ice_ufrag.as_ptr()),
+                webrtc::ptr::Borrowed::from_ptr(rffi_ice_pwd.as_ptr()),
                 dtls_fingerprint_sha256,
-                rtp_demux_ids.as_ptr(),
+                webrtc::ptr::Borrowed::from_ptr(rtp_demux_ids.as_ptr()),
                 rtp_demux_ids.len(),
             )
-        };
+        });
         if sdi.is_null() {
             return Err(RingRtcError::MungeSdp.into());
         }
@@ -332,17 +327,20 @@ pub use crate::webrtc::sim::sdp_observer::RffiCreateSessionDescriptionObserver;
 pub struct CreateSessionDescriptionObserver {
     /// condition variable used to signal the completion of the create
     /// session description operation.
-    condition: FutureResult<Result<*mut RffiSessionDescription>>,
+    condition: FutureResult<Result<webrtc::ptr::Unique<RffiSessionDescription>>>,
     /// Pointer to C++ webrtc::rffi::RffiCreateSessionDescriptionObserver object
-    rffi: *const RffiCreateSessionDescriptionObserver,
+    rffi: webrtc::Arc<RffiCreateSessionDescriptionObserver>,
 }
 
 impl CreateSessionDescriptionObserver {
     /// Create a new CreateSessionDescriptionObserver.
     fn new() -> Self {
         Self {
-            condition: Arc::new((Mutex::new((false, Ok(ptr::null_mut()))), Condvar::new())),
-            rffi: ptr::null(),
+            condition: Arc::new((
+                Mutex::new((false, Ok(webrtc::ptr::Unique::null()))),
+                Condvar::new(),
+            )),
+            rffi: webrtc::Arc::null(),
         }
     }
 
@@ -350,7 +348,7 @@ impl CreateSessionDescriptionObserver {
     /// success.
     ///
     /// This call signals the condition variable.
-    fn on_create_success(&self, session_description: *mut RffiSessionDescription) {
+    fn on_create_success(&self, session_description: webrtc::ptr::Unique<RffiSessionDescription>) {
         info!("on_create_success()");
         let &(ref mtx, ref cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
@@ -383,6 +381,8 @@ impl CreateSessionDescriptionObserver {
     /// Retrieve the result of the create session description operation.
     ///
     /// This call blocks on the condition variable.
+    /// This can only be called once to get a valid value.  After that, it will return a null
+    /// SessionDescription.  This is because the SessionDescription can't be cloned.
     pub fn get_result(&self) -> Result<SessionDescription> {
         let &(ref mtx, ref cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
@@ -394,8 +394,8 @@ impl CreateSessionDescriptionObserver {
                 })?;
             }
             // TODO: implement guard.1.clone() here ....
-            match &guard.1 {
-                Ok(v) => Ok(SessionDescription::new(*v)),
+            match &mut guard.1 {
+                Ok(v) => Ok(SessionDescription::new(v.take())),
                 Err(e) => Err(
                     RingRtcError::CreateSessionDescriptionObserverResult(format!("{}", e)).into(),
                 ),
@@ -409,13 +409,13 @@ impl CreateSessionDescriptionObserver {
     }
 
     /// Set the RFFI observer object.
-    pub fn set_rffi(&mut self, observer: *const RffiCreateSessionDescriptionObserver) {
+    pub fn set_rffi(&mut self, observer: webrtc::Arc<RffiCreateSessionDescriptionObserver>) {
         self.rffi = observer
     }
 
     /// Return the RFFI observer object.
-    pub fn rffi(&self) -> *const RffiCreateSessionDescriptionObserver {
-        self.rffi
+    pub fn rffi(&self) -> &webrtc::Arc<RffiCreateSessionDescriptionObserver> {
+        &self.rffi
     }
 }
 
@@ -423,34 +423,44 @@ impl CreateSessionDescriptionObserver {
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn csd_observer_OnSuccess(
-    csd_observer: *mut CreateSessionDescriptionObserver,
-    session_description: *mut RffiSessionDescription,
+    csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
+    session_description: webrtc::ptr::Owned<RffiSessionDescription>,
 ) {
     info!("csd_observer_OnSuccess()");
-    match unsafe { ptr_as_ref(csd_observer) } {
-        Ok(csd_observer) => csd_observer.on_create_success(session_description),
-        Err(e) => error!("csd_observer_OnSuccess(): {}", e),
-    };
+    let session_description = webrtc::ptr::Unique::from(session_description);
+
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(csd_observer) = unsafe { csd_observer.as_mut() } {
+        csd_observer.on_create_success(session_description);
+    } else {
+        error!("csd_observer_OnSuccess() with null observer");
+    }
 }
 
 /// CreateSessionDescription observer OnFailure() callback.
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn csd_observer_OnFailure(
-    csd_observer: *mut CreateSessionDescriptionObserver,
-    err_message: *const c_char,
+    csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
+    err_message: webrtc::ptr::Borrowed<c_char>,
     err_type: i32,
 ) {
-    let err_string: String = unsafe { CStr::from_ptr(err_message).to_string_lossy().into_owned() };
+    let err_string: String = unsafe {
+        CStr::from_ptr(err_message.as_ptr())
+            .to_string_lossy()
+            .into_owned()
+    };
     error!(
         "csd_observer_OnFailure(): {}, type: {}",
         err_string, err_type
     );
 
-    match unsafe { ptr_as_ref(csd_observer) } {
-        Ok(v) => v.on_create_failure(err_string, err_type),
-        Err(e) => error!("csd_observer_OnFailure(): {}", e),
-    };
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(csd_observer) = unsafe { csd_observer.as_mut() } {
+        csd_observer.on_create_failure(err_string, err_type);
+    } else {
+        error!("csd_observer_OnFailure() with null observer");
+    }
 }
 
 /// CreateSessionDescription observer callback function pointers.
@@ -458,12 +468,12 @@ extern "C" fn csd_observer_OnFailure(
 #[allow(non_snake_case)]
 pub struct CreateSessionDescriptionObserverCallbacks {
     pub onSuccess: extern "C" fn(
-        csd_observer: *mut CreateSessionDescriptionObserver,
-        session_description: *mut RffiSessionDescription,
+        csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
+        session_description: webrtc::ptr::Owned<RffiSessionDescription>,
     ),
     pub onFailure: extern "C" fn(
-        csd_observer: *mut CreateSessionDescriptionObserver,
-        error_message: *const c_char,
+        csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
+        error_message: webrtc::ptr::Borrowed<c_char>,
         error_type: i32,
     ),
 }
@@ -483,12 +493,12 @@ const CSD_OBSERVER_CBS_PTR: *const CreateSessionDescriptionObserverCallbacks = &
 pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
     let csd_observer = Box::new(CreateSessionDescriptionObserver::new());
     let csd_observer_ptr = Box::into_raw(csd_observer);
-    let rffi = unsafe {
+    let rffi = webrtc::Arc::from_owned(unsafe {
         sdp::Rust_createCreateSessionDescriptionObserver(
-            csd_observer_ptr as RustObject,
-            CSD_OBSERVER_CBS_PTR as *const c_void,
+            webrtc::ptr::Borrowed::from_ptr(csd_observer_ptr).to_void(),
+            webrtc::ptr::Borrowed::from_ptr(CSD_OBSERVER_CBS_PTR).to_void(),
         )
-    };
+    });
     let mut csd_observer = unsafe { Box::from_raw(csd_observer_ptr) };
 
     csd_observer.set_rffi(rffi);
@@ -508,7 +518,7 @@ pub struct SetSessionDescriptionObserver {
     /// session description operation.
     condition: FutureResult<Result<()>>,
     /// Pointer to C++ CreateSessionDescriptionObserver object
-    rffi: *const RffiSetSessionDescriptionObserver,
+    rffi: webrtc::Arc<RffiSetSessionDescriptionObserver>,
 }
 
 impl SetSessionDescriptionObserver {
@@ -516,7 +526,7 @@ impl SetSessionDescriptionObserver {
     fn new() -> Self {
         Self {
             condition: Arc::new((Mutex::new((false, Ok(()))), Condvar::new())),
-            rffi: ptr::null(),
+            rffi: webrtc::Arc::null(),
         }
     }
 
@@ -581,55 +591,67 @@ impl SetSessionDescriptionObserver {
     }
 
     /// Set the RFFI observer object.
-    pub fn set_rffi(&mut self, rffi: *const RffiSetSessionDescriptionObserver) {
+    pub fn set_rffi(&mut self, rffi: webrtc::Arc<RffiSetSessionDescriptionObserver>) {
         self.rffi = rffi
     }
 
     /// Return the RFFI observer object.
-    pub fn rffi(&self) -> *const RffiSetSessionDescriptionObserver {
-        self.rffi
+    pub fn rffi(&self) -> &webrtc::Arc<RffiSetSessionDescriptionObserver> {
+        &self.rffi
     }
 }
 
 /// SetSessionDescription observer OnSuccess() callback.
 #[no_mangle]
 #[allow(non_snake_case)]
-extern "C" fn ssd_observer_OnSuccess(ssd_observer: *mut SetSessionDescriptionObserver) {
+extern "C" fn ssd_observer_OnSuccess(
+    ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>,
+) {
     info!("ssd_observer_OnSuccess()");
-    match unsafe { ptr_as_ref(ssd_observer) } {
-        Ok(v) => v.on_set_success(),
-        Err(e) => error!("ssd_observer_OnSuccess(): {}", e),
-    };
+
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(ssd_observer) = unsafe { ssd_observer.as_mut() } {
+        ssd_observer.on_set_success();
+    } else {
+        error!("ssd_observer_OnSuccess() with null observer");
+    }
 }
 
 /// SetSessionDescription observer OnFailure() callback.
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn ssd_observer_OnFailure(
-    ssd_observer: *mut SetSessionDescriptionObserver,
-    err_message: *const c_char,
+    ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>,
+    err_message: webrtc::ptr::Borrowed<c_char>,
     err_type: i32,
 ) {
-    let err_string: String = unsafe { CStr::from_ptr(err_message).to_string_lossy().into_owned() };
+    let err_string: String = unsafe {
+        CStr::from_ptr(err_message.as_ptr())
+            .to_string_lossy()
+            .into_owned()
+    };
     error!(
         "ssd_observer_OnFailure(): {}, type: {}",
         err_string, err_type
     );
 
-    match unsafe { ptr_as_ref(ssd_observer) } {
-        Ok(v) => v.on_set_failure(err_string, err_type),
-        Err(e) => error!("ssd_observer_OnFailure(): {}", e),
-    };
+    if ssd_observer.is_null() {
+        error!("ssd_observer_OnFailure() with null observer");
+    } else {
+        unsafe { &*(ssd_observer.as_ptr() as *const SetSessionDescriptionObserver) }
+            .on_set_failure(err_string, err_type);
+    }
 }
 
 /// SetSessionDescription observer callback function pointers.
 #[repr(C)]
 #[allow(non_snake_case)]
 pub struct SetSessionDescriptionObserverCallbacks {
-    pub onSuccess: extern "C" fn(ssd_observer: *mut SetSessionDescriptionObserver),
+    pub onSuccess:
+        extern "C" fn(ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>),
     pub onFailure: extern "C" fn(
-        ssd_observer: *mut SetSessionDescriptionObserver,
-        error_message: *const c_char,
+        ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>,
+        error_message: webrtc::ptr::Borrowed<c_char>,
         error_type: i32,
     ),
 }
@@ -649,14 +671,14 @@ const SSD_OBSERVER_CBS_PTR: *const SetSessionDescriptionObserverCallbacks = &SSD
 pub fn create_ssd_observer() -> Box<SetSessionDescriptionObserver> {
     let ssd_observer = Box::new(SetSessionDescriptionObserver::new());
     let ssd_observer_ptr = Box::into_raw(ssd_observer);
-    let rffi_ssd_observer = unsafe {
+    let rffi_ssd_observer = webrtc::Arc::from_owned(unsafe {
         sdp::Rust_createSetSessionDescriptionObserver(
-            ssd_observer_ptr as RustObject,
-            SSD_OBSERVER_CBS_PTR as *const c_void,
+            webrtc::ptr::Borrowed::from_ptr(ssd_observer_ptr).to_void(),
+            webrtc::ptr::Borrowed::from_ptr(SSD_OBSERVER_CBS_PTR).to_void(),
         )
-    };
+    });
     let mut ssd_observer = unsafe { Box::from_raw(ssd_observer_ptr) };
 
-    ssd_observer.set_rffi(rffi_ssd_observer as *const RffiSetSessionDescriptionObserver);
+    ssd_observer.set_rffi(rffi_ssd_observer);
     ssd_observer
 }

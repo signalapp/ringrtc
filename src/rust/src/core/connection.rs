@@ -40,6 +40,7 @@ use crate::core::util::{ptr_as_box, redact_string, TaskQueueRuntime};
 use crate::error::RingRtcError;
 use crate::protobuf;
 
+use crate::webrtc;
 use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
@@ -113,7 +114,7 @@ where
     /// DataChannel object
     data_channel: Option<DataChannel>,
     /// Raw pointer to Connection object for PeerConnectionObserver
-    connection_ptr: Option<*mut Connection<T>>,
+    connection_ptr: Option<webrtc::ptr::Owned<Connection<T>>>,
     /// Application-specific incoming media
     incoming_media: Option<<T as Platform>::AppIncomingMedia>,
     /// Application specific peer connection
@@ -977,17 +978,17 @@ where
     }
 
     /// Clone the Connection, Box it and return a raw pointer to the Box.
-    pub fn create_connection_ptr(&self) -> *mut Connection<T> {
+    pub fn create_connection_ptr(&self) -> webrtc::ptr::Owned<Connection<T>> {
         let connection_box = Box::new(self.clone());
-        Box::into_raw(connection_box)
+        unsafe { webrtc::ptr::Owned::from_ptr(Box::into_raw(connection_box)) }
     }
 
     /// Return the internally tracked connection object pointer, for
     /// use by the PeerConnectionObserver call backs.
-    pub fn get_connection_ptr(&self) -> Result<*mut Connection<T>> {
+    pub fn get_connection_ptr(&self) -> Result<webrtc::ptr::Borrowed<Connection<T>>> {
         let webrtc = self.webrtc.lock()?;
         match webrtc.connection_ptr.as_ref() {
-            Some(v) => Ok(*v),
+            Some(v) => Ok(v.borrow()),
             None => Err(RingRtcError::OptionValueNotSet(
                 String::from("connection_ptr()"),
                 String::from("connection_ptr"),
@@ -1450,15 +1451,13 @@ where
         let mut webrtc = self.webrtc.lock()?;
 
         // dispose of the incoming media
-        let _ = webrtc.incoming_media.take();
+        webrtc.incoming_media = None;
 
         // dispose of the stats observer
-        let _ = webrtc.stats_observer.take();
+        webrtc.stats_observer = None;
 
-        // unregister the data channel observer
-        if let Some(data_channel) = webrtc.data_channel.take().as_mut() {
-            data_channel.dispose();
-        }
+        // dispose of the data channel
+        webrtc.data_channel = None;
 
         // Free the application connection object, which is in essence
         // the PeerConnection object.  It is important to dispose of
@@ -1467,14 +1466,14 @@ where
         // whose observer is using the connection_ptr.  Once the
         // PeerConnection is completely shutdown it is safe to free up
         // the connection_ptr.
-        let _ = webrtc.app_connection.take();
+        webrtc.app_connection = None;
 
         // Free the connection object previously used by the
         // PeerConnectionObserver.  Convert the pointer back into a
         // Box and let it go out of scope.
         match webrtc.connection_ptr.take() {
             Some(v) => {
-                let _ = unsafe { ptr_as_box(v)? };
+                let _ = unsafe { ptr_as_box(v.as_ptr() as *mut Connection<T>)? };
                 Ok(())
             }
             None => Err(RingRtcError::OptionValueNotSet(

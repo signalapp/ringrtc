@@ -949,7 +949,7 @@ public class CallManager {
    */
   @CalledByNative
   @Nullable
-  private Connection createConnection(long        nativeConnection,
+  private Connection createConnection(long        nativeConnectionBorrowed,
                                       long        nativeCallId,
                                       int         remoteDeviceId,
                                       CallContext callContext,
@@ -984,7 +984,7 @@ public class CallManager {
     CameraControl         cameraControl = callContext.cameraControl;
     try {
       long nativePeerConnection = ringrtcCreatePeerConnection(factory.getNativeOwnedFactoryAndThreads(),
-                                                              nativeConnection,
+                                                              nativeConnectionBorrowed,
                                                               configuration,
                                                               constraints);
       if (nativePeerConnection == 0) {
@@ -1328,7 +1328,7 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void handleIncomingVideoTrack(long clientId, long remoteDemuxId, long nativeVideoTrack) {
+  private void handleIncomingVideoTrack(long clientId, long remoteDemuxId, long nativeVideoTrackBorrowedRc) {
     Log.i(TAG, "handleIncomingVideoTrack():");
 
     GroupCall groupCall = this.groupCallByClientId.get(clientId);
@@ -1337,7 +1337,7 @@ public class CallManager {
       return;
     }
 
-    groupCall.handleIncomingVideoTrack(remoteDemuxId, nativeVideoTrack);
+    groupCall.handleIncomingVideoTrack(remoteDemuxId, nativeVideoTrackBorrowedRc);
   }
 
   @CalledByNative

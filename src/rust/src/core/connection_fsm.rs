@@ -193,7 +193,7 @@ impl fmt::Display for ConnectionEvent {
             ),
             ConnectionEvent::InternalError(e) => format!("InternalError: {}", e),
             ConnectionEvent::ReceivedIncomingMedia(stream) => {
-                format!("ReceivedIncomingMedia, stream: {:}", stream)
+                format!("ReceivedIncomingMedia, stream: {:?}", stream)
             }
             ConnectionEvent::ReceivedSignalingDataChannel(dc) => {
                 format!("ReceivedSignalingDataChannel, dc: {:?}", dc)

@@ -8,12 +8,13 @@
 use jni::objects::GlobalRef;
 use jni::sys::jobject;
 use jni::JNIEnv;
-use std::fmt;
-use std::ptr;
 
 use crate::android::error::AndroidError;
 use crate::common::Result;
-use crate::webrtc::media::{MediaStream, RffiMediaStream};
+use crate::webrtc::{
+    self,
+    media::{MediaStream, RffiMediaStream},
+};
 
 /// Incomplete type for C++ JavaMediaStream.
 #[repr(C)]
@@ -23,36 +24,23 @@ pub struct RffiJavaMediaStream {
 
 /// Rust wrapper around webrtc::jni::JavaMediaStream object.
 pub struct JavaMediaStream {
-    rffi: *const RffiJavaMediaStream,
+    rffi: webrtc::ptr::Unique<RffiJavaMediaStream>,
 }
 
 unsafe impl Sync for JavaMediaStream {}
 unsafe impl Send for JavaMediaStream {}
 
-impl fmt::Debug for JavaMediaStream {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "jave_media_stream: {:p}", self.rffi)
-    }
-}
-
-impl Drop for JavaMediaStream {
-    fn drop(&mut self) {
-        if !self.rffi.is_null() {
-            info!("Dropping JavaMediastream");
-            unsafe { Rust_freeJavaMediaStream(self.rffi) };
-            self.rffi = ptr::null();
-        }
+impl webrtc::ptr::Delete for RffiJavaMediaStream {
+    fn delete(owned: webrtc::ptr::Owned<Self>) {
+        unsafe { Rust_deleteJavaMediaStream(owned) };
     }
 }
 
 impl JavaMediaStream {
     /// Create a JavaMediaStream from a MediaStream object.
     pub fn new(stream: MediaStream) -> Result<Self> {
-        let rffi = unsafe {
-            // The JavaMediaStream constructor takes ownership of the
-            // raw MediaStream pointer.
-            Rust_createJavaMediaStream(stream.take_rffi())
-        };
+        let rffi =
+            webrtc::ptr::Unique::from(unsafe { Rust_createJavaMediaStream(stream.into_owned()) });
         if rffi.is_null() {
             return Err(AndroidError::CreateJavaMediaStream.into());
         }
@@ -62,7 +50,7 @@ impl JavaMediaStream {
     /// Return a JNI GlobalRef to the JavaMediaStream object
     pub fn global_ref(&self, env: &JNIEnv) -> Result<GlobalRef> {
         unsafe {
-            let jobject = Rust_getJavaMediaStreamObject(self.rffi);
+            let jobject = Rust_getJavaMediaStreamObject(self.rffi.borrow());
             Ok(env.new_global_ref(jobject)?)
         }
     }
@@ -70,11 +58,12 @@ impl JavaMediaStream {
 
 extern "C" {
     fn Rust_createJavaMediaStream(
-        rffi_media_stream: *const RffiMediaStream,
-    ) -> *const RffiJavaMediaStream;
+        rffi_media_stream: webrtc::ptr::OwnedRc<RffiMediaStream>,
+    ) -> webrtc::ptr::Owned<RffiJavaMediaStream>;
 
-    fn Rust_freeJavaMediaStream(rffi_java_media_stream: *const RffiJavaMediaStream);
+    fn Rust_deleteJavaMediaStream(rffi_java_media_stream: webrtc::ptr::Owned<RffiJavaMediaStream>);
 
-    fn Rust_getJavaMediaStreamObject(rffi_java_media_stream: *const RffiJavaMediaStream)
-        -> jobject;
+    fn Rust_getJavaMediaStreamObject(
+        rffi_java_media_stream: webrtc::ptr::Borrowed<RffiJavaMediaStream>,
+    ) -> jobject;
 }

@@ -474,24 +474,27 @@ pub fn create_group_call_client(
     call_manager: *mut IosCallManager,
     group_id: group_call::GroupId,
     sfu_url: String,
-    native_pcf_owned_rc: *const c_void,
-    native_owned_audio_track: *const c_void,
-    native_owned_video_track: *const c_void,
+    native_peer_connection_factory: webrtc::ptr::OwnedRc<pcf::RffiPeerConnectionFactoryInterface>,
+    native_audio_track: webrtc::ptr::OwnedRc<media::RffiAudioTrack>,
+    native_video_track: webrtc::ptr::OwnedRc<media::RffiVideoTrack>,
 ) -> Result<group_call::ClientId> {
     info!("create_group_call_client():");
 
-    let outgoing_audio_track =
-        media::AudioTrack::owned(native_owned_audio_track as *const media::RffiAudioTrack);
-    let outgoing_video_track =
-        media::VideoTrack::owned(native_owned_video_track as *const media::RffiVideoTrack);
-
     let peer_connection_factory = unsafe {
         PeerConnectionFactory::from_native_factory(webrtc::Arc::from_owned(
-            webrtc::ptr::OwnedRc::from_ptr(
-                native_pcf_owned_rc as *const pcf::RffiPeerConnectionFactoryInterface,
-            ),
+            native_peer_connection_factory,
         ))
     };
+
+    let outgoing_audio_track = media::AudioTrack::new(
+        webrtc::Arc::from_owned(native_audio_track),
+        Some(peer_connection_factory.rffi().clone()),
+    );
+
+    let outgoing_video_track = media::VideoTrack::new(
+        webrtc::Arc::from_owned(native_video_track),
+        Some(peer_connection_factory.rffi().clone()),
+    );
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(

@@ -14,12 +14,9 @@
 // Public interfaces exported to Rust as "extern C".
 #define RUSTEXPORT extern "C" __attribute__((visibility("default")))
 
-// Opaque pointer to a Rust object.
-typedef void* rust_object;
-
 /* Ice Update Message structure passed between Rust and c++ */
 typedef struct {
-  const char* sdp;
+  const char* sdp_borrowed;
 } RustIceCandidate;
 
 #endif /* RFFI_API_DEFS_H__ */

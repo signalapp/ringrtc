@@ -133,8 +133,8 @@ class InjectableNetworkImpl : public InjectableNetwork, public rtc::NetworkManag
   }
 
   ~InjectableNetworkImpl() override {
-    if (sender_.object) {
-      sender_.Release(sender_.object);
+    if (sender_.object_owned) {
+      sender_.Delete(sender_.object_owned);
     }
   }
 
@@ -209,7 +209,7 @@ class InjectableNetworkImpl : public InjectableNetwork, public rtc::NetworkManag
               const rtc::SocketAddress& remote_address,
               const uint8_t* data,
               size_t size) override {
-    if (!sender_.object) {
+    if (!sender_.object_owned) {
       RTC_LOG(LS_WARNING) << "Dropping packet because no sender set.";
       return -1;
     }
@@ -219,7 +219,7 @@ class InjectableNetworkImpl : public InjectableNetwork, public rtc::NetworkManag
     //                     << " from " << local_address.ToString()
     //                     << " to " << remote_address.ToString()
     //                     << " size: " << size;
-    sender_.SendUdp(sender_.object, local, remote, data, size);
+    sender_.SendUdp(sender_.object_owned, local, remote, data, size);
     return size;
   }
 
@@ -339,34 +339,36 @@ std::unique_ptr<InjectableNetwork> CreateInjectableNetwork(rtc::Thread* network_
   return std::make_unique<InjectableNetworkImpl>(network_thread);
 }
 
+// The passed-in sender must live as long as the InjectableNetwork,
+// which likely means it must live as long as the PeerConnection.
 RUSTEXPORT void Rust_InjectableNetwork_SetSender(
-    InjectableNetwork* network,
-    const InjectableNetworkSender* sender) {
-  network->SetSender(sender);
+    InjectableNetwork* network_borrowed,
+    const InjectableNetworkSender* sender_borrowed) {
+  network_borrowed->SetSender(sender_borrowed);
 }
 
 RUSTEXPORT void Rust_InjectableNetwork_AddInterface(
-    InjectableNetwork* network,
-    const char* name,
+    InjectableNetwork* network_borrowed,
+    const char* name_borrowed,
     rtc::AdapterType type,
     Ip ip, 
     int preference) {
-  network->AddInterface(name, type, ip, preference);
+  network_borrowed->AddInterface(name_borrowed, type, ip, preference);
 }
 
 RUSTEXPORT void Rust_InjectableNetwork_RemoveInterface(
-    InjectableNetwork* network,
-    const char* name) {
-  network->RemoveInterface(name);
+    InjectableNetwork* network_borrowed,
+    const char* name_borrowed) {
+  network_borrowed->RemoveInterface(name_borrowed);
 }
 
 RUSTEXPORT void Rust_InjectableNetwork_ReceiveUdp(
-    InjectableNetwork* network,
+    InjectableNetwork* network_borrowed,
     IpPort local,
     IpPort remote,
-    const uint8_t* data,
+    const uint8_t* data_borrowed,
     size_t size) {
-  network->ReceiveUdp(local, remote, data, size);
+  network_borrowed->ReceiveUdp(local, remote, data_borrowed, size);
 }
 
 }  // namespace rffi

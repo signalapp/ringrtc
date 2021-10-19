@@ -5,20 +5,15 @@
 
 //! WebRTC Create Session Description
 
-use std::ffi::c_void;
-use std::{ptr, slice};
+use std::slice;
 
-use crate::core::util::{ptr_as_mut, RustObject};
+use crate::webrtc;
 
-#[cfg(not(feature = "sim"))]
-use crate::webrtc::ffi::ref_count::release_ref;
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::stats_observer as stats;
 #[cfg(not(feature = "sim"))]
 pub use crate::webrtc::ffi::stats_observer::RffiStatsObserver;
 
-#[cfg(feature = "sim")]
-use crate::webrtc::sim::ref_count::release_ref;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::stats_observer as stats;
 #[cfg(feature = "sim")]
@@ -27,18 +22,7 @@ pub use crate::webrtc::sim::stats_observer::RffiStatsObserver;
 /// Collector object for obtaining statistics.
 #[derive(Debug)]
 pub struct StatsObserver {
-    /// Pointer to C++ webrtc::rffi::StatsObserverRffi object.
-    rffi_stats_observer: *const RffiStatsObserver,
-}
-
-unsafe impl Send for StatsObserver {}
-
-impl Drop for StatsObserver {
-    fn drop(&mut self) {
-        if !self.rffi_stats_observer.is_null() {
-            release_ref(self.rffi_stats_observer as *const c_void);
-        }
-    }
+    rffi: webrtc::Arc<RffiStatsObserver>,
 }
 
 impl StatsObserver {
@@ -119,7 +103,7 @@ impl StatsObserver {
         );
 
         Self {
-            rffi_stats_observer: ptr::null(),
+            rffi: webrtc::Arc::null(),
         }
     }
 
@@ -255,13 +239,13 @@ impl StatsObserver {
     }
 
     /// Set the RFFI observer object.
-    pub fn set_rffi_stats_observer(&mut self, rffi_stats_observer: *const RffiStatsObserver) {
-        self.rffi_stats_observer = rffi_stats_observer
+    pub fn set_rffi(&mut self, rffi: webrtc::Arc<RffiStatsObserver>) {
+        self.rffi = rffi
     }
 
     /// Return the RFFI observer object.
-    pub fn rffi_stats_observer(&self) -> *const RffiStatsObserver {
-        self.rffi_stats_observer
+    pub fn rffi(&self) -> &webrtc::Arc<RffiStatsObserver> {
+        &self.rffi
     }
 }
 
@@ -358,21 +342,30 @@ pub struct MediaStatistics {
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn stats_observer_OnStatsComplete(
-    stats_observer: *mut StatsObserver,
-    values: &MediaStatistics,
+    stats_observer: webrtc::ptr::Borrowed<StatsObserver>,
+    values: webrtc::ptr::Borrowed<MediaStatistics>,
 ) {
-    match unsafe { ptr_as_mut(stats_observer) } {
-        Ok(v) => v.on_stats_complete(values),
-        Err(e) => error!("stats_observer_OnStatsComplete(): {}", e),
-    };
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(stats_observer) = unsafe { stats_observer.as_mut() } {
+        // Safe because the values should still be alive (it was just passed to us)
+        if let Some(values) = unsafe { values.as_ref() } {
+            stats_observer.on_stats_complete(values);
+        } else {
+            error!("stats_observer_OnStatsComplete() with null values");
+        }
+    } else {
+        error!("stats_observer_OnStatsComplete() with null observer");
+    }
 }
 
 /// StatsObserver callback function pointers.
 #[repr(C)]
 #[allow(non_snake_case)]
 pub struct StatsObserverCallbacks {
-    pub onStatsComplete:
-        extern "C" fn(stats_observer: *mut StatsObserver, values: &MediaStatistics),
+    pub onStatsComplete: extern "C" fn(
+        stats_observer: webrtc::ptr::Borrowed<StatsObserver>,
+        values: webrtc::ptr::Borrowed<MediaStatistics>,
+    ),
 }
 
 const STATS_OBSERVER_CBS: StatsObserverCallbacks = StatsObserverCallbacks {
@@ -388,14 +381,14 @@ const STATS_OBSERVER_CBS_PTR: *const StatsObserverCallbacks = &STATS_OBSERVER_CB
 pub fn create_stats_observer() -> Box<StatsObserver> {
     let stats_observer = Box::new(StatsObserver::new());
     let stats_observer_ptr = Box::into_raw(stats_observer);
-    let rffi_stats_observer = unsafe {
+    let rffi_stats_observer = webrtc::Arc::from_owned(unsafe {
         stats::Rust_createStatsObserver(
-            stats_observer_ptr as RustObject,
-            STATS_OBSERVER_CBS_PTR as *const c_void,
+            webrtc::ptr::Borrowed::from_ptr(stats_observer_ptr).to_void(),
+            webrtc::ptr::Borrowed::from_ptr(STATS_OBSERVER_CBS_PTR).to_void(),
         )
-    };
+    });
     let mut stats_observer = unsafe { Box::from_raw(stats_observer_ptr) };
 
-    stats_observer.set_rffi_stats_observer(rffi_stats_observer);
+    stats_observer.set_rffi(rffi_stats_observer);
     stats_observer
 }

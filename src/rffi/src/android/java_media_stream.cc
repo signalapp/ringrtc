@@ -9,31 +9,29 @@
 
 #include "sdk/android/src/jni/pc/peer_connection.h"
 #include "rffi/api/android/media_stream_intf.h"
+#include "rffi/src/ptr.h"
 
 #include <string>
 
 namespace webrtc {
 namespace rffi {
 
+// Returns an owned pointer.
 RUSTEXPORT webrtc::jni::JavaMediaStream*
-Rust_createJavaMediaStream(MediaStreamInterface *stream) {
-
-  rtc::scoped_refptr<MediaStreamInterface> media_stream(stream);
+Rust_createJavaMediaStream(MediaStreamInterface* stream_borrowed_rc) {
   JNIEnv* env = AttachCurrentThreadIfNeeded();
-
-  // NOTE: JavaMediaStream() takes ownership of the MediaStream* ref counted pointer.
-  jni::JavaMediaStream *java_media_stream = new jni::JavaMediaStream(env, media_stream);
-  return java_media_stream;
+  // jni::JavaMediaStream takes an owned RC.
+  return new jni::JavaMediaStream(env, inc_rc(stream_borrowed_rc));
 }
 
 RUSTEXPORT void
-Rust_freeJavaMediaStream(webrtc::jni::JavaMediaStream *java_media_stream) {
-  delete java_media_stream;
+Rust_deleteJavaMediaStream(webrtc::jni::JavaMediaStream* stream_owned) {
+  delete stream_owned;
 }
 
 RUSTEXPORT jobject
-Rust_getJavaMediaStreamObject(webrtc::jni::JavaMediaStream *java_media_stream) {
-  return java_media_stream->j_media_stream().obj();
+Rust_getJavaMediaStreamObject(webrtc::jni::JavaMediaStream* stream_borrowed) {
+  return stream_borrowed->j_media_stream().obj();
 }
 
 } // namespace rffi
