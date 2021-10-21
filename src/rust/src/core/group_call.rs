@@ -1436,10 +1436,14 @@ impl Client {
     fn set_send_rates_inner(state: &mut State, send_rates: SendRates) {
         if state.send_rates != send_rates {
             if send_rates.max == Some(DataRate::from_kbps(ALL_ALONE_MAX_SEND_RATE_KBPS)) {
-                info!("Disabling outgoing media because there are no other devices.");
+                info!(
+                    "Disable audio render and outgoing media because there are no other devices."
+                );
+                state.peer_connection.set_audio_playout_enabled(false);
                 state.peer_connection.set_outgoing_media_enabled(false);
             } else {
-                info!("Enabling outgoing media because there are other devices.");
+                info!("Enable audio render and outgoing media because there are other devices.");
+                state.peer_connection.set_audio_playout_enabled(true);
                 state.peer_connection.set_outgoing_media_enabled(true);
             }
             if let Err(e) = state.peer_connection.set_send_rates(send_rates.clone()) {
