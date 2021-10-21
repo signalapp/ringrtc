@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.13.6
+
+- Use SetAudioPlayout() function for group calls
+
 ## v2.13.5
 
 - Improve how WebRTC pointer is tracked across FFI
