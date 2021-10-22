@@ -239,7 +239,7 @@ impl CallEndpoint {
                 // Option<CallManager> thing that we have to set later.
                 let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
-                let pcf = PeerConnectionFactory::new(pcf::Config {
+                let mut pcf = PeerConnectionFactory::new(pcf::Config {
                     use_injectable_network: true, // Set up packet flow
                     ..Default::default()
                 })?;

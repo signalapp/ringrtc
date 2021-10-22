@@ -127,9 +127,9 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        npm_config_arch=${TARGET_ARCH} npm_config_target_arch=${TARGET_ARCH} npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=11.2.0 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp RUSTFLAGS="${RUSTFLAGS_WIN}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --target ${CARGO_TARGET} --features electron
+        RUSTFLAGS="${RUSTFLAGS_WIN}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --target ${CARGO_TARGET} --features electron
     else
-        npm_config_arch=${TARGET_ARCH} npm_config_target_arch=${TARGET_ARCH} npm_config_disturl=https://atom.io/download/electron npm_config_runtime=electron npm_config_target=11.2.0 npm_config_build_from_source=true npm_config_devdir=~/.electron-gyp RUSTFLAGS="-C link-arg=-s ${RUSTFLAGS_WIN}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --target ${CARGO_TARGET} --features electron --release
+        RUSTFLAGS="-C link-arg=-s ${RUSTFLAGS_WIN}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --target ${CARGO_TARGET} --features electron --release
     fi
 
     if [ $DEFAULT_PLATFORM = "darwin" ]

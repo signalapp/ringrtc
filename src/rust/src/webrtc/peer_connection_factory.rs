@@ -155,6 +155,8 @@ impl AudioDevice {
 pub struct PeerConnectionFactory {
     rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
     use_new_audio_device_module: bool,
+    playout_device_count: Option<u16>,
+    recording_device_count: Option<u16>,
 }
 
 #[derive(Default)]
@@ -193,6 +195,8 @@ impl PeerConnectionFactory {
         Ok(Self {
             rffi,
             use_new_audio_device_module,
+            playout_device_count: None,
+            recording_device_count: None,
         })
     }
 
@@ -214,6 +218,8 @@ impl PeerConnectionFactory {
         Self {
             rffi,
             use_new_audio_device_module: false,
+            playout_device_count: None,
+            recording_device_count: None,
         }
     }
 
@@ -352,7 +358,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(feature = "native")]
-    pub fn get_audio_playout_devices(&self) -> Result<Vec<AudioDevice>> {
+    pub fn get_audio_playout_devices(&mut self) -> Result<Vec<AudioDevice>> {
         let device_count = unsafe { pcf::Rust_getAudioPlayoutDevices(self.rffi.as_borrowed()) };
         if device_count < 0 {
             error!("getAudioPlayoutDevices() returned {}", device_count);
@@ -377,10 +383,13 @@ impl PeerConnectionFactory {
             device_count
         };
 
-        info!(
-            "PeerConnectionFactory::get_audio_playout_devices(): device_count: {}",
-            device_count
-        );
+        if self.playout_device_count != Some(device_count) {
+            info!(
+                "PeerConnectionFactory::get_audio_playout_devices(): device_count: {}",
+                device_count
+            );
+            self.playout_device_count = Some(device_count);
+        }
 
         for i in 0..device_count {
             match self.get_audio_playout_device(i) {
@@ -420,7 +429,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(all(feature = "native", target_os = "windows"))] // For the default ADM.
-    fn get_default_playout_device_index(&self) -> Result<u16> {
+    fn get_default_playout_device_index(&mut self) -> Result<u16> {
         let default_device = self.get_audio_playout_device(DEFAULT_COMMUNICATION_DEVICE_INDEX)?;
         let all_devices = self.get_audio_playout_devices()?;
         if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
@@ -432,7 +441,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(feature = "native")]
-    pub fn set_audio_playout_device(&self, index: u16) -> Result<()> {
+    pub fn set_audio_playout_device(&mut self, index: u16) -> Result<()> {
         #[cfg(target_os = "windows")]
         let index = if self.use_new_audio_device_module {
             // For the new ADM, swap the first two devices back to ordinal if
@@ -500,7 +509,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(feature = "native")]
-    pub fn get_audio_recording_devices(&self) -> Result<Vec<AudioDevice>> {
+    pub fn get_audio_recording_devices(&mut self) -> Result<Vec<AudioDevice>> {
         let device_count = unsafe { pcf::Rust_getAudioRecordingDevices(self.rffi.as_borrowed()) };
         if device_count < 0 {
             error!("getAudioRecordingDevices() returned {}", device_count);
@@ -525,10 +534,13 @@ impl PeerConnectionFactory {
             device_count
         };
 
-        info!(
-            "PeerConnectionFactory::get_audio_recording_devices(): device_count: {}",
-            device_count
-        );
+        if self.recording_device_count != Some(device_count) {
+            info!(
+                "PeerConnectionFactory::get_audio_recording_devices(): device_count: {}",
+                device_count
+            );
+            self.recording_device_count = Some(device_count);
+        }
 
         for i in 0..device_count {
             match self.get_audio_recording_device(i) {
@@ -568,7 +580,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(all(feature = "native", target_os = "windows"))] // For the default ADM.
-    fn get_default_recording_device_index(&self) -> Result<u16> {
+    fn get_default_recording_device_index(&mut self) -> Result<u16> {
         let default_device = self.get_audio_recording_device(DEFAULT_COMMUNICATION_DEVICE_INDEX)?;
         let all_devices = self.get_audio_recording_devices()?;
         if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
@@ -580,7 +592,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(feature = "native")]
-    pub fn set_audio_recording_device(&self, index: u16) -> Result<()> {
+    pub fn set_audio_recording_device(&mut self, index: u16) -> Result<()> {
         #[cfg(target_os = "windows")]
         let index = if self.use_new_audio_device_module {
             // For the new ADM, swap the first two devices back to ordinal if
