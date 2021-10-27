@@ -18,7 +18,6 @@ use std::fmt;
 // - RTCCertificate
 // - RtpSender (Sync and Send because it's wrapped in a Proxy)
 // - RtpReceiver (Sync and Send because it's wrapped in a Proxy)
-// - DataChannel (Sync and Send because it's wrapped in a Proxy)
 // - MediaStream (Sync and Send because it's wrapped in a Proxy)
 // - AudioTrack (Sync and Send because it's wrapped in a Proxy)
 // - VideoTrack (Sync and Send because it's wrapped in a Proxy)

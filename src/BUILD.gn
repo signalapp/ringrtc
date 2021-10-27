@@ -37,7 +37,6 @@ if (is_linux || is_mac || is_win) {
     ]
 
     sources = [
-      "rffi/src/data_channel.cc",
       "rffi/src/injectable_network.cc",
       "rffi/src/logging.cc",
       "rffi/src/media.cc",

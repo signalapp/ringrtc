@@ -113,12 +113,6 @@ RUSTEXPORT void
 Rust_setAudioPlayoutEnabled(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
                             bool                             enabled);
 
-// Returns an owned RC.
-// The passed-in observer must outlive the DataChannel.
-RUSTEXPORT webrtc::DataChannelInterface*
-Rust_createSignalingDataChannel(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
-                                webrtc::PeerConnectionObserver* pc_observer_borrowed);
-
 RUSTEXPORT bool
 Rust_addIceCandidateFromSdp(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
                             const char*                      sdp);

@@ -1555,14 +1555,13 @@ export enum GroupCallEndReason {
   FailedToCreatePeerConnectionFactory = 4,
   FailedToGenerateCertificate = 5,
   FailedToCreatePeerConnection = 6,
-  FailedToCreateDataChannel = 7,
-  FailedToStartPeerConnection = 8,
-  FailedToUpdatePeerConnection = 9,
-  FailedToSetMaxSendBitrate = 10,
-  IceFailedWhileConnecting = 11,
-  IceFailedAfterConnected = 12,
-  ServerChangedDemuxId = 13,
-  HasMaxDevices = 14,
+  FailedToStartPeerConnection = 7,
+  FailedToUpdatePeerConnection = 8,
+  FailedToSetMaxSendBitrate = 9,
+  IceFailedWhileConnecting = 10,
+  IceFailedAfterConnected = 11,
+  ServerChangedDemuxId = 12,
+  HasMaxDevices = 13,
 }
 
 export enum CallMessageUrgency {

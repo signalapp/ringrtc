@@ -87,15 +87,6 @@ void PeerConnectionObserverRffi::OnRemoveStream(
   RTC_LOG(LS_INFO) << "OnRemoveStream()";
 }
 
-void PeerConnectionObserverRffi::OnDataChannel(rtc::scoped_refptr<DataChannelInterface> channel) {
-  RTC_LOG(LS_INFO) << "OnDataChannel() label: " << channel->label();
-
-  if (channel->label() == "signaling") {
-    channel->RegisterObserver(this);
-    callbacks_.onSignalingDataChannel(observer_, take_rc(channel));
-  }
-}
-
 void PeerConnectionObserverRffi::OnRtpPacket(const RtpPacketReceived& rtp_packet) {
   uint8_t pt = rtp_packet.PayloadType();
   uint16_t seqnum = rtp_packet.SequenceNumber();
@@ -148,11 +139,6 @@ void PeerConnectionObserverRffi::OnAddTrack(
 void PeerConnectionObserverRffi::OnTrack(
     rtc::scoped_refptr<RtpTransceiverInterface> transceiver) {
   RTC_LOG(LS_INFO) << "OnTrack()";
-}
-
-void PeerConnectionObserverRffi::OnMessage(const DataBuffer& buffer) {
-  RTC_LOG(LS_INFO) << "OnMessage() size: " << buffer.size();
-  callbacks_.onSignalingDataChannelMessage(observer_, buffer.data.cdata(), buffer.size());
 }
 
 class Encryptor : public webrtc::FrameEncryptorInterface {

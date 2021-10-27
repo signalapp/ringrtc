@@ -7,7 +7,7 @@ fn main() {
     println!("Compiling protobufs ...");
 
     let proto_files = [
-        "protobuf/data_channel.proto",
+        "protobuf/rtp_data.proto",
         "protobuf/signaling.proto",
         "protobuf/group_call.proto",
     ];

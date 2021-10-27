@@ -398,8 +398,6 @@ pub struct AppInterface {
         observer: *mut c_void,
         deviceId: u32,
         context: *mut c_void,
-        enable_dtls: bool,
-        enable_rtp_data_channel: bool,
     ) -> AppConnectionInterface,
     /// Request that the application create an application Media Stream object
     /// associated with the given application Connection object.

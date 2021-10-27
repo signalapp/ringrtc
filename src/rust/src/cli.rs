@@ -25,7 +25,7 @@ use ringrtc::{
         injectable_network::InjectableNetwork,
         media::{VideoFrame, VideoSink, VideoSource},
         network::NetworkInterfaceType,
-        peer_connection_factory::{self as pcf, Certificate, IceServer, PeerConnectionFactory},
+        peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
         peer_connection_observer::NetworkRoute,
     },
 };
@@ -285,13 +285,11 @@ impl CallEndpoint {
                 let call_manager = CallManager::new(platform)?;
 
                 // And a CallContext.  We'll use the same context for each call.
-                let cert = Certificate::generate()?;
                 let outgoing_audio_track = pcf.create_outgoing_audio_track()?;
                 let outgoing_video_source = pcf.create_outgoing_video_source()?;
                 let outgoing_video_track =
                     pcf.create_outgoing_video_track(&outgoing_video_source)?;
                 let call_context = NativeCallContext::new(
-                    cert,
                     hide_ip,
                     ice_server,
                     outgoing_audio_track,

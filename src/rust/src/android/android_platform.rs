@@ -292,15 +292,13 @@ impl Platform for AndroidPlatform {
 
         const CREATE_CONNECTION_METHOD: &str = "createConnection";
         const CREATE_CONNECTION_SIG: &str =
-            "(JJILorg/signal/ringrtc/CallManager$CallContext;ZZ)Lorg/signal/ringrtc/Connection;";
+            "(JJILorg/signal/ringrtc/CallManager$CallContext;)Lorg/signal/ringrtc/Connection;";
         let args = [
             // This is borrowed by the Java method.
             (connection_ptr.as_ptr() as jlong).into(),
             call_id_jlong.into(),
             jni_remote_device_id.into(),
             jni_call_context.as_obj().into(),
-            false.into(), /* always disable DTLS */
-            true.into(),  /* always enable the RTP data channel */
         ];
         let result = jni_call_method(
             &env,

@@ -18,7 +18,6 @@ use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver, RffiSessionDescription, RffiSetSessionDescriptionObserver,
 };
 use crate::webrtc::sim::ice_gatherer::{RffiIceGatherer, FAKE_ICE_GATHERER};
-use crate::webrtc::sim::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::stats_observer::RffiStatsObserver;
 
 /// Simulation type for PeerConnection.
@@ -115,11 +114,6 @@ struct RffiPeerConnectionState {
     removed_ice_candidates: Vec<SocketAddr>,
 }
 
-/// Simulation type for DataChannelInterface.
-pub type RffiDataChannel = u32;
-
-static FAKE_DATA_CHANNEL: RffiDataChannel = 9;
-
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createOffer(
     _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
@@ -181,15 +175,6 @@ pub unsafe fn Rust_setAudioPlayoutEnabled(
     _enabled: bool,
 ) {
     info!("Rust_setAudioPlayoutEnabled:");
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_createSignalingDataChannel(
-    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
-    _pc_observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
-) -> webrtc::ptr::OwnedRc<RffiDataChannel> {
-    info!("Rust_createSignalingDataChannel():");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_DATA_CHANNEL)
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

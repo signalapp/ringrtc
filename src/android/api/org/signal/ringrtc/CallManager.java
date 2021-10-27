@@ -26,7 +26,6 @@ import org.webrtc.MediaStream;
 import org.webrtc.NativeLibraryLoader;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
-import org.webrtc.RtcCertificatePem;
 import org.webrtc.VideoDecoderFactory;
 import org.webrtc.VideoEncoderFactory;
 import org.webrtc.VideoSource;
@@ -360,9 +359,6 @@ public class CallManager {
 
     PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase);
 
-    // Defaults to ECDSA, which should be fast.
-    RtcCertificatePem certificate = RtcCertificatePem.generateCertificate();
-
     CallContext callContext = new CallContext(callId,
                                               context,
                                               factory,
@@ -370,8 +366,7 @@ public class CallManager {
                                               remoteSink,
                                               camera,
                                               iceServers,
-                                              hideIp,
-                                              certificate);
+                                              hideIp);
 
     callContext.setVideoEnabled(enableCamera);
     ringrtcProceed(nativeCallManager,
@@ -952,9 +947,7 @@ public class CallManager {
   private Connection createConnection(long        nativeConnectionBorrowed,
                                       long        nativeCallId,
                                       int         remoteDeviceId,
-                                      CallContext callContext,
-                                      boolean     enableDtls,
-                                      boolean     enableRtpDataChannel) {
+                                      CallContext callContext) {
 
     CallId callId = new CallId(nativeCallId);
 
@@ -971,14 +964,7 @@ public class CallManager {
     if (callContext.hideIp) {
       configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;
     }
-    configuration.certificate = callContext.certificate;
-
-    configuration.enableDtlsSrtp = enableDtls;
-    configuration.enableRtpDataChannel = enableRtpDataChannel;
-
-    if (enableDtls) {
-      constraints.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
-    }
+    configuration.enableDtlsSrtp = false;
 
     PeerConnectionFactory factory       = callContext.factory;
     CameraControl         cameraControl = callContext.cameraControl;
@@ -1401,7 +1387,6 @@ public class CallManager {
               public final  boolean                        hideIp;
     @Nullable public final  VideoSource                    videoSource;
     @Nullable public final  VideoTrack                     videoTrack;
-    @NonNull  public final  RtcCertificatePem              certificate;
 
     public CallContext(@NonNull CallId                         callId,
                        @NonNull Context                        context,
@@ -1410,8 +1395,7 @@ public class CallManager {
                        @NonNull VideoSink                      remoteSink,
                        @NonNull CameraControl                  camera,
                        @NonNull List<PeerConnection.IceServer> iceServers,
-                                boolean                        hideIp,
-                       @NonNull RtcCertificatePem              certificate) {
+                                boolean                        hideIp) {
 
       Log.i(TAG, "ctor(): " + callId);
 
@@ -1421,7 +1405,6 @@ public class CallManager {
       this.cameraControl = camera;
       this.iceServers    = iceServers;
       this.hideIp        = hideIp;
-      this.certificate   = certificate;
 
       // Create a video track that will be shared across all
       // connection objects.  It must be disposed manually.

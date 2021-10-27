@@ -78,13 +78,13 @@ pub enum CallState {
     WaitingToProceed,
 
     /// Call is connecting (signaling and ICE) with the remote peer.
-    /// We don't ring until we're connected with ICE and have a data
-    /// channel to send an "accepted" message.
+    /// We don't ring until we're connected with ICE to send an
+    /// "accepted" message.
     ConnectingBeforeAccepted,
 
-    /// ICE is connected and there is a data channel available,
+    /// ICE is connected,
     /// But the callee has not yet accepted.
-    ConnectedWithDataChannelBeforeAccepted,
+    ConnectedBeforeAccepted,
 
     /// ICE is connected and the callee has accepted.
     ConnectedAndAccepted,

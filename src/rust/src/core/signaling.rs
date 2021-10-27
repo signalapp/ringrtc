@@ -20,7 +20,7 @@ use crate::protobuf;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {
     // V1 used SDP, DTLS, and SCTP. Not supported.
-    // V2 replaced SCTP with RTCP data channel and embedded SDP in a protobuf. Not supported.
+    // V2 replaced SCTP with RTP data and embedded SDP in a protobuf. Not supported.
     // V3 replaced DTLS with a custom Diffie-Hellman exchange to derive SRTP keys.
     // V3 is used for ICE candidates but not supported for offers/answers.
     V3,

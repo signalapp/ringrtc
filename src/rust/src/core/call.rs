@@ -665,35 +665,34 @@ where
         }
     }
 
-    /// Send a Hangup on all underlying Connections via the data channel
-    /// (if established).
-    pub fn send_hangup_via_data_channel_to_all(&self, hangup: signaling::Hangup) -> Result<()> {
+    /// Send a Hangup on all underlying Connections via RTP data
+    pub fn send_hangup_via_rtp_data_to_all(&self, hangup: signaling::Hangup) -> Result<()> {
         info!(
-            "send_hangup_via_data_channel_to_all(): call_id: {}",
+            "send_hangup_via_rtp_data_to_all(): call_id: {}",
             self.call_id()
         );
 
         let mut connection_map = self.connection_map.lock()?;
         for connection in connection_map.values_mut() {
             info!(
-                "send_hangup_via_data_channel_to_all(): call_id: {} remote_device_id: {}",
+                "send_hangup_via_rtp_data_to_all(): call_id: {} remote_device_id: {}",
                 self.call_id(),
                 connection.remote_device_id()
             );
-            connection.inject_send_hangup_via_data_channel(hangup)?;
+            connection.inject_send_hangup_via_rtp_data(hangup)?;
         }
         Ok(())
     }
 
-    /// Send a Hangup on all underlying Connections via the data channel
-    /// (if established) except for the given device_id (if).
-    pub fn send_hangup_via_data_channel_to_all_except(
+    /// Send a Hangup on all underlying Connections via RTP data
+    /// except for the given device_id.
+    pub fn send_hangup_via_rtp_data_to_all_except(
         &self,
         hangup: signaling::Hangup,
         excluded_remote_device_id: DeviceId,
     ) -> Result<()> {
         info!(
-            "send_hangup_via_data_channel_to_all_except(): {} hangup: {:?} excluded remote_device_id: {}",
+            "send_hangup_via_rtp_data_to_all_except(): {} hangup: {:?} excluded remote_device_id: {}",
             self.call_id(),
             hangup,
             excluded_remote_device_id
@@ -704,24 +703,24 @@ where
             let remote_device_id = connection.remote_device_id();
             if excluded_remote_device_id != remote_device_id {
                 info!(
-                    "send_hangup_via_data_channel_to_all_except(): included remote_device_id: {}",
+                    "send_hangup_via_rtp_data_to_all_except(): included remote_device_id: {}",
                     remote_device_id
                 );
-                connection.inject_send_hangup_via_data_channel(hangup)?;
+                connection.inject_send_hangup_via_rtp_data(hangup)?;
             }
         }
         Ok(())
     }
 
-    /// Convenience function to send a hangup using both the data channel to currently
+    /// Convenience function to send a hangup using both the RTP data to currently
     /// connected remotes and signaling to all as a backup.
-    pub fn send_hangup_via_data_channel_and_signaling_to_all_except(
+    pub fn send_hangup_via_rtp_data_and_signaling_to_all_except(
         &self,
         hangup: signaling::Hangup,
         excluded_remote_device_id: DeviceId,
     ) -> Result<()> {
-        // Send hangup via the data channel.
-        self.send_hangup_via_data_channel_to_all_except(hangup, excluded_remote_device_id)?;
+        // Send hangup via RTP data
+        self.send_hangup_via_rtp_data_to_all_except(hangup, excluded_remote_device_id)?;
 
         // Send hangup via signaling.
         self.call_manager()?.send_hangup(
@@ -932,13 +931,13 @@ where
         self.inject_event(CallEvent::AcceptCall)
     }
 
-    /// Inject a local `SendHangupViaDataChannelToAll` event into the FSM.
-    pub fn inject_send_hangup_via_data_channel_to_all(
+    /// Inject a local `SendHangupViaRtpDataToAll` event into the FSM.
+    pub fn inject_send_hangup_via_rtp_data_to_all(
         &mut self,
         hangup: signaling::Hangup,
     ) -> Result<()> {
         self.set_state(CallState::Terminating)?;
-        self.inject_event(CallEvent::SendHangupViaDataChannelToAll(hangup))
+        self.inject_event(CallEvent::SendHangupViaRtpDataToAll(hangup))
     }
 
     /// Inject a `ReceivedAnswer` event into the FSM

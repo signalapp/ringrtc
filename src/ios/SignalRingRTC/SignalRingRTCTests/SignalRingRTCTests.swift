@@ -2370,7 +2370,7 @@ class SignalRingRTCTests: XCTestCase {
                     return
                 }
 
-                // The connect message would go over the data channel.
+                // The connect message would go RTP data.
 
                 // Both the callee and caller should be in a connected state.
                 expect(acceptingCallee.delegate.eventLocalConnectedInvoked).toEventually(equal(true), timeout: .seconds(1))

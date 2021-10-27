@@ -34,14 +34,13 @@ public enum GroupCallEndReason: Int32 {
     case failedToCreatePeerConnectionFactory = 4
     case failedToGenerateCertificate = 5
     case failedToCreatePeerConnection = 6
-    case failedToCreateDataChannel = 7
-    case failedToStartPeerConnection = 8
-    case failedToUpdatePeerConnection = 9
-    case failedToSetMaxSendBitrate = 10
-    case iceFailedWhileConnecting = 11
-    case iceFailedAfterConnected = 12
-    case serverChangedDemuxId = 13
-    case hasMaxDevices = 14
+    case failedToStartPeerConnection = 7
+    case failedToUpdatePeerConnection = 8
+    case failedToSetMaxSendBitrate = 9
+    case iceFailedWhileConnecting = 10
+    case iceFailedAfterConnected = 11
+    case serverChangedDemuxId = 12
+    case hasMaxDevices = 13
 }
 
 /// The local device state for a group call.

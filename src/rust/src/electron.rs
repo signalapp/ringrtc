@@ -26,7 +26,7 @@ use crate::native::{
 };
 use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource, VideoTrack};
 use crate::webrtc::peer_connection_factory::{
-    self as pcf, AudioDevice, Certificate, IceServer, PeerConnectionFactory,
+    self as pcf, AudioDevice, IceServer, PeerConnectionFactory,
 };
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
@@ -652,9 +652,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     );
 
     with_call_endpoint(&mut cx, |endpoint| {
-        let certificate = Certificate::generate()?;
         let call_context = NativeCallContext::new(
-            certificate,
             hide_ip,
             ice_server,
             endpoint.outgoing_audio_track.clone(),

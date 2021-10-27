@@ -701,9 +701,6 @@ public final class GroupCall {
         /** Could not create a peer connection for media. */
         FAILED_TO_CREATE_PEER_CONNECTION,
 
-        /** Could not create a data channel to send data. */
-        FAILED_TO_CREATE_DATA_CHANNEL,
-
         /** Could not start the peer connection for media. */
         FAILED_TO_START_PEER_CONNECTION,
 

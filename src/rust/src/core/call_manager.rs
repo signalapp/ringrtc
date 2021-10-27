@@ -892,7 +892,7 @@ where
     /// - Trimming the message_queue, before possibly sending hangup message(s)
     /// - [optional] notifying application about call ended reason
     /// - closing down Call object
-    /// - [optional] sending hangup on all connection data channels
+    /// - [optional] sending hangup on all connections via RTP data
     /// - [optional] sending Signal hangup message
     fn terminate_call(
         &mut self,
@@ -912,8 +912,8 @@ where
         }
 
         if let Some(hangup) = hangup {
-            // All connections send hangup via data_channel.
-            call.inject_send_hangup_via_data_channel_to_all(hangup)?;
+            // All connections send hangup via RTP data.
+            call.inject_send_hangup_via_rtp_data_to_all(hangup)?;
         }
 
         let mut call_manager = self.clone();
@@ -1111,7 +1111,7 @@ where
                 is_active_call = true;
                 if let Ok(state) = active_call.state() {
                     match state {
-                        CallState::ConnectedWithDataChannelBeforeAccepted
+                        CallState::ConnectedBeforeAccepted
                         | CallState::ConnectedAndAccepted
                         | CallState::ReconnectingAfterAccepted => {
                             // Get the last sent message type and see if it was for ICE.
@@ -1496,7 +1496,7 @@ where
         // Invoke hangup_other for the call, which will inject hangup/busy
         // to all connections, if any.
         let hangup = signaling::Hangup::BusyOnAnotherDevice(sender_device_id);
-        active_call.send_hangup_via_data_channel_to_all_except(hangup, sender_device_id)?;
+        active_call.send_hangup_via_rtp_data_to_all_except(hangup, sender_device_id)?;
 
         // Send out hangup/busy to all callees via signal messaging.
         // Use legacy signaling since the busy device, legacy or

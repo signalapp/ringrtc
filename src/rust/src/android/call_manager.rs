@@ -10,7 +10,7 @@ use std::panic;
 use std::time::Duration;
 
 use jni::objects::{JClass, JObject, JString};
-use jni::sys::{jboolean, jbyteArray, jint, jlong, jobject};
+use jni::sys::{jbyteArray, jint, jlong, jobject};
 use jni::JNIEnv;
 use log::Level;
 
@@ -85,8 +85,6 @@ pub fn create_peer_connection(
     native_connection: webrtc::ptr::Borrowed<Connection<AndroidPlatform>>,
     jni_rtc_config: JObject,
     jni_media_constraints: JObject,
-    enable_dtls: bool,
-    enable_rtp_data_channel: bool,
 ) -> Result<jlong> {
     let connection = unsafe { native_connection.as_mut() }.ok_or_else(|| {
         RingRtcError::NullPointer(
@@ -100,16 +98,6 @@ pub fn create_peer_connection(
     let pc_observer =
         PeerConnectionObserver::new(native_connection, false /* enable_frame_encryption */)?;
 
-    // Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection takes
-    // ownership of the RffiPeerConnectionObserver.  But we also pass
-    // a borrowed RffiPeerConnectionObserver into PeerConnection::new
-    // (for use with data channels).
-    // This is weird, but it works as long as the Java-level PeerConnection
-    // keeps the observer around as long as the data channel, which it does.
-    // TODO: See if we can clean this up.
-    let pc_observer_rffi_unique = pc_observer.take_rffi();
-    let pc_observer_rffi_borrowed = pc_observer_rffi_unique.borrow();
-
     // construct JNI OwnedPeerConnection object
     let jni_owned_pc = unsafe {
         Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection(
@@ -118,10 +106,8 @@ pub fn create_peer_connection(
             peer_connection_factory,
             jni_rtc_config,
             jni_media_constraints,
-            pc_observer_rffi_unique.into_owned().as_ptr() as jlong,
+            pc_observer.into_rffi().into_owned().as_ptr() as jlong,
             JObject::null(),
-            enable_dtls as jboolean,
-            enable_rtp_data_channel as jboolean,
         )
     };
     info!("jni_owned_pc: {}", jni_owned_pc);
@@ -144,7 +130,7 @@ pub fn create_peer_connection(
     // We can't "webrtc::Arc::from_borrowed(peer_connection_factory)" here because
     // peer_connection_factory is actually an OwnedFactoryAndThreads, not a PeerConnectionFactory.
     // We'd need to unwrap it with something like Rust_borrowPeerConnectionFromJniOwnedPeerConnection.
-    let peer_connection = PeerConnection::new(rffi_pc, Box::new(pc_observer_rffi_borrowed), None);
+    let peer_connection = PeerConnection::new(rffi_pc, None, None);
 
     connection.set_peer_connection(peer_connection)?;
 

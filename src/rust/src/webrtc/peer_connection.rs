@@ -11,7 +11,6 @@ use crate::common::{units::DataRate, Result};
 use crate::core::util::redact_string;
 use crate::error::RingRtcError;
 use crate::webrtc;
-use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::{AudioEncoderConfig, RffiAudioEncoderConfig};
 use crate::webrtc::network::RffiIpPort;
@@ -25,24 +24,13 @@ use crate::webrtc::stats_observer::StatsObserver;
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection as pc;
-#[cfg(not(feature = "sim"))]
-pub use crate::webrtc::ffi::peer_connection::{RffiDataChannel, RffiPeerConnection};
 
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection as pc;
 #[cfg(feature = "sim")]
-pub use crate::webrtc::sim::peer_connection::{
-    BoxedRtpPacketSink, RffiDataChannel, RffiPeerConnection,
-};
+pub use crate::webrtc::sim::peer_connection::BoxedRtpPacketSink;
 
-pub trait BorrowPeerConnectionObserver:
-    webrtc::ptr::Borrow<RffiPeerConnectionObserver> + std::fmt::Debug
-{
-}
-impl<T: webrtc::ptr::Borrow<RffiPeerConnectionObserver> + std::fmt::Debug>
-    BorrowPeerConnectionObserver for T
-{
-}
+pub use pc::RffiPeerConnection;
 
 /// Rust wrapper around WebRTC C++ PeerConnection object.
 #[derive(Debug)]
@@ -55,10 +43,9 @@ pub struct PeerConnection {
     // indefinitely.
     _owner: Option<webrtc::Arc<RffiPeerConnectionFactoryOwner>>,
 
-    // Used for passing into create_signaling_data_channel
-    // and for optionally keeping the PeerConnectionObserver around longer
+    // Used for optionally keeping the PeerConnectionObserver around longer
     // than the native PeerConnection.
-    rffi_pc_observer: Box<dyn BorrowPeerConnectionObserver>,
+    _rffi_pc_observer: Option<webrtc::ptr::Unique<RffiPeerConnectionObserver>>,
 }
 
 impl Drop for PeerConnection {
@@ -81,12 +68,12 @@ pub struct SendRates {
 impl PeerConnection {
     pub fn new(
         rffi: webrtc::Arc<RffiPeerConnection>,
-        rffi_pc_observer: Box<dyn BorrowPeerConnectionObserver>,
+        rffi_pc_observer: Option<webrtc::ptr::Unique<RffiPeerConnectionObserver>>,
         owner: Option<webrtc::Arc<RffiPeerConnectionFactoryOwner>>,
     ) -> Self {
         Self {
             rffi,
-            rffi_pc_observer,
+            _rffi_pc_observer: rffi_pc_observer,
             _owner: owner,
         }
     }
@@ -96,24 +83,6 @@ impl PeerConnection {
         unsafe { self.rffi.as_borrowed().as_ref() }
             .unwrap()
             .set_rtp_packet_sink(rtp_packet_sink)
-    }
-
-    /// Rust wrapper around C++ PeerConnection::CreateDataChannel().
-    /// Assumes the label "signaling" and unordered/unreliable for RTP.
-    pub fn create_signaling_data_channel(&self) -> Result<DataChannel> {
-        let rffi_data_channel = webrtc::Arc::from_owned(unsafe {
-            pc::Rust_createSignalingDataChannel(
-                self.rffi.as_borrowed(),
-                self.rffi_pc_observer.borrow(),
-            )
-        });
-        if rffi_data_channel.is_null() {
-            return Err(RingRtcError::CreateSignalingDataChannel.into());
-        }
-
-        let data_channel = DataChannel::new(rffi_data_channel);
-
-        Ok(data_channel)
     }
 
     /// Rust wrapper around C++ webrtc::CreateSessionDescription(kOffer).

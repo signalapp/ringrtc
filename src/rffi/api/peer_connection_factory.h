@@ -85,13 +85,12 @@ RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
 RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
   webrtc::rffi::PeerConnectionObserverRffi* observer_borrowed,
-  rtc::RTCCertificate* certificate_borrowed_rc,
+  // If non-null, enable DTLS.
+  rtc::RTCCertificate* dtls_certificate_borrowed_rc,
   bool hide_ip,
   RffiIceServer ice_server,
   webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
-  webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc,
-  bool enable_dtls,
-  bool enable_rtp_data_channel);
+  webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc);
 
 // Returns an owned RC.
 RUSTEXPORT webrtc::AudioTrackInterface* Rust_createAudioTrack(

@@ -236,13 +236,12 @@ impl PeerConnectionFactory {
     pub fn create_peer_connection<T: PeerConnectionObserverTrait>(
         &self,
         pc_observer: PeerConnectionObserver<T>,
-        certificate: Certificate,
+        // DTLS is enabled if Some
+        dtls_certificate: Option<Certificate>,
         hide_ip: bool,
         ice_servers: &IceServer,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
-        enable_dtls: bool,
-        enable_rtp_data_channel: bool,
     ) -> Result<PeerConnection> {
         debug!(
             "PeerConnectionFactory::create_peer_connection() {:?}",
@@ -255,14 +254,18 @@ impl PeerConnectionFactory {
         // for as long as the native PeerConnection is alive.
         // we do this by passing a webrtc::ptr::Unique<RffiPeerConnectionObserver> to
         // the Rust-level PeerConnection and let it own it.
-        let pc_observer_rffi_unique = pc_observer.take_rffi();
-        let pc_observer_rffi_borrowed = pc_observer_rffi_unique.borrow();
+        let pc_observer_rffi = pc_observer.into_rffi();
 
         let rffi = webrtc::Arc::from_owned(unsafe {
             pcf::Rust_createPeerConnection(
                 self.rffi.as_borrowed(),
-                pc_observer_rffi_borrowed,
-                certificate.rffi().as_borrowed(),
+                pc_observer_rffi.borrow(),
+                // Use the as_ref() so that the Certificate isn't destroyed
+                // before we are done passing it to Rust_createPeerConnection.
+                match dtls_certificate.as_ref() {
+                    Some(certificate) => certificate.rffi().as_borrowed(),
+                    None => webrtc::ptr::BorrowedRc::null(),
+                },
                 hide_ip,
                 ice_servers.rffi(),
                 outgoing_audio_track.rffi().as_borrowed(),
@@ -270,8 +273,6 @@ impl PeerConnectionFactory {
                     .map_or_else(webrtc::ptr::BorrowedRc::null, |outgoing_video_track| {
                         outgoing_video_track.rffi().as_borrowed()
                     }),
-                enable_dtls,
-                enable_rtp_data_channel,
             )
         });
         debug!(
@@ -283,7 +284,7 @@ impl PeerConnectionFactory {
         }
         Ok(PeerConnection::new(
             rffi,
-            Box::new(pc_observer_rffi_unique),
+            Some(pc_observer_rffi),
             Some(self.rffi.clone()),
         ))
     }

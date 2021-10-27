@@ -41,7 +41,7 @@ pub struct ReceiverStatus {
     pub max_bitrate_bps: ::std::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Data {
+pub struct Message {
     #[prost(message, optional, tag="1")]
     pub accepted: ::std::option::Option<Accepted>,
     #[prost(message, optional, tag="2")]

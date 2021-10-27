@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use num_enum::TryFromPrimitive;
 use prost::Message;
 use rand::Rng;
@@ -33,7 +33,6 @@ use crate::{
     protobuf,
     webrtc::{
         self,
-        data_channel::DataChannel,
         media::{AudioTrack, VideoTrack},
         peer_connection::{PeerConnection, SendRates},
         peer_connection_factory::{self as pcf, Certificate, IceServer, PeerConnectionFactory},
@@ -379,7 +378,6 @@ pub enum EndReason {
     FailedToCreatePeerConnectionFactory,
     FailedToGenerateCertificate,
     FailedToCreatePeerConnection,
-    FailedToCreateDataChannel,
     FailedToStartPeerConnection,
     FailedToUpdatePeerConnection,
     FailedToSetMaxSendBitrate,
@@ -812,18 +810,14 @@ impl Client {
                 let local_dtls_fingerprint = certificate.compute_fingerprint_sha256()?;
                 let hide_ip = false;
                 let ice_server = IceServer::none();
-                let enable_dtls = true;
-                let enable_rtp_data_channel = true;
                 let peer_connection = peer_connection_factory
                     .create_peer_connection(
                         peer_connection_observer,
-                        certificate,
+                        Some(certificate),
                         hide_ip,
                         &ice_server,
                         outgoing_audio_track,
                         outgoing_video_track,
-                        enable_dtls,
-                        enable_rtp_data_channel,
                     )
                     .map_err(|e| {
                         observer.handle_ended(client_id, EndReason::FailedToCreatePeerConnection);
@@ -2980,13 +2974,6 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         Ok(())
     }
 
-    fn handle_signaling_data_channel_connected(
-        &mut self,
-        _data_channel: DataChannel,
-    ) -> Result<()> {
-        Ok(())
-    }
-
     fn handle_rtp_received(&mut self, header: rtp::Header, payload: &[u8]) {
         if let Some(client) = &self.client {
             client.handle_rtp_received(header, payload);
@@ -2996,14 +2983,6 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                 header.ssrc
             );
         }
-    }
-
-    #[allow(clippy::collapsible_if)]
-    fn handle_signaling_data_channel_message(&mut self, _bytes: Bytes) {
-        info!(
-            "group_call::Client(outer)::handle_data_channel_message(client_id: {})",
-            self.log_id()
-        );
     }
 
     fn get_media_ciphertext_buffer_size(

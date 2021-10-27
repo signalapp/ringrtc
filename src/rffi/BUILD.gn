@@ -5,7 +5,6 @@
 
 # C++ source files common to both Android and iOS
 common_sources = [
-  "src/data_channel.cc",
   "src/injectable_network.cc",
   "src/logging.cc",
   "src/media.cc",

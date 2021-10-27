@@ -32,7 +32,7 @@ pub mod device_to_device {
         #[prost(bool, optional, tag="4")]
         pub sharing_screen: ::std::option::Option<bool>,
     }
-    /// Sent over RTP data channel *and* signaling
+    /// Sent over RTP data *and* signaling
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Leaving {
         /// When sent over signaling, you must indicate which device is leaving.
@@ -42,7 +42,6 @@ pub mod device_to_device {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeviceToSfu {
-    /// Called resolutionRequest in the SFU's RtpDataChannelMessages.proto
     #[prost(message, optional, tag="1")]
     pub video_request: ::std::option::Option<device_to_sfu::VideoRequestMessage>,
 }
@@ -66,7 +65,6 @@ pub mod device_to_sfu {
         }
     }
 }
-/// Called RtpDataChannelMessage in the SFU's RtpDataChannelMessages.proto
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SfuToDevice {
     #[prost(message, optional, tag="2")]

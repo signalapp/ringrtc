@@ -48,8 +48,8 @@ pub mod core {
 
 /// Protobuf Definitions.
 pub mod protobuf {
-    pub mod data_channel;
     pub mod group_call;
+    pub mod rtp_data;
     pub mod signaling;
 }
 
@@ -93,7 +93,6 @@ pub mod native;
 pub mod webrtc {
     pub mod arc;
     pub use arc::Arc;
-    pub mod data_channel;
     pub mod ice_gatherer;
     #[cfg(feature = "simnet")]
     pub mod injectable_network;
@@ -111,7 +110,6 @@ pub mod webrtc {
     pub mod stats_observer;
     #[cfg(not(feature = "sim"))]
     mod ffi {
-        pub mod data_channel;
         pub mod ice_gatherer;
         pub mod logging;
         pub mod media;
@@ -124,7 +122,6 @@ pub mod webrtc {
     }
     #[cfg(feature = "sim")]
     pub mod sim {
-        pub mod data_channel;
         pub mod ice_gatherer;
         pub mod media;
         pub mod peer_connection;

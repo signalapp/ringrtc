@@ -73,8 +73,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
     native_connection_borrowed: jlong,
     jni_rtc_config: JObject,
     jni_media_constraints: JObject,
-    enable_dtls: bool,
-    enable_rtp_data_channel: bool,
 ) -> jlong {
     match call_manager::create_peer_connection(
         &env,
@@ -84,8 +82,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
         ),
         jni_rtc_config,
         jni_media_constraints,
-        enable_dtls,
-        enable_rtp_data_channel,
     ) {
         Ok(v) => v,
         Err(e) => {

@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-#include "api/data_channel_interface.h"
 #include "api/ice_gatherer_interface.h"
 #include "api/ice_transport_interface.h"
 #include "api/jsep_session_description.h"
@@ -250,7 +249,7 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   int TX_TIME_OFFSET_EXT_ID = 13;
 
   // Payload types must be over 96 and less than 128.
-  int DATA_PT = 101;
+  // 101 used by connection.rs
   int OPUS_PT = 102;
   int VP8_PT = 108;
   int VP8_RTX_PT = 118;
@@ -266,13 +265,11 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   // overlap with SSRCs from the other side.  To avoid potential problems, we'll give the
   // caller side 1XXX and the callee side 2XXX;
   uint32_t BASE_SSRC = offer ? 1000 : 2000;
-  uint32_t DATA_SSRC = BASE_SSRC + 1;
+  // 1001 and 2001 used by connection.rs
   uint32_t AUDIO_SSRC = BASE_SSRC + 2;
   uint32_t VIDEO_SSRC = BASE_SSRC + 3;
   uint32_t VIDEO_RTX_SSRC = BASE_SSRC + 13;
 
-  // This must stay in sync with PeerConnection.createDataChannel.
-  std::string DATA_CHANNEL_LABEL = "signaling";
   // This should stay in sync with PeerConnectionFactory.createAudioTrack
   std::string AUDIO_TRACK_ID = "audio1";
   // This must stay in sync with PeerConnectionFactory.createVideoTrack
@@ -295,15 +292,10 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
     media->set_direction(webrtc::RtpTransceiverDirection::kSendRecv);
   };
 
-  auto data = std::make_unique<cricket::RtpDataContentDescription>();
-  set_rtp_params(data.get());
   auto audio = std::make_unique<cricket::AudioContentDescription>();
   set_rtp_params(audio.get());
   auto video = std::make_unique<cricket::VideoContentDescription>();
   set_rtp_params(video.get());
-
-  auto google_data = cricket::DataCodec(DATA_PT, cricket::kGoogleRtpDataCodecName);
-  data->AddCodec(google_data);
 
   auto opus = cricket::AudioCodec(OPUS_PT, cricket::kOpusCodecName, 48000, 0, 2);
   // These are the current defaults for WebRTC
@@ -400,16 +392,6 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   video->AddRtpHeaderExtension(abs_send_time);
   video->AddRtpHeaderExtension(tx_time_offset);
 
-  auto data_stream = cricket::StreamParams();
-  data_stream.add_ssrc(DATA_SSRC);
-  data_stream.id = DATA_CHANNEL_LABEL;
-  // RTP data channels are a little funny.
-  // They use the following instead of the above
-  // for communicating the data channel label.
-  std::vector<std::string> data_stream_ids;
-  data_stream_ids.push_back(DATA_CHANNEL_LABEL);
-  data_stream.set_stream_ids(data_stream_ids);
-
   auto audio_stream = cricket::StreamParams();
   audio_stream.id = AUDIO_TRACK_ID;
   audio_stream.add_ssrc(AUDIO_SSRC);
@@ -420,7 +402,7 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   video_stream.AddFidSsrc(VIDEO_SSRC, VIDEO_RTX_SSRC);  // AKA RTX
 
   // Things that are the same for all of them
-  for (auto* stream : {&audio_stream, &video_stream, &data_stream}) {
+  for (auto* stream : {&audio_stream, &video_stream}) {
     // WebRTC just generates a random 16-byte string for the entire PeerConnection.
     // It's used to send an SDES RTCP message.
     // The value doesn't seem to be used for anything else.
@@ -429,13 +411,8 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
     stream->cname = "CNAMECNAMECNAME!";
   }
 
-  data->AddStream(data_stream);
   audio->AddStream(audio_stream);
   video->AddStream(video_stream);
-
-  // This is the default, and it doesn't really matter. Provided as a sanity check
-  // in case there is a problem with the data channel.
-  data->set_bandwidth(30720);
 
   // TODO: Why is this only for video by default in WebRTC? Should we enable it for all of them?
   video->set_rtcp_reduced_size(true);
@@ -443,22 +420,18 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   // Keep the order as the WebRTC default: (audio, video, data).
   auto audio_content_name = "audio";
   auto video_content_name = "video";
-  auto data_content_name = "data";
 
   auto session = std::make_unique<cricket::SessionDescription>();
   session->AddTransportInfo(cricket::TransportInfo(audio_content_name, transport));
   session->AddTransportInfo(cricket::TransportInfo(video_content_name, transport));
-  session->AddTransportInfo(cricket::TransportInfo(data_content_name, transport));
 
   bool stopped = false;
   session->AddContent(audio_content_name, cricket::MediaProtocolType::kRtp, stopped, std::move(audio));
   session->AddContent(video_content_name, cricket::MediaProtocolType::kRtp, stopped, std::move(video));
-  session->AddContent(data_content_name, cricket::MediaProtocolType::kRtp, stopped, std::move(data));
 
   auto bundle = cricket::ContentGroup(cricket::GROUP_TYPE_BUNDLE);
   bundle.AddContentName(audio_content_name);
   bundle.AddContentName(video_content_name);
-  bundle.AddContentName(data_content_name);
   session->AddGroup(bundle);
 
   // This is the default and used for "Plan B" SDP, which is what we use in V1, V2, and V3.
@@ -764,20 +737,6 @@ Rust_setAudioPlayoutEnabled(webrtc::PeerConnectionInterface* peer_connection_bor
                             bool                             enabled) {
   RTC_LOG(LS_INFO) << "Rust_setAudioPlayoutEnabled(" << enabled << ")";
   peer_connection_borrowed_rc->SetAudioPlayout(enabled);
-}
-
-// Returns an owned RC.
-// The passed-in observer must outlive the DataChannel.
-RUSTEXPORT DataChannelInterface*
-Rust_createSignalingDataChannel(PeerConnectionInterface* peer_connection_borrowed_rc,
-                                PeerConnectionObserver* pc_observer_borrowed) {
-  struct DataChannelInit dc_config;
-  rtc::scoped_refptr<DataChannelInterface> channel = peer_connection_borrowed_rc->CreateDataChannel("signaling", &dc_config);
-
-  // Let the observer know a data channel was create so it can register itself to receive messages.
-  pc_observer_borrowed->OnDataChannel(channel);
-
-  return take_rc(channel);
 }
 
 RUSTEXPORT bool

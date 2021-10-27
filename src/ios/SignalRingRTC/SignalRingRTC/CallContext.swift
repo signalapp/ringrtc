@@ -22,12 +22,11 @@ public class CallContext {
     weak var videoCaptureController: VideoCaptureController!
     let videoSource: RTCVideoSource
     let videoTrack: RTCVideoTrack
-    let certificate: RTCCertificate
 
     // Cache the latest settings so we don't repeat them.
     var currentVideoEnableSetting: Bool
 
-    init (iceServers: [RTCIceServer], hideIp: Bool, audioSource: RTCAudioSource, audioTrack: RTCAudioTrack, videoSource: RTCVideoSource, videoTrack: RTCVideoTrack, videoCaptureController: VideoCaptureController, certificate: RTCCertificate) {
+    init (iceServers: [RTCIceServer], hideIp: Bool, audioSource: RTCAudioSource, audioTrack: RTCAudioTrack, videoSource: RTCVideoSource, videoTrack: RTCVideoTrack, videoCaptureController: VideoCaptureController) {
         self.iceServers = iceServers
         self.hideIp = hideIp
         self.audioSource = audioSource
@@ -35,7 +34,6 @@ public class CallContext {
         self.videoSource = videoSource
         self.videoTrack = videoTrack
         self.videoCaptureController = videoCaptureController
-        self.certificate = certificate
 
         // For now, assume video starts out as disabled.
         currentVideoEnableSetting = false

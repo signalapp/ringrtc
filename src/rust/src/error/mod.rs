@@ -47,8 +47,6 @@ pub enum RingRtcError {
     // WebRTC / C++ error codes
     #[error("Unable to create C++ PeerConnectionObserver")]
     CreatePeerConnectionObserver,
-    #[error("Unable to create C++ signaling DataChannel")]
-    CreateSignalingDataChannel,
     #[error("Unable to create C++ PeerConnectionFactory")]
     CreatePeerConnectionFactory,
     #[error("Unable to create C++ PeerConnection")]
@@ -94,11 +92,9 @@ pub enum RingRtcError {
     #[error("Unknown signaled protocol version")]
     UnknownSignaledProtocolVersion,
 
-    // DataChannel error codes
-    #[error("Unable to send data channel message")]
-    DataChannelSend,
-    #[error("Data channel protocol error: {0}")]
-    DataChannelProtocol(String),
+    // RTP Data error codes
+    #[error("RTP data protocol error: {0}")]
+    RtpDataProtocol(String),
     #[error("Unable to send RTP data")]
     SendRtp,
     #[error("Unable to receive RTP data")]

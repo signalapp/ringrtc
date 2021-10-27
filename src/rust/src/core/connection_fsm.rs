@@ -20,7 +20,7 @@
 //! - AnswerCall
 //! - LocalHangup
 //! - UpdateSenderStatus
-//! - SendReceiverStatusViaDataChannel
+//! - SendReceiverStatusViaRtpData
 //! - SendBusy
 //! - ReceivedIce
 //! - ReceivedHangup
@@ -32,10 +32,9 @@
 //! - IceFailed
 //! - IceDisconnected
 //! - ReceivedIncomingMedia
-//! - ReceivedSignalingDataChannel
-//! - ReceivedAcceptedViaDataChannel
-//! - ReceivedSenderStatusViaDataChannel
-//! - ReceivedReceiverStatusViaDataChannel
+//! - ReceivedAcceptedViaRtpData
+//! - ReceivedSenderStatusViaRtpData
+//! - ReceivedReceiverStatusViaRtpData
 //! - ReceivedHangup
 //!
 //! # Asynchronous Outputs:
@@ -63,7 +62,6 @@ use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
-use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
@@ -74,36 +72,36 @@ pub enum ConnectionEvent {
     /// Action: Add candidate to PeerConnection.
     ReceivedIce(signaling::Ice),
     /// Receive hangup from remote peer.
-    /// Source: signaling or data channel (PeerConnection)
+    /// Source: signaling or RTP data
     /// Action: Bubble up to the Call, which then terminates.
     ReceivedHangup(CallId, signaling::Hangup),
-    /// Event from client application to send hangup message via the data channel.
+    /// Event from client application to send hangup message via RTP data.
     /// Source: app or internal decision to terminate call
-    /// Action: Send a hangup message over the data channel.
-    SendHangupViaDataChannel(signaling::Hangup),
+    /// Action: Send a hangup message over RTP data.
+    SendHangupViaRtpData(signaling::Hangup),
     /// Accept incoming call (callee only).
     /// Source: app (user action)
-    /// Action: got to "accepted" state and send accept message over the data channel
+    /// Action: got to "accepted" state and send accept message via RTP data.
     Accept,
     /// Receive accepted message from remote peer.
-    /// Source: data channel (PeerConnection)
+    /// Source: RTP data
     /// Action: bubble up to Call and transition states
-    ReceivedAcceptedViaDataChannel(CallId),
+    ReceivedAcceptedViaRtpData(CallId),
     /// Receive sender status change from remote peer.
-    /// Source: data channel (PeerConnection)
+    /// Source: RTP data
     /// Action: Bubble up to app, which should change the "in call" screen.
-    ReceivedSenderStatusViaDataChannel(CallId, signaling::SenderStatus, Option<u64>),
+    ReceivedSenderStatusViaRtpData(CallId, signaling::SenderStatus, Option<u64>),
     /// Receive receiver status change from remote peer.
-    /// Source: data channel (PeerConnection)
+    /// Source: RTP data
     /// Action: Make adjustments in connection if necessary.
-    ReceivedReceiverStatusViaDataChannel(CallId, DataRate, Option<u64>),
-    /// Send sender status message via the data channel
+    ReceivedReceiverStatusViaRtpData(CallId, DataRate, Option<u64>),
+    /// Send sender status message via RTP data
     /// Source: app (user action)
-    /// Action: Accumulate and send a sender status message over the data channel.
+    /// Action: Accumulate and send a sender status message via RTP data.
     UpdateSenderStatus(signaling::SenderStatus),
     /// Set bandwidth mode
     /// Source: app (user setting)
-    /// Action: Update and send bitrate via a receiver status message over the data channel.
+    /// Action: Update and send bitrate via a receiver status message via RTP data.
     UpdateBandwidthMode(BandwidthMode),
     /// Local ICE candidates added or removed from PeerConnection
     /// Source: PeerConnection
@@ -133,10 +131,6 @@ pub enum ConnectionEvent {
     /// Source: PeerConnection (OnAddStream)
     /// Action: remember the MediaStream so we can "connect" to it after the call is accepted
     ReceivedIncomingMedia(MediaStream),
-    /// Received signaling data channel from PeerConnection
-    /// Source: PeerConnection
-    /// Action: Use the DataChannel to send and receive messages.
-    ReceivedSignalingDataChannel(DataChannel),
     /// Synchronize the FSM.
     /// Only used by unit tests
     Synchronize(Arc<(Mutex<bool>, Condvar)>),
@@ -154,28 +148,24 @@ impl fmt::Display for ConnectionEvent {
             ConnectionEvent::ReceivedHangup(call_id, hangup) => {
                 format!("RemoteHangup, call_id: {} hangup: {}", call_id, hangup)
             }
-            ConnectionEvent::ReceivedAcceptedViaDataChannel(id) => {
-                format!("ReceivedAcceptedViaDataChannel, call_id: {}", id)
+            ConnectionEvent::ReceivedAcceptedViaRtpData(id) => {
+                format!("ReceivedAcceptedViaRtpData, call_id: {}", id)
             }
-            ConnectionEvent::ReceivedSenderStatusViaDataChannel(id, status, sequence_number) => {
+            ConnectionEvent::ReceivedSenderStatusViaRtpData(id, status, sequence_number) => {
                 format!(
-                    "ReceivedSenderStatusViaDataChannel, call_id: {}, status: {:?}, seqnum: {:?}",
+                    "ReceivedSenderStatusViaRtpData, call_id: {}, status: {:?}, seqnum: {:?}",
                     id, status, sequence_number
                 )
             }
-            ConnectionEvent::ReceivedReceiverStatusViaDataChannel(
-                id,
-                max_bitrate,
-                sequence_number,
-            ) => {
+            ConnectionEvent::ReceivedReceiverStatusViaRtpData(id, max_bitrate, sequence_number) => {
                 format!(
-                    "ReceivedReceiverStatusViaDataChannel, call_id: {}, max_bitrate: {:?}, seqnum: {:?}",
+                    "ReceivedReceiverStatusViaRtpData, call_id: {}, max_bitrate: {:?}, seqnum: {:?}",
                     id, max_bitrate, sequence_number
                 )
             }
             ConnectionEvent::ReceivedIce(_) => "RemoteIceCandidates".to_string(),
-            ConnectionEvent::SendHangupViaDataChannel(hangup) => {
-                format!("SendHangupViaDataChannel, hangup: {}", hangup)
+            ConnectionEvent::SendHangupViaRtpData(hangup) => {
+                format!("SendHangupViaRtpData, hangup: {}", hangup)
             }
             ConnectionEvent::UpdateSenderStatus(status) => {
                 format!("UpdateSenderStatus, status: {:?}", status)
@@ -194,9 +184,6 @@ impl fmt::Display for ConnectionEvent {
             ConnectionEvent::InternalError(e) => format!("InternalError: {}", e),
             ConnectionEvent::ReceivedIncomingMedia(stream) => {
                 format!("ReceivedIncomingMedia, stream: {:?}", stream)
-            }
-            ConnectionEvent::ReceivedSignalingDataChannel(dc) => {
-                format!("ReceivedSignalingDataChannel, dc: {:?}", dc)
             }
             ConnectionEvent::Synchronize(_) => "Synchronize".to_string(),
             ConnectionEvent::Terminate => "Terminate".to_string(),
@@ -268,15 +255,15 @@ where
                     match (state, &event) {
                         (
                             ConnectionState::ConnectedAndAccepted,
-                            ConnectionEvent::ReceivedSenderStatusViaDataChannel(_, _, _),
+                            ConnectionEvent::ReceivedSenderStatusViaRtpData(_, _, _),
                         )
                         | (
                             ConnectionState::ConnectedAndAccepted,
-                            ConnectionEvent::ReceivedReceiverStatusViaDataChannel(_, _, _),
+                            ConnectionEvent::ReceivedReceiverStatusViaRtpData(_, _, _),
                         )
                         | (
                             ConnectionState::ConnectedAndAccepted,
-                            ConnectionEvent::ReceivedAcceptedViaDataChannel(_),
+                            ConnectionEvent::ReceivedAcceptedViaRtpData(_),
                         ) => {
                             // Don't log periodic, ignored events at high verbosity
                             debug!("state: {}, event: {}", state, event)
@@ -379,8 +366,8 @@ where
         // Handle these events even while terminating, as the remote
         // side needs to be informed.
         match event {
-            ConnectionEvent::SendHangupViaDataChannel(hangup) => {
-                return self.handle_send_hangup_via_data_channel(connection, state, hangup)
+            ConnectionEvent::SendHangupViaRtpData(hangup) => {
+                return self.handle_send_hangup_via_rtp_data(connection, state, hangup)
             }
             ConnectionEvent::Terminate => return self.handle_terminate(connection),
             ConnectionEvent::Synchronize(sync) => return self.handle_synchronize(sync),
@@ -402,29 +389,26 @@ where
                 self.handle_received_hangup(connection, state, call_id, hangup)
             }
             ConnectionEvent::Accept => self.handle_accept(connection, state),
-            ConnectionEvent::ReceivedAcceptedViaDataChannel(id) => {
-                self.handle_received_accepted_via_data_channel(connection, state, id)
+            ConnectionEvent::ReceivedAcceptedViaRtpData(id) => {
+                self.handle_received_accepted_via_rtp_data(connection, state, id)
             }
-            ConnectionEvent::ReceivedSenderStatusViaDataChannel(id, status, sequence_number) => {
-                self.handle_received_sender_status_via_data_channel(
+            ConnectionEvent::ReceivedSenderStatusViaRtpData(id, status, sequence_number) => self
+                .handle_received_sender_status_via_rtp_data(
                     connection,
                     state,
                     id,
                     status,
                     sequence_number,
+                ),
+            ConnectionEvent::ReceivedReceiverStatusViaRtpData(id, max_bitrate, sequence_number) => {
+                self.handle_received_receiver_status_via_rtp_data(
+                    connection,
+                    state,
+                    id,
+                    max_bitrate,
+                    sequence_number,
                 )
             }
-            ConnectionEvent::ReceivedReceiverStatusViaDataChannel(
-                id,
-                max_bitrate,
-                sequence_number,
-            ) => self.handle_received_receiver_status_via_data_channel(
-                connection,
-                state,
-                id,
-                max_bitrate,
-                sequence_number,
-            ),
             ConnectionEvent::ReceivedIce(ice) => self.handle_received_ice(connection, state, ice),
             ConnectionEvent::UpdateSenderStatus(status) => {
                 self.handle_update_sender_status(connection, state, status)
@@ -445,10 +429,7 @@ where
             ConnectionEvent::ReceivedIncomingMedia(stream) => {
                 self.handle_received_incoming_media(connection, state, stream)
             }
-            ConnectionEvent::ReceivedSignalingDataChannel(dc) => {
-                self.handle_received_signaling_data_channel(connection, state, dc)
-            }
-            ConnectionEvent::SendHangupViaDataChannel(_) => Ok(()),
+            ConnectionEvent::SendHangupViaRtpData(_) => Ok(()),
             ConnectionEvent::Synchronize(_) => Ok(()),
             ConnectionEvent::Terminate => Ok(()),
         }
@@ -498,7 +479,7 @@ where
         Ok(())
     }
 
-    fn handle_received_accepted_via_data_channel(
+    fn handle_received_accepted_via_rtp_data(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
@@ -519,19 +500,19 @@ where
                 connection.set_state(ConnectionState::ConnectedAndAccepted)?;
                 self.notify_observer(
                     connection,
-                    ConnectionObserverEvent::ReceivedAcceptedViaDataChannel,
+                    ConnectionObserverEvent::ReceivedAcceptedViaRtpData,
                 );
             }
-            ConnectionState::ConnectedAndAccepted => {
+            ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted => {
                 // Ignore Accepted notifications in already-accepted state. These may arise
-                // because of expected data channel retransmissions.
+                // because of expected RTP data retransmissions.
             }
-            _ => self.unexpected_state(state, "ReceivedAcceptedViaDataChannel"),
+            _ => self.unexpected_state(state, "ReceivedAcceptedViaRtpData"),
         }
         Ok(())
     }
 
-    fn handle_received_sender_status_via_data_channel(
+    fn handle_received_sender_status_via_rtp_data(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
@@ -540,7 +521,7 @@ where
         sequence_number: Option<u64>,
     ) -> Result<()> {
         debug!(
-            "handle_received_sender_status_via_data_channel(): status: {:?}, sequence_number: {:?}",
+            "handle_received_sender_status_via_rtp_data(): status: {:?}, sequence_number: {:?}",
             status, sequence_number
         );
 
@@ -582,14 +563,14 @@ where
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => self.notify_observer(
                 connection,
-                ConnectionObserverEvent::ReceivedSenderStatusViaDataChannel(status),
+                ConnectionObserverEvent::ReceivedSenderStatusViaRtpData(status),
             ),
-            _ => self.unexpected_state(state, "ReceivedSenderStatusViaDataChannel"),
+            _ => self.unexpected_state(state, "ReceivedSenderStatusViaRtpData"),
         };
         Ok(())
     }
 
-    fn handle_received_receiver_status_via_data_channel(
+    fn handle_received_receiver_status_via_rtp_data(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
@@ -598,7 +579,7 @@ where
         sequence_number: Option<u64>,
     ) -> Result<()> {
         debug!(
-            "handle_received_receiver_status_via_data_channel(): max_bitrate: {:?}, sequence_number: {:?}",
+            "handle_received_receiver_status_via_rtp_data(): max_bitrate: {:?}, sequence_number: {:?}",
             max_bitrate, sequence_number
         );
 
@@ -643,7 +624,7 @@ where
             | ConnectionState::ConnectedAndAccepted => {
                 connection.set_remote_max_bitrate(max_bitrate)?
             }
-            _ => self.unexpected_state(state, "ReceivedReceiverStatusViaDataChannel"),
+            _ => self.unexpected_state(state, "ReceivedReceiverStatusViaRtpData"),
         };
         Ok(())
     }
@@ -677,14 +658,14 @@ where
             ConnectionState::ConnectingBeforeAccepted
             | ConnectionState::ReconnectingAfterAccepted
             | ConnectionState::ConnectedBeforeAccepted => {
-                // notify the peer via a data channel message.
+                // notify the peer via an RTP data message.
                 let mut err_connection = connection.clone();
                 let connected_future = lazy(move |_| {
                     if connection.terminating()? {
                         return Ok(());
                     }
                     connection.set_state(ConnectionState::ConnectedAndAccepted)?;
-                    connection.send_accepted_via_data_channel()
+                    connection.send_accepted_via_rtp_data()
                 })
                 .map_err(move |err| {
                     err_connection.inject_internal_error(err, "Sending Connected failed");
@@ -697,19 +678,17 @@ where
         Ok(())
     }
 
-    fn handle_send_hangup_via_data_channel(
+    fn handle_send_hangup_via_rtp_data(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
         hangup: signaling::Hangup,
     ) -> Result<()> {
         match state {
-            ConnectionState::NotYetStarted => {
-                self.unexpected_state(state, "SendHangupViaDataChannel")
-            }
+            ConnectionState::NotYetStarted => self.unexpected_state(state, "SendHangupViaRtpData"),
             _ => {
                 let mut err_connection = connection.clone();
-                let hangup_future = lazy(move |_| connection.send_hangup_via_data_channel(hangup))
+                let hangup_future = lazy(move |_| connection.send_hangup_via_rtp_data(hangup))
                     .map_err(move |err| {
                         err_connection.inject_internal_error(err, "Sending Hangup failed");
                     });
@@ -731,7 +710,7 @@ where
             | ConnectionState::ReconnectingAfterAccepted
             | ConnectionState::ConnectedBeforeAccepted
             | ConnectionState::ConnectedAndAccepted => {
-                // notify the peer via a data channel message.
+                // notify the peer via an RTP data message.
                 let mut err_connection = connection.clone();
                 let send_sender_status_future = lazy(move |_| {
                     if connection.terminating()? {
@@ -828,19 +807,16 @@ where
                 connection.set_state(ConnectionState::ConnectedBeforeAccepted)?;
                 match connection.direction() {
                     CallDirection::OutGoing => {
-                        // For outgoing calls, we assume we have a data channel.
                         self.notify_observer(
                             connection,
-                            ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted,
+                            ConnectionObserverEvent::ConnectedBeforeAccepted,
                         );
                     }
                     CallDirection::InComing => {
-                        if connection.has_data_channel()? {
-                            self.notify_observer(
-                                connection,
-                                ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted,
-                            );
-                        }
+                        self.notify_observer(
+                            connection,
+                            ConnectionObserverEvent::ConnectedBeforeAccepted,
+                        );
                     }
                 }
             }
@@ -957,32 +933,6 @@ where
                 self.worker_spawn(add_stream_future);
             }
             _ => self.unexpected_state(state, "ReceivedIncomingMedia"),
-        }
-        Ok(())
-    }
-
-    fn handle_received_signaling_data_channel(
-        &mut self,
-        connection: Connection<T>,
-        state: ConnectionState,
-        data_channel: DataChannel,
-    ) -> Result<()> {
-        ringbench!(RingBench::WebRtc, RingBench::Conn, "on_data_channel()");
-
-        match state {
-            ConnectionState::ConnectingBeforeAccepted
-            | ConnectionState::ConnectedBeforeAccepted
-            | ConnectionState::ConnectedAndAccepted => {
-                let notify_handle = connection.clone();
-                connection.set_signaling_data_channel(data_channel)?;
-                if state == ConnectionState::ConnectedBeforeAccepted {
-                    self.notify_observer(
-                        notify_handle,
-                        ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted,
-                    );
-                }
-            }
-            _ => self.unexpected_state(state, "ReceivedSignalingDataChannel"),
         }
         Ok(())
     }

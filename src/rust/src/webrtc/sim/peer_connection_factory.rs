@@ -49,13 +49,11 @@ pub unsafe fn Rust_createPeerConnectionFactoryWrapper(
 pub unsafe fn Rust_createPeerConnection(
     _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
     _observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
-    _certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
+    _dtls_certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
     _hide_ip: bool,
     _ice_server: RffiIceServer,
     _outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
     _outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
-    _enable_dtls: bool,
-    _enable_rtp_data_channel: bool,
 ) -> webrtc::ptr::OwnedRc<RffiPeerConnection> {
     info!("Rust_createPeerConnection()");
     webrtc::ptr::OwnedRc::from_ptr(Box::leak(Box::new(RffiPeerConnection::new())))

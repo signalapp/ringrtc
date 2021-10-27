@@ -5,7 +5,6 @@
 
 //! WebRTC Peer Connection Observer
 
-use bytes::Bytes;
 use libc::size_t;
 use std::ffi::CStr;
 use std::marker::PhantomData;
@@ -18,11 +17,9 @@ use crate::common::{Result, RingBench};
 use crate::core::signaling;
 use crate::error::RingRtcError;
 use crate::webrtc;
-use crate::webrtc::data_channel::DataChannel;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
 use crate::webrtc::media::{RffiAudioTrack, RffiMediaStream, RffiVideoTrack};
 use crate::webrtc::network::RffiIpPort;
-use crate::webrtc::peer_connection::RffiDataChannel;
 use crate::webrtc::rtp;
 
 /// Rust version of WebRTC RTCIceConnectionState enum
@@ -121,10 +118,8 @@ pub trait PeerConnectionObserverTrait {
         Ok(())
     }
 
-    // Data channel events
-    fn handle_signaling_data_channel_connected(&mut self, data_channel: DataChannel) -> Result<()>;
-    fn handle_signaling_data_channel_message(&mut self, message: Bytes);
-    fn handle_rtp_received(&mut self, _header: rtp::Header, _data: &[u8]) {}
+    // RTP data events
+    fn handle_rtp_received(&mut self, header: rtp::Header, data: &[u8]);
 
     // Frame encryption
     // Defaults allow an impl to not support E2EE
@@ -363,56 +358,6 @@ extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
     }
 }
 
-/// PeerConnectionObserver OnSignalingDataChannel() callback.
-#[allow(non_snake_case)]
-extern "C" fn pc_observer_OnSignalingDataChannel<T>(
-    observer: webrtc::ptr::Borrowed<T>,
-    rffi_data_channel: webrtc::ptr::OwnedRc<RffiDataChannel>,
-) where
-    T: PeerConnectionObserverTrait,
-{
-    // Safe because the observer should still be alive (it was just passed to us)
-    if let Some(observer) = unsafe { observer.as_mut() } {
-        info!(
-            "pc_observer_OnSignalingDataChannel(): {}",
-            observer.log_id()
-        );
-        let data_channel = DataChannel::new(webrtc::Arc::from_owned(rffi_data_channel));
-        observer
-            .handle_signaling_data_channel_connected(data_channel)
-            .unwrap_or_else(|e| error!("Problems handling signaling data channel: {}", e));
-    } else {
-        error!("pc_observer_OnSignalingDataChannel called with null observer");
-    }
-}
-
-/// PeerConnectionObserver OnDataChannelMessage() callback.
-#[allow(non_snake_case)]
-extern "C" fn pc_observer_OnSignalingDataChannelMessage<T>(
-    observer: webrtc::ptr::Borrowed<T>,
-    buffer: webrtc::ptr::Borrowed<u8>,
-    length: size_t,
-) where
-    T: PeerConnectionObserverTrait,
-{
-    if buffer.is_null() {
-        warn!("data channel message is null");
-        return;
-    }
-
-    trace!("pc_observer_OnDataChannelMessage(): length: {}", length);
-
-    let slice = unsafe { slice::from_raw_parts(buffer.as_ptr(), length as usize) };
-    let bytes = Bytes::from_static(slice);
-
-    // Safe because the observer should still be alive (it was just passed to us)
-    if let Some(observer) = unsafe { observer.as_mut() } {
-        observer.handle_signaling_data_channel_message(bytes)
-    } else {
-        error!("pc_observer_OnSignalingDataChannelMessage called with null observer");
-    }
-}
-
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnRtpReceived<T>(
     observer: webrtc::ptr::Borrowed<T>,
@@ -606,11 +551,7 @@ where
     onAddVideoRtpReceiver:
         extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiVideoTrack>),
 
-    // Data channel events
-    onSignalingDataChannel:
-        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiDataChannel>),
-    onSignalingDataChannelMessage:
-        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::Borrowed<u8>, size_t),
+    // RTP data events
     onRtpReceived: extern "C" fn(
         webrtc::ptr::Borrowed<T>,
         u8,
@@ -694,9 +635,7 @@ where
             onAddAudioRtpReceiver: pc_observer_OnAddAudioRtpReceiver::<T>,
             onAddVideoRtpReceiver: pc_observer_OnAddVideoRtpReceiver::<T>,
 
-            // Data channel events
-            onSignalingDataChannel: pc_observer_OnSignalingDataChannel::<T>,
-            onSignalingDataChannelMessage: pc_observer_OnSignalingDataChannelMessage::<T>,
+            // RTP data events
             onRtpReceived: pc_observer_OnRtpReceived::<T>,
 
             // Frame encryption
@@ -725,7 +664,7 @@ where
         }
     }
 
-    pub fn take_rffi(mut self) -> webrtc::ptr::Unique<RffiPeerConnectionObserver> {
+    pub fn into_rffi(mut self) -> webrtc::ptr::Unique<RffiPeerConnectionObserver> {
         self.rffi.take()
     }
 }

@@ -116,24 +116,12 @@ impl Platform for IosPlatform {
         let pc_observer =
             PeerConnectionObserver::new(connection_ptr, false /* enable_frame_encryption */)?;
 
-        // onCreateConnectionInterface takes
-        // ownership of the RffiPeerConnectionObserver.  But we also pass
-        // a borrowed RffiPeerConnectionObserver into PeerConnection::new
-        // (for use with data channels).
-        // This is weird, but it works as long as the Java-level PeerConnection
-        // keeps the observer around as long as the data channel, which it does.
-        // TODO: See if we can clean this up.
-        let pc_observer_rffi_unique = pc_observer.take_rffi();
-        let pc_observer_rffi_borrowed = pc_observer_rffi_unique.borrow();
-
         let app_connection_interface = (self.app_interface.onCreateConnectionInterface)(
             self.app_interface.object,
             // This takes an owned pointer.
-            pc_observer_rffi_unique.into_owned().as_ptr() as *mut std::ffi::c_void,
+            pc_observer.into_rffi().into_owned().as_ptr() as *mut std::ffi::c_void,
             remote_device_id,
             call.call_context()?.object,
-            false, /* always disable DTLS */
-            true,  /* always enable the RTP data channel */
         );
 
         if app_connection_interface.object.is_null() || app_connection_interface.pc.is_null() {
@@ -157,11 +145,7 @@ impl Platform for IosPlatform {
 
         // Note: We have to make sure the PeerConnectionFactory outlives this PC because we're not getting
         // any help from the type system when passing in a None for the PeerConnectionFactory here.
-        let peer_connection = PeerConnection::new(
-            rffi_peer_connection,
-            Box::new(pc_observer_rffi_borrowed),
-            None,
-        );
+        let peer_connection = PeerConnection::new(rffi_peer_connection, None, None);
 
         connection.set_peer_connection(peer_connection)?;
 

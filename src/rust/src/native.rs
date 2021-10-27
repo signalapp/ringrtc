@@ -20,7 +20,7 @@ use crate::core::{
 };
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
-use crate::webrtc::peer_connection_factory::{Certificate, IceServer, PeerConnectionFactory};
+use crate::webrtc::peer_connection_factory::{IceServer, PeerConnectionFactory};
 use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
 // This serves as the Platform::AppCallContext
@@ -28,7 +28,6 @@ use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserv
 // for each call.
 #[derive(Clone)]
 pub struct NativeCallContext {
-    certificate: Certificate,
     hide_ip: bool,
     ice_server: IceServer,
     outgoing_audio_track: AudioTrack,
@@ -37,14 +36,12 @@ pub struct NativeCallContext {
 
 impl NativeCallContext {
     pub fn new(
-        certificate: Certificate,
         hide_ip: bool,
         ice_server: IceServer,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
     ) -> Self {
         Self {
-            certificate,
             hide_ip,
             ice_server,
             outgoing_audio_track,
@@ -415,13 +412,11 @@ impl Platform for NativePlatform {
         )?;
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,
-            context.certificate.clone(),
+            None, /* disable DTLS; no certificate */
             context.hide_ip,
             &context.ice_server,
             context.outgoing_audio_track.clone(),
             Some(context.outgoing_video_track.clone()),
-            false, /* always disable DTLS */
-            true,  /* always enable the RTP data channel */
         )?;
 
         connection.set_peer_connection(pc)?;

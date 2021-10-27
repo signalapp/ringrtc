@@ -70,13 +70,12 @@ extern "C" {
     pub fn Rust_createPeerConnection(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
-        certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
+        // If non-null, enable DTLS.
+        dtls_certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
         hide_ip: bool,
         ice_server: RffiIceServer,
         outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
         outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
-        enable_dtls: bool,
-        enable_rtp_data_channel: bool,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnection>;
     pub fn Rust_createAudioTrack(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,

@@ -41,9 +41,7 @@ typedef struct {
   void (*onAddAudioRtpReceiver)(void* observer_borrowed, webrtc::MediaStreamTrackInterface* track_owned_rc);
   void (*onAddVideoRtpReceiver)(void* observer_borrowed, webrtc::MediaStreamTrackInterface* track_owned_rc);
 
-  // Data Channel events
-  void (*onSignalingDataChannel)(void* observer_borrowed, webrtc::DataChannelInterface* data_channel_owned_rc);
-  void (*onSignalingDataChannelMessage)(void* observer_borrowed, const uint8_t* data_borrowed, size_t);
+  // RTP data events
   void (*onRtpReceived)(void* observer_borrowed, uint8_t, uint16_t, uint32_t, uint32_t, const uint8_t* payload_borrowed, size_t);
 
   // Frame encryption

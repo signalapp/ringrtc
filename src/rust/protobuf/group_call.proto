@@ -23,7 +23,7 @@
      optional bool sharing_screen = 4;
    }
  
-   // Sent over RTP data channel *and* signaling
+   // Sent over RTP data *and* signaling
    message Leaving {
      // When sent over signaling, you must indicate which device is leaving.
      optional uint32 demux_id = 1;
@@ -48,11 +48,9 @@
      optional uint32 max_kbps = 3;
    }
  
-   // Called resolutionRequest in the SFU's RtpDataChannelMessages.proto
    optional VideoRequestMessage video_request = 1;
  }
  
- // Called RtpDataChannelMessage in the SFU's RtpDataChannelMessages.proto
  message SfuToDevice {
    message DeviceJoinedOrLeft {
    }

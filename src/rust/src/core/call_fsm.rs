@@ -76,7 +76,7 @@ pub enum CallEvent {
     /// Accept incoming call (callee only).
     AcceptCall,
     /// Send Hangup
-    SendHangupViaDataChannelToAll(signaling::Hangup),
+    SendHangupViaRtpDataToAll(signaling::Hangup),
 
     // Flow events from client application
     /// OK to proceed with call setup including user options.
@@ -111,8 +111,8 @@ impl fmt::Display for CallEvent {
         let display = match self {
             CallEvent::StartCall => "StartCall".to_string(),
             CallEvent::AcceptCall => "AcceptCall".to_string(),
-            CallEvent::SendHangupViaDataChannelToAll(hangup) => {
-                format!("SendHangupViaDataChannelToAll, hangup: {}", hangup)
+            CallEvent::SendHangupViaRtpDataToAll(hangup) => {
+                format!("SendHangupViaRtpDataToAll, hangup: {}", hangup)
             }
             CallEvent::Proceed(bandwidth_mode) => {
                 format!("Proceed, bandwidth_mode: {}", bandwidth_mode)
@@ -298,8 +298,8 @@ where
         // Handle these events even while terminating, as the remote
         // side needs to be informed.
         match event {
-            CallEvent::SendHangupViaDataChannelToAll(hangup) => {
-                return self.handle_send_hangup_via_data_channel_to_all(call, state, hangup)
+            CallEvent::SendHangupViaRtpDataToAll(hangup) => {
+                return self.handle_send_hangup_via_rtp_data_to_all(call, state, hangup)
             }
             CallEvent::Terminate => return self.handle_terminate(call),
             CallEvent::Synchronize(sync) => return self.handle_synchronize(sync),
@@ -336,7 +336,7 @@ where
             CallEvent::InternalError(error) => self.handle_internal_error(call, error),
             CallEvent::CallTimeout => self.handle_call_timeout(call, state),
             // Handled above
-            CallEvent::SendHangupViaDataChannelToAll(_) => Ok(()),
+            CallEvent::SendHangupViaRtpDataToAll(_) => Ok(()),
             CallEvent::Synchronize(_) => Ok(()),
             CallEvent::Terminate => Ok(()),
         }
@@ -423,7 +423,7 @@ where
     ) -> Result<()> {
         // Accept answers when we are ringing so we can get answers for more than one connection.
         if state == CallState::ConnectingBeforeAccepted
-            || state == CallState::ConnectedWithDataChannelBeforeAccepted
+            || state == CallState::ConnectedBeforeAccepted
         {
             let mut err_call = call.clone();
             let received_answer_future = lazy(move |_| {
@@ -452,7 +452,7 @@ where
         match state {
             CallState::WaitingToProceed
             | CallState::ConnectingBeforeAccepted
-            | CallState::ConnectedWithDataChannelBeforeAccepted
+            | CallState::ConnectedBeforeAccepted
             | CallState::ConnectedAndAccepted
             | CallState::ReconnectingAfterAccepted => {
                 let mut err_call = call.clone();
@@ -567,7 +567,7 @@ where
         // Set the state to terminating here if not Idle | Terminating | Closed.
         if let CallState::WaitingToProceed
         | CallState::ConnectingBeforeAccepted
-        | CallState::ConnectedWithDataChannelBeforeAccepted
+        | CallState::ConnectedBeforeAccepted
         | CallState::ConnectedAndAccepted
         | CallState::ReconnectingAfterAccepted = state
         {
@@ -583,11 +583,11 @@ where
             // Not for NotYetStarted | ConnectedAndAccepted | ReconnectingAfterAccepted | Terminating | Terminated states:
             if let CallState::WaitingToProceed
             | CallState::ConnectingBeforeAccepted
-            | CallState::ConnectedWithDataChannelBeforeAccepted = state
+            | CallState::ConnectedBeforeAccepted = state
             {
                 let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
                 let excluded_remote_device_id = hangup_device_id.unwrap_or(0);
-                call.send_hangup_via_data_channel_and_signaling_to_all_except(
+                call.send_hangup_via_rtp_data_and_signaling_to_all_except(
                     hangup_to_propagate,
                     excluded_remote_device_id,
                 )?;
@@ -612,7 +612,7 @@ where
     fn handle_accept_call(&mut self, call: Call<T>, state: CallState) -> Result<()> {
         info!("handle_accept_call():");
         match state {
-            CallState::ConnectedWithDataChannelBeforeAccepted => {
+            CallState::ConnectedBeforeAccepted => {
                 call.set_state(CallState::ConnectedAndAccepted)?;
                 let mut err_call = call.clone();
                 let accept_future = lazy(move |_| {
@@ -636,21 +636,22 @@ where
         Ok(())
     }
 
-    fn handle_send_hangup_via_data_channel_to_all(
+    fn handle_send_hangup_via_rtp_data_to_all(
         &mut self,
         call: Call<T>,
         state: CallState,
         hangup: signaling::Hangup,
     ) -> Result<()> {
-        info!("handle_send_hangup_via_data_channel_to_all():");
+        info!("handle_send_hangup_via_rtp_data_to_all():");
         match state {
             CallState::NotYetStarted => self.unexpected_state(state, "LocalHangup"),
             _ => {
                 let mut err_call = call.clone();
-                let future = lazy(move |_| call.send_hangup_via_data_channel_to_all(hangup))
-                    .map_err(move |err| {
+                let future = lazy(move |_| call.send_hangup_via_rtp_data_to_all(hangup)).map_err(
+                    move |err| {
                         err_call.inject_internal_error(err, "Send hangup request failed");
-                    });
+                    },
+                );
 
                 self.worker_spawn(future);
             }
@@ -681,12 +682,12 @@ where
         let call_id = call.call_id();
 
         match event {
-            ConnectionObserverEvent::ConnectedWithDataChannelBeforeAccepted => {
+            ConnectionObserverEvent::ConnectedBeforeAccepted => {
                 match state {
                     CallState::ConnectingBeforeAccepted => {
-                        // We use the fact that we are connected with a data channel
+                        // We use the fact that we are connected via ICE
                         // as a signal that the application should ring.
-                        call.set_state(CallState::ConnectedWithDataChannelBeforeAccepted)?;
+                        call.set_state(CallState::ConnectedBeforeAccepted)?;
                         if let CallDirection::InComing = call.direction() {
                             self.notify_application(call, ApplicationEvent::LocalRinging)
                         } else {
@@ -704,10 +705,10 @@ where
                 }
                 Ok(())
             }
-            ConnectionObserverEvent::ReceivedAcceptedViaDataChannel => {
+            ConnectionObserverEvent::ReceivedAcceptedViaRtpData => {
                 match call.direction() {
                     CallDirection::OutGoing => match state {
-                        CallState::ConnectedWithDataChannelBeforeAccepted => {
+                        CallState::ConnectedBeforeAccepted => {
                             info!(
                                 "handle_connection_observer_event(): Accepted from {}",
                                 remote_device_id
@@ -716,13 +717,10 @@ where
                             call.set_state(CallState::ConnectedAndAccepted)?;
                             call.set_active_device_id(remote_device_id)?;
 
-                            // Send out hangup/accepted to all via the data channel except to the accepter.
+                            // Send out hangup/accepted to all via RTP data except to the accepter.
                             let hangup =
                                 signaling::Hangup::AcceptedOnAnotherDevice(remote_device_id);
-                            call.send_hangup_via_data_channel_to_all_except(
-                                hangup,
-                                remote_device_id,
-                            )?;
+                            call.send_hangup_via_rtp_data_to_all_except(hangup, remote_device_id)?;
 
                             let mut err_call = call.clone();
                             let connected_future = lazy(move |_| {
@@ -785,7 +783,7 @@ where
                     },
                     CallDirection::InComing => {
                         warn!(
-                            "Ignoring ReceivedAcceptedViaDataChannel for incoming call: {}",
+                            "Ignoring ReceivedAcceptedViaRtpData for incoming call: {}",
                             call_id
                         );
                     }
@@ -800,7 +798,7 @@ where
                     hangup,
                 },
             ),
-            ConnectionObserverEvent::ReceivedSenderStatusViaDataChannel(status) => {
+            ConnectionObserverEvent::ReceivedSenderStatusViaRtpData(status) => {
                 if call.active_device_id()? == remote_device_id {
                     match state {
                         CallState::ConnectedAndAccepted => {

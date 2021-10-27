@@ -496,13 +496,10 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         videoCaptureController.capturerDelegate = videoSource
 
-        // This defaults to ECDSA, which should be fast.
-        let certificate = RTCCertificate.generate(withParams: [:])!
-
         // Create a call context object to hold on to some of
         // the settings needed by the application when actually
         // creating the connection.
-        let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController, certificate: certificate)
+        let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController)
 
         let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), bandwidthMode.rawValue)
         if retPtr == nil {
@@ -992,7 +989,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Utility Observers
 
-    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, enableDtls: Bool, enableRtpDataChannel: Bool) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
+    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
         Logger.debug("onCreateConnection")
 
         // We create default configuration settings here as per
@@ -1000,8 +997,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         // Create the configuration.
         let configuration = RTCConfiguration()
-        // All the connections of a given call should use the same certificate.
-        configuration.certificate = appCallContext.certificate
 
         // Update the configuration with the provided Ice Servers.
         // @todo Validate and if none, set a backup value, don't expect
@@ -1018,16 +1013,10 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             configuration.iceTransportPolicy = .relay
         }
 
-        configuration.enableDtlsSrtp = enableDtls
-        configuration.enableRtpDataChannel = enableRtpDataChannel
+        configuration.enableDtlsSrtp = false
 
         // Create the default media constraints.
-        let constraints: RTCMediaConstraints
-        if enableDtls {
-            constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: ["DtlsSrtpKeyAgreement": "true"])
-        } else {
-            constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-        }
+        let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 
         Logger.debug("Create application connection object...")
         let connection = Connection(pcObserverOwned: pcObserverOwned!,

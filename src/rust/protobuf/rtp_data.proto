@@ -5,9 +5,9 @@
 
 syntax = "proto2";
 
-// Messages sent over the data channel
+// Messages sent over RTP data
 
-package data_channel;
+package rtp_data;
 
 message Accepted {
   optional uint64 id = 1;
@@ -39,7 +39,7 @@ message ReceiverStatus {
   optional uint64 max_bitrate_bps = 2;
 }
 
-message Data {
+message Message {
   optional Accepted       accepted       = 1;
   optional Hangup         hangup         = 2;
   optional SenderStatus   senderStatus   = 3;

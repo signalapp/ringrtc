@@ -20,7 +20,6 @@ use ringrtc::core::group_call;
 use ringrtc::core::signaling;
 use ringrtc::protobuf;
 use ringrtc::webrtc;
-use ringrtc::webrtc::data_channel::DataChannel;
 use ringrtc::webrtc::media::MediaStream;
 
 #[macro_use]
@@ -110,8 +109,7 @@ fn inbound_ice_connecting() {
 //
 // 1. receive an offer
 // 2. ice connected
-// 3. on data channel
-// 4. local accept call
+// 3. local accept call
 //
 // Now in the ConnectedAndAccepted state.
 
@@ -129,25 +127,12 @@ fn connect_inbound_call() -> TestContext {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(
-        active_call.state().expect(error_line!()),
-        CallState::ConnectingBeforeAccepted
-    );
-
-    info!("test: injecting signaling data channel connected");
-    let data_channel = DataChannel::new(webrtc::Arc::null());
-    active_connection
-        .inject_received_signaling_data_channel(data_channel)
-        .expect(error_line!());
-
-    cm.synchronize().expect(error_line!());
-
-    assert_eq!(
         active_connection.state().expect(error_line!()),
         ConnectionState::ConnectedBeforeAccepted
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::ConnectedWithDataChannelBeforeAccepted
+        CallState::ConnectedBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::LocalRinging), 1);
     assert_eq!(context.error_count(), 0);

@@ -297,13 +297,12 @@ RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
 RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
     PeerConnectionObserverRffi* observer_borrowed,
-    rtc::RTCCertificate* certificate_borrowed_rc,
+    // If non-null, enable DTLS.
+    rtc::RTCCertificate* dtls_certificate_borrowed_rc,
     bool hide_ip,
     RffiIceServer ice_server,
     webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
-    webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc,
-    bool enable_dtls,
-    bool enable_rtp_data_channel) {
+    webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc) {
   auto factory = factory_owner_borrowed_rc->peer_connection_factory();
 
   PeerConnectionInterface::RTCConfiguration config;
@@ -313,7 +312,12 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   if (hide_ip) {
     config.type = PeerConnectionInterface::kRelay;
   }
-  config.certificates.push_back(inc_rc(certificate_borrowed_rc));
+  if (dtls_certificate_borrowed_rc) {
+    config.enable_dtls_srtp = true;
+    config.certificates.push_back(inc_rc(dtls_certificate_borrowed_rc));
+  } else {
+    config.enable_dtls_srtp = false;
+  }
   if (ice_server.urls_size > 0) {
     webrtc::PeerConnectionInterface::IceServer rtc_ice_server;
     rtc_ice_server.username = std::string(ice_server.username_borrowed);
@@ -324,8 +328,6 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     config.servers.push_back(rtc_ice_server);
   }
 
-  config.enable_dtls_srtp = enable_dtls;
-  config.enable_rtp_data_channel = enable_rtp_data_channel;
   config.crypto_options = webrtc::CryptoOptions{};
   if (observer_borrowed->enable_frame_encryption()) {
     config.crypto_options->sframe.require_frame_encryption = true;

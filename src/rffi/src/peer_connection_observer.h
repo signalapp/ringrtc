@@ -6,7 +6,6 @@
 #ifndef RFFI_PEER_CONNECTION_OBSERVER_H__
 #define RFFI_PEER_CONNECTION_OBSERVER_H__
 
-#include "api/data_channel_interface.h"
 #include "api/crypto/frame_encryptor_interface.h"
 #include "api/peer_connection_interface.h"
 
@@ -19,7 +18,7 @@
 namespace webrtc {
 namespace rffi {
 
-class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataChannelObserver {
+class PeerConnectionObserverRffi : public PeerConnectionObserver {
  public:
   // Passed-in observer must live at least as long as the PeerConnectionObserverRffi.
   PeerConnectionObserverRffi(void* observer,
@@ -55,7 +54,7 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataCha
       const cricket::CandidatePairChangeEvent& event) override;
   void OnAddStream(rtc::scoped_refptr<MediaStreamInterface> stream) override;
   void OnRemoveStream(rtc::scoped_refptr<MediaStreamInterface> stream) override;
-  void OnDataChannel(rtc::scoped_refptr<DataChannelInterface> channel) override;
+  void OnDataChannel(rtc::scoped_refptr<DataChannelInterface> channel) override {}
   void OnRtpPacket(const RtpPacketReceived& rtp_packet) override;
   void OnRenegotiationNeeded() override;
   void OnAddTrack(rtc::scoped_refptr<RtpReceiverInterface> receiver,
@@ -63,12 +62,6 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver, public DataCha
                       streams) override;
   void OnTrack(
       rtc::scoped_refptr<RtpTransceiverInterface> transceiver) override;
-
-  // Implementation of DataChannelObserver interface, which propagates
-  // the callbacks to the Rust observer.
-  void OnMessage(const DataBuffer& buffer) override;
-  void OnBufferedAmountChange(uint64_t previous_amount) override {}
-  void OnStateChange() override {}
 
  private:
   void* observer_;

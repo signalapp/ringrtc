@@ -217,7 +217,7 @@ fn connect_outbound_call() -> TestContext {
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::ConnectedWithDataChannelBeforeAccepted
+        CallState::ConnectedBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
@@ -232,7 +232,7 @@ fn connect_outbound_call() -> TestContext {
 
     info!("test: injecting accepted");
     active_connection
-        .inject_received_accepted_via_data_channel(active_call.call_id())
+        .inject_received_accepted_via_rtp_data(active_call.call_id())
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -292,7 +292,7 @@ fn outbound_local_hang_up() {
     assert_eq!(context.normal_hangups_sent(), 1);
     assert!(!cm.busy());
 
-    // TODO - verify that the data_channel sent a hangup message
+    // TODO - verify that a hangup message was sent via RTP data
 }
 
 #[test]
@@ -348,7 +348,7 @@ fn outbound_ice_disconnected_before_call_accepted() {
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::ConnectedWithDataChannelBeforeAccepted
+        CallState::ConnectedBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
@@ -394,7 +394,7 @@ fn outbound_call_accepted_with_stale_call_id() {
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::ConnectedWithDataChannelBeforeAccepted
+        CallState::ConnectedBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
@@ -403,7 +403,7 @@ fn outbound_call_accepted_with_stale_call_id() {
     info!("test: injecting stale accepted message");
     let call_id = u64::from(active_call.call_id());
     active_connection
-        .inject_received_accepted_via_data_channel(CallId::new(call_id + 1))
+        .inject_received_accepted_via_rtp_data(CallId::new(call_id + 1))
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -415,7 +415,7 @@ fn outbound_call_accepted_with_stale_call_id() {
     );
     assert_eq!(
         active_call.state().expect(error_line!()),
-        CallState::ConnectedWithDataChannelBeforeAccepted
+        CallState::ConnectedBeforeAccepted
     );
     assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
@@ -477,7 +477,7 @@ fn outbound_call_connected_local_hangup() {
     assert_eq!(context.normal_hangups_sent(), 1);
     assert!(!cm.busy());
 
-    // TODO - verify that the data_channel sent a hangup message
+    // TODO - verify that a hangup message was sent via RTP data
 }
 
 #[test]
@@ -632,7 +632,7 @@ fn update_sender_status() {
     assert_eq!(context.error_count(), 0);
 
     assert_eq!(
-        Some(protobuf::data_channel::SenderStatus {
+        Some(protobuf::rtp_data::SenderStatus {
             id: Some(active_connection.call_id().into()),
             video_enabled: Some(false),
             sharing_screen: None,
@@ -658,7 +658,7 @@ fn update_sender_status() {
     assert_eq!(context.error_count(), 0);
 
     assert_eq!(
-        Some(protobuf::data_channel::SenderStatus {
+        Some(protobuf::rtp_data::SenderStatus {
             id: Some(active_connection.call_id().into()),
             video_enabled: Some(true),
             sharing_screen: Some(true),
@@ -677,7 +677,7 @@ fn update_sender_status() {
     assert_eq!(context.error_count(), 0);
 
     assert_eq!(
-        Some(protobuf::data_channel::SenderStatus {
+        Some(protobuf::rtp_data::SenderStatus {
             id: Some(active_connection.call_id().into()),
             video_enabled: Some(true),
             sharing_screen: Some(false),
@@ -702,7 +702,7 @@ fn update_bandwidth_mode_default() {
     assert_eq!(context.error_count(), 0);
 
     // TODO -- verify that the bitrate was changed
-    // TODO -- verify that the data channel object sent a message
+    // TODO -- verify that the a message was sent via RTP data
 }
 
 #[test]
@@ -721,7 +721,7 @@ fn update_bandwidth_mode_low() {
     assert_eq!(context.error_count(), 0);
 
     // TODO -- verify that the bitrate was changed
-    // TODO -- verify that the data channel object sent a message
+    // TODO -- verify that the a message was sent via RTP data
 }
 
 #[test]
@@ -1142,7 +1142,7 @@ fn received_remote_video_status() {
         let enable = context.prng.gen::<bool>();
 
         active_connection
-            .inject_received_sender_status_via_data_channel(
+            .inject_received_sender_status_via_rtp_data(
                 active_call.call_id(),
                 signaling::SenderStatus {
                     video_enabled: Some(enable),
@@ -1180,7 +1180,7 @@ fn received_remote_video_status() {
 
     // Ignore old ones
     active_connection
-        .inject_received_sender_status_via_data_channel(
+        .inject_received_sender_status_via_rtp_data(
             active_call.call_id(),
             signaling::SenderStatus {
                 video_enabled: Some(true),
@@ -1191,7 +1191,7 @@ fn received_remote_video_status() {
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     active_connection
-        .inject_received_sender_status_via_data_channel(
+        .inject_received_sender_status_via_rtp_data(
             active_call.call_id(),
             signaling::SenderStatus {
                 video_enabled: Some(false),
@@ -1235,7 +1235,7 @@ fn received_remote_sharing_screen_status() {
         let enable = context.prng.gen::<bool>();
 
         active_connection
-            .inject_received_sender_status_via_data_channel(
+            .inject_received_sender_status_via_rtp_data(
                 active_call.call_id(),
                 signaling::SenderStatus {
                     video_enabled: None,
@@ -1267,7 +1267,7 @@ fn received_remote_sharing_screen_status() {
 
     // Ignore old ones
     active_connection
-        .inject_received_sender_status_via_data_channel(
+        .inject_received_sender_status_via_rtp_data(
             active_call.call_id(),
             signaling::SenderStatus {
                 video_enabled: None,
@@ -1278,7 +1278,7 @@ fn received_remote_sharing_screen_status() {
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     active_connection
-        .inject_received_sender_status_via_data_channel(
+        .inject_received_sender_status_via_rtp_data(
             active_call.call_id(),
             signaling::SenderStatus {
                 video_enabled: None,
@@ -1312,7 +1312,7 @@ fn received_remote_multiple_status() {
 
     // Ignore old ones
     active_connection
-        .inject_received_sender_status_via_data_channel(
+        .inject_received_sender_status_via_rtp_data(
             active_call.call_id(),
             signaling::SenderStatus {
                 video_enabled: Some(false),
@@ -1323,7 +1323,7 @@ fn received_remote_multiple_status() {
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     active_connection
-        .inject_received_sender_status_via_data_channel(
+        .inject_received_sender_status_via_rtp_data(
             active_call.call_id(),
             signaling::SenderStatus {
                 video_enabled: Some(true),
@@ -1520,7 +1520,7 @@ fn outbound_multiple_remote_devices() {
         );
         assert_eq!(
             active_call.state().expect(error_line!()),
-            CallState::ConnectedWithDataChannelBeforeAccepted
+            CallState::ConnectedBeforeAccepted
         );
         assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
         assert_eq!(context.error_count(), 0);
@@ -1547,7 +1547,7 @@ fn outbound_multiple_remote_devices() {
         .unwrap()
         .outgoing_audio_enabled(),);
     active_connection
-        .inject_received_accepted_via_data_channel(active_call.call_id())
+        .inject_received_accepted_via_rtp_data(active_call.call_id())
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());

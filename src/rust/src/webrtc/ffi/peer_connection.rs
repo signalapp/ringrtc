@@ -9,7 +9,6 @@ use std::os::raw::c_char;
 
 use crate::webrtc;
 use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
-use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
 use crate::webrtc::media::RffiAudioEncoderConfig;
 use crate::webrtc::network::{RffiIp, RffiIpPort};
 use crate::webrtc::rtp;
@@ -27,16 +26,6 @@ pub struct RffiPeerConnection {
 // See "class PeerConnectionInterface: public rtc::RefCountInterface"
 // in webrtc/api/peer_connection_interface.h
 impl webrtc::RefCounted for RffiPeerConnection {}
-
-/// Incomplete type for C++ DataChannelInterface.
-#[repr(C)]
-pub struct RffiDataChannel {
-    _private: [u8; 0],
-}
-
-// See "class DataChannelInterface: public rtc::RefCountInterface"
-// in webrtc/api/data_channel_interface.h
-impl webrtc::RefCounted for RffiDataChannel {}
 
 extern "C" {
     pub fn Rust_createOffer(
@@ -75,12 +64,6 @@ extern "C" {
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         enabled: bool,
     );
-
-    // The passed-in observer must live as long as the returned value.
-    pub fn Rust_createSignalingDataChannel(
-        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
-        pc_observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
-    ) -> webrtc::ptr::OwnedRc<RffiDataChannel>;
 
     pub fn Rust_addIceCandidateFromSdp(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
