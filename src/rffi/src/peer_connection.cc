@@ -855,6 +855,9 @@ Rust_setSendBitrates(PeerConnectionInterface* peer_connection_borrowed_rc,
     peer_connection_borrowed_rc->SetBitrate(bitrate_settings);
 }
 
+// Warning: this blocks on the WebRTC network thread, so avoid calling it
+// while holding a lock, especially a lock also taken in a callback
+// from the network thread.
 RUSTEXPORT bool
 Rust_sendRtp(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
              uint8_t pt,
@@ -874,6 +877,9 @@ Rust_sendRtp(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
   return peer_connection_borrowed_rc->SendRtp(std::move(packet));
 }
 
+// Warning: this blocks on the WebRTC network thread, so avoid calling it
+// while holding a lock, especially a lock also taken in a callback
+// from the network thread.
 RUSTEXPORT bool
 Rust_receiveRtp(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc, uint8_t pt) {
   return peer_connection_borrowed_rc->ReceiveRtp(pt);

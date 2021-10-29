@@ -503,6 +503,7 @@ pub fn create_group_call_client(
         Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,
+        None,
     )
 }
 

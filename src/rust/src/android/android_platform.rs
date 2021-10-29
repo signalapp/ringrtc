@@ -280,6 +280,7 @@ impl Platform for AndroidPlatform {
             remote_device_id,
             connection_type,
             bandwidth_mode,
+            None, // The app adds sinks to VideoTracks.
         )?;
 
         let connection_ptr = connection.get_connection_ptr()?;

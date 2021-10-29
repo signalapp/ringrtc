@@ -150,6 +150,7 @@ impl Platform for SimPlatform {
             remote_device_id,
             connection_type,
             bandwidth_mode,
+            None,
         )
         .unwrap();
         connection.set_app_connection(fake_pc).unwrap();

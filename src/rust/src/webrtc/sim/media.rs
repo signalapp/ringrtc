@@ -56,14 +56,6 @@ pub unsafe fn Rust_setVideoTrackContentHint(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getFirstVideoTrack(
-    _stream: webrtc::ptr::BorrowedRc<RffiMediaStream>,
-) -> webrtc::ptr::OwnedRc<RffiVideoTrack> {
-    info!("Rust_getFirstVideoTrack()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_TRACK)
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_pushVideoFrame(
     _source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
     _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,

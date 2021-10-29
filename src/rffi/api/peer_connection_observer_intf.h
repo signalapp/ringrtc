@@ -8,6 +8,7 @@
 
 #include "api/peer_connection_interface.h"
 #include "rffi/api/rffi_defs.h"
+#include "rffi/api/media.h"
 #include "rffi/api/network.h"
 #include "rtc_base/network_constants.h"
 
@@ -40,8 +41,12 @@ typedef struct {
   void (*onAddStream)(void* observer_borrowed, webrtc::MediaStreamInterface* stream_owned_rc);
   void (*onAddAudioRtpReceiver)(void* observer_borrowed, webrtc::MediaStreamTrackInterface* track_owned_rc);
   void (*onAddVideoRtpReceiver)(void* observer_borrowed, webrtc::MediaStreamTrackInterface* track_owned_rc);
+  void (*onVideoFrame)(void* observer_borrowed, uint32_t track_id, RffiVideoFrameMetadata metadata, webrtc::VideoFrameBuffer* frame_buffer_borrowed);
 
   // RTP data events
+  // Warning: this runs on the WebRTC network thread, so doing anything that
+  // would block is dangerous, especially taking a lock that is also taken
+  // while calling something that blocks on the network thread.
   void (*onRtpReceived)(void* observer_borrowed, uint8_t, uint16_t, uint32_t, uint32_t, const uint8_t* payload_borrowed, size_t);
 
   // Frame encryption
@@ -54,9 +59,10 @@ typedef struct {
 // Passed-in observer must live at least as long as the PeerConnectionObserverRffi,
 // which is at least as long as the PeerConnection.
 RUSTEXPORT webrtc::rffi::PeerConnectionObserverRffi*
-Rust_createPeerConnectionObserver(void*                                  observer_borrowed,
+Rust_createPeerConnectionObserver(void* observer_borrowed,
                                   const PeerConnectionObserverCallbacks* callbacks_borrowed,
-                                  bool                                   enable_frame_encryption);
+                                  bool enable_frame_encryption,
+                                  bool enable_video_frame_event);
 
 RUSTEXPORT void
 Rust_deletePeerConnectionObserver(webrtc::rffi::PeerConnectionObserverRffi* observer_owned);

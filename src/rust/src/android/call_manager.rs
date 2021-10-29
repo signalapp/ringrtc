@@ -95,8 +95,11 @@ pub fn create_peer_connection(
 
     // native_connection is an un-boxed Connection<AndroidPlatform> on the heap.
     // pass ownership of it to the PeerConnectionObserver.
-    let pc_observer =
-        PeerConnectionObserver::new(native_connection, false /* enable_frame_encryption */)?;
+    let pc_observer = PeerConnectionObserver::new(
+        native_connection,
+        false, /* enable_frame_encryption */
+        false, /* enable_video_frame_event */
+    )?;
 
     // construct JNI OwnedPeerConnection object
     let jni_owned_pc = unsafe {
@@ -671,6 +674,7 @@ pub fn create_group_call_client(
         Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,
+        None,
     )
 }
 

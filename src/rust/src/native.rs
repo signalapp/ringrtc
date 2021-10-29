@@ -32,6 +32,7 @@ pub struct NativeCallContext {
     ice_server: IceServer,
     outgoing_audio_track: AudioTrack,
     outgoing_video_track: VideoTrack,
+    incoming_video_sink: Box<dyn VideoSink>,
 }
 
 impl NativeCallContext {
@@ -40,12 +41,14 @@ impl NativeCallContext {
         ice_server: IceServer,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
+        incoming_video_sink: Box<dyn VideoSink>,
     ) -> Self {
         Self {
             hide_ip,
             ice_server,
             outgoing_audio_track,
             outgoing_video_track,
+            incoming_video_sink,
         }
     }
 }
@@ -223,7 +226,6 @@ pub enum GroupUpdate {
     ConnectionStateChanged(group_call::ClientId, group_call::ConnectionState),
     JoinStateChanged(group_call::ClientId, group_call::JoinState),
     RemoteDeviceStatesChanged(group_call::ClientId, Vec<group_call::RemoteDeviceState>),
-    IncomingVideoTrack(group_call::ClientId, group_call::DemuxId, VideoTrack),
     PeekChanged {
         client_id: group_call::ClientId,
         members: Vec<group_call::UserId>,
@@ -258,7 +260,6 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::ConnectionStateChanged(_, _) => "ConnectionStateChanged".to_string(),
             GroupUpdate::JoinStateChanged(_, _) => "JoinStateChanged".to_string(),
             GroupUpdate::RemoteDeviceStatesChanged(_, _) => "RemoteDeviceStatesChanged".to_string(),
-            GroupUpdate::IncomingVideoTrack(_, _, _) => "IncomingVideoTrack".to_string(),
             GroupUpdate::PeekChanged { .. } => "PeekChanged".to_string(),
             GroupUpdate::PeekResponse { .. } => "PeekResponse".to_string(),
             GroupUpdate::Ended(_, reason) => format!("Ended({:?})", reason),
@@ -285,7 +286,6 @@ pub struct NativePlatform {
     signaling_sender: Box<dyn SignalingSender + Send>,
     should_assume_messages_sent: bool,
     state_handler: Box<dyn CallStateHandler + Send>,
-    incoming_video_sink: Box<dyn VideoSink + Send>,
 
     // Only relevant for group calls
     http_client: Box<dyn HttpClient + Send>,
@@ -299,7 +299,6 @@ impl NativePlatform {
         signaling_sender: Box<dyn SignalingSender + Send>,
         should_assume_messages_sent: bool,
         state_handler: Box<dyn CallStateHandler + Send>,
-        incoming_video_sink: Box<dyn VideoSink + Send>,
 
         http_client: Box<dyn HttpClient + Send>,
         group_handler: Box<dyn GroupUpdateHandler + Send>,
@@ -310,7 +309,6 @@ impl NativePlatform {
             signaling_sender,
             should_assume_messages_sent,
             state_handler,
-            incoming_video_sink,
 
             http_client,
             group_handler,
@@ -396,19 +394,21 @@ impl Platform for NativePlatform {
             call, remote_device_id, signaling_version
         );
 
+        let context = call.call_context()?;
         // Like AndroidPlatform::create_connection
         let connection = Connection::new(
             call.clone(),
             remote_device_id,
             connection_type,
             bandwidth_mode,
+            Some(context.incoming_video_sink),
         )?;
-        let context = call.call_context()?;
 
         // Like android::call_manager::create_peer_connection
         let pc_observer = PeerConnectionObserver::new(
             connection.get_connection_ptr()?,
             false, /* enable_frame_encryption */
+            true,  /* enable_video_frame_event */
         )?;
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,
@@ -436,21 +436,14 @@ impl Platform for NativePlatform {
         &self,
         _remote_peer: &Self::AppRemotePeer,
         _call_context: &Self::AppCallContext,
-        incoming_media: &Self::AppIncomingMedia,
+        _incoming_media: &Self::AppIncomingMedia,
     ) -> Result<()> {
         info!("NativePlatform::connect_incoming_media()");
-        if let Some(incoming_video_track) = incoming_media.first_video_track() {
-            self.incoming_video_sink.set_enabled(true);
-            // Note: this is passing an unsafe reference that must outlive
-            // the VideoTrack/MediaStream.
-            incoming_video_track.add_sink(self.incoming_video_sink.as_ref());
-        }
         Ok(())
     }
 
-    fn disconnect_incoming_media(&self, _app_call_context: &Self::AppCallContext) -> Result<()> {
+    fn disconnect_incoming_media(&self, _call_context: &Self::AppCallContext) -> Result<()> {
         info!("NativePlatform::disconnect_incoming_media()");
-        self.incoming_video_sink.set_enabled(false);
         Ok(())
     }
 
@@ -828,21 +821,12 @@ impl Platform for NativePlatform {
         &self,
         client_id: group_call::ClientId,
         remote_demux_id: group_call::DemuxId,
-        incoming_video_track: VideoTrack,
+        _incoming_video_track: VideoTrack,
     ) {
         info!(
             "NativePlatform::handle_incoming_video_track(): id: {}; remote_demux_id: {}",
             client_id, remote_demux_id
         );
-
-        let result = self.send_group_update(GroupUpdate::IncomingVideoTrack(
-            client_id,
-            remote_demux_id,
-            incoming_video_track,
-        ));
-        if result.is_err() {
-            error!("{:?}", result.err());
-        }
     }
 
     fn handle_peek_changed(

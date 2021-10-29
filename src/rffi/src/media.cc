@@ -15,33 +15,6 @@
 namespace webrtc {
 namespace rffi {
 
-VideoSink::VideoSink(void* obj, VideoSinkCallbacks* cbs)
-  : obj_(obj), cbs_(*cbs) {
-}
-
-VideoSink::~VideoSink() {
-}
-
-void VideoSink::OnFrame(const webrtc::VideoFrame& frame) {
-  RffiVideoFrameMetadata metadata = {};
-  metadata.width = frame.width();
-  metadata.height = frame.height();
-  metadata.rotation = frame.rotation();
-  // We can't keep a reference to the buffer around or it will slow down the video decoder.
-  // This introduces a copy, but only in the case where we aren't rotated,
-  // and it's a copy of i420 and not RGBA (i420 is smaller than RGBA).
-  // TODO: Figure out if we can make the decoder have a larger frame output pool
-  // so that we don't need to do this.
-  auto* buffer_owned_rc = Rust_copyAndRotateVideoFrameBuffer(frame.video_frame_buffer().get(), frame.rotation());
-  // If we rotated the frame, we need to update metadata as well
-  if ((metadata.rotation == kVideoRotation_90) || (metadata.rotation == kVideoRotation_270)) {
-    metadata.width = frame.height();
-    metadata.height = frame.width();
-  }
-  metadata.rotation = kVideoRotation_0;
-  cbs_.onVideoFrame(obj_, metadata, buffer_owned_rc);
-}
-
 VideoSource::VideoSource() : VideoTrackSource(false /* remote */) {
    SetState(kLive);
 }
@@ -73,36 +46,6 @@ RUSTEXPORT void Rust_setVideoTrackEnabled(
 RUSTEXPORT void Rust_setVideoTrackContentHint(
     webrtc::VideoTrackInterface* track_borrowed_rc, bool is_screenshare) {
   track_borrowed_rc->set_content_hint(is_screenshare ? VideoTrackInterface::ContentHint::kText : VideoTrackInterface::ContentHint::kNone);
-}
-
-RUSTEXPORT VideoTrackInterface* Rust_getFirstVideoTrack(MediaStreamInterface* stream) {
-  auto tracks = stream->GetVideoTracks();
-  if (tracks.empty()) {
-    return nullptr;
-  }
-  rtc::scoped_refptr<VideoTrackInterface> first = tracks[0];
-  return take_rc(first);
-}
-
-// Passed-in "obj" must live at least as long as the VideoSink,
-// which likely means as long as the VideoTrack it's attached to,
-// which likely means as long as the PeerConnection.
-RUSTEXPORT void Rust_addVideoSink(
-    webrtc::VideoTrackInterface* track_borrowed_rc,
-    void* obj_borrowed,
-    VideoSinkCallbacks* cbs_borrowed) {
-  auto sink_owned_rc = take_rc(make_ref_counted<VideoSink>(obj_borrowed, cbs_borrowed));
-  // LEAK: This is never decremeted.  We should fix that.
-  auto sink_borrowed = sink_owned_rc;
-
-  rtc::VideoSinkWants wants;
-  // Note: this causes frames to be dropped, not rotated.
-  // So don't set it to true, even if it seems to make sense!
-  wants.rotation_applied = false;
-
-  // The sink gets stored in the track, but never destroys it.
-  // The sink must live as long as the track.
-  track_borrowed_rc->AddOrUpdateSink(sink_borrowed, wants);
 }
 
 RUSTEXPORT void Rust_pushVideoFrame(

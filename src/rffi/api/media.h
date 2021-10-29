@@ -17,27 +17,8 @@ typedef struct {
   webrtc::VideoRotation rotation;
 } RffiVideoFrameMetadata;
 
-typedef struct {
-  // Passes ownership of the buffer
-  void (*onVideoFrame)(void* obj_borrowed, RffiVideoFrameMetadata, webrtc::VideoFrameBuffer* frame_buffer_borrowed);
-} VideoSinkCallbacks;
-
 namespace webrtc {
 namespace rffi {
-
-// A simple implementation of a VideoSinkInterface which be used to attach to a incoming video
-// track for rendering by calling Rust_addVideoSink.
-class VideoSink : public rtc::VideoSinkInterface<webrtc::VideoFrame>, public rtc::RefCountInterface {
- public:
-  VideoSink(void* obj, VideoSinkCallbacks* cbs);
-  ~VideoSink() override;
-
-  void OnFrame(const webrtc::VideoFrame& frame) override;
-
- private:
-  void* obj_;
-  VideoSinkCallbacks cbs_;
-};
 
 // A simple implementation of a VideoTrackSource which can be used for pushing frames into
 // an outgoing video track for encoding by calling Rust_pushVideoFrame.
@@ -76,14 +57,6 @@ RUSTEXPORT void Rust_setVideoTrackContentHint(webrtc::VideoTrackInterface* track
 // Gets the first video track from the stream, or nullptr if there is none.
 RUSTEXPORT webrtc::VideoTrackInterface* Rust_getFistVideoTrack(
     webrtc::MediaStreamInterface* track_borrowed_rc);
-
-// Creates an VideoSink to the given track and attaches it to the track to
-// get frames from C++ to Rust.
-// Passed-in "obj" must live at least as long as the VideoSink,
-// which likely means as long as the VideoTrack,
-// which likely means as long as the PeerConnection.
-RUSTEXPORT void Rust_addVideoSink(
-    webrtc::VideoTrackInterface* track_borrowed_rc, void* obj_borrowed, VideoSinkCallbacks* cbs_borrowed);
 
 // Same as VideoSource::PushVideoFrame, to get frames from Rust to C++.
 RUSTEXPORT void Rust_pushVideoFrame(webrtc::rffi::VideoSource* source_borrowed_rc, webrtc::VideoFrameBuffer* buffer_borrowed_rc);

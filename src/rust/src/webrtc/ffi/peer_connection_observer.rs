@@ -27,6 +27,7 @@ extern "C" {
         pc_observer: webrtc::ptr::Borrowed<std::ffi::c_void>,
         pc_observer_cb: webrtc::ptr::Borrowed<std::ffi::c_void>,
         enable_frame_encryption: bool,
+        enable_video_frame_event: bool,
     ) -> webrtc::ptr::Owned<RffiPeerConnectionObserver>;
 
     pub fn Rust_deletePeerConnectionObserver(

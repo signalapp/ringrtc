@@ -41,7 +41,7 @@ use crate::protobuf;
 
 use crate::webrtc;
 use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::MediaStream;
+use crate::webrtc::media::{MediaStream, VideoFrame, VideoSink};
 use crate::webrtc::peer_connection::{PeerConnection, SendRates};
 use crate::webrtc::peer_connection_observer::{
     IceConnectionState, NetworkRoute, PeerConnectionObserverTrait,
@@ -117,7 +117,6 @@ where
     /// PeerConnection object
     peer_connection: Option<PeerConnection>,
     last_sent_rtp_data_timestamp: rtp::Timestamp,
-    last_received_rtp_data_timestamp: rtp::Timestamp,
     /// Raw pointer to Connection object for PeerConnectionObserver
     connection_ptr: Option<webrtc::ptr::Owned<Connection<T>>>,
     /// Application-specific incoming media
@@ -340,6 +339,11 @@ where
     tick_context: Arc<CallMutex<TickContext>>,
     /// The accumulated state of sending messages over RTP data
     accumulated_rtp_data_message: Arc<CallMutex<protobuf::rtp_data::Message>>,
+    /// We use this to drop out-of-order messages.
+    last_received_rtp_data_timestamp: Arc<CallMutex<rtp::Timestamp>>,
+    // If set, all of the video frames will go here.
+    // This is separate from the observer so it can bypass a thread hop.
+    incoming_video_sink: Option<Box<dyn VideoSink>>,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -422,6 +426,8 @@ where
             connection_type: self.connection_type,
             tick_context: Arc::clone(&self.tick_context),
             accumulated_rtp_data_message: Arc::clone(&self.accumulated_rtp_data_message),
+            last_received_rtp_data_timestamp: Arc::clone(&self.last_received_rtp_data_timestamp),
+            incoming_video_sink: self.incoming_video_sink.clone(),
         }
     }
 }
@@ -437,6 +443,7 @@ where
         remote_device: DeviceId,
         connection_type: ConnectionType,
         bandwidth_mode: BandwidthMode,
+        incoming_video_sink: Option<Box<dyn VideoSink>>,
     ) -> Result<Self> {
         // Create a FSM runtime for this connection.
         let context = Context::new()?;
@@ -448,7 +455,6 @@ where
         let webrtc = WebRtcData {
             peer_connection: None,
             last_sent_rtp_data_timestamp: 0,
-            last_received_rtp_data_timestamp: 0,
             connection_ptr: None,
             incoming_media: None,
             app_connection: None,
@@ -489,6 +495,11 @@ where
                 protobuf::rtp_data::Message::default(),
                 "accumulated_rtp_data_message",
             )),
+            last_received_rtp_data_timestamp: Arc::new(CallMutex::new(
+                0,
+                "last_received_rtp_data_timestamp",
+            )),
+            incoming_video_sink,
         };
 
         connection.init_connection_ptr()?;
@@ -645,6 +656,10 @@ where
             peer_connection.set_outgoing_media_enabled(false);
             // But do start incoming RTP right away so that we can receive the
             // "accepted" message.
+            // Warning: we're holding the lock to webrtc_data while we
+            // block on the WebRTC network thread, so we need to make
+            // sure we don't grab the webrtc_data lock in
+            // handle_rtp_received.
             peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
             peer_connection.set_incoming_media_enabled(true);
 
@@ -781,6 +796,10 @@ where
 
             // No RTP will be processed/received until
             // peer_connection.set_incoming_media_enabled(true).
+            // Warning: we're holding the lock to webrtc_data while we
+            // block on the WebRTC network thread, so we need to make
+            // sure we don't grab the webrtc_data lock in
+            // handle_rtp_received.
             peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
 
             self.apply_bandwidth_mode(peer_connection, &bandwidth_mode)?;
@@ -1327,6 +1346,10 @@ where
             // Plus the above sequence number is too small to be useful.
             timestamp: webrtc_data.last_sent_rtp_data_timestamp,
         };
+        // Warning: we're holding the lock to webrtc_data while we
+        // block on the WebRTC network thread, so we need to make
+        // sure we don't grab the webrtc_data lock in
+        // handle_rtp_received.
         webrtc_data.peer_connection()?.send_rtp(header, &bytes)?;
         Ok(())
     }
@@ -1352,6 +1375,16 @@ where
         );
 
         let call = self.call.lock()?;
+        // When PeerConnection::SetRemoteDescription triggers PeerConnectionObserver::OnAddStream,
+        // the MediaStream is wrapped via create_incoming_media, which does the following on different platforms:
+        // - Android: wraps it in layers of JavaMediaStream/jni::JavaMediaStream.
+        // - iOS: wraps it in layers of IosMediaStream/AppMediaStreamInterface/ConnectionMediaStream/RTCMediaStream.
+        // - Desktop: does no additional wrapping
+        // Later, when the call is accepted, the wrapped media
+        // is passed to connect_incoming_media, which does the following on different platforms:
+        // - iOS: The RTCMediaStream level of wrapping is passed to the app via onConnectMedia, which adds a sink to the first video track.
+        // - Android: The JavaMediaStream level of wrapping is passed to the app via onConnectMedia, which adds a sink to the first video track.
+        // - Desktop: Uses the PeerConnectionObserver for video sinks rather than adding its own.
         let incoming_media = call.create_incoming_media(self, stream)?;
         self.set_incoming_media(incoming_media)
     }
@@ -1419,6 +1452,12 @@ where
 
         // Free up webrtc related resources.
         let mut webrtc = self.webrtc.lock()?;
+
+        // This makes it safe to destroy the stats observer
+        // and the Connection (which is also a PeerConnectionObserver).
+        if let Ok(peer_connection) = webrtc.peer_connection() {
+            peer_connection.close();
+        }
 
         // dispose of the incoming media
         webrtc.incoming_media = None;
@@ -1930,6 +1969,17 @@ where
         self.inject_received_incoming_media(stream)
     }
 
+    fn handle_incoming_video_frame(
+        &mut self,
+        track_id: u32,
+        video_frame: VideoFrame,
+    ) -> Result<()> {
+        if let Some(incoming_video_sink) = self.incoming_video_sink.as_ref() {
+            incoming_video_sink.on_video_frame(track_id, video_frame)
+        }
+        Ok(())
+    }
+
     fn handle_rtp_received(&mut self, header: rtp::Header, payload: &[u8]) {
         let data = match (header.pt, header.ssrc) {
             // Old clients send with 4 bytes of reserved data.
@@ -1947,11 +1997,22 @@ where
                 return;
             }
         };
-        let mut webrtc = self.webrtc.lock().expect("Lock WebRTC");
-        if header.timestamp > webrtc.last_received_rtp_data_timestamp {
-            webrtc.last_received_rtp_data_timestamp = header.timestamp;
-            drop(webrtc);
-            self.inject_received_via_rtp_data(data)
+        // Warning: normally you wouldn't want to take a lock while being
+        // called by the WebRTC network thread, but this lock
+        // is only taken here and nowhere else, and no other locks
+        // are taken so we can't get into a deadlock.
+        let mut last_received_rtp_data_timestamp = self
+            .last_received_rtp_data_timestamp
+            .lock()
+            .expect("Lock last_recived_rtp_data_timestamp");
+
+        // We allow equal timestamps because old clients send
+        // multiple messages with the same timestamp.
+        // This shouldn't be a problem in practice.
+        if header.timestamp >= *last_received_rtp_data_timestamp {
+            *last_received_rtp_data_timestamp = header.timestamp;
+            drop(last_received_rtp_data_timestamp);
+            self.inject_received_via_rtp_data(data);
         }
     }
 }

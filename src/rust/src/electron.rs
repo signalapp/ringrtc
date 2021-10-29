@@ -269,54 +269,6 @@ impl GroupUpdateHandler for EventReporter {
     }
 }
 
-#[derive(Clone)]
-pub struct OneFrameBuffer {
-    state: Arc<Mutex<OneFrameBufferState>>,
-}
-
-struct OneFrameBufferState {
-    enabled: bool,
-    frame: Option<VideoFrame>,
-}
-
-impl VideoSink for OneFrameBuffer {
-    fn set_enabled(&self, enabled: bool) {
-        if let Ok(mut state) = self.state.lock() {
-            state.enabled = enabled;
-            if !enabled {
-                state.frame = None;
-            }
-        }
-    }
-
-    fn on_video_frame(&self, frame: VideoFrame) {
-        if let Ok(mut state) = self.state.lock() {
-            if state.enabled {
-                state.frame = Some(frame);
-            }
-        }
-    }
-}
-
-impl OneFrameBuffer {
-    fn new(enabled: bool) -> Self {
-        Self {
-            state: Arc::new(Mutex::new(OneFrameBufferState {
-                enabled,
-                frame: None,
-            })),
-        }
-    }
-
-    fn pop(&self) -> Option<VideoFrame> {
-        if let Ok(mut state) = self.state.lock() {
-            state.frame.take()
-        } else {
-            None
-        }
-    }
-}
-
 pub struct CallEndpoint {
     call_manager: CallManager<NativePlatform>,
 
@@ -329,11 +281,8 @@ pub struct CallEndpoint {
     // We only keep this around so we can pass it to PeerConnectionFactory::create_peer_connection
     // via the NativeCallContext.
     outgoing_video_track: VideoTrack,
-    // Pulled out by receiveVideoFrame for direct/1:1 calls
-    incoming_video_buffer: OneFrameBuffer,
-    // Pulled out by receiveGroupCalLVideoFrame for group calls
-    incoming_video_buffer_by_remote_demux_id:
-        HashMap<(group_call::ClientId, group_call::DemuxId), Box<OneFrameBuffer>>,
+    // Boxed so we can pass it as a Box<dyn VideoSink>
+    incoming_video_sink: Box<LastFramesVideoSink>,
 
     peer_connection_factory: PeerConnectionFactory,
 
@@ -363,6 +312,7 @@ impl CallEndpoint {
         let outgoing_video_track =
             peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
         outgoing_video_track.set_enabled(false);
+        let incoming_video_sink = Box::new(LastFramesVideoSink::default());
 
         let event_reported = Arc::new(AtomicBool::new(false));
         let js_object = Arc::new(Root::new(cx, &*js_object));
@@ -412,20 +362,16 @@ impl CallEndpoint {
         let signaling_sender = Box::new(event_reporter.clone());
         let should_assume_messages_sent = false; // Use async notification from app to send next message.
         let state_handler = Box::new(event_reporter.clone());
-        let incoming_video_buffer = OneFrameBuffer::new(false /* enabled */);
-        let incoming_video_sink = Box::new(incoming_video_buffer.clone());
 
         // Only relevant for group calls
         let http_client = Box::new(event_reporter.clone());
         let group_handler = Box::new(event_reporter);
-        let incoming_video_buffer_by_remote_demux_id = HashMap::new();
 
         let platform = NativePlatform::new(
             peer_connection_factory.clone(),
             signaling_sender,
             should_assume_messages_sent,
             state_handler,
-            incoming_video_sink,
             http_client,
             group_handler,
         );
@@ -437,11 +383,41 @@ impl CallEndpoint {
             outgoing_audio_track,
             outgoing_video_source,
             outgoing_video_track,
-            incoming_video_buffer,
-            incoming_video_buffer_by_remote_demux_id,
+            incoming_video_sink,
             peer_connection_factory,
             js_object,
         })
+    }
+}
+
+#[derive(Clone, Default)]
+struct LastFramesVideoSink {
+    last_frame_by_track_id: Arc<Mutex<HashMap<u32, VideoFrame>>>,
+}
+
+impl VideoSink for LastFramesVideoSink {
+    fn on_video_frame(&self, track_id: u32, frame: VideoFrame) {
+        self.last_frame_by_track_id
+            .lock()
+            .unwrap()
+            .insert(track_id, frame);
+    }
+
+    fn box_clone(&self) -> Box<dyn VideoSink> {
+        Box::new(self.clone())
+    }
+}
+
+impl LastFramesVideoSink {
+    fn pop(&self, track_id: u32) -> Option<VideoFrame> {
+        self.last_frame_by_track_id
+            .lock()
+            .unwrap()
+            .remove(&track_id)
+    }
+
+    fn clear(&self) {
+        self.last_frame_by_track_id.lock().unwrap().clear();
     }
 }
 
@@ -657,6 +633,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
             ice_server,
             endpoint.outgoing_audio_track.clone(),
             endpoint.outgoing_video_track.clone(),
+            endpoint.incoming_video_sink.clone(),
         );
         endpoint.outgoing_video_track.set_content_hint(false);
         endpoint.call_manager.proceed(
@@ -1075,7 +1052,7 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let rgba_buffer = cx.argument::<JsBuffer>(0)?;
-    let frame = with_call_endpoint(&mut cx, |endpoint| endpoint.incoming_video_buffer.pop());
+    let frame = with_call_endpoint(&mut cx, |endpoint| endpoint.incoming_video_sink.pop(0));
     if let Some(frame) = frame {
         let frame = frame.apply_rotation();
         cx.borrow(&rgba_buffer, |handle| {
@@ -1096,19 +1073,12 @@ fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let _client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let remote_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as group_call::DemuxId;
     let rgba_buffer = cx.argument::<JsBuffer>(2)?;
 
     let frame = with_call_endpoint(&mut cx, |endpoint| {
-        if let Some(video_buffer) = endpoint
-            .incoming_video_buffer_by_remote_demux_id
-            .get(&(client_id, remote_demux_id))
-        {
-            video_buffer.pop()
-        } else {
-            None
-        }
+        endpoint.incoming_video_sink.pop(remote_demux_id)
     });
 
     if let Some(frame) = frame {
@@ -1144,12 +1114,14 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
         let peer_connection_factory = endpoint.peer_connection_factory.clone();
         let outgoing_audio_track = endpoint.outgoing_audio_track.clone();
         let outgoing_video_track = endpoint.outgoing_video_track.clone();
+        let incoming_video_sink = endpoint.incoming_video_sink.clone();
         let result = endpoint.call_manager.create_group_call_client(
             group_id,
             sfu_url,
             Some(peer_connection_factory),
             outgoing_audio_track,
             outgoing_video_track,
+            Some(incoming_video_sink),
         );
         if let Ok(v) = result {
             client_id = v;
@@ -1789,6 +1761,9 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
                     EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
                 };
+                with_call_endpoint(&mut cx, |endpoint| {
+                    endpoint.incoming_video_sink.clear();
+                });
                 let age = match reason {
                     EndReason::ReceivedOfferExpired { age } => age,
                     _ => Duration::ZERO,
@@ -2095,27 +2070,6 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::GroupUpdate(GroupUpdate::IncomingVideoTrack(
-                client_id,
-                remote_demux_id,
-                incoming_video_track,
-            )) => {
-                with_call_endpoint(&mut cx, |endpoint| {
-                    // Warning: this needs to be boxed.  Otherwise, the reference won't work.
-                    // TODO: Use the type system to protect against this kind of mistake.
-                    let incoming_video_sink =
-                        Box::new(OneFrameBuffer::new(true /* enabled */));
-                    // TODO: Remove from the map when remote devices no longer have the given demux ID.
-                    // It's not a big deal until lots of people leave a group call, which is probably unusual.
-                    incoming_video_track.add_sink(incoming_video_sink.as_ref());
-                    endpoint
-                        .incoming_video_buffer_by_remote_demux_id
-                        .insert((client_id, remote_demux_id), incoming_video_sink);
-                    Ok(())
-                })
-                .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
-            }
-
             Event::GroupUpdate(GroupUpdate::PeekChanged {
                 client_id,
                 members,
@@ -2226,10 +2180,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.number(reason as i32).upcast(),
                 ];
                 with_call_endpoint(&mut cx, |endpoint| {
-                    let ended_client_id = client_id;
-                    endpoint.incoming_video_buffer_by_remote_demux_id.retain(
-                        |(client_id, _remote_demux_id), _buffer| *client_id != ended_client_id,
-                    );
+                    endpoint.incoming_video_sink.clear();
                     Ok(())
                 })
                 .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;

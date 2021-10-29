@@ -36,7 +36,7 @@ use crate::core::util::{uuid_to_string, TaskQueueRuntime};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::protobuf;
-use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
+use crate::webrtc::media::{AudioTrack, MediaStream, VideoSink, VideoTrack};
 use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
@@ -2598,6 +2598,7 @@ where
         peer_connection_factory: Option<PeerConnectionFactory>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
+        incoming_video_sink: Option<Box<dyn VideoSink>>,
     ) -> Result<group_call::ClientId> {
         info!("create_group_call_client():");
         debug!(
@@ -2631,6 +2632,7 @@ where
             peer_connection_factory,
             outgoing_audio_track,
             Some(outgoing_video_track),
+            incoming_video_sink,
             ring_id,
         )?;
 

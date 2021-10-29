@@ -26,7 +26,7 @@ use ringrtc::{
     },
     protobuf,
     webrtc::{
-        media::{VideoFrame, VideoFrameMetadata, VideoSink as VideoSinkTrait, VideoTrack},
+        media::{VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack},
         peer_connection_factory::PeerConnectionFactory,
     },
 };
@@ -115,20 +115,7 @@ impl rustls::ServerCertVerifier for ServerCertVerifier {
 #[derive(Clone, Default)]
 struct Observer {
     remote_devices: Arc<Mutex<Vec<group_call::RemoteDeviceState>>>,
-    video_sink_by_demux_id: Arc<Mutex<HashMap<DemuxId, VideoSink>>>,
-}
-
-#[derive(Clone, Default)]
-struct VideoSink {
-    last_frame_metadata: Arc<Mutex<Option<VideoFrameMetadata>>>,
-}
-
-impl VideoSinkTrait for VideoSink {
-    fn set_enabled(&self, _enabled: bool) {}
-
-    fn on_video_frame(&self, frame: VideoFrame) {
-        *self.last_frame_metadata.lock().unwrap() = Some(frame.metadata());
-    }
+    last_frame_metadata_by_track_id: Arc<Mutex<HashMap<u32, VideoFrameMetadata>>>,
 }
 
 impl group_call::Observer for Observer {
@@ -193,13 +180,6 @@ impl group_call::Observer for Observer {
         _incoming_video_track: VideoTrack,
     ) {
         info!("Got a video track for {}", sender_demux_id);
-        let video_sink = VideoSink::default();
-        // TODO: Figure out why this causes crashing.
-        // incoming_video_track.add_sink(&video_sink);
-        self.video_sink_by_demux_id
-            .lock()
-            .unwrap()
-            .insert(sender_demux_id, video_sink);
     }
 
     fn handle_ended(&self, _client_id: ClientId, reason: EndReason) {
@@ -221,6 +201,19 @@ impl group_call::Observer for Observer {
         _network_route: ringrtc::webrtc::peer_connection_observer::NetworkRoute,
     ) {
         // ignore
+    }
+}
+
+impl VideoSink for Observer {
+    fn on_video_frame(&self, track_id: u32, frame: VideoFrame) {
+        self.last_frame_metadata_by_track_id
+            .lock()
+            .unwrap()
+            .insert(track_id, frame.metadata());
+    }
+
+    fn box_clone(&self) -> Box<dyn VideoSink> {
+        Box::new(self.clone())
     }
 }
 
@@ -287,6 +280,7 @@ fn main() {
         None,
         outgoing_audio_track,
         Some(outgoing_video_track.clone()),
+        Some(Box::new(observer.clone())),
         None,
     )
     .unwrap();
@@ -335,14 +329,19 @@ fn main() {
         info!("Requests: {:?}", requests);
         info!(
             "Current videos: {}",
-            observer.video_sink_by_demux_id.lock().unwrap().len()
+            observer
+                .last_frame_metadata_by_track_id
+                .lock()
+                .unwrap()
+                .len()
         );
-        for (sender_demux_id, sink) in observer.video_sink_by_demux_id.lock().unwrap().iter() {
-            info!(
-                "  {} {:?}",
-                sender_demux_id,
-                sink.last_frame_metadata.lock().unwrap()
-            );
+        for (track_id, metadata) in observer
+            .last_frame_metadata_by_track_id
+            .lock()
+            .unwrap()
+            .iter()
+        {
+            info!("  {} {:?}", track_id, metadata);
         }
         client.request_video(requests);
         std::thread::sleep(std::time::Duration::from_secs(10));

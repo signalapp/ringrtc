@@ -259,6 +259,9 @@ impl PeerConnection {
         Ok(())
     }
 
+    // Warning: this blocks on the WebRTC network thread, so avoid calling it
+    // while holding a lock, especially a lock also taken in a callback
+    // from the network thread.
     pub fn send_rtp(&self, header: rtp::Header, payload: &[u8]) -> Result<()> {
         let rtp::Header {
             pt,
@@ -286,6 +289,9 @@ impl PeerConnection {
 
     // Must be called after either SetLocalDescription or SetRemoteDescription.
     // Received RTP with the matching PT will be sent to PeerConnectionObserver::handle_rtp_received.
+    // Warning: this blocks on the WebRTC network thread, so avoid calling it
+    // while holding a lock, especially a lock also taken in a callback
+    // from the network thread.
     pub fn receive_rtp(&self, pt: rtp::PayloadType) -> Result<()> {
         let ok = unsafe { pc::Rust_receiveRtp(self.rffi.as_borrowed(), pt) };
         if ok {

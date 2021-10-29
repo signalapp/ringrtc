@@ -13,7 +13,7 @@ use crate::webrtc::ffi::media;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::media;
 
-pub use media::{RffiAudioTrack, RffiMediaStream, RffiVideoTrack};
+pub use media::{RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer, RffiVideoTrack};
 
 /// Rust wrapper around WebRTC C++ MediaStream object.
 #[derive(Clone, Debug)]
@@ -35,17 +35,6 @@ impl MediaStream {
 
     pub fn into_owned(self) -> webrtc::ptr::OwnedRc<media::RffiMediaStream> {
         self.rffi.into_owned()
-    }
-
-    pub fn first_video_track(&self) -> Option<VideoTrack> {
-        let track_rffi = webrtc::Arc::from_owned(unsafe {
-            media::Rust_getFirstVideoTrack(self.rffi.as_borrowed())
-        });
-        if track_rffi.is_null() {
-            return None;
-        }
-        // TODO: Figure out a way to pass in a PeerConnection as an owner.
-        Some(VideoTrack::new(track_rffi, None))
     }
 }
 
@@ -263,65 +252,21 @@ impl VideoTrack {
             Some(id)
         }
     }
-
-    #[cfg(feature = "native")]
-    pub fn add_sink(&self, sink: &dyn VideoSink) {
-        let sink_ptr = Box::into_raw(Box::new(RffiVideoSink { sink }));
-        let cbs_ptr = &VideoSinkCallbacks {
-            onVideoFrame: video_sink_OnVideoFrame,
-        };
-        unsafe {
-            media::Rust_addVideoSink(
-                self.rffi.as_borrowed(),
-                webrtc::ptr::Borrowed::from_ptr(sink_ptr).to_void(),
-                webrtc::ptr::Borrowed::from_ptr(cbs_ptr).to_void(),
-            );
-        }
-    }
 }
 
-pub trait VideoSink {
-    // If not enabled, ignore new frames and clear old frames.
-    fn set_enabled(&self, enabled: bool);
+// You could have a non-Sync, non-Send VideoSink, but
+// it's more convenient put those traits here than anywhere else.
+pub trait VideoSink: Sync + Send {
     // Warning: this video frame's output buffer is shared with a video decoder,
     // and so must quickly be dropped (by copying it and dropping the original)
     // or the video decoder will soon stall and video will be choppy.
-    fn on_video_frame(&self, frame: VideoFrame);
+    fn on_video_frame(&self, track_id: u32, frame: VideoFrame);
+    fn box_clone(&self) -> Box<dyn VideoSink>;
 }
 
-// Since dyn pointers aren't safe to send over FFI (they are double-sized fat pointers),
-// we have to wrap them in something that can have a normal pointer.
-#[cfg(feature = "native")]
-struct RffiVideoSink<'sink> {
-    sink: &'sink dyn VideoSink,
-}
-
-#[cfg(feature = "native")]
-#[repr(C)]
-#[allow(non_snake_case)]
-pub struct VideoSinkCallbacks {
-    onVideoFrame: extern "C" fn(
-        webrtc::ptr::Borrowed<RffiVideoSink>,
-        VideoFrameMetadata,
-        webrtc::ptr::OwnedRc<media::RffiVideoFrameBuffer>,
-    ),
-}
-
-#[cfg(feature = "native")]
-#[allow(non_snake_case)]
-extern "C" fn video_sink_OnVideoFrame(
-    rffi_sink: webrtc::ptr::Borrowed<RffiVideoSink>,
-    metadata: VideoFrameMetadata,
-    rffi_buffer: webrtc::ptr::OwnedRc<media::RffiVideoFrameBuffer>,
-) {
-    // Safe because the sink should still be alive (it was just passed to us)
-    if let Some(rffi_sink) = unsafe { rffi_sink.as_mut() } {
-        rffi_sink.sink.on_video_frame(VideoFrame::from_buffer(
-            metadata,
-            webrtc::Arc::from_owned(rffi_buffer),
-        ));
-    } else {
-        error!("video_sink_OnVideoFrame called with null sink");
+impl Clone for Box<dyn VideoSink> {
+    fn clone(&self) -> Self {
+        self.box_clone()
     }
 }
 

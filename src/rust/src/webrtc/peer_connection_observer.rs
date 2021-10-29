@@ -17,8 +17,10 @@ use crate::common::{Result, RingBench};
 use crate::core::signaling;
 use crate::error::RingRtcError;
 use crate::webrtc;
-use crate::webrtc::media::{AudioTrack, MediaStream, VideoTrack};
-use crate::webrtc::media::{RffiAudioTrack, RffiMediaStream, RffiVideoTrack};
+use crate::webrtc::media::{
+    AudioTrack, MediaStream, RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer, RffiVideoTrack,
+    VideoFrame, VideoFrameMetadata, VideoTrack,
+};
 use crate::webrtc::network::RffiIpPort;
 use crate::webrtc::rtp;
 
@@ -117,8 +119,18 @@ pub trait PeerConnectionObserverTrait {
     fn handle_incoming_video_added(&mut self, _incoming_track: VideoTrack) -> Result<()> {
         Ok(())
     }
+    fn handle_incoming_video_frame(
+        &mut self,
+        _track_id: u32,
+        _video_frame: VideoFrame,
+    ) -> Result<()> {
+        Ok(())
+    }
 
     // RTP data events
+    // Warning: this runs on the WebRTC network thread, so doing anything that
+    // would block is dangerous, especially taking a lock that is also taken
+    // while calling something that blocks on the network thread.
     fn handle_rtp_received(&mut self, header: rtp::Header, data: &[u8]);
 
     // Frame encryption
@@ -358,6 +370,29 @@ extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
     }
 }
 
+/// PeerConnectionObserver OnVideoFrame() callback for video frames.
+#[allow(non_snake_case)]
+extern "C" fn pc_observer_OnVideoFrame<T>(
+    observer: webrtc::ptr::Borrowed<T>,
+    track_id: u32,
+    metadata: VideoFrameMetadata,
+    rffi_buffer: webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>,
+) where
+    T: PeerConnectionObserverTrait,
+{
+    // Safe because the observer should still be alive (it was just passed to us)
+    if let Some(observer) = unsafe { observer.as_mut() } {
+        debug!("pc_observer_OnVideoFrame(): track_id: {}", track_id,);
+        // TODO: Figure out how to pass in a PeerConnection as an owner.
+        let frame = VideoFrame::from_buffer(metadata, webrtc::Arc::from_owned(rffi_buffer));
+        observer
+            .handle_incoming_video_frame(track_id, frame)
+            .unwrap_or_else(|e| error!("Problems handling incoming video frame: {}", e));
+    } else {
+        error!("pc_observer_OnVideoFrame called with null observer");
+    }
+}
+
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnRtpReceived<T>(
     observer: webrtc::ptr::Borrowed<T>,
@@ -550,6 +585,12 @@ where
         extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiAudioTrack>),
     onAddVideoRtpReceiver:
         extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiVideoTrack>),
+    onVideoFrame: extern "C" fn(
+        webrtc::ptr::Borrowed<T>,
+        track_id: u32,
+        VideoFrameMetadata,
+        webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>,
+    ),
 
     // RTP data events
     onRtpReceived: extern "C" fn(
@@ -616,8 +657,11 @@ where
     /// Creates a new WebRTC C++ PeerConnectionObserver object,
     /// registering the observer callbacks to this module, and wraps
     /// the result in a Rust PeerConnectionObserver object.
-
-    pub fn new(observer: webrtc::ptr::Borrowed<T>, enable_frame_encryption: bool) -> Result<Self> {
+    pub fn new(
+        observer: webrtc::ptr::Borrowed<T>,
+        enable_frame_encryption: bool,
+        enable_video_frame_event: bool,
+    ) -> Result<Self> {
         debug!(
             "create_pc_observer(): observer_ptr: {:p}",
             observer.as_ptr()
@@ -631,9 +675,16 @@ where
             onIceNetworkRouteChange: pc_observer_OnIceNetworkRouteChange::<T>,
 
             // Media events
+            // Triggered by PeerConnection::SetRemoteDescription when audio or video tracks are added.
+            // Used for 1:1 calls.
             onAddStream: pc_observer_OnAddStream::<T>,
+            // Triggered by PeerConnection::SetRemoteDescription when audio or video tracks are added.
+            // Used for group calls.
             onAddAudioRtpReceiver: pc_observer_OnAddAudioRtpReceiver::<T>,
+            // Triggered by PeerConnection::SetRemoteDescription when audio or video tracks are added.
+            // Used for group calls.
             onAddVideoRtpReceiver: pc_observer_OnAddVideoRtpReceiver::<T>,
+            onVideoFrame: pc_observer_OnVideoFrame::<T>,
 
             // RTP data events
             onRtpReceived: pc_observer_OnRtpReceived::<T>,
@@ -651,6 +702,7 @@ where
                 observer.to_void(),
                 webrtc::ptr::Borrowed::from_ptr(pc_observer_callbacks_ptr).to_void(),
                 enable_frame_encryption,
+                enable_video_frame_event,
             )
         });
 

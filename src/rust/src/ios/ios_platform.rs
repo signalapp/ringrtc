@@ -107,14 +107,18 @@ impl Platform for IosPlatform {
             remote_device_id,
             connection_type,
             bandwidth_mode,
+            None, // The app adds sinks to VideoTracks.
         )?;
 
         let connection_ptr = connection.get_connection_ptr()?;
 
         // Get the observer because we will need it when creating the
         // PeerConnection in Swift.
-        let pc_observer =
-            PeerConnectionObserver::new(connection_ptr, false /* enable_frame_encryption */)?;
+        let pc_observer = PeerConnectionObserver::new(
+            connection_ptr,
+            false, /* enable_frame_encryption */
+            false, /* enable_video_frame_event */
+        )?;
 
         let app_connection_interface = (self.app_interface.onCreateConnectionInterface)(
             self.app_interface.object,

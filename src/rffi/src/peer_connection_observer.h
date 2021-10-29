@@ -7,6 +7,7 @@
 #define RFFI_PEER_CONNECTION_OBSERVER_H__
 
 #include "api/crypto/frame_encryptor_interface.h"
+#include "api/media_stream_interface.h"
 #include "api/peer_connection_interface.h"
 
 /**
@@ -18,12 +19,15 @@
 namespace webrtc {
 namespace rffi {
 
+class VideoSink;
+
 class PeerConnectionObserverRffi : public PeerConnectionObserver {
  public:
   // Passed-in observer must live at least as long as the PeerConnectionObserverRffi.
   PeerConnectionObserverRffi(void* observer,
                              const PeerConnectionObserverCallbacks* callbacks,
-                             bool enable_frame_encryption);
+                             bool enable_frame_encryption,
+                             bool enable_video_frame_event);
   ~PeerConnectionObserverRffi() override;
 
   // If enabled, the PeerConnection will be configured to encrypt and decrypt
@@ -63,11 +67,36 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver {
   void OnTrack(
       rtc::scoped_refptr<RtpTransceiverInterface> transceiver) override;
 
+  // Called by the VideoSinks in video_sinks_.
+  void OnVideoFrame(uint32_t track_id, const webrtc::VideoFrame& frame);
+
  private:
+  // Add a VideoSink to the video_sinks_ for ownership and pass
+  // a borrowed pointer to the track.
+  void AddVideoSink(VideoTrackInterface* track);
+
   void* observer_;
   PeerConnectionObserverCallbacks callbacks_;
   bool enable_frame_encryption_ = false;
+  bool enable_video_frame_event_ = false;
+  std::vector<std::unique_ptr<VideoSink>> video_sinks_;
 };
+
+// A simple implementation of a VideoSinkInterface which passes video frames
+// back to the PeerConnectionObserver with a track_id.
+class VideoSink : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
+ public:
+  VideoSink(uint32_t track_id, PeerConnectionObserverRffi*);
+  ~VideoSink() override = default;
+
+  void OnFrame(const webrtc::VideoFrame& frame) override;
+
+ private:
+  uint32_t track_id_;
+  PeerConnectionObserverRffi* pc_observer_;
+};
+
+
 
 } // namespace rffi
 } // namespace webrtc

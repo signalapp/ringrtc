@@ -33,7 +33,7 @@ use crate::{
     protobuf,
     webrtc::{
         self,
-        media::{AudioTrack, VideoTrack},
+        media::{AudioTrack, VideoFrame, VideoSink, VideoTrack},
         peer_connection::{PeerConnection, SendRates},
         peer_connection_factory::{self as pcf, Certificate, IceServer, PeerConnectionFactory},
         peer_connection_observer::{
@@ -766,6 +766,8 @@ impl Client {
         peer_connection_factory: Option<PeerConnectionFactory>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
+        // This is separate from the observer so it can bypass a thread hop.
+        incoming_video_sink: Option<Box<dyn VideoSink>>,
         ring_id: Option<RingId>,
     ) -> Result<Self> {
         debug!("group_call::Client(outer)::new(client_id: {})", client_id);
@@ -802,7 +804,7 @@ impl Client {
                 })?;
 
                 let (peer_connection_observer_impl, peer_connection_observer) =
-                    PeerConnectionObserverImpl::uninitialized()?;
+                    PeerConnectionObserverImpl::uninitialized(incoming_video_sink)?;
                 // WebRTC uses alphanumeric plus + and /, which is just barely a superset of this,
                 // but we can't uses dashes due to the sfu.
                 let local_ice_ufrag = random_alphanumeric(4);
@@ -2834,14 +2836,22 @@ fn encode_proto(msg: impl prost::Message) -> Result<BytesMut> {
 // more convenient (fewer "if let Some(x) = x" to do).
 struct PeerConnectionObserverImpl {
     client: Option<Client>,
+    incoming_video_sink: Option<Box<dyn VideoSink>>,
 }
 
 impl PeerConnectionObserverImpl {
-    fn uninitialized() -> Result<(Box<Self>, PeerConnectionObserver<Self>)> {
-        let boxed_observer_impl = Box::new(Self { client: None });
+    fn uninitialized(
+        incoming_video_sink: Option<Box<dyn VideoSink>>,
+    ) -> Result<(Box<Self>, PeerConnectionObserver<Self>)> {
+        let enable_video_frame_event = incoming_video_sink.is_some();
+        let boxed_observer_impl = Box::new(Self {
+            client: None,
+            incoming_video_sink,
+        });
         let observer = PeerConnectionObserver::new(
             webrtc::ptr::Borrowed::from_ptr(&*boxed_observer_impl),
             true, /* enable_frame_encryption */
+            enable_video_frame_event,
         )?;
         Ok((boxed_observer_impl, observer))
     }
@@ -2959,6 +2969,12 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                 );
 
                 if let Some(remote_demux_id) = incoming_video_track.id() {
+                    // When PeerConnection::SetRemoteDescription triggers PeerConnectionObserver::OnAddTrack,
+                    // if it's a VideoTrack, this is where it comes.  Each platform does different things:
+                    // - iOS: The VideoTrack is wrapped in an RTCVideoTrack and passed to the app
+                    //        via handleIncomingVideoTrack and onRemoteDeviceStatesChanged, which adds a sink.
+                    // - Android: The VideoTrack is wrapped in a Java VideoTrack and passed to the app via handleIncomingVideoTrack, which adds a sink.
+                    // - Desktop: A VideoSink is added by the PeerConnectionObserverRffi.
                     state.observer.handle_incoming_video_track(
                         state.client_id,
                         remote_demux_id,
@@ -2970,6 +2986,17 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
             });
         } else {
             warn!("Call isn't setup yet!");
+        }
+        Ok(())
+    }
+
+    fn handle_incoming_video_frame(
+        &mut self,
+        track_id: u32,
+        video_frame: VideoFrame,
+    ) -> Result<()> {
+        if let Some(incoming_video_sink) = self.incoming_video_sink.as_ref() {
+            incoming_video_sink.on_video_frame(track_id, video_frame)
         }
         Ok(())
     }
@@ -3553,6 +3580,7 @@ mod tests {
                 fake_self_uuid,
                 None,
                 fake_audio_track,
+                None,
                 None,
                 None,
             )

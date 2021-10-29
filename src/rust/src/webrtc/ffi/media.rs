@@ -70,16 +70,6 @@ extern "C" {
         track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
         is_screenshare: bool,
     );
-    pub fn Rust_getFirstVideoTrack(
-        stream: webrtc::ptr::BorrowedRc<RffiMediaStream>,
-    ) -> webrtc::ptr::OwnedRc<RffiVideoTrack>;
-    // The "obj" must outlive the VideoTrack (or the PeerConnection from which it came).
-    #[cfg(feature = "native")]
-    pub fn Rust_addVideoSink(
-        track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
-        obj: webrtc::ptr::Borrowed<std::ffi::c_void>,
-        cb: webrtc::ptr::Borrowed<std::ffi::c_void>,
-    );
     pub fn Rust_pushVideoFrame(
         source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,

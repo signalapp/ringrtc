@@ -251,6 +251,7 @@ impl TestContext {
             None,
             ringrtc::webrtc::media::AudioTrack::new(webrtc::Arc::null(), None),
             ringrtc::webrtc::media::VideoTrack::new(webrtc::Arc::null(), None),
+            None,
         )
     }
 }
