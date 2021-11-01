@@ -60,6 +60,7 @@ public final class GroupCall {
     @Nullable private AudioTrack                         outgoingAudioTrack;
     @Nullable private VideoSource                        outgoingVideoSource;
     @Nullable private VideoTrack                         outgoingVideoTrack;
+    @NonNull  private ArrayList<VideoTrack>              incomingVideoTracks;
 
     /*
      * Creates a GroupCall object. If successful, all supporting objects
@@ -117,6 +118,8 @@ public final class GroupCall {
         // Define maximum output video format for group calls.
         this.outgoingVideoSource.adaptOutputFormat(640, 360, 30);
 
+        this.incomingVideoTracks = new ArrayList<>();
+
         try {
             this.clientId = ringrtcCreateGroupCallClient(
                 nativeCallManager,
@@ -155,6 +158,10 @@ public final class GroupCall {
         if (this.outgoingVideoTrack != null) {
             this.outgoingVideoTrack.dispose();
             this.outgoingVideoTrack = null;
+        }
+
+        for (VideoTrack incomingTrack : incomingVideoTracks) {
+            incomingTrack.dispose();
         }
     }
 
@@ -558,11 +565,11 @@ public final class GroupCall {
      * rendered for a specific member (by demuxId). Called via the CallManager.
      *
      */
-    void handleIncomingVideoTrack(long remoteDemuxId, long nativeVideoTrackBorrowedRc) {
+    void handleIncomingVideoTrack(long remoteDemuxId, long nativeVideoTrackOwnedRc) {
         Log.i(TAG, "handleIncomingVideoTrack():");
 
-        if (nativeVideoTrackBorrowedRc == 0) {
-            Log.d(TAG, "nativeVideoTrackBorrowedRc is null (0)");
+        if (nativeVideoTrackOwnedRc == 0) {
+            Log.d(TAG, "nativeVideoTrackOwnedRc is null (0)");
             return;
         }
 
@@ -572,17 +579,8 @@ public final class GroupCall {
             return;
         }
 
-        // Note: VideoTrack expects an owned RC, but only if VideoTrack.dispose
-        // is called (see webrtc/sdk/android/api/org/webrtc/MediaStreamTrack.java
-        // and webrtc/sdk/android/api/org/webrtc/VideoTrack.java).
-        // But we never call VideoTrack.dispose, so VideoTrack effectively expects
-        // a borrowed RC.  But that means this remoteDeviceState.videoTrack must not outlive
-        // the native VideoTrack, and there is no guarantee that it doesn't.
-        // LEAK: Further, when sinks are added to the VideoTrack, it creates
-        // native wrapper objects that are only deleted when VideoTrack.dispose()
-        // is called.  So we really should call VideoTrack.dispose(), and if we do
-        // that, we should pass in an owned RC instead of a borrowed RC.
-        remoteDeviceState.videoTrack = new VideoTrack(nativeVideoTrackBorrowedRc);
+        remoteDeviceState.videoTrack = new VideoTrack(nativeVideoTrackOwnedRc);
+        this.incomingVideoTracks.add(remoteDeviceState.videoTrack);
         this.observer.onRemoteDeviceStatesChanged(this);
     }
 

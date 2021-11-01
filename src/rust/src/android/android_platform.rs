@@ -1404,8 +1404,8 @@ impl Platform for AndroidPlatform {
 
         let jni_client_id = client_id as jlong;
         let jni_remote_demux_id = remote_demux_id as jlong;
-        let jni_native_video_track_borrowed_rc =
-            incoming_video_track.rffi().as_borrowed().as_ptr() as jlong;
+        let jni_native_video_track_owned_rc =
+            incoming_video_track.rffi().clone().into_owned().as_ptr() as jlong;
 
         const METHOD: &str = "handleIncomingVideoTrack";
         const SIG: &str = "(JJJ)V";
@@ -1413,7 +1413,7 @@ impl Platform for AndroidPlatform {
         let args = [
             jni_client_id.into(),
             jni_remote_demux_id.into(),
-            jni_native_video_track_borrowed_rc.into(),
+            jni_native_video_track_owned_rc.into(),
         ];
         let result = jni_call_method(&env, jni_call_manager, METHOD, SIG, &args);
         if result.is_err() {
