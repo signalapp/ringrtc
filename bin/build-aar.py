@@ -179,11 +179,16 @@ def BuildArch(dry_run, build_dir, arch, debug_build, extra_gn_args,
 
     output_dir = GetArchBuildDir(build_dir, arch, debug_build)
     gn_args = {
-        'target_os'         : '"android"',
-        'target_cpu'        : '"{}"'.format(arch),
-        'is_debug'          : 'false',
-        'rtc_include_tests' : 'false',
-        'rtc_build_examples': 'false',
+        'target_os'           : '"android"',
+        'target_cpu'          : '"{}"'.format(arch),
+        'is_debug'            : 'false',
+        'rtc_include_tests'   : 'false',
+        'rtc_build_examples'  : 'false',
+        'rtc_build_tools'     : 'false',
+        'rtc_enable_protobuf' : 'false',
+        'rtc_enable_sctp'     : 'false',
+        'rtc_libvpx_build_vp9': 'false',
+        'rtc_include_ilbc'    : 'false',
     }
     if debug_build is True:
         gn_args['is_debug'] = 'true'

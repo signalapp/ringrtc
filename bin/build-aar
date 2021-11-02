@@ -15,5 +15,4 @@ BIN_DIR="$(realpath -e $(dirname $0))"
     --webrtc-src-dir="${WEBRTC_SRC_DIR}"   \
     --gradle-dir="${ANDROID_GRADLE_DIR}"   \
     --publish-version="${PROJECT_VERSION}" \
-    --extra-gn-args="rtc_enable_sctp=false" \
     "$@"

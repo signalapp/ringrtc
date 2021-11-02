@@ -123,8 +123,9 @@ then
   else
     ARCHS=("simulator:x64" "simulator:arm64" "device:arm64" "catalyst:x64" "catalyst:arm64")
   fi
+  EXTRA_GN_ARGS="rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_enable_sctp=false rtc_libvpx_build_vp9=false rtc_include_ilbc=false"
 
-  (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/" --build_config ${BUILD_TYPE} --arch "${ARCHS[@]}" --extra-gn-args rtc_enable_sctp=false)
+  (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/" --build_config ${BUILD_TYPE} --arch "${ARCHS[@]}" --extra-gn-args "${EXTRA_GN_ARGS}")
 
   "${BIN_DIR}/print_build_env.py" \
       --webrtc-version="${WEBRTC_VERSION}" \
