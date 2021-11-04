@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.14.0
+
+- Update WebRTC to 4638 (M95)
+
+- Further improvements to WebRTC pointer management
+
+- Replace DataChannel with direct RTP data
+
+- Logging/Testing/Build improvements
+
 ## v2.13.6
 
 - Use SetAudioPlayout() function for group calls
