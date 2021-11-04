@@ -5,6 +5,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 
+# Allow non-exported environment variables
+# shellcheck disable=SC2034
+
 # Android specific environment variables
 ANDROID_CONFIG_DIR="${CONFIG_DIR}/android"
 
@@ -19,7 +22,7 @@ prepare_workspace_platform() {
     echo "Preparing workspace for Android..."
 
     # Setup NDK toolchains
-    $BIN_DIR/install-ndk-toolchains
+    "$BIN_DIR"/install-ndk-toolchains
 
-    $BIN_DIR/fetch-android-deps
+    "$BIN_DIR"/fetch-android-deps
 }

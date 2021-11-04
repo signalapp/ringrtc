@@ -26,10 +26,8 @@
 
 set -e
 
-BIN_DIR=$(dirname "$0")
-BIN_DIR=$(realpath -e "${BIN_DIR}")
 # shellcheck source=bin/env.sh
-. "${BIN_DIR}/env.sh"
+. "$(dirname "$0")"/env.sh
 
 usage()
 {

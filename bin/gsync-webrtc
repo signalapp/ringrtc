@@ -8,8 +8,8 @@
 set -e
 
 WEBRTC_REVISION="$1"
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 # Create gclient config file, based on platform
 mkdir -p "$WEBRTC_DIR"

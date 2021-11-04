@@ -5,6 +5,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 
+# Allow non-exported environment variables
+# shellcheck disable=SC2034
+
 # Specify WebRTC version.  This corresponds to the
 # branch or tag of the signalapp/webrtc repository.
 WEBRTC_VERSION="4638"

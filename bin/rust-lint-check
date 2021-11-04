@@ -7,8 +7,8 @@
 
 set -e
 
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 MANIFEST="${RINGRTC_SRC_DIR}/rust/Cargo.toml"
 
@@ -16,7 +16,7 @@ OUTPUT_DIR="${OUTPUT_DIR}/rust-lint"
 
 # Remove some of the build products, so that the lint is generated
 # every time.
-rm -rf ${OUTPUT_DIR}/*/*/*/*ringrtc* ${OUTPUT_DIR}/*/*/.fingerprint/*ringrtc*
+rm -rf "${OUTPUT_DIR}"/*/*/*/*ringrtc* "${OUTPUT_DIR}"/*/*/.fingerprint/*ringrtc*
 
 case $WEBRTC_PLATFORM in
     android)
@@ -30,7 +30,7 @@ case $WEBRTC_PLATFORM in
         exit 1
 esac
 
-echo "Entering directory \`$(dirname $MANIFEST)'"
+echo "Entering directory \`$(dirname "$MANIFEST")'"
 
 cargo clippy \
     --target $TARGET \

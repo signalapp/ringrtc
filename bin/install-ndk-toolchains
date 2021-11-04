@@ -11,8 +11,8 @@ set -e
 # - a gclient hook
 # - a build step for ringrtc/BUILD.gn, putting the correct NDK in the output directory
 
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 # where is the NDK located?
 NDK_HOME="${WEBRTC_DIR}/src/third_party/android_ndk"
@@ -45,11 +45,11 @@ CARGO_CONFIG="${CARGO_CONFIG_DIR}/config"
 if [ -f $CARGO_CONFIG ] ; then
     BACKUP_CARGO=$(mktemp -u -p $CARGO_CONFIG_DIR -t config.XXXXXXXX.bak)
     echo "I: cargo config exists already, renaming to: $BACKUP_CARGO."
-    mv -f $CARGO_CONFIG $BACKUP_CARGO
+    mv -f $CARGO_CONFIG "$BACKUP_CARGO"
 else
     echo "I: generating cargo config for toolchains."
 fi
-mkdir -p $(dirname $CARGO_CONFIG)
+mkdir -p "$(dirname $CARGO_CONFIG)"
 
 for a in $ARCHS ; do
     case "$a" in

@@ -7,8 +7,8 @@
 
 set -e
 
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 # Note: make sure to only use NodeJS architectures here, like x64, ia32, arm64, etc.
 TARGET_ARCH=${TARGET_ARCH:-x64}
@@ -98,7 +98,7 @@ case "$(rustup show active-toolchain)" in
         CARGO_TARGET="${CARGO_ARCH}-unknown-linux-gnu"
         ;;
     * )
-        echo "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting."
+        printf "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting.\n"
         exit 1
 esac
 
@@ -135,14 +135,14 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
     if [ $DEFAULT_PLATFORM = "darwin" ]
     then
         mkdir -p ../node/build/darwin
-        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/libringrtc.dylib ../node/build/darwin/libringrtc-${TARGET_ARCH}.node
+        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/libringrtc.dylib ../node/build/darwin/libringrtc-"${TARGET_ARCH}".node
     elif [ $DEFAULT_PLATFORM = "win32" ]
     then
         mkdir -p ../node/build/win32
-        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/ringrtc.dll ../node/build/win32/libringrtc-${TARGET_ARCH}.node
+        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/ringrtc.dll ../node/build/win32/libringrtc-"${TARGET_ARCH}".node
     elif [ $DEFAULT_PLATFORM = "linux" ]
     then
         mkdir -p ../node/build/linux
-        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/libringrtc.so ../node/build/linux/libringrtc-${TARGET_ARCH}.node
+        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/libringrtc.so ../node/build/linux/libringrtc-"${TARGET_ARCH}".node
     fi
 )

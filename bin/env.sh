@@ -5,6 +5,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 
+# Allow non-exported environment variables
+# shellcheck disable=SC2034
+
+BIN_DIR=$(dirname "$0")
+BIN_DIR=$(realpath -e "$BIN_DIR")
+
 [ -d "$BIN_DIR" ] || {
     echo "ERROR: project bin directory does not exist: $BIN_DIR"
     exit 1
@@ -40,9 +46,11 @@ VERSION_INFO="${CONFIG_DIR}/version.sh"
     echo "ERROR: unable to load version configuration: $VERSION_INFO"
     exit 1
 }
+# shellcheck source=config/version.sh
 . "$VERSION_INFO"
 
 if [ -f "${OUTPUT_DIR}/webrtc-version.env" ] ; then
+    # shellcheck disable=SC1090,SC1091 # can't check generated file
     . "${OUTPUT_DIR}/webrtc-version.env"
 fi
 
@@ -60,6 +68,7 @@ INTENDED_WEBRTC_PLATFORM=$WEBRTC_PLATFORM
 
 # current platform if it exists
 if [ -f "${OUTPUT_DIR}/platform.env" ] ; then
+    # shellcheck disable=SC1090,SC1091 # can't check generated file
     . "${OUTPUT_DIR}/platform.env"
 fi
 if [ -n "$WEBRTC_PLATFORM" ] ; then
@@ -73,6 +82,7 @@ if [ -n "$WEBRTC_PLATFORM" ] ; then
     # platform specific env if it exists
     PLATFORM_ENV="${BIN_DIR}/env-${WEBRTC_PLATFORM}.sh"
     if [ -f "$PLATFORM_ENV" ] ; then
+        # shellcheck disable=SC1090 # can't check platform-specific file
         .  "$PLATFORM_ENV"
     else
         echo "ERROR: Unable to find platform specific environment settings: $PLATFORM_ENV"

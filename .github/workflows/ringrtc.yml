@@ -26,6 +26,7 @@ jobs:
       with:
         profile: minimal
         components: clippy
+    - run: shellcheck **/*.sh bin/build-aar bin/build-cli bin/build-electron bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-android-deps bin/gsync-webrtc bin/install-ndk-toolchains bin/prepare-workspace bin/rust-lint-check src/rust/scripts/make-protos src/rust/scripts/run-tests
     - run: rm -rf out/rust-lint
     - uses: actions-rs/clippy-check@v1
       with:

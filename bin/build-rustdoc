@@ -7,8 +7,8 @@
 
 set -e
 
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 MANIFEST="${RINGRTC_SRC_DIR}/rust/Cargo.toml"
 

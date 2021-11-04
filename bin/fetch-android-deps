@@ -7,8 +7,8 @@
 
 set -e
 
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 echo "Fetching Android dependencies..."
 
@@ -17,12 +17,12 @@ rm -rf "${ANDROID_DEPS_DIR}"
 ./gradlew -PjarCacheDir="${ANDROID_DEPS_DIR}" getDeps
 
 # expand aar files
-AAR_FILES=$(ls ${ANDROID_DEPS_DIR}/*.aar || true)
+AAR_FILES=$(ls "${ANDROID_DEPS_DIR}"/*.aar || true)
 for aar in $AAR_FILES ; do
     DIR="${aar%.aar}"
-    mkdir -p $DIR
-    cd $DIR
-    jar xf $aar
+    mkdir -p "$DIR"
+    cd "$DIR"
+    jar xf "$aar"
 done
 
 JAR_LIST="${RINGRTC_WEBRTC_SRC_DIR}/jar.list"

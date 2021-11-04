@@ -7,8 +7,8 @@
 
 set -e
 
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 SOURCEPATH="${ANDROID_SRC_DIR}/api"
 CLASSPATH="${OUTPUT_DIR}/release/libs/libwebrtc.jar"
@@ -17,14 +17,12 @@ ANDROID_SDK="${WEBRTC_SRC_DIR}/third_party/android_sdk/public/platforms/android-
 ANDROID_ANNOTATIONS="${WEBRTC_SRC_DIR}/third_party/android_deps/libs/androidx_annotation_annotation"
 
 for d in "$ANDROID_DEPS_DIR" "$ANDROID_SDK" "$ANDROID_ANNOTATIONS" ; do
-    for f in $(find -L "$d" -type f -name '*.jar') ; do
-        CLASSPATH="${CLASSPATH}:$f"
-    done
+    CLASSPATH="$CLASSPATH:$(find -L "$d" -type f -name '*.jar' -print | paste -sd ':' -)"
 done
 
 OUTPUT_DIR="${OUTPUT_DIR}/javadoc"
-rm -rf $OUTPUT_DIR
-mkdir $OUTPUT_DIR
+rm -rf "$OUTPUT_DIR"
+mkdir "$OUTPUT_DIR"
 
 # Treat all warns as errors
 javadoc -quiet -Xdoclint:all -d "$OUTPUT_DIR" -sourcepath "$SOURCEPATH" -classpath "$CLASSPATH" org.signal.ringrtc

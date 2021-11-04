@@ -7,8 +7,8 @@
 
 set -e
 
-BIN_DIR="$(realpath -e $(dirname $0))"
-. "${BIN_DIR}/env.sh"
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
 
 usage()
 {
@@ -78,7 +78,7 @@ get_default_platform()
 DEFAULT_PLATFORM=$(get_default_platform)
 if [ "${DEFAULT_PLATFORM}" = "unknown" ]
 then
-    echo "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting."
+    printf "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting.\n"
     exit 1
 fi
 
