@@ -98,44 +98,17 @@ while [ "$1" != "" ]; do
     shift
 done
 
-webrtc_archs_for_environment() {
-  case $1 in
-    catalyst )
-      echo x64 arm64
+webrtc_arch_for_host_sim() {
+  case $(machine) in
+    x86_64* )
+      echo 'simulator:x64'
       ;;
-    simulator )
-      if [[ -n "${HOST_SIM_ONLY}" ]]; then
-        case $(machine) in
-          x86_64* )
-            echo x64
-            ;;
-          arm64* )
-            echo arm64
-            ;;
-          * )
-            echo 'error: unrecoginzed host architecture ' "$(machine)" >&2
-            exit 1
-            ;;
-        esac
-      else
-        echo arm64 x64
-      fi
-      ;;
-    device )
-      echo arm64
+    arm64* )
+      echo 'simulator:arm64'
       ;;
     * )
-      echo 'error: unknown environment ' "$1" >&2
+      echo 'error: unrecoginzed host architecture ' "$(machine)" >&2
       exit 1
-      ;;
-    esac
-}
-
-webrtc_args_for_environment() {
-  echo "target_environment=\"$1\""
-  case $1 in
-    catalyst )
-      echo 'ios_deployment_target="14"'
       ;;
   esac
 }
@@ -143,25 +116,15 @@ webrtc_args_for_environment() {
 # The WebRTC part of the build resulting in WebRTC.xcframework.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
-  echo "Building WebRTC.xcframework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
+  echo "Building WebRTC.xcframework in ${OUTPUT_DIR}..."
 
   if [[ -n "${HOST_SIM_ONLY}" ]]; then
-    ENVIRONMENTS=simulator
+    ARCHS=$(webrtc_arch_for_host_sim)
   else
-    ENVIRONMENTS="catalyst simulator device"
+    ARCHS=("simulator:x64" "simulator:arm64" "device:arm64" "catalyst:x64" "catalyst:arm64")
   fi
-  XCFRAMEWORK_ARGS=()
 
-  for ENVIRONMENT in ${ENVIRONMENTS}; do
-    # shellcheck disable=SC2046 # word splitting for webrtc_archs_for_environment
-    (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/${BUILD_TYPE}/${ENVIRONMENT}" --build_config ${BUILD_TYPE} --arch $(webrtc_archs_for_environment "${ENVIRONMENT}") --extra-gn-args rtc_enable_sctp=false $(webrtc_args_for_environment "${ENVIRONMENT}"))
-    # Intentionally omit the debug symbols; they're huge.
-    XCFRAMEWORK_ARGS+=(-framework "${BUILD_TYPE}/${ENVIRONMENT}/WebRTC.framework")
-  done
-
-  echo "Making xcframework in ${OUTPUT_DIR}"
-  rm -rf "${OUTPUT_DIR}"/WebRTC.xcframework
-  (cd "${OUTPUT_DIR}" && xcodebuild -create-xcframework "${XCFRAMEWORK_ARGS[@]}" -output WebRTC.xcframework)
+  (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/" --build_config ${BUILD_TYPE} --arch "${ARCHS[@]}" --extra-gn-args rtc_enable_sctp=false)
 
   "${BIN_DIR}/print_build_env.py" \
       --webrtc-version="${WEBRTC_VERSION}" \

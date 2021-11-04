@@ -37,10 +37,6 @@ pub struct RffiCertificate {
     _private: [u8; 0],
 }
 
-// WARNING: RTCCertificate changed to "class RTCCertificate: public RefCountedNonVirtual"
-// in https://source.chromium.org/chromium/_/webrtc/src.git/+/86ee89f73e4f4799b3ebcc0b5c65837c9601fe6d
-// on 4/21/2021.  So when we update WebRTC, this must be
-// removed.
 impl webrtc::RefCounted for RffiCertificate {}
 
 /// Incomplete type for C++ AudioDeviceModule.

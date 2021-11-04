@@ -112,7 +112,7 @@ class PeerConnectionFactoryWithOwnedThreads
     dependencies.media_engine = cricket::CreateMediaEngine(std::move(media_dependencies));
 
     auto factory = CreateModularPeerConnectionFactory(std::move(dependencies));
-    return make_ref_counted<PeerConnectionFactoryWithOwnedThreads>(
+    return rtc::make_ref_counted<PeerConnectionFactoryWithOwnedThreads>(
         std::move(factory),
         std::move(network_thread),
         std::move(worker_thread),
@@ -290,7 +290,7 @@ RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
     const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
   };
 
-  return take_rc(make_ref_counted<PeerConnectionFactoryWrapper>(inc_rc(pcf_borrowed_rc)));
+  return take_rc(rtc::make_ref_counted<PeerConnectionFactoryWrapper>(inc_rc(pcf_borrowed_rc)));
 }
 
 // Returns an owned RC.
@@ -341,8 +341,12 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   if (factory_owner_borrowed_rc->injectable_network()) {
     deps.allocator = factory_owner_borrowed_rc->injectable_network()->CreatePortAllocator();
   }
-  rtc::scoped_refptr<PeerConnectionInterface> pc = factory->CreatePeerConnection(
-    config, std::move(deps));
+  auto result = factory->CreatePeerConnectionOrError(config, std::move(deps));
+  if (!result.ok()) {
+    RTC_LOG(LS_INFO) << "Failed to CreatePeerConnecton: " << result.error().message();
+    return nullptr;
+  }
+  rtc::scoped_refptr<PeerConnectionInterface> pc = result.MoveValue();
 
   // We use an arbitrary stream_id because existing apps want a MediaStream to pop out.
   auto stream_id = "s";
@@ -395,7 +399,7 @@ RUSTEXPORT AudioTrackInterface* Rust_createAudioTrack(
 
 // Returns an owned RC.
 RUSTEXPORT VideoTrackSourceInterface* Rust_createVideoSource() {
-  return take_rc(make_ref_counted<webrtc::rffi::VideoSource>());
+  return take_rc(rtc::make_ref_counted<webrtc::rffi::VideoSource>());
 }
 
 // Returns an owned RC.

@@ -297,7 +297,7 @@ rtc::scoped_refptr<FrameDecryptorInterface> PeerConnectionObserverRffi::CreateDe
   // The PeerConnectionObserverRffi outlives the Decryptor because it outlives the PeerConnection,
   // which outlives the RtpReceiver, which owns the Decryptor.
   // So we know the PeerConnectionObserverRffi outlives the Decryptor.
-  return make_ref_counted<Decryptor>(track_id, observer_, &callbacks_);
+  return rtc::make_ref_counted<Decryptor>(track_id, observer_, &callbacks_);
 }
 
 // Returns an owned pointer.

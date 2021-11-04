@@ -28,12 +28,6 @@ T* take_rc(rtc::scoped_refptr<T> scoped) {
     return scoped.release();
 }
 
-// Use rtc::make_ref_counted instead once we update WebRTC.
-template <typename T, typename... Args>
-rtc::scoped_refptr<T> make_ref_counted(Args&&... args) {
-  return inc_rc(new rtc::RefCountedObject<T>(std::forward<Args>(args)...));
-}
-
 } // namespace rffi
 } // namespace webrtc
 

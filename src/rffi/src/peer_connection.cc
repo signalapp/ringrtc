@@ -7,7 +7,7 @@
 #include "api/ice_transport_interface.h"
 #include "api/jsep_session_description.h"
 #include "api/peer_connection_interface.h"
-#include "media/base/h264_profile_level_id.h"
+#include "api/video_codecs/h264_profile_level_id.h"
 #include "modules/rtp_rtcp/source/rtp_header_extensions.h"
 #include "p2p/base/port.h"
 #include "pc/media_session.h"
@@ -180,7 +180,7 @@ Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_d
           continue;
         }
 
-        auto profile_level_id = webrtc::H264::ParseSdpProfileLevelId(codec.params);
+        auto profile_level_id = ParseSdpForH264ProfileLevelId(codec.params);
         if (!profile_level_id) {
           std::string profile_level_id_string;
           codec.GetParam("profile-level-id", &profile_level_id_string);
@@ -188,13 +188,13 @@ Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_d
           continue;
         }
 
-        if (profile_level_id->profile == webrtc::H264::kProfileConstrainedHigh && !has_h264_chp) {
+        if (profile_level_id->profile == H264Profile::kProfileConstrainedHigh && !has_h264_chp) {
           RffiVideoCodec h264_chp;
           h264_chp.type = kRffiVideoCodecH264ConstrainedHigh;
-          h264_chp.level = profile_level_id->level;
+          h264_chp.level = static_cast<uint32_t>(profile_level_id->level);
           v4->receive_video_codecs.push_back(h264_chp);
           has_h264_chp = true;
-        } else if (profile_level_id->profile != webrtc::H264::kProfileConstrainedBaseline) {
+        } else if (profile_level_id->profile != H264Profile::kProfileConstrainedBaseline) {
           // Not a warning because WebRTC software H264 encoders say they support baseline, even though it's useless.
           RTC_LOG(LS_INFO) << "Ignoring H264 codec profile = " << profile_level_id->profile;  
           continue;
@@ -205,7 +205,7 @@ Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_d
           // (but don't add it more than once)
           RffiVideoCodec h264_cbp;
           h264_cbp.type = kRffiVideoCodecH264ConstrainedBaseline;
-          h264_cbp.level = profile_level_id->level;
+          h264_cbp.level = static_cast<uint32_t>(profile_level_id->level);
           v4->receive_video_codecs.push_back(h264_cbp);
           has_h264_cbp = true;
         }
@@ -322,14 +322,14 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
     video_codec->AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamRemb, cricket::kParamValueEmpty));
   };
 
-  auto add_h264_params = [] (cricket::VideoCodec* h264_codec, webrtc::H264::Profile profile, uint32_t level) {
+  auto add_h264_params = [] (cricket::VideoCodec* h264_codec, H264Profile profile, uint32_t level) {
     // All of the codec implementations (iOS hardware, Android hardware) are only used by WebRTC
     // with packetization mode 1.  Software codecs also support mode 0, but who cares.  It's useless.
     // They also all allow for level asymmetry.
     h264_codec->SetParam(cricket::kH264FmtpLevelAsymmetryAllowed, "1");
     h264_codec->SetParam(cricket::kH264FmtpPacketizationMode, "1");
     // On Android and with software, the level is always 31.  But it could be anything with iOS.
-    auto profile_level_id_string = webrtc::H264::ProfileLevelIdToString(webrtc::H264::ProfileLevelId(profile, webrtc::H264::Level(level)));
+    auto profile_level_id_string = H264ProfileLevelIdToString(H264ProfileLevelId(profile, H264Level(level)));
     if (profile_level_id_string) {
       h264_codec->SetParam("profile-level-id", *profile_level_id_string);
     }
@@ -348,7 +348,7 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
     } else if (rffi_codec.type == kRffiVideoCodecH264ConstrainedHigh) {
       auto h264_chp = cricket::VideoCodec(H264_CHP_PT, cricket::kH264CodecName);
       auto h264_chp_rtx = cricket::VideoCodec::CreateRtxCodec(H264_CHP_RTX_PT, H264_CHP_PT);
-      add_h264_params(&h264_chp, webrtc::H264::kProfileConstrainedHigh, rffi_codec.level);
+      add_h264_params(&h264_chp, H264Profile::kProfileConstrainedHigh, rffi_codec.level);
       add_video_feedback_params(&h264_chp);
 
       video->AddCodec(h264_chp);
@@ -356,7 +356,7 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
     } else if (rffi_codec.type == kRffiVideoCodecH264ConstrainedBaseline) {
       auto h264_cbp = cricket::VideoCodec(H264_CBP_PT, cricket::kH264CodecName);
       auto h264_cbp_rtx = cricket::VideoCodec::CreateRtxCodec(H264_CBP_RTX_PT, H264_CBP_PT);
-      add_h264_params(&h264_cbp, webrtc::H264::kProfileConstrainedBaseline, rffi_codec.level);
+      add_h264_params(&h264_cbp, H264Profile::kProfileConstrainedBaseline, rffi_codec.level);
       add_video_feedback_params(&h264_cbp);
 
       video->AddCodec(h264_cbp);

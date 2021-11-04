@@ -55,12 +55,13 @@ fn main() {
             println!("cargo:rustc-link-lib=wmcodecdspuuid");
             println!("cargo:rustc-link-lib=secur32");
             println!("cargo:rustc-link-lib=iphlpapi");
-
-            // Use statically linked 'libcmt[d]' instead of dynamically linked 'msvcrt[d]'.
+            // Include the appropriate static C/C++ Standard Libraries.
             if debug {
                 println!("cargo:rustc-link-lib=libcmtd");
+                println!("cargo:rustc-link-lib=libcpmtd");
             } else {
                 println!("cargo:rustc-link-lib=libcmt");
+                println!("cargo:rustc-link-lib=libcpmt");
             }
         } else {
             println!("cargo:rustc-link-lib=stdc++");

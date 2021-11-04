@@ -182,7 +182,7 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
 RUSTEXPORT StatsObserverRffi*
 Rust_createStatsObserver(void*                         stats_observer_borrowed,
                          const StatsObserverCallbacks* stats_observer_cbs_borrowed) {
-  return take_rc(make_ref_counted<StatsObserverRffi>(stats_observer_borrowed, stats_observer_cbs_borrowed));
+  return take_rc(rtc::make_ref_counted<StatsObserverRffi>(stats_observer_borrowed, stats_observer_cbs_borrowed));
 }
 
 } // namespace rffi
