@@ -128,6 +128,12 @@ then
   "${BIN_DIR}/print_build_env.py" \
       --webrtc-version="${WEBRTC_VERSION}" \
       --ringrtc-version="${PROJECT_VERSION}" > "${OUTPUT_DIR}"/WebRTC.xcframework/build_env.txt
+
+  # Delete dSYMs out of the built XCFramework.
+  # FIXME: In the future, we probably want to keep these,
+  # which is why we aren't changing WebRTC's build script to skip them altogether.
+  rm -r "${OUTPUT_DIR}"/WebRTC.xcframework/*/dSYMs
+  plutil -remove AvailableLibraries.DebugSymbolsPath "${OUTPUT_DIR}"/WebRTC.xcframework/Info.plist
 fi
 
 cargo_flags() {
