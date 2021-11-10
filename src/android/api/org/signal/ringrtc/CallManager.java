@@ -136,7 +136,8 @@ public class CallManager {
   ///
   /// If `eglBase` is present, hardware codecs will be used unless they are known to be broken
   /// in some way. Otherwise, we'll fall back to software codecs.
-  private PeerConnectionFactory createPeerConnectionFactory(@Nullable EglBase eglBase) {
+  private PeerConnectionFactory createPeerConnectionFactory(@Nullable EglBase               eglBase,
+                                                                      AudioProcessingMethod audioProcessingMethod) {
     Set<String> HARDWARE_ENCODING_BLOCKLIST = new HashSet<String>() {{
       // Samsung S6 with Exynos 7420 SoC
       add("SM-G920F");
@@ -184,11 +185,11 @@ public class CallManager {
       decoderFactory = new DefaultVideoDecoderFactory(eglBase.getEglBaseContext());
     }
 
-    // This is a workaround to what appears to a bug in WebRTC.
-    // If you don't call setAudioDeviceModule, then the default ADM created by WebRTC will not
-    // have .release() called, and the ADM will be leaked.
-    // This also lets us control the use of hardware AEC.
-    JavaAudioDeviceModule adm = createAudioDeviceModule();
+    // This is a workaround to what appears to a bug in WebRTC. If you don't call
+    // setAudioDeviceModule, then the default ADM created by WebRTC will not have
+    // .release() called, and the ADM will be leaked. This also lets us control the
+    // use of hardware or software voice processing.
+    JavaAudioDeviceModule adm = createAudioDeviceModule(audioProcessingMethod);
     PeerConnectionFactory factory = PeerConnectionFactory.builder()
             .setOptions(new PeerConnectionFactoryOptions())
             .setAudioDeviceModule(adm)
@@ -199,8 +200,18 @@ public class CallManager {
     return factory;
   }
 
-  static JavaAudioDeviceModule createAudioDeviceModule() {
-    Set<String> HARDWARE_AEC_BLOCKLIST = new HashSet<String>() {{
+  /// Defines the method to use for audio processing of AEC and NS.
+  ///
+  /// If `Default` is specified, the device's hardware will be used unless the
+  /// device is in the BLOCKLIST.
+  public enum AudioProcessingMethod {
+    Default,
+    ForceHardware,
+    ForceSoftware
+  }
+
+  static JavaAudioDeviceModule createAudioDeviceModule(AudioProcessingMethod audioProcessingMethod) {
+    Set<String> HARDWARE_AUDIO_PROCESSING_BLOCKLIST = new HashSet<String>() {{
       add("Pixel");
       add("Pixel XL");
       add("Moto G5");
@@ -215,10 +226,27 @@ public class CallManager {
       add("MI 5");
     }};
 
-    boolean useHardwareAec = !HARDWARE_AEC_BLOCKLIST.contains(Build.MODEL);
-    // Note: There is currently no way to enable the use of OpenSLES.
+    // We'll set both AEC and NS equally to be either both hardware or
+    // both software, assuming that they are co-tuned.
+    boolean useHardware;
+
+    switch(audioProcessingMethod) {
+      case ForceHardware:
+        useHardware = true;
+        break;
+      case ForceSoftware:
+        useHardware = false;
+        break;
+      default:
+        useHardware = !HARDWARE_AUDIO_PROCESSING_BLOCKLIST.contains(Build.MODEL);
+        break;
+    }
+
+    Log.i(TAG, "createAudioDeviceModule(): useHardware: " + useHardware);
+
     return JavaAudioDeviceModule.builder(ContextUtils.getApplicationContext())
-      .setUseHardwareAcousticEchoCanceler(useHardwareAec)
+      .setUseHardwareAcousticEchoCanceler(useHardware)
+      .setUseHardwareNoiseSuppressor(useHardware)
       .createAudioDeviceModule();
   }
 
@@ -327,16 +355,17 @@ public class CallManager {
    *
    * Indication from application to proceed with call
    *
-   * @param callId        callId for the call
-   * @param context       Call service context
-   * @param eglBase       eglBase to use for this Call
-   * @param localSink     local video sink to use for this Call
-   * @param remoteSink    remote video sink to use for this Call
-   * @param camera        camera control to use for this Call
-   * @param iceServers    list of ICE servers to use for this Call
-   * @param hideIp        if true hide caller's IP by using a TURN server
-   * @param bandwidthMode desired bandwidth mode to start the session with
-   * @param enableCamera  if true, enable the local camera video track when created
+   * @param callId                 callId for the call
+   * @param context                Call service context
+   * @param eglBase                eglBase to use for this Call
+   * @param audioProcessingMethod  the method to use for audio processing
+   * @param localSink              local video sink to use for this Call
+   * @param remoteSink             remote video sink to use for this Call
+   * @param camera                 camera control to use for this Call
+   * @param iceServers             list of ICE servers to use for this Call
+   * @param hideIp                 if true hide caller's IP by using a TURN server
+   * @param bandwidthMode          desired bandwidth mode to start the session with
+   * @param enableCamera           if true, enable the local camera video track when created
    *
    * @throws CallException for native code failures
    *
@@ -344,7 +373,8 @@ public class CallManager {
   public void proceed(@NonNull CallId                         callId,
                       @NonNull Context                        context,
                       @NonNull EglBase                        eglBase,
-                      @NonNull VideoSink		                  localSink,
+                               AudioProcessingMethod          audioProcessingMethod,
+                      @NonNull VideoSink                      localSink,
                       @NonNull VideoSink                      remoteSink,
                       @NonNull CameraControl                  camera,
                       @NonNull List<PeerConnection.IceServer> iceServers,
@@ -357,7 +387,7 @@ public class CallManager {
 
     Log.i(TAG, "proceed(): callId: " + callId + ", hideIp: " + hideIp);
 
-    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase);
+    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase, audioProcessingMethod);
 
     CallContext callContext = new CallContext(callId,
                                               context,
@@ -891,22 +921,22 @@ public class CallManager {
    * If there is any error when allocating resources for the object,
    * null is returned.
    *
-   * @param groupId      the unique identifier for the group
-   * @param sfuUrl       the URL to use when accessing the SFU
-   * @param eglBase      graphics base needed to initialize media
-   * @param observer     the observer that the group call object will use for callback notifications
+   * @param groupId                the unique identifier for the group
+   * @param sfuUrl                 the URL to use when accessing the SFU
+   * @param audioProcessingMethod  the method to use for audio processing
+   * @param observer               the observer that the group call object will use for callback notifications
    *
    */
-  public GroupCall createGroupCall(@NonNull byte[]             groupId,
-                                   @NonNull String             sfuUrl,
-                                   @NonNull EglBase            eglBase,
-                                   @NonNull GroupCall.Observer observer)
+  public GroupCall createGroupCall(@NonNull byte[]                groupId,
+                                   @NonNull String                sfuUrl,
+                                            AudioProcessingMethod audioProcessingMethod,
+                                   @NonNull GroupCall.Observer    observer)
   {
     checkCallManagerExists();
 
     if (this.groupFactory == null) {
       // The first GroupCall object will create a factory that will be re-used.
-      this.groupFactory = this.createPeerConnectionFactory(null);
+      this.groupFactory = this.createPeerConnectionFactory(null, audioProcessingMethod);
       if (this.groupFactory == null) {
         Log.e(TAG, "createPeerConnectionFactory failed");
         return null;
