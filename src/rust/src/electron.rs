@@ -636,6 +636,9 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
             endpoint.incoming_video_sink.clone(),
         );
         endpoint.outgoing_video_track.set_content_hint(false);
+        // This should be cleared at with "call concluded", but just in case
+        // we'll clear here as well.
+        endpoint.incoming_video_sink.clear();
         endpoint.call_manager.proceed(
             call_id,
             call_context,
@@ -1761,9 +1764,6 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
                     EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
                 };
-                with_call_endpoint(&mut cx, |endpoint| {
-                    endpoint.incoming_video_sink.clear();
-                });
                 let age = match reason {
                     EndReason::ReceivedOfferExpired { age } => age,
                     _ => Duration::ZERO,
@@ -1786,9 +1786,15 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     CallState::Ringing => "ringing",
                     CallState::Connected => "connected",
                     CallState::Connecting => "connecting",
-                    // Ignoring Concluded state since application should not treat
-                    // it as an 'ending' state transition.
-                    CallState::Concluded => return Ok(cx.undefined().upcast()),
+                    CallState::Concluded => {
+                        // Ignoring Concluded state since application should not treat
+                        // it as an 'ending' state transition.
+                        // However, it's a great time to clear things.
+                        with_call_endpoint(&mut cx, |endpoint| {
+                            endpoint.incoming_video_sink.clear();
+                        });
+                        return Ok(cx.undefined().upcast());
+                    }
                     // All covered above.
                     CallState::Incoming(_, _) => "incoming",
                     CallState::Outgoing(_, _) => "outgoing",
