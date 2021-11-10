@@ -545,29 +545,6 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  onSendLegacyHangup(
-    remoteUserId: UserId,
-    remoteDeviceId: DeviceId,
-    callId: CallId,
-    broadcast: boolean,
-    hangupType: HangupType,
-    deviceId: DeviceId | null
-  ): void {
-    const message = new CallingMessage();
-    message.legacyHangup = new HangupMessage();
-    message.legacyHangup.callId = callId;
-    message.legacyHangup.type = hangupType;
-    message.legacyHangup.deviceId = deviceId || 0;
-    this.sendSignaling(
-      remoteUserId,
-      remoteDeviceId,
-      callId,
-      broadcast,
-      message
-    );
-  }
-
-  // Called by Rust
   onSendHangup(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
@@ -920,8 +897,6 @@ export class RingRTCType {
     senderIdentityKey: Buffer,
     receiverIdentityKey: Buffer
   ): void {
-    const remoteSupportsMultiRing = message.supportsMultiRing || false;
-
     if (
       message.destinationDeviceId &&
       message.destinationDeviceId !== localDeviceId
@@ -954,7 +929,6 @@ export class RingRTCType {
         messageAgeSec,
         callId,
         offerType,
-        remoteSupportsMultiRing,
         opaque,
         senderIdentityKey,
         receiverIdentityKey
@@ -980,7 +954,6 @@ export class RingRTCType {
         remoteUserId,
         remoteDeviceId,
         callId,
-        remoteSupportsMultiRing,
         opaque,
         senderIdentityKey,
         receiverIdentityKey
@@ -2058,7 +2031,6 @@ export interface CallManager {
     callId: CallId,
     offerType: OfferType,
     localDeviceId: DeviceId,
-    remoteSupportsMultiRing: boolean,
     opaque: Buffer,
     senderIdentityKey: Buffer,
     receiverIdentityKey: Buffer
@@ -2067,7 +2039,6 @@ export interface CallManager {
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
-    remoteSupportsMultiRing: boolean,
     opaque: Buffer,
     senderIdentityKey: Buffer,
     receiverIdentityKey: Buffer
@@ -2188,14 +2159,6 @@ export interface CallManagerCallbacks {
     broadcast: boolean,
     candidates: Array<Buffer>
   ): void;
-  onSendLegacyHangup(
-    remoteUserId: UserId,
-    remoteDeviceId: DeviceId,
-    callId: CallId,
-    broadcast: boolean,
-    HangupType: HangupType,
-    hangupDeviceId: DeviceId | null
-  ): void;
   onSendHangup(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
@@ -2281,7 +2244,6 @@ export enum CallEndedReason {
   AcceptedOnAnotherDevice = 'AcceptedOnAnotherDevice',
   DeclinedOnAnotherDevice = 'DeclinedOnAnotherDevice',
   BusyOnAnotherDevice = 'BusyOnAnotherDevice',
-  CallerIsNotMultiring = 'CallerIsNotMultiring',
 }
 
 export enum CallLogLevel {

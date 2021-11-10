@@ -726,10 +726,7 @@ where
         self.call_manager()?.send_hangup(
             self.clone(),
             self.call_id(),
-            signaling::SendHangup {
-                hangup,
-                use_legacy: true,
-            },
+            signaling::SendHangup { hangup },
         )
     }
 

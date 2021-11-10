@@ -14,7 +14,7 @@ use std::{
 use bytes::{Bytes, BytesMut};
 use prost::Message as _;
 
-use crate::common::{CallMediaType, DeviceId, FeatureLevel, Result};
+use crate::common::{CallMediaType, DeviceId, Result};
 use crate::protobuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,7 +47,6 @@ pub enum Message {
     Answer(Answer),
     Ice(Ice),
     Hangup(Hangup),
-    LegacyHangup(Hangup),
     Busy,
 }
 
@@ -58,7 +57,6 @@ impl Message {
             Self::Answer(_) => MessageType::Answer,
             Self::Ice(_) => MessageType::Ice,
             Self::Hangup(_) => MessageType::Hangup,
-            Self::LegacyHangup(_) => MessageType::Hangup,
             Self::Busy => MessageType::Busy,
         }
     }
@@ -71,7 +69,6 @@ impl fmt::Display for Message {
             Self::Answer(_) => "Answer(...)".to_string(),
             Self::Ice(_) => "Ice(...)".to_string(),
             Self::Hangup(hangup) => format!("Hangup({:?})", hangup),
-            Self::LegacyHangup(hangup) => format!("LegacyHangup({:?})", hangup),
             Self::Busy => "Busy".to_string(),
         };
         write!(f, "({})", display)
@@ -444,7 +441,6 @@ pub struct SendIce {
 /// Hangup messages are always broadcast to all devices.
 pub struct SendHangup {
     pub hangup: Hangup,
-    pub use_legacy: bool,
 }
 
 /// An Offer with extra info specific to receiving
@@ -453,8 +449,6 @@ pub struct ReceivedOffer {
     /// The approximate age of the offer
     pub age: Duration,
     pub sender_device_id: DeviceId,
-    /// The feature level supported by the sender device
-    pub sender_device_feature_level: FeatureLevel,
     pub receiver_device_id: DeviceId,
     /// If true, the receiver (local) device is the primary device, otherwise a linked device
     pub receiver_device_is_primary: bool,
@@ -466,8 +460,6 @@ pub struct ReceivedOffer {
 pub struct ReceivedAnswer {
     pub answer: Answer,
     pub sender_device_id: DeviceId,
-    /// The feature level supported by the sender device
-    pub sender_device_feature_level: FeatureLevel,
     pub sender_identity_key: Vec<u8>,
     pub receiver_identity_key: Vec<u8>,
 }

@@ -12,9 +12,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::common::{
-    CallId, CallMediaType, DeviceId, FeatureLevel, HttpMethod, HttpResponse, Result,
-};
+use crate::common::{CallId, CallMediaType, DeviceId, HttpMethod, HttpResponse, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::group_call;
@@ -736,10 +734,9 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let age_sec = cx.argument::<JsNumber>(3)?.value(&mut cx) as u64;
     let call_id = CallId::new(get_id_arg(&mut cx, 4));
     let offer_type = cx.argument::<JsNumber>(5)?.value(&mut cx) as i32;
-    let sender_supports_multi_ring = cx.argument::<JsBoolean>(6)?.value(&mut cx);
-    let opaque = cx.argument::<JsBuffer>(7)?;
-    let sender_identity_key = cx.argument::<JsBuffer>(8)?;
-    let receiver_identity_key = cx.argument::<JsBuffer>(9)?;
+    let opaque = cx.argument::<JsBuffer>(6)?;
+    let sender_identity_key = cx.argument::<JsBuffer>(7)?;
+    let receiver_identity_key = cx.argument::<JsBuffer>(8)?;
 
     let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
     let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
@@ -749,11 +746,6 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let call_media_type = match offer_type {
         1 => CallMediaType::Video,
         _ => CallMediaType::Audio, // TODO: Do something better.  Default matches are evil.
-    };
-    let sender_device_feature_level = if sender_supports_multi_ring {
-        FeatureLevel::MultiRing
-    } else {
-        FeatureLevel::Unspecified
     };
 
     with_call_endpoint(&mut cx, |endpoint| {
@@ -766,7 +758,6 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
                 offer,
                 age: Duration::from_secs(age_sec),
                 sender_device_id,
-                sender_device_feature_level,
                 receiver_device_id,
                 // An electron client cannot be the primary device.
                 receiver_device_is_primary: false,
@@ -785,21 +776,14 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let _peer_id = cx.argument::<JsString>(0)?.value(&mut cx) as PeerId;
     let sender_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let call_id = CallId::new(get_id_arg(&mut cx, 2));
-    let sender_supports_multi_ring = cx.argument::<JsBoolean>(3)?.value(&mut cx);
-    let opaque = cx.argument::<JsBuffer>(4)?;
-    let sender_identity_key = cx.argument::<JsBuffer>(5)?;
-    let receiver_identity_key = cx.argument::<JsBuffer>(6)?;
+    let opaque = cx.argument::<JsBuffer>(3)?;
+    let sender_identity_key = cx.argument::<JsBuffer>(4)?;
+    let receiver_identity_key = cx.argument::<JsBuffer>(5)?;
 
     let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
     let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
     let receiver_identity_key =
         cx.borrow(&receiver_identity_key, |handle| handle.as_slice().to_vec());
-
-    let sender_device_feature_level = if sender_supports_multi_ring {
-        FeatureLevel::MultiRing
-    } else {
-        FeatureLevel::Unspecified
-    };
 
     with_call_endpoint(&mut cx, |endpoint| {
         let answer = signaling::Answer::new(opaque)?;
@@ -808,7 +792,6 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
             signaling::ReceivedAnswer {
                 answer,
                 sender_device_id,
-                sender_device_feature_level,
                 sender_identity_key,
                 receiver_identity_key,
             },
@@ -1677,20 +1660,6 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                             cx.undefined().upcast(),
                         )
                     }
-                    signaling::Message::LegacyHangup(hangup) => {
-                        let (hangup_type, hangup_device_id) = hangup.to_type_and_device_id();
-                        let hangup_type = cx.number(hangup_type as i32).upcast();
-                        let device_id = match hangup_device_id {
-                            Some(device_id) => cx.number(device_id).upcast(),
-                            None => cx.null().upcast(),
-                        };
-                        (
-                            "onSendLegacyHangup",
-                            hangup_type,
-                            device_id,
-                            cx.undefined().upcast(),
-                        )
-                    }
                     signaling::Message::Busy => (
                         "onSendBusy",
                         cx.undefined().upcast(),
@@ -1762,7 +1731,6 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     EndReason::AcceptedOnAnotherDevice => "AcceptedOnAnotherDevice",
                     EndReason::DeclinedOnAnotherDevice => "DeclinedOnAnotherDevice",
                     EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
-                    EndReason::CallerIsNotMultiring => "CallerIsNotMultiring",
                 };
                 let age = match reason {
                     EndReason::ReceivedOfferExpired { age } => age,

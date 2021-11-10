@@ -66,8 +66,6 @@ public enum CallManagerEvent: Int32 {
     case receivedOfferWhileActive
     /// Received an offer while already handling an active call and glare was detected.
     case receivedOfferWithGlare
-    /// Received an offer on a linked device from one that doesn't support multi-ring.
-    case ignoreCallsFromNonMultiringCallers
 }
 
 // In sync with WebRTC's PeerConnection.AdapterType.
@@ -277,7 +275,7 @@ public protocol CallManagerDelegate: AnyObject {
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHangup callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool)
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHangup callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32)
 
     /**
      * A Busy message should be sent to the given remote.
@@ -610,7 +608,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 
     // MARK: - Signaling API
-    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, remoteSupportsMultiRing: Bool, isLocalDevicePrimary: Bool, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
+    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, isLocalDevicePrimary: Bool, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedOffer")
 
@@ -634,7 +632,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
 
         let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaqueSlice, messageAgeSec, callMediaType.rawValue, localDevice, remoteSupportsMultiRing, isLocalDevicePrimary, senderIdentityKeySlice, receiverIdentityKeySlice)
+        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaqueSlice, messageAgeSec, callMediaType.rawValue, localDevice, isLocalDevicePrimary, senderIdentityKeySlice, receiverIdentityKeySlice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedOffer() function failure")
         }
@@ -643,7 +641,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         _ = unmanagedRemote.retain()
     }
 
-    public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, opaque: Data, remoteSupportsMultiRing: Bool, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
+    public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, opaque: Data, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
         AssertIsOnMainThread()
         Logger.debug("receivedAnswer")
 
@@ -666,7 +664,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             }
         }
 
-        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, sourceDevice, opaqueSlice, remoteSupportsMultiRing, senderIdentityKeySlice, receiverIdentityKeySlice)
+        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, sourceDevice, opaqueSlice, senderIdentityKeySlice, receiverIdentityKeySlice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedAnswer() function failure")
         }
@@ -915,7 +913,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32, useLegacyHangupMessage: Bool) {
+    func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32) {
         Logger.debug("onSendHangup")
 
         DispatchQueue.main.async {
@@ -924,7 +922,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
-            delegate.callManager(self, shouldSendHangup: callId, call: callReference, destinationDeviceId: destinationDeviceId, hangupType: hangupType, deviceId: deviceId, useLegacyHangupMessage: useLegacyHangupMessage)
+            delegate.callManager(self, shouldSendHangup: callId, call: callReference, destinationDeviceId: destinationDeviceId, hangupType: hangupType, deviceId: deviceId)
         }
     }
 

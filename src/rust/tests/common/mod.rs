@@ -16,7 +16,7 @@ use rand::distributions::{Distribution, Standard};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use ringrtc::common::{ApplicationEvent, CallMediaType, DeviceId, FeatureLevel};
+use ringrtc::common::{ApplicationEvent, CallMediaType, DeviceId};
 use ringrtc::core::call::Call;
 use ringrtc::core::call_manager::CallManager;
 use ringrtc::core::connection::Connection;
@@ -274,7 +274,6 @@ pub fn random_received_offer(_prng: &Prng, age: Duration) -> signaling::Received
         offer,
         age,
         sender_device_id: 1,
-        sender_device_feature_level: FeatureLevel::MultiRing,
         receiver_device_id: 1,
         receiver_device_is_primary: true,
         sender_identity_key: Vec::new(),
@@ -300,7 +299,6 @@ pub fn random_received_answer(
     signaling::ReceivedAnswer {
         answer,
         sender_device_id,
-        sender_device_feature_level: FeatureLevel::MultiRing,
         sender_identity_key: Vec::new(),
         receiver_identity_key: Vec::new(),
     }

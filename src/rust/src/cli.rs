@@ -9,7 +9,7 @@ use ringrtc::{
     common::{
         actor::{Actor, Stopper},
         units::DataRate,
-        CallId, CallMediaType, DeviceId, FeatureLevel, HttpMethod, Result,
+        CallId, CallMediaType, DeviceId, HttpMethod, Result,
     },
     core::{bandwidth_mode::BandwidthMode, call_manager::CallManager, group_call, signaling},
     native::{
@@ -427,7 +427,6 @@ impl CallEndpoint {
                             offer,
                             age: Duration::from_secs(0),
                             sender_device_id,
-                            sender_device_feature_level: FeatureLevel::MultiRing,
                             receiver_device_id: state.device_id,
                             receiver_device_is_primary: (state.device_id == 1),
                             sender_identity_key,
@@ -442,7 +441,6 @@ impl CallEndpoint {
                         signaling::ReceivedAnswer {
                             answer,
                             sender_device_id,
-                            sender_device_feature_level: FeatureLevel::MultiRing,
                             sender_identity_key,
                             receiver_identity_key,
                         },
@@ -459,7 +457,7 @@ impl CallEndpoint {
                     )
                     .expect("received ice candidates");
                 }
-                signaling::Message::Hangup(hangup) | signaling::Message::LegacyHangup(hangup) => {
+                signaling::Message::Hangup(hangup) => {
                     cm.received_hangup(
                         call_id,
                         signaling::ReceivedHangup {

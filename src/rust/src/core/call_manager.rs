@@ -21,8 +21,8 @@ use lazy_static::lazy_static;
 use prost::Message;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DeviceId, FeatureLevel,
-    HttpMethod, HttpResponse, Result, RingBench,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DeviceId, HttpMethod,
+    HttpResponse, Result, RingBench,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -926,14 +926,10 @@ where
                 // the call actually should send one.
                 if call.should_send_hangup() {
                     // Send hangup via signaling channel.
-                    // Use legacy hangup signaling by default.
                     call_manager.send_hangup(
                         call_clone,
                         call_id,
-                        signaling::SendHangup {
-                            hangup,
-                            use_legacy: true,
-                        },
+                        signaling::SendHangup { hangup },
                     )?;
                 }
             }
@@ -1205,10 +1201,9 @@ where
             RingBench::App,
             RingBench::Cm,
             format!(
-                "received_offer()\t{}\t{}\tfeature={}\tprimary={}\t{}\t{}",
+                "received_offer()\t{}\t{}\tprimary={}\t{}\t{}",
                 incoming_call_id,
                 received.sender_device_id,
-                received.sender_device_feature_level,
                 received.receiver_device_is_primary,
                 received.offer.to_info_string(),
                 received.receiver_device_id,
@@ -1218,23 +1213,6 @@ where
         if received.age > MAX_MESSAGE_AGE {
             ringbenchx!(RingBench::Cm, RingBench::App, "offer expired");
             self.notify_offer_expired(&remote_peer, incoming_call_id, received.age)?;
-            // Notify application we are completely done with this remote.
-            self.notify_call_concluded(&remote_peer, incoming_call_id)?;
-            return Ok(());
-        }
-
-        if (received.sender_device_feature_level == FeatureLevel::Unspecified)
-            && !received.receiver_device_is_primary
-        {
-            ringbenchx!(
-                RingBench::Cm,
-                RingBench::App,
-                "offer not supported on linked device"
-            );
-            self.notify_application(
-                &remote_peer,
-                ApplicationEvent::IgnoreCallsFromNonMultiringCallers,
-            )?;
             // Notify application we are completely done with this remote.
             self.notify_call_concluded(&remote_peer, incoming_call_id)?;
             return Ok(());
@@ -1499,16 +1477,11 @@ where
         active_call.send_hangup_via_rtp_data_to_all_except(hangup, sender_device_id)?;
 
         // Send out hangup/busy to all callees via signal messaging.
-        // Use legacy signaling since the busy device, legacy or
-        // otherwise, should ignore the message.
         let mut call_manager = active_call.call_manager()?;
         call_manager.send_hangup(
             active_call.clone(),
             active_call.call_id(),
-            signaling::SendHangup {
-                hangup,
-                use_legacy: true,
-            },
+            signaling::SendHangup { hangup },
         )?;
 
         // Handle the normal processing of busy by concluding the call locally.

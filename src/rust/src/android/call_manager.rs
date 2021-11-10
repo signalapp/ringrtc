@@ -20,7 +20,7 @@ use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
 
-use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, HttpResponse, Result};
+use crate::common::{CallId, CallMediaType, DeviceId, HttpResponse, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::Connection;
@@ -248,7 +248,6 @@ pub fn received_answer(
     call_id: jlong,
     sender_device_id: DeviceId,
     opaque: jbyteArray,
-    sender_device_feature_level: FeatureLevel,
     sender_identity_key: jbyteArray,
     receiver_identity_key: jbyteArray,
 ) -> Result<()> {
@@ -277,7 +276,6 @@ pub fn received_answer(
         signaling::ReceivedAnswer {
             answer: signaling::Answer::new(opaque)?,
             sender_device_id,
-            sender_device_feature_level,
             sender_identity_key,
             receiver_identity_key,
         },
@@ -296,7 +294,6 @@ pub fn received_offer(
     age_sec: u64,
     call_media_type: CallMediaType,
     receiver_device_id: DeviceId,
-    sender_device_feature_level: FeatureLevel,
     receiver_device_is_primary: bool,
     sender_identity_key: jbyteArray,
     receiver_identity_key: jbyteArray,
@@ -329,7 +326,6 @@ pub fn received_offer(
             offer: signaling::Offer::new(call_media_type, opaque)?,
             age: Duration::from_secs(age_sec),
             sender_device_id,
-            sender_device_feature_level,
             receiver_device_id,
             receiver_device_is_primary,
             sender_identity_key,

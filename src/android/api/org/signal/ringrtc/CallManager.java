@@ -491,7 +491,6 @@ public class CallManager {
    * @param messageAgeSec            approximate age of the offer message, in seconds
    * @param callMediaType            the origination type for the call, audio or video
    * @param localDeviceId            the local deviceId of the client
-   * @param remoteSupportsMultiRing  if true, the remote device supports the multi-ring feature
    * @param isLocalDevicePrimary     if true, the local device is considered a primary device
    * @param senderIdentityKey        the identity key of the remote client
    * @param receiverIdentityKey      the identity key of the local client
@@ -506,7 +505,6 @@ public class CallManager {
                                      Long          messageAgeSec,
                                      CallMediaType callMediaType,
                                      Integer       localDeviceId,
-                                     boolean       remoteSupportsMultiRing,
                                      boolean       isLocalDevicePrimary,
                             @NonNull byte[]        senderIdentityKey,
                             @NonNull byte[]        receiverIdentityKey)
@@ -524,7 +522,6 @@ public class CallManager {
                          messageAgeSec,
                          callMediaType.ordinal(),
                          localDeviceId,
-                         remoteSupportsMultiRing,
                          isLocalDevicePrimary,
                          senderIdentityKey,
                          receiverIdentityKey);
@@ -537,7 +534,6 @@ public class CallManager {
    * @param callId                   callId for the call
    * @param remoteDeviceId           deviceId of remote peer
    * @param opaque                   the opaque answer
-   * @param remoteSupportsMultiRing  if true, the remote device supports the multi-ring feature
    * @param senderIdentityKey        the identity key of the remote client
    * @param receiverIdentityKey      the identity key of the local client
    *
@@ -547,7 +543,6 @@ public class CallManager {
   public void receivedAnswer(         CallId  callId,
                                       Integer remoteDeviceId,
                              @NonNull byte[]  opaque,
-                                      boolean remoteSupportsMultiRing,
                              @NonNull byte[]  senderIdentityKey,
                              @NonNull byte[]  receiverIdentityKey)
     throws CallException
@@ -560,7 +555,6 @@ public class CallManager {
                           callId.longValue(),
                           remoteDeviceId,
                           opaque,
-                          remoteSupportsMultiRing,
                           senderIdentityKey,
                           receiverIdentityKey);
   }
@@ -1193,9 +1187,9 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void onSendHangup(long callId, Remote remote, int remoteDeviceId, boolean broadcast, HangupType hangupType, int deviceId, boolean useLegacyHangupMessage) {
+  private void onSendHangup(long callId, Remote remote, int remoteDeviceId, boolean broadcast, HangupType hangupType, int deviceId) {
     Log.i(TAG, "onSendHangup():");
-    observer.onSendHangup(new CallId(callId), remote, remoteDeviceId, broadcast, hangupType, deviceId, useLegacyHangupMessage);
+    observer.onSendHangup(new CallId(callId), remote, remoteDeviceId, broadcast, hangupType, deviceId);
   }
 
   @CalledByNative
@@ -1564,10 +1558,7 @@ public class CallManager {
     RECEIVED_OFFER_WHILE_ACTIVE,
 
     /** Received an offer while already handling an active call and glare was detected. */
-    RECEIVED_OFFER_WITH_GLARE,
-
-    /** Received an offer on a linked device from one that doesn't support multi-ring. */
-    IGNORE_CALLS_FROM_NON_MULTIRING_CALLERS;
+    RECEIVED_OFFER_WITH_GLARE;
 
     @CalledByNative
     static CallEvent fromNativeIndex(int nativeIndex) {
@@ -1795,10 +1786,9 @@ public class CallManager {
      * @param broadcast               if true, send broadcast message
      * @param hangupType              type of hangup, normal or handled elsewhere
      * @param deviceId                if not a normal hangup, the associated deviceId
-     * @param useLegacyHangupMessage  if true, use legacyHangup as opposed to hangup in protocol
      *
      */
-    void onSendHangup(CallId callId, Remote remote, Integer remoteDeviceId, Boolean broadcast, HangupType hangupType, Integer deviceId, Boolean useLegacyHangupMessage);
+    void onSendHangup(CallId callId, Remote remote, Integer remoteDeviceId, Boolean broadcast, HangupType hangupType, Integer deviceId);
 
     /**
      *
@@ -1929,7 +1919,6 @@ public class CallManager {
                                long    callId,
                                int     remoteDeviceId,
                                byte[]  opaque,
-                               boolean remoteSupportsMultiRing,
                                byte[]  senderIdentityKey,
                                byte[]  receiverIdentityKey)
     throws CallException;
@@ -1943,7 +1932,6 @@ public class CallManager {
                               long    messageAgeSec,
                               int     callMediaType,
                               int     localDeviceId,
-                              boolean remoteSupportsMultiRing,
                               boolean isLocalDevicePrimary,
                               byte[]  senderIdentityKey,
                               byte[]  receiverIdentityKey)

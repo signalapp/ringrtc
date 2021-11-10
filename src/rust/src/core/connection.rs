@@ -26,8 +26,8 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::common::{
-    units::DataRate, CallDirection, CallId, CallMediaType, ConnectionState, DeviceId, FeatureLevel,
-    Result, RingBench,
+    units::DataRate, CallDirection, CallId, CallMediaType, ConnectionState, DeviceId, Result,
+    RingBench,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
@@ -313,8 +313,6 @@ where
     fsm_receiver: Option<Receiver<(Connection<T>, ConnectionEvent)>>,
     /// Unique 64-bit number identifying the call.
     call_id: CallId,
-    /// The feature level supported by the remote device.
-    remote_feature_level: Arc<CallMutex<FeatureLevel>>,
     /// Connection ID, identifying the call and remote_device.
     connection_id: ConnectionId,
     /// The call direction, inbound or outbound.
@@ -413,7 +411,6 @@ where
             // creation and starting.
             fsm_receiver: None,
             call_id: self.call_id,
-            remote_feature_level: Arc::clone(&self.remote_feature_level),
             connection_id: self.connection_id,
             direction: self.direction,
             state: Arc::clone(&self.state),
@@ -465,11 +462,6 @@ where
             fsm_sender,
             fsm_receiver: Some(fsm_receiver),
             call_id,
-            // Until otherwise detected, remotes are assumed to be multi-ring capable.
-            remote_feature_level: Arc::new(CallMutex::new(
-                FeatureLevel::MultiRing,
-                "remote_feature_level",
-            )),
             connection_id: ConnectionId::new(call_id, remote_device),
             direction,
             call: Arc::new(CallMutex::new(call, "call")),
@@ -586,8 +578,6 @@ where
     ) -> Result<()> {
         let result = (|| {
             self.set_state(ConnectionState::Starting)?;
-
-            self.set_remote_feature_level(received.sender_device_feature_level)?;
 
             let mut webrtc = self.webrtc.lock()?;
 
@@ -885,19 +875,6 @@ where
     pub fn set_network_route(&self, new_network_route: NetworkRoute) -> Result<()> {
         let mut network_route = self.network_route.lock()?;
         *network_route = new_network_route;
-        Ok(())
-    }
-
-    /// Return the current feature level of the remote.
-    pub fn remote_feature_level(&self) -> Result<FeatureLevel> {
-        let remote_feature_level = self.remote_feature_level.lock()?;
-        Ok(*remote_feature_level)
-    }
-
-    /// Update the current feature level of the remote.
-    pub fn set_remote_feature_level(&self, new_remote_feature_level: FeatureLevel) -> Result<()> {
-        let mut remote_feature_level = self.remote_feature_level.lock()?;
-        *remote_feature_level = new_remote_feature_level;
         Ok(())
     }
 

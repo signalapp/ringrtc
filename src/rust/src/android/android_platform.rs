@@ -653,7 +653,7 @@ impl Platform for AndroidPlatform {
 
         const SEND_HANGUP_MESSAGE_METHOD: &str = "onSendHangup";
         const SEND_HANGUP_MESSAGE_SIG: &str =
-            "(JLorg/signal/ringrtc/Remote;IZLorg/signal/ringrtc/CallManager$HangupType;IZ)V";
+            "(JLorg/signal/ringrtc/Remote;IZLorg/signal/ringrtc/CallManager$HangupType;I)V";
 
         let args = [
             call_id_jlong.into(),
@@ -662,7 +662,6 @@ impl Platform for AndroidPlatform {
             broadcast.into(),
             jni_hangup_type.as_obj().into(),
             hangup_device_id.into(),
-            send.use_legacy.into(),
         ];
         let _ = jni_call_method(
             &env,

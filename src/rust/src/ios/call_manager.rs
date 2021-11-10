@@ -14,7 +14,7 @@ use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppO
 use crate::ios::ios_platform::IosPlatform;
 use crate::ios::logging::{init_logging, IosLogger};
 
-use crate::common::{CallId, CallMediaType, DeviceId, FeatureLevel, HttpResponse, Result};
+use crate::common::{CallId, CallMediaType, DeviceId, HttpResponse, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
@@ -141,7 +141,6 @@ pub fn received_answer(
     call_id: u64,
     sender_device_id: DeviceId,
     opaque: Option<Vec<u8>>,
-    sender_device_feature_level: FeatureLevel,
     sender_identity_key: Option<Vec<u8>>,
     receiver_identity_key: Option<Vec<u8>>,
 ) -> Result<()> {
@@ -191,7 +190,6 @@ pub fn received_answer(
         signaling::ReceivedAnswer {
             answer: signaling::Answer::new(opaque)?,
             sender_device_id,
-            sender_device_feature_level,
             sender_identity_key,
             receiver_identity_key,
         },
@@ -209,7 +207,6 @@ pub fn received_offer(
     age_sec: u64,
     call_media_type: CallMediaType,
     receiver_device_id: DeviceId,
-    sender_device_feature_level: FeatureLevel,
     receiver_device_is_primary: bool,
     sender_identity_key: Option<Vec<u8>>,
     receiver_identity_key: Option<Vec<u8>>,
@@ -263,7 +260,6 @@ pub fn received_offer(
             offer: signaling::Offer::new(call_media_type, opaque)?,
             age: Duration::from_secs(age_sec),
             sender_device_id,
-            sender_device_feature_level,
             receiver_device_id,
             receiver_device_is_primary,
             sender_identity_key,

@@ -330,7 +330,6 @@ impl Platform for IosPlatform {
             broadcast,
             hangup_type as i32,
             hangup_device_id,
-            send.use_legacy,
         );
 
         Ok(())

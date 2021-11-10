@@ -16,7 +16,7 @@ use crate::android::android_platform::AndroidPlatform;
 use crate::android::call_manager;
 use crate::android::call_manager::AndroidCallManager;
 use crate::android::error;
-use crate::common::{CallMediaType, DeviceId, FeatureLevel};
+use crate::common::{CallMediaType, DeviceId};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::connection::Connection;
 use crate::core::{group_call, signaling};
@@ -235,23 +235,15 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
     call_id: jlong,
     remote_device: jint,
     opaque: jbyteArray,
-    remote_supports_multi_ring: jboolean,
     sender_identity_key: jbyteArray,
     receiver_identity_key: jbyteArray,
 ) {
-    let remote_feature_level = if remote_supports_multi_ring == jni::sys::JNI_TRUE {
-        FeatureLevel::MultiRing
-    } else {
-        FeatureLevel::Unspecified
-    };
-
     match call_manager::received_answer(
         &env,
         call_manager as *mut AndroidCallManager,
         call_id,
         remote_device as DeviceId,
         opaque,
-        remote_feature_level,
         sender_identity_key,
         receiver_identity_key,
     ) {
@@ -275,17 +267,10 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     message_age_sec: jlong,
     call_media_type: jint,
     local_device: jint,
-    remote_supports_multi_ring: jboolean,
     jni_is_local_device_primary: jboolean,
     sender_identity_key: jbyteArray,
     receiver_identity_key: jbyteArray,
 ) {
-    let remote_feature_level = if remote_supports_multi_ring == jni::sys::JNI_TRUE {
-        FeatureLevel::MultiRing
-    } else {
-        FeatureLevel::Unspecified
-    };
-
     match call_manager::received_offer(
         &env,
         call_manager as *mut AndroidCallManager,
@@ -296,7 +281,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
         message_age_sec as u64,
         CallMediaType::from_i32(call_media_type),
         local_device as DeviceId,
-        remote_feature_level,
         jni_is_local_device_primary == jni::sys::JNI_TRUE,
         sender_identity_key,
         receiver_identity_key,

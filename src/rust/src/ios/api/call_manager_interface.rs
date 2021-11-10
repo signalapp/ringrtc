@@ -16,7 +16,7 @@ use crate::ios::call_manager;
 use crate::ios::call_manager::IosCallManager;
 use crate::ios::logging::IosLogger;
 
-use crate::common::{CallMediaType, DeviceId, FeatureLevel, HttpResponse};
+use crate::common::{CallMediaType, DeviceId, HttpResponse};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::group_call;
 use crate::core::signaling;
@@ -359,7 +359,6 @@ pub struct AppInterface {
         broadcast: bool,
         hangupType: i32,
         deviceId: u32,
-        useLegacyHangupMessage: bool,
     ),
     ///
     pub onSendBusy: extern "C" fn(
@@ -685,22 +684,14 @@ pub extern "C" fn ringrtcReceivedAnswer(
     callId: u64,
     senderDeviceId: u32,
     opaque: AppByteSlice,
-    senderSupportsMultiRing: bool,
     senderIdentityKey: AppByteSlice,
     receiverIdentityKey: AppByteSlice,
 ) -> *mut c_void {
-    let sender_device_feature_level = if senderSupportsMultiRing {
-        FeatureLevel::MultiRing
-    } else {
-        FeatureLevel::Unspecified
-    };
-
     match call_manager::received_answer(
         callManager as *mut IosCallManager,
         callId,
         senderDeviceId as DeviceId,
         byte_vec_from_app_slice(&opaque),
-        sender_device_feature_level,
         byte_vec_from_app_slice(&senderIdentityKey),
         byte_vec_from_app_slice(&receiverIdentityKey),
     ) {
@@ -726,17 +717,10 @@ pub extern "C" fn ringrtcReceivedOffer(
     messageAgeSec: u64,
     callMediaType: i32,
     receiverDeviceId: u32,
-    senderSupportsMultiRing: bool,
     receiverDeviceIsPrimary: bool,
     senderIdentityKey: AppByteSlice,
     receiverIdentityKey: AppByteSlice,
 ) -> *mut c_void {
-    let sender_device_feature_level = if senderSupportsMultiRing {
-        FeatureLevel::MultiRing
-    } else {
-        FeatureLevel::Unspecified
-    };
-
     match call_manager::received_offer(
         callManager as *mut IosCallManager,
         callId,
@@ -746,7 +730,6 @@ pub extern "C" fn ringrtcReceivedOffer(
         messageAgeSec,
         CallMediaType::from_i32(callMediaType),
         receiverDeviceId as DeviceId,
-        sender_device_feature_level,
         receiverDeviceIsPrimary,
         byte_vec_from_app_slice(&senderIdentityKey),
         byte_vec_from_app_slice(&receiverIdentityKey),

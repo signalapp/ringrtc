@@ -194,9 +194,6 @@ pub enum ApplicationEvent {
     /// Received an offer while already handling an active call and glare
     /// was detected.
     ReceivedOfferWithGlare,
-
-    /// Received an offer on a linked device from one that doesn't support multi-ring.
-    IgnoreCallsFromNonMultiringCallers,
 }
 
 impl fmt::Display for ApplicationEvent {
@@ -276,33 +273,6 @@ impl CallDirection {
         match value {
             0 => CallDirection::InComing,
             1 => CallDirection::OutGoing,
-            _ => panic!("Unknown value: {}", value),
-        }
-    }
-}
-
-/// The supported feature level of the remote peer.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum FeatureLevel {
-    /// Unspecified by remote, usually means a legacy/older protocol.
-    Unspecified = 0,
-
-    /// Remote is multi-ring capable.
-    MultiRing,
-}
-
-impl fmt::Display for FeatureLevel {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl FeatureLevel {
-    pub fn from_i32(value: i32) -> Self {
-        match value {
-            0 => FeatureLevel::Unspecified,
-            1 => FeatureLevel::MultiRing,
             _ => panic!("Unknown value: {}", value),
         }
     }

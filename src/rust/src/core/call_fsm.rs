@@ -56,9 +56,7 @@ use futures::{Future, Stream};
 
 use crate::error::RingRtcError;
 
-use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallState, DeviceId, FeatureLevel, Result,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallState, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::{Call, EventStream};
 use crate::core::connection::ConnectionObserverEvent;
@@ -117,10 +115,9 @@ impl fmt::Display for CallEvent {
             CallEvent::Proceed(bandwidth_mode) => {
                 format!("Proceed, bandwidth_mode: {}", bandwidth_mode)
             }
-            CallEvent::ReceivedAnswer(received) => format!(
-                "ReceivedAnswer, device: {} feature_level: {}",
-                received.sender_device_id, received.sender_device_feature_level
-            ),
+            CallEvent::ReceivedAnswer(received) => {
+                format!("ReceivedAnswer, device: {}", received.sender_device_id)
+            }
             CallEvent::ReceivedIce(received) => {
                 format!("ReceivedIce, device: {}", received.sender_device_id)
             }
@@ -737,27 +734,13 @@ where
                                 // network route.
                                 call.notify_network_route_changed(connection.network_route()?)?;
 
-                                // If the remote device of the active connection can support
-                                // multi-ring, we send a "legacy" Hangup message. The callee
-                                // that accepted the call will ignore it and all other callees,
-                                // legacy or otherwise, will handle it and end.
-                                //
-                                // If the remote device is not multi-ring capable, then we send
-                                // a new "non-legacy" Hangup message because the callee that
-                                // accepted the call will ignore it as it is not defined in their
-                                // protocol definition.
-                                let use_legacy = match connection.remote_feature_level()? {
-                                    FeatureLevel::Unspecified => false,
-                                    FeatureLevel::MultiRing => true,
-                                };
-
                                 // Send the accepted indication via hangup signaling (it will be
                                 // replicated to all remote peers).
                                 let mut call_manager = call.call_manager()?;
                                 call_manager.send_hangup(
                                     call.clone(),
                                     call.call_id(),
-                                    signaling::SendHangup { hangup, use_legacy },
+                                    signaling::SendHangup { hangup },
                                 )?;
 
                                 // Close all the other connections (this blocks).
