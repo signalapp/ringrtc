@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.14.1
+
+- Desktop: Clear out the incoming video frame to avoid rendering old data
+
+- iOS: Delete the dSYMs out of the built xcframework
+
 ## v2.14.0
 
 - Update WebRTC to 4638 (M95)
