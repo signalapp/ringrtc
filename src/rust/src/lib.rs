@@ -53,7 +53,9 @@ pub mod protobuf {
 #[cfg(any(target_os = "android", feature = "check-all"))]
 /// Android specific implementation.
 mod android {
-    extern crate jni;
+    #[macro_use]
+    mod jni_util;
+
     #[allow(clippy::missing_safety_doc)]
     mod api {
         mod jni_call_manager;
@@ -61,7 +63,6 @@ mod android {
     mod android_platform;
     mod call_manager;
     mod error;
-    mod jni_util;
     mod logging;
     mod webrtc_java_media_stream;
     mod webrtc_peer_connection_factory;

@@ -58,7 +58,7 @@ rand_chacha = { version = "0.2", optional = true }
 neon = { version = "0.9.1", optional = true, default-features = false, features = ["napi-6", "channel-api"] }
 
 # Optional, needed to check Android-specific code when not targeting Android
-jni = { version = "0.17.0", optional = true, default-features = false }
+jni = { version = "0.19.0", optional = true, default-features = false }
 
 # Optional, needed by the "http" feature
 ureq = { version = "2.2", optional = true }
@@ -91,7 +91,7 @@ path = "tests/outgoing.rs"
 required-features = ["sim"]
 
 [target.'cfg(target_os="android")'.dependencies]
-jni = { version = "0.17.0", default-features = false }
+jni = { version = "0.19.0", default-features = false }
 
 [dev-dependencies]
 env_logger = { version = "0.8.1" }

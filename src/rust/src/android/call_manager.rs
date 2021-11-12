@@ -43,11 +43,12 @@ pub fn get_build_info(env: &JNIEnv) -> Result<jobject> {
     #[cfg(any(not(debug_assertions), test))]
     let debug = false;
 
-    const BUILD_INFO_CLASS: &str = "org/signal/ringrtc/BuildInfo";
-    const BUILD_INFO_SIG: &str = "(Z)V";
-    let args = [debug.into()];
-
-    let result = jni_new_object(env, BUILD_INFO_CLASS, BUILD_INFO_SIG, &args)?.into_inner();
+    let result = jni_new_object(
+        env,
+        jni_class_name!(org.signal.ringrtc.BuildInfo),
+        jni_args!((debug => boolean) -> void),
+    )?
+    .into_inner();
 
     Ok(result)
 }
@@ -80,7 +81,7 @@ pub fn create_call_manager(env: &JNIEnv, jni_call_manager: JObject) -> Result<jl
 
 /// Create a org.webrtc.PeerConnection object
 pub fn create_peer_connection(
-    env: &JNIEnv,
+    env: JNIEnv,
     peer_connection_factory: jlong,
     native_connection: webrtc::ptr::Borrowed<Connection<AndroidPlatform>>,
     jni_rtc_config: JObject,
@@ -104,7 +105,7 @@ pub fn create_peer_connection(
     // construct JNI OwnedPeerConnection object
     let jni_owned_pc = unsafe {
         Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection(
-            env.clone(),
+            env,
             JClass::from(JObject::null()),
             peer_connection_factory,
             jni_rtc_config,
@@ -801,9 +802,9 @@ pub fn request_video(
     let jni_rendered_resolution_list = env.get_list(jni_rendered_resolutions)?;
     let mut rendered_resolutions: Vec<group_call::VideoRequest> = Vec::new();
     for jni_rendered_resolution in jni_rendered_resolution_list.iter()? {
-        const LONG_TYPE: &str = "J";
-        const INT_TYPE: &str = "I";
-        const NULLABLE_INT_TYPE: &str = "Ljava/lang/Integer;";
+        const LONG_TYPE: &str = jni_signature!(long);
+        const INT_TYPE: &str = jni_signature!(int);
+        const NULLABLE_INT_TYPE: &str = jni_signature!(java.lang.Integer);
 
         const DEMUX_ID_FIELD: &str = "demuxId";
         let demux_id =
@@ -829,9 +830,9 @@ pub fn request_video(
         let framerate = if framerate.is_null() {
             None
         } else {
-            // We have java/lang/Integer, so we need to invoke the function to get the actual
+            // We have java.lang.Integer, so we need to invoke the function to get the actual
             // int value that is attached to it.
-            match env.call_method(framerate, "intValue", "()I", &[]) {
+            match env.call_method(framerate, "intValue", jni_signature!(() -> int), &[]) {
                 Ok(jvalue) => {
                     match jvalue.i() {
                         Ok(int) => Some(int.to_owned() as u16),

@@ -6,6 +6,7 @@
 //! Common types used throughout the library.
 
 pub mod actor;
+pub mod jni_signature;
 pub mod units;
 
 use std::fmt;

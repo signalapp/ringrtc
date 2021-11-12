@@ -6,6 +6,8 @@
 //! Utility helpers for JNI access
 
 use std::collections::HashMap;
+use std::convert::{TryFrom, TryInto};
+use std::marker::PhantomData;
 
 use jni::objects::{GlobalRef, JClass, JList, JObject, JValue};
 use jni::JNIEnv;
@@ -13,50 +15,176 @@ use jni::JNIEnv;
 use crate::android::error::AndroidError;
 use crate::common::Result;
 
+pub use crate::jni_class_name;
+pub use crate::jni_signature;
+
+macro_rules! jni_arg {
+    ( $arg:expr => boolean ) => {
+        <jni::objects::JValue as From<bool>>::from($arg)
+    };
+    // jni_signature will reject this, but having it do something reasonable avoids multiple errors.
+    ( $arg:expr => bool ) => {
+        <jni::objects::JValue as From<bool>>::from($arg)
+    };
+    ( $arg:expr => byte ) => {
+        jni::objects::JValue::Byte($arg)
+    };
+    ( $arg:expr => char ) => {
+        jni::objects::JValue::Char($arg)
+    };
+    ( $arg:expr => short ) => {
+        jni::objects::JValue::Short($arg)
+    };
+    ( $arg:expr => int ) => {
+        jni::objects::JValue::Int($arg)
+    };
+    ( $arg:expr => long ) => {
+        jni::objects::JValue::Long($arg)
+    };
+    ( $arg:expr => float ) => {
+        jni::objects::JValue::Float($arg)
+    };
+    ( $arg:expr => double ) => {
+        jni::objects::JValue::Double($arg)
+    };
+    // Assume anything else is an object. This includes arrays and classes.
+    ( $arg:expr => $($_:tt)+) => {
+        jni::objects::JValue::Object($arg.into())
+    };
+}
+
+macro_rules! jni_return_type {
+    // Unfortunately there's not a conversion directly from JValue to bool, only jboolean.
+    (boolean) => {
+        jni::sys::jboolean
+    };
+    // jni_signature will reject this, but having it do something reasonable avoids multiple errors.
+    (bool) => {
+        jni::sys::jboolean
+    };
+    (byte) => {
+        jni::sys::jbyte
+    };
+    (char) => {
+        jni::sys::jchar
+    };
+    (short) => {
+        jni::sys::jshort
+    };
+    (int) => {
+        jni::sys::jint
+    };
+    (long) => {
+        jni::sys::jlong
+    };
+    (float) => {
+        jni::sys::jfloat
+    };
+    (double) => {
+        jni::sys::jdouble
+    };
+    (void) => {
+        ()
+    };
+    // Assume anything else is an object. This includes arrays and classes.
+    ($($_:tt)+) => {
+        jni::objects::JObject
+    };
+}
+
+/// Represents a return type, used by [`JniArgs`].
+///
+/// This is an implementation detail of [`jni_args`] and [`JniArgs`]. Using a function type makes
+/// `JniArgs` covariant, which allows the compiler to be less strict about the lifetime marker.
+pub type PhantomReturnType<R> = PhantomData<fn() -> R>;
+
+/// A JNI argument list, type-checked with its signature.
+#[derive(Debug, Clone, Copy)]
+pub struct JniArgs<'a, R, const LEN: usize> {
+    pub sig: &'static str,
+    pub args: [JValue<'a>; LEN],
+    pub _return: PhantomReturnType<R>,
+}
+
+impl<'a, const LEN: usize> JniArgs<'a, (), LEN> {
+    pub fn returning_void(sig: &'static str, args: [JValue<'a>; LEN]) -> Self {
+        Self {
+            sig,
+            args,
+            _return: PhantomData,
+        }
+    }
+}
+
+/// Produces a JniArgs struct from the given arguments and return type.
+///
+/// # Example
+///
+/// ```
+/// let args = jni_args!((name => java.lang.String, 0x3FFF => short) -> void);
+/// assert_eq!(args.sig, "(Ljava/lang/String;S)V");
+/// assert_eq!(args.args.len(), 2);
+/// ```
+macro_rules! jni_args {
+    (
+        (
+            $( $arg:expr => $arg_base:tt $(. $arg_rest:ident)* $(:: $arg_nested:ident)* ),* $(,)?
+        ) -> $ret_base:tt $(. $ret_rest:ident)* $(:: $ret_nested:ident)*
+    ) => {
+        JniArgs {
+            sig: jni_signature!(
+                (
+                    $( $arg_base $(. $arg_rest)* $(:: $arg_nested)* ),*
+                ) -> $ret_base $(. $ret_rest)* $(:: $ret_nested)*
+            ),
+            args: [$(jni_arg!($arg => $arg_base)),*],
+            _return: PhantomReturnType::<jni_return_type!($ret_base)> {},
+        }
+    }
+}
+
 /// Wrapper around JNIEnv::call_method() with logging.
-pub fn jni_call_method<'a>(
+pub fn jni_call_method<'a, R, const ARG_LEN: usize>(
     env: &'a JNIEnv,
     object: JObject<'a>,
     name: &str,
-    sig: &str,
-    args: &[JValue],
-) -> Result<JValue<'a>> {
-    match env.call_method(object, name, sig, args) {
-        Ok(v) => Ok(v),
-        Err(e) => Err(AndroidError::JniCallMethod(name.to_string(), sig.to_string(), e).into()),
-    }
+    args: JniArgs<'a, R, ARG_LEN>,
+) -> Result<R>
+where
+    R: TryFrom<JValue<'a>, Error = jni::errors::Error>,
+{
+    env.call_method(object, name, args.sig, &args.args)
+        .and_then(|v| v.try_into())
+        .map_err(|e| AndroidError::JniCallMethod(name.to_string(), args.sig.to_string(), e).into())
 }
 
 /// Wrapper around JNIEnv::call_static_method() with logging.
 #[allow(dead_code)]
-pub fn jni_call_static_method<'a>(
+pub fn jni_call_static_method<'a, R, const ARG_LEN: usize>(
     env: &'a JNIEnv,
     class: &str,
     name: &str,
-    sig: &str,
-    args: &[JValue],
-) -> Result<JValue<'a>> {
-    match env.call_static_method(class, name, sig, args) {
-        Ok(v) => Ok(v),
-        Err(_) => Err(AndroidError::JniCallStaticMethod(
-            class.to_string(),
-            name.to_string(),
-            sig.to_string(),
-        )
-        .into()),
-    }
+    args: JniArgs<'a, R, ARG_LEN>,
+) -> Result<R>
+where
+    R: TryFrom<JValue<'a>, Error = jni::errors::Error>,
+{
+    env.call_static_method(class, name, args.sig, &args.args)
+        .and_then(|v| v.try_into())
+        .map_err(|e| AndroidError::JniCallMethod(name.to_string(), args.sig.to_string(), e).into())
 }
 
 /// Wrapper around JNIEnv::new_object() with logging.
-pub fn jni_new_object<'a>(
+pub fn jni_new_object<'a, const ARG_LEN: usize>(
     env: &'a JNIEnv,
     class: &str,
-    sig: &str,
-    args: &[JValue],
+    args: JniArgs<'a, (), ARG_LEN>,
 ) -> Result<JObject<'a>> {
-    match env.new_object(class, sig, args) {
+    match env.new_object(class, args.sig, &args.args) {
         Ok(v) => Ok(v),
-        Err(_) => Err(AndroidError::JniCallConstructor(class.to_string(), sig.to_string()).into()),
+        Err(_) => {
+            Err(AndroidError::JniCallConstructor(class.to_string(), args.sig.to_string()).into())
+        }
     }
 }
 
@@ -76,9 +204,11 @@ pub fn jni_get_field<'a>(
 /// Creates a new java.util.LinkedList object
 pub fn jni_new_linked_list<'a>(env: &'a JNIEnv) -> Result<JList<'a, 'a>> {
     // create empty java linked list object
-    const LINKED_LIST_CLASS: &str = "java/util/LinkedList";
-    const LINKED_LIST_CLASS_SIG: &str = "()V";
-    let list = jni_new_object(env, LINKED_LIST_CLASS, LINKED_LIST_CLASS_SIG, &[])?;
+    let list = jni_new_object(
+        env,
+        jni_class_name!(java.util.LinkedList),
+        jni_args!(() -> void),
+    )?;
     Ok(env.get_list(list)?)
 }
 
@@ -86,12 +216,13 @@ pub fn jni_new_linked_list<'a>(env: &'a JNIEnv) -> Result<JList<'a, 'a>> {
 #[allow(dead_code)]
 pub fn dump_references(env: &JNIEnv) {
     let _ = env.with_local_frame(5, || {
-        const VM_DEBUG_CLASS: &str = "dalvik/system/VMDebug";
-        const VM_DEBUG_METHOD: &str = "dumpReferenceTables";
-        const VM_DEBUG_SIG: &str = "()V";
-
         info!("Dumping references ->");
-        let _ = env.call_static_method(VM_DEBUG_CLASS, VM_DEBUG_METHOD, VM_DEBUG_SIG, &[]);
+        let _ = env.call_static_method(
+            jni_class_name!(dalvik.system.VMDebug),
+            "dumpReferenceTables",
+            jni_signature!(() -> void),
+            &[],
+        );
         info!("<- Done with references");
 
         Ok(JObject::null())

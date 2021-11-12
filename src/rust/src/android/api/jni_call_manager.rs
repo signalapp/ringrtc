@@ -75,7 +75,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
     jni_media_constraints: JObject,
 ) -> jlong {
     match call_manager::create_peer_connection(
-        &env,
+        env,
         peer_connection_factory,
         webrtc::ptr::Borrowed::from_ptr(
             native_connection_borrowed as *mut Connection<AndroidPlatform>,

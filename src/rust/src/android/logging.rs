@@ -11,6 +11,7 @@ use jni::{JNIEnv, JavaVM};
 use log::{Level, Log, Metadata, Record};
 
 use crate::android::error::AndroidError;
+use crate::android::jni_util::*;
 use crate::common::Result;
 
 /// Log object for interfacing with existing Android logger.
@@ -22,9 +23,9 @@ struct AndroidLogger {
 
 // Method name and signature required of Java logger class
 // void log(int level, String tag, String message)
-const LOGGER_CLASS: &str = "org/signal/ringrtc/Log";
+const LOGGER_CLASS: &str = jni_class_name!(org.signal.ringrtc.Log);
 const LOGGER_METHOD: &str = "log";
-const LOGGER_SIG: &str = "(ILjava/lang/String;Ljava/lang/String;)V";
+const LOGGER_SIG: &str = jni_signature!((int, java.lang.String, java.lang.String) -> void);
 
 impl AndroidLogger {
     fn get_java_env(&self) -> Result<JNIEnv> {

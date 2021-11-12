@@ -11,7 +11,9 @@ use jni::objects::JObject;
 use jni::JNIEnv;
 use thiserror::Error;
 
-const CALL_EXCEPTION_CLASS: &str = "org/signal/ringrtc/CallException";
+use crate::android::jni_util::*;
+
+const CALL_EXCEPTION_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallException);
 
 /// Convert a `Error` into a Java `org.signal.ringrtc.CallException`
 /// and throw it.
@@ -22,13 +24,12 @@ pub fn throw_error(env: &JNIEnv, error: Error) {
     if env.exception_check().is_ok() {
         if let Ok(exception) = env.exception_occurred() {
             if env.exception_clear().is_ok() {
-                let args = [];
                 let java_exception: String;
                 match env.call_method(
                     JObject::from(exception),
                     "toString",
-                    "()Ljava/lang/String;",
-                    &args,
+                    jni_signature!(() -> java.lang.String),
+                    &[],
                 ) {
                     Ok(v) => {
                         java_exception = {
