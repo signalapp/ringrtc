@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.14.2
+
+- Don't terminate a 1:1 call because of transient RTP data error
+
+- Reference signalapp/webrtc@4638b
+  - Make it possible to share an APM between PeerConnections (ensures AEC/NS operation)
+
 ## v2.14.1
 
 - Desktop: Clear out the incoming video frame to avoid rendering old data
