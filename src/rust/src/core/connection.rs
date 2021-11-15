@@ -1350,7 +1350,15 @@ where
         // block on the WebRTC network thread, so we need to make
         // sure we don't grab the webrtc_data lock in
         // handle_rtp_received.
-        webrtc_data.peer_connection()?.send_rtp(header, &bytes)?;
+        // Warning: send_rtp() can fail if there is a transient error, so don't take it
+        // too seriously.  Plus, we'll resend every second anyway.
+        if webrtc_data
+            .peer_connection()?
+            .send_rtp(header, &bytes)
+            .is_err()
+        {
+            warn!("Could not send RTP data message.");
+        }
         Ok(())
     }
 
