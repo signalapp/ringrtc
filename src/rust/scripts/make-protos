@@ -6,4 +6,4 @@
 #
 
 OUTPUT_DIR=/tmp/ringrtc-protobuf
-cargo run --bin protobuf-gen --features protobuf_gen_deps --target-dir=$OUTPUT_DIR
+cargo run --bin protobuf-gen --features protobuf_gen_deps,sim --target-dir=$OUTPUT_DIR
