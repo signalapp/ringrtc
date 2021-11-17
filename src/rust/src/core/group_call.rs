@@ -312,7 +312,7 @@ pub enum ConnectionState {
 //      | joined     |
 //      V            |
 //   Joined       -->|
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum JoinState {
     /// Join() has not yet been called
     /// or leave() has been called
@@ -325,9 +325,9 @@ pub enum JoinState {
     /// Join() has been called but a response from the SFU is pending.
     Joining,
 
-    /// Join() has been called and a response from the SFU has been received.
-    /// and a DemuxId/RequestToken has been assigned.
-    Joined(DemuxId, String),
+    /// Join() has been called, a response from the SFU has been received,
+    /// and a DemuxId has been assigned.
+    Joined(DemuxId),
 }
 
 // The info about SFU needed in order to connect to it.
@@ -404,7 +404,6 @@ pub trait SfuClient {
     // Notifies the client of the new membership proof.
     fn set_membership_proof(&mut self, proof: MembershipProof);
     fn set_group_members(&mut self, members: Vec<GroupMemberInfo>);
-    fn leave(&mut self, long_device_id: String);
 }
 
 // Associates a group member's UUID with their UUID ciphertext
@@ -1100,7 +1099,7 @@ impl Client {
                 state.client_id
             );
             match state.join_state {
-                JoinState::Joined(_, _) => {
+                JoinState::Joined(_) => {
                     warn!("Can't join when already joined.");
                 }
                 JoinState::Joining => {
@@ -1169,7 +1168,7 @@ impl Client {
             state.client_id,
             join_state
         );
-        state.join_state = join_state.clone();
+        state.join_state = join_state;
         state
             .observer
             .handle_join_state_changed(state.client_id, join_state);
@@ -1196,14 +1195,12 @@ impl Client {
             JoinState::NotJoined(_) => {
                 warn!("Can't leave when not joined.");
             }
-            JoinState::Joining | JoinState::Joined(_, _) => {
+            JoinState::Joining | JoinState::Joined(_) => {
                 state.peer_connection.set_outgoing_media_enabled(false);
                 state.peer_connection.set_incoming_media_enabled(false);
                 Self::release_busy(state);
 
-                if let JoinState::Joined(local_demux_id, long_device_id) = state.join_state.clone()
-                {
-                    state.sfu_client.leave(long_device_id);
+                if let JoinState::Joined(local_demux_id) = state.join_state {
                     Self::send_leaving_through_sfu_and_over_signaling(state, local_demux_id);
                     Self::send_leave_to_sfu(state);
                 }
@@ -1372,7 +1369,7 @@ impl Client {
                 state.client_id
             );
 
-            if let JoinState::Joined(local_demux_id, _) = state.join_state {
+            if let JoinState::Joined(local_demux_id) = state.join_state {
                 let user_ids: HashSet<UserId> = state
                     .remote_devices
                     .iter()
@@ -1590,7 +1587,7 @@ impl Client {
         );
 
         let joining_or_joined = match state.join_state {
-            JoinState::Joined(_, _) | JoinState::Joining => true,
+            JoinState::Joined(_) | JoinState::Joining => true,
             JoinState::NotJoined(_) => false,
         };
         if joining_or_joined {
@@ -1616,7 +1613,7 @@ impl Client {
     }
 
     // This should be called by the SfuClient after it has joined.
-    pub fn on_sfu_client_joined(&self, result: Result<(SfuInfo, DemuxId, String)>) {
+    pub fn on_sfu_client_joined(&self, result: Result<(SfuInfo, DemuxId)>) {
         debug!(
             "group_call::Client(outer)::on_sfu_client_joined(client_id: {})",
             self.client_id
@@ -1627,7 +1624,7 @@ impl Client {
                 state.client_id
             );
 
-            if let Ok((sfu_info, local_demux_id, long_device_id)) = result {
+            if let Ok((sfu_info, local_demux_id)) = result {
                 match state.connection_state {
                     ConnectionState::NotConnected => {
                         warn!("The SFU completed joining before connect() was requested.");
@@ -1660,7 +1657,7 @@ impl Client {
                         // The call to set_peek_info_inner needs the join state to be joined.
                         // But make sure to fire observer.handle_join_state_changed after
                         // set_peek_info_inner so that state.remote_devices are filled in.
-                        state.join_state = JoinState::Joined(local_demux_id, long_device_id);
+                        state.join_state = JoinState::Joined(local_demux_id);
                         if let Some(peek_info) = &state.last_peek_info {
                             // TODO: Do the same processing without making it look like we just
                             // got an update from the server even though the update actually came
@@ -1670,13 +1667,13 @@ impl Client {
                         }
                         state
                             .observer
-                            .handle_join_state_changed(state.client_id, state.join_state.clone());
+                            .handle_join_state_changed(state.client_id, state.join_state);
                         // We just now appeared in the participants list, and possibly even updated
                         // the eraId.
                         Self::request_remote_devices_as_soon_as_possible(state);
                         state.next_stats_time = Some(Instant::now() + STATS_INTERVAL);
                     }
-                    JoinState::Joined(_, _) => {
+                    JoinState::Joined(_) => {
                         warn!("The SFU completed joining more than once.");
                     }
                 };
@@ -1864,7 +1861,7 @@ impl Client {
         }
 
         let peek_info_to_remember = peek_info.clone();
-        if let JoinState::Joined(local_demux_id, _) = state.join_state {
+        if let JoinState::Joined(local_demux_id) = state.join_state {
             // We remember these before changing state.remote_devices so we can calculate changes after.
             let old_demux_ids: HashSet<DemuxId> = state.remote_devices.demux_id_set();
 
@@ -2107,7 +2104,7 @@ impl Client {
                 let ratchet_counter: frame_crypto::RatchetCounter = 0;
                 let secret = frame_crypto::random_secret(&mut rand::rngs::OsRng);
 
-                if let JoinState::Joined(local_demux_id, _) = state.join_state {
+                if let JoinState::Joined(local_demux_id) = state.join_state {
                     let user_ids: HashSet<UserId> = state
                         .remote_devices
                         .iter()
@@ -2177,7 +2174,7 @@ impl Client {
                 .expect("Get lock for frame encryption context to advance media send key");
             frame_crypto_context.advance_send_ratchet()
         };
-        if let JoinState::Joined(local_demux_id, _) = state.join_state {
+        if let JoinState::Joined(local_demux_id) = state.join_state {
             info!(
                 "Sending newly advanced key to users with added devices (number of users: {})",
                 users_with_added_devices.len()
@@ -2275,7 +2272,7 @@ impl Client {
             "Sending pending media key to users with added devices (number of users: {}).",
             users_with_added_devices.len()
         );
-        if let JoinState::Joined(local_demux_id, _) = state.join_state {
+        if let JoinState::Joined(local_demux_id) = state.join_state {
             if let KeyRotationState::Pending { secret, .. } = state.media_send_key_rotation_state {
                 for user_id in users_with_added_devices.iter() {
                     Self::send_media_send_key_to_user_over_signaling(
@@ -2580,7 +2577,7 @@ impl Client {
             "group_call::Client(inner)::broadcast_data_through_sfu(client_id: {}, message: {:?})",
             state.client_id, message,
         );
-        if let JoinState::Joined(local_demux_id, _) = state.join_state {
+        if let JoinState::Joined(local_demux_id) = state.join_state {
             let message = Self::encrypt_data(state, message)?;
             let seqnum = state.rtp_data_through_sfu_next_seqnum;
             state.rtp_data_through_sfu_next_seqnum =
@@ -2605,7 +2602,7 @@ impl Client {
             "group_call::Client(inner)::send_data_to_sfu(client_id: {}, message: {:?})",
             state.client_id, message,
         );
-        if let JoinState::Joined(_local_demux_id, _) = state.join_state {
+        if let JoinState::Joined(_) = state.join_state {
             let seqnum = state.rtp_data_to_sfu_next_seqnum;
             state.rtp_data_to_sfu_next_seqnum = state.rtp_data_to_sfu_next_seqnum.wrapping_add(1);
 
@@ -3217,18 +3214,13 @@ mod tests {
             _dtls_fingerprint: &DtlsFingerprint,
             client: Client,
         ) {
-            client.on_sfu_client_joined(Ok((
-                self.sfu_info.clone(),
-                self.local_demux_id,
-                "token".to_string(),
-            )));
+            client.on_sfu_client_joined(Ok((self.sfu_info.clone(), self.local_demux_id)));
         }
         fn peek(&mut self, _handle_remote_devices: BoxedPeekInfoHandler) {
             self.request_count.fetch_add(1, atomic::Ordering::SeqCst);
         }
         fn set_group_members(&mut self, _members: Vec<GroupMemberInfo>) {}
         fn set_membership_proof(&mut self, _proof: MembershipProof) {}
-        fn leave(&mut self, _long_device_id: String) {}
     }
 
     // TODO: Put this in common util area?
@@ -3422,7 +3414,7 @@ mod tests {
         }
 
         fn handle_join_state_changed(&self, _client_id: ClientId, join_state: JoinState) {
-            if let JoinState::Joined(_, _) = join_state {
+            if let JoinState::Joined(_) = join_state {
                 let mut owned_remote_devices_at_join_time = self
                     .remote_devices_at_join_time
                     .lock()

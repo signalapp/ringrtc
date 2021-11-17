@@ -603,7 +603,7 @@ impl Platform for IosPlatform {
             match join_state {
                 group_call::JoinState::NotJoined(_) => 0,
                 group_call::JoinState::Joining => 1,
-                group_call::JoinState::Joined(_, _) => 2,
+                group_call::JoinState::Joined(_) => 2,
             },
         );
     }

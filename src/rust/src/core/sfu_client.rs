@@ -21,8 +21,6 @@ use crate::error::RingRtcError;
 
 #[derive(Deserialize, Debug)]
 struct JoinResponse {
-    #[serde(rename = "endpointId")]
-    endpoint_id: String,
     #[serde(rename = "ssrcPrefix")]
     ssrc_prefix: u32,
     transport: SfuTransport,
@@ -104,7 +102,7 @@ impl SfuClient {
         }
     }
 
-    fn process_join_response(response: Option<HttpResponse>) -> Result<(SfuInfo, DemuxId, String)> {
+    fn process_join_response(response: Option<HttpResponse>) -> Result<(SfuInfo, DemuxId)> {
         let body = match response {
             Some(r) if r.status_code >= 200 && r.status_code <= 300 => r.body,
             Some(r) if r.status_code == RESPONSE_CODE_MAX_PARTICIPANTS_REACHED => {
@@ -164,7 +162,6 @@ impl SfuClient {
 
         let ice_ufrag = deserialized.transport.ufrag;
         let ice_pwd = deserialized.transport.pwd;
-        let endpoint_id = deserialized.endpoint_id;
 
         let info = group_call::SfuInfo {
             udp_addresses,
@@ -174,10 +171,10 @@ impl SfuClient {
         };
         let demux_id = deserialized.ssrc_prefix;
         debug!(
-            "SfuClient: successful join, info: {:?}, demux_id: {}, endpoint_id: {}",
-            info, demux_id, endpoint_id
+            "SfuClient: successful join, info: {:?}, demux_id: {}",
+            info, demux_id
         );
-        Ok((info, demux_id, endpoint_id))
+        Ok((info, demux_id))
     }
 
     fn join_with_header(
@@ -533,42 +530,6 @@ impl group_call::SfuClient for SfuClient {
         info!(
             "SfuClient set_group_members: {} members",
             self.member_prefixes.len()
-        );
-    }
-
-    fn leave(&mut self, endpoint_id: String) {
-        info!("SfuClient leave");
-
-        let auth_header = match self.auth_header.as_ref() {
-            Some(h) => h,
-            None => {
-                // We shouldn't have been able to join without an auth header. In theory, we could
-                // request a new auth token and use it, but it will likely take longer and be less
-                // reliable than just letting it time out.
-                warn!("Requesting to leave a conference without an auth header; ignoring");
-                return;
-            }
-        };
-
-        let endpoint_url = format!("{}/v1/conference/participants/{}", self.url, endpoint_id);
-        let mut headers = HashMap::new();
-        headers.insert("Authorization".to_string(), auth_header.to_string());
-        self.http_client.make_request(
-            endpoint_url,
-            HttpMethod::Delete,
-            headers,
-            None,
-            Box::new(move |resp| match resp {
-                Some(r) if r.status_code >= 200 && r.status_code <= 300 => {
-                    debug!("SfuClient: leave successful");
-                }
-                Some(r) => {
-                    warn!("SfuClient: HTTP error while leaving ({})", r.status_code);
-                }
-                _ => {
-                    warn!("SfuClient: HTTP error while leaving (no response)");
-                }
-            }),
         );
     }
 }
