@@ -1205,6 +1205,7 @@ impl Client {
                 {
                     state.sfu_client.leave(long_device_id);
                     Self::send_leaving_through_sfu_and_over_signaling(state, local_demux_id);
+                    Self::send_leave_to_sfu(state);
                 }
                 Self::set_join_state_and_notify_observer(state, JoinState::NotJoined(None));
                 state.next_stats_time = None;
@@ -1524,6 +1525,7 @@ impl Client {
                     max_kbps: state.max_receive_rate.map(|rate| rate.as_kbps() as u32),
                     requests,
                 }),
+                ..Default::default()
             }) {
                 Err(e) => {
                     warn!("Failed to encode video request: {:?}", e);
@@ -2483,6 +2485,23 @@ impl Client {
             }
         })?;
         Self::broadcast_data_through_sfu(state, &heartbeat_msg)
+    }
+
+    fn send_leave_to_sfu(state: &mut State) {
+        use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
+        match encode_proto(DeviceToSfu {
+            leave: Some(LeaveMessage {}),
+            ..Default::default()
+        }) {
+            Err(e) => {
+                warn!("Failed to encode LeaveMessage: {:?}", e);
+            }
+            Ok(msg) => {
+                if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+                    warn!("Failed to send LeaveMessage: {:?}", e);
+                }
+            }
+        }
     }
 
     fn send_leaving_through_sfu_and_over_signaling(state: &mut State, local_demux_id: DemuxId) {
@@ -4447,7 +4466,8 @@ mod tests {
                         },
                     ],
                     max_kbps: None,
-                })
+                }),
+                ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
@@ -4507,7 +4527,8 @@ mod tests {
                         },
                     ],
                     max_kbps: Some(1),
-                })
+                }),
+                ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
@@ -4535,7 +4556,8 @@ mod tests {
                         },
                     ],
                     max_kbps: Some(500),
-                })
+                }),
+                ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
@@ -4563,12 +4585,38 @@ mod tests {
                         },
                     ],
                     max_kbps: Some(20_000_000),
-                })
+                }),
+                ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
 
         client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn device_to_sfu_leave() {
+        use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
+
+        let mut client1 = TestClient::new(vec![1], 1, None);
+
+        let (sender, receiver) = mpsc::channel();
+        client1.sfu_rtp_packet_sender = Some(sender);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[]);
+        client1.client.leave();
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                leave: Some(LeaveMessage {}),
+                ..Default::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
     }
 
     #[test]

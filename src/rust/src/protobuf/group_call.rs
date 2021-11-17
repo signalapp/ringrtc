@@ -45,6 +45,8 @@ pub mod device_to_device {
 pub struct DeviceToSfu {
     #[prost(message, optional, tag="1")]
     pub video_request: ::core::option::Option<device_to_sfu::VideoRequestMessage>,
+    #[prost(message, optional, tag="2")]
+    pub leave: ::core::option::Option<device_to_sfu::LeaveMessage>,
 }
 /// Nested message and enum types in `DeviceToSfu`.
 pub mod device_to_sfu {
@@ -52,7 +54,6 @@ pub mod device_to_sfu {
     pub struct VideoRequestMessage {
         #[prost(message, repeated, tag="1")]
         pub requests: ::prost::alloc::vec::Vec<video_request_message::VideoRequest>,
-        /// tag 2 was previously "max_count", which is no longer used
         #[prost(uint32, optional, tag="3")]
         pub max_kbps: ::core::option::Option<u32>,
     }
@@ -66,6 +67,9 @@ pub mod device_to_sfu {
             #[prost(uint32, optional, tag="2")]
             pub height: ::core::option::Option<u32>,
         }
+    }
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct LeaveMessage {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

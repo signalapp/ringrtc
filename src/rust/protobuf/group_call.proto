@@ -44,11 +44,14 @@
      }
    
      repeated VideoRequest requests = 1;
-     // tag 2 was previously "max_count", which is no longer used
+     reserved 2; // tag 2 was previously "max_count", which is no longer used
      optional uint32 max_kbps = 3;
    }
  
+   message LeaveMessage {}
+
    optional VideoRequestMessage video_request = 1;
+   optional LeaveMessage leave = 2;
  }
  
  message SfuToDevice {
