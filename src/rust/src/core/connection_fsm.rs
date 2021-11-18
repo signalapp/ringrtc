@@ -557,15 +557,27 @@ where
             self.last_remote_sender_status_sequence_number = sequence_number;
         }
 
-        match state {
-            ConnectionState::ConnectingBeforeAccepted
-            | ConnectionState::ReconnectingAfterAccepted
-            | ConnectionState::ConnectedBeforeAccepted
-            | ConnectionState::ConnectedAndAccepted => self.notify_observer(
-                connection,
-                ConnectionObserverEvent::ReceivedSenderStatusViaRtpData(status),
-            ),
-            _ => self.unexpected_state(state, "ReceivedSenderStatusViaRtpData"),
+        match (state, sequence_number) {
+            (
+                ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted,
+                Some(_),
+            ) => {
+                self.notify_observer(
+                    connection,
+                    ConnectionObserverEvent::ReceivedSenderStatusViaRtpData(status),
+                );
+            }
+            (
+                ConnectionState::ConnectingBeforeAccepted
+                | ConnectionState::ConnectedBeforeAccepted,
+                Some(_),
+            ) => {
+                // Ignore before accepted
+            }
+            (_, Some(_)) => self.unexpected_state(state, "ReceivedSenderStatusViaRtpData"),
+            (_, None) => {
+                // Ignore old messages
+            }
         };
         Ok(())
     }
@@ -617,14 +629,24 @@ where
             self.last_remote_receiver_status_sequence_number = sequence_number;
         }
 
-        match state {
-            ConnectionState::ConnectingBeforeAccepted
-            | ConnectionState::ReconnectingAfterAccepted
-            | ConnectionState::ConnectedBeforeAccepted
-            | ConnectionState::ConnectedAndAccepted => {
-                connection.set_remote_max_bitrate(max_bitrate)?
+        match (state, sequence_number) {
+            (
+                ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted,
+                Some(_),
+            ) => {
+                connection.set_remote_max_bitrate(max_bitrate)?;
             }
-            _ => self.unexpected_state(state, "ReceivedReceiverStatusViaRtpData"),
+            (
+                ConnectionState::ConnectingBeforeAccepted
+                | ConnectionState::ConnectedBeforeAccepted,
+                Some(_),
+            ) => {
+                // Ignore before accepted
+            }
+            (_, Some(_)) => self.unexpected_state(state, "ReceivedReceiverStatusViaRtpData"),
+            (_, None) => {
+                // Ignore old messages
+            }
         };
         Ok(())
     }
