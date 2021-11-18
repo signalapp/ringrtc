@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.14.3
+
+- Avoid handling RTP Data before accepted
+
+- Reference signalapp/webrtc@4638c
+  - Port crash fix
+
 ## v2.14.2
 
 - Don't terminate a 1:1 call because of transient RTP data error
