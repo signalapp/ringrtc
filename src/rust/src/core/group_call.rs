@@ -2497,6 +2497,10 @@ impl Client {
                 if let Err(e) = Self::send_data_to_sfu(state, &msg) {
                     warn!("Failed to send LeaveMessage: {:?}", e);
                 }
+                // Send it *again* to increase reliability just a little.
+                if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+                    warn!("Failed to send extra redundancy LeaveMessage: {:?}", e);
+                }
             }
         }
     }
