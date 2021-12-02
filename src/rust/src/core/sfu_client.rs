@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
+use hex::ToHex;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -22,7 +23,7 @@ use crate::error::RingRtcError;
 #[derive(Deserialize, Debug)]
 struct JoinResponse {
     #[serde(rename = "ssrcPrefix")]
-    ssrc_prefix: u32,
+    demux_id: u32,
     transport: SfuTransport,
 }
 
@@ -30,7 +31,8 @@ struct JoinResponse {
 struct SfuTransport {
     ufrag: String,
     pwd: String,
-    fingerprints: Vec<SfuFingerprint>,
+    #[serde(rename = "dhePublicKey", with = "hex")]
+    dhe_pub_key: [u8; 32],
     candidates: Vec<SfuCandidate>,
 }
 
@@ -38,12 +40,6 @@ struct SfuTransport {
 struct SfuCandidate {
     ip: String,
     port: u16,
-}
-
-#[derive(Deserialize, Debug)]
-struct SfuFingerprint {
-    hash: String,
-    fingerprint: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -64,7 +60,7 @@ struct SfuParticipant {
     #[serde(rename = "endpointId")]
     endpoint_id: String,
     #[serde(rename = "ssrcPrefix")]
-    ssrc_prefix: u32,
+    demux_id: u32,
 }
 
 // Keeps track of which SFU-assigned endpoint ID prefix corresponds to which member's UUID.
@@ -76,25 +72,34 @@ struct UuidEndpointPrefix {
 
 pub struct SfuClient {
     url: String,
+    // For use post-DHE
+    hkdf_extra_info: Vec<u8>,
     http_client: Box<dyn HttpClient + Send>,
     auth_header: Option<String>,
     member_prefixes: Vec<UuidEndpointPrefix>,
-    deferred_join: Option<(
-        String,
-        String,
-        group_call::DtlsFingerprint,
-        group_call::Client,
-    )>,
+    deferred_join: Option<(String, String, [u8; 32], group_call::Client)>,
 }
 
 const RESPONSE_CODE_NO_CONFERENCE: u16 = 404;
 const RESPONSE_CODE_MAX_PARTICIPANTS_REACHED: u16 = 413;
 
+pub struct Joined {
+    pub sfu_info: SfuInfo,
+    pub local_demux_id: DemuxId,
+    pub server_dhe_pub_key: [u8; 32],
+    pub hkdf_extra_info: Vec<u8>,
+}
+
 impl SfuClient {
-    pub fn new(http_client: Box<dyn HttpClient + Send>, url: String) -> Self {
+    pub fn new(
+        http_client: Box<dyn HttpClient + Send>,
+        url: String,
+        hkdf_extra_info: Vec<u8>,
+    ) -> Self {
         let url = url.trim_end_matches('/').to_string();
         SfuClient {
             url,
+            hkdf_extra_info,
             http_client,
             auth_header: None,
             member_prefixes: vec![],
@@ -102,7 +107,10 @@ impl SfuClient {
         }
     }
 
-    fn process_join_response(response: Option<HttpResponse>) -> Result<(SfuInfo, DemuxId)> {
+    fn process_join_response(
+        response: Option<HttpResponse>,
+        hkdf_extra_info: Vec<u8>,
+    ) -> Result<Joined> {
         let body = match response {
             Some(r) if r.status_code >= 200 && r.status_code <= 300 => r.body,
             Some(r) if r.status_code == RESPONSE_CODE_MAX_PARTICIPANTS_REACHED => {
@@ -128,26 +136,7 @@ impl SfuClient {
         debug!("SfuClient: join response: {:?}", body);
 
         let deserialized: JoinResponse = serde_json::from_str(body)?;
-        let sha256_fingerprint = match deserialized
-            .transport
-            .fingerprints
-            .iter()
-            .find(|fp| fp.hash == "sha-256")
-        {
-            Some(fp) => fp,
-            None => {
-                error!("SfuClient: no SHA-256 fingerprint in the join response");
-                return Err(RingRtcError::SfuClientRequestFailed.into());
-            }
-        };
-        let dtls_fingerprint = match group_call::decode_fingerprint(&sha256_fingerprint.fingerprint)
-        {
-            Some(fp) => fp,
-            None => {
-                error!("SfuClient: Failed to parse DTLS fingerprint in join response");
-                return Err(RingRtcError::SfuClientRequestFailed.into());
-            }
-        };
+        let server_dhe_pub_key = deserialized.transport.dhe_pub_key;
 
         if deserialized.transport.candidates.is_empty() {
             error!("SfuClient: no candidates provided in the join response");
@@ -163,18 +152,22 @@ impl SfuClient {
         let ice_ufrag = deserialized.transport.ufrag;
         let ice_pwd = deserialized.transport.pwd;
 
-        let info = group_call::SfuInfo {
+        let sfu_info = group_call::SfuInfo {
             udp_addresses,
             ice_ufrag,
             ice_pwd,
-            dtls_fingerprint,
         };
-        let demux_id = deserialized.ssrc_prefix;
+        let local_demux_id = deserialized.demux_id;
         debug!(
-            "SfuClient: successful join, info: {:?}, demux_id: {}",
-            info, demux_id
+            "SfuClient: successful join, info: {:?}, demux_id: {}, server_dhe_public_key: {:?}, hkdf_extra_info: {:?}",
+            sfu_info, local_demux_id, server_dhe_pub_key, hkdf_extra_info
         );
-        Ok((info, demux_id))
+        Ok(Joined {
+            sfu_info,
+            local_demux_id,
+            server_dhe_pub_key,
+            hkdf_extra_info,
+        })
     }
 
     fn join_with_header(
@@ -182,28 +175,23 @@ impl SfuClient {
         auth_header: &str,
         ice_ufrag: &str,
         ice_pwd: &str,
-        dtls_fingerprint: &group_call::DtlsFingerprint,
+        dhe_pub_key: &[u8],
         client: group_call::Client,
     ) {
         info!("SfuClient join_with_header:");
 
         let join_json = json!({
-            // The payload types, header extensions, fingerprint hash, payload formats,
+            // The payload types, header extensions, payload formats,
             // and SSRCs need to match those configured in peer_connection.cc
             // (CreateSessionDescriptionForGroupCall) and group_call.rs
             "transport": {
                 "candidates": [],
-                "fingerprints": [
-                    {
-                        "fingerprint" : group_call::encode_fingerprint(dtls_fingerprint),
-                        "hash" : "sha-256",
-                        "setup" : "active",
-                    },
-                ],
                 "ufrag" : ice_ufrag,
                 "pwd": ice_pwd,
                 "xmlns" : "urn:xmpp:jingle:transports:ice-udp:1",
-                "rtcp-mux": true
+                "rtcp-mux": true,
+                "dhePublicKey": dhe_pub_key.encode_hex::<String>(),
+                "hkdfExtraInfo": self.hkdf_extra_info.encode_hex::<String>(),
             },
             "audioPayloadType" : {
                 "id": 102,
@@ -317,13 +305,14 @@ impl SfuClient {
         headers.insert("Authorization".to_string(), auth_header.to_string());
         headers.insert("Content-Type".to_string(), "application/json".to_string());
         let body = join_json.to_string().as_bytes().to_vec();
+        let hkdf_extra_info = self.hkdf_extra_info.clone();
         self.http_client.make_request(
             participants_url,
             HttpMethod::Put,
             headers,
             Some(body),
             Box::new(move |resp| {
-                let outcome = Self::process_join_response(resp);
+                let outcome = Self::process_join_response(resp, hkdf_extra_info);
                 client.on_sfu_client_joined(outcome);
             }),
         );
@@ -376,7 +365,7 @@ impl SfuClient {
             .participants
             .into_iter()
             .filter_map(|p| {
-                let demux_id = p.ssrc_prefix;
+                let demux_id = p.demux_id;
                 let user_id = Self::lookup_uuid_by_endpoint_id(&member_prefixes, &p.endpoint_id);
                 if let Ok(short_device_id) =
                     p.endpoint_id.split('-').nth(1).unwrap_or_default().parse()
@@ -478,9 +467,9 @@ impl group_call::SfuClient for SfuClient {
         self.auth_header = Some(header.clone());
 
         // Release any tasks that were blocked on getting the token.
-        if let Some((ice_ufrag, ice_pwd, dtls_fingerprint, client)) = self.deferred_join.take() {
+        if let Some((ice_ufrag, ice_pwd, dhe_pub_key, client)) = self.deferred_join.take() {
             info!("membership token received, proceeding with deferred join");
-            self.join_with_header(&header, &ice_ufrag, &ice_pwd, &dtls_fingerprint, client);
+            self.join_with_header(&header, &ice_ufrag, &ice_pwd, &dhe_pub_key[..], client);
         }
     }
 
@@ -488,17 +477,16 @@ impl group_call::SfuClient for SfuClient {
         &mut self,
         ice_ufrag: &str,
         ice_pwd: &str,
-        dtls_fingerprint: &group_call::DtlsFingerprint,
+        dhe_pub_key: [u8; 32],
         client: group_call::Client,
     ) {
         match self.auth_header.as_ref() {
-            Some(h) => self.join_with_header(h, ice_ufrag, ice_pwd, dtls_fingerprint, client),
+            Some(h) => self.join_with_header(h, ice_ufrag, ice_pwd, &dhe_pub_key[..], client),
             None => {
                 info!("join requested without membership token - deferring");
                 let ice_ufrag = ice_ufrag.to_string();
                 let ice_pwd = ice_pwd.to_string();
-                let dtls_fingerprint = *dtls_fingerprint;
-                self.deferred_join = Some((ice_ufrag, ice_pwd, dtls_fingerprint, client));
+                self.deferred_join = Some((ice_ufrag, ice_pwd, dhe_pub_key, client));
             }
         }
     }

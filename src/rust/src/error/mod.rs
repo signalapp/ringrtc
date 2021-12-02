@@ -57,10 +57,6 @@ pub enum RingRtcError {
     CreateVideoTrack,
     #[error("Unable to create C++ AudioTrack")]
     CreateAudioTrack,
-    #[error("Unable to generate C++ RTCCertificate")]
-    GenerateCertificate,
-    #[error("Unable to compute C++ RTCCertificate fingerprint")]
-    ComputeCertificateFingerprint,
     #[error("Unable to query Audio Devices")]
     #[allow(dead_code)]
     QueryAudioDevices,

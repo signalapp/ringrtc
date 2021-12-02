@@ -10,7 +10,7 @@ use std::os::raw::c_char;
 
 use crate::webrtc::{
     self,
-    sdp_observer::{RffiConnectionParametersV4, SrtpCryptoSuite},
+    sdp_observer::{RffiConnectionParametersV4, RffiSrtpKey, SrtpCryptoSuite},
 };
 
 /// Incomplete type for SessionDescription, used by
@@ -90,16 +90,14 @@ extern "C" {
     pub fn Rust_localDescriptionForGroupCall(
         ice_ufrag: webrtc::ptr::Borrowed<c_char>,
         ice_pwd: webrtc::ptr::Borrowed<c_char>,
-        // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
-        dtls_fingerprint_sha256_borrowed: *const [u8; 32],
+        client_srtp_key: RffiSrtpKey,
         demux_id: u32,
     ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
     pub fn Rust_remoteDescriptionForGroupCall(
         ice_ufrag: webrtc::ptr::Borrowed<c_char>,
         ice_pwd: webrtc::ptr::Borrowed<c_char>,
-        // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
-        dtls_fingerprint_sha256_borrowed: *const [u8; 32],
+        server_srtp_key: RffiSrtpKey,
         demux_ids_data: webrtc::ptr::Borrowed<u32>,
         demux_ids_len: size_t,
     ) -> webrtc::ptr::Owned<RffiSessionDescription>;

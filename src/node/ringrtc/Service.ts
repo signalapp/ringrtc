@@ -643,12 +643,14 @@ export class RingRTCType {
   getGroupCall(
     groupId: Buffer,
     sfuUrl: string,
+    hkdfExtraInfo: Buffer,
     observer: GroupCallObserver
   ): GroupCall | undefined {
     const groupCall = new GroupCall(
       this.callManager,
       groupId,
       sfuUrl,
+      hkdfExtraInfo,
       observer
     );
 
@@ -1526,7 +1528,7 @@ export enum GroupCallEndReason {
   CallManagerIsBusy = 2,
   SfuClientFailedToJoin = 3,
   FailedToCreatePeerConnectionFactory = 4,
-  FailedToGenerateCertificate = 5,
+  FailedToNegotiateSrtpKeys = 5,
   FailedToCreatePeerConnection = 6,
   FailedToStartPeerConnection = 7,
   FailedToUpdatePeerConnection = 8,
@@ -1671,6 +1673,7 @@ export class GroupCall {
     callManager: CallManager,
     groupId: Buffer,
     sfuUrl: string,
+    hkdfExtraInfo: Buffer,
     observer: GroupCallObserver
   ) {
     this._callManager = callManager;
@@ -1678,7 +1681,7 @@ export class GroupCall {
 
     this._localDeviceState = new LocalDeviceState();
 
-    this._clientId = this._callManager.createGroupCallClient(groupId, sfuUrl);
+    this._clientId = this._callManager.createGroupCallClient(groupId, sfuUrl, hkdfExtraInfo);
   }
 
   // Called by UI
@@ -2074,7 +2077,7 @@ export interface CallManager {
 
   // Group Calls
 
-  createGroupCallClient(groupId: Buffer, sfuUrl: string): GroupCallClientId;
+  createGroupCallClient(groupId: Buffer, sfuUrl: string, hkdfExtraInfo: Buffer): GroupCallClientId;
   deleteGroupCallClient(clientId: GroupCallClientId): void;
   connect(clientId: GroupCallClientId): void;
   join(clientId: GroupCallClientId): void;

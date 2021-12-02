@@ -470,6 +470,7 @@ pub fn create_group_call_client(
     call_manager: *mut IosCallManager,
     group_id: group_call::GroupId,
     sfu_url: String,
+    hkdf_extra_info: Vec<u8>,
     native_peer_connection_factory: webrtc::ptr::OwnedRc<pcf::RffiPeerConnectionFactoryInterface>,
     native_audio_track: webrtc::ptr::OwnedRc<media::RffiAudioTrack>,
     native_video_track: webrtc::ptr::OwnedRc<media::RffiVideoTrack>,
@@ -496,6 +497,7 @@ pub fn create_group_call_client(
     call_manager.create_group_call_client(
         group_id,
         sfu_url,
+        hkdf_extra_info,
         Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,

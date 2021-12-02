@@ -85,8 +85,6 @@ RUSTEXPORT webrtc::rffi::InjectableNetwork* Rust_getInjectableNetwork(
 RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
   webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
   webrtc::rffi::PeerConnectionObserverRffi* observer_borrowed,
-  // If non-null, enable DTLS.
-  rtc::RTCCertificate* dtls_certificate_borrowed_rc,
   bool hide_ip,
   RffiIceServer ice_server,
   webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
@@ -129,12 +127,5 @@ RUSTEXPORT int32_t Rust_getAudioRecordingDeviceName(
 RUSTEXPORT bool Rust_setAudioRecordingDevice(
   webrtc::PeerConnectionFactoryOwner* factory_owner_borrowed_rc, 
   uint16_t index);
-
-// Returns an owned RC.
-RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate();
-
-RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(
-  rtc::RTCCertificate* cert_borrowed_rc, 
-  uint8_t fingerprint_out[32]);
 
 #endif /* RFFI_API_PEER_CONNECTION_FACTORY_H__ */

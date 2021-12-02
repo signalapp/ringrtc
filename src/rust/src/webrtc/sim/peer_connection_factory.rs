@@ -23,10 +23,6 @@ pub static FAKE_PEER_CONNECTION_FACTORY: RffiPeerConnectionFactoryOwner = 10;
 
 pub type RffiPeerConnectionFactoryInterface = u32;
 
-pub type RffiCertificate = u32;
-
-pub static FAKE_CERTIFICATE: RffiCertificate = 11;
-
 pub type RffiAudioDeviceModule = u32;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -49,7 +45,6 @@ pub unsafe fn Rust_createPeerConnectionFactoryWrapper(
 pub unsafe fn Rust_createPeerConnection(
     _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
     _observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
-    _dtls_certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
     _hide_ip: bool,
     _ice_server: RffiIceServer,
     _outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
@@ -80,21 +75,6 @@ pub unsafe fn Rust_createVideoTrack(
 ) -> webrtc::ptr::OwnedRc<RffiVideoTrack> {
     info!("Rust_createVideoTrack()");
     webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_TRACK)
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_generateCertificate() -> webrtc::ptr::OwnedRc<RffiCertificate> {
-    info!("Rust_generateCertificate()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_CERTIFICATE)
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_computeCertificateFingerprintSha256(
-    _cert: webrtc::ptr::BorrowedRc<RffiCertificate>,
-    _fingerprint_out: *mut [u8; 32],
-) -> bool {
-    info!("Rust_computeCertificateFingerprintSha256()");
-    true
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

@@ -447,7 +447,7 @@ webrtc::JsepSessionDescription*
 CreateSessionDescriptionForGroupCall(bool local, 
                                      const std::string& ice_ufrag,
                                      const std::string& ice_pwd,
-                                     std::unique_ptr<rtc::SSLFingerprint> dtls_fingerprint,
+                                     RffiSrtpKey srtp_key,
                                      std::vector<uint32_t> rtp_demux_ids) {
   // Major changes from the default WebRTC behavior:
   // 1. We remove all codecs except Opus and VP8.
@@ -482,14 +482,25 @@ CreateSessionDescriptionForGroupCall(bool local,
   transport.ice_pwd = ice_pwd;
   transport.AddOption(cricket::ICE_OPTION_TRICKLE);
 
-  // WebRTC requires ACTPASS instead of ACTIVE for a local offer.
-  transport.connection_role = local ? cricket::CONNECTIONROLE_ACTPASS : cricket::CONNECTIONROLE_PASSIVE;
-  transport.identity_fingerprint = std::move(dtls_fingerprint);
+  // DTLS is disabled
+  transport.connection_role = cricket::CONNECTIONROLE_NONE;
+  transport.identity_fingerprint = nullptr;
 
-  auto set_rtp_params = [] (cricket::MediaContentDescription* media) {
-    media->set_protocol(cricket::kMediaProtocolDtlsSavpf);
+  // Use SRTP master key material instead
+  cricket::CryptoParams crypto_params;
+  crypto_params.cipher_suite = rtc::SrtpCryptoSuiteToName(srtp_key.suite);
+  std::string key(srtp_key.key_borrowed, srtp_key.key_len);
+  std::string salt(srtp_key.salt_borrowed, srtp_key.salt_len);
+  crypto_params.key_params = "inline:" + rtc::Base64::Encode(key + salt);
+
+  auto set_rtp_params = [crypto_params] (cricket::MediaContentDescription* media) {
+    media->set_protocol(cricket::kMediaProtocolSavpf);
     media->set_rtcp_mux(true);
     media->set_direction(webrtc::RtpTransceiverDirection::kSendRecv);
+
+    std::vector<cricket::CryptoParams> cryptos;
+    cryptos.push_back(crypto_params);
+    media->set_cryptos(cryptos);
   };
 
   auto audio = std::make_unique<cricket::AudioContentDescription>();
@@ -656,32 +667,28 @@ CreateSessionDescriptionForGroupCall(bool local,
 RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_localDescriptionForGroupCall(const char* ice_ufrag_borrowed,
                                   const char* ice_pwd_borrowed,
-                                  const uint8_t dtls_fingerprint_sha256_borrowed[32],
+                                  RffiSrtpKey client_srtp_key,
                                   uint32_t rtp_demux_id) {
-  std::unique_ptr<rtc::SSLFingerprint> dtls_fingerprint = std::make_unique<rtc::SSLFingerprint>(
-    rtc::DIGEST_SHA_256, rtc::ArrayView<const uint8_t>(dtls_fingerprint_sha256_borrowed, 32));
   std::vector<uint32_t> rtp_demux_ids;
   // A 0 demux_id means we don't know the demux ID yet and shouldn't include one.
   if (rtp_demux_id > 0) {
     rtp_demux_ids.push_back(rtp_demux_id);
   }
   return CreateSessionDescriptionForGroupCall(
-    true /* local */, std::string(ice_ufrag_borrowed), std::string(ice_pwd_borrowed), std::move(dtls_fingerprint), rtp_demux_ids);
+    true /* local */, std::string(ice_ufrag_borrowed), std::string(ice_pwd_borrowed), client_srtp_key, rtp_demux_ids);
 }
 
 // Returns an owned pointer.
 RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_remoteDescriptionForGroupCall(const char* ice_ufrag_borrowed,
                                    const char* ice_pwd_borrowed,
-                                   const uint8_t dtls_fingerprint_sha256_borrowed[32],
+                                   RffiSrtpKey server_srtp_key,
                                    uint32_t* rtp_demux_ids_borrowed,
                                    size_t rtp_demux_ids_len) {
-  std::unique_ptr<rtc::SSLFingerprint> dtls_fingerprint = std::make_unique<rtc::SSLFingerprint>(
-    rtc::DIGEST_SHA_256, rtc::ArrayView<const uint8_t>(dtls_fingerprint_sha256_borrowed, 32));
   std::vector<uint32_t> rtp_demux_ids;
   rtp_demux_ids.assign(rtp_demux_ids_borrowed, rtp_demux_ids_borrowed + rtp_demux_ids_len);
   return CreateSessionDescriptionForGroupCall(
-    false /* local */, std::string(ice_ufrag_borrowed), std::string(ice_pwd_borrowed), std::move(dtls_fingerprint), rtp_demux_ids);
+    false /* local */, std::string(ice_ufrag_borrowed), std::string(ice_pwd_borrowed), server_srtp_key, rtp_demux_ids);
 }
 
 RUSTEXPORT void

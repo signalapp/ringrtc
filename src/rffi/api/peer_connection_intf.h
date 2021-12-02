@@ -82,6 +82,14 @@ typedef struct {
   ConnectionParametersV4* backing_owned;
 } RffiConnectionParametersV4;
 
+typedef struct {
+  int suite;
+  const char* key_borrowed;
+  size_t key_len;
+  const char* salt_borrowed;
+  size_t salt_len;
+} RffiSrtpKey;
+
 // Returns an owned pointer.
 RUSTEXPORT RffiConnectionParametersV4*
 Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_description_borrowed);

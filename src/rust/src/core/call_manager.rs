@@ -2527,7 +2527,7 @@ where
         group_members: Vec<group_call::GroupMemberInfo>,
     ) {
         let http_client = Box::new(self.clone());
-        let mut sfu_client = SfuClient::new(http_client, url);
+        let mut sfu_client = SfuClient::new(http_client, url, vec![]);
         let call_manager = self.clone();
         sfu_client.request_joined_members(
             membership_proof,
@@ -2564,10 +2564,12 @@ where
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_group_call_client(
         &mut self,
         group_id: group_call::GroupId,
         sfu_url: String,
+        hkdf_extra_info: Vec<u8>,
         peer_connection_factory: Option<PeerConnectionFactory>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
@@ -2594,7 +2596,7 @@ where
             .get(&group_id)
             .map(|ring| ring.ring_id);
 
-        let sfu_client = SfuClient::new(Box::new(self.clone()), sfu_url);
+        let sfu_client = SfuClient::new(Box::new(self.clone()), sfu_url, hkdf_extra_info);
         let client = group_call::Client::start(
             group_id,
             client_id,

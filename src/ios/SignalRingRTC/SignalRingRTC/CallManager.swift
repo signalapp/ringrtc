@@ -771,7 +771,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Group Call
 
-    public func createGroupCall(groupId: Data, sfuUrl: String, videoCaptureController: VideoCaptureController) -> GroupCall? {
+    public func createGroupCall(groupId: Data, sfuUrl: String, hkdfExtraInfo: Data, videoCaptureController: VideoCaptureController) -> GroupCall? {
         AssertIsOnMainThread()
         Logger.debug("createGroupCall")
 
@@ -780,7 +780,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             return nil
         }
 
-        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, groupId: groupId, sfuUrl: sfuUrl, videoCaptureController: videoCaptureController)
+        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, groupId: groupId, sfuUrl: sfuUrl, hkdfExtraInfo: hkdfExtraInfo, videoCaptureController: videoCaptureController)
         return groupCall
     }
 

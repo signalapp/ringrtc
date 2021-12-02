@@ -31,14 +31,6 @@ pub struct RffiPeerConnectionFactoryInterface {
 // in webrtc/api/peer_connection_interface.h
 impl webrtc::RefCounted for RffiPeerConnectionFactoryInterface {}
 
-/// Incomplete type for C++ RTCCertificate.
-#[repr(C)]
-pub struct RffiCertificate {
-    _private: [u8; 0],
-}
-
-impl webrtc::RefCounted for RffiCertificate {}
-
 /// Incomplete type for C++ AudioDeviceModule.
 #[repr(C)]
 pub struct RffiAudioDeviceModule {
@@ -66,8 +58,6 @@ extern "C" {
     pub fn Rust_createPeerConnection(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
-        // If non-null, enable DTLS.
-        dtls_certificate: webrtc::ptr::BorrowedRc<RffiCertificate>,
         hide_ip: bool,
         ice_server: RffiIceServer,
         outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
@@ -81,11 +71,6 @@ extern "C" {
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
     ) -> webrtc::ptr::OwnedRc<RffiVideoTrack>;
-    pub fn Rust_generateCertificate() -> webrtc::ptr::OwnedRc<RffiCertificate>;
-    pub fn Rust_computeCertificateFingerprintSha256(
-        cert: webrtc::ptr::BorrowedRc<RffiCertificate>,
-        fingerprint_out: *mut [u8; 32],
-    ) -> bool;
     #[cfg(feature = "native")]
     pub fn Rust_getAudioPlayoutDevices(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,

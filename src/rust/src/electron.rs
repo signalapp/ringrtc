@@ -1087,10 +1087,18 @@ fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let group_id = cx.argument::<JsValue>(0)?.as_value(&mut cx);
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
+    let hkdf_extra_info = cx.argument::<JsValue>(2)?.as_value(&mut cx);
 
     let mut client_id = group_call::INVALID_CLIENT_ID;
 
     let group_id: std::vec::Vec<u8> = match group_id.downcast::<JsBuffer, _>(&mut cx) {
+        Ok(handle) => cx.borrow(&handle, |handle| handle.as_slice().to_vec()),
+        Err(_) => {
+            return Ok(cx.number(client_id).upcast());
+        }
+    };
+    let hkdf_extra_info: std::vec::Vec<u8> = match hkdf_extra_info.downcast::<JsBuffer, _>(&mut cx)
+    {
         Ok(handle) => cx.borrow(&handle, |handle| handle.as_slice().to_vec()),
         Err(_) => {
             return Ok(cx.number(client_id).upcast());
@@ -1104,6 +1112,7 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
         let result = endpoint.call_manager.create_group_call_client(
             group_id,
             sfu_url,
+            hkdf_extra_info,
             Some(peer_connection_factory),
             outgoing_audio_track,
             outgoing_video_track,

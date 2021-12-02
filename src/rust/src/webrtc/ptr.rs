@@ -15,7 +15,6 @@ use std::fmt;
 // - AudioDeviceImpl
 // - AudioMixerImpl
 // - PeerConnection (Sync and Send because it's wrapped in a Proxy)
-// - RTCCertificate
 // - RtpSender (Sync and Send because it's wrapped in a Proxy)
 // - RtpReceiver (Sync and Send because it's wrapped in a Proxy)
 // - MediaStream (Sync and Send because it's wrapped in a Proxy)

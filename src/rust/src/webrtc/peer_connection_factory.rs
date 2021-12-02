@@ -38,37 +38,6 @@ const ADM_MAX_DEVICE_NAME_SIZE: usize = 128;
 #[cfg(feature = "native")]
 const ADM_MAX_DEVICE_UUID_SIZE: usize = 128;
 
-/// Rust wrapper around WebRTC C++ RTCCertificate object.
-#[derive(Clone, Debug)]
-pub struct Certificate {
-    rffi: webrtc::Arc<pcf::RffiCertificate>,
-}
-
-impl Certificate {
-    pub fn generate() -> Result<Certificate> {
-        let rffi = webrtc::Arc::from_owned(unsafe { pcf::Rust_generateCertificate() });
-        if rffi.is_null() {
-            return Err(RingRtcError::GenerateCertificate.into());
-        }
-        Ok(Self { rffi })
-    }
-
-    pub fn compute_fingerprint_sha256(&self) -> Result<[u8; 32]> {
-        let mut fingerprint = [0u8; 32];
-        let ok = unsafe {
-            pcf::Rust_computeCertificateFingerprintSha256(self.rffi.as_borrowed(), &mut fingerprint)
-        };
-        if !ok {
-            return Err(RingRtcError::ComputeCertificateFingerprint.into());
-        }
-        Ok(fingerprint)
-    }
-
-    pub fn rffi(&self) -> &webrtc::Arc<pcf::RffiCertificate> {
-        &self.rffi
-    }
-}
-
 #[repr(C)]
 pub struct RffiIceServer {
     pub username: webrtc::ptr::Borrowed<c_char>,
@@ -236,8 +205,6 @@ impl PeerConnectionFactory {
     pub fn create_peer_connection<T: PeerConnectionObserverTrait>(
         &self,
         pc_observer: PeerConnectionObserver<T>,
-        // DTLS is enabled if Some
-        dtls_certificate: Option<Certificate>,
         hide_ip: bool,
         ice_servers: &IceServer,
         outgoing_audio_track: AudioTrack,
@@ -260,12 +227,6 @@ impl PeerConnectionFactory {
             pcf::Rust_createPeerConnection(
                 self.rffi.as_borrowed(),
                 pc_observer_rffi.borrow(),
-                // Use the as_ref() so that the Certificate isn't destroyed
-                // before we are done passing it to Rust_createPeerConnection.
-                match dtls_certificate.as_ref() {
-                    Some(certificate) => certificate.rffi().as_borrowed(),
-                    None => webrtc::ptr::BorrowedRc::null(),
-                },
                 hide_ip,
                 ice_servers.rffi(),
                 outgoing_audio_track.rffi().as_borrowed(),

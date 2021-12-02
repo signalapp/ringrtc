@@ -74,6 +74,7 @@ public final class GroupCall {
     GroupCall(         long                  nativeCallManager,
               @NonNull byte[]                groupId,
               @NonNull String                sfuUrl,
+              @NonNull byte[]                hkdfExtraInfo,
               @NonNull PeerConnectionFactory factory,
               @NonNull Observer              observer) {
         Log.i(TAG, "GroupCall():");
@@ -125,6 +126,7 @@ public final class GroupCall {
                 nativeCallManager,
                 groupId,
                 sfuUrl,
+                hkdfExtraInfo,
                 // Returns a borrowed RC.
                 factory.getNativePeerConnectionFactory(),
                 // Returns a borrowed RC.
@@ -693,8 +695,8 @@ public final class GroupCall {
         /** Could not create a usable peer connection factory for media. */
         FAILED_TO_CREATE_PEER_CONNECTION_FACTORY,
 
-        /** Could not generate a certificate for media. */
-        FAILED_TO_GENERATE_CERTIFICATE,
+        /** Could not negotiate SRTP keys with a DHE. */
+        FAILED_TO_NEGOTIATE_SRTP_KEYS,
 
         /** Could not create a peer connection for media. */
         FAILED_TO_CREATE_PEER_CONNECTION,
@@ -945,6 +947,7 @@ public final class GroupCall {
         long ringrtcCreateGroupCallClient(long nativeCallManager,
                                           byte[] groupId,
                                           String sfuUrl,
+                                          byte[] hkdfExtraInfo,
                                           long nativePeerConnectionFactory,
                                           long nativeAudioTrack,
                                           long nativeVideoTrack)

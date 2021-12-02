@@ -245,6 +245,7 @@ fn main() {
         .get(2)
         .map(String::as_str)
         .unwrap_or("757365725f6964:67726f75705f6964:1:"); // Hex of "user_id:group_id:timestamp:" with empty MAC
+    let hkdf_extra_info = vec![1, 2, 3];
 
     log::set_logger(&LOG).expect("set logger");
     log::set_max_level(log::LevelFilter::Info);
@@ -252,7 +253,7 @@ fn main() {
 
     let group_id = b"Test Group".to_vec();
     let http_client: HttpClient = HttpClient::start();
-    let sfu_client = SfuClient::new(Box::new(http_client), url.to_string());
+    let sfu_client = SfuClient::new(Box::new(http_client), url.to_string(), hkdf_extra_info);
     let observer = Observer::default();
     let config = peer_connection_factory::Config {
         use_injectable_network: false,

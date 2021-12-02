@@ -2041,8 +2041,8 @@ fn negotiate_srtp_keys(
     let hkdf = Hkdf::<Sha256>::new(Some(&hkdf_salt), shared_secret.as_bytes());
 
     const SUITE: SrtpCryptoSuite = SrtpCryptoSuite::AeadAes256Gcm;
-    const KEY_SIZE: usize = 32;
-    const SALT_SIZE: usize = 12;
+    const KEY_SIZE: usize = SUITE.key_size();
+    const SALT_SIZE: usize = SUITE.salt_size();
     let mut okm = vec![0; KEY_SIZE + SALT_SIZE + KEY_SIZE + SALT_SIZE];
     hkdf.expand(&hkdf_info, &mut okm)
         .map_err(|_| RingRtcError::SrtpKeyNegotiationFailure)?;

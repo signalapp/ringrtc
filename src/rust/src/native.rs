@@ -410,7 +410,6 @@ impl Platform for NativePlatform {
         )?;
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,
-            None, /* disable DTLS; no certificate */
             context.hide_ip,
             &context.ice_server,
             context.outgoing_audio_track.clone(),

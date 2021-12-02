@@ -13,7 +13,7 @@ use libc::{size_t, strdup};
 use crate::webrtc;
 use crate::webrtc::sdp_observer::{
     CreateSessionDescriptionObserver, CreateSessionDescriptionObserverCallbacks,
-    RffiConnectionParametersV4, SetSessionDescriptionObserver,
+    RffiConnectionParametersV4, RffiSrtpKey, SetSessionDescriptionObserver,
     SetSessionDescriptionObserverCallbacks, SrtpCryptoSuite,
 };
 
@@ -144,8 +144,7 @@ pub unsafe fn Rust_sessionDescriptionFromV4(
 pub unsafe fn Rust_localDescriptionForGroupCall(
     _ice_ufrag: webrtc::ptr::Borrowed<c_char>,
     _ice_pwd: webrtc::ptr::Borrowed<c_char>,
-    // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
-    _dtls_fingerprint_sha256_borrowed: *const [u8; 32],
+    _client_srtp_key: RffiSrtpKey,
     _demux_id: u32,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_localDescriptionForGroupCall(): ");
@@ -156,8 +155,7 @@ pub unsafe fn Rust_localDescriptionForGroupCall(
 pub unsafe fn Rust_remoteDescriptionForGroupCall(
     _ice_ufrag: webrtc::ptr::Borrowed<c_char>,
     _ice_pwd: webrtc::ptr::Borrowed<c_char>,
-    // cbindgen on iOS can't seem to handle webrtc::ptr::Borrowed<[u8; 32]>
-    _dtls_fingerprint_sha256_borrowed: *const [u8; 32],
+    _server_srtp_key: RffiSrtpKey,
     _demux_ids_data: webrtc::ptr::Borrowed<u32>,
     _demux_ids_len: size_t,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {

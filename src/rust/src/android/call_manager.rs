@@ -622,11 +622,13 @@ pub fn peek_group_call(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_group_call_client(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     group_id: jbyteArray,
     sfu_url: JString,
+    hkdf_extra_info: jbyteArray,
     native_pcf_borrowed_rc: jlong,
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
@@ -635,6 +637,7 @@ pub fn create_group_call_client(
 
     let group_id = env.convert_byte_array(group_id)?;
     let sfu_url = env.get_string(sfu_url)?.into();
+    let hkdf_extra_info = env.convert_byte_array(hkdf_extra_info)?;
 
     let peer_connection_factory = unsafe {
         PeerConnectionFactory::from_native_factory(webrtc::Arc::from_borrowed(
@@ -668,6 +671,7 @@ pub fn create_group_call_client(
     call_manager.create_group_call_client(
         group_id,
         sfu_url,
+        hkdf_extra_info,
         Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,

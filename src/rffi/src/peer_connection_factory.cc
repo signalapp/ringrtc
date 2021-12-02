@@ -24,7 +24,6 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/log_sinks.h"
 #include "rtc_base/message_digest.h"
-#include "rtc_base/rtc_certificate_generator.h"
 
 #if defined(WEBRTC_ANDROID)
 #include "sdk/android/src/jni/pc/android_network_monitor.h"
@@ -297,8 +296,6 @@ RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactoryWrapper(
 RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     PeerConnectionFactoryOwner* factory_owner_borrowed_rc,
     PeerConnectionObserverRffi* observer_borrowed,
-    // If non-null, enable DTLS.
-    rtc::RTCCertificate* dtls_certificate_borrowed_rc,
     bool hide_ip,
     RffiIceServer ice_server,
     webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
@@ -312,12 +309,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   if (hide_ip) {
     config.type = PeerConnectionInterface::kRelay;
   }
-  if (dtls_certificate_borrowed_rc) {
-    config.enable_dtls_srtp = true;
-    config.certificates.push_back(inc_rc(dtls_certificate_borrowed_rc));
-  } else {
-    config.enable_dtls_srtp = false;
-  }
+  config.enable_dtls_srtp = false;
   if (ice_server.urls_size > 0) {
     webrtc::PeerConnectionInterface::IceServer rtc_ice_server;
     rtc_ice_server.username = std::string(ice_server.username_borrowed);
@@ -411,25 +403,6 @@ RUSTEXPORT VideoTrackInterface* Rust_createVideoTrack(
   // PeerConnectionFactory::CreateVideoTrack increments the refcount on source.
   // Note: This must stay "video1" to stay in sync with V4 signaling.
   return take_rc(factory->CreateVideoTrack("video1", source_borrowed_rc));
-}
-
-// This could technically be in its own file because it's not part of PeerConnectionFactory,
-// but this is a convenient place to put it.
-// Returns an owned RC.
-RUSTEXPORT rtc::RTCCertificate* Rust_generateCertificate() {
-  rtc::KeyParams params;  // default is ECDSA
-  absl::optional<uint64_t> expires_ms;  // default is to never expire?
-  return take_rc(rtc::RTCCertificateGenerator::GenerateCertificate(params, expires_ms));
-}
-
-RUSTEXPORT bool Rust_computeCertificateFingerprintSha256(rtc::RTCCertificate* cert_borrowed_rc, uint8_t fingerprint_out[32]) {
-  if (!cert_borrowed_rc || !fingerprint_out) {
-    return false;
-  }
-
-  size_t digest_size;
-  return (cert_borrowed_rc->GetSSLCertificate().ComputeDigest(rtc::DIGEST_SHA_256, fingerprint_out, 32, &digest_size)
-          && (digest_size == 32));
 }
 
 RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(

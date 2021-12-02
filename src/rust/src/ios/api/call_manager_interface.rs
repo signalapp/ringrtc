@@ -1073,6 +1073,7 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
     callManager: *mut c_void,
     groupId: AppByteSlice,
     sfuUrl: AppByteSlice,
+    hkdfExtraInfo: AppByteSlice,
     nativePeerConnectionFactoryOwnedRc: *const c_void,
     nativeAudioTrackOwnedRc: *const c_void,
     nativeVideoTrackOwnedRc: *const c_void,
@@ -1092,11 +1093,17 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
         error!("Invalid sfuUrl");
         return group_call::INVALID_CLIENT_ID;
     }
+    let hkdf_extra_info = byte_vec_from_app_slice(&hkdfExtraInfo);
+    if hkdf_extra_info.is_none() {
+        error!("Invalid HKDF extra info");
+        return group_call::INVALID_CLIENT_ID;
+    }
 
     match call_manager::create_group_call_client(
         callManager as *mut IosCallManager,
         group_id.unwrap(),
         sfu_url.unwrap(),
+        hkdf_extra_info.unwrap(),
         unsafe {
             webrtc::ptr::OwnedRc::from_ptr(
                 nativePeerConnectionFactoryOwnedRc

@@ -923,6 +923,7 @@ public class CallManager {
    */
   public GroupCall createGroupCall(@NonNull byte[]                groupId,
                                    @NonNull String                sfuUrl,
+                                   @NonNull byte[]                hkdfExtraInfo,
                                             AudioProcessingMethod audioProcessingMethod,
                                    @NonNull GroupCall.Observer    observer)
   {
@@ -937,7 +938,7 @@ public class CallManager {
       }
     }
 
-    GroupCall groupCall = new GroupCall(nativeCallManager, groupId, sfuUrl, this.groupFactory, observer);
+    GroupCall groupCall = new GroupCall(nativeCallManager, groupId, sfuUrl, hkdfExtraInfo, this.groupFactory, observer);
 
     if (groupCall.clientId != 0) {
       // Add the groupCall to the map.
@@ -1012,7 +1013,6 @@ public class CallManager {
       MediaStream      mediaStream      = factory.createLocalMediaStream("ARDAMS");
       MediaConstraints audioConstraints = new MediaConstraints();
 
-      audioConstraints.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
       AudioSource audioSource = factory.createAudioSource(audioConstraints);
       // Note: This must stay "audio1" to stay in sync with V4 signaling.
       AudioTrack  audioTrack  = factory.createAudioTrack("audio1", audioSource);

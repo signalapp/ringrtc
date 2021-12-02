@@ -248,6 +248,7 @@ impl TestContext {
         self.cm().create_group_call_client(
             group_id,
             "".to_owned(),
+            vec![],
             None,
             ringrtc::webrtc::media::AudioTrack::new(webrtc::Arc::null(), None),
             ringrtc::webrtc::media::VideoTrack::new(webrtc::Arc::null(), None),

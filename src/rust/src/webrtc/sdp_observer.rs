@@ -27,7 +27,7 @@ use crate::webrtc::sim::sdp_observer as sdp;
 pub use crate::webrtc::sim::sdp_observer::RffiSessionDescription;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SrtpCryptoSuite {
     // Matches webrtc/rtc_base/ssl_stream_adapter.h
     Aes128CmSha1 = 1,  // 16-byte key; 14-byte salt
@@ -35,11 +35,57 @@ pub enum SrtpCryptoSuite {
     AeadAes256Gcm = 8, // 32-byte key; 12-byte salt
 }
 
+impl SrtpCryptoSuite {
+    pub const fn key_size(self) -> usize {
+        match self {
+            Self::Aes128CmSha1 => 16,
+            Self::AeadAes128Gcm => 16,
+            Self::AeadAes256Gcm => 32,
+        }
+    }
+
+    pub const fn salt_size(self) -> usize {
+        match self {
+            Self::Aes128CmSha1 => 14,
+            Self::AeadAes128Gcm => 12,
+            Self::AeadAes256Gcm => 12,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SrtpKey {
     pub suite: SrtpCryptoSuite,
     pub key: Vec<u8>,
     pub salt: Vec<u8>,
 }
+
+/// For passing into C++
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RffiSrtpKey<'srtp_key> {
+    suite: SrtpCryptoSuite,
+    key_data: webrtc::ptr::Borrowed<u8>,
+    key_len: libc::size_t,
+    salt_data: webrtc::ptr::Borrowed<u8>,
+    salt_len: libc::size_t,
+    // We don't to hold any data here, but we do want the lifetime.
+    _srtp_key: std::marker::PhantomData<&'srtp_key SrtpKey>,
+}
+
+impl SrtpKey {
+    pub fn rffi(&self) -> RffiSrtpKey<'_> {
+        RffiSrtpKey {
+            suite: self.suite,
+            key_data: webrtc::ptr::Borrowed::from_ptr(self.key.as_ptr()),
+            key_len: self.key.len(),
+            salt_data: webrtc::ptr::Borrowed::from_ptr(self.salt.as_ptr()),
+            salt_len: self.salt.len(),
+            _srtp_key: std::marker::PhantomData,
+        }
+    }
+}
+
 /// Rust wrapper around WebRTC C++ SessionDescription.
 #[derive(Debug)]
 pub struct SessionDescription {
@@ -255,7 +301,7 @@ impl SessionDescription {
     pub fn local_for_group_call(
         ice_ufrag: &str,
         ice_pwd: &str,
-        dtls_fingerprint_sha256: &[u8; 32],
+        client_srtp_key: &SrtpKey,
         rtp_demux_id: Option<u32>,
     ) -> Result<Self> {
         let rffi_ice_ufrag = CString::new(ice_ufrag.as_bytes())?;
@@ -265,7 +311,7 @@ impl SessionDescription {
             sdp::Rust_localDescriptionForGroupCall(
                 webrtc::ptr::Borrowed::from_ptr(rffi_ice_ufrag.as_ptr()),
                 webrtc::ptr::Borrowed::from_ptr(rffi_ice_pwd.as_ptr()),
-                dtls_fingerprint_sha256,
+                client_srtp_key.rffi(),
                 rtp_demux_id.unwrap_or(0),
             )
         });
@@ -278,7 +324,7 @@ impl SessionDescription {
     pub fn remote_for_group_call(
         ice_ufrag: &str,
         ice_pwd: &str,
-        dtls_fingerprint_sha256: &[u8; 32],
+        server_srtp_key: &SrtpKey,
         rtp_demux_ids: &[u32],
     ) -> Result<Self> {
         let rffi_ice_ufrag = CString::new(ice_ufrag.as_bytes())?;
@@ -288,7 +334,7 @@ impl SessionDescription {
             sdp::Rust_remoteDescriptionForGroupCall(
                 webrtc::ptr::Borrowed::from_ptr(rffi_ice_ufrag.as_ptr()),
                 webrtc::ptr::Borrowed::from_ptr(rffi_ice_pwd.as_ptr()),
-                dtls_fingerprint_sha256,
+                server_srtp_key.rffi(),
                 webrtc::ptr::Borrowed::from_ptr(rtp_demux_ids.as_ptr()),
                 rtp_demux_ids.len(),
             )
