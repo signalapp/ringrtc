@@ -559,6 +559,8 @@ const RTP_DATA_TO_SFU_SSRC: rtp::Ssrc = 1;
 // ramp all the way up, though.
 const ALL_ALONE_MAX_SEND_RATE_KBPS: u64 = 1;
 
+const NORMAL_MAX_RECEIVE_RATE_KBPS: u64 = 20_000_000;
+
 // The time between when a sender generates a new media send key
 // and applies it.  It needs to be big enough that there is
 // a high probability that receivers will receive the
@@ -900,7 +902,8 @@ impl Client {
                     speaker_rtp_timestamp: None,
 
                     send_rates: SendRates::default(),
-                    max_receive_rate: None,
+                    // If the client never calls set_bandwidth_mode, use the normal max receive rate.
+                    max_receive_rate: Some(DataRate::from_kbps(NORMAL_MAX_RECEIVE_RATE_KBPS)),
                     forwarding_video_demux_ids: HashSet::default(),
 
                     cancellable_initial_ring: None,
@@ -1451,7 +1454,7 @@ impl Client {
                 // Effectively only allow one low quality video
                 BandwidthMode::Low => DataRate::from_kbps(500),
                 // Effectively allow a lot of video 
-                BandwidthMode::Normal => DataRate::from_kbps(20_000_000),
+                BandwidthMode::Normal => DataRate::from_kbps(NORMAL_MAX_RECEIVE_RATE_KBPS),
             });
             if !state.on_demand_video_request_sent_since_last_tick {
                 Self::send_video_requests_to_sfu(state);
@@ -4524,7 +4527,7 @@ mod tests {
                             height: Some(0),
                         },
                     ],
-                    max_kbps: None,
+                    max_kbps: Some(NORMAL_MAX_RECEIVE_RATE_KBPS as u32),
                 }),
                 ..Default::default()
             },
