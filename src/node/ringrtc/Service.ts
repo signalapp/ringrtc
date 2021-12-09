@@ -1681,7 +1681,11 @@ export class GroupCall {
 
     this._localDeviceState = new LocalDeviceState();
 
-    this._clientId = this._callManager.createGroupCallClient(groupId, sfuUrl, hkdfExtraInfo);
+    this._clientId = this._callManager.createGroupCallClient(
+      groupId,
+      sfuUrl,
+      hkdfExtraInfo
+    );
   }
 
   // Called by UI
@@ -2077,7 +2081,11 @@ export interface CallManager {
 
   // Group Calls
 
-  createGroupCallClient(groupId: Buffer, sfuUrl: string, hkdfExtraInfo: Buffer): GroupCallClientId;
+  createGroupCallClient(
+    groupId: Buffer,
+    sfuUrl: string,
+    hkdfExtraInfo: Buffer
+  ): GroupCallClientId;
   deleteGroupCallClient(clientId: GroupCallClientId): void;
   connect(clientId: GroupCallClientId): void;
   join(clientId: GroupCallClientId): void;
