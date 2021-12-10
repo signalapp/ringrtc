@@ -410,6 +410,7 @@ export const MAX_VIDEO_CAPTURE_BUFFER_SIZE = MAX_VIDEO_CAPTURE_AREA * 4;
 export class CanvasVideoRenderer {
   private canvas?: Ref<HTMLCanvasElement>;
   private buffer: Buffer;
+  private imageData?: ImageData;
   private source?: VideoFrameSource;
   private rafId?: any;
 
@@ -521,16 +522,10 @@ export class CanvasVideoRenderer {
       context.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // Share the same buffer as this.buffer.
-    const clampedArrayBuffer = new Uint8ClampedArray(
-      this.buffer.buffer,
-      this.buffer.byteOffset,
-      width * height * 4
-    );
-    context.putImageData(
-      new ImageData(clampedArrayBuffer, width, height),
-      dx,
-      dy
-    );
+    if (this.imageData?.width !== width || this.imageData?.height !== height) {
+      this.imageData = new ImageData(width, height);
+    }
+    this.imageData.data.set(this.buffer.subarray(0, width * height * 4));
+    context.putImageData(this.imageData, dx, dy);
   }
 }
