@@ -765,6 +765,7 @@ public class CallManager {
   {
     checkCallManagerExists();
 
+    Log.i(TAG, "#outgoing_audio_enabled: " + enable);
     Connection connection = ringrtcGetActiveConnection(nativeCallManager);
     connection.setAudioEnabled(enable);
   }

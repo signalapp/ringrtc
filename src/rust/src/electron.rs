@@ -967,7 +967,7 @@ fn httpRequestFailed(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn setOutgoingAudioEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-    debug!("JsCallManager.setOutgoingAudioEnabled({})", enabled);
+    info!("#outgoing_audio_enabled: {}", enabled);
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_audio_track.set_enabled(enabled);

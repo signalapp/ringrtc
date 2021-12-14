@@ -547,7 +547,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     public func setLocalAudioEnabled(enabled: Bool) {
         AssertIsOnMainThread()
-        Logger.debug("setLocalAudioEnabled(\(enabled))")
+        Logger.info("#outgoing_audio_enabled: \(enabled)")
 
         let retPtr = ringrtcGetActiveCallContext(ringRtcCallManager)
         guard let callContext = retPtr else {
