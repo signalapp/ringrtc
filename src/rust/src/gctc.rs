@@ -9,7 +9,6 @@ use std::sync::{Arc, Mutex};
 
 use log::info;
 
-use ringrtc::webrtc::peer_connection_factory;
 use ringrtc::{
     common::{
         actor::{Actor, Stopper},
@@ -27,7 +26,8 @@ use ringrtc::{
     protobuf,
     webrtc::{
         media::{VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack},
-        peer_connection_factory::PeerConnectionFactory,
+        peer_connection::{AudioLevel, ReceivedAudioLevel},
+        peer_connection_factory::{self, PeerConnectionFactory},
     },
 };
 
@@ -199,6 +199,15 @@ impl group_call::Observer for Observer {
         &self,
         _client_id: ClientId,
         _network_route: ringrtc::webrtc::peer_connection_observer::NetworkRoute,
+    ) {
+        // ignore
+    }
+
+    fn handle_audio_levels(
+        &self,
+        _client_id: group_call::ClientId,
+        _captured_level: AudioLevel,
+        _received_levels: Vec<ReceivedAudioLevel>,
     ) {
         // ignore
     }

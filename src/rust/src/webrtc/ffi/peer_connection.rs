@@ -11,6 +11,7 @@ use crate::webrtc;
 use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
 use crate::webrtc::media::RffiAudioEncoderConfig;
 use crate::webrtc::network::{RffiIp, RffiIpPort};
+use crate::webrtc::peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel};
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver, RffiSessionDescription, RffiSetSessionDescriptionObserver,
@@ -123,6 +124,14 @@ extern "C" {
     pub fn Rust_configureAudioEncoders(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         config: webrtc::ptr::Borrowed<RffiAudioEncoderConfig>,
+    );
+
+    pub fn Rust_getAudioLevels(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        captured_out: webrtc::ptr::Borrowed<RffiAudioLevel>,
+        received_out: webrtc::ptr::Borrowed<RffiReceivedAudioLevel>,
+        received_out_size: usize,
+        received_size_out: webrtc::ptr::Borrowed<usize>,
     );
 
     pub fn Rust_closePeerConnection(peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>);

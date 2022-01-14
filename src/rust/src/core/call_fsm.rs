@@ -63,6 +63,7 @@ use crate::core::connection::ConnectionObserverEvent;
 use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::core::util::TaskQueueRuntime;
+use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// The different types of CallEvents.
@@ -92,7 +93,6 @@ pub enum CallEvent {
     ConnectionObserverEvent(ConnectionObserverEvent, DeviceId),
     /// Connection observer error
     ConnectionObserverError(anyhow::Error, DeviceId),
-
     // Internally generated events
     /// Notify the call manager of an internal error condition.
     InternalError(anyhow::Error),
@@ -137,6 +137,17 @@ impl fmt::Display for CallEvent {
             CallEvent::Terminate => "Terminate".to_string(),
         };
         write!(f, "({})", display)
+    }
+}
+
+impl CallEvent {
+    // If an event is frequent, avoid logging it.
+    pub fn is_frequent(&self) -> bool {
+        if let CallEvent::ConnectionObserverEvent(event, _) = self {
+            event.is_frequent()
+        } else {
+            false
+        }
     }
 }
 
@@ -205,7 +216,9 @@ where
             match ready!(pin_stream.poll_next(cx)) {
                 Some((call, event)) => {
                     let state = call.state()?;
-                    info!("state: {}, event: {}", state, event);
+                    if !event.is_frequent() {
+                        info!("state: {}, event: {}", state, event);
+                    }
                     if let Err(e) = self.handle_event(call, state, event) {
                         error!("Handling event failed: {:?}", e);
                     }
@@ -364,6 +377,26 @@ where
         }
         .map_err(move |err| {
             err_call.inject_internal_error(err, "Notify Network Route Changed Future failed");
+        });
+
+        self.notify_spawn(notify_app_future);
+    }
+
+    fn notify_audio_levels(
+        &mut self,
+        call: Call<T>,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) {
+        let mut err_call = call.clone();
+        let notify_app_future = async move {
+            if call.terminating()? {
+                return Ok(());
+            }
+            call.notify_audio_levels(captured_level, received_level)
+        }
+        .map_err(move |err| {
+            err_call.inject_internal_error(err, "Notify Audio Levels Future failed");
         });
 
         self.notify_spawn(notify_app_future);
@@ -908,6 +941,13 @@ where
                         );
                     }
                 }
+                Ok(())
+            }
+            ConnectionObserverEvent::AudioLevels {
+                captured_level,
+                received_level,
+            } => {
+                self.notify_audio_levels(call, captured_level, received_level);
                 Ok(())
             }
         }

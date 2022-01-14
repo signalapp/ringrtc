@@ -17,6 +17,7 @@ use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::{group_call, signaling};
 use crate::webrtc::media::{MediaStream, VideoTrack};
+use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// A trait encompassing the traits the platform associated types must
@@ -65,6 +66,14 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         &self,
         remote_peer: &Self::AppRemotePeer,
         network_route: NetworkRoute,
+    ) -> Result<()>;
+
+    /// Notify the client application about audio levels
+    fn on_audio_levels(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
     ) -> Result<()>;
 
     /// Send an offer to a remote peer using the signaling
@@ -243,6 +252,14 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         max_devices: Option<u32>,
         device_count: u32,
     );
+
+    fn handle_audio_levels(
+        &self,
+        _client_id: group_call::ClientId,
+        _captured_level: AudioLevel,
+        _received_levels: Vec<ReceivedAudioLevel>,
+    ) {
+    }
 
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason);
 }

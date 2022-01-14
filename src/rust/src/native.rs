@@ -20,6 +20,7 @@ use crate::core::{
 };
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
+use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_factory::{IceServer, PeerConnectionFactory};
 use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
@@ -112,6 +113,12 @@ pub trait CallStateHandler {
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_network_route(&self, remote_peer_id: &str, network_route: NetworkRoute)
         -> Result<()>;
+    fn handle_audio_levels(
+        &self,
+        remote_peer_id: &str,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()>;
 }
 
 // Starts an HTTP request. CallManager is notified of the result via a separate callback.
@@ -248,6 +255,7 @@ pub enum GroupUpdate {
         update: group_call::RingUpdate,
     },
     NetworkRouteChanged(group_call::ClientId, NetworkRoute),
+    AudioLevels(group_call::ClientId, AudioLevel, Vec<ReceivedAudioLevel>),
 }
 
 impl fmt::Display for GroupUpdate {
@@ -264,6 +272,9 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::Ring { update, .. } => format!("Ring({:?})", update),
             GroupUpdate::NetworkRouteChanged(_, network_route) => {
                 format!("NetworkRouteChanged({:?})", network_route)
+            }
+            GroupUpdate::AudioLevels(_, captured_level, received_levels) => {
+                format!("AudioLevels({:?}, {:?})", captured_level, received_levels)
             }
         };
         write!(f, "({})", display)
@@ -320,6 +331,16 @@ impl NativePlatform {
     fn send_network_route(&self, peer_id: &str, network_route: NetworkRoute) -> Result<()> {
         self.state_handler
             .handle_network_route(peer_id, network_route)
+    }
+
+    fn send_audio_levels(
+        &self,
+        peer_id: &str,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        self.state_handler
+            .handle_audio_levels(peer_id, captured_level, received_level)
     }
 
     fn send_group_update(&self, update: GroupUpdate) -> Result<()> {
@@ -561,6 +582,21 @@ impl Platform for NativePlatform {
         self.send_network_route(remote_peer, network_route)
     }
 
+    fn on_audio_levels(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        trace!(
+            "NativePlatform::on_audio_levels(): remote_peer: {}, captured_level: {}, received_level: {}",
+            remote_peer, captured_level, received_level
+        );
+
+        self.send_audio_levels(remote_peer, captured_level, received_level)?;
+        Ok(())
+    }
+
     fn on_offer_expired(&self, remote_peer: &Self::AppRemotePeer, age: Duration) -> Result<()> {
         info!(
             "NativePlatform::on_offer_expired(): remote_peer: {}, age: {:?}",
@@ -768,6 +804,23 @@ impl Platform for NativePlatform {
         );
         let result =
             self.send_group_update(GroupUpdate::NetworkRouteChanged(client_id, network_route));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_audio_levels(
+        &self,
+        client_id: group_call::ClientId,
+        captured_level: AudioLevel,
+        received_levels: Vec<ReceivedAudioLevel>,
+    ) {
+        trace!("NativePlatform::handle_audio_levels(): id: {}", client_id);
+        let result = self.send_group_update(GroupUpdate::AudioLevels(
+            client_id,
+            captured_level,
+            received_levels,
+        ));
         if result.is_err() {
             error!("{:?}", result.err());
         }

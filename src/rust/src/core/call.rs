@@ -29,6 +29,7 @@ use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
+use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// Encapsulates the FSM and runtime upon which a Call runs.
@@ -428,6 +429,20 @@ where
         let remote_peer = self.remote_peer()?;
 
         call_manager.notify_network_route_changed(&*remote_peer, network_route)
+    }
+
+    /// Notify application of audio levels
+    ///
+    /// This is a pass through to the CallManager.
+    pub fn notify_audio_levels(
+        &self,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        let call_manager = self.call_manager()?;
+        let remote_peer = self.remote_peer()?;
+
+        call_manager.notify_audio_levels(&*remote_peer, captured_level, received_level)
     }
 
     /// Notify call manager of an internal error.
@@ -958,12 +973,14 @@ where
         remote_device_id: DeviceId,
         event: ConnectionObserverEvent,
     ) -> Result<()> {
-        info!(
-            "on_connection_observer_event(): call_id: {}, remote_device_id: {}, event: {}",
-            self.call_id(),
-            remote_device_id,
-            event
-        );
+        if !event.is_frequent() {
+            info!(
+                "on_connection_observer_event(): call_id: {}, remote_device_id: {}, event: {}",
+                self.call_id(),
+                remote_device_id,
+                event
+            );
+        }
         self.inject_event(CallEvent::ConnectionObserverEvent(event, remote_device_id))
     }
 

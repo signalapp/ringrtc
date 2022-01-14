@@ -25,6 +25,7 @@ use ringrtc::{
         injectable_network::InjectableNetwork,
         media::{VideoFrame, VideoSink, VideoSource},
         network::NetworkInterfaceType,
+        peer_connection::AudioLevel,
         peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
         peer_connection_observer::NetworkRoute,
     },
@@ -572,6 +573,19 @@ impl CallStateHandler for CallEndpoint {
         info!(
             "Network route changed for {} => {}: {:?}",
             self.peer_id, remote_peer_id, network_route
+        );
+        Ok(())
+    }
+
+    fn handle_audio_levels(
+        &self,
+        remote_peer_id: &str,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        debug!(
+            "Audio Levels captured for {} => {}: captured: {}; received: {}",
+            self.peer_id, remote_peer_id, captured_level, received_level
         );
         Ok(())
     }

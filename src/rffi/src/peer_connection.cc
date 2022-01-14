@@ -899,6 +899,16 @@ Rust_configureAudioEncoders(webrtc::PeerConnectionInterface* peer_connection_bor
 }
 
 RUSTEXPORT void
+Rust_getAudioLevels(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
+                    cricket::AudioLevel* captured_out,
+                    cricket::ReceivedAudioLevel* received_out, 
+                    size_t received_out_size,
+                    size_t* received_size_out) {
+  RTC_LOG(LS_VERBOSE) << "Rust_getAudioLevels(...)";
+  peer_connection_borrowed_rc->GetAudioLevels(captured_out, received_out, received_out_size, received_size_out);
+}
+
+RUSTEXPORT void
 Rust_closePeerConnection(PeerConnectionInterface* peer_connection_borrowed_rc) {
     peer_connection_borrowed_rc->Close();
 }

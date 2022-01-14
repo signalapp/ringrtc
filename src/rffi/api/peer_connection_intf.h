@@ -168,4 +168,11 @@ Rust_receiveRtp(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc, ui
 RUSTEXPORT void
 Rust_configureAudioEncoders(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc, const webrtc::AudioEncoder::Config* config_borrowed);
 
+RUSTEXPORT void
+Rust_getAudioLevels(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
+                    cricket::AudioLevel* captured_out,
+                    cricket::ReceivedAudioLevel* received_out,
+                    size_t received_out_size,
+                    size_t* received_size_out);
+
 #endif /* RFFI_API_PEER_CONNECTION_INTF_H__ */

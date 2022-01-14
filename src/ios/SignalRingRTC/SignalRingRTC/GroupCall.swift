@@ -48,11 +48,23 @@ public class LocalDeviceState {
     public internal(set) var connectionState: ConnectionState
     public internal(set) var networkRoute: NetworkRoute
     public internal(set) var joinState: JoinState
+    public internal(set) var audioLevel: UInt16
 
     init() {
         self.connectionState = .notConnected
         self.joinState = .notJoined
         self.networkRoute = NetworkRoute(localAdapterType: .unknown)
+        self.audioLevel = 0
+    }
+}
+
+public class ReceivedAudioLevel {
+    public let demuxId: UInt32
+    public internal(set) var audioLevel: UInt16
+
+    init(demuxId: UInt32, audioLevel: UInt16) {
+        self.demuxId = demuxId
+        self.audioLevel = audioLevel
     }
 }
 
@@ -69,6 +81,7 @@ public class RemoteDeviceState: Hashable {
     public internal(set) var addedTime: UInt64  // unix millis
     public internal(set) var speakerTime: UInt64  // unix millis; 0 if they've never spoken
     public internal(set) var forwardingVideo: Bool?
+    public internal(set) var audioLevel: UInt16
 
     public internal(set) var videoTrack: RTCVideoTrack?
 
@@ -78,6 +91,7 @@ public class RemoteDeviceState: Hashable {
         self.mediaKeysReceived = mediaKeysReceived
         self.addedTime = addedTime
         self.speakerTime = speakerTime
+        self.audioLevel = 0
     }
 
     public static func ==(lhs: RemoteDeviceState, rhs: RemoteDeviceState) -> Bool {
@@ -142,6 +156,11 @@ public protocol GroupCallDelegate: AnyObject {
      * states from the group call and refresh the presentation.
      */
     func groupCall(onRemoteDeviceStatesChanged groupCall: GroupCall)
+
+    /**
+     * Indication that the application should draw audio levels.
+     */
+    func groupCall(onAudioLevels groupCall: GroupCall)
 
     /**
      * Indication that the application can retrieve an updated PeekInfo which
@@ -528,6 +547,20 @@ public class GroupCall {
         self.delegate?.groupCall(onLocalDeviceStateChanged: self)
     }
 
+    func handleAudioLevels(capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel]) {
+        AssertIsOnMainThread()
+
+        self.localDeviceState.audioLevel = capturedLevel;
+        for received in receivedLevels {
+            let remoteDeviceState = self.remoteDeviceStates[received.demuxId]
+            if remoteDeviceState != nil {
+                remoteDeviceState?.audioLevel = received.audioLevel
+            }
+        }
+
+        self.delegate?.groupCall(onAudioLevels: self)
+    }
+
     func handleJoinStateChanged(joinState: JoinState) {
        AssertIsOnMainThread()
 
@@ -542,10 +575,11 @@ public class GroupCall {
 
         var remoteDeviceByDemuxId: [UInt32: RemoteDeviceState] = [:]
         for remoteDeviceState in remoteDeviceStates {
-            // Maintain the video track if one already exists.
+            // Maintain the video track and audio level if one already exists.
             let existingDeviceState = self.remoteDeviceStates[remoteDeviceState.demuxId]
             if existingDeviceState != nil {
                 remoteDeviceState.videoTrack = existingDeviceState?.videoTrack
+                remoteDeviceState.audioLevel = existingDeviceState?.audioLevel ?? 0
             }
 
             // Build the dictionary version of the array with demuxId as the key.

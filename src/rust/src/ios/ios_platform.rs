@@ -22,13 +22,16 @@ use crate::core::{group_call, signaling};
 use crate::ios::api::call_manager_interface::{
     AppByteSlice, AppCallContext, AppConnectionInterface, AppHeader, AppHeaderArray,
     AppIceCandidateArray, AppInterface, AppObject, AppOptionalBool, AppOptionalUInt32,
-    AppRemoteDeviceState, AppRemoteDeviceStateArray, AppUuidArray,
+    AppReceivedAudioLevel, AppReceivedAudioLevelArray, AppRemoteDeviceState,
+    AppRemoteDeviceStateArray, AppUuidArray,
 };
 use crate::ios::error::IosError;
 use crate::ios::ios_media_stream::IosMediaStream;
 use crate::webrtc;
 use crate::webrtc::media::{MediaStream, VideoTrack};
-use crate::webrtc::peer_connection::{PeerConnection, RffiPeerConnection};
+use crate::webrtc::peer_connection::{
+    AudioLevel, PeerConnection, ReceivedAudioLevel, RffiPeerConnection,
+};
 use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
 /// Concrete type for iOS AppIncomingMedia objects.
@@ -201,6 +204,23 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             remote_peer.ptr,
             network_route.local_adapter_type as i32,
+        );
+
+        Ok(())
+    }
+
+    fn on_audio_levels(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        trace!("on_audio_levels(): {}, {}", captured_level, received_level);
+        (self.app_interface.onAudioLevels)(
+            self.app_interface.object,
+            remote_peer.ptr,
+            captured_level as u16,
+            received_level as u16,
         );
 
         Ok(())
@@ -589,6 +609,34 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             client_id,
             network_route.local_adapter_type as i32,
+        );
+    }
+
+    fn handle_audio_levels(
+        &self,
+        client_id: group_call::ClientId,
+        captured_level: AudioLevel,
+        received_levels: Vec<ReceivedAudioLevel>,
+    ) {
+        trace!("handle_audio_levels(): {:?}", captured_level);
+        let mut app_received_levels: Vec<AppReceivedAudioLevel> = Vec::new();
+        for received in received_levels {
+            app_received_levels.push(AppReceivedAudioLevel {
+                demuxId: received.demux_id,
+                level: received.level,
+            });
+        }
+
+        let app_received_levels_array = AppReceivedAudioLevelArray {
+            levels: app_received_levels.as_ptr(),
+            count: app_received_levels.len(),
+        };
+
+        (self.app_interface.handleAudioLevels)(
+            self.app_interface.object,
+            client_id,
+            captured_level as u16,
+            app_received_levels_array,
         );
     }
 

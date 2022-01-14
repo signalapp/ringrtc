@@ -250,6 +250,12 @@ public protocol CallManagerDelegate: AnyObject {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onNetworkRouteChangedFor call: CallManagerDelegateCallType, networkRoute: NetworkRoute)
 
     /**
+     * onAudiolevelsFor will be invoked regularly to provide audio levels.
+     * Invoked *synchronously*.
+     */
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onAudioLevelsFor call: CallManagerDelegateCallType, capturedLevel: UInt16, receivedLevel: UInt16)
+
+    /**
      * An Offer message should be sent to the given remote.
      * Invoked on the main thread, asychronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
@@ -308,7 +314,7 @@ public protocol CallManagerDelegate: AnyObject {
     /**
      * Two call 'remote' pointers should be compared to see if they refer to the same
      * remote peer/contact.
-     * Invoked on the main thread, *synchronously*.
+     * Invoked *synchronously*.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldCompareCalls call1: CallManagerDelegateCallType, call2: CallManagerDelegateCallType) -> Bool
 
@@ -872,6 +878,16 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    func onAudioLevelsFor(remote: UnsafeRawPointer, capturedLevel: UInt16, receivedLevel: UInt16) {
+        // The frequency of audio level updates is too high for the main thread, so
+        // invoke the delegate function synchronously.
+
+        guard let delegate = self.delegate else { return }
+
+        let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
+        delegate.callManager(self, onAudioLevelsFor: callReference, capturedLevel: capturedLevel, receivedLevel: receivedLevel)
+    }
+
     // MARK: - Signaling Observers
 
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
@@ -1150,6 +1166,17 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
             groupCall.handleNetworkRouteChanged(networkRoute: networkRoute)
         }
+    }
+
+    func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel]) {
+        // TODO: Enable or modify during integration with client for Audio Level display.
+        //DispatchQueue.main.async {
+        //    guard let groupCall = self.groupCallByClientId[clientId] else {
+        //        return
+        //    }
+        //
+        //    groupCall.handleAudioLevels(capturedLevel: capturedLevel, receivedLevels: receivedLevels)
+        //}
     }
 
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {

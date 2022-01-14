@@ -38,7 +38,7 @@ use crate::{
     webrtc::{
         self,
         media::{AudioTrack, VideoFrame, VideoSink, VideoTrack},
-        peer_connection::{PeerConnection, SendRates},
+        peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, SendRates},
         peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
         peer_connection_observer::{
             IceConnectionState, NetworkRoute, PeerConnectionObserver, PeerConnectionObserverTrait,
@@ -233,6 +233,13 @@ pub trait Observer {
         client_id: ClientId,
         remote_demux_id: DemuxId,
         incoming_video_track: VideoTrack,
+    );
+
+    fn handle_audio_levels(
+        &self,
+        client_id: ClientId,
+        captured_level: AudioLevel,
+        received_levels: Vec<ReceivedAudioLevel>,
     );
 
     // This will be the last callback.
@@ -693,11 +700,15 @@ struct State {
     peer_connection_observer_impl: Box<PeerConnectionObserverImpl>,
     rtp_data_to_sfu_next_seqnum: u32,
     rtp_data_through_sfu_next_seqnum: u32,
+    next_heartbeat_time: Option<Instant>,
 
     // Things for getting statistics from the PeerConnection
     // Stats gathering happens only when joined
     next_stats_time: Option<Instant>,
     stats_observer: Box<StatsObserver>,
+
+    // Things for getting audio levels from the PeerConnection
+    next_audio_levels_time: Option<Instant>,
 
     next_membership_proof_request_time: Option<Instant>,
 
@@ -729,7 +740,7 @@ struct State {
     // once per second, you get an "on demand" one.  Any more than that and you
     // wait for the next tick.
     video_requests: Option<Vec<VideoRequest>>,
-    on_demand_video_request_sent_since_last_tick: bool,
+    on_demand_video_request_sent_since_last_heartbeat: bool,
     speaker_rtp_timestamp: Option<rtp::Timestamp>,
 
     send_rates: SendRates,
@@ -784,10 +795,16 @@ impl RemoteDevices {
 
 // The time between ticks to do periodic things like request updated
 // membership list from the SfuClient
-const TICK_INTERVAL: Duration = Duration::from_secs(1);
+const TICK_INTERVAL: Duration = Duration::from_millis(200);
 
-// The stats period, how often to get and log them.
+// How often to send RTP data messages and video requests.
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
+
+// How often to get and log stats.
 const STATS_INTERVAL: Duration = Duration::from_secs(10);
+
+// How often to get and report audio levels to app.
+const AUDIO_LEVELS_INTERVAL: Duration = Duration::from_millis(200);
 
 // How often to request an updated membership proof (24 hours).
 const MEMBERSHIP_PROOF_REQUEST_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -888,8 +905,12 @@ impl Client {
                     rtp_data_to_sfu_next_seqnum: 1,
                     rtp_data_through_sfu_next_seqnum: 1,
 
+                    next_heartbeat_time: None,
+
                     next_stats_time: None,
                     stats_observer: create_stats_observer(),
+
+                    next_audio_levels_time: None,
 
                     next_membership_proof_request_time: None,
 
@@ -898,7 +919,7 @@ impl Client {
                     media_send_key_rotation_state: KeyRotationState::Applied,
 
                     video_requests: None,
-                    on_demand_video_request_sent_since_last_tick: false,
+                    on_demand_video_request_sent_since_last_heartbeat: false,
                     speaker_rtp_timestamp: None,
 
                     send_rates: SendRates::default(),
@@ -929,15 +950,23 @@ impl Client {
     fn tick(state: &mut State) {
         let now = Instant::now();
 
-        debug!(
+        trace!(
             "group_call::Client(inner)::tick(group_id: {})",
             state.client_id
         );
 
         Self::request_remote_devices_from_sfu_if_older_than(state, Duration::from_secs(10));
 
-        if let Err(err) = Self::send_heartbeat(state) {
-            warn!("Failed to send regular heartbeat: {:?}", err);
+        if let Some(next_heartbeat_time) = state.next_heartbeat_time {
+            if now >= next_heartbeat_time {
+                if let Err(err) = Self::send_heartbeat(state) {
+                    warn!("Failed to send regular heartbeat: {:?}", err);
+                }
+                // Also send video requests at the same rate as the hearbeat.
+                Self::send_video_requests_to_sfu(state);
+                state.on_demand_video_request_sent_since_last_heartbeat = false;
+                state.next_heartbeat_time = Some(now + HEARTBEAT_INTERVAL)
+            }
         }
 
         if let Some(next_stats_time) = state.next_stats_time {
@@ -949,6 +978,18 @@ impl Client {
             }
         }
 
+        if let Some(next_audio_levels_time) = state.next_audio_levels_time {
+            if now >= next_audio_levels_time {
+                let (captured_level, received_levels) = state.peer_connection.get_audio_levels();
+                state.observer.handle_audio_levels(
+                    state.client_id,
+                    captured_level,
+                    received_levels,
+                );
+                state.next_audio_levels_time = Some(now + AUDIO_LEVELS_INTERVAL);
+            }
+        }
+
         if let Some(next_membership_proof_request_time) = state.next_membership_proof_request_time {
             if now >= next_membership_proof_request_time {
                 state.observer.request_membership_proof(state.client_id);
@@ -956,9 +997,6 @@ impl Client {
                     Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
             }
         }
-
-        Self::send_video_requests_to_sfu(state);
-        state.on_demand_video_request_sent_since_last_tick = false;
 
         state.actor.send_delayed(TICK_INTERVAL, Self::tick);
     }
@@ -1057,10 +1095,16 @@ impl Client {
                         ConnectionState::Connecting,
                     );
 
+                    let now = Instant::now();
+
+                    // Start heartbeats and audio levels right away.
+                    state.next_heartbeat_time = Some(now);
+                    state.next_audio_levels_time = Some(now);
+
                     // Request group membership refresh as we start polling the participant list.
                     state.observer.request_membership_proof(state.client_id);
                     state.next_membership_proof_request_time =
-                        Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+                        Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
 
                     // Request the list of all group members
                     state.observer.request_group_members(state.client_id);
@@ -1240,7 +1284,9 @@ impl Client {
                     Self::send_leave_to_sfu(state);
                 }
                 Self::set_join_state_and_notify_observer(state, JoinState::NotJoined(None));
+                state.next_heartbeat_time = None;
                 state.next_stats_time = None;
+                state.next_audio_levels_time = None;
                 state.next_membership_proof_request_time = None;
             }
         }
@@ -1456,9 +1502,9 @@ impl Client {
                 // Effectively allow a lot of video 
                 BandwidthMode::Normal => DataRate::from_kbps(NORMAL_MAX_RECEIVE_RATE_KBPS),
             });
-            if !state.on_demand_video_request_sent_since_last_tick {
+            if !state.on_demand_video_request_sent_since_last_heartbeat {
                 Self::send_video_requests_to_sfu(state);
-                state.on_demand_video_request_sent_since_last_tick = true;
+                state.on_demand_video_request_sent_since_last_heartbeat = true;
             }
         });
     }
@@ -1498,9 +1544,9 @@ impl Client {
                 state.client_id
             );
             state.video_requests = Some(requests);
-            if !state.on_demand_video_request_sent_since_last_tick {
+            if !state.on_demand_video_request_sent_since_last_heartbeat {
                 Self::send_video_requests_to_sfu(state);
-                state.on_demand_video_request_sent_since_last_tick = true;
+                state.on_demand_video_request_sent_since_last_heartbeat = true;
             }
         });
     }
@@ -3369,6 +3415,7 @@ mod tests {
 
         request_membership_proof_invocation_count: Arc<AtomicU64>,
         handle_remote_devices_changed_invocation_count: Arc<AtomicU64>,
+        handle_audio_levels_invocation_count: Arc<AtomicU64>,
     }
 
     impl FakeObserver {
@@ -3399,6 +3446,7 @@ mod tests {
                 era_id: None,
                 request_membership_proof_invocation_count: Default::default(),
                 handle_remote_devices_changed_invocation_count: Default::default(),
+                handle_audio_levels_invocation_count: Default::default(),
             }
         }
 
@@ -3468,6 +3516,12 @@ mod tests {
             self.handle_remote_devices_changed_invocation_count
                 .swap(0, Ordering::Relaxed)
         }
+
+        /// Gets the number of `handle_audio_levels` since last checked.
+        fn handle_audio_levels_invocation_count(&self) -> u64 {
+            self.handle_audio_levels_invocation_count
+                .swap(0, Ordering::Relaxed)
+        }
     }
 
     impl Observer for FakeObserver {
@@ -3510,6 +3564,16 @@ mod tests {
                 .expect("Lock recipients to set remote devices");
             *owned_remote_devices = remote_devices.to_vec();
             self.handle_remote_devices_changed_invocation_count
+                .fetch_add(1, Ordering::Relaxed);
+        }
+
+        fn handle_audio_levels(
+            &self,
+            _client_id: ClientId,
+            _captured_level: AudioLevel,
+            _received_levels: Vec<ReceivedAudioLevel>,
+        ) {
+            self.handle_audio_levels_invocation_count
                 .fetch_add(1, Ordering::Relaxed);
         }
 
@@ -4654,6 +4718,18 @@ mod tests {
         );
 
         client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn audio_level_polling() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        assert_eq!(0, client1.observer.handle_audio_levels_invocation_count());
+        client1.connect_join_and_wait_until_joined();
+        assert_eq!(1, client1.observer.handle_audio_levels_invocation_count());
+        std::thread::sleep(Duration::from_millis(250));
+        assert_eq!(1, client1.observer.handle_audio_levels_invocation_count());
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(1, client1.observer.handle_audio_levels_invocation_count());
     }
 
     #[test]

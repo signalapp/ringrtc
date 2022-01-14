@@ -22,7 +22,7 @@ use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::sim::error::SimError;
 use crate::webrtc::media::{MediaStream, VideoTrack};
-use crate::webrtc::peer_connection::PeerConnection;
+use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 use crate::webrtc::sim::peer_connection::RffiPeerConnection;
 
@@ -200,6 +200,16 @@ impl Platform for SimPlatform {
         network_route: NetworkRoute,
     ) -> Result<()> {
         info!("on_network_route_changed(): {:?}", network_route);
+        Ok(())
+    }
+
+    fn on_audio_levels(
+        &self,
+        _remote_peer: &Self::AppRemotePeer,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        trace!("on_audio_levels(): {}, {}", captured_level, received_level);
         Ok(())
     }
 
@@ -497,6 +507,19 @@ impl Platform for SimPlatform {
         network_route: NetworkRoute,
     ) {
         info!("handle_network_route_changed(): {:?}", network_route);
+    }
+
+    fn handle_audio_levels(
+        &self,
+        _client_id: group_call::ClientId,
+        captured_level: AudioLevel,
+        received_levels: Vec<ReceivedAudioLevel>,
+    ) {
+        trace!(
+            "handle_audio_levels(): {:?}, {:?}",
+            captured_level,
+            received_levels
+        );
     }
 
     fn handle_join_state_changed(

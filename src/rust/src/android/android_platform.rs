@@ -26,6 +26,7 @@ use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::webrtc::media::{MediaStream, VideoTrack};
+use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 const RINGRTC_PACKAGE: &str = jni_class_name!(org.signal.ringrtc);
@@ -33,6 +34,8 @@ const CALL_MANAGER_CLASS: &str = "CallManager";
 const HTTP_HEADER_CLASS: &str = jni_class_name!(org.signal.ringrtc.HttpHeader);
 const REMOTE_DEVICE_STATE_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.GroupCall::RemoteDeviceState);
+const RECEIVED_AUDIO_LEVEL_CLASS: &str =
+    jni_class_name!(org.signal.ringrtc.GroupCall::ReceivedAudioLevel);
 
 /// Android implementation for platform::Platform::AppIncomingMedia
 pub type AndroidMediaStream = JavaMediaStream;
@@ -406,6 +409,33 @@ impl Platform for AndroidPlatform {
             jni_args!((
                 remote_peer.as_obj() => org.signal.ringrtc.Remote,
                 network_route.local_adapter_type as i32 => int,
+            ) -> void),
+        )?;
+        Ok(())
+    }
+
+    fn on_audio_levels(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        trace!(
+            "on_audio_levels(): captured_level: {}; received_level: {}",
+            captured_level,
+            received_level
+        );
+
+        let env = self.java_env()?;
+
+        let _ = jni_call_method(
+            &env,
+            self.jni_call_manager.as_obj(),
+            "onAudioLevels",
+            jni_args!((
+                remote_peer.as_obj() => org.signal.ringrtc.Remote,
+                captured_level as i32 => int,
+                received_level as i32 => int,
             ) -> void),
         )?;
         Ok(())
@@ -1122,6 +1152,80 @@ impl Platform for AndroidPlatform {
                     network_route.local_adapter_type as i32 => int,
                 ) -> void),
             );
+        }
+    }
+
+    fn handle_audio_levels(
+        &self,
+        client_id: group_call::ClientId,
+        captured_level: AudioLevel,
+        received_levels: Vec<ReceivedAudioLevel>,
+    ) {
+        trace!(
+            "handle_audio_levels(): client_id: {}, captured_level: {:?}, received_levels: {:?}",
+            client_id,
+            captured_level,
+            received_levels,
+        );
+
+        if let Ok(env) = self.java_env() {
+            // Set a frame capacity of min (5) + objects (2) + elements (N * 2 per level).
+            // TODO: If this creates too much garbage, use arrays instead of Lists.
+            let capacity = (5 + 2 + received_levels.len() * 2) as i32;
+            let _ = env.with_local_frame(capacity, || {
+                // create Java List<GroupCall.ReceivedAudioLevel>
+                let received_level_class =
+                    match self.class_cache.get_class(RECEIVED_AUDIO_LEVEL_CLASS) {
+                        Ok(v) => v,
+                        Err(error) => {
+                            error!("{:?}", error);
+                            return Ok(JObject::null());
+                        }
+                    };
+
+                let received_levels_list = match jni_new_linked_list(&env) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                };
+
+                for received in received_levels {
+                    let args = jni_args!((
+                        received.demux_id as jlong => long,
+                        received.level as jint => int,
+                    ) -> void);
+
+                    let received_level_obj =
+                        match env.new_object(received_level_class, args.sig, &args.args) {
+                            Ok(v) => v,
+                            Err(error) => {
+                                error!("jni_received_level: {:?}", error);
+                                continue;
+                            }
+                        };
+
+                    let result = received_levels_list.add(received_level_obj);
+                    if result.is_err() {
+                        error!("jni_received_levels_list.add: {:?}", result.err());
+                        continue;
+                    }
+                }
+
+                let _ = jni_call_method(
+                    &env,
+                    self.jni_call_manager.as_obj(),
+                    "handleAudioLevels",
+                    jni_args!((
+                        client_id as jlong => long,
+                        captured_level as jint => int,
+                        JObject::from(received_levels_list) => java.util.List,
+                    ) -> void),
+                );
+
+                Ok(JObject::null())
+            });
         }
     }
 

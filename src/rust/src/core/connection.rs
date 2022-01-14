@@ -42,7 +42,7 @@ use crate::protobuf;
 use crate::webrtc;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::{MediaStream, VideoFrame, VideoSink};
-use crate::webrtc::peer_connection::{PeerConnection, SendRates};
+use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, SendRates};
 use crate::webrtc::peer_connection_observer::{
     IceConnectionState, NetworkRoute, PeerConnectionObserverTrait,
 };
@@ -52,11 +52,23 @@ use crate::webrtc::sdp_observer::{
 };
 use crate::webrtc::stats_observer::{create_stats_observer, StatsObserver};
 
-/// The periodic tick interval. Used to generate stats and to retransmit RTP messages.
-pub const TICK_PERIOD_SEC: u64 = 1;
+/// Used to generate stats, to retransmit RTP messages, and to get audio levels.
+const TICK_INTERVAL_MILLIS: u64 = 200;
+const TICK_INTERVAL: Duration = Duration::from_millis(TICK_INTERVAL_MILLIS);
 
-/// The stats period, how often to get and log them. Assumes tick period is 1 second.
-pub const STATS_PERIOD_SEC: u64 = 10;
+/// How often to get and log stats
+const POLL_STATS_INTERVAL_MILLIS: u64 = 10_000;
+const POLL_STATS_INTERVAL_TICKS: u64 = POLL_STATS_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
+
+/// How often to retransmit RTP messages.
+const SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS: u64 = 1000;
+const SEND_RTP_DATA_MESSAGE_INTERVAL_TICKS: u64 =
+    SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
+
+/// How often to get audio levels.
+const POLL_AUDIO_LEVELS_INTERVAL_MILLIS: u64 = 200;
+const POLL_AUDIO_LEVELS_INTERVAL_TICKS: u64 =
+    POLL_AUDIO_LEVELS_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
 
 pub const RTP_DATA_PAYLOAD_TYPE: rtp::PayloadType = 101;
 pub const OLD_RTP_DATA_SSRC_FOR_OUTGOING: rtp::Ssrc = 1001;
@@ -94,6 +106,18 @@ pub enum ConnectionObserverEvent {
 
     /// The ICE network route changed
     IceNetworkRouteChanged(NetworkRoute),
+
+    AudioLevels {
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    },
+}
+
+impl ConnectionObserverEvent {
+    // If an event is frequent, avoid logging it.
+    pub fn is_frequent(&self) -> bool {
+        matches!(self, ConnectionObserverEvent::AudioLevels { .. })
+    }
 }
 
 impl Clone for ConnectionObserverEvent {
@@ -1045,14 +1069,14 @@ where
 
         let (cancel_sender, cancel_receiver) = oneshot::channel::<()>();
         let tick_forever = async move {
-            let duration = Duration::from_secs(TICK_PERIOD_SEC);
-            let mut interval = tokio::time::interval(duration);
+            let mut interval = tokio::time::interval(TICK_INTERVAL);
             let mut ticks_elapsed = 0u64;
-
             loop {
                 interval.tick().await;
                 ticks_elapsed += 1;
-                connection.tick(ticks_elapsed).unwrap();
+                if let Err(err) = connection.tick(ticks_elapsed) {
+                    warn!("connection.tick() failed: {:?}", err);
+                }
             }
         };
         let tick_until_cancel = async move {
@@ -1078,13 +1102,31 @@ where
     pub fn tick(&mut self, ticks_elapsed: u64) -> Result<()> {
         let mut webrtc = self.webrtc.lock()?;
 
-        self.send_latest_rtp_data_message(&mut webrtc)?;
+        if ticks_elapsed % SEND_RTP_DATA_MESSAGE_INTERVAL_TICKS == 0 {
+            self.send_latest_rtp_data_message(&mut webrtc)?;
+        }
 
-        if ticks_elapsed % STATS_PERIOD_SEC == 0 {
+        if ticks_elapsed % POLL_STATS_INTERVAL_TICKS == 0 {
             if let Some(observer) = webrtc.stats_observer.as_ref() {
                 let _ = webrtc.peer_connection()?.get_stats(observer);
             } else {
                 warn!("tick(): No stats_observer found");
+            }
+        }
+
+        #[allow(clippy::modulo_one)]
+        if ticks_elapsed % POLL_AUDIO_LEVELS_INTERVAL_TICKS == 0 {
+            let (captured_level, received_levels) = webrtc.peer_connection()?.get_audio_levels();
+            let received_level = received_levels
+                .first()
+                .map(|received| received.level)
+                .unwrap_or(0);
+            let event = ConnectionObserverEvent::AudioLevels {
+                captured_level,
+                received_level,
+            };
+            if let Err(err) = self.notify_observer(event) {
+                warn!("tick(): failed to notify of audio levels: {:?}", err);
             }
         }
 

@@ -65,6 +65,18 @@ pub struct SendRates {
     pub max: Option<DataRate>,
 }
 
+pub type RffiAudioLevel = u16;
+
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct RffiReceivedAudioLevel {
+    pub demux_id: u32,
+    pub level: RffiAudioLevel,
+}
+
+pub type AudioLevel = RffiAudioLevel;
+pub type ReceivedAudioLevel = RffiReceivedAudioLevel;
+
 impl PeerConnection {
     pub fn new(
         rffi: webrtc::Arc<RffiPeerConnection>,
@@ -310,6 +322,23 @@ impl PeerConnection {
                 webrtc::ptr::Borrowed::from_ptr(&config),
             )
         };
+    }
+
+    pub fn get_audio_levels(&self) -> (AudioLevel, Vec<RffiReceivedAudioLevel>) {
+        let captured_level: RffiAudioLevel = 0;
+        let mut received_levels: Vec<RffiReceivedAudioLevel> = Vec::with_capacity(100);
+        unsafe {
+            let len = 0usize;
+            pc::Rust_getAudioLevels(
+                self.rffi.as_borrowed(),
+                webrtc::ptr::Borrowed::from_ptr(&captured_level),
+                webrtc::ptr::Borrowed::from_ptr(received_levels.as_mut_ptr()),
+                received_levels.capacity(),
+                webrtc::ptr::Borrowed::from_ptr(&len),
+            );
+            received_levels.set_len(len);
+        }
+        (captured_level, received_levels)
     }
 
     pub fn close(&self) {

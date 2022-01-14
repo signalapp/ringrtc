@@ -300,6 +300,10 @@ final class TestDelegate: CallManagerDelegate {
         Logger.debug("TestDelegate:onNetworkRouteChangedFor - \(networkRoute.localAdapterType)")
     }
 
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, onAudioLevelsFor call: OpaqueCallData, capturedLevel: UInt16, receivedLevel: UInt16) {
+        Logger.debug("TestDelegate:onAudioLevelsFor - \(capturedLevel) \(receivedLevel)")
+    }
+
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendOffer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
         Logger.debug("TestDelegate:shouldSendOffer")
         generalInvocationDetected = true

@@ -23,6 +23,7 @@ use crate::native::{
     NativeCallContext, NativePlatform, PeerId, SignalingSender,
 };
 use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource, VideoTrack};
+use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_factory::{
     self as pcf, AudioDevice, IceServer, PeerConnectionFactory,
 };
@@ -134,6 +135,11 @@ pub enum Event {
     },
     // The network route changed for a 1:1 call
     NetworkRouteChange(PeerId, NetworkRoute),
+    AudioLevels {
+        peer_id: PeerId,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    },
 }
 
 /// Wraps a [`std::sync::mpsc::Sender`] with a callback to report new events.
@@ -236,6 +242,20 @@ impl CallStateHandler for EventReporter {
             remote_peer_id.to_string(),
             enabled,
         ))?;
+        Ok(())
+    }
+
+    fn handle_audio_levels(
+        &self,
+        remote_peer_id: &str,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        self.send(Event::AudioLevels {
+            peer_id: remote_peer_id.to_string(),
+            captured_level,
+            received_level,
+        })?;
         Ok(())
     }
 }
@@ -1820,6 +1840,25 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
+            Event::AudioLevels {
+                peer_id,
+                captured_level,
+                received_level,
+            } => {
+                let method_name = "onAudioLevels";
+                let args: Vec<Handle<JsValue>> = vec![
+                    cx.string(peer_id).upcast(),
+                    cx.number(captured_level).upcast(),
+                    cx.number(received_level).upcast(),
+                ];
+
+                let method = *observer
+                    .get(&mut cx, method_name)?
+                    .downcast::<JsFunction, _>(&mut cx)
+                    .expect("onAudioLevels is a function");
+                method.call(&mut cx, observer, args)?;
+            }
+
             Event::SendHttpRequest {
                 request_id,
                 url,
@@ -2194,6 +2233,35 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     .get(&mut cx, method_name)?
                     .downcast::<JsFunction, _>(&mut cx)
                     .expect(&error_message);
+                method.call(&mut cx, observer, args)?;
+            }
+
+            Event::GroupUpdate(GroupUpdate::AudioLevels(
+                client_id,
+                captured_level,
+                received_levels,
+            )) => {
+                let js_received_levels = JsArray::new(&mut cx, received_levels.len() as u32);
+                for (i, received_level) in received_levels.iter().enumerate() {
+                    let js_received_level = JsObject::new(&mut cx);
+                    let js_demux_id = cx.number(received_level.demux_id);
+                    js_received_level.set(&mut cx, "demuxId", js_demux_id)?;
+                    let js_level = cx.number(received_level.level);
+                    js_received_level.set(&mut cx, "level", js_level)?;
+                    js_received_levels.set(&mut cx, i as u32, js_received_level)?;
+                }
+
+                let method_name = "handleAudioLevels";
+                let args: Vec<Handle<JsValue>> = vec![
+                    cx.number(client_id).upcast(),
+                    cx.number(captured_level).upcast(),
+                    js_received_levels.upcast(),
+                ];
+
+                let method = *observer
+                    .get(&mut cx, method_name)?
+                    .downcast::<JsFunction, _>(&mut cx)
+                    .expect("handleAudioLevels is a function");
                 method.call(&mut cx, observer, args)?;
             }
         }

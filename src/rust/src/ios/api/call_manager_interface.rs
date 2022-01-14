@@ -20,6 +20,7 @@ use crate::common::{CallMediaType, DeviceId, HttpResponse};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::group_call;
 use crate::core::signaling;
+use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::{self, media, peer_connection_factory as pcf};
 
 ///
@@ -261,6 +262,22 @@ pub struct AppRemoteDeviceStateArray {
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
+pub struct AppReceivedAudioLevel {
+    pub demuxId: group_call::DemuxId,
+    pub level: AudioLevel,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+#[allow(non_snake_case)]
+pub struct AppReceivedAudioLevelArray {
+    pub levels: *const AppReceivedAudioLevel,
+    pub count: size_t,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+#[allow(non_snake_case)]
 pub struct AppGroupMemberInfo {
     pub userId: AppByteSlice,
     pub userIdCipherText: AppByteSlice,
@@ -322,6 +339,13 @@ pub struct AppInterface {
     ///
     pub onNetworkRouteChanged:
         extern "C" fn(object: *mut c_void, remote: *const c_void, localNetworkAdapterType: i32),
+    ///
+    pub onAudioLevels: extern "C" fn(
+        object: *mut c_void,
+        remote: *const c_void,
+        capturedLevel: u16,
+        receivedLevel: u16,
+    ),
     ///
     pub onSendOffer: extern "C" fn(
         object: *mut c_void,
@@ -445,6 +469,12 @@ pub struct AppInterface {
         object: *mut c_void,
         clientId: group_call::ClientId,
         localNetworkAdapterType: i32,
+    ),
+    pub handleAudioLevels: extern "C" fn(
+        object: *mut c_void,
+        clientId: group_call::ClientId,
+        capturedLevel: u16,
+        receivedAudioLevels: AppReceivedAudioLevelArray,
     ),
     ///
     pub handleJoinStateChanged:

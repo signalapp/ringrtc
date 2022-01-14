@@ -13,6 +13,7 @@ use crate::core::platform::PlatformItem;
 use crate::webrtc;
 use crate::webrtc::media::RffiAudioEncoderConfig;
 use crate::webrtc::network::RffiIpPort;
+use crate::webrtc::peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel};
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
     RffiCreateSessionDescriptionObserver, RffiSessionDescription, RffiSetSessionDescriptionObserver,
@@ -287,6 +288,25 @@ pub unsafe fn Rust_configureAudioEncoders(
     _config: webrtc::ptr::Borrowed<RffiAudioEncoderConfig>,
 ) {
     info!("Rust_configureAudioEncoders:");
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub fn Rust_getAudioLevels(
+    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    captured_out: webrtc::ptr::Borrowed<RffiAudioLevel>,
+    _received_out: webrtc::ptr::Borrowed<RffiReceivedAudioLevel>,
+    _received_out_size: usize,
+    received_size_out: webrtc::ptr::Borrowed<usize>,
+) {
+    info!("Rust_getAudioLevels:");
+    unsafe {
+        if let Some(captured_out) = captured_out.as_mut() {
+            *captured_out = 0;
+        }
+        if let Some(received_size_out) = received_size_out.as_mut() {
+            *received_size_out = 0;
+        }
+    }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

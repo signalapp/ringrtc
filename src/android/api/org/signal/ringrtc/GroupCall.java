@@ -532,6 +532,25 @@ public final class GroupCall {
 
     /**
      *
+     * Callback from RingRTC with details about audio levels.
+     *
+     */
+    void handleAudioLevels(int capturedLevel, List<CallManager.ReceivedAudioLevel> receivedLevels) {
+        Log.d(TAG, "handleAudioLevels():");
+
+        this.localDeviceState.audioLevel = capturedLevel;
+        for (CallManager.ReceivedAudioLevel received : receivedLevels) {
+            RemoteDeviceState remoteDeviceState = this.remoteDeviceStates.get(received.demuxId);
+            if (remoteDeviceState != null) {
+                remoteDeviceState.audioLevel = received.level;
+            }
+        }
+
+        this.observer.onAudioLevels(this);
+    }
+
+    /**
+     *
      * Callback from RingRTC when the remote device states have changed.
      * Called via the CallManager.
      *
@@ -544,11 +563,12 @@ public final class GroupCall {
             // Convert each userIdByteArray to userId UUID.
             remoteDeviceState.userId = Util.getUuidFromBytes(remoteDeviceState.userIdByteArray);
 
-            // Maintain the video track if one already exists.
+            // Maintain the video track and audio level if one already exists.
             if (this.remoteDeviceStates != null) {
                 RemoteDeviceState existingDeviceState = this.remoteDeviceStates.get(remoteDeviceState.demuxId);
                 if (existingDeviceState != null) {
                     remoteDeviceState.videoTrack = existingDeviceState.videoTrack;
+                    remoteDeviceState.audioLevel = existingDeviceState.audioLevel;
                 }
             }
 
@@ -737,6 +757,7 @@ public final class GroupCall {
         boolean         audioMuted;
         boolean         videoMuted;
         NetworkRoute    networkRoute;
+        int             audioLevel;
 
         public LocalDeviceState() {
             this.connectionState = ConnectionState.NOT_CONNECTED;
@@ -744,6 +765,7 @@ public final class GroupCall {
             this.audioMuted = true;
             this.videoMuted = true;
             this.networkRoute = new NetworkRoute();
+            this.audioLevel = 0;
         }
 
         public LocalDeviceState(@NonNull LocalDeviceState localDeviceState) {
@@ -752,6 +774,7 @@ public final class GroupCall {
             this.audioMuted = localDeviceState.audioMuted;
             this.videoMuted = localDeviceState.videoMuted;
             this.networkRoute = localDeviceState.networkRoute;
+            this.audioLevel = localDeviceState.audioLevel;
         }
 
         public ConnectionState getConnectionState() {
@@ -772,6 +795,11 @@ public final class GroupCall {
 
         public NetworkRoute getNetworkRoute() {
             return networkRoute;
+        }
+
+        // Range of 0-32767, where 0 is silence.
+        public int getAudioLevel() {
+            return audioLevel;
         }
     }
 
@@ -798,6 +826,7 @@ public final class GroupCall {
         @Nullable Boolean    forwardingVideo;
 
         @Nullable VideoTrack videoTrack;
+        @NonNull  int        audioLevel;
 
         public RemoteDeviceState(          long    demuxId,
                                  @NonNull  byte[]  userIdByteArray,
@@ -820,6 +849,7 @@ public final class GroupCall {
             this.addedTime = addedTime;
             this.speakerTime = speakerTime;
             this.forwardingVideo = forwardingVideo;
+            this.audioLevel = 0;
         }
 
         public long getDemuxId() {
@@ -866,6 +896,11 @@ public final class GroupCall {
 
         public @Nullable VideoTrack getVideoTrack() {
             return videoTrack;
+        }
+
+        // Range of 0-32767, where 0 is silence.
+        public int getAudioLevel() {
+            return audioLevel;
         }
     }
 
@@ -924,6 +959,11 @@ public final class GroupCall {
          * Notification that the local device state has changed.
          */
         void onLocalDeviceStateChanged(GroupCall groupCall);
+
+        /**
+         * Notification of audio levels.
+         */
+        void onAudioLevels(GroupCall groupCall);
 
         /**
          * Notification that the remote device states have changed.

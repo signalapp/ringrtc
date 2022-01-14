@@ -37,6 +37,7 @@ use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoSink, VideoTrack};
+use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_factory::PeerConnectionFactory;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
@@ -2060,6 +2061,17 @@ where
         platform.on_network_route_changed(remote_peer, network_route)
     }
 
+    /// Notify application of audio levels
+    pub(super) fn notify_audio_levels(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        captured_level: AudioLevel,
+        received_level: AudioLevel,
+    ) -> Result<()> {
+        let platform = self.platform.lock()?;
+        platform.on_audio_levels(remote_peer, captured_level, received_level)
+    }
+
     /// Create a new connection to a remote device
     pub(super) fn create_connection(
         &self,
@@ -2452,6 +2464,22 @@ where
             era_id,
             max_devices,
             device_count
+        );
+    }
+
+    fn handle_audio_levels(
+        &self,
+        client_id: group_call::ClientId,
+        captured_level: AudioLevel,
+        received_levels: Vec<ReceivedAudioLevel>,
+    ) {
+        trace!("handle_audio_levels():");
+        platform_handler!(
+            self,
+            handle_audio_levels,
+            client_id,
+            captured_level,
+            received_levels
         );
     }
 

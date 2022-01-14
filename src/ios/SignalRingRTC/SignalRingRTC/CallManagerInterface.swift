@@ -11,6 +11,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
     func onNetworkRouteChangedFor(remote: UnsafeRawPointer, networkRoute: NetworkRoute)
+    func onAudioLevelsFor(remote: UnsafeRawPointer, capturedLevel: UInt16, receivedLevel: UInt16)
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType)
     func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data)
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [Data])
@@ -33,6 +34,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func requestGroupMembers(clientId: UInt32)
     func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState)
     func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute)
+    func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel])
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
@@ -63,6 +65,7 @@ class CallManagerInterface {
             onStartCall: callManagerInterfaceOnStartCall,
             onEvent: callManagerInterfaceOnCallEvent,
             onNetworkRouteChanged: callManagerInterfaceOnNetworkRouteChanged,
+            onAudioLevels: callManagerInterfaceOnAudioLevels,
             onSendOffer: callManagerInterfaceOnSendOffer,
             onSendAnswer: callManagerInterfaceOnSendAnswer,
             onSendIceCandidates: callManagerInterfaceOnSendIceCandidates,
@@ -86,6 +89,7 @@ class CallManagerInterface {
             requestGroupMembers: callManagerInterfaceRequestGroupMembers,
             handleConnectionStateChanged: callManagerInterfaceHandleConnectionStateChanged,
             handleNetworkRouteChanged: callManagerInterfaceHandleNetworkRouteChanged,
+            handleAudioLevels: callManagerInterfaceHandleAudioLevels,
             handleJoinStateChanged: callManagerInterfaceHandleJoinStateChanged,
             handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
@@ -128,6 +132,14 @@ class CallManagerInterface {
 
         let networkRoute = NetworkRoute(localAdapterType: validLocalNetworkAdapterType)
         delegate.onNetworkRouteChangedFor(remote: remote, networkRoute: networkRoute)
+    }
+
+    func onAudioLevelsFor(remote: UnsafeRawPointer, capturedLevel: UInt16, receivedLevel: UInt16) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.onAudioLevelsFor(remote: remote, capturedLevel: capturedLevel, receivedLevel: receivedLevel)
     }
 
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
@@ -276,6 +288,14 @@ class CallManagerInterface {
         delegate.handleNetworkRouteChanged(clientId: clientId, networkRoute: networkRoute)
     }
 
+    func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel]) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleAudioLevels(clientId: clientId, capturedLevel: capturedLevel, receivedLevels: receivedLevels)
+    }
+
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
@@ -379,6 +399,21 @@ func callManagerInterfaceOnNetworkRouteChanged(object: UnsafeMutableRawPointer?,
     }
 
     obj.onNetworkRouteChangedFor(remote: remote, localNetworkAdapterType: localNetworkAdapterType)
+}
+
+func callManagerInterfaceOnAudioLevels(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, capturedLevel: UInt16, receivedLevel: UInt16) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let remote = remote else {
+        owsFailDebug("remote was unexpectedly nil")
+        return
+    }
+
+    obj.onAudioLevelsFor(remote: remote, capturedLevel: capturedLevel, receivedLevel: receivedLevel)
 }
 
 func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, mediaType: Int32) {
@@ -831,6 +866,24 @@ func callManagerInterfaceHandleNetworkRouteChanged(object: UnsafeMutableRawPoint
 
     let networkRoute = NetworkRoute(localAdapterType: localNetworkAdapterType)
     obj.handleNetworkRouteChanged(clientId: clientId, networkRoute: networkRoute)
+}
+
+func callManagerInterfaceHandleAudioLevels(object: UnsafeMutableRawPointer?, clientId: UInt32, capturedLevel: UInt16, receivedLevelArray: AppReceivedAudioLevelArray) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    var finalReceivedLevels: [ReceivedAudioLevel] = []
+
+    for index in 0..<receivedLevelArray.count {
+        let receivedLevel = receivedLevelArray.levels[index]
+
+        finalReceivedLevels.append(ReceivedAudioLevel(demuxId: receivedLevel.demuxId, audioLevel: receivedLevel.level))
+    }
+
+    obj.handleAudioLevels(clientId: clientId, capturedLevel: capturedLevel, receivedLevels: finalReceivedLevels)
 }
 
 func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinState: Int32) {
