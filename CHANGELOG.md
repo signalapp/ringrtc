@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.0
+
+- Add API to get the incoming and outgoing audio levels
+
 ## v2.16.1
 
 - Node: Optimize use of CanvasVideoRenderer.renderVideoFrame
