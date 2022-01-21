@@ -185,7 +185,12 @@ impl Platform for IosPlatform {
         Ok(())
     }
 
-    fn on_event(&self, remote_peer: &Self::AppRemotePeer, event: ApplicationEvent) -> Result<()> {
+    fn on_event(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        _call_id: CallId,
+        event: ApplicationEvent,
+    ) -> Result<()> {
         info!("on_event(): {}", event);
 
         (self.app_interface.onEvent)(self.app_interface.object, remote_peer.ptr, event as i32);
@@ -508,12 +513,17 @@ impl Platform for IosPlatform {
         Ok(result)
     }
 
-    fn on_offer_expired(&self, remote_peer: &Self::AppRemotePeer, _age: Duration) -> Result<()> {
+    fn on_offer_expired(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        call_id: CallId,
+        _age: Duration,
+    ) -> Result<()> {
         // iOS already keeps track of the offer timestamp, so no need to pass the age through.
-        self.on_event(remote_peer, ApplicationEvent::ReceivedOfferExpired)
+        self.on_event(remote_peer, call_id, ApplicationEvent::ReceivedOfferExpired)
     }
 
-    fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()> {
+    fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer, _call_id: CallId) -> Result<()> {
         info!("on_call_concluded():");
 
         (self.app_interface.onCallConcluded)(self.app_interface.object, remote_peer.ptr);

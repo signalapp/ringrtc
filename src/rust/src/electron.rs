@@ -116,7 +116,7 @@ pub enum Event {
     },
     // The call with the given remote PeerId has changed state.
     // We assume only one call per remote PeerId at a time.
-    CallState(PeerId, CallState),
+    CallState(PeerId, CallId, CallState),
     // The state of the remote video (whether enabled or not)
     // Like call state, we ID the call by PeerId and assume there is only one.
     RemoteVideoState(PeerId, bool),
@@ -215,8 +215,17 @@ impl SignalingSender for EventReporter {
 }
 
 impl CallStateHandler for EventReporter {
-    fn handle_call_state(&self, remote_peer_id: &str, call_state: CallState) -> Result<()> {
-        self.send(Event::CallState(remote_peer_id.to_string(), call_state))?;
+    fn handle_call_state(
+        &self,
+        remote_peer_id: &str,
+        call_id: CallId,
+        call_state: CallState,
+    ) -> Result<()> {
+        self.send(Event::CallState(
+            remote_peer_id.to_string(),
+            call_id,
+            call_state,
+        ))?;
         Ok(())
     }
 
@@ -1713,7 +1722,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::CallState(peer_id, CallState::Incoming(call_id, call_media_type)) => {
+            Event::CallState(peer_id, call_id, CallState::Incoming(call_media_type)) => {
                 let method_name = "onStartIncomingCall";
                 let args: Vec<Handle<JsValue>> = vec![
                     cx.string(peer_id).upcast(),
@@ -1727,8 +1736,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            // TODO: Dedup this
-            Event::CallState(peer_id, CallState::Outgoing(call_id, _call_media_type)) => {
+            Event::CallState(peer_id, call_id, CallState::Outgoing(_call_media_type)) => {
                 let method_name = "onStartOutgoingCall";
                 let args: Vec<Handle<JsValue>> = vec![
                     cx.string(peer_id).upcast(),
@@ -1741,7 +1749,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::CallState(peer_id, CallState::Ended(reason)) => {
+            Event::CallState(peer_id, call_id, CallState::Ended(reason)) => {
                 let method_name = "onCallEnded";
                 let reason_string = match reason {
                     EndReason::LocalHangup => "LocalHangup",
@@ -1766,7 +1774,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     _ => Duration::ZERO,
                 };
                 let args = vec![
-                    cx.string(peer_id).upcast::<JsValue>(),
+                    cx.string(peer_id).upcast(),
+                    create_id_arg(&mut cx, call_id.as_u64()),
                     cx.string(reason_string).upcast(),
                     cx.number(age.as_secs_f64()).upcast(),
                 ];
@@ -1777,24 +1786,28 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::CallState(peer_id, state) => {
+            Event::CallState(peer_id, _call_id, state) => {
                 let method_name = "onCallState";
                 let state_string = match state {
                     CallState::Ringing => "ringing",
                     CallState::Connected => "connected",
                     CallState::Connecting => "connecting",
                     CallState::Concluded => {
-                        // Ignoring Concluded state since application should not treat
-                        // it as an 'ending' state transition.
+                        // "Call Concluded" means that the core won't issue anymore
+                        // notifications or events for the call. The Desktop client
+                        // doesn't currently need this information for its state.
+
                         // However, it's a great time to clear things.
                         with_call_endpoint(&mut cx, |endpoint| {
                             endpoint.incoming_video_sink.clear();
                         });
-                        return Ok(cx.undefined().upcast());
+
+                        // Make sure to keep handling subsequent events in this batch.
+                        continue;
                     }
                     // All covered above.
-                    CallState::Incoming(_, _) => "incoming",
-                    CallState::Outgoing(_, _) => "outgoing",
+                    CallState::Incoming(_) => "incoming",
+                    CallState::Outgoing(_) => "outgoing",
                     CallState::Ended(_) => "ended",
                 };
                 let args = vec![cx.string(peer_id), cx.string(state_string)];

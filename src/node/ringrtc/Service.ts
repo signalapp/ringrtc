@@ -206,11 +206,29 @@ class Requests<T> {
   }
 }
 
+class CallInfo {
+  isVideoCall: boolean;
+  receivedAtCounter: number;
+
+  constructor(isVideoCall: boolean, receivedAtCounter: number) {
+    this.isVideoCall = isVideoCall;
+    this.receivedAtCounter = receivedAtCounter;
+  }
+}
+
 export class RingRTCType {
   private readonly callManager: CallManager;
   private _call: Call | null;
   private _groupCallByClientId: Map<GroupCallClientId, GroupCall>;
   private _peekRequests: Requests<PeekInfo>;
+
+  // A map to hold call information not maintained in RingRTC.
+  private _callInfoByCallId: Map<String, CallInfo>;
+
+  private getCallInfoKey(callId: CallId): String {
+    // CallId is u64 so use a string key instead.
+    return callId.high.toString() + callId.low.toString();
+  }
 
   // Set by UX
   handleOutgoingSignaling:
@@ -219,7 +237,13 @@ export class RingRTCType {
   handleIncomingCall: ((call: Call) => Promise<CallSettings | null>) | null =
     null;
   handleAutoEndedIncomingCallRequest:
-    | ((remoteUserId: UserId, reason: CallEndedReason, ageSec: number) => void)
+    | ((
+        remoteUserId: UserId,
+        reason: CallEndedReason,
+        ageSec: number,
+        wasVideoCall: boolean,
+        receivedAtCounter: number | undefined
+      ) => void)
     | null = null;
   handleLogMessage:
     | ((
@@ -262,6 +286,7 @@ export class RingRTCType {
     this._call = null;
     this._groupCallByClientId = new Map();
     this._peekRequests = new Requests<PeekInfo>();
+    this._callInfoByCallId = new Map();
   }
 
   setConfig(config: Config) {
@@ -293,7 +318,7 @@ export class RingRTCType {
       isIncoming,
       isVideoCall,
       settings,
-      CallState.Prering
+      CallState.Starting
     );
     this._call = call;
     // We won't actually send anything until the remote side accepts.
@@ -321,6 +346,7 @@ export class RingRTCType {
     }
 
     call.callId = callId;
+    call.state = CallState.Prering;
     this.proceed(callId, call.settings);
   }
 
@@ -355,7 +381,7 @@ export class RingRTCType {
       isIncoming,
       isVideoCall,
       null,
-      CallState.Prering
+      CallState.Starting
     );
     // Callback to UX not set
     const handleIncomingCall = this.handleIncomingCall;
@@ -373,6 +399,7 @@ export class RingRTCType {
         return;
       }
       call.settings = settings;
+      call.state = CallState.Prering;
       this.proceed(callId, settings);
     })();
   }
@@ -400,7 +427,19 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  onCallEnded(remoteUserId: UserId, reason: CallEndedReason, ageSec: number) {
+  onCallEnded(
+    remoteUserId: UserId,
+    callId: CallId,
+    reason: CallEndedReason,
+    ageSec: number
+  ) {
+    let callInfo = this._callInfoByCallId.get(this.getCallInfoKey(callId));
+    const { isVideoCall, receivedAtCounter } = callInfo || {
+      isVideoCall: false,
+      receivedAtCounter: undefined,
+    };
+    this._callInfoByCallId.delete(this.getCallInfoKey(callId));
+
     const call = this._call;
     if (call && reason == CallEndedReason.ReceivedOfferWithGlare) {
       // The current call is the outgoing call.
@@ -416,18 +455,27 @@ export class RingRTCType {
       // (proceeded down to the code below)
     }
 
-    // If there is no call or the remoteUserId doesn't match that of
-    // the current call, or if one of the "receive offer while already
-    // in a call" reasons are provided, don't end the current call,
-    // just update the call history.
+    // If there is no call or the remoteUserId doesn't match that of the current
+    // call, or if one of the "receive offer while already in a call or because
+    // it expired" reasons are provided, don't end the current call, because
+    // there isn't one for this Ended notification, just update the call history.
+    // If the incoming call ends while in the starting state, also immediately
+    // update the call history because it is just a replay of messages.
     if (
       !call ||
       call.remoteUserId !== remoteUserId ||
       reason === CallEndedReason.ReceivedOfferWhileActive ||
-      reason === CallEndedReason.ReceivedOfferExpired
+      reason === CallEndedReason.ReceivedOfferExpired ||
+      (call.state === CallState.Starting && call.isIncoming)
     ) {
       if (this.handleAutoEndedIncomingCallRequest) {
-        this.handleAutoEndedIncomingCallRequest(remoteUserId, reason, ageSec);
+        this.handleAutoEndedIncomingCallRequest(
+          remoteUserId,
+          reason,
+          ageSec,
+          isVideoCall,
+          receivedAtCounter
+        );
       }
       return;
     }
@@ -480,7 +528,7 @@ export class RingRTCType {
   onAudioLevels(
     remoteUserId: UserId,
     capturedLevel: AudioLevel,
-    receivedLevel: AudioLevel,
+    receivedLevel: AudioLevel
   ): void {
     const call = this._call;
     if (!call || call.remoteUserId !== remoteUserId) {
@@ -794,7 +842,7 @@ export class RingRTCType {
   // Called by Rust
   handleAudioLevels(
     clientId: GroupCallClientId,
-    capturedLevel: AudioLevel, 
+    capturedLevel: AudioLevel,
     receivedLevels: Array<ReceivedAudioLevel>
   ): void {
     silly_deadlock_protection(() => {
@@ -877,7 +925,7 @@ export class RingRTCType {
         const ringId = BigInt(ringIdString);
         this.handleGroupCallRingUpdate(groupId, ringId, sender, state);
       } else {
-        console.log('RingRTC.handleGroupCallRingUpdate is not set!');
+        this.logError('RingRTC.handleGroupCallRingUpdate is not set!');
       }
     });
   }
@@ -917,6 +965,7 @@ export class RingRTCType {
     remoteDeviceId: DeviceId,
     localDeviceId: DeviceId,
     messageAgeSec: number,
+    messageReceivedAtCounter: number,
     message: CallingMessage,
     senderIdentityKey: Buffer,
     receiverIdentityKey: Buffer
@@ -943,6 +992,14 @@ export class RingRTCType {
       }
 
       const offerType = message.offer.type || OfferType.AudioCall;
+
+      // Save the call details for later when the call is ended.
+      let callInfo = new CallInfo(
+        offerType === OfferType.VideoCall,
+        messageReceivedAtCounter
+      );
+      this._callInfoByCallId.set(this.getCallInfoKey(callId), callInfo);
+
       this.callManager.receivedOffer(
         remoteUserId,
         remoteDeviceId,
@@ -1072,7 +1129,7 @@ export class RingRTCType {
     if (this.handleSendHttpRequest) {
       this.handleSendHttpRequest(requestId, url, method, headers, body);
     } else {
-      console.log('RingRTC.handleSendHttpRequest is not set!');
+      this.logError('RingRTC.handleSendHttpRequest is not set!');
     }
   }
 
@@ -1085,7 +1142,7 @@ export class RingRTCType {
     if (this.handleSendCallMessage) {
       this.handleSendCallMessage(recipientUuid, message, urgency);
     } else {
-      console.log('RingRTC.handleSendCallMessage is not set!');
+      this.logError('RingRTC.handleSendCallMessage is not set!');
     }
   }
 
@@ -1098,7 +1155,7 @@ export class RingRTCType {
     if (this.handleSendCallMessageToGroup) {
       this.handleSendCallMessageToGroup(groupId, message, urgency);
     } else {
-      console.log('RingRTC.handleSendCallMessageToGroup is not set!');
+      this.logError('RingRTC.handleSendCallMessageToGroup is not set!');
     }
   }
 
@@ -1436,6 +1493,7 @@ export class Call {
       return;
     }
     switch (this.state) {
+      case CallState.Starting:
       case CallState.Prering:
       case CallState.Ringing:
         this._videoCapturer.enableCapture();
@@ -1490,6 +1548,7 @@ export class Call {
       return;
     }
     switch (this.state) {
+      case CallState.Starting:
       case CallState.Prering:
       case CallState.Ringing:
         this._videoRenderer.disable();
@@ -1828,7 +1887,10 @@ export class GroupCall {
     this._observer.onLocalDeviceStateChanged(this);
   }
 
-  handleAudioLevels(capturedLevel: AudioLevel, receivedLevels: Array<ReceivedAudioLevel>) {
+  handleAudioLevels(
+    capturedLevel: AudioLevel,
+    receivedLevels: Array<ReceivedAudioLevel>
+  ) {
     this._localDeviceState.audioLevel = capturedLevel;
     if (this._remoteDeviceStates != undefined) {
       for (const received of receivedLevels) {
@@ -2170,6 +2232,7 @@ export interface CallManagerCallbacks {
   onCallState(remoteUserId: UserId, state: CallState): void;
   onCallEnded(
     remoteUserId: UserId,
+    callId: CallId,
     endedReason: CallEndedReason,
     ageSec: number
   ): void;
@@ -2258,7 +2321,8 @@ export interface CallManagerCallbacks {
 }
 
 export enum CallState {
-  Prering = 'init',
+  Starting = 'starting',
+  Prering = 'proceeding',
   Ringing = 'ringing',
   Accepted = 'connected',
   Reconnecting = 'connecting',

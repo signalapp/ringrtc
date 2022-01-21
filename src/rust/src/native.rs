@@ -108,7 +108,12 @@ pub trait SignalingSender {
 }
 
 pub trait CallStateHandler {
-    fn handle_call_state(&self, remote_peer_id: &str, state: CallState) -> Result<()>;
+    fn handle_call_state(
+        &self,
+        remote_peer_id: &str,
+        call_id: CallId,
+        state: CallState,
+    ) -> Result<()>;
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_network_route(&self, remote_peer_id: &str, network_route: NetworkRoute)
@@ -138,8 +143,8 @@ pub trait HttpClient {
 // call_manager::CallState.
 // TODO: Should we unify with ConnectionState and CallState?
 pub enum CallState {
-    Incoming(CallId, CallMediaType), // !connected || !accepted
-    Outgoing(CallId, CallMediaType), // !connected || !accepted
+    Incoming(CallMediaType), // !connected || !accepted
+    Outgoing(CallMediaType), // !connected || !accepted
     Ringing, //  connected && !accepted  (currently can be stuck here if you accept incoming before Ringing)
     Connected, //  connected &&  accepted
     Connecting, // !connected &&  accepted  (currently won't happen until after Connected)
@@ -150,11 +155,11 @@ pub enum CallState {
 impl fmt::Display for CallState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let display = match self {
-            CallState::Incoming(call_id, call_media_type) => {
-                format!("Incoming({}, {})", call_id, call_media_type)
+            CallState::Incoming(call_media_type) => {
+                format!("Incoming({})", call_media_type)
             }
-            CallState::Outgoing(call_id, call_media_type) => {
-                format!("Outgoing({}, {})", call_id, call_media_type)
+            CallState::Outgoing(call_media_type) => {
+                format!("Outgoing({})", call_media_type)
             }
             CallState::Connected => "Connected".to_string(),
             CallState::Connecting => "Connecting".to_string(),
@@ -324,8 +329,9 @@ impl NativePlatform {
         }
     }
 
-    fn send_state(&self, peer_id: &str, state: CallState) -> Result<()> {
-        self.state_handler.handle_call_state(peer_id, state)
+    fn send_state(&self, peer_id: &str, call_id: CallId, state: CallState) -> Result<()> {
+        self.state_handler
+            .handle_call_state(peer_id, call_id, state)
     }
 
     fn send_network_route(&self, peer_id: &str, network_route: NetworkRoute) -> Result<()> {
@@ -478,15 +484,21 @@ impl Platform for NativePlatform {
         );
         self.send_state(
             remote_peer,
+            call_id,
             match direction {
-                CallDirection::OutGoing => CallState::Outgoing(call_id, call_media_type),
-                CallDirection::InComing => CallState::Incoming(call_id, call_media_type),
+                CallDirection::OutGoing => CallState::Outgoing(call_media_type),
+                CallDirection::InComing => CallState::Incoming(call_media_type),
             },
         )?;
         Ok(())
     }
 
-    fn on_event(&self, remote_peer: &Self::AppRemotePeer, event: ApplicationEvent) -> Result<()> {
+    fn on_event(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        call_id: CallId,
+        event: ApplicationEvent,
+    ) -> Result<()> {
         info!(
             "NativePlatform::on_event(): remote_peer: {}, event: {}",
             remote_peer, event
@@ -494,65 +506,85 @@ impl Platform for NativePlatform {
 
         match event {
             ApplicationEvent::LocalRinging | ApplicationEvent::RemoteRinging => {
-                self.send_state(remote_peer, CallState::Ringing)
+                self.send_state(remote_peer, call_id, CallState::Ringing)
             }
             ApplicationEvent::LocalAccepted
             | ApplicationEvent::RemoteAccepted
-            | ApplicationEvent::Reconnected => self.send_state(remote_peer, CallState::Connected),
-            ApplicationEvent::Reconnecting => self.send_state(remote_peer, CallState::Connecting),
-            ApplicationEvent::EndedLocalHangup => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::LocalHangup))
+            | ApplicationEvent::Reconnected => {
+                self.send_state(remote_peer, call_id, CallState::Connected)
             }
-            ApplicationEvent::EndedRemoteHangup => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::RemoteHangup))
+            ApplicationEvent::Reconnecting => {
+                self.send_state(remote_peer, call_id, CallState::Connecting)
             }
+            ApplicationEvent::EndedLocalHangup => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Ended(EndReason::LocalHangup),
+            ),
+            ApplicationEvent::EndedRemoteHangup => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Ended(EndReason::RemoteHangup),
+            ),
             ApplicationEvent::EndedRemoteHangupNeedPermission => self.send_state(
                 remote_peer,
+                call_id,
                 CallState::Ended(EndReason::RemoteHangupNeedPermission),
             ),
             ApplicationEvent::EndedRemoteBusy => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::Busy))
+                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Busy))
             }
             ApplicationEvent::EndedRemoteGlare => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::Glare))
+                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Glare))
             }
             ApplicationEvent::EndedTimeout => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::Timeout))
+                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Timeout))
             }
-            ApplicationEvent::EndedInternalFailure => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::InternalFailure))
-            }
-            ApplicationEvent::EndedSignalingFailure => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::SignalingFailure))
-            }
-            ApplicationEvent::EndedConnectionFailure => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::ConnectionFailure))
-            }
+            ApplicationEvent::EndedInternalFailure => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Ended(EndReason::InternalFailure),
+            ),
+            ApplicationEvent::EndedSignalingFailure => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Ended(EndReason::SignalingFailure),
+            ),
+            ApplicationEvent::EndedConnectionFailure => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Ended(EndReason::ConnectionFailure),
+            ),
             ApplicationEvent::EndedAppDroppedCall => {
-                self.send_state(remote_peer, CallState::Ended(EndReason::Declined))
+                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Declined))
             }
             ApplicationEvent::ReceivedOfferExpired => {
                 debug_assert!(false, "should use on_offer_expired instead");
-                self.on_offer_expired(remote_peer, Duration::ZERO)
+                self.on_offer_expired(remote_peer, call_id, Duration::ZERO)
             }
             ApplicationEvent::ReceivedOfferWhileActive => self.send_state(
                 remote_peer,
+                call_id,
                 CallState::Ended(EndReason::ReceivedOfferWhileActive),
             ),
             ApplicationEvent::ReceivedOfferWithGlare => self.send_state(
                 remote_peer,
+                call_id,
                 CallState::Ended(EndReason::ReceivedOfferWithGlare),
             ),
             ApplicationEvent::EndedRemoteHangupAccepted => self.send_state(
                 remote_peer,
+                call_id,
                 CallState::Ended(EndReason::AcceptedOnAnotherDevice),
             ),
             ApplicationEvent::EndedRemoteHangupDeclined => self.send_state(
                 remote_peer,
+                call_id,
                 CallState::Ended(EndReason::DeclinedOnAnotherDevice),
             ),
             ApplicationEvent::EndedRemoteHangupBusy => self.send_state(
                 remote_peer,
+                call_id,
                 CallState::Ended(EndReason::BusyOnAnotherDevice),
             ),
             ApplicationEvent::RemoteVideoEnable => self.send_remote_video_state(remote_peer, true),
@@ -597,7 +629,12 @@ impl Platform for NativePlatform {
         Ok(())
     }
 
-    fn on_offer_expired(&self, remote_peer: &Self::AppRemotePeer, age: Duration) -> Result<()> {
+    fn on_offer_expired(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        call_id: CallId,
+        age: Duration,
+    ) -> Result<()> {
         info!(
             "NativePlatform::on_offer_expired(): remote_peer: {}, age: {:?}",
             remote_peer, age
@@ -605,18 +642,19 @@ impl Platform for NativePlatform {
 
         self.send_state(
             remote_peer,
+            call_id,
             CallState::Ended(EndReason::ReceivedOfferExpired { age }),
         )?;
         Ok(())
     }
 
-    fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer) -> Result<()> {
+    fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()> {
         info!(
             "NativePlatform::on_call_concluded(): remote_peer: {}",
             remote_peer
         );
 
-        self.send_state(remote_peer, CallState::Concluded)?;
+        self.send_state(remote_peer, call_id, CallState::Concluded)?;
         Ok(())
     }
 

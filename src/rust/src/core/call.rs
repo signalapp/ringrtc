@@ -418,7 +418,7 @@ where
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.notify_application(&*remote_peer, event)
+        call_manager.notify_application(&*remote_peer, self.call_id, event)
     }
 
     /// Notify application of a change to the network route.

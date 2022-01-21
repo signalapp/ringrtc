@@ -40,6 +40,7 @@ describe('RingRTC', () => {
             4,
             2,
             age,
+            1,
             offer,
             Buffer.from([]),
             Buffer.from([])
@@ -78,6 +79,7 @@ describe('RingRTC', () => {
             4,
             2,
             10,
+            2,
             offer,
             Buffer.from([]),
             Buffer.from([])

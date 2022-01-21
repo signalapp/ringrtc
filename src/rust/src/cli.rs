@@ -546,20 +546,25 @@ impl SignalingSender for CallEndpoint {
 }
 
 impl CallStateHandler for CallEndpoint {
-    fn handle_call_state(&self, remote_peer_id: &str, call_state: CallState) -> Result<()> {
+    fn handle_call_state(
+        &self,
+        remote_peer_id: &str,
+        call_id: CallId,
+        call_state: CallState,
+    ) -> Result<()> {
         info!(
             "State change in call from {}.{} to {}: now {:?}",
             self.peer_id, self.device_id, remote_peer_id, call_state
         );
 
         self.actor.send(move |state| {
-            if let CallState::Incoming(call_id, _call_media_type)
-            | CallState::Outgoing(call_id, _call_media_type) = call_state
+            if let CallState::Incoming(_call_media_type) | CallState::Outgoing(_call_media_type) =
+                call_state
             {
                 state
                     .call_manager
                     .proceed(call_id, state.call_context.clone(), BandwidthMode::VeryLow)
-                    .expect("proceed with outgoing call");
+                    .expect("proceed with call");
             }
         });
         Ok(())
