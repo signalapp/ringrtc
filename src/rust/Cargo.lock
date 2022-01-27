@@ -873,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.17.0"
+version = "2.17.1"
 dependencies = [
  "aes",
  "anyhow",

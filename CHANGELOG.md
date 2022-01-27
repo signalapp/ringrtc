@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.17.1
+
+- Electron: Fix incoming call notifications for better call history
+
+- Reference signalapp/webrtc@4638e
+  - iOS: Fix stereo playout bug
+
+- Update dependencies
+
 ## v2.17.0
 
 - Add API to get the incoming and outgoing audio levels
