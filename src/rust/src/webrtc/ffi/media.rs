@@ -74,10 +74,20 @@ extern "C" {
         source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     );
-    pub fn Rust_createVideoFrameBufferFromRgba(
+    pub fn Rust_copyVideoFrameBufferFromI420(
         width: u32,
         height: u32,
-        rgba: webrtc::ptr::Borrowed<u8>,
+        src: webrtc::ptr::Borrowed<u8>,
+    ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>;
+    pub fn Rust_copyVideoFrameBufferFromNv12(
+        width: u32,
+        height: u32,
+        src: webrtc::ptr::Borrowed<u8>,
+    ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>;
+    pub fn Rust_copyVideoFrameBufferFromRgba(
+        width: u32,
+        height: u32,
+        src: webrtc::ptr::Borrowed<u8>,
     ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>;
     pub fn Rust_convertVideoFrameBufferToRgba(
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,

@@ -51,8 +51,6 @@ RUSTEXPORT void Rust_setVideoTrackContentHint(
 RUSTEXPORT void Rust_pushVideoFrame(
     webrtc::rffi::VideoSource* source_borrowed_rc,
     VideoFrameBuffer* buffer_borrowed_rc) {
-  // At some point we might care about capture timestamps, but for now
-  // using the current time is sufficient.
   auto timestamp_us = rtc::TimeMicros();
   auto frame = webrtc::VideoFrame::Builder()
       .set_video_frame_buffer(inc_rc(buffer_borrowed_rc))
@@ -62,7 +60,56 @@ RUSTEXPORT void Rust_pushVideoFrame(
 }
 
 // Returns an owned RC.
-RUSTEXPORT VideoFrameBuffer* Rust_createVideoFrameBufferFromRgba(
+RUSTEXPORT VideoFrameBuffer* Rust_copyVideoFrameBufferFromI420(
+    uint32_t width, uint32_t height, uint8_t* src_borrowed) {
+  int width_y = static_cast<int>(width);
+  int height_y = static_cast<int>(height);
+  int width_u = (width_y + 1) / 2;
+  int height_u = (height_y + 1) / 2;
+
+  int stride_y = width_y;
+  int stride_u = width_u;
+  int stride_v = width_u;
+
+  int size_y = width_y * height_y;
+  int size_u = width_u * height_u;
+
+  uint8_t* src_y = src_borrowed;
+  uint8_t* src_u = src_y + size_y;
+  uint8_t* src_v = src_u + size_u;
+  
+  return take_rc(I420Buffer::Copy(width, height, src_y, stride_y, src_u, stride_u, src_v, stride_v));
+}
+
+// Returns an owned RC.
+RUSTEXPORT VideoFrameBuffer* Rust_copyVideoFrameBufferFromNv12(
+    uint32_t width, uint32_t height, uint8_t* src_borrowed) {
+  int width_y = static_cast<int>(width);
+  int height_y = static_cast<int>(height);
+  int width_u = (width_y + 1) / 2;
+  int width_v = width_u;
+
+  int stride_y = width_y;
+  int stride_uv = width_u + width_v;
+
+  int size_y = width_y * height_y;
+
+  uint8_t* src_y = src_borrowed;
+  uint8_t* src_uv = src_y + size_y;
+
+  auto dest = I420Buffer::Create(width, height);
+  libyuv::NV12ToI420(
+      src_y, stride_y,
+      src_uv, stride_uv,
+      dest->MutableDataY(), dest->StrideY(),
+      dest->MutableDataU(), dest->StrideU(),
+      dest->MutableDataV(), dest->StrideV(),
+      width_y, height_y);
+  return take_rc(dest);
+}
+
+// Returns an owned RC.
+RUSTEXPORT VideoFrameBuffer* Rust_copyVideoFrameBufferFromRgba(
     uint32_t width, uint32_t height, uint8_t* rgba_borrowed) {
   auto i420 = I420Buffer::Create(width, height);
   int rgba_stride = 4 * width;

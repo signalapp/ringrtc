@@ -25,7 +25,7 @@ use ringrtc::{
     },
     protobuf,
     webrtc::{
-        media::{VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack},
+        media::{VideoFrame, VideoFrameMetadata, VideoPixelFormat, VideoSink, VideoTrack},
         peer_connection::{AudioLevel, ReceivedAudioLevel},
         peer_connection_factory::{self, PeerConnectionFactory},
     },
@@ -307,7 +307,12 @@ fn main() {
             let rgba_data: Vec<u8> = (0..(width * height * 4))
                 .map(|i: u32| i.wrapping_add(index as u32) as u8)
                 .collect();
-            outgoing_video_source.push_frame(VideoFrame::from_rgba(width, height, &rgba_data));
+            outgoing_video_source.push_frame(VideoFrame::copy_from_slice(
+                width,
+                height,
+                VideoPixelFormat::Rgba,
+                &rgba_data,
+            ));
             std::thread::sleep(std::time::Duration::from_secs_f32(1.0 / 30.0));
         }
     });

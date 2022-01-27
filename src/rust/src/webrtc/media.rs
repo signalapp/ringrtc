@@ -111,6 +111,25 @@ impl VideoFrameMetadata {
     }
 }
 
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VideoPixelFormat {
+    I420,
+    Nv12,
+    Rgba,
+}
+
+impl VideoPixelFormat {
+    pub fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(VideoPixelFormat::I420),
+            1 => Some(VideoPixelFormat::Nv12),
+            2 => Some(VideoPixelFormat::Rgba),
+            _ => None,
+        }
+    }
+}
+
 pub struct VideoFrame {
     metadata: VideoFrameMetadata,
     rffi_buffer: webrtc::Arc<media::RffiVideoFrameBuffer>,
@@ -154,21 +173,30 @@ impl VideoFrame {
         }
     }
 
-    pub fn from_rgba(width: u32, height: u32, rgba_buffer: &[u8]) -> Self {
-        Self {
-            metadata: VideoFrameMetadata {
-                width,
-                height,
-                rotation: VideoRotation::None,
+    pub fn copy_from_slice(
+        width: u32,
+        height: u32,
+        pixel_format: VideoPixelFormat,
+        buffer: &[u8],
+    ) -> Self {
+        let metadata = VideoFrameMetadata {
+            width,
+            height,
+            rotation: VideoRotation::None,
+        };
+        let rffi_source = webrtc::ptr::Borrowed::from_ptr(buffer.as_ptr());
+        let rffi_buffer = webrtc::Arc::from_owned(match pixel_format {
+            VideoPixelFormat::I420 => unsafe {
+                media::Rust_copyVideoFrameBufferFromI420(width, height, rffi_source)
             },
-            rffi_buffer: webrtc::Arc::from_owned(unsafe {
-                media::Rust_createVideoFrameBufferFromRgba(
-                    width,
-                    height,
-                    webrtc::ptr::Borrowed::from_ptr(rgba_buffer.as_ptr()),
-                )
-            }),
-        }
+            VideoPixelFormat::Nv12 => unsafe {
+                media::Rust_copyVideoFrameBufferFromNv12(width, height, rffi_source)
+            },
+            VideoPixelFormat::Rgba => unsafe {
+                media::Rust_copyVideoFrameBufferFromRgba(width, height, rffi_source)
+            },
+        });
+        Self::from_buffer(metadata, rffi_buffer)
     }
 
     pub fn to_rgba(&self, rgba_buffer: &mut [u8]) {

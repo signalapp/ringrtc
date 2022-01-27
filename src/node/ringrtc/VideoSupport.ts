@@ -10,6 +10,41 @@ interface Ref<T> {
   readonly current: T | null;
 }
 
+// Given a weird name to not conflict with WebCodec's VideoPixelFormat
+export enum VideoPixelFormatEnum {
+  I420 = 0,
+  Nv12 = 1,
+  Rgba = 2,
+}
+
+function videoPixelFormatFromEnum(format: VideoPixelFormatEnum): VideoPixelFormat {
+  switch (format) {
+    case VideoPixelFormatEnum.I420: {
+      return "I420";
+    }
+    case VideoPixelFormatEnum.Nv12: {
+      return "NV12";
+    }
+    case VideoPixelFormatEnum.Rgba: {
+      return "RGBA";
+    }
+  }
+}
+
+function videoPixelFormatToEnum(format: VideoPixelFormat): VideoPixelFormatEnum | undefined {
+  switch (format) {
+    case "I420": {
+      return VideoPixelFormatEnum.I420;
+    }
+    case "NV12": {
+      return VideoPixelFormatEnum.Nv12;
+    }
+    case "RGBA": {
+      return VideoPixelFormatEnum.Rgba;
+    }
+  }
+}
+
 // The way a CanvasVideoRender gets VideoFrames
 export interface VideoFrameSource {
   // Fills in the given buffer and returns the width x height
@@ -18,9 +53,9 @@ export interface VideoFrameSource {
   receiveVideoFrame(buffer: Buffer): [number, number] | undefined;
 }
 
-// The way a GumVideoCapturer sends frames
+// Sends frames (after getting them from something like GumVideoCapturer, for example).
 interface VideoFrameSender {
-  sendVideoFrame(width: number, height: number, rgbaBuffer: Buffer): void;
+  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void;
 }
 
 export class GumVideoCaptureOptions {
@@ -30,19 +65,16 @@ export class GumVideoCaptureOptions {
   preferredDeviceId?: string;
   screenShareSourceId?: string;
 }
+
 export class GumVideoCapturer {
   private defaultCaptureOptions: GumVideoCaptureOptions;
   private localPreview?: Ref<HTMLVideoElement>;
   private captureOptions?: GumVideoCaptureOptions;
   private sender?: VideoFrameSender;
   private mediaStream?: MediaStream;
-  private canvas?: OffscreenCanvas;
-  private canvasContext?: OffscreenCanvasRenderingContext2D;
-  private intervalId?: any;
+  private spawnedSenderRunning: boolean = false;
   private preferredDeviceId?: string;
-  private capturingStartTime: number | undefined;
-  // Set this if you want fake video
-  public fakeVideoName: string | undefined;
+  private updateLocalPreviewIntervalId?: any;
 
   constructor(defaultCaptureOptions: GumVideoCaptureOptions) {
     this.defaultCaptureOptions = defaultCaptureOptions;
@@ -61,6 +93,18 @@ export class GumVideoCapturer {
     this.localPreview = localPreview;
 
     this.updateLocalPreviewSourceObject();
+
+    // This is a dumb hack around the fact that sometimes the
+    // this.localPreview.current is updated without a call
+    // to setLocalPreview, in which case the local preview
+    // won't be rendered.
+    if (this.updateLocalPreviewIntervalId != undefined) {
+      clearInterval(this.updateLocalPreviewIntervalId);
+    }
+    this.updateLocalPreviewIntervalId = setInterval(
+      this.updateLocalPreviewSourceObject.bind(this),
+      1000,
+    );
   }
 
   enableCapture(): void {
@@ -80,6 +124,11 @@ export class GumVideoCapturer {
   disable(): void {
     this.stopCapturing();
     this.stopSending();
+
+    if (this.updateLocalPreviewIntervalId != undefined) {
+      clearInterval(this.updateLocalPreviewIntervalId);
+    }
+    this.updateLocalPreviewIntervalId = undefined;
   }
 
   async setPreferredDevice(deviceId: string): Promise<void> {
@@ -139,7 +188,6 @@ export class GumVideoCapturer {
       return;
     }
     this.captureOptions = options;
-    this.capturingStartTime = Date.now();
     try {
       // If we start/stop/start, we may have concurrent calls to getUserMedia,
       // which is what we want if we're switching from camera to screenshare.
@@ -158,6 +206,9 @@ export class GumVideoCapturer {
       }
 
       this.mediaStream = mediaStream;
+      if (!this.spawnedSenderRunning && this.mediaStream != undefined && this.sender != undefined) {
+        this.spawnSender(this.mediaStream, this.sender);
+      }  
 
       this.updateLocalPreviewSourceObject();
     } catch (e) {
@@ -197,25 +248,56 @@ export class GumVideoCapturer {
       this.stopSending();
     }
     this.sender = sender;
-    this.canvas = new OffscreenCanvas(
-      this.captureOptions!.maxWidth,
-      this.captureOptions!.maxHeight
-    );
-    this.canvasContext = this.canvas.getContext('2d') || undefined;
-    const interval = 1000 / this.captureOptions!.maxFramerate;
-    this.intervalId = setInterval(
-      this.captureAndSendOneVideoFrame.bind(this),
-      interval
-    );
+
+    if (!this.spawnedSenderRunning && this.mediaStream != undefined) {
+      this.spawnSender(this.mediaStream, this.sender);
+    }
+  }
+
+  private spawnSender(mediaStream: MediaStream, sender: VideoFrameSender) {
+    const track = mediaStream.getVideoTracks()[0];
+    if (track == undefined || this.spawnedSenderRunning) {
+      return;
+    }
+
+    const reader = (new MediaStreamTrackProcessor({ track })).readable.getReader();
+    const buffer = Buffer.alloc(MAX_VIDEO_CAPTURE_BUFFER_SIZE);
+    this.spawnedSenderRunning = true;
+    (async () => {
+      try {
+        while (sender === this.sender && mediaStream == this.mediaStream) {
+          const {done, value: frame} = await reader.read();
+          if (done) {
+            break;
+          }
+          if (!frame) {
+            continue;
+          }
+          const format = videoPixelFormatToEnum(frame.format ?? "I420");
+          if (format == undefined) {
+            console.warn(`Unsupported video frame format: ${frame.format}`);
+            break;
+          }
+          frame.copyTo(buffer);
+          sender.sendVideoFrame(
+            frame.codedWidth,
+            frame.codedHeight,
+            format,
+            buffer
+          );
+          // This must be called for more frames to come.
+          frame.close();
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      this.spawnedSenderRunning = false;
+    })();
   }
 
   private stopSending(): void {
+    // The spawned sender should stop
     this.sender = undefined;
-    this.canvas = undefined;
-    this.canvasContext = undefined;
-    if (!!this.intervalId) {
-      clearInterval(this.intervalId);
-    }
   }
 
   private updateLocalPreviewSourceObject(): void {
@@ -244,158 +326,6 @@ export class GumVideoCapturer {
     } else {
       localPreview.srcObject = null;
     }
-  }
-
-  private captureAndSendOneVideoFrame(): void {
-    if (!this.canvas || !this.canvasContext || !this.sender) {
-      return;
-    }
-
-    if (
-      this.fakeVideoName != undefined &&
-      this.capturingStartTime != undefined
-    ) {
-      let width = 640;
-      let height = 480;
-      let duration = Date.now() - this.capturingStartTime;
-      this.drawFakeVideo(
-        this.canvasContext,
-        width,
-        height,
-        this.fakeVideoName,
-        duration
-      );
-      const image = this.canvasContext.getImageData(0, 0, width, height);
-      let bufferWithoutCopying = Buffer.from(
-        image.data.buffer,
-        image.data.byteOffset,
-        image.data.byteLength
-      );
-      this.sender.sendVideoFrame(
-        image.width,
-        image.height,
-        bufferWithoutCopying
-      );
-      return;
-    }
-
-    if (this.localPreview && this.localPreview.current) {
-      this.updateLocalPreviewSourceObject();
-
-      const width = this.localPreview.current.videoWidth;
-      const height = this.localPreview.current.videoHeight;
-      if (width === 0 || height === 0) {
-        return;
-      }
-
-      this.canvasContext.drawImage(
-        this.localPreview.current,
-        0,
-        0,
-        width,
-        height
-      );
-      const image = this.canvasContext.getImageData(0, 0, width, height);
-      let bufferWithoutCopying = Buffer.from(
-        image.data.buffer,
-        image.data.byteOffset,
-        image.data.byteLength
-      );
-      this.sender.sendVideoFrame(
-        image.width,
-        image.height,
-        bufferWithoutCopying
-      );
-    }
-  }
-
-  private drawFakeVideo(
-    context: OffscreenCanvasRenderingContext2D,
-    width: number,
-    height: number,
-    name: string,
-    time: number
-  ): void {
-    function fill(style: string, draw: () => void) {
-      context.fillStyle = style;
-      context.beginPath();
-      draw();
-      context.fill();
-    }
-
-    function stroke(style: string, draw: () => void) {
-      context.strokeStyle = style;
-      context.beginPath();
-      draw();
-      context.stroke();
-    }
-
-    function arc(
-      x: number,
-      y: number,
-      radius: number,
-      start: number,
-      end: number
-    ) {
-      const twoPi = 2 * Math.PI;
-      context.arc(x, y, radius, start * twoPi, end * twoPi);
-    }
-
-    function circle(x: number, y: number, radius: number) {
-      arc(x, y, radius, 0, 1);
-    }
-
-    function fillFace(x: number, y: number, faceRadius: number) {
-      const eyeRadius = faceRadius / 5;
-      const eyeOffsetX = faceRadius / 2;
-      const eyeOffsetY = -faceRadius / 4;
-      const smileRadius = faceRadius / 2;
-      const smileOffsetY = -eyeOffsetY;
-      fill('yellow', () => circle(x, y, faceRadius));
-      fill('black', () => circle(x - eyeOffsetX, y + eyeOffsetY, eyeRadius));
-      fill('black', () => circle(x + eyeOffsetX, y + eyeOffsetY, eyeRadius));
-      stroke('black', () => arc(x, y + smileOffsetY, smileRadius, 0, 0.5));
-    }
-
-    function fillText(
-      x: number,
-      y: number,
-      fillStyle: string,
-      fontSize: number,
-      fontName: string,
-      align: CanvasTextAlign,
-      text: string
-    ) {
-      context.font = `${fontSize}px ${fontName}`;
-      context.textAlign = align;
-      context.fillStyle = fillStyle;
-      context.fillText(text, x, y);
-    }
-
-    function fillLabeledFace(
-      x: number,
-      y: number,
-      faceRadius: number,
-      label: string
-    ) {
-      const labelSize = faceRadius * 0.3;
-      const labelOffsetY = faceRadius * 1.5;
-
-      fillFace(x, y, faceRadius);
-      fillText(
-        x,
-        y + labelOffsetY,
-        'black',
-        labelSize,
-        'monospace',
-        'center',
-        label
-      );
-    }
-
-    context.fillStyle = 'white';
-    context.fillRect(0, 0, width, height);
-    fillLabeledFace(width / 2, height / 2, height / 3, `${name} ${time}`);
   }
 }
 

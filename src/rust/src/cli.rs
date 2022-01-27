@@ -23,7 +23,7 @@ use ringrtc::{
     webrtc::{
         injectable_network,
         injectable_network::InjectableNetwork,
-        media::{VideoFrame, VideoSink, VideoSource},
+        media::{VideoFrame, VideoPixelFormat, VideoSink, VideoSource},
         network::NetworkInterfaceType,
         peer_connection::AudioLevel,
         peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
@@ -486,7 +486,12 @@ impl CallEndpoint {
             let rgba_data: Vec<u8> = (0..(width * height * 4)).map(|i: u32| i as u8).collect();
             state
                 .outgoing_video_source
-                .push_frame(VideoFrame::from_rgba(width, height, &rgba_data));
+                .push_frame(VideoFrame::copy_from_slice(
+                    width,
+                    height,
+                    VideoPixelFormat::Rgba,
+                    &rgba_data,
+                ));
             state.actor.send_delayed(duration, move |state| {
                 send_one_frame_and_schedule_another(state, width, height, duration);
             });

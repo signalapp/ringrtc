@@ -64,12 +64,32 @@ pub unsafe fn Rust_pushVideoFrame(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_createVideoFrameBufferFromRgba(
+pub unsafe fn Rust_copyVideoFrameBufferFromI420(
     _width: u32,
     _height: u32,
-    _rgba: webrtc::ptr::Borrowed<u8>,
+    _src: webrtc::ptr::Borrowed<u8>,
 ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
-    info!("Rust_createVideoFrameBufferFromRgba()");
+    info!("Rust_copyVideoFrameBufferFromI420()");
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_copyVideoFrameBufferFromNv12(
+    _width: u32,
+    _height: u32,
+    _src: webrtc::ptr::Borrowed<u8>,
+) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
+    info!("Rust_copyVideoFrameBufferFromNv12()");
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_copyVideoFrameBufferFromRgba(
+    _width: u32,
+    _height: u32,
+    _src: webrtc::ptr::Borrowed<u8>,
+) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
+    info!("Rust_copyVideoFrameBufferFromRgba()");
     webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
 }
 

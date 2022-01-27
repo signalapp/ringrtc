@@ -22,7 +22,9 @@ use crate::native::{
     CallState, CallStateHandler, EndReason, GroupUpdate, GroupUpdateHandler, HttpClient,
     NativeCallContext, NativePlatform, PeerId, SignalingSender,
 };
-use crate::webrtc::media::{AudioTrack, VideoFrame, VideoSink, VideoSource, VideoTrack};
+use crate::webrtc::media::{
+    AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack,
+};
 use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_factory::{
     self as pcf, AudioDevice, IceServer, PeerConnectionFactory,
@@ -1051,10 +1053,17 @@ fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let width = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let height = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
-    let rgba_buffer = cx.argument::<JsBuffer>(2)?;
+    let pixel_format = cx.argument::<JsNumber>(2)?.value(&mut cx) as i32;
+    let buffer = cx.argument::<JsBuffer>(3)?;
 
-    let frame = cx.borrow(&rgba_buffer, |handle| {
-        VideoFrame::from_rgba(width, height, handle.as_slice())
+    let pixel_format = VideoPixelFormat::from_i32(pixel_format);
+    if pixel_format.is_none() {
+        return cx.throw_error("Invalid pixel format");
+    }
+    let pixel_format = pixel_format.unwrap();
+
+    let frame = cx.borrow(&buffer, |buffer| {
+        VideoFrame::copy_from_slice(width, height, pixel_format, buffer.as_slice())
     });
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_video_source.push_frame(frame);

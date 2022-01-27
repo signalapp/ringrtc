@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-import { GumVideoCaptureOptions } from './VideoSupport';
+import { GumVideoCaptureOptions, VideoPixelFormatEnum } from './VideoSupport';
 
 /* tslint:disable max-classes-per-file */
 
@@ -1481,9 +1481,9 @@ export class Call {
   }
 
   // With this method, a Call is a VideoFrameSender
-  sendVideoFrame(width: number, height: number, rgbaBuffer: Buffer): void {
+  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void {
     // This assumes we only have one active all.
-    this._callManager.sendVideoFrame(width, height, rgbaBuffer);
+    this._callManager.sendVideoFrame(width, height, format, buffer);
   }
 
   // With this method, a Call is a VideoFrameSource
@@ -1946,9 +1946,9 @@ export class GroupCall {
   }
 
   // With this, a GroupCall is a VideoFrameSender
-  sendVideoFrame(width: number, height: number, rgbaBuffer: Buffer): void {
+  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void {
     // This assumes we only have one active all.
-    this._callManager.sendVideoFrame(width, height, rgbaBuffer);
+    this._callManager.sendVideoFrame(width, height, format, buffer);
   }
 
   // With this, a GroupCall can provide a VideoFrameSource for each remote device.
@@ -2127,7 +2127,7 @@ export interface CallManager {
   setOutgoingVideoEnabled(enabled: boolean): void;
   setOutgoingVideoIsScreenShare(enabled: boolean): void;
   updateBandwidthMode(bandwidthMode: BandwidthMode): void;
-  sendVideoFrame(width: number, height: number, buffer: Buffer): void;
+  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void;
   receiveVideoFrame(buffer: Buffer): [number, number] | undefined;
   receivedOffer(
     remoteUserId: UserId,

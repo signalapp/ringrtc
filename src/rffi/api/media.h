@@ -61,9 +61,20 @@ RUSTEXPORT webrtc::VideoTrackInterface* Rust_getFistVideoTrack(
 // Same as VideoSource::PushVideoFrame, to get frames from Rust to C++.
 RUSTEXPORT void Rust_pushVideoFrame(webrtc::rffi::VideoSource* source_borrowed_rc, webrtc::VideoFrameBuffer* buffer_borrowed_rc);
 
+// I420 => I420
+// Returns an owned RC.
+RUSTEXPORT webrtc::VideoFrameBuffer* Rust_copyVideoFrameBufferFromI420(
+  uint32_t width, uint32_t height, uint8_t* src_borrowed);
+
+// NV12 => I420
+// Returns an owned RC.
+RUSTEXPORT webrtc::VideoFrameBuffer* Rust_copyVideoFrameBufferFromNv12(
+  uint32_t width, uint32_t height, uint8_t* src_borrowed);
+
 // RGBA => I420
-RUSTEXPORT webrtc::VideoFrameBuffer* Rust_createVideoFrameBufferFromRgba(
-  uint32_t width, uint32_t height, uint8_t* rgba_borrowed);
+// Returns an owned RC.
+RUSTEXPORT webrtc::VideoFrameBuffer* Rust_copyVideoFrameBufferFromRgba(
+  uint32_t width, uint32_t height, uint8_t* src_borrowed);
 
 // I420 => RGBA
 RUSTEXPORT void Rust_convertVideoFrameBufferToRgba(
