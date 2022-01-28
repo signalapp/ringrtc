@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.2
+
+- Electron: Revert new state and fix issue with prering ended handling
+
 ## v2.17.1
 
 - Electron: Fix incoming call notifications for better call history
