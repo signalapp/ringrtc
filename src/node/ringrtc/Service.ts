@@ -318,7 +318,7 @@ export class RingRTCType {
       isIncoming,
       isVideoCall,
       settings,
-      CallState.Starting
+      CallState.Prering
     );
     this._call = call;
     // We won't actually send anything until the remote side accepts.
@@ -346,7 +346,6 @@ export class RingRTCType {
     }
 
     call.callId = callId;
-    call.state = CallState.Prering;
     this.proceed(callId, call.settings);
   }
 
@@ -381,7 +380,7 @@ export class RingRTCType {
       isIncoming,
       isVideoCall,
       null,
-      CallState.Starting
+      CallState.Prering
     );
     // Callback to UX not set
     const handleIncomingCall = this.handleIncomingCall;
@@ -398,8 +397,8 @@ export class RingRTCType {
         call.ignore();
         return;
       }
+
       call.settings = settings;
-      call.state = CallState.Prering;
       this.proceed(callId, settings);
     })();
   }
@@ -459,14 +458,14 @@ export class RingRTCType {
     // call, or if one of the "receive offer while already in a call or because
     // it expired" reasons are provided, don't end the current call, because
     // there isn't one for this Ended notification, just update the call history.
-    // If the incoming call ends while in the starting state, also immediately
+    // If the incoming call ends while in the prering state, also immediately
     // update the call history because it is just a replay of messages.
     if (
       !call ||
       call.remoteUserId !== remoteUserId ||
       reason === CallEndedReason.ReceivedOfferWhileActive ||
       reason === CallEndedReason.ReceivedOfferExpired ||
-      (call.state === CallState.Starting && call.isIncoming)
+      (call.state === CallState.Prering && call.isIncoming)
     ) {
       if (this.handleAutoEndedIncomingCallRequest) {
         this.handleAutoEndedIncomingCallRequest(
@@ -477,6 +476,14 @@ export class RingRTCType {
           receivedAtCounter
         );
       }
+
+      if (call && (call.state === CallState.Prering && call.isIncoming)) {
+        // Set the state to Ended without triggering a state update since we
+        // already notified the client.
+        call.endedReason = reason;
+        call.setCallEnded();
+      }
+
       return;
     }
 
@@ -1394,6 +1401,10 @@ export class Call {
     }
   }
 
+  setCallEnded() {
+    this._state = CallState.Ended;
+  }
+
   set videoCapturer(capturer: VideoCapturer | null) {
     this._videoCapturer = capturer;
     this.enableOrDisableCapturer();
@@ -1493,7 +1504,6 @@ export class Call {
       return;
     }
     switch (this.state) {
-      case CallState.Starting:
       case CallState.Prering:
       case CallState.Ringing:
         this._videoCapturer.enableCapture();
@@ -1548,7 +1558,6 @@ export class Call {
       return;
     }
     switch (this.state) {
-      case CallState.Starting:
       case CallState.Prering:
       case CallState.Ringing:
         this._videoRenderer.disable();
@@ -2321,8 +2330,7 @@ export interface CallManagerCallbacks {
 }
 
 export enum CallState {
-  Starting = 'starting',
-  Prering = 'proceeding',
+  Prering = 'idle',
   Ringing = 'ringing',
   Accepted = 'connected',
   Reconnecting = 'connecting',
