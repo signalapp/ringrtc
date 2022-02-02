@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.18.0
+
+- Update Audio Level API to specify desired interval
+
+- Electron: Use WebCodecs to capture and send video
+
+- Reference signalapp/webrtc@4638f
+  - Group Calls: Enable 3rd spatial layer for video
+
+- Update dependencies
+
 ## v2.17.2
 
 - Electron: Revert new state and fix issue with prering ended handling
@@ -9,7 +20,7 @@
 - Electron: Fix incoming call notifications for better call history
 
 - Reference signalapp/webrtc@4638e
-  - iOS: Fix stereo playout bug
+  - Mac: Fix stereo playout bug
 
 - Update dependencies
 
