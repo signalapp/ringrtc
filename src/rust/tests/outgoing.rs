@@ -74,6 +74,7 @@ fn start_outbound_and_proceed() -> TestContext {
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
+        None,
     )
     .expect(error_line!());
 
@@ -131,6 +132,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
+        None,
     )
     .expect(error_line!());
 
@@ -1410,6 +1412,7 @@ fn outbound_proceed_with_error() {
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
+        None,
     )
     .expect(error_line!());
 
@@ -1915,6 +1918,7 @@ fn start_outbound_receive_busy() {
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
+        None,
     )
     .expect(error_line!());
 

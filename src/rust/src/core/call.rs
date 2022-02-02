@@ -516,7 +516,11 @@ where
     ///
     /// - create a Connection for the single remote DeviceId.
     /// - handle the previously stored pending Offer and ICE Candidates
-    pub fn proceed(&mut self, bandwidth_mode: BandwidthMode) -> Result<()> {
+    pub fn proceed(
+        &mut self,
+        bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
+    ) -> Result<()> {
         info!("proceed():");
 
         let mut call_manager = self.call_manager()?;
@@ -535,6 +539,7 @@ where
                         ConnectionType::Incoming,
                         pending_call.received.offer.latest_version(),
                         bandwidth_mode,
+                        audio_levels_interval,
                     )?;
                     let answer = connection
                         .start_incoming(pending_call.received, pending_call.ice_candidates)?;
@@ -567,6 +572,7 @@ where
                     ConnectionType::OutgoingParent,
                     signaling::Version::V4,
                     bandwidth_mode,
+                    audio_levels_interval,
                 )?;
                 let (local_secret, ice_gatherer, offer) =
                     parent_connection.start_outgoing_parent(self.media_type, bandwidth_mode)?;
@@ -606,12 +612,14 @@ where
                 info!("received_answer from device {}; forking enabled, so inject into connection_map", sender_device_id);
                 let call_manager = self.call_manager()?;
                 let bandwidth_mode = forking.parent_connection.local_bandwidth_mode()?;
+                let audio_levels_interval = forking.parent_connection.audio_levels_interval();
                 let mut child_connection = call_manager.create_connection(
                     self,
                     sender_device_id,
                     ConnectionType::OutgoingChild,
                     received.answer.latest_version(),
                     bandwidth_mode,
+                    audio_levels_interval,
                 )?;
                 child_connection.start_outgoing_child(
                     &forking.local_secret,
@@ -933,8 +941,15 @@ where
     }
 
     /// Inject a call Proceed event into the FSM.
-    pub fn inject_proceed(&mut self, bandwidth_mode: BandwidthMode) -> Result<()> {
-        let event = CallEvent::Proceed(bandwidth_mode);
+    pub fn inject_proceed(
+        &mut self,
+        bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
+    ) -> Result<()> {
+        let event = CallEvent::Proceed {
+            bandwidth_mode,
+            audio_levels_interval,
+        };
         self.inject_event(event)
     }
 

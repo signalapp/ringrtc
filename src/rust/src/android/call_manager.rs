@@ -179,6 +179,7 @@ pub fn proceed(
     call_id: jlong,
     jni_call_context: JObject,
     bandwidth_mode: BandwidthMode,
+    audio_levels_interval: Option<Duration>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
@@ -189,7 +190,12 @@ pub fn proceed(
     let android_call_context =
         AndroidCallContext::new(platform, env.new_global_ref(jni_call_context)?);
 
-    call_manager.proceed(call_id, android_call_context, bandwidth_mode)
+    call_manager.proceed(
+        call_id,
+        android_call_context,
+        bandwidth_mode,
+        audio_levels_interval,
+    )
 }
 
 /// Application notification that signal message was sent successfully
@@ -629,6 +635,7 @@ pub fn create_group_call_client(
     group_id: jbyteArray,
     sfu_url: JString,
     hkdf_extra_info: jbyteArray,
+    audio_levels_interval_millis: jint,
     native_pcf_borrowed_rc: jlong,
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
@@ -667,11 +674,18 @@ pub fn create_group_call_client(
         Some(peer_connection_factory.rffi().clone()),
     );
 
+    let audio_levels_interval = if audio_levels_interval_millis <= 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audio_levels_interval_millis as u64))
+    };
+
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_group_call_client(
         group_id,
         sfu_url,
         hkdf_extra_info,
+        audio_levels_interval,
         Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,

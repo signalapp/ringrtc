@@ -67,6 +67,7 @@ fn start_inbound_call() -> TestContext {
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
+        None,
     )
     .expect(error_line!());
 
@@ -490,6 +491,7 @@ fn start_inbound_call_with_error() {
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
         BandwidthMode::Normal,
+        None,
     )
     .expect(error_line!());
 

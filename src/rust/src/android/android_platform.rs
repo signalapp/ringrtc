@@ -264,13 +264,15 @@ impl Platform for AndroidPlatform {
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {} signaling_version: {:?}, bandwidth_mode: {}",
+            "create_connection(): call_id: {} remote_device_id: {} signaling_version: {:?}, bandwidth_mode: {}, audio_levels_interval: {:?}",
             call.call_id(),
             remote_device_id,
             signaling_version,
-            bandwidth_mode
+            bandwidth_mode,
+            audio_levels_interval,
         );
 
         let env = self.java_env()?;
@@ -281,6 +283,7 @@ impl Platform for AndroidPlatform {
             remote_device_id,
             connection_type,
             bandwidth_mode,
+            audio_levels_interval,
             None, // The app adds sinks to VideoTracks.
         )?;
 

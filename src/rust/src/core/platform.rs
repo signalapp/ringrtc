@@ -47,6 +47,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>>;
 
     /// Inform the client application that a call should be started.

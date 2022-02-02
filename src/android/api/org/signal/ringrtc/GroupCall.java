@@ -71,12 +71,13 @@ public final class GroupCall {
      * If clientId is 0, the caller should invoke dispose() and let the
      * object itself get GC'd.
      */
-    GroupCall(         long                  nativeCallManager,
-              @NonNull byte[]                groupId,
-              @NonNull String                sfuUrl,
-              @NonNull byte[]                hkdfExtraInfo,
-              @NonNull PeerConnectionFactory factory,
-              @NonNull Observer              observer) {
+    GroupCall(          long                  nativeCallManager,
+              @NonNull  byte[]                groupId,
+              @NonNull  String                sfuUrl,
+              @NonNull  byte[]                hkdfExtraInfo,
+              @Nullable Integer               audioLevelsIntervalMs,
+              @NonNull  PeerConnectionFactory factory,
+              @NonNull  Observer              observer) {
         Log.i(TAG, "GroupCall():");
 
         this.nativeCallManager = nativeCallManager;
@@ -121,12 +122,14 @@ public final class GroupCall {
 
         this.incomingVideoTracks = new ArrayList<>();
 
+        int audioLevelsIntervalMillis = audioLevelsIntervalMs == null ? 0 : audioLevelsIntervalMs.intValue();
         try {
             this.clientId = ringrtcCreateGroupCallClient(
                 nativeCallManager,
                 groupId,
                 sfuUrl,
                 hkdfExtraInfo,
+                audioLevelsIntervalMillis,
                 // Returns a borrowed RC.
                 factory.getNativePeerConnectionFactory(),
                 // Returns a borrowed RC.
@@ -988,6 +991,7 @@ public final class GroupCall {
                                           byte[] groupId,
                                           String sfuUrl,
                                           byte[] hkdfExtraInfo,
+                                          int audioLevelsIntervalMillis,
                                           long nativePeerConnectionFactory,
                                           long nativeAudioTrack,
                                           long nativeVideoTrack)

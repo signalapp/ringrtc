@@ -171,16 +171,22 @@ export class NetworkRoute {
 }
 
 // Range of 0-32767 where 0 is silence.
-export type AudioLevel = number;
+export type RawAudioLevel = number;
+// Range of 0-1 where 0 is silence.
+export type NormalizedAudioLevel = number;
 
 export class ReceivedAudioLevel {
   demuxId: number; // UInt32
-  level: AudioLevel;
+  level: RawAudioLevel;
 
-  constructor(demuxId: number, level: AudioLevel) {
+  constructor(demuxId: number, level: RawAudioLevel) {
     this.demuxId = demuxId;
     this.level = level;
   }
+}
+
+function normalizeAudioLevel(raw: RawAudioLevel): NormalizedAudioLevel {
+  return raw / 32767;
 }
 
 class Requests<T> {
@@ -411,7 +417,8 @@ export class RingRTCType {
         settings.iceServer.password || '',
         settings.iceServer.urls,
         settings.hideIp,
-        settings.bandwidthMode
+        settings.bandwidthMode,
+        settings.audioLevelsIntervalMillis || 0,
       );
     });
   }
@@ -534,16 +541,16 @@ export class RingRTCType {
 
   onAudioLevels(
     remoteUserId: UserId,
-    capturedLevel: AudioLevel,
-    receivedLevel: AudioLevel
+    capturedLevel: RawAudioLevel,
+    receivedLevel: RawAudioLevel
   ): void {
     const call = this._call;
     if (!call || call.remoteUserId !== remoteUserId) {
       return;
     }
 
-    call.outgoingAudioLevel = capturedLevel;
-    call.remoteAudioLevel = receivedLevel;
+    call.outgoingAudioLevel = normalizeAudioLevel(capturedLevel);
+    call.remoteAudioLevel = normalizeAudioLevel(receivedLevel);
     if (call.handleAudioLevels) {
       call.handleAudioLevels();
     }
@@ -729,6 +736,7 @@ export class RingRTCType {
     groupId: Buffer,
     sfuUrl: string,
     hkdfExtraInfo: Buffer,
+    audioLevelsIntervalMillis: number | undefined,
     observer: GroupCallObserver
   ): GroupCall | undefined {
     const groupCall = new GroupCall(
@@ -736,6 +744,7 @@ export class RingRTCType {
       groupId,
       sfuUrl,
       hkdfExtraInfo,
+      audioLevelsIntervalMillis,
       observer
     );
 
@@ -849,7 +858,7 @@ export class RingRTCType {
   // Called by Rust
   handleAudioLevels(
     clientId: GroupCallClientId,
-    capturedLevel: AudioLevel,
+    capturedLevel: RawAudioLevel,
     receivedLevels: Array<ReceivedAudioLevel>
   ): void {
     silly_deadlock_protection(() => {
@@ -1288,6 +1297,7 @@ export interface CallSettings {
   iceServer: IceServer;
   hideIp: boolean;
   bandwidthMode: BandwidthMode;
+  audioLevelsIntervalMillis?: number;
 }
 
 interface IceServer {
@@ -1336,8 +1346,8 @@ export class Call {
   private _outgoingVideoEnabled: boolean = false;
   private _outgoingVideoIsScreenShare: boolean = false;
   private _remoteVideoEnabled: boolean = false;
-  outgoingAudioLevel: AudioLevel = 0;
-  remoteAudioLevel: AudioLevel = 0;
+  outgoingAudioLevel: NormalizedAudioLevel = 0;
+  remoteAudioLevel: NormalizedAudioLevel = 0;
   remoteSharingScreen: boolean = false;
   networkRoute: NetworkRoute = new NetworkRoute();
   private _videoCapturer: VideoCapturer | null = null;
@@ -1650,7 +1660,7 @@ export class LocalDeviceState {
   joinState: JoinState;
   audioMuted: boolean;
   videoMuted: boolean;
-  audioLevel: AudioLevel;
+  audioLevel: NormalizedAudioLevel;
   presenting: boolean;
   sharingScreen: boolean;
   networkRoute: NetworkRoute;
@@ -1676,7 +1686,7 @@ export class RemoteDeviceState {
 
   audioMuted: boolean | undefined;
   videoMuted: boolean | undefined;
-  audioLevel: AudioLevel;
+  audioLevel: NormalizedAudioLevel;
   presenting: boolean | undefined;
   sharingScreen: boolean | undefined;
   videoAspectRatio: number | undefined; // Float
@@ -1754,6 +1764,7 @@ export class GroupCall {
     groupId: Buffer,
     sfuUrl: string,
     hkdfExtraInfo: Buffer,
+    audioLevelsIntervalMillis: number | undefined,
     observer: GroupCallObserver
   ) {
     this._callManager = callManager;
@@ -1764,7 +1775,8 @@ export class GroupCall {
     this._clientId = this._callManager.createGroupCallClient(
       groupId,
       sfuUrl,
-      hkdfExtraInfo
+      hkdfExtraInfo,
+      audioLevelsIntervalMillis || 0,
     );
   }
 
@@ -1897,15 +1909,15 @@ export class GroupCall {
   }
 
   handleAudioLevels(
-    capturedLevel: AudioLevel,
+    capturedLevel: RawAudioLevel,
     receivedLevels: Array<ReceivedAudioLevel>
   ) {
-    this._localDeviceState.audioLevel = capturedLevel;
+    this._localDeviceState.audioLevel = normalizeAudioLevel(capturedLevel);
     if (this._remoteDeviceStates != undefined) {
       for (const received of receivedLevels) {
         for (let remoteDeviceState of this._remoteDeviceStates) {
           if (remoteDeviceState.demuxId == received.demuxId) {
-            remoteDeviceState.audioLevel = received.level;
+            remoteDeviceState.audioLevel = normalizeAudioLevel(received.level);
           }
         }
       }
@@ -2111,7 +2123,8 @@ export interface CallManager {
     iceServerPassword: string,
     iceServerUrls: Array<string>,
     hideIp: boolean,
-    bandwidthMode: BandwidthMode
+    bandwidthMode: BandwidthMode,
+    audioLevelsIntervalMillis: number,
   ): void;
   accept(callId: CallId): void;
   ignore(callId: CallId): void;
@@ -2182,7 +2195,8 @@ export interface CallManager {
   createGroupCallClient(
     groupId: Buffer,
     sfuUrl: string,
-    hkdfExtraInfo: Buffer
+    hkdfExtraInfo: Buffer,
+    audioLevelsIntervalMillis: number,
   ): GroupCallClientId;
   deleteGroupCallClient(clientId: GroupCallClientId): void;
   connect(clientId: GroupCallClientId): void;

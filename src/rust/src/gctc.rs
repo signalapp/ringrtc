@@ -292,6 +292,7 @@ fn main() {
         Some(outgoing_video_track.clone()),
         Some(Box::new(observer.clone())),
         None,
+        None,
     )
     .unwrap();
 

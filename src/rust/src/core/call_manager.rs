@@ -437,13 +437,15 @@ where
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         handle_active_call_api!(
             self,
             CallManager::handle_proceed,
             call_id,
             app_call_context,
-            bandwidth_mode
+            bandwidth_mode,
+            audio_levels_interval
         )
     }
 
@@ -1072,6 +1074,7 @@ where
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         ringbench!(
             RingBench::App,
@@ -1085,7 +1088,7 @@ where
             Ok(())
         } else {
             active_call.set_call_context(app_call_context)?;
-            active_call.inject_proceed(bandwidth_mode)
+            active_call.inject_proceed(bandwidth_mode, audio_levels_interval)
         }
     }
 
@@ -2085,6 +2088,7 @@ where
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<T>> {
         let mut platform = self.platform.lock()?;
         platform.create_connection(
@@ -2093,6 +2097,7 @@ where
             connection_type,
             signaling_version,
             bandwidth_mode,
+            audio_levels_interval,
         )
     }
 
@@ -2603,6 +2608,7 @@ where
         group_id: group_call::GroupId,
         sfu_url: String,
         hkdf_extra_info: Vec<u8>,
+        audio_levels_interval: Option<Duration>,
         peer_connection_factory: Option<PeerConnectionFactory>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
@@ -2642,6 +2648,7 @@ where
             Some(outgoing_video_track),
             incoming_video_sink,
             ring_id,
+            audio_levels_interval,
         )?;
 
         let mut client_by_id = self.group_call_by_client_id.lock()?;

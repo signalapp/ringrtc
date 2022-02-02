@@ -79,7 +79,10 @@ pub enum CallEvent {
 
     // Flow events from client application
     /// OK to proceed with call setup including user options.
-    Proceed(BandwidthMode),
+    Proceed {
+        bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
+    },
 
     // Signaling events from client application
     /// Received answer from remote peer (caller only).
@@ -112,8 +115,14 @@ impl fmt::Display for CallEvent {
             CallEvent::SendHangupViaRtpDataToAll(hangup) => {
                 format!("SendHangupViaRtpDataToAll, hangup: {}", hangup)
             }
-            CallEvent::Proceed(bandwidth_mode) => {
-                format!("Proceed, bandwidth_mode: {}", bandwidth_mode)
+            CallEvent::Proceed {
+                bandwidth_mode,
+                audio_levels_interval,
+            } => {
+                format!(
+                    "Proceed, bandwidth_mode: {}, audio_levels_interval: {:?}",
+                    bandwidth_mode, audio_levels_interval
+                )
             }
             CallEvent::ReceivedAnswer(received) => {
                 format!("ReceivedAnswer, device: {}", received.sender_device_id)
@@ -328,7 +337,10 @@ where
 
         match event {
             CallEvent::StartCall => self.handle_start_call(call, state),
-            CallEvent::Proceed(bandwidth_mode) => self.handle_proceed(call, state, bandwidth_mode),
+            CallEvent::Proceed {
+                bandwidth_mode,
+                audio_levels_interval,
+            } => self.handle_proceed(call, state, bandwidth_mode, audio_levels_interval),
             CallEvent::AcceptCall => self.handle_accept_call(call, state),
             CallEvent::ReceivedAnswer(received) => {
                 self.handle_received_answer(call, state, received)
@@ -420,6 +432,7 @@ where
         mut call: Call<T>,
         state: CallState,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         info!("handle_proceed():");
 
@@ -431,7 +444,7 @@ where
                 if call.terminating()? {
                     return Ok(());
                 }
-                call.proceed(bandwidth_mode)
+                call.proceed(bandwidth_mode, audio_levels_interval)
             }
             .map_err(move |err| {
                 err_call.inject_internal_error(err, "Proceed Future failed");

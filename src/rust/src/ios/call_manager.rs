@@ -86,13 +86,19 @@ pub fn proceed(
     call_id: u64,
     app_call_context: AppCallContext,
     bandwidth_mode: BandwidthMode,
+    audio_levels_interval: Option<Duration>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
 
     info!("proceed(): {}", call_id);
 
-    call_manager.proceed(call_id, Arc::new(app_call_context), bandwidth_mode)
+    call_manager.proceed(
+        call_id,
+        Arc::new(app_call_context),
+        bandwidth_mode,
+        audio_levels_interval,
+    )
 }
 
 /// Application notification that the sending of the previous message was a success.
@@ -466,11 +472,13 @@ pub fn peek_group_call(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_group_call_client(
     call_manager: *mut IosCallManager,
     group_id: group_call::GroupId,
     sfu_url: String,
     hkdf_extra_info: Vec<u8>,
+    audio_levels_interval: Option<Duration>,
     native_peer_connection_factory: webrtc::ptr::OwnedRc<pcf::RffiPeerConnectionFactoryInterface>,
     native_audio_track: webrtc::ptr::OwnedRc<media::RffiAudioTrack>,
     native_video_track: webrtc::ptr::OwnedRc<media::RffiVideoTrack>,
@@ -498,6 +506,7 @@ pub fn create_group_call_client(
         group_id,
         sfu_url,
         hkdf_extra_info,
+        audio_levels_interval,
         Some(peer_connection_factory),
         outgoing_audio_track,
         outgoing_video_track,

@@ -707,6 +707,7 @@ struct State {
     next_stats_time: Option<Instant>,
     stats_observer: Box<StatsObserver>,
 
+    audio_levels_interval: Option<Duration>,
     // Things for getting audio levels from the PeerConnection
     next_audio_levels_time: Option<Instant>,
 
@@ -803,9 +804,6 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 // How often to get and log stats.
 const STATS_INTERVAL: Duration = Duration::from_secs(10);
 
-// How often to get and report audio levels to app.
-const AUDIO_LEVELS_INTERVAL: Duration = Duration::from_millis(200);
-
 // How often to request an updated membership proof (24 hours).
 const MEMBERSHIP_PROOF_REQUEST_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -824,6 +822,7 @@ impl Client {
         // This is separate from the observer so it can bypass a thread hop.
         incoming_video_sink: Option<Box<dyn VideoSink>>,
         ring_id: Option<RingId>,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<Self> {
         debug!("group_call::Client(outer)::new(client_id: {})", client_id);
         let stopper = Stopper::new();
@@ -910,6 +909,7 @@ impl Client {
                     next_stats_time: None,
                     stats_observer: create_stats_observer(),
 
+                    audio_levels_interval,
                     next_audio_levels_time: None,
 
                     next_membership_proof_request_time: None,
@@ -978,7 +978,9 @@ impl Client {
             }
         }
 
-        if let Some(next_audio_levels_time) = state.next_audio_levels_time {
+        if let (Some(audio_levels_interval), Some(next_audio_levels_time)) =
+            (state.audio_levels_interval, state.next_audio_levels_time)
+        {
             if now >= next_audio_levels_time {
                 let (captured_level, received_levels) = state.peer_connection.get_audio_levels();
                 state.observer.handle_audio_levels(
@@ -986,7 +988,7 @@ impl Client {
                     captured_level,
                     received_levels,
                 );
-                state.next_audio_levels_time = Some(now + AUDIO_LEVELS_INTERVAL);
+                state.next_audio_levels_time = Some(now + audio_levels_interval);
             }
         }
 
@@ -3728,6 +3730,7 @@ mod tests {
                 None,
                 None,
                 None,
+                Some(Duration::from_millis(200)),
             )
             .expect("Start Client");
             Self {

@@ -250,6 +250,7 @@ impl TestContext {
             "".to_owned(),
             vec![],
             None,
+            None,
             ringrtc::webrtc::media::AudioTrack::new(webrtc::Arc::null(), None),
             ringrtc::webrtc::media::VideoTrack::new(webrtc::Arc::null(), None),
             None,

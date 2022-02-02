@@ -639,6 +639,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     let js_ice_server_urls = cx.argument::<JsArray>(3)?;
     let hide_ip = cx.argument::<JsBoolean>(4)?.value(&mut cx);
     let bandwidth_mode = cx.argument::<JsNumber>(5)?.value(&mut cx) as i32;
+    let audio_levels_interval_millis = cx.argument::<JsNumber>(6)?.value(&mut cx) as u64;
 
     let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len(&mut cx) as usize);
     for i in 0..js_ice_server_urls.len(&mut cx) {
@@ -656,6 +657,12 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         call_id, ice_server, hide_ip
     );
 
+    let audio_levels_interval = if audio_levels_interval_millis == 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audio_levels_interval_millis))
+    };
+
     with_call_endpoint(&mut cx, |endpoint| {
         let call_context = NativeCallContext::new(
             hide_ip,
@@ -672,6 +679,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
             call_id,
             call_context,
             BandwidthMode::from_i32(bandwidth_mode),
+            audio_levels_interval,
         )?;
         Ok(())
     })
@@ -1126,6 +1134,7 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let group_id = cx.argument::<JsValue>(0)?.as_value(&mut cx);
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
     let hkdf_extra_info = cx.argument::<JsValue>(2)?.as_value(&mut cx);
+    let audio_levels_interval_millis = cx.argument::<JsNumber>(3)?.value(&mut cx) as u64;
 
     let mut client_id = group_call::INVALID_CLIENT_ID;
 
@@ -1142,6 +1151,13 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
             return Ok(cx.number(client_id).upcast());
         }
     };
+
+    let audio_levels_interval = if audio_levels_interval_millis == 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audio_levels_interval_millis))
+    };
+
     with_call_endpoint(&mut cx, |endpoint| {
         let peer_connection_factory = endpoint.peer_connection_factory.clone();
         let outgoing_audio_track = endpoint.outgoing_audio_track.clone();
@@ -1151,6 +1167,7 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
             group_id,
             sfu_url,
             hkdf_extra_info,
+            audio_levels_interval,
             Some(peer_connection_factory),
             outgoing_audio_track,
             outgoing_video_track,

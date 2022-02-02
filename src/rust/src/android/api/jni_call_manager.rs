@@ -21,6 +21,7 @@ use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::connection::Connection;
 use crate::core::{group_call, signaling};
 use crate::webrtc;
+use std::time::Duration;
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -140,13 +141,21 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
     call_id: jlong,
     jni_call_context: JObject,
     bandwidth_mode: jint,
+    audio_levels_interval_millis: jint,
 ) {
+    let audio_levels_interval = if audio_levels_interval_millis <= 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audio_levels_interval_millis as u64))
+    };
+
     match call_manager::proceed(
         &env,
         call_manager as *mut AndroidCallManager,
         call_id,
         jni_call_context,
         BandwidthMode::from_i32(bandwidth_mode),
+        audio_levels_interval,
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -596,6 +605,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
     group_id: jbyteArray,
     sfu_url: JString,
     hkdf_extra_info: jbyteArray,
+    audio_levels_interval_millis: jint,
     native_peer_connection_factory_borrowed_rc: jlong,
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
@@ -606,6 +616,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
         group_id,
         sfu_url,
         hkdf_extra_info,
+        audio_levels_interval_millis,
         native_peer_connection_factory_borrowed_rc,
         native_audio_track_borrowed_rc,
         native_video_track_borrowed_rc,

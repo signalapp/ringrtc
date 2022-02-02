@@ -413,6 +413,7 @@ impl Platform for NativePlatform {
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>> {
         info!(
             "NativePlatform::create_connection(): call: {} remote_device_id: {} signaling_version: {:?}",
@@ -426,6 +427,7 @@ impl Platform for NativePlatform {
             remote_device_id,
             connection_type,
             bandwidth_mode,
+            audio_levels_interval,
             Some(context.incoming_video_sink),
         )?;
 

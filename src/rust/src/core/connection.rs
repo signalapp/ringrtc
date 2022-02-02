@@ -65,11 +65,6 @@ const SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS: u64 = 1000;
 const SEND_RTP_DATA_MESSAGE_INTERVAL_TICKS: u64 =
     SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
 
-/// How often to get audio levels.
-const POLL_AUDIO_LEVELS_INTERVAL_MILLIS: u64 = 200;
-const POLL_AUDIO_LEVELS_INTERVAL_TICKS: u64 =
-    POLL_AUDIO_LEVELS_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
-
 pub const RTP_DATA_PAYLOAD_TYPE: rtp::PayloadType = 101;
 pub const OLD_RTP_DATA_SSRC_FOR_OUTGOING: rtp::Ssrc = 1001;
 pub const OLD_RTP_DATA_SSRC_FOR_INCOMING: rtp::Ssrc = 2001;
@@ -351,6 +346,8 @@ where
     webrtc: Arc<CallMutex<WebRtcData<T>>>,
     /// The bandwidth modes that have been set for the connection.
     bandwidth_modes: Arc<CallMutex<BandwidthModes>>,
+    /// The interval for audio level polling
+    audio_levels_interval: Option<Duration>,
     /// Local ICE candidates waiting to be sent over signaling.
     buffered_local_ice_candidates: Arc<CallMutex<Vec<signaling::IceCandidate>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
@@ -442,6 +439,7 @@ where
             context: Arc::clone(&self.context),
             webrtc: Arc::clone(&self.webrtc),
             bandwidth_modes: Arc::clone(&self.bandwidth_modes),
+            audio_levels_interval: self.audio_levels_interval,
             buffered_local_ice_candidates: Arc::clone(&self.buffered_local_ice_candidates),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
             connection_type: self.connection_type,
@@ -464,6 +462,7 @@ where
         remote_device: DeviceId,
         connection_type: ConnectionType,
         bandwidth_mode: BandwidthMode,
+        audio_levels_interval: Option<Duration>,
         incoming_video_sink: Option<Box<dyn VideoSink>>,
     ) -> Result<Self> {
         // Create a FSM runtime for this connection.
@@ -500,6 +499,7 @@ where
                 },
                 "webrtc",
             )),
+            audio_levels_interval,
             buffered_local_ice_candidates: Arc::new(CallMutex::new(
                 Vec::new(),
                 "buffered_local_ice_candidates",
@@ -915,6 +915,12 @@ where
         Ok(bandwidth_modes.local_bandwidth_mode)
     }
 
+    /// Needed for ICE forking (we must copy this value from the parent connection
+    /// to the child connection)
+    pub fn audio_levels_interval(&self) -> Option<Duration> {
+        self.audio_levels_interval
+    }
+
     /// Set the incoming media.
     pub fn set_incoming_media(
         &self,
@@ -1114,19 +1120,24 @@ where
             }
         }
 
-        #[allow(clippy::modulo_one)]
-        if ticks_elapsed % POLL_AUDIO_LEVELS_INTERVAL_TICKS == 0 {
-            let (captured_level, received_levels) = webrtc.peer_connection()?.get_audio_levels();
-            let received_level = received_levels
-                .first()
-                .map(|received| received.level)
-                .unwrap_or(0);
-            let event = ConnectionObserverEvent::AudioLevels {
-                captured_level,
-                received_level,
-            };
-            if let Err(err) = self.notify_observer(event) {
-                warn!("tick(): failed to notify of audio levels: {:?}", err);
+        if let Some(audio_levels_interval) = self.audio_levels_interval {
+            let audio_levels_interval_ticks =
+                (audio_levels_interval.as_millis() as u64) / TICK_INTERVAL_MILLIS;
+            #[allow(clippy::modulo_one)]
+            if ticks_elapsed % audio_levels_interval_ticks == 0 {
+                let (captured_level, received_levels) =
+                    webrtc.peer_connection()?.get_audio_levels();
+                let received_level = received_levels
+                    .first()
+                    .map(|received| received.level)
+                    .unwrap_or(0);
+                let event = ConnectionObserverEvent::AudioLevels {
+                    captured_level,
+                    received_level,
+                };
+                if let Err(err) = self.notify_observer(event) {
+                    warn!("tick(): failed to notify of audio levels: {:?}", err);
+                }
             }
         }
 

@@ -365,22 +365,24 @@ public class CallManager {
    * @param iceServers             list of ICE servers to use for this Call
    * @param hideIp                 if true hide caller's IP by using a TURN server
    * @param bandwidthMode          desired bandwidth mode to start the session with
+   * @param audioLevelsIntervalMs  if greater than 0, enable audio levels with this interval (in milliseconds)
    * @param enableCamera           if true, enable the local camera video track when created
    *
    * @throws CallException for native code failures
    *
    */
-  public void proceed(@NonNull CallId                         callId,
-                      @NonNull Context                        context,
-                      @NonNull EglBase                        eglBase,
-                               AudioProcessingMethod          audioProcessingMethod,
-                      @NonNull VideoSink                      localSink,
-                      @NonNull VideoSink                      remoteSink,
-                      @NonNull CameraControl                  camera,
-                      @NonNull List<PeerConnection.IceServer> iceServers,
-                               boolean                        hideIp,
-                               BandwidthMode                  bandwidthMode,
-                               boolean                        enableCamera)
+  public void proceed(@NonNull  CallId                         callId,
+                      @NonNull  Context                        context,
+                      @NonNull  EglBase                        eglBase,
+                                AudioProcessingMethod          audioProcessingMethod,
+                      @NonNull  VideoSink                      localSink,
+                      @NonNull  VideoSink                      remoteSink,
+                      @NonNull  CameraControl                  camera,
+                      @NonNull  List<PeerConnection.IceServer> iceServers,
+                                boolean                        hideIp,
+                                BandwidthMode                  bandwidthMode,
+                      @Nullable Integer                        audioLevelsIntervalMs,
+                                boolean                        enableCamera)
     throws CallException
   {
     checkCallManagerExists();
@@ -399,10 +401,13 @@ public class CallManager {
                                               hideIp);
 
     callContext.setVideoEnabled(enableCamera);
+
+    int audioLevelsIntervalMillis = audioLevelsIntervalMs == null ? 0 : audioLevelsIntervalMs.intValue();
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
                    callContext,
-                   bandwidthMode.ordinal());
+                   bandwidthMode.ordinal(),
+                   audioLevelsIntervalMillis);
   }
 
   /**
@@ -922,11 +927,12 @@ public class CallManager {
    * @param observer               the observer that the group call object will use for callback notifications
    *
    */
-  public GroupCall createGroupCall(@NonNull byte[]                groupId,
-                                   @NonNull String                sfuUrl,
-                                   @NonNull byte[]                hkdfExtraInfo,
-                                            AudioProcessingMethod audioProcessingMethod,
-                                   @NonNull GroupCall.Observer    observer)
+  public GroupCall createGroupCall(@NonNull  byte[]                groupId,
+                                   @NonNull  String                sfuUrl,
+                                   @NonNull  byte[]                hkdfExtraInfo,
+                                   @Nullable Integer               audioLevelsIntervalMs,
+                                             AudioProcessingMethod audioProcessingMethod,
+                                   @NonNull  GroupCall.Observer    observer)
   {
     checkCallManagerExists();
 
@@ -939,7 +945,7 @@ public class CallManager {
       }
     }
 
-    GroupCall groupCall = new GroupCall(nativeCallManager, groupId, sfuUrl, hkdfExtraInfo, this.groupFactory, observer);
+    GroupCall groupCall = new GroupCall(nativeCallManager, groupId, sfuUrl, hkdfExtraInfo, audioLevelsIntervalMs, this.groupFactory, observer);
 
     if (groupCall.clientId != 0) {
       // Add the groupCall to the map.
@@ -1939,7 +1945,8 @@ public class CallManager {
     void ringrtcProceed(long        nativeCallManager,
                         long        callId,
                         CallContext callContext,
-                        int         bandwidthMode)
+                        int         bandwidthMode,
+                        int         audioLevelsIntervalMillis)
     throws CallException;
 
   private native

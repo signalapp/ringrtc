@@ -475,7 +475,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - hideIp: A flag used to hide the IP of the user by using relay (TURN) servers only
     ///   - videoCaptureController: UI provided capturer interface
     ///   - bandwidthMode: The desired bandwidth mode to start the session with
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, bandwidthMode: BandwidthMode) throws {
+    ///   - audioLevelsIntervalMillis: If non-zero, the desired interval between audio level events (in milliseconds)
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, bandwidthMode: BandwidthMode, audioLevelsIntervalMillis: UInt64?) throws {
         AssertIsOnMainThread()
         Logger.debug("proceed")
 
@@ -505,7 +506,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // creating the connection.
         let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController)
 
-        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), bandwidthMode.rawValue)
+        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), bandwidthMode.rawValue, audioLevelsIntervalMillis ?? 0)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "proceed() function failure")
         }
@@ -1169,14 +1170,13 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 
     func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel]) {
-        // TODO: Enable or modify during integration with client for Audio Level display.
-        //DispatchQueue.main.async {
-        //    guard let groupCall = self.groupCallByClientId[clientId] else {
-        //        return
-        //    }
-        //
-        //    groupCall.handleAudioLevels(capturedLevel: capturedLevel, receivedLevels: receivedLevels)
-        //}
+        DispatchQueue.main.async {
+           guard let groupCall = self.groupCallByClientId[clientId] else {
+               return
+           }
+        
+           groupCall.handleAudioLevels(capturedLevel: capturedLevel, receivedLevels: receivedLevels)
+        }
     }
 
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {

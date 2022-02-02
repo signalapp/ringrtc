@@ -612,12 +612,19 @@ pub extern "C" fn ringrtcProceed(
     callId: u64,
     appCallContext: AppCallContext,
     bandwidthMode: i32,
+    audioLevelsIntervalMillis: u64,
 ) -> *mut c_void {
+    let audio_levels_interval = if audioLevelsIntervalMillis == 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audioLevelsIntervalMillis))
+    };
     match call_manager::proceed(
         callManager as *mut IosCallManager,
         callId,
         appCallContext,
         BandwidthMode::from_i32(bandwidthMode),
+        audio_levels_interval,
     ) {
         Ok(_v) => {
             // Return the object reference back as indication of success.
@@ -1104,6 +1111,7 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
     groupId: AppByteSlice,
     sfuUrl: AppByteSlice,
     hkdfExtraInfo: AppByteSlice,
+    audio_levels_interval_millis: u64,
     nativePeerConnectionFactoryOwnedRc: *const c_void,
     nativeAudioTrackOwnedRc: *const c_void,
     nativeVideoTrackOwnedRc: *const c_void,
@@ -1129,11 +1137,18 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
         return group_call::INVALID_CLIENT_ID;
     }
 
+    let audio_levels_interval = if audio_levels_interval_millis == 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audio_levels_interval_millis))
+    };
+
     match call_manager::create_group_call_client(
         callManager as *mut IosCallManager,
         group_id.unwrap(),
         sfu_url.unwrap(),
         hkdf_extra_info.unwrap(),
+        audio_levels_interval,
         unsafe {
             webrtc::ptr::OwnedRc::from_ptr(
                 nativePeerConnectionFactoryOwnedRc
