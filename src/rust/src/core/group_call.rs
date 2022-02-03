@@ -566,7 +566,7 @@ const RTP_DATA_TO_SFU_SSRC: rtp::Ssrc = 1;
 // ramp all the way up, though.
 const ALL_ALONE_MAX_SEND_RATE_KBPS: u64 = 1;
 
-const NORMAL_MAX_RECEIVE_RATE_KBPS: u64 = 20_000_000;
+const NORMAL_MAX_RECEIVE_RATE_KBPS: u64 = 20_000;
 
 // The time between when a sender generates a new media send key
 // and applies it.  It needs to be big enough that there is
