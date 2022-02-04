@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.18.1
+
+- Fix group call rate constant
+
+- iOS: Fix audio level api for group calls and tests
+
 ## v2.18.0
 
 - Update Audio Level API to specify desired interval
