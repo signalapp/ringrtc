@@ -538,11 +538,11 @@ public final class GroupCall {
      * Callback from RingRTC with details about audio levels.
      *
      */
-    void handleAudioLevels(int capturedLevel, List<CallManager.ReceivedAudioLevel> receivedLevels) {
+    void handleAudioLevels(int capturedLevel, List<ReceivedAudioLevel> receivedLevels) {
         Log.d(TAG, "handleAudioLevels():");
 
         this.localDeviceState.audioLevel = capturedLevel;
-        for (CallManager.ReceivedAudioLevel received : receivedLevels) {
+        for (ReceivedAudioLevel received : receivedLevels) {
             RemoteDeviceState remoteDeviceState = this.remoteDeviceStates.get(received.demuxId);
             if (remoteDeviceState != null) {
                 remoteDeviceState.audioLevel = received.level;
@@ -904,6 +904,21 @@ public final class GroupCall {
         // Range of 0-32767, where 0 is silence.
         public int getAudioLevel() {
             return audioLevel;
+        }
+    }
+
+    /**
+    *
+    * A way to pass a list of (demuxId, level) through the FFI.
+    *
+    */
+    public static class ReceivedAudioLevel {
+        public long demuxId;
+        public int level;  // Range of 0-32767, where 0 is silence
+
+        public ReceivedAudioLevel(long demuxId, int level) {
+            this.demuxId = demuxId;
+            this.level = level;
         }
     }
 

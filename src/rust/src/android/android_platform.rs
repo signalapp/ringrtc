@@ -1583,6 +1583,7 @@ impl AndroidPlatform {
             jni_class_name!(org.signal.ringrtc.GroupCall::GroupCallEndReason),
             HTTP_HEADER_CLASS,
             REMOTE_DEVICE_STATE_CLASS,
+            RECEIVED_AUDIO_LEVEL_CLASS,
             jni_class_name!(java.lang.Boolean),
             jni_class_name!(java.lang.Float),
             jni_class_name!(java.lang.Integer),

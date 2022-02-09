@@ -1320,7 +1320,7 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void handleAudioLevels(long clientId, int capturedLevel, List<ReceivedAudioLevel> receivedLevels) {
+  private void handleAudioLevels(long clientId, int capturedLevel, List<GroupCall.ReceivedAudioLevel> receivedLevels) {
     Log.d(TAG, "handleAudioLevels():");
 
     GroupCall groupCall = this.groupCallByClientId.get(clientId);
@@ -1497,21 +1497,6 @@ public class CallManager {
       }
 
       factory.dispose();
-    }
-  }
-
-  /**
-   *
-   * A way to pass a list of (demuxId, level) through the FFI.
-   *
-   */
-  public class ReceivedAudioLevel {
-    public long demuxId;
-    public int level;  // Range of 0-32767, where 0 is silence
-
-    public ReceivedAudioLevel(long demuxId, int level) {
-      this.demuxId = demuxId;
-      this.level = level;
     }
   }
 
