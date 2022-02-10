@@ -57,7 +57,7 @@ fi
 # This is the release branch of webrtc to check out
 WEBRTC_REVISION="branch-heads/${WEBRTC_VERSION}"
 
-# This function should be overriden by a platform specific
+# This function should be overridden by a platform specific
 # implementation.
 prepare_workspace_platform() {
     echo "ERROR: prepare_workspace_platform() is undefined for this platform: $WEBRTC_PLATFORM"

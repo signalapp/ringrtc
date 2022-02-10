@@ -2180,7 +2180,7 @@ impl Client {
         state.joined_members = new_user_ids;
 
         if should_request_again {
-            // Something occured while we were waiting for this update.
+            // Something occurred while we were waiting for this update.
             // We should request again.
             debug!("Request devices because we previously requested while a request was pending");
             Self::request_remote_devices_as_soon_as_possible(state);
@@ -3673,7 +3673,7 @@ mod tests {
                 );
             } else {
                 info!(
-                    "Did not sent message from {:?} to {:?} becuase it's not a known recipient.",
+                    "Did not sent message from {:?} to {:?} because it's not a known recipient.",
                     self.user_id, recipient_id
                 );
             }

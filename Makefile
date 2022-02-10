@@ -23,7 +23,7 @@ ANDROID_TARGETS := $(foreach t, $(BUILD_TYPES),     \
 
 IOS_TARGETS := ios/release
 
-# This can be overriden on the command line, e.g. "make electron NODEJS_ARCH=ia32"
+# This can be overridden on the command line, e.g. "make electron NODEJS_ARCH=ia32"
 # Note: make sure to only use NodeJS architectures here, like x64, ia32, arm64, etc.
 NODEJS_ARCH := x64
 
@@ -34,7 +34,7 @@ help:
 	$(Q) echo "  electron -- build an Electron library"
 	$(Q) echo "  cli      -- build the test cli"
 	$(Q) echo
-	$(Q) echo "For the electon/cli builds, you can specify an optional platform"
+	$(Q) echo "For the electron/cli builds, you can specify an optional platform"
 	$(Q) echo "which will download WebRTC. For example:"
 	$(Q) echo "  $ make electron PLATFORM=unix"
 	$(Q) echo
