@@ -1207,7 +1207,7 @@ where
         self.add_and_remove_remote_ice_candidates(pc, &ice.candidates)
     }
 
-    // This is where we differentiate between received candiate additions and removals.
+    // This is where we differentiate between received candidate additions and removals.
     fn add_and_remove_remote_ice_candidates(
         &self,
         pc: &PeerConnection,

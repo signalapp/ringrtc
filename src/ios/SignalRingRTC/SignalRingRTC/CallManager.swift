@@ -197,19 +197,19 @@ public protocol CallManagerDelegate: AnyObject {
 
     /**
      * A call, either outgoing or incoming, should be started by the application.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldStartCall call: CallManagerDelegateCallType, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
 
     /**
      * onEvent will be invoked in response to Call Manager library operations.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onEvent call: CallManagerDelegateCallType, event: CallManagerEvent)
 
     /**
      * onNetworkRouteChangedFor will be invoked when changes to the network routing (e.g. wifi/cellular) are detected.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onNetworkRouteChangedFor call: CallManagerDelegateCallType, networkRoute: NetworkRoute)
 
@@ -221,42 +221,42 @@ public protocol CallManagerDelegate: AnyObject {
 
     /**
      * An Offer message should be sent to the given remote.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendOffer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType)
 
     /**
      * An Answer message should be sent to the given remote.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendAnswer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, opaque: Data)
 
     /**
      * An Ice Candidate message should be sent to the given remote.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendIceCandidates callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, candidates: [Data])
 
     /**
      * A Hangup message should be sent to the given remote.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHangup callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32)
 
     /**
      * A Busy message should be sent to the given remote.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendBusy callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?)
 
     /**
      * A call message should be sent to the given remote recipient.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessage recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
@@ -278,14 +278,14 @@ public protocol CallManagerDelegate: AnyObject {
     /**
      * The local video track has been enabled and can be connected to the
      * UI's display surface/view for the outgoing media.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onUpdateLocalVideoSession call: CallManagerDelegateCallType, session: AVCaptureSession?)
 
     /**
      * The remote peer has connected and their video track can be connected to the
      * UI's display surface/view for the incoming media.
-     * Invoked on the main thread, asychronously.
+     * Invoked on the main thread, asynchronously.
      */
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onAddRemoteVideoTrack call: CallManagerDelegateCallType, track: RTCVideoTrack)
 

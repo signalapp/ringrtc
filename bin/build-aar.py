@@ -408,7 +408,7 @@ def main():
     if args.upload_sonatype_repo is not None:
         if args.debug_build is True or args.release_build is True:
             print('ERROR: When uploading, must upload complete release and debug builds')
-            print('ERROR: You cannot specifiy either --release or --debug while uploading')
+            print('ERROR: You cannot specify either --release or --debug while uploading')
             return 1
 
         if args.upload_sonatype_user is None or args.upload_sonatype_password is None:

@@ -1917,7 +1917,7 @@ class SignalRingRTCTests: XCTestCase {
         let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
         let useTurnOnly = false
 
-        // An extra Call Manger for some scenarions (such as busy).
+        // An extra Call Manager for some scenarios (such as busy).
         let delegateExtra = TestDelegate()
         var callManagerExtra = createCallManager(delegateExtra)
         expect(callManagerExtra).toNot(beNil())
