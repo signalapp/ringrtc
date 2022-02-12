@@ -273,20 +273,23 @@ export class GumVideoCapturer {
           if (!frame) {
             continue;
           }
-          const format = videoPixelFormatToEnum(frame.format ?? "I420");
-          if (format == undefined) {
-            console.warn(`Unsupported video frame format: ${frame.format}`);
-            break;
+          try {
+            const format = videoPixelFormatToEnum(frame.format ?? "I420");
+            if (format == undefined) {
+              console.warn(`Unsupported video frame format: ${frame.format}`);
+              break;
+            }
+            frame.copyTo(buffer);
+            sender.sendVideoFrame(
+              frame.codedWidth,
+              frame.codedHeight,
+              format,
+              buffer
+            );
+          } finally {
+            // This must be called for more frames to come.  
+            frame.close();
           }
-          frame.copyTo(buffer);
-          sender.sendVideoFrame(
-            frame.codedWidth,
-            frame.codedHeight,
-            format,
-            buffer
-          );
-          // This must be called for more frames to come.
-          frame.close();
         }
       } finally {
         reader.releaseLock();
