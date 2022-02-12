@@ -16,11 +16,11 @@ pub struct DataRate {
 
 #[allow(dead_code)]
 impl DataRate {
-    pub fn per_second(size_per_second: DataSize) -> Self {
+    pub const fn per_second(size_per_second: DataSize) -> Self {
         Self { size_per_second }
     }
 
-    pub fn from_bps(bps: u64) -> Self {
+    pub const fn from_bps(bps: u64) -> Self {
         Self::per_second(DataSize::from_bits(bps))
     }
 
@@ -28,7 +28,7 @@ impl DataRate {
         self.size_per_second.as_bits()
     }
 
-    pub fn from_kbps(kbps: u64) -> Self {
+    pub const fn from_kbps(kbps: u64) -> Self {
         Self::per_second(DataSize::from_kilobits(kbps))
     }
 
@@ -36,7 +36,7 @@ impl DataRate {
         self.size_per_second.as_kilobits()
     }
 
-    pub fn from_mbps(mbps: u64) -> Self {
+    pub const fn from_mbps(mbps: u64) -> Self {
         Self::per_second(DataSize::from_megabits(mbps))
     }
 
@@ -60,11 +60,11 @@ pub struct DataSize {
 
 #[allow(dead_code)]
 impl DataSize {
-    pub fn per_second(self) -> DataRate {
+    pub const fn per_second(self) -> DataRate {
         DataRate::per_second(self)
     }
 
-    pub fn from_bits(bits: u64) -> Self {
+    pub const fn from_bits(bits: u64) -> Self {
         Self { bits }
     }
 
@@ -72,7 +72,7 @@ impl DataSize {
         self.bits
     }
 
-    pub fn from_bytes(bytes: u64) -> Self {
+    pub const fn from_bytes(bytes: u64) -> Self {
         Self::from_bits(bytes * 8)
     }
 
@@ -80,7 +80,7 @@ impl DataSize {
         self.as_bits() / 8
     }
 
-    pub fn from_kilobits(kbits: u64) -> Self {
+    pub const fn from_kilobits(kbits: u64) -> Self {
         Self::from_bits(kbits * 1000)
     }
 
@@ -88,7 +88,7 @@ impl DataSize {
         self.as_bits() / 1000
     }
 
-    pub fn from_kilobytes(kbytes: u64) -> Self {
+    pub const fn from_kilobytes(kbytes: u64) -> Self {
         Self::from_bytes(kbytes * 1000)
     }
 
@@ -96,7 +96,7 @@ impl DataSize {
         self.as_bytes() / 1000
     }
 
-    pub fn from_megabits(mbits: u64) -> Self {
+    pub const fn from_megabits(mbits: u64) -> Self {
         Self::from_kilobits(mbits * 1000)
     }
 
@@ -104,7 +104,7 @@ impl DataSize {
         self.as_kilobits() / 1000
     }
 
-    pub fn from_megabytes(mbytes: u64) -> Self {
+    pub const fn from_megabytes(mbytes: u64) -> Self {
         Self::from_kilobytes(mbytes * 1000)
     }
 

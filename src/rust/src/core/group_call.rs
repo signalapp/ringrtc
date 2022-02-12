@@ -564,9 +564,23 @@ const RTP_DATA_TO_SFU_SSRC: rtp::Ssrc = 1;
 // It looks like the bandwidth estimator will only probe up to 100kbps,
 // but that's better than nothing.  It appears to take 26 seconds to
 // ramp all the way up, though.
-const ALL_ALONE_MAX_SEND_RATE_KBPS: u64 = 1;
+const ALL_ALONE_MAX_SEND_RATE: DataRate = DataRate::from_kbps(1);
 
-const NORMAL_MAX_RECEIVE_RATE_KBPS: u64 = 20_000;
+const SMALL_CALL_MAX_SEND_RATE: DataRate = DataRate::from_kbps(1000);
+
+// This is the smallest rate at which WebRTC seems to still send VGA.
+const LARGE_CALL_MAX_SEND_RATE: DataRate = DataRate::from_kbps(671);
+
+// Use a higher bitrate for screen sharing
+const SCREENSHARE_MIN_SEND_RATE: DataRate = DataRate::from_mbps(2);
+const SCREENSHARE_START_SEND_RATE: DataRate = DataRate::from_mbps(2);
+const SCREENSHARE_MAX_SEND_RATE: DataRate = DataRate::from_mbps(5);
+
+const AUDIO_ONLY_MAX_RECEIVE_RATE: DataRate = DataRate::from_kbps(1);
+
+const LOW_MAX_RECEIVE_RATE: DataRate = DataRate::from_kbps(500);
+
+const NORMAL_MAX_RECEIVE_RATE: DataRate = DataRate::from_mbps(20);
 
 // The time between when a sender generates a new media send key
 // and applies it.  It needs to be big enough that there is
@@ -924,7 +938,7 @@ impl Client {
 
                     send_rates: SendRates::default(),
                     // If the client never calls set_bandwidth_mode, use the normal max receive rate.
-                    max_receive_rate: Some(DataRate::from_kbps(NORMAL_MAX_RECEIVE_RATE_KBPS)),
+                    max_receive_rate: Some(NORMAL_MAX_RECEIVE_RATE),
                     forwarding_video_demux_ids: HashSet::default(),
 
                     cancellable_initial_ring: None,
@@ -1497,12 +1511,9 @@ impl Client {
             );
 
             state.max_receive_rate = Some(match bandwidth_mode {
-                // Effectively force audio-only
-                BandwidthMode::VeryLow => DataRate::from_kbps(1),
-                // Effectively only allow one low quality video
-                BandwidthMode::Low => DataRate::from_kbps(500),
-                // Effectively allow a lot of video 
-                BandwidthMode::Normal => DataRate::from_kbps(NORMAL_MAX_RECEIVE_RATE_KBPS),
+                BandwidthMode::VeryLow => AUDIO_ONLY_MAX_RECEIVE_RATE,
+                BandwidthMode::Low => LOW_MAX_RECEIVE_RATE,
+                BandwidthMode::Normal => NORMAL_MAX_RECEIVE_RATE,
             });
             if !state.on_demand_video_request_sent_since_last_heartbeat {
                 Self::send_video_requests_to_sfu(state);
@@ -1513,7 +1524,7 @@ impl Client {
 
     fn set_send_rates_inner(state: &mut State, send_rates: SendRates) {
         if state.send_rates != send_rates {
-            if send_rates.max == Some(DataRate::from_kbps(ALL_ALONE_MAX_SEND_RATE_KBPS)) {
+            if send_rates.max == Some(ALL_ALONE_MAX_SEND_RATE) {
                 info!(
                     "Disable audio render and outgoing media because there are no other devices."
                 );
@@ -1743,7 +1754,7 @@ impl Client {
                         Self::set_send_rates_inner(
                             state,
                             SendRates {
-                                max: Some(DataRate::from_kbps(ALL_ALONE_MAX_SEND_RATE_KBPS)),
+                                max: Some(ALL_ALONE_MAX_SEND_RATE),
                                 ..SendRates::default()
                             },
                         );
@@ -2138,27 +2149,22 @@ impl Client {
 
     // Returns (min, start, max)
     fn compute_send_rates(joined_member_count: usize, sharing_screen: bool) -> SendRates {
-        let from_kbps = |kbps| Some(DataRate::from_kbps(kbps));
         match (joined_member_count, sharing_screen) {
-            // No one is here, so push it down as low as WebRTC will let us.
             (0, _) => SendRates {
-                max: from_kbps(ALL_ALONE_MAX_SEND_RATE_KBPS),
+                max: Some(ALL_ALONE_MAX_SEND_RATE),
                 ..SendRates::default()
             },
-            // Use a higher bitrate for screen sharing
             (_, true) => SendRates {
-                min: from_kbps(2000),
-                start: from_kbps(2000),
-                max: from_kbps(5000),
+                min: Some(SCREENSHARE_MIN_SEND_RATE),
+                start: Some(SCREENSHARE_START_SEND_RATE),
+                max: Some(SCREENSHARE_MAX_SEND_RATE),
             },
-            // Send between 500kbps and 1Mbps depending on how many other devices there are.
-            // The more there are, the less we will send.
             (1..=7, _) => SendRates {
-                max: from_kbps(1000),
+                max: Some(SMALL_CALL_MAX_SEND_RATE),
                 ..SendRates::default()
             },
             _ => SendRates {
-                max: from_kbps(500),
+                max: Some(LARGE_CALL_MAX_SEND_RATE),
                 ..SendRates::default()
             },
         }
@@ -4594,7 +4600,7 @@ mod tests {
                             height: Some(0),
                         },
                     ],
-                    max_kbps: Some(NORMAL_MAX_RECEIVE_RATE_KBPS as u32),
+                    max_kbps: Some(NORMAL_MAX_RECEIVE_RATE.as_kbps() as u32),
                 }),
                 ..Default::default()
             },
@@ -5221,7 +5227,7 @@ mod tests {
             Some(SendRates {
                 min: None,
                 start: None,
-                max: Some(DataRate::from_kbps(500)),
+                max: Some(DataRate::from_kbps(671)),
             }),
             client1.observer.send_rates()
         );
@@ -5243,7 +5249,7 @@ mod tests {
             Some(SendRates {
                 min: None,
                 start: None,
-                max: Some(DataRate::from_kbps(500)),
+                max: Some(DataRate::from_kbps(671)),
             }),
             client1.observer.send_rates()
         );
