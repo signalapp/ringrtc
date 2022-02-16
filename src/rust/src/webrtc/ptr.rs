@@ -54,6 +54,7 @@ impl<T> Owned<T> {
     // All convenience methods below
 
     /// Null-out the existing value.
+    #[must_use]
     pub fn take(&mut self) -> Self {
         std::mem::replace(self, Self::null())
     }
@@ -170,6 +171,7 @@ impl<T: RefCounted> OwnedRc<T> {
     // All convenience methods below
 
     /// Null-out the existing value.
+    #[must_use]
     pub fn take(&mut self) -> Self {
         std::mem::replace(self, Self::null())
     }
@@ -275,6 +277,7 @@ impl<T: Delete> Unique<T> {
     // All convenience methods below
 
     /// Null-out the existing value.
+    #[must_use]
     pub fn take(&mut self) -> Self {
         Self::from(self.take_owned())
     }

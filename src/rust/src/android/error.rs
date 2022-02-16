@@ -24,30 +24,25 @@ pub fn throw_error(env: &JNIEnv, error: Error) {
     if env.exception_check().is_ok() {
         if let Ok(exception) = env.exception_occurred() {
             if env.exception_clear().is_ok() {
-                let java_exception: String;
-                match env.call_method(
+                let java_exception = match env.call_method(
                     JObject::from(exception),
                     "toString",
                     jni_signature!(() -> java.lang.String),
                     &[],
                 ) {
                     Ok(v) => {
-                        java_exception = {
-                            if let Ok(jstring) = v.l() {
-                                if let Ok(rstring) = env.get_string(jstring.into()) {
-                                    rstring.into()
-                                } else {
-                                    String::from("unknown -- unable to decode exception")
-                                }
+                        if let Ok(jstring) = v.l() {
+                            if let Ok(rstring) = env.get_string(jstring.into()) {
+                                rstring.into()
                             } else {
                                 String::from("unknown -- unable to decode exception")
                             }
+                        } else {
+                            String::from("unknown -- unable to decode exception")
                         }
                     }
-                    Err(_) => {
-                        java_exception = String::from("unknown -- unable to decode exception")
-                    }
-                }
+                    Err(_) => String::from("unknown -- unable to decode exception"),
+                };
 
                 let _ = env.throw_new(
                     CALL_EXCEPTION_CLASS,

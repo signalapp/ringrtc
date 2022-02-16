@@ -95,6 +95,7 @@ pub struct VideoFrameMetadata {
 }
 
 impl VideoFrameMetadata {
+    #[must_use]
     pub fn apply_rotation(&self) -> Self {
         match self.rotation {
             VideoRotation::None | VideoRotation::Clockwise180 => Self {
@@ -148,6 +149,7 @@ impl VideoFrame {
         self.metadata.height
     }
 
+    #[must_use]
     pub fn apply_rotation(self) -> Self {
         if self.metadata.rotation == VideoRotation::None {
             return self;

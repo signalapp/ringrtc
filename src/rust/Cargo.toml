@@ -62,7 +62,7 @@ neon = { version = "0.9.1", optional = true, default-features = false, features 
 jni = { version = "0.19.0", optional = true, default-features = false }
 
 # Optional, needed by the "http" feature
-ureq = { version = "2.2", optional = true }
+ureq = { version = "=2.2", optional = true }
 rustls = { version = "0.19.1", optional = true, features = ["dangerous_configuration"] }
 webpki = { version = "0.21", optional = true }
 
