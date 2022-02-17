@@ -5,7 +5,7 @@
 
 //! Platform trait describing the interface an operating system platform must
 /// implement for calling.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::time::Duration;
 
@@ -207,15 +207,7 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         update: group_call::RingUpdate,
     );
 
-    fn handle_peek_response(
-        &self,
-        request_id: u32,
-        joined_members: &[group_call::UserId],
-        creator: Option<group_call::UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
-    );
+    fn handle_peek_response(&self, request_id: u32, peek_info: group_call::PeekInfo);
 
     fn request_membership_proof(&self, client_id: group_call::ClientId);
 
@@ -257,11 +249,8 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        joined_members: &[group_call::UserId],
-        creator: Option<group_call::UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: &group_call::PeekInfo,
+        joined_members: &HashSet<group_call::UserId>,
     );
 
     fn handle_audio_levels(

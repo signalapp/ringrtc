@@ -5,7 +5,7 @@
 
 //! Simulation CallPlatform Interface.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -565,24 +565,13 @@ impl Platform for SimPlatform {
     fn handle_peek_changed(
         &self,
         _client_id: group_call::ClientId,
-        _joined_members: &[group_call::UserId],
-        _creator: Option<group_call::UserId>,
-        _era_id: Option<&str>,
-        _max_devices: Option<u32>,
-        _device_count: u32,
+        _peek_info: &group_call::PeekInfo,
+        _joined_members: &HashSet<group_call::UserId>,
     ) {
         unimplemented!()
     }
 
-    fn handle_peek_response(
-        &self,
-        _request_id: u32,
-        _joined_members: &[group_call::UserId],
-        _creator: Option<group_call::UserId>,
-        _era_id: Option<&str>,
-        _max_devices: Option<u32>,
-        _device_count: u32,
-    ) {
+    fn handle_peek_response(&self, _request_id: u32, _peek_info: group_call::PeekInfo) {
         unimplemented!()
     }
 

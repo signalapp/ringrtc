@@ -5,7 +5,7 @@
 
 //! iOS Platform
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::fmt;
 use std::sync::Arc;
@@ -554,19 +554,26 @@ impl Platform for IosPlatform {
         );
     }
 
-    fn handle_peek_response(
-        &self,
-        request_id: u32,
-        joined_members: &[group_call::UserId],
-        creator: Option<group_call::UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
-    ) {
+    fn handle_peek_response(&self, request_id: u32, peek_info: group_call::PeekInfo) {
+        let group_call::PeekInfo {
+            devices,
+            creator,
+            era_id,
+            max_devices,
+            device_count,
+        } = peek_info;
+
+        // We use a HashSet because the client expects a unique list of users,
+        // and there can be multiple devices from the same user.
+        let joined_members: HashSet<group_call::UserId> = devices
+            .into_iter()
+            .filter_map(|device| device.user_id)
+            .collect();
+
         let mut app_joined_members: Vec<AppByteSlice> = Vec::new();
 
         for member in joined_members {
-            let app_joined_member = app_slice_from_bytes(Some(member));
+            let app_joined_member = app_slice_from_bytes(Some(&member));
             app_joined_members.push(app_joined_member);
         }
 
@@ -576,7 +583,6 @@ impl Platform for IosPlatform {
         };
 
         let app_creator = app_slice_from_bytes(creator.as_ref());
-        let era_id = era_id.map(String::from);
         let app_era_id = app_slice_from_str(era_id.as_ref());
 
         let app_max_devices = app_option_from_u32(max_devices);
@@ -726,11 +732,8 @@ impl Platform for IosPlatform {
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        joined_members: &[group_call::UserId],
-        creator: Option<group_call::UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: &group_call::PeekInfo,
+        joined_members: &HashSet<group_call::UserId>,
     ) {
         let mut app_joined_members: Vec<AppByteSlice> = Vec::new();
 
@@ -744,11 +747,10 @@ impl Platform for IosPlatform {
             count: app_joined_members.len(),
         };
 
-        let app_creator = app_slice_from_bytes(creator.as_ref());
-        let era_id = era_id.map(String::from);
-        let app_era_id = app_slice_from_str(era_id.as_ref());
+        let app_creator = app_slice_from_bytes(peek_info.creator.as_ref());
+        let app_era_id = app_slice_from_str(peek_info.era_id.as_ref());
 
-        let app_max_devices = app_option_from_u32(max_devices);
+        let app_max_devices = app_option_from_u32(peek_info.max_devices);
 
         (self.app_interface.handlePeekChanged)(
             self.app_interface.object,
@@ -757,7 +759,7 @@ impl Platform for IosPlatform {
             app_creator,
             app_era_id,
             app_max_devices,
-            device_count,
+            peek_info.device_count,
         );
     }
 

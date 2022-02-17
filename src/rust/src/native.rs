@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::time::Duration;
 
@@ -238,19 +238,11 @@ pub enum GroupUpdate {
     RemoteDeviceStatesChanged(group_call::ClientId, Vec<group_call::RemoteDeviceState>),
     PeekChanged {
         client_id: group_call::ClientId,
-        members: Vec<group_call::UserId>,
-        creator: Option<group_call::UserId>,
-        era_id: Option<String>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: group_call::PeekInfo,
     },
     PeekResponse {
         request_id: u32,
-        members: Vec<group_call::UserId>,
-        creator: Option<group_call::UserId>,
-        era_id: Option<String>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: group_call::PeekInfo,
     },
     Ended(group_call::ClientId, group_call::EndReason),
     Ring {
@@ -917,27 +909,20 @@ impl Platform for NativePlatform {
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        joined_members: &[group_call::UserId],
-        creator: Option<group_call::UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: &group_call::PeekInfo,
+        _joined_members: &HashSet<group_call::UserId>,
     ) {
         info!(
             "NativePlatform::handle_peek_changed(): id: {}, era_id: {:?}, max_devices: {:?}, device_count: {}",
             client_id,
-            era_id,
-            max_devices,
-            device_count
+            peek_info.era_id,
+            peek_info.max_devices,
+            peek_info.device_count
         );
 
         let result = self.send_group_update(GroupUpdate::PeekChanged {
             client_id,
-            members: joined_members.to_vec(),
-            creator,
-            era_id: era_id.map(String::from),
-            max_devices,
-            device_count,
+            peek_info: peek_info.clone(),
         });
         if result.is_err() {
             error!("{:?}", result.err());
@@ -945,24 +930,12 @@ impl Platform for NativePlatform {
     }
 
     // Response of peek_group_call without group_call::Client
-    fn handle_peek_response(
-        &self,
-        request_id: u32,
-        joined_members: &[group_call::UserId],
-        creator: Option<group_call::UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
-    ) {
+    fn handle_peek_response(&self, request_id: u32, peek_info: group_call::PeekInfo) {
         info!("NativePlatform::handle_peek_response(): id: {}", request_id,);
 
         let result = self.send_group_update(GroupUpdate::PeekResponse {
             request_id,
-            members: joined_members.to_vec(),
-            creator,
-            era_id: era_id.map(String::from),
-            max_devices,
-            device_count,
+            peek_info,
         });
         if result.is_err() {
             error!("{:?}", result.err());

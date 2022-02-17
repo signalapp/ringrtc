@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 
@@ -17,8 +17,8 @@ use ringrtc::{
     core::{
         call_mutex::CallMutex,
         group_call::{
-            self, ClientId, ConnectionState, DemuxId, EndReason, JoinState, RemoteDeviceState,
-            RemoteDevicesChangedReason, UserId,
+            self, ClientId, ConnectionState, DemuxId, EndReason, JoinState, PeekInfo,
+            RemoteDeviceState, RemoteDevicesChangedReason, UserId,
         },
         http_client,
         sfu_client::SfuClient,
@@ -152,15 +152,16 @@ impl group_call::Observer for Observer {
     fn handle_peek_changed(
         &self,
         _client_id: ClientId,
-        joined_members: &[UserId],
-        creator: Option<UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: &PeekInfo,
+        _joined_members: &HashSet<UserId>,
     ) {
         info!(
-            "Peek info changed to joined: {:?} creator: {:?}, era: {:?} devices: {:?}/{:?}",
-            joined_members, creator, era_id, device_count, max_devices
+            "Peek info changed to creator: {:?}, era: {:?} devices: {:?}/{:?} {:?}",
+            peek_info.creator,
+            peek_info.era_id,
+            peek_info.device_count,
+            peek_info.max_devices,
+            peek_info.devices,
         );
     }
 

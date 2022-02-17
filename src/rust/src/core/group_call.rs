@@ -216,11 +216,10 @@ pub trait Observer {
     fn handle_peek_changed(
         &self,
         client_id: ClientId,
-        joined_members: &[UserId],
-        creator: Option<UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: &PeekInfo,
+        // We use a HashSet because the client expects a unique list of users,
+        // and there can be multiple devices from the same user.
+        joined_members: &HashSet<UserId>,
     );
 
     // This is separate from handle_remote_devices_changed because everything else
@@ -1966,15 +1965,9 @@ impl Client {
             _ => None,
         };
         if old_user_ids != new_user_ids || old_era_id != peek_info.era_id {
-            let joined_members: Vec<UserId> = new_user_ids.iter().cloned().collect();
-            state.observer.handle_peek_changed(
-                state.client_id,
-                &joined_members,
-                peek_info.creator.clone(),
-                peek_info.era_id.as_deref(),
-                peek_info.max_devices,
-                peek_info.device_count,
-            )
+            state
+                .observer
+                .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
         }
 
         let peek_info_to_remember = peek_info.clone();
@@ -2068,14 +2061,10 @@ impl Client {
             }
 
             if new_user_ids != old_user_ids {
-                let joined_members: Vec<UserId> = new_user_ids.iter().cloned().collect();
                 state.observer.handle_peek_changed(
                     state.client_id,
-                    &joined_members,
-                    peek_info.creator.clone(),
-                    peek_info.era_id.as_deref(),
-                    peek_info.max_devices,
-                    peek_info.device_count,
+                    &peek_info_to_remember,
+                    &new_user_ids,
                 )
             }
             // If someone was added, we must advance the send media key
@@ -3588,21 +3577,18 @@ mod tests {
         fn handle_peek_changed(
             &self,
             _client_id: ClientId,
-            joined_members: &[UserId],
-            creator: Option<UserId>,
-            era_id: Option<&str>,
-            max_devices: Option<u32>,
-            device_count: u32,
+            peek_info: &PeekInfo,
+            joined_members: &HashSet<UserId>,
         ) {
             let mut owned_state = self
                 .peek_state
                 .lock()
                 .expect("Lock peek state to handle update");
-            owned_state.joined_members = joined_members.to_vec();
-            owned_state.creator = creator;
-            owned_state.era_id = era_id.map(String::from);
-            owned_state.max_devices = max_devices;
-            owned_state.device_count = device_count;
+            owned_state.joined_members = joined_members.iter().cloned().collect();
+            owned_state.creator = peek_info.creator.clone();
+            owned_state.era_id = peek_info.era_id.clone();
+            owned_state.max_devices = peek_info.max_devices;
+            owned_state.device_count = peek_info.device_count;
         }
 
         fn handle_send_rates_changed(&self, _client_id: ClientId, send_rates: SendRates) {
@@ -4394,19 +4380,33 @@ mod tests {
 
         // Temporary clear the observer state so we can verify we don't get a
         // callback when nothing changes.
-        peeker
-            .observer
-            .handle_peek_changed(0, &[], None, None, None, 0);
+        peeker.observer.handle_peek_changed(
+            0,
+            &PeekInfo {
+                creator: None,
+                era_id: None,
+                devices: vec![],
+                device_count: 0,
+                max_devices: None,
+            },
+            &HashSet::default(),
+        );
         assert_eq!(0, peeker.observer.joined_members().len());
         peeker.set_remotes_and_wait_until_applied(&[&joiner1, &joiner2]);
         assert_eq!(0, peeker.observer.joined_members().len());
         peeker.observer.handle_peek_changed(
             0,
-            &[joiner1.user_id.clone(), joiner2.user_id.clone()],
-            None,
-            None,
-            None,
-            3,
+            &PeekInfo {
+                creator: None,
+                era_id: None,
+                devices: vec![],
+                device_count: 3,
+                max_devices: None,
+            },
+            &([joiner1.user_id.clone(), joiner2.user_id.clone()]
+                .iter()
+                .cloned()
+                .collect()),
         );
 
         peeker.set_remotes_and_wait_until_applied(&[]);

@@ -2458,22 +2458,16 @@ where
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        joined_members: &[group_call::UserId],
-        creator: Option<group_call::UserId>,
-        era_id: Option<&str>,
-        max_devices: Option<u32>,
-        device_count: u32,
+        peek_info: &group_call::PeekInfo,
+        joined_members: &HashSet<group_call::UserId>,
     ) {
         info!("handle_peek_changed():");
         platform_handler!(
             self,
             handle_peek_changed,
             client_id,
-            joined_members,
-            creator,
-            era_id,
-            max_devices,
-            device_count
+            peek_info,
+            joined_members
         );
     }
 
@@ -2574,30 +2568,9 @@ where
                 info!("handle_peek_response");
 
                 // Treat failures the same as peeking into empty calls.
-                let group_call::PeekInfo {
-                    devices,
-                    creator,
-                    era_id,
-                    max_devices,
-                    device_count,
-                } = peek_info.unwrap_or_default();
+                let peek_info = peek_info.unwrap_or_default();
 
-                let members: HashSet<group_call::UserId> = devices
-                    .into_iter()
-                    .filter_map(|device| device.user_id)
-                    .collect();
-                let members: Vec<group_call::UserId> = members.into_iter().collect();
-
-                platform_handler!(
-                    call_manager,
-                    handle_peek_response,
-                    request_id,
-                    &members[..],
-                    creator,
-                    era_id.as_deref(),
-                    max_devices,
-                    device_count
-                );
+                platform_handler!(call_manager, handle_peek_response, request_id, peek_info);
             }),
         );
     }

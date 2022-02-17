@@ -2042,6 +2042,10 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         group_call::JoinState::Joined(_) => 2,
                     })
                     .upcast(),
+                    match join_state {
+                        group_call::JoinState::Joined(demux_id) => cx.number(demux_id).upcast(),
+                        _ => cx.null().upcast(),
+                    },
                 ];
                 let error_message = format!("{} is a function", method_name);
                 let method = *observer
@@ -2133,24 +2137,28 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
             Event::GroupUpdate(GroupUpdate::PeekChanged {
                 client_id,
-                members,
-                creator,
-                era_id,
-                max_devices,
-                device_count,
+                peek_info,
             }) => {
+                let group_call::PeekInfo {
+                    devices,
+                    creator,
+                    era_id,
+                    max_devices,
+                    device_count,
+                } = peek_info;
+
                 let method_name = "handlePeekChanged";
 
-                let js_members = JsArray::new(&mut cx, members.len() as u32);
-                for (i, member) in members.iter().enumerate() {
-                    let member: neon::handle::Handle<JsValue> = {
-                        let mut js_member = cx.buffer(member.len() as u32)?;
-                        cx.borrow_mut(&mut js_member, |handle| {
-                            handle.as_mut_slice().copy_from_slice(member.as_ref());
-                        });
-                        js_member.upcast()
-                    };
-                    js_members.set(&mut cx, i as u32, member)?;
+                let js_devices = JsArray::new(&mut cx, devices.len() as u32);
+                for (i, device) in devices.into_iter().enumerate() {
+                    let js_device = cx.empty_object();
+                    let js_demux_id = cx.number(device.demux_id);
+                    js_device.set(&mut cx, "demuxId", js_demux_id)?;
+                    if let Some(user_id) = device.user_id {
+                        let js_user_id = to_js_buffer(&mut cx, &user_id);
+                        js_device.set(&mut cx, "userId", js_user_id)?;
+                    }
+                    js_devices.set(&mut cx, i as u32, js_device)?;
                 }
                 let js_creator: neon::handle::Handle<JsValue> = match creator {
                     Some(creator) => to_js_buffer(&mut cx, &creator).upcast(),
@@ -2167,7 +2175,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let device_count: neon::handle::Handle<JsValue> = cx.number(device_count).upcast();
 
                 let js_info = cx.empty_object();
-                js_info.set(&mut cx, "joinedMembers", js_members)?;
+                js_info.set(&mut cx, "devices", js_devices)?;
                 js_info.set(&mut cx, "creator", js_creator)?;
                 js_info.set(&mut cx, "eraId", era_id)?;
                 js_info.set(&mut cx, "maxDevices", max_devices)?;
@@ -2185,24 +2193,28 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
             Event::GroupUpdate(GroupUpdate::PeekResponse {
                 request_id,
-                members,
-                creator,
-                era_id,
-                max_devices,
-                device_count,
+                peek_info,
             }) => {
+                let group_call::PeekInfo {
+                    devices,
+                    creator,
+                    era_id,
+                    max_devices,
+                    device_count,
+                } = peek_info;
+
                 let method_name = "handlePeekResponse";
                 let js_info = cx.empty_object();
-                let js_members = JsArray::new(&mut cx, members.len() as u32);
-                for (i, member) in members.iter().enumerate() {
-                    let member: neon::handle::Handle<JsValue> = {
-                        let mut js_member = cx.buffer(member.len() as u32)?;
-                        cx.borrow_mut(&mut js_member, |handle| {
-                            handle.as_mut_slice().copy_from_slice(member.as_ref());
-                        });
-                        js_member.upcast()
-                    };
-                    js_members.set(&mut cx, i as u32, member)?;
+                let js_devices = JsArray::new(&mut cx, devices.len() as u32);
+                for (i, device) in devices.into_iter().enumerate() {
+                    let js_device = cx.empty_object();
+                    let js_demux_id = cx.number(device.demux_id);
+                    js_device.set(&mut cx, "demuxId", js_demux_id)?;
+                    if let Some(user_id) = device.user_id {
+                        let js_user_id = to_js_buffer(&mut cx, &user_id);
+                        js_device.set(&mut cx, "userId", js_user_id)?;
+                    }
+                    js_devices.set(&mut cx, i as u32, js_device)?;
                 }
                 let js_creator: neon::handle::Handle<JsValue> = match creator {
                     Some(creator) => to_js_buffer(&mut cx, &creator).upcast(),
@@ -2218,7 +2230,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 };
                 let device_count: neon::handle::Handle<JsValue> = cx.number(device_count).upcast();
 
-                js_info.set(&mut cx, "joinedMembers", js_members)?;
+                js_info.set(&mut cx, "devices", js_devices)?;
                 js_info.set(&mut cx, "creator", js_creator)?;
                 js_info.set(&mut cx, "eraId", era_id)?;
                 js_info.set(&mut cx, "maxDevices", max_devices)?;
