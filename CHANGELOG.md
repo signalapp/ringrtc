@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.19.0
+
+- Group Calls: Increase max send bitrate for large calls
+
+- Group Calls: Use v2 frontend api and remove notion of endpoint_id
+
+- Reference signalapp/webrtc@4638h
+  - Android: Add Aec3/AecM switch
+  - Windows: Workaround for multi-channel input
+
+- Android: Add aec switch and remove legacy default
+
+- Electron: Bubble up more DemuxIds
+
+- Update Rust and dependencies
+
 ## v2.18.1
 
 - Fix group call rate constant
