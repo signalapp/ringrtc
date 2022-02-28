@@ -280,7 +280,7 @@ pub struct AppReceivedAudioLevelArray {
 #[allow(non_snake_case)]
 pub struct AppGroupMemberInfo {
     pub userId: AppByteSlice,
-    pub userIdCipherText: AppByteSlice,
+    pub memberId: AppByteSlice,
 }
 
 #[repr(C)]
@@ -1080,15 +1080,15 @@ pub extern "C" fn ringrtcPeekGroupCall(
             continue;
         }
 
-        let user_id_ciphertext = byte_vec_from_app_slice(&member.userIdCipherText);
-        if user_id_ciphertext.is_none() {
+        let member_id = byte_vec_from_app_slice(&member.memberId);
+        if member_id.is_none() {
             error!("Invalid userIdCipherText");
             continue;
         }
 
         group_members.push(group_call::GroupMemberInfo {
             user_id: user_id.unwrap(),
-            user_id_ciphertext: user_id_ciphertext.unwrap(),
+            member_id: member_id.unwrap(),
         })
     }
 
@@ -1366,15 +1366,15 @@ pub extern "C" fn ringrtcSetGroupMembers(
             continue;
         }
 
-        let user_id_ciphertext = byte_vec_from_app_slice(&member.userIdCipherText);
-        if user_id_ciphertext.is_none() {
+        let member_id = byte_vec_from_app_slice(&member.memberId);
+        if member_id.is_none() {
             error!("Invalid userIdCipherText");
             continue;
         }
 
         group_members.push(group_call::GroupMemberInfo {
             user_id: user_id.unwrap(),
-            user_id_ciphertext: user_id_ciphertext.unwrap(),
+            member_id: member_id.unwrap(),
         })
     }
 

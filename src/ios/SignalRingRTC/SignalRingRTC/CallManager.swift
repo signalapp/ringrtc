@@ -800,9 +800,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         let appMembers: [AppGroupMemberInfo] = groupMembers.map { member in
             let userIdSlice = allocatedAppByteSliceFromData(maybe_data: member.userId.data)
-            let userIdCipherTextSlice = allocatedAppByteSliceFromData(maybe_data: member.userIdCipherText)
+            let memberIdSlice = allocatedAppByteSliceFromData(maybe_data: member.userIdCipherText)
 
-            return AppGroupMemberInfo(userId: userIdSlice, userIdCipherText: userIdCipherTextSlice)
+            return AppGroupMemberInfo(userId: userIdSlice, memberId: memberIdSlice)
         }
 
         // Make sure to release the allocated memory when the function exists,
@@ -820,8 +820,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
                 if appMember.userId.bytes != nil {
                     appMember.userId.bytes.deallocate()
                 }
-                if appMember.userIdCipherText.bytes != nil {
-                    appMember.userIdCipherText.bytes.deallocate()
+                if appMember.memberId.bytes != nil {
+                    appMember.memberId.bytes.deallocate()
                 }
             }
         }

@@ -61,11 +61,10 @@ pub mod device_to_sfu {
     pub mod video_request_message {
         #[derive(Clone, PartialEq, ::prost::Message)]
         pub struct VideoRequest {
-            /// Functionally the same as a DemuxId, but oddly different.
-            #[prost(uint64, optional, tag="1")]
-            pub short_device_id: ::core::option::Option<u64>,
             #[prost(uint32, optional, tag="2")]
             pub height: ::core::option::Option<u32>,
+            #[prost(fixed32, optional, tag="3")]
+            pub demux_id: ::core::option::Option<u32>,
         }
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -90,9 +89,8 @@ pub mod sfu_to_device {
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Speaker {
-        /// Functionally the same as a DemuxId, but oddly different.
-        #[prost(string, optional, tag="1")]
-        pub long_device_id: ::core::option::Option<::prost::alloc::string::String>,
+        #[prost(fixed32, optional, tag="2")]
+        pub demux_id: ::core::option::Option<u32>,
     }
     /// The resolution the SFU wants you to send to it to satisfy the requests
     /// of all of the other devices.

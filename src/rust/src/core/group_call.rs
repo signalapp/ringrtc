@@ -60,7 +60,11 @@ pub type MembershipProof = Vec<u8>;
 // User UUID plaintext
 pub type UserId = Vec<u8>;
 // User UUID cipher text within the context of the group
-pub type UserIdCiphertext = Vec<u8>;
+pub type GroupMemberId = Vec<u8>;
+// hex(sha256(GroupMemberId))
+// This is what the SFU knows and is used to communicate with the SFU.
+// It must be mapped to a UserId to be useful.
+pub type OpaqueUserId = String;
 // Each device joined to a group call is assigned a DemuxID
 // which is used for demuxing media, but also identifying
 // the device.
@@ -404,12 +408,8 @@ pub struct PeekInfo {
 #[derive(Clone, Debug)]
 pub struct PeekDeviceInfo {
     pub demux_id: DemuxId,
+    // None if we couldn't map from the opaque_user_id.
     pub user_id: Option<UserId>,
-    // These are basically the same as DemuxIds,
-    // but the SFU uses one sometimes and the other
-    // other times.
-    pub short_device_id: u64,
-    pub long_device_id: String,
 }
 
 #[repr(C)]
@@ -439,7 +439,7 @@ pub type BoxedPeekInfoHandler = Box<dyn FnOnce(Result<PeekInfo>) + Send + 'stati
 // The callbacks from the Client to the "SFU client" for the group call.
 pub trait SfuClient {
     // This should call Client.on_sfu_client_joined when the SfuClient has joined.
-    fn join(&mut self, ice_ufrag: &str, ice_pwd: &str, dhe_pub_key: [u8; 32], client: Client);
+    fn join(&mut self, ice_ufrag: &str, dhe_pub_key: [u8; 32], client: Client);
     fn peek(&mut self, handle_remote_devices: BoxedPeekInfoHandler);
 
     // Notifies the client of the new membership proof.
@@ -447,11 +447,20 @@ pub trait SfuClient {
     fn set_group_members(&mut self, members: Vec<GroupMemberInfo>);
 }
 
-// Associates a group member's UUID with their UUID ciphertext
+// Associates a group member's UserId with their GroupMemberId.
+// This is passed from the client to RingRTC to be able to create OpaqueUserIdMappings.
 #[derive(Clone, Debug)]
 pub struct GroupMemberInfo {
     pub user_id: UserId,
-    pub user_id_ciphertext: UserIdCiphertext,
+    pub member_id: GroupMemberId,
+}
+
+// Associates a group member's OpaqueUserId with either UUID.
+// This is kept by RingRTC to be able to turn an OpaqueUserId into a UserId.
+#[derive(Clone, Debug)]
+pub struct OpaqueUserIdMapping {
+    pub opaque_user_id: OpaqueUserId,
+    pub user_id: UserId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -478,8 +487,6 @@ impl From<protobuf::group_call::device_to_device::Heartbeat> for HeartbeatState 
 pub struct RemoteDeviceState {
     pub demux_id: DemuxId,
     pub user_id: UserId,
-    short_device_id: u64,
-    long_device_id: String,
     pub media_keys_received: bool,
     pub heartbeat_state: HeartbeatState,
     // The latest timestamp we received from an update to
@@ -509,18 +516,10 @@ fn as_unix_millis(t: Option<SystemTime>) -> u64 {
 }
 
 impl RemoteDeviceState {
-    fn new(
-        demux_id: DemuxId,
-        user_id: UserId,
-        short_device_id: u64,
-        long_device_id: String,
-        added_time: SystemTime,
-    ) -> Self {
+    fn new(demux_id: DemuxId, user_id: UserId, added_time: SystemTime) -> Self {
         Self {
             demux_id,
             user_id,
-            short_device_id,
-            long_device_id,
             media_keys_received: false,
             heartbeat_state: Default::default(),
             heartbeat_rtp_timestamp: None,
@@ -789,16 +788,6 @@ impl RemoteDevices {
     /// Find remote device state by demux id
     fn find_by_demux_id_mut(&mut self, demux_id: DemuxId) -> Option<&mut RemoteDeviceState> {
         self.0.iter_mut().find(|device| device.demux_id == demux_id)
-    }
-
-    /// Find remote device state by the long device id
-    fn find_by_long_device_id_mut(
-        &mut self,
-        long_device_id: &str,
-    ) -> Option<&mut RemoteDeviceState> {
-        self.0
-            .iter_mut()
-            .find(|device| device.long_device_id == *long_device_id)
     }
 
     /// Returns a set containing all the demux ids in the collection
@@ -1218,7 +1207,6 @@ impl Client {
                         state.dhe_state = DheState::start(client_secret);
                         state.sfu_client.join(
                             &state.local_ice_ufrag,
-                            &state.local_ice_pwd,
                             *client_pub_key.as_bytes(),
                             callback,
                         );
@@ -1581,7 +1569,7 @@ impl Client {
                         .find_by_demux_id(request.demux_id)
                         .map(|device| {
                             VideoRequestProto {
-                                short_device_id: Some(device.short_device_id),
+                                demux_id: Some(device.demux_id),
                                 // We use the min because the SFU does not understand the concept of video rotation
                                 // so all requests must be in terms of non-rotated video even though the apps
                                 // will request in terms of rotated video.  We assume that all video is sent over the
@@ -1998,8 +1986,6 @@ impl Client {
                     if let PeekDeviceInfo {
                         demux_id,
                         user_id: Some(user_id),
-                        short_device_id,
-                        long_device_id,
                     } = device
                     {
                         // Keep the old one, with its state, if there is one.
@@ -2007,13 +1993,7 @@ impl Client {
                             match old_remote_devices_by_id_pair.remove(&(demux_id, user_id.clone()))
                             {
                                 Some(existing_remote_device) => existing_remote_device,
-                                None => RemoteDeviceState::new(
-                                    demux_id,
-                                    user_id,
-                                    short_device_id,
-                                    long_device_id,
-                                    added_time,
-                                ),
+                                None => RemoteDeviceState::new(demux_id, user_id, added_time),
                             },
                         )
                     } else {
@@ -2741,13 +2721,10 @@ impl Client {
                 if let Ok(msg) = SfuToDevice::decode(payload) {
                     let mut handled = false;
                     if let Some(Speaker {
-                        long_device_id: Some(speaker_long_device_id),
+                        demux_id: Some(demux_id),
                     }) = &msg.speaker
                     {
-                        self.handle_speaker_received(
-                            header.timestamp,
-                            speaker_long_device_id.clone(),
-                        );
+                        self.handle_speaker_received(header.timestamp, *demux_id);
                         handled = true;
                     };
                     if let Some(DeviceJoinedOrLeft { .. }) = msg.device_joined_or_left {
@@ -2806,7 +2783,7 @@ impl Client {
         }
     }
 
-    fn handle_speaker_received(&self, timestamp: rtp::Timestamp, speaker_long_device_id: String) {
+    fn handle_speaker_received(&self, timestamp: rtp::Timestamp, demux_id: DemuxId) {
         self.actor.send(move |state| {
             if let Some(speaker_rtp_timestamp) = state.speaker_rtp_timestamp {
                 if timestamp <= speaker_rtp_timestamp {
@@ -2822,10 +2799,7 @@ impl Client {
 
             let latest_speaker_demux_id = state.remote_devices.latest_speaker_demux_id();
 
-            if let Some(speaker_device) = state
-                .remote_devices
-                .find_by_long_device_id_mut(&speaker_long_device_id)
-            {
+            if let Some(speaker_device) = state.remote_devices.find_by_demux_id_mut(demux_id) {
                 if latest_speaker_demux_id == Some(speaker_device.demux_id) {
                     debug!(
                         "Already the latest speaker demux {:?} since {:?}",
@@ -2848,7 +2822,7 @@ impl Client {
             } else {
                 debug!(
                     "Ignoring speaker change because it isn't a known remote devices: {}",
-                    speaker_long_device_id
+                    demux_id
                 );
                 // Unknown speaker device. It's probably the local device.
             }
@@ -3316,13 +3290,7 @@ mod tests {
     }
 
     impl SfuClient for FakeSfuClient {
-        fn join(
-            &mut self,
-            _ice_ufrag: &str,
-            _ice_pwd: &str,
-            _dhe_pub_key: [u8; 32],
-            client: Client,
-        ) {
+        fn join(&mut self, _ice_ufrag: &str, _dhe_pub_key: [u8; 32], client: Client) {
             client.on_sfu_client_joined(Ok(sfu_client::Joined {
                 sfu_info: self.sfu_info.clone(),
                 local_demux_id: self.local_demux_id,
@@ -3681,16 +3649,6 @@ mod tests {
         default_peek_info: PeekInfo,
     }
 
-    // Just so it's something different
-    fn demux_id_to_short_device_id(demux_id: DemuxId) -> u64 {
-        (demux_id + 1000) as u64
-    }
-
-    // Just so it's something different
-    fn demux_id_to_long_device_id(demux_id: DemuxId) -> String {
-        format!("long-{}", demux_id)
-    }
-
     impl TestClient {
         fn new(user_id: UserId, demux_id: DemuxId, forged_demux_id: Option<DemuxId>) -> Self {
             let sfu_client = FakeSfuClient::new(
@@ -3748,8 +3706,6 @@ mod tests {
                 .map(|client| PeekDeviceInfo {
                     demux_id: client.demux_id,
                     user_id: Some(client.user_id.clone()),
-                    short_device_id: demux_id_to_short_device_id(client.demux_id),
-                    long_device_id: demux_id_to_long_device_id(client.demux_id),
                 })
                 .collect();
             // Need to clone to pass over to the actor and set in observer.
@@ -3837,7 +3793,7 @@ mod tests {
 
         fn receive_speaker(&self, timestamp: u32, speaker_demux_id: DemuxId) {
             self.client
-                .handle_speaker_received(timestamp, demux_id_to_long_device_id(speaker_demux_id));
+                .handle_speaker_received(timestamp, speaker_demux_id);
             self.wait_for_client_to_process();
         }
 
@@ -4322,14 +4278,10 @@ mod tests {
                 PeekDeviceInfo {
                     demux_id: 2,
                     user_id: Some(b"2".to_vec()),
-                    short_device_id: demux_id_to_short_device_id(2),
-                    long_device_id: demux_id_to_long_device_id(2),
                 },
                 PeekDeviceInfo {
                     demux_id: 3,
                     user_id: None,
-                    short_device_id: demux_id_to_short_device_id(3),
-                    long_device_id: demux_id_to_long_device_id(3),
                 },
             ],
             creator: None,
@@ -4588,15 +4540,15 @@ mod tests {
                 video_request: Some(VideoRequestMessage {
                     requests: vec![
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            demux_id: Some(2),
                             height: Some(1080),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(3)),
+                            demux_id: Some(3),
                             height: Some(80),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(4)),
+                            demux_id: Some(4),
                             height: Some(0),
                         },
                     ],
@@ -4649,15 +4601,15 @@ mod tests {
                 video_request: Some(VideoRequestMessage {
                     requests: vec![
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            demux_id: Some(2),
                             height: Some(1080),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(3)),
+                            demux_id: Some(3),
                             height: Some(80),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(4)),
+                            demux_id: Some(4),
                             height: Some(0),
                         },
                     ],
@@ -4678,15 +4630,15 @@ mod tests {
                 video_request: Some(VideoRequestMessage {
                     requests: vec![
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            demux_id: Some(2),
                             height: Some(1080),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(3)),
+                            demux_id: Some(3),
                             height: Some(80),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(4)),
+                            demux_id: Some(4),
                             height: Some(0),
                         },
                     ],
@@ -4707,15 +4659,15 @@ mod tests {
                 video_request: Some(VideoRequestMessage {
                     requests: vec![
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(2)),
+                            demux_id: Some(2),
                             height: Some(1080),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(3)),
+                            demux_id: Some(3),
                             height: Some(80),
                         },
                         VideoRequestProto {
-                            short_device_id: Some(demux_id_to_short_device_id(4)),
+                            demux_id: Some(4),
                             height: Some(0),
                         },
                     ],
@@ -4827,11 +4779,11 @@ mod tests {
         let initial_count = client1.sfu_client.request_count();
         let user_a = GroupMemberInfo {
             user_id: b"a".to_vec(),
-            user_id_ciphertext: b"A".to_vec(),
+            member_id: b"A".to_vec(),
         };
         let user_b = GroupMemberInfo {
             user_id: b"b".to_vec(),
-            user_id_ciphertext: b"B".to_vec(),
+            member_id: b"B".to_vec(),
         };
         client1.set_remotes_and_wait_until_applied(&[]);
 
@@ -4868,8 +4820,6 @@ mod tests {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
                 user_id: None,
-                short_device_id: demux_id_to_short_device_id(2),
-                long_device_id: demux_id_to_long_device_id(2),
             }],
             device_count: 1,
             max_devices: Some(1),
@@ -4884,8 +4834,6 @@ mod tests {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
                 user_id: None,
-                short_device_id: demux_id_to_short_device_id(2),
-                long_device_id: demux_id_to_long_device_id(2),
             }],
             device_count: 1,
             max_devices: Some(2),
@@ -4904,8 +4852,6 @@ mod tests {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
                 user_id: None,
-                short_device_id: demux_id_to_short_device_id(2),
-                long_device_id: demux_id_to_long_device_id(2),
             }],
             device_count: 1,
             max_devices: Some(2),
@@ -5142,8 +5088,6 @@ mod tests {
                 PeekDeviceInfo {
                     demux_id,
                     user_id: Some(user_id.as_bytes().to_vec()),
-                    short_device_id: demux_id_to_short_device_id(demux_id),
-                    long_device_id: demux_id_to_long_device_id(demux_id),
                 }
             })
             .collect();
@@ -5628,34 +5572,6 @@ mod remote_devices_tests {
     }
 
     #[test]
-    fn find_by_long_device_id_mut_when_key_is_not_found() {
-        let device_1 = remote_device_state(1, None);
-        let device_2 = remote_device_state(2, None);
-        let device_3 = remote_device_state(3, None);
-        let absent_id = "not present".to_string();
-        let mut remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
-        let device_state = remote_devices.find_by_long_device_id_mut(&absent_id);
-        assert_eq!(None, device_state);
-    }
-
-    #[test]
-    fn find_by_long_device_id_mut_and_edit_is_persisted() {
-        let device_1 = remote_device_state(1, None);
-        let device_2 = remote_device_state(2, None);
-        let device_3 = remote_device_state(3, None);
-        let device_2_long_id = device_2.long_device_id.clone();
-        let mut remote_devices = RemoteDevices::from_iter(vec![device_1, device_2, device_3]);
-        let device_state = remote_devices
-            .find_by_long_device_id_mut(&device_2_long_id)
-            .unwrap();
-        device_state.speaker_time = Some(time(300));
-        let device_state = remote_devices
-            .find_by_long_device_id_mut(&device_2_long_id)
-            .unwrap();
-        assert_eq!(Some(time(300)), device_state.speaker_time);
-    }
-
-    #[test]
     fn demux_id_set() {
         let device_1 = remote_device_state(1, None);
         let device_2 = remote_device_state(2, None);
@@ -5672,21 +5588,12 @@ mod remote_devices_tests {
     }
 
     fn remote_device_state(id: u32, spoken_at: Option<SystemTime>) -> RemoteDeviceState {
-        let mut remote_device_state = RemoteDeviceState::new(
-            id,
-            id.to_be_bytes().to_vec(),
-            long_device_id(id),
-            format!("long-{}", id),
-            time(1),
-        );
+        let mut remote_device_state =
+            RemoteDeviceState::new(id, id.to_be_bytes().to_vec(), time(1));
 
         remote_device_state.speaker_time = spoken_at;
 
         remote_device_state
-    }
-
-    fn long_device_id(id: u32) -> u64 {
-        ((id as u64) << 32) | (id as u64)
     }
 
     #[test]

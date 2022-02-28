@@ -1442,7 +1442,7 @@ fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
             Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
             Err(_) => None,
         };
-        let user_id_ciphertext = match js_member
+        let member_id = match js_member
             .get(&mut cx, "userIdCipherText")?
             .downcast::<JsBuffer, _>(&mut cx)
         {
@@ -1450,12 +1450,9 @@ fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
             Err(_) => None,
         };
 
-        match (user_id, user_id_ciphertext) {
-            (Some(user_id), Some(user_id_ciphertext)) => {
-                members.push(group_call::GroupMemberInfo {
-                    user_id,
-                    user_id_ciphertext,
-                });
+        match (user_id, member_id) {
+            (Some(user_id), Some(member_id)) => {
+                members.push(group_call::GroupMemberInfo { user_id, member_id });
             }
             _ => {
                 warn!("Ignoring invalid GroupMemberInfo");
@@ -1514,7 +1511,7 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
             Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
             Err(_) => None,
         };
-        let user_id_ciphertext = match js_member
+        let member_id = match js_member
             .get(&mut cx, "userIdCipherText")?
             .downcast::<JsBuffer, _>(&mut cx)
         {
@@ -1522,12 +1519,9 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
             Err(_) => None,
         };
 
-        match (user_id, user_id_ciphertext) {
-            (Some(user_id), Some(user_id_ciphertext)) => {
-                members.push(group_call::GroupMemberInfo {
-                    user_id,
-                    user_id_ciphertext,
-                });
+        match (user_id, member_id) {
+            (Some(user_id), Some(member_id)) => {
+                members.push(group_call::GroupMemberInfo { user_id, member_id });
             }
             _ => {
                 warn!("Ignoring invalid GroupMemberInfo");

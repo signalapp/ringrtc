@@ -38,9 +38,8 @@
  message DeviceToSfu {
    message VideoRequestMessage {
      message VideoRequest {
-       // Functionally the same as a DemuxId, but oddly different.
-       optional uint64 short_device_id = 1;
        optional uint32 height = 2;
+       optional fixed32 demux_id = 3;
      }
    
      repeated VideoRequest requests = 1;
@@ -59,8 +58,7 @@
    }
  
    message Speaker {
-     // Functionally the same as a DemuxId, but oddly different.
-     optional string long_device_id = 1;
+     optional fixed32 demux_id = 2;
    } 
  
    // The resolution the SFU wants you to send to it to satisfy the requests

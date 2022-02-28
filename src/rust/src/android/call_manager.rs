@@ -597,7 +597,7 @@ fn deserialize_to_group_member_info(
     for chunk in serialized_group_members.chunks_exact_mut(81) {
         group_members.push(group_call::GroupMemberInfo {
             user_id: chunk[..16].into(),
-            user_id_ciphertext: chunk[16..].into(),
+            member_id: chunk[16..].into(),
         })
     }
 
