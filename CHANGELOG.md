@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.19.1
+
+- Android: Add default enum for audio processing
+
 ## v2.19.0
 
 - Group Calls: Increase max send bitrate for large calls
