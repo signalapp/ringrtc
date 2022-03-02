@@ -202,6 +202,7 @@ public class CallManager {
 
   /// Defines the method to use for audio processing of AEC and NS.
   public enum AudioProcessingMethod {
+    Default,
     ForceHardware,
     ForceSoftwareAec3,
     ForceSoftwareAecM
