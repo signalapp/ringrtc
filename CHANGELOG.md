@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.19.2
+
+- Introduce a "lite" part of RingRTC
+
 ## v2.19.1
 
 - Android: Add default enum for audio processing
