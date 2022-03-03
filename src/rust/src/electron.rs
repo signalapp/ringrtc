@@ -12,15 +12,19 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::common::{CallId, CallMediaType, DeviceId, HttpMethod, HttpResponse, Result};
+use crate::common::{CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::group_call;
-use crate::core::group_call::{GroupId, SignalingMessageUrgency, UserId};
+use crate::core::group_call::{GroupId, SignalingMessageUrgency};
 use crate::core::signaling;
+use crate::lite::{
+    http,
+    sfu::{DemuxId, GroupMember, PeekInfo, UserId},
+};
 use crate::native::{
-    CallState, CallStateHandler, EndReason, GroupUpdate, GroupUpdateHandler, HttpClient,
-    NativeCallContext, NativePlatform, PeerId, SignalingSender,
+    CallState, CallStateHandler, EndReason, GroupUpdate, GroupUpdateHandler, NativeCallContext,
+    NativePlatform, PeerId, SignalingSender,
 };
 use crate::webrtc::media::{
     AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack,
@@ -130,10 +134,7 @@ pub enum Event {
     // JavaScript should initiate an HTTP request.
     SendHttpRequest {
         request_id: u32,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
+        request: http::Request,
     },
     // The network route changed for a 1:1 call
     NetworkRouteChange(PeerId, NetworkRoute),
@@ -271,23 +272,12 @@ impl CallStateHandler for EventReporter {
     }
 }
 
-impl HttpClient for EventReporter {
-    fn send_http_request(
-        &self,
-        request_id: u32,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-    ) -> Result<()> {
-        self.send(Event::SendHttpRequest {
+impl http::Delegate for EventReporter {
+    fn send_request(&self, request_id: u32, request: http::Request) {
+        let _ = self.send(Event::SendHttpRequest {
             request_id,
-            url,
-            method,
-            headers,
-            body,
-        })?;
-        Ok(())
+            request,
+        });
     }
 }
 
@@ -393,7 +383,7 @@ impl CallEndpoint {
         let state_handler = Box::new(event_reporter.clone());
 
         // Only relevant for group calls
-        let http_client = Box::new(event_reporter.clone());
+        let http_client = http::DelegatingClient::new(event_reporter.clone());
         let group_handler = Box::new(event_reporter);
 
         let platform = NativePlatform::new(
@@ -401,10 +391,9 @@ impl CallEndpoint {
             signaling_sender,
             should_assume_messages_sent,
             state_handler,
-            http_client,
             group_handler,
         );
-        let call_manager = CallManager::new(platform)?;
+        let call_manager = CallManager::new(platform, http_client)?;
 
         Ok(Self {
             call_manager,
@@ -972,12 +961,12 @@ fn receivedHttpResponse(mut cx: FunctionContext) -> JsResult<JsValue> {
     let status_code = cx.argument::<JsNumber>(1)?.value(&mut cx) as u16;
     let body = cx.argument::<JsBuffer>(2)?;
     let body = cx.borrow(&body, |handle| handle.as_slice().to_vec());
-    let response = HttpResponse { status_code, body };
+    let response = http::Response { status_code, body };
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .call_manager
-            .received_http_response(request_id, Some(response))?;
+            .received_http_response(request_id, Some(response));
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
@@ -996,7 +985,7 @@ fn httpRequestFailed(mut cx: FunctionContext) -> JsResult<JsValue> {
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .call_manager
-            .received_http_response(request_id, None)?;
+            .received_http_response(request_id, None);
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
@@ -1106,7 +1095,7 @@ fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let _client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
-    let remote_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as group_call::DemuxId;
+    let remote_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
     let rgba_buffer = cx.argument::<JsBuffer>(2)?;
 
     let frame = with_call_endpoint(&mut cx, |endpoint| {
@@ -1379,7 +1368,7 @@ fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
             .get(&mut cx, "demuxId")?
             .downcast::<JsNumber, _>(&mut cx)
         {
-            Ok(handle) => Some(handle.value(&mut cx) as group_call::DemuxId),
+            Ok(handle) => Some(handle.value(&mut cx) as DemuxId),
             Err(_) => None,
         };
         let width = match js_resolution
@@ -1452,10 +1441,10 @@ fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
 
         match (user_id, member_id) {
             (Some(user_id), Some(member_id)) => {
-                members.push(group_call::GroupMemberInfo { user_id, member_id });
+                members.push(GroupMember { user_id, member_id });
             }
             _ => {
-                warn!("Ignoring invalid GroupMemberInfo");
+                warn!("Ignoring invalid GroupMember");
             }
         };
     }
@@ -1521,10 +1510,10 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
 
         match (user_id, member_id) {
             (Some(user_id), Some(member_id)) => {
-                members.push(group_call::GroupMemberInfo { user_id, member_id });
+                members.push(GroupMember { user_id, member_id });
             }
             _ => {
-                warn!("Ignoring invalid GroupMemberInfo");
+                warn!("Ignoring invalid GroupMember");
             }
         };
     }
@@ -1894,10 +1883,13 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
             Event::SendHttpRequest {
                 request_id,
-                url,
-                method,
-                headers,
-                body,
+                request:
+                    http::Request {
+                        method,
+                        url,
+                        headers,
+                        body,
+                    },
             } => {
                 let method_name = "sendHttpRequest";
                 // Pass headers as an object with the Fetch API. Only the last value will be sent
@@ -2133,7 +2125,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 client_id,
                 peek_info,
             }) => {
-                let group_call::PeekInfo {
+                let PeekInfo {
                     devices,
                     creator,
                     era_id,
@@ -2164,7 +2156,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 };
                 let max_devices: neon::handle::Handle<JsValue> = match max_devices {
                     None => cx.undefined().upcast(),
-                    Some(devices) => cx.number(devices).upcast(),
+                    Some(max_devices) => cx.number(max_devices).upcast(),
                 };
                 let device_count: neon::handle::Handle<JsValue> = cx.number(device_count).upcast();
 
@@ -2185,17 +2177,18 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::GroupUpdate(GroupUpdate::PeekResponse {
+            Event::GroupUpdate(GroupUpdate::PeekResult {
                 request_id,
-                peek_info,
+                peek_result,
             }) => {
-                let group_call::PeekInfo {
+                // TODO: Pass failure error codes to app.
+                let PeekInfo {
                     devices,
                     creator,
                     era_id,
                     max_devices,
                     device_count,
-                } = peek_info;
+                } = peek_result.unwrap_or_default();
 
                 let method_name = "handlePeekResponse";
                 let js_info = cx.empty_object();

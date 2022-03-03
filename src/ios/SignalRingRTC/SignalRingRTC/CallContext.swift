@@ -9,6 +9,7 @@ import SignalCoreKit
 
 // This class's member functions are all called from the CallManager class
 // on the main thread.
+@available(iOSApplicationExtension, unavailable)
 public class CallContext {
 
     // A camera queue on which to perform camera operations.
@@ -85,6 +86,7 @@ public class CallContext {
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callContextDestroy(object: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")

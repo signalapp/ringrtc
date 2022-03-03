@@ -681,11 +681,10 @@ extern "C" fn ssd_observer_OnFailure(
         err_string, err_type
     );
 
-    if ssd_observer.is_null() {
-        error!("ssd_observer_OnFailure() with null observer");
+    if let Some(ssd_observer) = unsafe { ssd_observer.as_ref() } {
+        ssd_observer.on_set_failure(err_string, err_type);
     } else {
-        unsafe { &*(ssd_observer.as_ptr() as *const SetSessionDescriptionObserver) }
-            .on_set_failure(err_string, err_type);
+        error!("ssd_observer_OnFailure() with null observer");
     }
 }
 

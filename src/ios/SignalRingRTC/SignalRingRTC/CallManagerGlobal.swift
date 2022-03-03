@@ -9,6 +9,7 @@ import SignalCoreKit
 
 // Global singleton to guarantee certain things are only invoked
 // once...
+@available(iOSApplicationExtension, unavailable)
 public class CallManagerGlobal {
 
     // CallManagerGlobal is a singleton.

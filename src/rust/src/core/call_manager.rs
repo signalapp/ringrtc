@@ -21,20 +21,22 @@ use lazy_static::lazy_static;
 use prost::Message;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DeviceId, HttpMethod,
-    HttpResponse, Result, RingBench,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DeviceId, Result, RingBench,
 };
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::group_call::Observer;
-use crate::core::http_client::HttpClient;
 use crate::core::platform::Platform;
 use crate::core::sfu_client::SfuClient;
 use crate::core::util::{uuid_to_string, TaskQueueRuntime};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::lite::{
+    http, sfu,
+    sfu::{DemuxId, GroupMember, MembershipProof, PeekInfo, UserId},
+};
 use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoSink, VideoTrack};
 use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
@@ -175,13 +177,6 @@ where
     }
 }
 
-/// Maintains the set of HTTP requests in progress, and their associated callbacks.
-type HttpResponseCallback = Box<dyn FnOnce(Option<HttpResponse>) + Send>;
-struct HttpRequestTracker {
-    response_callbacks: HashMap<u32, HttpResponseCallback>,
-    next_request_id: u32,
-}
-
 /// Information about a received group ring that hasn't yet been accepted or cancelled.
 #[derive(Debug)]
 struct OutstandingGroupRing {
@@ -202,7 +197,7 @@ where
     /// Interface to platform specific methods.
     platform: Arc<CallMutex<T>>,
     /// The current user's UUID, or None if it's unknown.
-    self_uuid: Arc<CallMutex<Option<group_call::UserId>>>,
+    self_uuid: Arc<CallMutex<Option<UserId>>>,
     /// Map of all 1:1 calls.
     call_by_call_id: Arc<CallMutex<HashMap<CallId, Call<T>>>>,
     /// CallId of the active call.
@@ -219,8 +214,8 @@ where
     worker_runtime: Arc<CallMutex<Option<TaskQueueRuntime>>>,
     /// Signaling message queue.
     message_queue: Arc<CallMutex<SignalingMessageQueue<T>>>,
-    /// Outstanding HTTP requests
-    http_request_tracker: Arc<CallMutex<HttpRequestTracker>>,
+    /// How to make HTTP requests to the SFU for group calls.
+    http_client: http::DelegatingClient,
 }
 
 impl<T> fmt::Display for CallManager<T>
@@ -284,47 +279,7 @@ where
             busy: Arc::clone(&self.busy),
             worker_runtime: Arc::clone(&self.worker_runtime),
             message_queue: Arc::clone(&self.message_queue),
-            http_request_tracker: Arc::clone(&self.http_request_tracker),
-        }
-    }
-}
-
-impl<T> HttpClient for CallManager<T>
-where
-    T: Platform,
-{
-    fn make_request(
-        &self,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-        on_response: HttpResponseCallback,
-    ) {
-        info!("make_request():");
-        debug!("  url: {} method: {:?} headers: {:?}", url, method, headers);
-        let request_id = {
-            let mut tracker = self
-                .http_request_tracker
-                .lock()
-                .expect("http_request_tracker lock");
-            let next_request_id = tracker.next_request_id;
-            tracker.next_request_id += 1;
-            tracker
-                .response_callbacks
-                .insert(next_request_id, on_response);
-            next_request_id
-        };
-        match self
-            .platform()
-            .unwrap()
-            .send_http_request(request_id, url, method, headers, body)
-        {
-            Ok(()) => {}
-            Err(e) => {
-                error!("send_http_request synchronously failed: {:?}", e);
-                // We can't call the failure callback since ownership has been transferred.
-            }
+            http_client: self.http_client.clone(),
         }
     }
 }
@@ -339,8 +294,7 @@ where
     // a) fast or b) asynchronous.
     ////////////////////////////////////////////////////////////////////////
 
-    /// Create a new CallManager.
-    pub fn new(platform: T) -> Result<Self> {
+    pub fn new(platform: T, http_client: http::DelegatingClient) -> Result<Self> {
         info!(
             "RingRTC v{}",
             option_env!("CARGO_PKG_VERSION").unwrap_or("unknown")
@@ -369,18 +323,12 @@ where
                 SignalingMessageQueue::new()?,
                 "message_queue",
             )),
-            http_request_tracker: Arc::new(CallMutex::new(
-                HttpRequestTracker {
-                    response_callbacks: HashMap::new(),
-                    next_request_id: 0,
-                },
-                "http_request_tracker",
-            )),
+            http_client,
         })
     }
 
     /// Updates the current user's UUID.
-    pub fn set_self_uuid(&mut self, uuid: group_call::UserId) -> Result<()> {
+    pub fn set_self_uuid(&mut self, uuid: UserId) -> Result<()> {
         info!("set_self_uuid():");
         *self.self_uuid.lock()? = Some(uuid);
         Ok(())
@@ -601,17 +549,13 @@ where
     }
 
     /// Received a HTTP response from the application.
-    pub fn received_http_response(
-        &mut self,
-        request_id: u32,
-        response: Option<HttpResponse>,
-    ) -> Result<()> {
-        handle_api!(
+    pub fn received_http_response(&mut self, request_id: u32, response: Option<http::Response>) {
+        let _ = handle_api!(
             self,
             CallManager::handle_received_http_response,
             request_id,
             response
-        )
+        );
     }
 
     /// Request to reset the Call Manager.
@@ -1644,7 +1588,7 @@ where
         &mut self,
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender_uuid: group_call::UserId,
+        sender_uuid: UserId,
     ) -> Result<()> {
         {
             let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
@@ -1692,38 +1636,14 @@ where
     fn handle_received_http_response(
         &mut self,
         request_id: u32,
-        response: Option<HttpResponse>,
+        response: Option<http::Response>,
     ) -> Result<()> {
         info!(
             "handle_received_http_response(): request_id: {}",
             request_id
         );
 
-        match &response {
-            Some(r) => {
-                info!("  status_code: {}", r.status_code);
-                debug!("  body: {} bytes", r.body.len())
-            }
-            None => {
-                info!("  app indicates request failure");
-            }
-        }
-
-        let callback = self
-            .http_request_tracker
-            .lock()
-            .expect("http_request_tracker lock")
-            .response_callbacks
-            .remove(&request_id);
-        if let Some(callback) = callback {
-            debug!("received_http_response(): calling registered callback");
-            callback(response);
-        } else {
-            error!(
-                "received_http_response(): received response for untracked request: {}",
-                request_id
-            );
-        }
+        self.http_client.received_response(request_id, response);
         Ok(())
     }
 
@@ -2442,7 +2362,7 @@ where
     fn handle_incoming_video_track(
         &mut self,
         client_id: group_call::ClientId,
-        remote_demux_id: group_call::DemuxId,
+        remote_demux_id: DemuxId,
         incoming_video_track: VideoTrack,
     ) {
         info!("handle_incoming_video_track():");
@@ -2458,8 +2378,8 @@ where
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        peek_info: &group_call::PeekInfo,
-        joined_members: &HashSet<group_call::UserId>,
+        peek_info: &PeekInfo,
+        joined_members: &HashSet<UserId>,
     ) {
         info!("handle_peek_changed():");
         platform_handler!(
@@ -2494,7 +2414,7 @@ where
 
     fn send_signaling_message(
         &mut self,
-        recipient: group_call::UserId,
+        recipient: UserId,
         call_message: protobuf::signaling::CallMessage,
         urgency: group_call::SignalingMessageUrgency,
     ) {
@@ -2554,25 +2474,27 @@ where
     pub fn peek_group_call(
         &self,
         request_id: u32,
-        url: String,
-        membership_proof: group_call::MembershipProof,
-        group_members: Vec<group_call::GroupMemberInfo>,
+        sfu_url: String,
+        membership_proof: MembershipProof,
+        group_members: Vec<GroupMember>,
     ) {
-        let http_client = Box::new(self.clone());
-        let mut sfu_client = SfuClient::new(http_client, url, vec![]);
-        let call_manager = self.clone();
-        sfu_client.request_joined_members(
-            membership_proof,
-            group_members,
-            Box::new(move |peek_info| {
-                info!("handle_peek_response");
-
-                // Treat failures the same as peeking into empty calls.
-                let peek_info = peek_info.unwrap_or_default();
-
-                platform_handler!(call_manager, handle_peek_response, request_id, peek_info);
-            }),
-        );
+        if let Some(auth_header) = sfu::auth_header_from_membership_proof(&membership_proof) {
+            let opaque_user_id_mappings =
+                sfu::opaque_user_id_mappings_from_group_members(&group_members);
+            let call_manager = self.clone();
+            sfu::peek(
+                &self.http_client,
+                &sfu_url,
+                auth_header,
+                opaque_user_id_mappings,
+                Box::new(move |peek_result| {
+                    info!("handle_peek_response");
+                    platform_handler!(call_manager, handle_peek_result, request_id, peek_result);
+                }),
+            );
+        } else {
+            error!("Invalid membership proof: {:?}", membership_proof);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2608,7 +2530,8 @@ where
             .get(&group_id)
             .map(|ring| ring.ring_id);
 
-        let sfu_client = SfuClient::new(Box::new(self.clone()), sfu_url, hkdf_extra_info);
+        let sfu_client =
+            SfuClient::new(Box::new(self.http_client.clone()), sfu_url, hkdf_extra_info);
         let client = group_call::Client::start(
             group_id,
             client_id,
@@ -2707,11 +2630,7 @@ where
         group_call_api_handler!(self, client_id, disconnect);
     }
 
-    pub fn group_ring(
-        &mut self,
-        client_id: group_call::ClientId,
-        recipient: Option<group_call::UserId>,
-    ) {
+    pub fn group_ring(&mut self, client_id: group_call::ClientId, recipient: Option<UserId>) {
         info!("group_ring(): id: {}", client_id);
         group_call_api_handler!(self, client_id, ring, recipient);
     }
@@ -2762,7 +2681,7 @@ where
     pub fn set_group_members(
         &mut self,
         client_id: group_call::ClientId,
-        members: Vec<group_call::GroupMemberInfo>,
+        members: Vec<GroupMember>,
     ) {
         info!("set_group_members(): id: {}", client_id);
         group_call_api_handler!(self, client_id, set_group_members, members);

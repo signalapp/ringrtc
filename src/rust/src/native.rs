@@ -3,20 +3,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
 
-use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{
-    group_call::{self, GroupId, SignalingMessageUrgency, UserId},
+    group_call::{self, GroupId, SignalingMessageUrgency},
     signaling,
+};
+use crate::lite::{
+    sfu,
+    sfu::{DemuxId, PeekInfo, PeekResult, UserId},
 };
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
@@ -126,18 +128,6 @@ pub trait CallStateHandler {
     ) -> Result<()>;
 }
 
-// Starts an HTTP request. CallManager is notified of the result via a separate callback.
-pub trait HttpClient {
-    fn send_http_request(
-        &self,
-        request_id: u32,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-    ) -> Result<()>;
-}
-
 // These are the different states a call can be in.
 // Closely tied with call_manager::ConnectionState and
 // call_manager::CallState.
@@ -238,17 +228,17 @@ pub enum GroupUpdate {
     RemoteDeviceStatesChanged(group_call::ClientId, Vec<group_call::RemoteDeviceState>),
     PeekChanged {
         client_id: group_call::ClientId,
-        peek_info: group_call::PeekInfo,
+        peek_info: PeekInfo,
     },
-    PeekResponse {
+    PeekResult {
         request_id: u32,
-        peek_info: group_call::PeekInfo,
+        peek_result: PeekResult,
     },
     Ended(group_call::ClientId, group_call::EndReason),
     Ring {
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: group_call::UserId,
+        sender: UserId,
         update: group_call::RingUpdate,
     },
     NetworkRouteChanged(group_call::ClientId, NetworkRoute),
@@ -264,7 +254,7 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::JoinStateChanged(_, _) => "JoinStateChanged".to_string(),
             GroupUpdate::RemoteDeviceStatesChanged(_, _) => "RemoteDeviceStatesChanged".to_string(),
             GroupUpdate::PeekChanged { .. } => "PeekChanged".to_string(),
-            GroupUpdate::PeekResponse { .. } => "PeekResponse".to_string(),
+            GroupUpdate::PeekResult { .. } => "PeekResult".to_string(),
             GroupUpdate::Ended(_, reason) => format!("Ended({:?})", reason),
             GroupUpdate::Ring { update, .. } => format!("Ring({:?})", update),
             GroupUpdate::NetworkRouteChanged(_, network_route) => {
@@ -294,7 +284,6 @@ pub struct NativePlatform {
     state_handler: Box<dyn CallStateHandler + Send>,
 
     // Only relevant for group calls
-    http_client: Box<dyn HttpClient + Send>,
     group_handler: Box<dyn GroupUpdateHandler + Send>,
 }
 
@@ -306,7 +295,6 @@ impl NativePlatform {
         should_assume_messages_sent: bool,
         state_handler: Box<dyn CallStateHandler + Send>,
 
-        http_client: Box<dyn HttpClient + Send>,
         group_handler: Box<dyn GroupUpdateHandler + Send>,
     ) -> Self {
         Self {
@@ -316,7 +304,6 @@ impl NativePlatform {
             should_assume_messages_sent,
             state_handler,
 
-            http_client,
             group_handler,
         }
     }
@@ -771,18 +758,6 @@ impl Platform for NativePlatform {
             .send_call_message_to_group(group_id, message, urgency)
     }
 
-    fn send_http_request(
-        &self,
-        request_id: u32,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-    ) -> Result<()> {
-        self.http_client
-            .send_http_request(request_id, url, method, headers, body)
-    }
-
     // Group Calls
 
     fn request_membership_proof(&self, client_id: group_call::ClientId) {
@@ -897,7 +872,7 @@ impl Platform for NativePlatform {
     fn handle_incoming_video_track(
         &self,
         client_id: group_call::ClientId,
-        remote_demux_id: group_call::DemuxId,
+        remote_demux_id: DemuxId,
         _incoming_video_track: VideoTrack,
     ) {
         info!(
@@ -909,33 +884,20 @@ impl Platform for NativePlatform {
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        peek_info: &group_call::PeekInfo,
-        _joined_members: &HashSet<group_call::UserId>,
+        peek_info: &PeekInfo,
+        _joined_members: &HashSet<UserId>,
     ) {
         info!(
             "NativePlatform::handle_peek_changed(): id: {}, era_id: {:?}, max_devices: {:?}, device_count: {}",
             client_id,
             peek_info.era_id,
             peek_info.max_devices,
-            peek_info.device_count
+            peek_info.devices.len()
         );
 
         let result = self.send_group_update(GroupUpdate::PeekChanged {
             client_id,
             peek_info: peek_info.clone(),
-        });
-        if result.is_err() {
-            error!("{:?}", result.err());
-        }
-    }
-
-    // Response of peek_group_call without group_call::Client
-    fn handle_peek_response(&self, request_id: u32, peek_info: group_call::PeekInfo) {
-        info!("NativePlatform::handle_peek_response(): id: {}", request_id,);
-
-        let result = self.send_group_update(GroupUpdate::PeekResponse {
-            request_id,
-            peek_info,
         });
         if result.is_err() {
             error!("{:?}", result.err());
@@ -955,7 +917,7 @@ impl Platform for NativePlatform {
         &self,
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: group_call::UserId,
+        sender: UserId,
         update: group_call::RingUpdate,
     ) {
         info!("NativePlatform::group_call_ring_update(): id: {}", ring_id);
@@ -965,6 +927,20 @@ impl Platform for NativePlatform {
             ring_id,
             sender,
             update,
+        });
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+}
+
+impl sfu::Delegate for NativePlatform {
+    fn handle_peek_result(&self, request_id: u32, peek_result: PeekResult) {
+        info!("NativePlatform::handle_peek_result(): id: {}", request_id);
+
+        let result = self.send_group_update(GroupUpdate::PeekResult {
+            request_id,
+            peek_result,
         });
         if result.is_err() {
             error!("{:?}", result.err());

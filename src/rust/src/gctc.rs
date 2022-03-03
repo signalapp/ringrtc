@@ -10,18 +10,18 @@ use std::sync::{Arc, Mutex};
 use log::info;
 
 use ringrtc::{
-    common::{
-        actor::{Actor, Stopper},
-        HttpMethod, HttpResponse,
-    },
+    common::actor::{Actor, Stopper},
     core::{
         call_mutex::CallMutex,
         group_call::{
-            self, ClientId, ConnectionState, DemuxId, EndReason, JoinState, PeekInfo,
-            RemoteDeviceState, RemoteDevicesChangedReason, UserId,
+            self, ClientId, ConnectionState, EndReason, JoinState, RemoteDeviceState,
+            RemoteDevicesChangedReason,
         },
-        http_client,
         sfu_client::SfuClient,
+    },
+    lite::{
+        http,
+        sfu::{DemuxId, PeekInfo, UserId},
     },
     protobuf,
     webrtc::{
@@ -44,15 +44,15 @@ impl HttpClient {
     }
 }
 
-impl http_client::HttpClient for HttpClient {
-    fn make_request(
-        &self,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-        on_response: Box<dyn FnOnce(Option<HttpResponse>) + Send>,
-    ) {
+impl http::Client for HttpClient {
+    fn send_request(&self, request: http::Request, response_callback: http::ResponseCallback) {
+        let http::Request {
+            method,
+            url,
+            headers,
+            body,
+        } = request;
+
         self.actor.send(move |_| {
             let mut tls_config = rustls::ClientConfig::new();
             tls_config
@@ -61,10 +61,10 @@ impl http_client::HttpClient for HttpClient {
             let agent = ureq::builder().tls_config(Arc::new(tls_config)).build();
 
             let mut request = match method {
-                HttpMethod::Get => agent.get(&url),
-                HttpMethod::Put => agent.put(&url),
-                HttpMethod::Delete => agent.delete(&url),
-                HttpMethod::Post => agent.post(&url),
+                http::Method::Get => agent.get(&url),
+                http::Method::Put => agent.put(&url),
+                http::Method::Delete => agent.delete(&url),
+                http::Method::Post => agent.post(&url),
             };
             for (key, value) in headers.iter() {
                 request = request.set(key, value);
@@ -78,21 +78,21 @@ impl http_client::HttpClient for HttpClient {
                     let status_code = response.status();
                     let mut body = Vec::new();
                     if response.into_reader().read_to_end(&mut body).is_ok() {
-                        on_response(Some(HttpResponse { status_code, body }));
+                        response_callback(Some(http::Response { status_code, body }));
                     } else {
-                        on_response(None);
+                        response_callback(None);
                     }
                 }
                 Err(ureq::Error::Status(status_code, response)) => {
                     let mut body = Vec::new();
                     if response.into_reader().read_to_end(&mut body).is_ok() {
-                        on_response(Some(HttpResponse { status_code, body }));
+                        response_callback(Some(http::Response { status_code, body }));
                     } else {
-                        on_response(None);
+                        response_callback(None);
                     }
                 }
                 Err(ureq::Error::Transport(_)) => {
-                    on_response(None);
+                    response_callback(None);
                 }
             }
         });

@@ -11,15 +11,17 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
+use crate::lite::{
+    sfu,
+    sfu::{DemuxId, PeekInfo, PeekResult, UserId},
+};
 use crate::sim::error::SimError;
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel};
@@ -67,13 +69,13 @@ struct SimStats {
 pub struct GroupCallRingUpdate {
     pub group_id: group_call::GroupId,
     pub ring_id: group_call::RingId,
-    pub sender: group_call::UserId,
+    pub sender: UserId,
     pub update: group_call::RingUpdate,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct OutgoingCallMessage {
-    pub recipient: group_call::UserId,
+    pub recipient: UserId,
     pub message: Vec<u8>,
     pub urgency: group_call::SignalingMessageUrgency,
 }
@@ -407,18 +409,6 @@ impl Platform for SimPlatform {
         unimplemented!()
     }
 
-    fn send_http_request(
-        &self,
-        _request_id: u32,
-        _url: String,
-        _method: HttpMethod,
-        _headers: HashMap<String, String>,
-        _body: Option<Vec<u8>>,
-    ) -> Result<()> {
-        // Do nothing.
-        Ok(())
-    }
-
     fn create_incoming_media(
         &self,
         _connection: &Connection<Self>,
@@ -556,7 +546,7 @@ impl Platform for SimPlatform {
     fn handle_incoming_video_track(
         &self,
         _client_id: group_call::ClientId,
-        _remote_demux_id: group_call::DemuxId,
+        _remote_demux_id: DemuxId,
         _incoming_video_track: VideoTrack,
     ) {
         unimplemented!()
@@ -565,13 +555,9 @@ impl Platform for SimPlatform {
     fn handle_peek_changed(
         &self,
         _client_id: group_call::ClientId,
-        _peek_info: &group_call::PeekInfo,
-        _joined_members: &HashSet<group_call::UserId>,
+        _peek_info: &PeekInfo,
+        _joined_members: &HashSet<UserId>,
     ) {
-        unimplemented!()
-    }
-
-    fn handle_peek_response(&self, _request_id: u32, _peek_info: group_call::PeekInfo) {
         unimplemented!()
     }
 
@@ -583,7 +569,7 @@ impl Platform for SimPlatform {
         &self,
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: group_call::UserId,
+        sender: UserId,
         update: group_call::RingUpdate,
     ) {
         self.group_call_ring_updates
@@ -595,6 +581,12 @@ impl Platform for SimPlatform {
                 sender,
                 update,
             });
+    }
+}
+
+impl sfu::Delegate for SimPlatform {
+    fn handle_peek_result(&self, _request_id: u32, _peek_result: PeekResult) {
+        unimplemented!()
     }
 }
 

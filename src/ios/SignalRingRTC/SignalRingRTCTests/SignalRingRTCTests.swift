@@ -10,6 +10,14 @@ import SignalCoreKit
 
 import Nimble
 
+typealias TestCallManager = CallManager<OpaqueCallData, TestDelegate>
+func createCallManager(_ delegate: TestDelegate) -> TestCallManager? {
+    let httpClient = HTTPClient(delegate: delegate)
+    let call_manager = TestCallManager(httpClient: httpClient)
+    call_manager.delegate = delegate
+    return call_manager
+}
+
 // Simulation of a call data type of context that Call Manager must treat opaquely.
 public class OpaqueCallData {
     let value: Int32   // Basic token for validation.
@@ -34,7 +42,7 @@ public class OpaqueCallData {
 
 extension OpaqueCallData: CallManagerCallReference { }
 
-final class TestDelegate: CallManagerDelegate {
+final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     public typealias CallManagerDelegateCallType = OpaqueCallData
 
     // Simulate the promise-like async handling of signaling messages.
@@ -118,7 +126,7 @@ final class TestDelegate: CallManagerDelegate {
 
     var sentHttpRequestId: UInt32?
     var sentHttpRequestUrl: String?
-    var sentHttpRequestMethod: CallManagerHttpMethod?
+    var sentHttpRequestMethod: HTTPMethod?
     var sentHttpRequestHeaders: [String: String]?
     var sentHttpRequestBody: Data?
 
@@ -534,27 +542,26 @@ final class TestDelegate: CallManagerDelegate {
         sentCallMessageToGroupMessage = message
         sentCallMessageToGroupUrgency = urgency
     }
-
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendHttpRequest requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
+    func sendRequest(requestId: UInt32, request: HTTPRequest) {
         Logger.debug("TestDelegate:shouldSendHttpRequest")
         generalInvocationDetected = true
 
         shouldSendHttpRequestInvoked = true
 
         sentHttpRequestId = requestId
-        sentHttpRequestUrl = url
-        sentHttpRequestMethod = method
-        sentHttpRequestHeaders = headers
-        sentHttpRequestBody = body
+        sentHttpRequestUrl = request.url
+        sentHttpRequestMethod = request.method
+        sentHttpRequestHeaders = request.headers
+        sentHttpRequestBody = request.body
 
         Logger.debug("requestId: \(requestId)")
-        Logger.debug("url: \(url)")
-        Logger.debug("method: \(method)")
+        Logger.debug("url: \(request.url)")
+        Logger.debug("method: \(request.method)")
         Logger.debug("headers:")
-        headers.forEach { (header) in
+        request.headers.forEach { (header) in
             Logger.debug("key: \(header.key) value: \(header.value)")
         }
-        Logger.debug("body: \(body)")
+        Logger.debug("body: \(request.body)")
     }
 
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, didUpdateRingForGroup groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate) {
@@ -631,11 +638,7 @@ class SignalRingRTCTests: XCTestCase {
         // Rust object.
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
-        expect(callManager).toNot(beNil())
+        var callManager = createCallManager(delegate)
         expect(delegate.generalInvocationDetected).to(equal(false))
         callManager = nil
 
@@ -651,34 +654,27 @@ class SignalRingRTCTests: XCTestCase {
         // The CallManagerLogger and CallManagerGlobal should persist for application life.
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
         expect(delegate.generalInvocationDetected).to(equal(false))
         callManager = nil
 
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
         expect(delegate.generalInvocationDetected).to(equal(false))
         callManager = nil
 
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
         expect(delegate.generalInvocationDetected).to(equal(false))
         callManager = nil
 
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
         expect(delegate.generalInvocationDetected).to(equal(false))
         callManager = nil
 
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
         expect(delegate.generalInvocationDetected).to(equal(false))
         callManager = nil
@@ -691,12 +687,10 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Create the Call Manager and close it quickly...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
 
         // Create Call Manager object, which will create a WebRTC factory
         // and the RingRTC Rust Call Manager object(s).
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
         expect(delegate.generalInvocationDetected).to(equal(false))
 
@@ -721,10 +715,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Outgoing Call...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -836,10 +827,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Outgoing Call Send Offer Fail...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -903,10 +891,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Incoming Call...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -993,10 +978,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: MultiHangup Minimum...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -1043,10 +1025,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: MultiHangup...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -1096,10 +1075,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: MultiHangup with Proceed...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -1173,10 +1149,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: MultiHangup with Proceed until offer sent...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -1251,10 +1224,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Incoming Call Offer with quick Hangup No Delay...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -1317,10 +1287,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Incoming Call Offer with quick Hangup with Delay...")
 
         let delegate = TestDelegate()
-        var callManager: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManager = CallManager()
-        callManager?.delegate = delegate
+        var callManager = createCallManager(delegate)
         expect(callManager).toNot(beNil())
 
         // For our tests, we will have a token opaque object
@@ -1386,18 +1353,14 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: MultiCall...")
 
         let delegateCaller = TestDelegate()
-        var callManagerCaller: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerCaller = CallManager()
-        callManagerCaller?.delegate = delegateCaller
+        var callManagerCaller = createCallManager(delegateCaller)
         expect(callManagerCaller).toNot(beNil())
         delegateCaller.expectedValue = 12345
         let callerAddress: Int32 = 888888
         let callerLocalDevice: UInt32 = 1
 
         let delegateCallee = TestDelegate()
-        var callManagerCallee: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerCallee = CallManager()
-        callManagerCallee?.delegate = delegateCallee
+        var callManagerCallee = createCallManager(delegateCallee)
         expect(callManagerCallee).toNot(beNil())
         delegateCallee.expectedValue = 11111
         let calleeAddress: Int32 = 777777
@@ -1568,16 +1531,11 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: MultiCall check that immediate ICE message is handled...")
 
         let delegateCaller = TestDelegate()
-        let delegateCallee = TestDelegate()
-
-        var callManagerCaller: CallManager<OpaqueCallData, TestDelegate>?
-        var callManagerCallee: CallManager<OpaqueCallData, TestDelegate>?
-
-        callManagerCaller = CallManager()
-        callManagerCaller?.delegate = delegateCaller
+        var callManagerCaller = createCallManager(delegateCaller)
         expect(callManagerCaller).toNot(beNil())
 
-        callManagerCallee = CallManager()
+        let delegateCallee = TestDelegate()
+        var callManagerCallee = createCallManager(delegateCallee)
         callManagerCallee?.delegate = delegateCallee
         expect(callManagerCallee).toNot(beNil())
 
@@ -1733,17 +1691,13 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Testing glare for scenario: \(scenario)...")
 
         let delegateA = TestDelegate()
-        var callManagerA: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerA = CallManager()
-        callManagerA?.delegate = delegateA
+        var callManagerA = createCallManager(delegateA)
         expect(callManagerA).toNot(beNil())
         delegateA.expectedValue = 12345
         let aAddress: Int32 = 888888
 
         let delegateB = TestDelegate()
-        var callManagerB: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerB = CallManager()
-        callManagerB?.delegate = delegateB
+        var callManagerB = createCallManager(delegateB)
         expect(callManagerB).toNot(beNil())
         delegateB.expectedValue = 11111
         let bAddress: Int32 = 777777
@@ -1929,8 +1883,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Testing multi-ring for scenario: \(scenario)...")
 
         let delegateCaller = TestDelegate()
-        var callManagerCaller: CallManager<OpaqueCallData, TestDelegate>? = CallManager()
-        callManagerCaller?.delegate = delegateCaller
+        var callManagerCaller = createCallManager(delegateCaller)
         expect(callManagerCaller).toNot(beNil())
         delegateCaller.expectedValue = 12345
         let callerAddress: Int32 = 888888
@@ -1941,10 +1894,8 @@ class SignalRingRTCTests: XCTestCase {
         // Build the callee structures, the Call Manager and delegate for each.
         var calleeDevices: [(callManager: CallManager<OpaqueCallData, TestDelegate>, delegate: TestDelegate, deviceId: UInt32)] = []
         for i in 1...calleeDeviceCount {
-            let callManager: CallManager<OpaqueCallData, TestDelegate> = CallManager()
             let delegate = TestDelegate()
-
-            callManager.delegate = delegate
+            let callManager = createCallManager(delegate)!
             delegate.expectedValue = Int32(i * 11111)
 
             // Setup automatic ICE for the callee.
@@ -1968,8 +1919,7 @@ class SignalRingRTCTests: XCTestCase {
 
         // An extra Call Manger for some scenarions (such as busy).
         let delegateExtra = TestDelegate()
-        var callManagerExtra: CallManager<OpaqueCallData, TestDelegate>? = CallManager()
-        callManagerExtra?.delegate = delegateExtra
+        var callManagerExtra = createCallManager(delegateExtra)
         expect(callManagerExtra).toNot(beNil())
         delegateExtra.expectedValue = 98765
         let extraAddress: Int32 = 666666
@@ -2436,17 +2386,13 @@ class SignalRingRTCTests: XCTestCase {
         let aAddress: Int32 = 888888
 
         let delegateA1 = TestDelegate()
-        var callManagerA1: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerA1 = CallManager()
-        callManagerA1?.delegate = delegateA1
+        var callManagerA1 = createCallManager(delegateA1)
         expect(callManagerA1).toNot(beNil())
         delegateA1.expectedValue = 12345
         let a1Device: UInt32 = 1
 
         let delegateA2 = TestDelegate()
-        var callManagerA2: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerA2 = CallManager()
-        callManagerA2?.delegate = delegateA2
+        var callManagerA2 = createCallManager(delegateA2)
         expect(callManagerA2).toNot(beNil())
         delegateA2.expectedValue = 54321
         let a2Device: UInt32 = 2
@@ -2454,17 +2400,13 @@ class SignalRingRTCTests: XCTestCase {
         let bAddress: Int32 = 111111
 
         let delegateB1 = TestDelegate()
-        var callManagerB1: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerB1 = CallManager()
-        callManagerB1?.delegate = delegateB1
+        var callManagerB1 = createCallManager(delegateB1)
         expect(callManagerB1).toNot(beNil())
         delegateB1.expectedValue = 11111
         let b1Device: UInt32 = 1
 
         let delegateB2 = TestDelegate()
-        var callManagerB2: CallManager<OpaqueCallData, TestDelegate>?
-        callManagerB2 = CallManager()
-        callManagerB2?.delegate = delegateB2
+        var callManagerB2 = createCallManager(delegateB2)
         expect(callManagerB2).toNot(beNil())
         delegateB2.expectedValue = 22222
         let b2Device: UInt32 = 2

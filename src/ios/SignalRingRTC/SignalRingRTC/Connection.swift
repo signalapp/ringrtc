@@ -7,6 +7,7 @@ import SignalRingRTC.RingRTC
 import WebRTC
 import SignalCoreKit
 
+@available(iOSApplicationExtension, unavailable)
 public class Connection {
     private var audioSender: RTCRtpSender?
     private var videoSender: RTCRtpSender?
@@ -65,6 +66,7 @@ public class Connection {
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 func connectionDestroy(object: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")

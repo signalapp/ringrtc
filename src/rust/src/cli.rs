@@ -9,12 +9,13 @@ use ringrtc::{
     common::{
         actor::{Actor, Stopper},
         units::DataRate,
-        CallId, CallMediaType, DeviceId, HttpMethod, Result,
+        CallId, CallMediaType, DeviceId, Result,
     },
     core::{bandwidth_mode::BandwidthMode, call_manager::CallManager, group_call, signaling},
+    lite::{http, sfu::UserId},
     native::{
-        CallState, CallStateHandler, GroupUpdate, GroupUpdateHandler, HttpClient,
-        NativeCallContext, NativePlatform, PeerId, SignalingSender,
+        CallState, CallStateHandler, GroupUpdate, GroupUpdateHandler, NativeCallContext,
+        NativePlatform, PeerId, SignalingSender,
     },
     simnet::{
         router,
@@ -273,7 +274,7 @@ impl CallEndpoint {
                 });
 
                 // Fill in fake group call things
-                let http_client = Box::new(endpoint.clone());
+                let http_client = http::DelegatingClient::new(endpoint.clone());
                 let group_handler = Box::new(endpoint.clone());
 
                 let platform = NativePlatform::new(
@@ -281,10 +282,9 @@ impl CallEndpoint {
                     signaling_sender,
                     should_assume_messages_sent,
                     state_handler,
-                    http_client,
                     group_handler,
                 );
-                let call_manager = CallManager::new(platform)?;
+                let call_manager = CallManager::new(platform, http_client)?;
 
                 // And a CallContext.  We'll use the same context for each call.
                 let outgoing_audio_track = pcf.create_outgoing_audio_track()?;
@@ -533,7 +533,7 @@ impl SignalingSender for CallEndpoint {
 
     fn send_call_message(
         &self,
-        _recipient_id: group_call::UserId,
+        _recipient_id: UserId,
         _msg: Vec<u8>,
         _urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
@@ -629,15 +629,8 @@ impl GroupUpdateHandler for CallEndpoint {
     }
 }
 
-impl HttpClient for CallEndpoint {
-    fn send_http_request(
-        &self,
-        _request_id: u32,
-        _url: String,
-        _method: HttpMethod,
-        _headers: HashMap<String, String>,
-        _body: Option<Vec<u8>>,
-    ) -> Result<()> {
+impl http::Delegate for CallEndpoint {
+    fn send_request(&self, _request_id: u32, _request: http::Request) {
         unimplemented!()
     }
 }

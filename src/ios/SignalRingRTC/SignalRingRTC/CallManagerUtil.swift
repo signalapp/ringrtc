@@ -5,6 +5,7 @@
 
 import SignalRingRTC.RingRTC
 
+@available(iOSApplicationExtension, unavailable)
 extension AppByteSlice {
     func asUnsafeBufferPointer() -> UnsafeBufferPointer<UInt8> {
         return UnsafeBufferPointer(start: bytes, count: len)

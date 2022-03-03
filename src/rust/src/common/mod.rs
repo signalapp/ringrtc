@@ -306,28 +306,6 @@ impl CallMediaType {
     }
 }
 
-/// The HTTP method to use when making a request.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum HttpMethod {
-    Get = 0,
-    Put,
-    Post,
-    Delete,
-}
-
-impl fmt::Display for HttpMethod {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-/// A response to an HTTP request.
-pub struct HttpResponse {
-    pub status_code: u16,
-    pub body: Vec<u8>,
-}
-
 // Benchmarking component list.
 pub enum RingBench {
     App,

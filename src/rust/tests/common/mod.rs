@@ -21,6 +21,7 @@ use ringrtc::core::call::Call;
 use ringrtc::core::call_manager::CallManager;
 use ringrtc::core::connection::Connection;
 use ringrtc::core::{group_call, signaling};
+use ringrtc::lite::http;
 use ringrtc::protobuf;
 use ringrtc::sim::sim_platform::SimPlatform;
 use ringrtc::webrtc;
@@ -98,13 +99,22 @@ impl Drop for TestContext {
     }
 }
 
+struct SimHttpDelegate {}
+
+impl http::Delegate for SimHttpDelegate {
+    fn send_request(&self, _request_id: u32, _request: http::Request) {
+        // Do nothing
+    }
+}
+
 #[allow(dead_code)]
 impl TestContext {
     pub fn new() -> Self {
         info!("TestContext::new()");
 
         let mut platform = SimPlatform::new();
-        let call_manager = CallManager::new(platform.clone()).unwrap();
+        let http_client = http::DelegatingClient::new(SimHttpDelegate {});
+        let call_manager = CallManager::new(platform.clone(), http_client).unwrap();
 
         platform.set_call_manager(call_manager.clone());
 

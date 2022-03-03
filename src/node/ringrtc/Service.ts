@@ -766,18 +766,18 @@ export class RingRTCType {
   // Called by UX
   // Returns a list of user IDs
   peekGroupCall(
-    sfu_url: string,
-    membership_proof: Buffer,
-    group_members: Array<GroupMemberInfo>
+    sfuUrl: string,
+    membershipProof: Buffer,
+    groupMembers: Array<GroupMemberInfo>
   ): Promise<PeekInfo> {
     let [requestId, promise] = this._peekRequests.add();
     // Response comes back via handlePeekResponse
     silly_deadlock_protection(() => {
       this.callManager.peekGroupCall(
         requestId,
-        sfu_url,
-        membership_proof,
-        group_members
+        sfuUrl,
+        membershipProof,
+        groupMembers
       );
     });
     return promise;

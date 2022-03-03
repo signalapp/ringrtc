@@ -8,7 +8,7 @@
 use std::convert::TryFrom;
 use std::ffi::c_void;
 use std::time::Duration;
-use std::{fmt, ptr, slice, str};
+use std::{fmt, ptr, slice};
 
 use libc::size_t;
 
@@ -16,10 +16,11 @@ use crate::ios::call_manager;
 use crate::ios::call_manager::IosCallManager;
 use crate::ios::logging::IosLogger;
 
-use crate::common::{CallMediaType, DeviceId, HttpResponse};
+use crate::common::{CallMediaType, DeviceId};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::group_call;
 use crate::core::signaling;
+use crate::lite::{http, sfu, sfu::DemuxId};
 use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::{self, media, peer_connection_factory as pcf};
 
@@ -115,24 +116,6 @@ pub struct AppOptionalBool {
 #[allow(non_snake_case)]
 pub struct AppIceCandidateArray {
     pub candidates: *const AppByteSlice,
-    pub count: size_t,
-}
-
-/// Structure for passing name/value strings to/from Swift.
-#[repr(C)]
-#[derive(Debug)]
-#[allow(non_snake_case)]
-pub struct AppHeader {
-    pub name: AppByteSlice,
-    pub value: AppByteSlice,
-}
-
-/// Structure for passing multiple name/value headers to/from Swift.
-#[repr(C)]
-#[derive(Debug)]
-#[allow(non_snake_case)]
-pub struct AppHeaderArray {
-    pub headers: *const AppHeader,
     pub count: size_t,
 }
 
@@ -239,7 +222,7 @@ impl Drop for AppMediaStreamInterface {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppRemoteDeviceState {
-    pub demuxId: group_call::DemuxId,
+    pub demuxId: DemuxId,
     pub user_id: AppByteSlice,
     pub mediaKeysReceived: bool,
     pub audioMuted: AppOptionalBool,
@@ -263,7 +246,7 @@ pub struct AppRemoteDeviceStateArray {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppReceivedAudioLevel {
-    pub demuxId: group_call::DemuxId,
+    pub demuxId: DemuxId,
     pub level: AudioLevel,
 }
 
@@ -303,7 +286,7 @@ pub struct AppUuidArray {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct AppVideoRequest {
-    pub demux_id: group_call::DemuxId,
+    pub demux_id: DemuxId,
     pub width: u16,
     pub height: u16,
     pub framerate: AppOptionalUInt16,
@@ -406,16 +389,6 @@ pub struct AppInterface {
         message: AppByteSlice,
         urgency: i32,
     ),
-    ///
-    pub sendHttpRequest: extern "C" fn(
-        object: *mut c_void,
-        requestId: u32,
-        url: AppByteSlice,
-        method: i32,
-        headerArray: AppHeaderArray,
-        body: AppByteSlice,
-    ),
-    ///
     pub onCreateConnectionInterface: extern "C" fn(
         object: *mut c_void,
         observer: *mut c_void,
@@ -449,16 +422,6 @@ pub struct AppInterface {
         ringUpdate: i32,
     ),
     ///
-    pub handlePeekResponse: extern "C" fn(
-        object: *mut c_void,
-        requestId: u32,
-        joinedMembers: AppUuidArray,
-        creator: AppByteSlice,
-        eraId: AppByteSlice,
-        maxDevices: AppOptionalUInt32,
-        deviceCount: u32,
-    ),
-    ///
     pub requestMembershipProof: extern "C" fn(object: *mut c_void, clientId: group_call::ClientId),
     ///
     pub requestGroupMembers: extern "C" fn(object: *mut c_void, clientId: group_call::ClientId),
@@ -489,7 +452,7 @@ pub struct AppInterface {
     pub handleIncomingVideoTrack: extern "C" fn(
         object: *mut c_void,
         clientId: group_call::ClientId,
-        remoteDemuxId: group_call::DemuxId,
+        remoteDemuxId: DemuxId,
         nativeVideoTrack: *mut c_void,
     ),
     ///
@@ -534,7 +497,7 @@ pub fn string_from_app_slice(app_slice: &AppByteSlice) -> Option<String> {
         return None;
     }
     let slice = unsafe { slice::from_raw_parts(app_slice.bytes, app_slice.len as usize) };
-    match str::from_utf8(slice) {
+    match std::str::from_utf8(slice) {
         Ok(s) => Some(s.to_string()),
         Err(_) => None,
     }
@@ -554,13 +517,14 @@ pub extern "C" fn ringrtcInitialize(logObject: IosLogger) -> *mut c_void {
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcCreate(
-    appCallManager: *mut c_void,
+pub unsafe extern "C" fn ringrtcCreateCallManager(
     appInterface: AppInterface,
+    httpClient: *const http::ios::Client,
 ) -> *mut c_void {
-    match call_manager::create(appCallManager, appInterface) {
-        Ok(v) => v,
-        Err(_e) => ptr::null_mut(),
+    if let Some(http_client) = httpClient.as_ref() {
+        call_manager::create(appInterface, http_client.clone()).unwrap_or(std::ptr::null_mut())
+    } else {
+        std::ptr::null_mut()
     }
 }
 
@@ -911,49 +875,6 @@ pub extern "C" fn ringrtcReceivedCallMessage(
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcReceivedHttpResponse(
-    callManager: *mut c_void,
-    requestId: u32,
-    statusCode: u16,
-    body: AppByteSlice,
-) {
-    info!("ringrtcReceivedHttpResponse():");
-
-    let body = byte_vec_from_app_slice(&body);
-    if body.is_none() {
-        error!("Invalid body");
-        return;
-    }
-
-    let response = HttpResponse {
-        status_code: statusCode,
-        body: body.unwrap(),
-    };
-
-    let result = call_manager::received_http_response(
-        callManager as *mut IosCallManager,
-        requestId,
-        Some(response),
-    );
-    if result.is_err() {
-        error!("{:?}", result.err());
-    }
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub extern "C" fn ringrtcHttpRequestFailed(callManager: *mut c_void, requestId: u32) {
-    info!("ringrtcHttpRequestFailed():");
-
-    let result =
-        call_manager::received_http_response(callManager as *mut IosCallManager, requestId, None);
-    if result.is_err() {
-        error!("{:?}", result.err());
-    }
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
 pub extern "C" fn ringrtcAccept(callManager: *mut c_void, callId: u64) -> *mut c_void {
     match call_manager::accept_call(callManager as *mut IosCallManager, callId) {
         Ok(_v) => {
@@ -1043,66 +964,6 @@ pub extern "C" fn ringrtcClose(callManager: *mut c_void) -> *mut c_void {
 }
 
 // Group Calls
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub extern "C" fn ringrtcPeekGroupCall(
-    callManager: *mut c_void,
-    requestId: u32,
-    sfuUrl: AppByteSlice,
-    proof: AppByteSlice,
-    appGroupMemberInfoArray: *const AppGroupMemberInfoArray,
-) {
-    info!("ringrtcPeekGroupCall():");
-
-    let sfu_url = string_from_app_slice(&sfuUrl);
-    if sfu_url.is_none() {
-        error!("Invalid sfuUrl");
-        return;
-    }
-
-    let proof = byte_vec_from_app_slice(&proof);
-    if proof.is_none() {
-        error!("Invalid proof");
-        return;
-    }
-
-    let count = unsafe { (*appGroupMemberInfoArray).count };
-    let app_group_members = unsafe { (*appGroupMemberInfoArray).members };
-
-    let app_members = unsafe { slice::from_raw_parts(app_group_members, count) };
-    let mut group_members = Vec::new();
-
-    for member in app_members {
-        let user_id = byte_vec_from_app_slice(&member.userId);
-        if user_id.is_none() {
-            error!("Invalid userId");
-            continue;
-        }
-
-        let member_id = byte_vec_from_app_slice(&member.memberId);
-        if member_id.is_none() {
-            error!("Invalid userIdCipherText");
-            continue;
-        }
-
-        group_members.push(group_call::GroupMemberInfo {
-            user_id: user_id.unwrap(),
-            member_id: member_id.unwrap(),
-        })
-    }
-
-    let result = call_manager::peek_group_call(
-        callManager as *mut IosCallManager,
-        requestId,
-        sfu_url.unwrap(),
-        proof.unwrap(),
-        group_members,
-    );
-    if result.is_err() {
-        error!("{:?}", result.err());
-    }
-}
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -1327,7 +1188,7 @@ pub extern "C" fn ringrtcRequestVideo(
         };
 
         rendered_resolutions.push(group_call::VideoRequest {
-            demux_id: resolution.demux_id as group_call::DemuxId,
+            demux_id: resolution.demux_id as DemuxId,
             width: resolution.width,
             height: resolution.height,
             framerate: optional_framerate,
@@ -1372,7 +1233,7 @@ pub extern "C" fn ringrtcSetGroupMembers(
             continue;
         }
 
-        group_members.push(group_call::GroupMemberInfo {
+        group_members.push(sfu::GroupMember {
             user_id: user_id.unwrap(),
             member_id: member_id.unwrap(),
         })

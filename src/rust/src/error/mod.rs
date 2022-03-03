@@ -107,8 +107,6 @@ pub enum RingRtcError {
     SfuClientReceivedUnexpectedResponseStatusCode(u16),
     #[error("SfuClient request failed")]
     SfuClientRequestFailed,
-    #[error("SfuClient asked to make a request with no auth token")]
-    SfuClientHasNotAuthToken,
     #[error("The maximum number of participants has been reached")]
     MaxParticipantsReached,
 

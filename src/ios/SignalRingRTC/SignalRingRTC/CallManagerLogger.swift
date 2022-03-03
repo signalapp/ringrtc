@@ -6,6 +6,7 @@
 import SignalRingRTC.RingRTC
 import SignalCoreKit
 
+@available(iOSApplicationExtension, unavailable)
 public enum CallManagerLogLevel: Int8 {
     case error = 1
     case warn = 2
@@ -14,6 +15,7 @@ public enum CallManagerLogLevel: Int8 {
     case trace = 5
 }
 
+@available(iOSApplicationExtension, unavailable)
 class CallManagerLogger {
 
     // MARK: Object Lifetime
@@ -56,6 +58,7 @@ class CallManagerLogger {
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerLoggerDestroy(object: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -67,6 +70,7 @@ func callManagerLoggerDestroy(object: UnsafeMutableRawPointer?) {
     // so deinit should be called implicitly.
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerLoggerCallback(object: UnsafeMutableRawPointer?, message: AppByteSlice, file: AppByteSlice, function: AppByteSlice, line: Int32, level: Int8) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")

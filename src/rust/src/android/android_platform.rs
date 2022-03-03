@@ -5,7 +5,7 @@
 
 //! Android Platform Interface.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,14 +17,16 @@ use jni::{JNIEnv, JavaVM};
 use crate::android::error::AndroidError;
 use crate::android::jni_util::*;
 use crate::android::webrtc_java_media_stream::JavaMediaStream;
-use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
+use crate::lite::{
+    http, sfu,
+    sfu::{DemuxId, PeekInfo, PeekResult, UserId},
+};
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_observer::NetworkRoute;
@@ -772,86 +774,6 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    fn send_http_request(
-        &self,
-        request_id: u32,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-    ) -> Result<()> {
-        info!("send_http_request(): request_id: {}", request_id);
-
-        let env = self.java_env()?;
-        let jni_call_manager = self.jni_call_manager.as_obj();
-
-        // Set a frame capacity of min (5) + objects (4) + elements (N * 3 objects per element).
-        let capacity = (9 + headers.len() * 3) as i32;
-        env.with_local_frame(capacity, || {
-            let jni_request_id = request_id as jlong;
-            let jni_url = JObject::from(env.new_string(url)?);
-            let jni_method =
-                match self.java_enum(&env, CALL_MANAGER_CLASS, "HttpMethod", method as i32) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        error!("jni_method: {:?}", error);
-                        return Ok(JObject::null());
-                    }
-                };
-
-            // create Java List<HttpHeader>
-            let http_header_class = match self.class_cache.get_class(HTTP_HEADER_CLASS) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("http_header_class: {:?}", error);
-                    return Ok(JObject::null());
-                }
-            };
-            let jni_headers = match jni_new_linked_list(&env) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("jni_headers: {:?}", error);
-                    return Ok(JObject::null());
-                }
-            };
-            for (name, value) in headers.iter() {
-                let jni_name = JObject::from(env.new_string(name)?);
-                let jni_value = JObject::from(env.new_string(value)?);
-                let args = jni_args!((
-                    jni_name => java.lang.String,
-                    jni_value => java.lang.String,
-                ) -> void);
-                let http_header_obj = env.new_object(http_header_class, args.sig, &args.args)?;
-                jni_headers.add(http_header_obj)?;
-            }
-
-            let jni_body = match body {
-                None => JObject::null(),
-                Some(body) => JObject::from(env.byte_array_from_slice(&body)?),
-            };
-
-            let result = jni_call_method(
-                &env,
-                jni_call_manager,
-                "sendHttpRequest",
-                jni_args!((
-                    jni_request_id => long,
-                    jni_url => java.lang.String,
-                    jni_method => org.signal.ringrtc.CallManager::HttpMethod,
-                    JObject::from(jni_headers) => java.util.List,
-                    jni_body => [byte],
-                ) -> void),
-            );
-            if result.is_err() {
-                error!("jni_call_method: {:?}", result.err());
-            }
-
-            Ok(JObject::null())
-        })?;
-
-        Ok(())
-    }
-
     fn create_incoming_media(
         &self,
         _connection: &Connection<Self>,
@@ -969,7 +891,7 @@ impl Platform for AndroidPlatform {
         &self,
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: group_call::UserId,
+        sender: UserId,
         update: group_call::RingUpdate,
     ) {
         info!("group_call_ring_update():");
@@ -1014,115 +936,6 @@ impl Platform for AndroidPlatform {
         if result.is_err() {
             error!("jni_call_method: {:?}", result.err());
         }
-    }
-
-    fn handle_peek_response(&self, request_id: u32, peek_info: group_call::PeekInfo) {
-        info!("handle_peek_response():");
-
-        let group_call::PeekInfo {
-            devices,
-            creator,
-            era_id,
-            max_devices,
-            device_count,
-        } = peek_info;
-
-        // We use a HashSet because the client expects a unique list of users,
-        // and there can be multiple devices from the same user.
-        let joined_members: HashSet<group_call::UserId> = devices
-            .into_iter()
-            .filter_map(|device| device.user_id)
-            .collect();
-
-        let env = match self.java_env() {
-            Ok(v) => v,
-            Err(error) => {
-                error!("{:?}", error);
-                return;
-            }
-        };
-        let jni_call_manager = self.jni_call_manager.as_obj();
-
-        // Set a frame capacity of min (5) + objects (5) + elements (N * 1 object per element).
-        let capacity = (10 + joined_members.len()) as i32;
-        let _ = env.with_local_frame(capacity, || {
-            let jni_request_id = request_id as jlong;
-
-            let joined_member_list = match jni_new_linked_list(&env) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("{:?}", error);
-                    return Ok(JObject::null());
-                }
-            };
-
-            for joined_member in joined_members {
-                let jni_opaque_user_id = match env.byte_array_from_slice(&joined_member) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        continue;
-                    }
-                };
-
-                let result = joined_member_list.add(jni_opaque_user_id);
-                if result.is_err() {
-                    error!("{:?}", result.err());
-                    continue;
-                }
-            }
-
-            let jni_creator = match creator {
-                None => JObject::null(),
-                Some(creator) => match env.byte_array_from_slice(&creator) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        return Ok(JObject::null());
-                    }
-                },
-            };
-
-            let jni_era_id = match era_id {
-                None => JObject::null(),
-                Some(era_id) => match env.new_string(era_id) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        return Ok(JObject::null());
-                    }
-                },
-            };
-
-            let jni_max_devices = match self.get_optional_u32_long_object(&env, max_devices) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("{:?}", error);
-                    return Ok(JObject::null());
-                }
-            };
-
-            let jni_device_count = device_count as jlong;
-
-            let result = jni_call_method(
-                &env,
-                jni_call_manager,
-                "handlePeekResponse",
-                jni_args!((
-                    jni_request_id => long,
-                    JObject::from(joined_member_list) => java.util.List,
-                    jni_creator => [byte],
-                    jni_era_id => java.lang.String,
-                    jni_max_devices => java.lang.Long,
-                    jni_device_count => long,
-                ) -> void),
-            );
-            if result.is_err() {
-                error!("jni_call_method: {:?}", result.err());
-            }
-
-            Ok(JObject::null())
-        });
     }
 
     fn request_membership_proof(&self, client_id: group_call::ClientId) {
@@ -1424,7 +1237,7 @@ impl Platform for AndroidPlatform {
     fn handle_incoming_video_track(
         &self,
         client_id: group_call::ClientId,
-        remote_demux_id: group_call::DemuxId,
+        remote_demux_id: DemuxId,
         incoming_video_track: VideoTrack,
     ) {
         info!("handle_incoming_video_track():");
@@ -1461,8 +1274,8 @@ impl Platform for AndroidPlatform {
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        peek_info: &group_call::PeekInfo,
-        joined_members: &HashSet<group_call::UserId>,
+        peek_info: &PeekInfo,
+        joined_members: &HashSet<UserId>,
     ) {
         info!("handle_peek_changed():");
 
@@ -1714,5 +1527,204 @@ impl AndroidPlatform {
                 Ok(jni_object)
             }
         }
+    }
+
+    fn send_http_request(&self, request_id: u32, request: http::Request) -> Result<()> {
+        info!("send_request(): request_id: {}", request_id);
+
+        let http::Request {
+            method,
+            url,
+            headers,
+            body,
+        } = request;
+
+        let env = self.java_env()?;
+        let jni_call_manager = self.jni_call_manager.as_obj();
+
+        // Set a frame capacity of min (5) + objects (4) + elements (N * 3 objects per element).
+        let capacity = (9 + headers.len() * 3) as i32;
+        env.with_local_frame(capacity, || {
+            let jni_request_id = request_id as jlong;
+            let jni_url = JObject::from(env.new_string(url)?);
+            let jni_method =
+                match self.java_enum(&env, CALL_MANAGER_CLASS, "HttpMethod", method as i32) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("jni_method: {:?}", error);
+                        return Ok(JObject::null());
+                    }
+                };
+
+            // create Java List<HttpHeader>
+            let http_header_class = match self.class_cache.get_class(HTTP_HEADER_CLASS) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("http_header_class: {:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+            let jni_headers = match jni_new_linked_list(&env) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("jni_headers: {:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+            for (name, value) in headers.iter() {
+                let jni_name = JObject::from(env.new_string(name)?);
+                let jni_value = JObject::from(env.new_string(value)?);
+                let args = jni_args!((
+                    jni_name => java.lang.String,
+                    jni_value => java.lang.String,
+                ) -> void);
+                let http_header_obj = env.new_object(http_header_class, args.sig, &args.args)?;
+                jni_headers.add(http_header_obj)?;
+            }
+
+            let jni_body = match body {
+                None => JObject::null(),
+                Some(body) => JObject::from(env.byte_array_from_slice(&body)?),
+            };
+
+            let result = jni_call_method(
+                &env,
+                jni_call_manager,
+                "sendHttpRequest",
+                jni_args!((
+                    jni_request_id => long,
+                    jni_url => java.lang.String,
+                    jni_method => org.signal.ringrtc.CallManager::HttpMethod,
+                    JObject::from(jni_headers) => java.util.List,
+                    jni_body => [byte],
+                ) -> void),
+            );
+            if result.is_err() {
+                error!("jni_call_method: {:?}", result.err());
+            }
+
+            Ok(JObject::null())
+        })?;
+        Ok(())
+    }
+}
+
+impl http::Delegate for AndroidPlatform {
+    fn send_request(&self, request_id: u32, request: http::Request) {
+        if let Err(err) = self.send_http_request(request_id, request) {
+            error!("AndroidPlatform.send_http_request failed: {:?}", err);
+        }
+    }
+}
+
+impl sfu::Delegate for AndroidPlatform {
+    fn handle_peek_result(&self, request_id: u32, peek_result: PeekResult) {
+        info!("handle_peek_response():");
+
+        // TODO: Pass failure error codes to app.
+        let PeekInfo {
+            devices,
+            creator,
+            era_id,
+            max_devices,
+            device_count,
+        } = peek_result.unwrap_or_default();
+
+        // We use a HashSet because the client expects a unique list of users,
+        // and there can be multiple devices from the same user.
+        let joined_members: HashSet<UserId> = devices
+            .into_iter()
+            .filter_map(|device| device.user_id)
+            .collect();
+
+        let env = match self.java_env() {
+            Ok(v) => v,
+            Err(error) => {
+                error!("{:?}", error);
+                return;
+            }
+        };
+        let jni_call_manager = self.jni_call_manager.as_obj();
+
+        // Set a frame capacity of min (5) + objects (5) + elements (N * 1 object per element).
+        let capacity = (10 + joined_members.len()) as i32;
+        let _ = env.with_local_frame(capacity, || {
+            let jni_request_id = request_id as jlong;
+
+            let joined_member_list = match jni_new_linked_list(&env) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("{:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+
+            for joined_member in joined_members {
+                let jni_opaque_user_id = match env.byte_array_from_slice(&joined_member) {
+                    Ok(v) => JObject::from(v),
+                    Err(error) => {
+                        error!("{:?}", error);
+                        continue;
+                    }
+                };
+
+                let result = joined_member_list.add(jni_opaque_user_id);
+                if result.is_err() {
+                    error!("{:?}", result.err());
+                    continue;
+                }
+            }
+
+            let jni_creator = match creator {
+                None => JObject::null(),
+                Some(creator) => match env.byte_array_from_slice(&creator) {
+                    Ok(v) => JObject::from(v),
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                },
+            };
+
+            let jni_era_id = match era_id {
+                None => JObject::null(),
+                Some(era_id) => match env.new_string(era_id) {
+                    Ok(v) => JObject::from(v),
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                },
+            };
+
+            let jni_max_devices = match self.get_optional_u32_long_object(&env, max_devices) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("{:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+
+            let jni_device_count = device_count as jlong;
+
+            let result = jni_call_method(
+                &env,
+                jni_call_manager,
+                "handlePeekResponse",
+                jni_args!((
+                    jni_request_id => long,
+                    JObject::from(joined_member_list) => java.util.List,
+                    jni_creator => [byte],
+                    jni_era_id => java.lang.String,
+                    jni_max_devices => java.lang.Long,
+                    jni_device_count => long,
+                ) -> void),
+            );
+            if result.is_err() {
+                error!("jni_call_method: {:?}", result.err());
+            }
+
+            Ok(JObject::null())
+        });
     }
 }

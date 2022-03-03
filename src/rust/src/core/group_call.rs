@@ -34,6 +34,10 @@ use crate::{
         signaling,
     },
     error::RingRtcError,
+    lite::sfu::{
+        DemuxId, GroupMember, MembershipProof, PeekDeviceInfo, PeekInfo, PeekResult,
+        PeekResultCallback, UserId,
+    },
     protobuf,
     webrtc::{
         self,
@@ -55,24 +59,6 @@ pub type ClientId = u32;
 // Group UUID
 pub type GroupId = Vec<u8>;
 pub type GroupIdRef<'a> = &'a [u8];
-// An opaque value obtained from a Groups server and provided to an SFU
-pub type MembershipProof = Vec<u8>;
-// User UUID plaintext
-pub type UserId = Vec<u8>;
-// User UUID cipher text within the context of the group
-pub type GroupMemberId = Vec<u8>;
-// hex(sha256(GroupMemberId))
-// This is what the SFU knows and is used to communicate with the SFU.
-// It must be mapped to a UserId to be useful.
-pub type OpaqueUserId = String;
-// Each device joined to a group call is assigned a DemuxID
-// which is used for demuxing media, but also identifying
-// the device.
-// 0 is not a valid value
-// When given as remote devices, these must have "gaps"
-// That allow for enough SSRCs to be derived from them.
-// Currently that gap is 16.
-pub type DemuxId = u32;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RingId(i64);
@@ -390,28 +376,6 @@ pub struct SfuInfo {
     pub ice_pwd: String,
 }
 
-// The current state of the SFU conference.
-#[derive(Clone, Debug, Default)]
-pub struct PeekInfo {
-    /// Currently joined devices
-    pub devices: Vec<PeekDeviceInfo>,
-    /// The user who created the call
-    pub creator: Option<UserId>,
-    /// The "era" of this group call; changes every time the last partipant leaves and someone else joins again.
-    pub era_id: Option<String>,
-    /// The maximum number of devices that can join this group call.
-    pub max_devices: Option<u32>,
-    /// The number of devices currently joined (including local device/user).
-    pub device_count: u32,
-}
-
-#[derive(Clone, Debug)]
-pub struct PeekDeviceInfo {
-    pub demux_id: DemuxId,
-    // None if we couldn't map from the opaque_user_id.
-    pub user_id: Option<UserId>,
-}
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum EndReason {
@@ -434,33 +398,15 @@ pub enum EndReason {
     HasMaxDevices,
 }
 
-pub type BoxedPeekInfoHandler = Box<dyn FnOnce(Result<PeekInfo>) + Send + 'static>;
-
 // The callbacks from the Client to the "SFU client" for the group call.
 pub trait SfuClient {
     // This should call Client.on_sfu_client_joined when the SfuClient has joined.
     fn join(&mut self, ice_ufrag: &str, dhe_pub_key: [u8; 32], client: Client);
-    fn peek(&mut self, handle_remote_devices: BoxedPeekInfoHandler);
+    fn peek(&mut self, result_callback: PeekResultCallback);
 
     // Notifies the client of the new membership proof.
     fn set_membership_proof(&mut self, proof: MembershipProof);
-    fn set_group_members(&mut self, members: Vec<GroupMemberInfo>);
-}
-
-// Associates a group member's UserId with their GroupMemberId.
-// This is passed from the client to RingRTC to be able to create OpaqueUserIdMappings.
-#[derive(Clone, Debug)]
-pub struct GroupMemberInfo {
-    pub user_id: UserId,
-    pub member_id: GroupMemberId,
-}
-
-// Associates a group member's OpaqueUserId with either UUID.
-// This is kept by RingRTC to be able to turn an OpaqueUserId into a UserId.
-#[derive(Clone, Debug)]
-pub struct OpaqueUserIdMapping {
-    pub opaque_user_id: OpaqueUserId,
-    pub user_id: UserId,
+    fn set_group_members(&mut self, members: Vec<GroupMember>);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -1050,7 +996,7 @@ impl Client {
             let actor = state.actor.clone();
             state.sfu_client.peek(Box::new(move |peek_info| {
                 actor.send(move |state| {
-                    Self::set_peek_info_inner(state, peek_info);
+                    Self::set_peek_result_inner(state, peek_info);
                 });
             }));
             state.remote_devices_request_state = RemoteDevicesRequestState::Requested {
@@ -1617,7 +1563,7 @@ impl Client {
         }
     }
 
-    pub fn set_group_members(&self, group_members: Vec<GroupMemberInfo>) {
+    pub fn set_group_members(&self, group_members: Vec<GroupMember>) {
         debug!(
             "group_call::Client(outer)::set_group_members(client_id: {})",
             self.client_id
@@ -1757,16 +1703,16 @@ impl Client {
                         warn!("The SFU completed joining before join() was requested.");
                     }
                     JoinState::Joining => {
-                        // The call to set_peek_info_inner needs the join state to be joined.
+                        // The call to set_peek_result_inner needs the join state to be joined.
                         // But make sure to fire observer.handle_join_state_changed after
-                        // set_peek_info_inner so that state.remote_devices are filled in.
+                        // set_peek_result_inner so that state.remote_devices are filled in.
                         state.join_state = JoinState::Joined(local_demux_id);
                         if let Some(peek_info) = &state.last_peek_info {
                             // TODO: Do the same processing without making it look like we just
                             // got an update from the server even though the update actually came
                             // from earlier.  For now, it's close enough.
                             let peek_info = peek_info.clone();
-                            Self::set_peek_info_inner(state, Ok(peek_info));
+                            Self::set_peek_result_inner(state, Ok(peek_info));
                         }
                         state
                             .observer
@@ -1896,32 +1842,32 @@ impl Client {
         Ok(())
     }
 
-    pub fn set_peek_info(&self, info: Result<PeekInfo>) {
+    pub fn set_peek_result(&self, result: PeekResult) {
         debug!(
-            "group_call::Client(outer)::set_peek_info: {}, info: {:?})",
-            self.client_id, info
+            "group_call::Client(outer)::set_peek_result: {}, result: {:?})",
+            self.client_id, result
         );
 
         self.actor.send(move |state| {
-            Self::set_peek_info_inner(state, info);
+            Self::set_peek_result_inner(state, result);
         });
     }
 
     // Most of the logic moved to inner method so this can be called by both
-    // set_peek_info() and as a callback to SfuClient::request_remote_devices.
-    fn set_peek_info_inner(state: &mut State, peek_info: Result<PeekInfo>) {
+    // set_peek_result() and as a callback to SfuClient::request_remote_devices.
+    fn set_peek_result_inner(state: &mut State, result: PeekResult) {
         debug!(
-            "group_call::Client(inner)::set_peek_info_inner(client_id: {}, info: {:?} state: {:?})",
-            state.client_id, peek_info, state.remote_devices_request_state
+            "group_call::Client(inner)::set_peek_result_inner(client_id: {}, result: {:?} state: {:?})",
+            state.client_id, result, state.remote_devices_request_state
         );
 
-        if let Err(e) = peek_info {
+        if let Err(e) = result {
             warn!("Failed to request remote devices from SFU: {}", e);
             state.remote_devices_request_state =
                 RemoteDevicesRequestState::Failed { at: Instant::now() };
             return;
         }
-        let peek_info = peek_info.unwrap();
+        let peek_info = result.unwrap();
 
         let is_first_update = matches!(
             state.remote_devices_request_state,
@@ -2029,7 +1975,7 @@ impl Client {
                 }
             }
 
-            // Note: if the first call to set_peek_info is [], we still fire the
+            // Note: if the first call to set_peek_result is [], we still fire the
             // handle_remote_devices_changed to ensure the observer can tell the difference
             // between "we know we have no remote devices" and "we don't know what we have yet".
             if demux_ids_changed || is_first_update {
@@ -2139,7 +2085,7 @@ impl Client {
         }
     }
 
-    // Pulled into a named private method because it might be called by set_peek_info
+    // Pulled into a named private method because it might be called by set_peek_result
     fn set_peer_connection_descriptions(
         state: &State,
         sfu_info: &SfuInfo,
@@ -3298,10 +3244,10 @@ mod tests {
                 hkdf_extra_info: b"hkdf_extra_info".to_vec(),
             }));
         }
-        fn peek(&mut self, _handle_remote_devices: BoxedPeekInfoHandler) {
+        fn peek(&mut self, _peek_result_callback: PeekResultCallback) {
             self.request_count.fetch_add(1, atomic::Ordering::SeqCst);
         }
-        fn set_group_members(&mut self, _members: Vec<GroupMemberInfo>) {}
+        fn set_group_members(&mut self, _members: Vec<GroupMember>) {}
         fn set_membership_proof(&mut self, _proof: MembershipProof) {}
     }
 
@@ -3715,7 +3661,7 @@ mod tests {
                 devices: remote_devices,
                 ..self.default_peek_info.clone()
             };
-            self.client.set_peek_info(Ok(peek_info));
+            self.client.set_peek_result(Ok(peek_info));
             let local_demux_id = self.demux_id;
             let sfu_rtp_packet_sender = self.sfu_rtp_packet_sender.clone();
             self.client.actor.send(move |state| {
@@ -4289,7 +4235,7 @@ mod tests {
             max_devices: None,
             device_count: 3,
         };
-        client.client.set_peek_info(Ok(peek_info));
+        client.client.set_peek_result(Ok(peek_info));
         client.wait_for_client_to_process();
 
         let remote_devices = client.observer.remote_devices();
@@ -4777,11 +4723,11 @@ mod tests {
         client1.client.connect();
         client1.wait_for_client_to_process();
         let initial_count = client1.sfu_client.request_count();
-        let user_a = GroupMemberInfo {
+        let user_a = GroupMember {
             user_id: b"a".to_vec(),
             member_id: b"A".to_vec(),
         };
-        let user_b = GroupMemberInfo {
+        let user_b = GroupMember {
             user_id: b"b".to_vec(),
             member_id: b"B".to_vec(),
         };
@@ -4816,7 +4762,7 @@ mod tests {
     fn full_call() {
         let client1 = TestClient::new(vec![1], 1, None);
         client1.client.connect();
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
                 user_id: None,
@@ -4830,7 +4776,7 @@ mod tests {
         assert_eq!(EndReason::HasMaxDevices, client1.observer.ended.wait());
 
         let client1 = TestClient::new(vec![1], 1, None);
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
                 user_id: None,
@@ -4848,7 +4794,7 @@ mod tests {
     #[ignore] // Because it's too slow
     fn membership_proof_requests() {
         let client1 = TestClient::new(vec![1], 1, None);
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
                 user_id: None,
@@ -5091,7 +5037,7 @@ mod tests {
                 }
             })
             .collect();
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![],
             device_count: 0,
             max_devices: None,
@@ -5108,7 +5054,7 @@ mod tests {
             client1.observer.send_rates()
         );
 
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: (&devices[..1]).to_vec(),
             device_count: 1,
             max_devices: None,
@@ -5125,7 +5071,7 @@ mod tests {
             client1.observer.send_rates()
         );
 
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: (&devices[..2]).to_vec(),
             device_count: 1,
             max_devices: None,
@@ -5142,7 +5088,7 @@ mod tests {
             client1.observer.send_rates()
         );
 
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: (&devices[..5]).to_vec(),
             device_count: 5,
             max_devices: None,
@@ -5159,7 +5105,7 @@ mod tests {
             client1.observer.send_rates()
         );
 
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: (&devices[..20]).to_vec(),
             device_count: 20,
             max_devices: None,
@@ -5198,7 +5144,7 @@ mod tests {
             client1.observer.send_rates()
         );
 
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: (&devices[..0]).to_vec(),
             device_count: 0,
             max_devices: None,
@@ -5226,7 +5172,7 @@ mod tests {
             client1.observer.send_rates()
         );
 
-        client1.client.set_peek_info(Ok(PeekInfo {
+        client1.client.set_peek_result(Ok(PeekInfo {
             devices: (&devices[..20]).to_vec(),
             device_count: 20,
             max_devices: None,

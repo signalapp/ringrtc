@@ -5,17 +5,19 @@
 
 //! Platform trait describing the interface an operating system platform must
 /// implement for calling.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
 
-use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, HttpMethod, Result,
-};
+use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::{group_call, signaling};
+use crate::lite::{
+    sfu,
+    sfu::{DemuxId, PeekInfo, UserId},
+};
 use crate::webrtc::media::{MediaStream, VideoTrack};
 use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_observer::NetworkRoute;
@@ -26,7 +28,7 @@ pub trait PlatformItem: Sync + Send + 'static {}
 
 /// A trait describing the interface an operating system platform must
 /// implement for calling.
-pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
+pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + 'static {
     /// Opaque application specific incoming media object.
     type AppIncomingMedia: PlatformItem;
 
@@ -140,17 +142,6 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()>;
 
-    /// Send a generic HTTP request to the service using the application's
-    /// HTTP stack and connection.
-    fn send_http_request(
-        &self,
-        request_id: u32,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-    ) -> Result<()>;
-
     /// Create a platform dependent media stream from the base WebRTC
     /// MediaStream.
     fn create_incoming_media(
@@ -203,11 +194,9 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
         &self,
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: group_call::UserId,
+        sender: UserId,
         update: group_call::RingUpdate,
     );
-
-    fn handle_peek_response(&self, request_id: u32, peek_info: group_call::PeekInfo);
 
     fn request_membership_proof(&self, client_id: group_call::ClientId);
 
@@ -242,15 +231,15 @@ pub trait Platform: fmt::Debug + fmt::Display + Send + Sized + 'static {
     fn handle_incoming_video_track(
         &self,
         client_id: group_call::ClientId,
-        remote_demux_id: group_call::DemuxId,
+        remote_demux_id: DemuxId,
         incoming_video_track: VideoTrack,
     );
 
     fn handle_peek_changed(
         &self,
         client_id: group_call::ClientId,
-        peek_info: &group_call::PeekInfo,
-        joined_members: &HashSet<group_call::UserId>,
+        peek_info: &PeekInfo,
+        joined_members: &HashSet<UserId>,
     );
 
     fn handle_audio_levels(

@@ -9,6 +9,7 @@ import SignalCoreKit
 
 // See comment of IosMediaStream to understand
 // where this fits in the many layers of wrappers.
+@available(iOSApplicationExtension, unavailable)
 public class ConnectionMediaStream {
 
     // Associate this application MediaStream object with a Connection.
@@ -35,6 +36,7 @@ public class ConnectionMediaStream {
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 func connectionMediaStreamDestroy(object: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -48,6 +50,7 @@ func connectionMediaStreamDestroy(object: UnsafeMutableRawPointer?) {
     // so deinit should be called implicitly.
 }
 
+@available(iOSApplicationExtension, unavailable)
 func connectionMediaStreamCreateMediaStream(object: UnsafeMutableRawPointer?, nativeStreamBorrowedRc: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer? {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")

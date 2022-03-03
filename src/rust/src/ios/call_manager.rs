@@ -14,12 +14,16 @@ use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppO
 use crate::ios::ios_platform::IosPlatform;
 use crate::ios::logging::{init_logging, IosLogger};
 
-use crate::common::{CallId, CallMediaType, DeviceId, HttpResponse, Result};
+use crate::common::{CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::lite::{
+    http,
+    sfu::{GroupMember, UserId},
+};
 use crate::webrtc;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection_factory::{self as pcf, PeerConnectionFactory};
@@ -43,18 +47,17 @@ pub fn initialize(log_object: IosLogger) -> Result<()> {
 }
 
 /// Creates a new IosCallManager object.
-pub fn create(app_call_manager: *mut c_void, app_interface: AppInterface) -> Result<*mut c_void> {
+pub fn create(app_interface: AppInterface, http_client: http::ios::Client) -> Result<*mut c_void> {
     info!("create_call_manager():");
-    let platform = IosPlatform::new(app_call_manager, app_interface)?;
-
-    let call_manager = IosCallManager::new(platform)?;
+    let platform = IosPlatform::new(app_interface)?;
+    let call_manager = IosCallManager::new(platform, http_client)?;
 
     let call_manager_box = Box::new(call_manager);
     Ok(Box::into_raw(call_manager_box) as *mut c_void)
 }
 
 /// Updates the current user's UUID.
-pub fn set_self_uuid(call_manager: *mut IosCallManager, uuid: group_call::UserId) -> Result<()> {
+pub fn set_self_uuid(call_manager: *mut IosCallManager, uuid: UserId) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
     info!("set_self_uuid():");
@@ -359,17 +362,6 @@ pub fn received_call_message(
     )
 }
 
-pub fn received_http_response(
-    call_manager: *mut IosCallManager,
-    request_id: u32,
-    response: Option<HttpResponse>,
-) -> Result<()> {
-    info!("received_http_response(): request_id: {}", request_id,);
-
-    let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.received_http_response(request_id, response)
-}
-
 /// Application notification to accept the incoming call
 pub fn accept_call(call_manager: *mut IosCallManager, call_id: u64) -> Result<()> {
     let call_id = CallId::from(call_id);
@@ -457,20 +449,6 @@ pub fn close(call_manager: *mut IosCallManager) -> Result<()> {
 }
 
 // Group Calls
-
-pub fn peek_group_call(
-    call_manager: *mut IosCallManager,
-    request_id: u32,
-    sfu_url: String,
-    membership_proof: Vec<u8>,
-    group_members: Vec<group_call::GroupMemberInfo>,
-) -> Result<()> {
-    info!("peek_group_call(): id: {}", request_id);
-
-    let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.peek_group_call(request_id, sfu_url, membership_proof, group_members);
-    Ok(())
-}
 
 #[allow(clippy::too_many_arguments)]
 pub fn create_group_call_client(
@@ -563,7 +541,7 @@ pub fn disconnect(
 pub fn group_ring(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,
-    recipient: Option<group_call::UserId>,
+    recipient: Option<UserId>,
 ) -> Result<()> {
     info!("group_ring(): id: {}", client_id);
 
@@ -634,7 +612,7 @@ pub fn request_video(
 pub fn set_group_members(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,
-    members: Vec<group_call::GroupMemberInfo>,
+    members: Vec<GroupMember>,
 ) -> Result<()> {
     info!("set_group_members(): id: {}", client_id);
 

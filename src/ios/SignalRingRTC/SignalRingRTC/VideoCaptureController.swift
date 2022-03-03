@@ -6,6 +6,7 @@
 import WebRTC
 import SignalCoreKit
 
+@available(iOSApplicationExtension, unavailable)
 public class VideoCaptureController {
     // The maximum video format allowable for any type of call.
     static let maxCaptureWidth: Int32 = 1280

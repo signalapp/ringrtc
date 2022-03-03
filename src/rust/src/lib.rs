@@ -25,6 +25,13 @@ pub mod common;
 
 mod error;
 
+// Doesn't depend on WebRTC
+pub mod lite {
+    pub mod ffi;
+    pub mod http;
+    pub mod sfu;
+}
+
 /// Core, platform independent functionality.
 pub mod core {
     pub mod bandwidth_mode;
@@ -36,7 +43,6 @@ pub mod core {
     pub mod connection_fsm;
     pub mod crypto;
     pub mod group_call;
-    pub mod http_client;
     pub mod platform;
     pub mod sfu_client;
     pub mod signaling;

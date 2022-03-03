@@ -23,6 +23,9 @@
 		38C42F0223C530E900AE79AD /* CallContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C42F0123C530E900AE79AD /* CallContext.swift */; };
 		38C4E533251A73AC005C2ACB /* GroupCall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4E532251A73AC005C2ACB /* GroupCall.swift */; };
 		7D7716621CF7C7BE6D628552 /* Pods_SignalRingRTCTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2C724194C4821B07AE3B7C25 /* Pods_SignalRingRTCTests.framework */; };
+		D09D0C2D27CEDCE80098758E /* HTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = D09D0C2A27CEDCE80098758E /* HTTP.swift */; };
+		D09D0C2E27CEDCE80098758E /* SFU.swift in Sources */ = {isa = PBXBuildFile; fileRef = D09D0C2B27CEDCE80098758E /* SFU.swift */; };
+		D09D0C2F27CEDCE80098758E /* FFI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D09D0C2C27CEDCE80098758E /* FFI.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +63,9 @@
 		38B4DB352331D29200015A3F /* SignalRingRTC.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = SignalRingRTC.modulemap; sourceTree = "<group>"; };
 		38C42F0123C530E900AE79AD /* CallContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallContext.swift; sourceTree = "<group>"; };
 		38C4E532251A73AC005C2ACB /* GroupCall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupCall.swift; sourceTree = "<group>"; };
+		D09D0C2A27CEDCE80098758E /* HTTP.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HTTP.swift; sourceTree = "<group>"; };
+		D09D0C2B27CEDCE80098758E /* SFU.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SFU.swift; sourceTree = "<group>"; };
+		D09D0C2C27CEDCE80098758E /* FFI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FFI.swift; sourceTree = "<group>"; };
 		DE6C4831733C40B0AA3F9822 /* Pods-SignalRingRTC.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTC.debug.xcconfig"; path = "Target Support Files/Pods-SignalRingRTC/Pods-SignalRingRTC.debug.xcconfig"; sourceTree = "<group>"; };
 		DF254E06AB2E2A67EA06C6FA /* Pods-SignalRingRTCTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTCTests.debug.xcconfig"; path = "Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests.debug.xcconfig"; sourceTree = "<group>"; };
 		EBFBB74B7B1783321FE6EEA7 /* Pods-SignalRingRTC.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTC.release.xcconfig"; path = "Target Support Files/Pods-SignalRingRTC/Pods-SignalRingRTC.release.xcconfig"; sourceTree = "<group>"; };
@@ -110,6 +116,9 @@
 		388AC0C922FA8B2D00BEC609 /* SignalRingRTC */ = {
 			isa = PBXGroup;
 			children = (
+				D09D0C2C27CEDCE80098758E /* FFI.swift */,
+				D09D0C2A27CEDCE80098758E /* HTTP.swift */,
+				D09D0C2B27CEDCE80098758E /* SFU.swift */,
 				38C42F0123C530E900AE79AD /* CallContext.swift */,
 				383347EB23AA952F00D53B63 /* CallManager.swift */,
 				383347E923AA952F00D53B63 /* CallManagerGlobal.swift */,
@@ -351,6 +360,9 @@
 				38C4E533251A73AC005C2ACB /* GroupCall.swift in Sources */,
 				383347F323AA952F00D53B63 /* CallManager.swift in Sources */,
 				383347F023AA952F00D53B63 /* Connection.swift in Sources */,
+				D09D0C2F27CEDCE80098758E /* FFI.swift in Sources */,
+				D09D0C2E27CEDCE80098758E /* SFU.swift in Sources */,
+				D09D0C2D27CEDCE80098758E /* HTTP.swift in Sources */,
 				383347EE23AA952F00D53B63 /* CallManagerInterface.swift in Sources */,
 				383347F223AA952F00D53B63 /* ConnectionMediaStream.swift in Sources */,
 				38C42F0223C530E900AE79AD /* CallContext.swift in Sources */,

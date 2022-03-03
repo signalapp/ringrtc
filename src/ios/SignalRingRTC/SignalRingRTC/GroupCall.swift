@@ -8,6 +8,7 @@ import WebRTC
 import SignalCoreKit
 
 /// Represents the connection state to a media server for a group call.
+@available(iOSApplicationExtension, unavailable)
 public enum ConnectionState: Int32 {
     case notConnected = 0
     case connecting = 1
@@ -16,6 +17,7 @@ public enum ConnectionState: Int32 {
 }
 
 /// Represents whether or not a user is joined to a group call and can exchange media.
+@available(iOSApplicationExtension, unavailable)
 public enum JoinState: Int32 {
     case notJoined = 0
     case joining = 1
@@ -23,6 +25,7 @@ public enum JoinState: Int32 {
 }
 
 /// If not ended purposely by the user, gives the reason why a group call ended.
+@available(iOSApplicationExtension, unavailable)
 public enum GroupCallEndReason: Int32 {
     // Normal events
     case deviceExplicitlyDisconnected = 0
@@ -44,6 +47,7 @@ public enum GroupCallEndReason: Int32 {
 }
 
 /// The local device state for a group call.
+@available(iOSApplicationExtension, unavailable)
 public class LocalDeviceState {
     public internal(set) var connectionState: ConnectionState
     public internal(set) var networkRoute: NetworkRoute
@@ -58,6 +62,7 @@ public class LocalDeviceState {
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 public class ReceivedAudioLevel {
     public let demuxId: UInt32
     public internal(set) var audioLevel: UInt16
@@ -69,6 +74,7 @@ public class ReceivedAudioLevel {
 }
 
 /// All remote devices in a group call and their associated state.
+@available(iOSApplicationExtension, unavailable)
 public class RemoteDeviceState: Hashable {
     public let demuxId: UInt32
     public var userId: UUID
@@ -104,19 +110,9 @@ public class RemoteDeviceState: Hashable {
     }
 }
 
-/// Used to communicate the group membership to RingRTC for a group call.
-public struct GroupMemberInfo {
-    public let userId: UUID
-    public let userIdCipherText: Data
-
-    public init(userId: UUID, userIdCipherText: Data) {
-        self.userId = userId
-        self.userIdCipherText = userIdCipherText
-    }
-}
-
 /// Used for the application to communicate the actual resolutions of
 /// each device in a group call to RingRTC and the media server.
+@available(iOSApplicationExtension, unavailable)
 public struct VideoRequest {
     let demuxId: UInt32
     let width: UInt16
@@ -132,6 +128,7 @@ public struct VideoRequest {
 }
 
 /// The group call observer.
+@available(iOSApplicationExtension, unavailable)
 public protocol GroupCallDelegate: AnyObject {
     /**
      * Indication that the application should provide an updated proof of membership
@@ -175,6 +172,7 @@ public protocol GroupCallDelegate: AnyObject {
     func groupCall(onEnded groupCall: GroupCall, reason: GroupCallEndReason)
 }
 
+@available(iOSApplicationExtension, unavailable)
 public class GroupCall {
     let ringRtcCallManager: UnsafeMutableRawPointer
     let factory: RTCPeerConnectionFactory
@@ -457,7 +455,7 @@ public class GroupCall {
         ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray)
     }
 
-    public func updateGroupMembers(members: [GroupMemberInfo]) {
+    public func updateGroupMembers(members: [GroupMember]) {
         AssertIsOnMainThread()
         Logger.debug("updateGroupMembers")
 

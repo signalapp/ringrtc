@@ -8,11 +8,13 @@ import WebRTC
 import SignalCoreKit
 
 // Errors that the Call Manager APIs can throw.
+@available(iOSApplicationExtension, unavailable)
 public enum CallManagerError: Error {
     case apiFailed(description: String)
 }
 
 /// Primary events a Call UI can act upon.
+@available(iOSApplicationExtension, unavailable)
 public enum CallManagerEvent: Int32 {
     /// Inbound call only: The call signaling (ICE) is complete.
     case ringingLocal = 0
@@ -80,6 +82,7 @@ public enum CallManagerEvent: Int32 {
 //   but it's because we bound to the default IP address (0.0.0.0)
 //   so it's probably the default adapter (wifi if available, for example)
 //   This is unlikely to happen in practice.
+@available(iOSApplicationExtension, unavailable)
 public enum NetworkAdapterType: Int32 {
   case unknown = 0
   case ethernet = 1
@@ -95,6 +98,7 @@ public enum NetworkAdapterType: Int32 {
 }
 
 /// Info about the current network route for sending audio/video/data
+@available(iOSApplicationExtension, unavailable)
 public struct NetworkRoute {
     public let localAdapterType: NetworkAdapterType
 
@@ -104,6 +108,7 @@ public struct NetworkRoute {
 }
 
 /// Type of media for call at time of origination.
+@available(iOSApplicationExtension, unavailable)
 public enum CallMediaType: Int32 {
     /// Call should start as audio only.
     case audioCall = 0
@@ -112,6 +117,7 @@ public enum CallMediaType: Int32 {
 }
 
 /// Modes of operation when working with different bandwidth environments.
+@available(iOSApplicationExtension, unavailable)
 public enum BandwidthMode: Int32 {
     /// Intended for audio-only, to help ensure reliable audio over
     /// severely constrained networks.
@@ -125,6 +131,7 @@ public enum BandwidthMode: Int32 {
 }
 
 /// Type of hangup message.
+@available(iOSApplicationExtension, unavailable)
 public enum HangupType: Int32 {
     /// Normal hangup, typically remote user initiated.
     case normal = 0
@@ -138,12 +145,14 @@ public enum HangupType: Int32 {
     case needPermission = 4
 }
 
+@available(iOSApplicationExtension, unavailable)
 public enum CallMessageUrgency: Int32 {
     case droppable = 0
     case handleImmediately
 }
 
 /// Describes why a ring was cancelled.
+@available(iOSApplicationExtension, unavailable)
 public enum RingCancelReason: Int32 {
     /// The user explicitly clicked "Decline".
     case declinedByUser = 0
@@ -151,6 +160,7 @@ public enum RingCancelReason: Int32 {
     case busy
 }
 
+@available(iOSApplicationExtension, unavailable)
 public enum RingUpdate: Int32 {
     /// The sender is trying to ring this user.
     case requested = 0
@@ -168,33 +178,9 @@ public enum RingUpdate: Int32 {
     case cancelledByRinger
 }
 
-/// Contains the list of currently joined participants and related info about the call in progress.
-public struct PeekInfo {
-    public let joinedMembers: [UUID]
-    public let creator: UUID?
-    public let eraId: String?
-    public let maxDevices: UInt32?
-    public let deviceCount: UInt32
-
-    public init(joinedMembers: [UUID], creator: UUID?, eraId: String?, maxDevices: UInt32?, deviceCount: UInt32) {
-        self.joinedMembers = joinedMembers
-        self.creator = creator
-        self.eraId = eraId
-        self.maxDevices = maxDevices
-        self.deviceCount = deviceCount
-    }
-}
-
-/// The HTTP methods supported by the Call Manager.
-public enum CallManagerHttpMethod: Int32 {
-    case get = 0
-    case put = 1
-    case post = 2
-    case delete = 3
-}
-
 /// Class to wrap the group call dictionary so group call objects can reference
 /// it. All operations must be done on the main thread.
+@available(iOSApplicationExtension, unavailable)
 class GroupCallByClientId {
     private var groupCallByClientId: [UInt32: GroupCall] = [:]
 
@@ -204,29 +190,7 @@ class GroupCallByClientId {
     }
 }
 
-class Requests<T> {
-    private var sealById: [UInt32: (T) -> Void] = [:]
-    private var nextId: UInt32 = 1
-
-    func add() -> (UInt32, Guarantee<T>) {
-        let id = self.nextId
-        self.nextId += 1
-        let guarantee: Guarantee<T> = Guarantee { seal in
-            self.sealById[id] = seal
-        }
-        return (id, guarantee)
-    }
-
-    func resolve(id: UInt32, response: T) -> Bool {
-        guard let seal = self.sealById[id] else {
-            return false
-        }
-        seal(response)
-        self.sealById[id] = nil
-        return true
-    }
-}
-
+@available(iOSApplicationExtension, unavailable)
 public protocol CallManagerDelegate: AnyObject {
 
     associatedtype CallManagerDelegateCallType: CallManagerCallReference
@@ -305,13 +269,6 @@ public protocol CallManagerDelegate: AnyObject {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency)
 
     /**
-     * A HTTP request should be sent to the given url.
-     * Invoked on the main thread, asychronously.
-     * The result of the call should be indicated by calling the receivedHttpResponse() function.
-     */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHttpRequest requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?)
-
-    /**
      * Two call 'remote' pointers should be compared to see if they refer to the same
      * remote peer/contact.
      * Invoked *synchronously*.
@@ -342,12 +299,17 @@ public protocol CallManagerDelegate: AnyObject {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, didUpdateRingForGroup groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate)
 }
 
+@available(iOSApplicationExtension, unavailable)
 public protocol CallManagerCallReference: AnyObject { }
 
 // Implementation of the Call Manager for iOS.
+@available(iOSApplicationExtension, unavailable)
 public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfaceDelegate where CallManagerDelegateType: CallManagerDelegate, CallManagerDelegateType.CallManagerDelegateCallType == CallType {
 
     public weak var delegate: CallManagerDelegateType?
+
+    public var httpClient: HTTPClient
+    public var sfuClient: SFUClient
 
     private var factory: RTCPeerConnectionFactory?
 
@@ -361,9 +323,12 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     private var videoCaptureController: VideoCaptureController?
 
-    public init() {
+    public init(httpClient: HTTPClient) {
         // Initialize the global object (mainly for logging).
         _ = CallManagerGlobal.shared
+
+        self.httpClient = httpClient
+        self.sfuClient = SFUClient(httpClient: httpClient)
 
         // Initialize the WebRTC factory.
         let decoderFactory = RTCDefaultVideoDecoderFactory()
@@ -377,7 +342,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let interface = CallManagerInterface(delegate: self)
 
         // Create the RingRTC Call Manager itself.
-        guard let ringRtcCallManager = ringrtcCreate(Unmanaged.passUnretained(self).toOpaque(), interface.getWrapper()) else {
+        guard let ringRtcCallManager = ringrtcCreateCallManager(interface.getWrapper(), self.httpClient.rtcClient) else {
             owsFail("unable to create ringRtcCallManager")
         }
 
@@ -751,31 +716,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         ringrtcReceivedCallMessage(ringRtcCallManager, senderUuidSlice, senderDeviceId, localDeviceId, messageSlice, messageAgeSec)
     }
 
-    public func receivedHttpResponse(requestId: UInt32, statusCode: UInt16, body: Data?) {
-        AssertIsOnMainThread()
-        Logger.debug("receivedHttpResponse")
-
-        let bodySlice = allocatedAppByteSliceFromData(maybe_data: body)
-
-        // Make sure to release the allocated memory when the function exists,
-        // to ensure that the pointers are still valid when used in the RingRTC
-        // API function.
-        defer {
-            if bodySlice.bytes != nil {
-                bodySlice.bytes.deallocate()
-            }
-        }
-
-        ringrtcReceivedHttpResponse(ringRtcCallManager, requestId, statusCode, bodySlice)
-    }
-
-    public func httpRequestFailed(requestId: UInt32) {
-        AssertIsOnMainThread()
-        Logger.debug("httpRequestFailed")
-
-        ringrtcHttpRequestFailed(ringRtcCallManager, requestId)
-    }
-
     // MARK: - Group Call
 
     public func createGroupCall(groupId: Data, sfuUrl: String, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) -> GroupCall? {
@@ -789,53 +729,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, groupId: groupId, sfuUrl: sfuUrl, hkdfExtraInfo: hkdfExtraInfo, audioLevelsIntervalMillis: audioLevelsIntervalMillis, videoCaptureController: videoCaptureController)
         return groupCall
-    }
-
-    public func peekGroupCall(sfuUrl: String, membershipProof: Data, groupMembers: [GroupMemberInfo]) -> Guarantee<PeekInfo> {
-        AssertIsOnMainThread()
-        Logger.debug("peekGroupCall")
-
-        let sfuUrlSlice = allocatedAppByteSliceFromString(maybe_string: sfuUrl)
-        let membershipProofSlice = allocatedAppByteSliceFromData(maybe_data: membershipProof)
-
-        let appMembers: [AppGroupMemberInfo] = groupMembers.map { member in
-            let userIdSlice = allocatedAppByteSliceFromData(maybe_data: member.userId.data)
-            let memberIdSlice = allocatedAppByteSliceFromData(maybe_data: member.userIdCipherText)
-
-            return AppGroupMemberInfo(userId: userIdSlice, memberId: memberIdSlice)
-        }
-
-        // Make sure to release the allocated memory when the function exists,
-        // to ensure that the pointers are still valid when used in the RingRTC
-        // API function.
-        defer {
-            if sfuUrlSlice.bytes != nil {
-                sfuUrlSlice.bytes.deallocate()
-            }
-            if membershipProofSlice.bytes != nil {
-                membershipProofSlice.bytes.deallocate()
-            }
-
-            for appMember in appMembers {
-                if appMember.userId.bytes != nil {
-                    appMember.userId.bytes.deallocate()
-                }
-                if appMember.memberId.bytes != nil {
-                    appMember.memberId.bytes.deallocate()
-                }
-            }
-        }
-
-        var appGroupMemberInfoArray = appMembers.withUnsafeBufferPointer { appMembersBytes in
-            return AppGroupMemberInfoArray(
-                members: appMembersBytes.baseAddress,
-                count: groupMembers.count
-            )
-        }
-
-        let (requestId, seal) = self.peekInfoRequests.add()
-        ringrtcPeekGroupCall(self.ringRtcCallManager, requestId, sfuUrlSlice, membershipProofSlice, &appGroupMemberInfoArray)
-        return seal
     }
 
     // MARK: - Event Observers
@@ -980,18 +873,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
-        Logger.debug("onSendHttpRequest")
-
-        DispatchQueue.main.async {
-            Logger.debug("onSendHttpRequest - main.async")
-
-            guard let delegate = self.delegate else { return }
-
-            delegate.callManager(self, shouldSendHttpRequest: requestId, url: url, method: method, headers: headers, body: body)
-        }
-    }
-
     func groupCallRingUpdate(groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate) {
         Logger.debug("onSendHttpRequest")
 
@@ -1096,18 +977,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
             // rust lib has signaled that it's done with the call reference
             unmanagedRemote.release()
-        }
-    }
-
-    func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo) {
-        Logger.debug("handlePeekResponse")
-
-        DispatchQueue.main.async {
-            Logger.debug("handlePeekResponse - main.async")
-
-            if !self.peekInfoRequests.resolve(id: requestId, response: peekInfo) {
-                Logger.warn("Invalid requestId for handlePeekResponse: \(requestId)")
-            }
         }
     }
 
@@ -1263,6 +1132,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 func allocatedAppByteSliceFromArray(maybe_bytes: [UInt8]?) -> AppByteSlice {
     guard let bytes = maybe_bytes else {
         return AppByteSlice(bytes: nil, len: 0)
@@ -1272,6 +1142,7 @@ func allocatedAppByteSliceFromArray(maybe_bytes: [UInt8]?) -> AppByteSlice {
     return AppByteSlice(bytes: ptr, len: bytes.count)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func allocatedAppByteSliceFromString(maybe_string: String?) -> AppByteSlice {
     guard let string = maybe_string else {
         return allocatedAppByteSliceFromArray(maybe_bytes: nil)
@@ -1279,6 +1150,7 @@ func allocatedAppByteSliceFromString(maybe_string: String?) -> AppByteSlice {
     return allocatedAppByteSliceFromArray(maybe_bytes: Array(string.utf8))
 }
 
+@available(iOSApplicationExtension, unavailable)
 func allocatedAppByteSliceFromData(maybe_data: Data?) -> AppByteSlice {
     guard let data = maybe_data else {
         return allocatedAppByteSliceFromArray(maybe_bytes: nil)

@@ -15,7 +15,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 use futures::future::Future;
-use sha2::{Digest, Sha256};
 use tokio::runtime;
 
 use crate::common::Result;
@@ -252,38 +251,6 @@ pub fn redact_string(text: &str) -> String {
 #[cfg(debug_assertions)]
 pub fn redact_string(text: &str) -> String {
     text.to_string()
-}
-
-/// Encodes a slice of bytes as a hexadecimal string.
-///
-/// ```
-/// use ringrtc::core::util::bytes_to_hexstring;
-///
-/// assert_eq!(bytes_to_hexstring(&[]), "");
-/// assert_eq!(bytes_to_hexstring(&[0x01, 0xAB, 0xCD]), "01abcd");
-/// ```
-pub fn bytes_to_hexstring(bytes: &[u8]) -> String {
-    let mut result = String::new();
-    for byte in bytes {
-        let hex_byte = format!("{:02x}", byte);
-        result.push_str(&hex_byte);
-    }
-    result
-}
-
-/// Computes a SHA-256 hash of the input value and returns it as a hex string.
-///
-/// ```
-/// use ringrtc::core::util::sha256_as_hexstring;
-///
-/// assert_eq!(sha256_as_hexstring("abc".as_bytes()), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-/// ```
-pub fn sha256_as_hexstring(data: &[u8]) -> String {
-    let mut hash = Sha256::new();
-    hash.update(data);
-    let hash = hash.finalize();
-
-    bytes_to_hexstring(&hash)
 }
 
 /// Encodes a slice of bytes representing a UUID as a string. Returns an empty

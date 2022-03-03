@@ -20,13 +20,14 @@ use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
 
-use crate::common::{CallId, CallMediaType, DeviceId, HttpResponse, Result};
+use crate::common::{CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::lite::{http, sfu::GroupMember};
 use crate::webrtc;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection::PeerConnection;
@@ -73,7 +74,9 @@ pub fn create_call_manager(env: &JNIEnv, jni_call_manager: JObject) -> Result<jl
     info!("create_call_manager():");
     let platform = AndroidPlatform::new(env, env.new_global_ref(jni_call_manager)?)?;
 
-    let call_manager = AndroidCallManager::new(platform)?;
+    let http_client = http::DelegatingClient::new(platform.try_clone()?);
+
+    let call_manager = AndroidCallManager::new(platform, http_client)?;
 
     let call_manager_box = Box::new(call_manager);
     Ok(Box::into_raw(call_manager_box) as jlong)
@@ -476,12 +479,13 @@ pub fn received_http_response(
         env.convert_byte_array(body)?
     };
 
-    let response = HttpResponse {
+    let response = http::Response {
         status_code: status_code as u16,
         body,
     };
 
-    call_manager.received_http_response(request_id as u32, Some(response))
+    call_manager.received_http_response(request_id as u32, Some(response));
+    Ok(())
 }
 
 /// Application notification of failed HTTP request.
@@ -490,7 +494,8 @@ pub fn http_request_failed(call_manager: *mut AndroidCallManager, request_id: jl
 
     info!("http_request_failed(): request_id: {}", request_id);
 
-    call_manager.received_http_response(request_id as u32, None)
+    call_manager.received_http_response(request_id as u32, None);
+    Ok(())
 }
 
 /// Application notification to accept the incoming call
@@ -581,10 +586,10 @@ pub fn close(call_manager: *mut AndroidCallManager) -> Result<()> {
 
 // Group Calls
 
-/// Convert a byte[] with 32-byte chunks in to a GroupMemberInfo struct vector.
+/// Convert a byte[] with 32-byte chunks in to a GroupMember struct vector.
 fn deserialize_to_group_member_info(
     mut serialized_group_members: Vec<u8>,
-) -> Result<Vec<group_call::GroupMemberInfo>> {
+) -> Result<Vec<GroupMember>> {
     if serialized_group_members.len() % 81 != 0 {
         error!(
             "Serialized buffer is not a multiple of 81: {}",
@@ -595,7 +600,7 @@ fn deserialize_to_group_member_info(
 
     let mut group_members = Vec::new();
     for chunk in serialized_group_members.chunks_exact_mut(81) {
-        group_members.push(group_call::GroupMemberInfo {
+        group_members.push(GroupMember {
             user_id: chunk[..16].into(),
             member_id: chunk[16..].into(),
         })

@@ -7,6 +7,7 @@ import SignalRingRTC.RingRTC
 import WebRTC
 import SignalCoreKit
 
+@available(iOSApplicationExtension, unavailable)
 protocol CallManagerInterfaceDelegate: AnyObject {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
@@ -19,7 +20,6 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
     func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
     func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency)
-    func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?)
     func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
     func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool
@@ -28,7 +28,6 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     // Group Calls
 
     func groupCallRingUpdate(groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate)
-    func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo)
 
     func requestMembershipProof(clientId: UInt32)
     func requestGroupMembers(clientId: UInt32)
@@ -42,6 +41,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleEnded(clientId: UInt32, reason: GroupCallEndReason)
 }
 
+@available(iOSApplicationExtension, unavailable)
 class CallManagerInterface {
 
     private weak var callManagerObserverDelegate: CallManagerInterfaceDelegate?
@@ -73,7 +73,6 @@ class CallManagerInterface {
             onSendBusy: callManagerInterfaceOnSendBusy,
             sendCallMessage: callManagerInterfaceSendCallMessage,
             sendCallMessageToGroup: callManagerInterfaceSendCallMessageToGroup,
-            sendHttpRequest: callManagerInterfaceSendHttpRequest,
             onCreateConnectionInterface: callManagerInterfaceOnCreateConnectionInterface,
             onCreateMediaStreamInterface: callManagerInterfaceOnCreateMediaStreamInterface,
             onConnectMedia: callManagerInterfaceOnConnectMedia,
@@ -83,7 +82,6 @@ class CallManagerInterface {
             // Group Calls
 
             groupCallRingUpdate: callManagerInterfaceGroupCallRingUpdate,
-            handlePeekResponse: callManagerInterfaceHandlePeekResponse,
 
             requestMembershipProof: callManagerInterfaceRequestMembershipProof,
             requestGroupMembers: callManagerInterfaceRequestGroupMembers,
@@ -198,14 +196,6 @@ class CallManagerInterface {
         delegate.sendCallMessageToGroup(groupId: groupId, message: message, urgency: urgency)
     }
 
-    func sendHttpRequest(requestId: UInt32, url: String, method: CallManagerHttpMethod, headers: [String: String], body: Data?) {
-        guard let delegate = self.callManagerObserverDelegate else {
-            return
-        }
-
-        delegate.sendHttpRequest(requestId: requestId, url: url, method: method, headers: headers, body: body)
-    }
-
     func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
         guard let delegate = self.callManagerObserverDelegate else {
             return nil
@@ -246,14 +236,6 @@ class CallManagerInterface {
         }
 
         delegate.groupCallRingUpdate(groupId: groupId, ringId: ringId, sender: sender, update: update)
-    }
-
-    func handlePeekResponse(requestId: UInt32, peekInfo: PeekInfo) {
-        guard let delegate = self.callManagerObserverDelegate else {
-            return
-        }
-
-        delegate.handlePeekResponse(requestId: requestId, peekInfo: peekInfo)
     }
 
     func requestMembershipProof(clientId: UInt32) {
@@ -337,6 +319,7 @@ class CallManagerInterface {
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceDestroy(object: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -348,6 +331,7 @@ func callManagerInterfaceDestroy(object: UnsafeMutableRawPointer?) {
     // so deinit should be called implicitly.
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, callId: UInt64, isOutgoing: Bool, mediaType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -371,6 +355,7 @@ func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: U
     obj.onStartCall(remote: remote, callId: callId, isOutgoing: isOutgoing, callMediaType: callMediaType)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, event: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -386,6 +371,7 @@ func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: U
     obj.onEvent(remote: remote, event: event)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnNetworkRouteChanged(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, localNetworkAdapterType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -401,6 +387,7 @@ func callManagerInterfaceOnNetworkRouteChanged(object: UnsafeMutableRawPointer?,
     obj.onNetworkRouteChangedFor(remote: remote, localNetworkAdapterType: localNetworkAdapterType)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnAudioLevels(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, capturedLevel: UInt16, receivedLevel: UInt16) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -416,6 +403,7 @@ func callManagerInterfaceOnAudioLevels(object: UnsafeMutableRawPointer?, remote:
     obj.onAudioLevelsFor(remote: remote, capturedLevel: capturedLevel, receivedLevel: receivedLevel)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, mediaType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -450,6 +438,7 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
     obj.onSendOffer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque, callMediaType: callMediaType)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -476,6 +465,7 @@ func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: 
     obj.onSendAnswer(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, opaque: opaque)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, candidates: UnsafePointer<AppIceCandidateArray>?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -515,6 +505,7 @@ func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, c
     obj.onSendIceCandidates(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, candidates: finalCandidates)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, type: Int32, deviceId: UInt32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -544,6 +535,7 @@ func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: 
     obj.onSendHangup(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId, hangupType: hangupType, deviceId: deviceId)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -565,6 +557,7 @@ func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UI
     obj.onSendBusy(callId: callId, remote: remote, destinationDeviceId: destinationDeviceId)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recipientUuid: AppByteSlice, message: AppByteSlice, urgency: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -588,6 +581,7 @@ func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recip
     obj.sendCallMessage(recipientUuid: recipient.uuid, message: message, urgency: urgency)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, message: AppByteSlice, urgency: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -611,38 +605,7 @@ func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?
     obj.sendCallMessageToGroup(groupId: groupId, message: message, urgency: urgency)
 }
 
-func callManagerInterfaceSendHttpRequest(object: UnsafeMutableRawPointer?, requestId: UInt32, url: AppByteSlice, method: Int32, headerArray: AppHeaderArray, body: AppByteSlice) {
-    guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
-        return
-    }
-    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
-
-    guard let url = url.asString() else {
-        Logger.error("url is not a valid string")
-        return
-    }
-
-    let httpMethod: CallManagerHttpMethod
-    if let validHttpMethod = CallManagerHttpMethod(rawValue: method) {
-        httpMethod = validHttpMethod
-    } else {
-        owsFailDebug("unexpected method")
-        return
-    }
-
-    var finalHeaders: [String: String] = [:]
-    for index in 0..<headerArray.count {
-        guard let name = headerArray.headers[index].name.asString() else {
-            continue
-        }
-
-        finalHeaders[name] = headerArray.headers[index].value.asString()
-    }
-
-    obj.sendHttpRequest(requestId: requestId, url: url, method: httpMethod, headers: finalHeaders, body: body.asData())
-}
-
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?) -> AppConnectionInterface {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -685,6 +648,7 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCreateMediaStreamInterface(object: UnsafeMutableRawPointer?, connection: UnsafeMutableRawPointer?) -> AppMediaStreamInterface {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -720,6 +684,7 @@ func callManagerInterfaceOnCreateMediaStreamInterface(object: UnsafeMutableRawPo
     return appMediaStream.getWrapper()
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnConnectMedia(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, context: UnsafeMutableRawPointer?, stream: UnsafeRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -749,6 +714,7 @@ func callManagerInterfaceOnConnectMedia(object: UnsafeMutableRawPointer?, remote
     obj.onConnectedMedia(remote: remote, appCallContext: appCallContext, stream: mediaStream)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCompareRemotes(object: UnsafeMutableRawPointer?, remote1: UnsafeRawPointer?, remote2: UnsafeRawPointer?) -> Bool {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -769,6 +735,7 @@ func callManagerInterfaceOnCompareRemotes(object: UnsafeMutableRawPointer?, remo
     return obj.onCompareRemotes(remote1: remote1, remote2: remote2)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCallConcluded(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -786,34 +753,7 @@ func callManagerInterfaceOnCallConcluded(object: UnsafeMutableRawPointer?, remot
 
 // Group Calls
 
-func callManagerInterfaceHandlePeekResponse(object: UnsafeMutableRawPointer?, requestId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32) {
-    guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
-        return
-    }
-    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
-
-    var finalJoinedMembers: [UUID] = []
-
-    for index in 0..<joinedMembers.count {
-        guard let userId = joinedMembers.uuids[index].asData() else {
-            Logger.debug("missing userId")
-            continue
-        }
-
-        finalJoinedMembers.append(userId.uuid)
-    }
-
-    var finalMaxDevices: UInt32?
-    if maxDevices.valid {
-        finalMaxDevices = maxDevices.value
-    }
-
-    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.asData()?.uuid, eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount)
-
-    obj.handlePeekResponse(requestId: requestId, peekInfo: peekInfo)
-}
-
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceRequestMembershipProof(object: UnsafeMutableRawPointer?, clientId: UInt32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -824,6 +764,7 @@ func callManagerInterfaceRequestMembershipProof(object: UnsafeMutableRawPointer?
     obj.requestMembershipProof(clientId: clientId)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceRequestGroupMembers(object: UnsafeMutableRawPointer?, clientId: UInt32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -834,6 +775,7 @@ func callManagerInterfaceRequestGroupMembers(object: UnsafeMutableRawPointer?, c
     obj.requestGroupMembers(clientId: clientId)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleConnectionStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, connectionState: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -852,6 +794,7 @@ func callManagerInterfaceHandleConnectionStateChanged(object: UnsafeMutableRawPo
     obj.handleConnectionStateChanged(clientId: clientId, connectionState: _connectionState)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleNetworkRouteChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, localNetworkAdapterType: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -868,6 +811,7 @@ func callManagerInterfaceHandleNetworkRouteChanged(object: UnsafeMutableRawPoint
     obj.handleNetworkRouteChanged(clientId: clientId, networkRoute: networkRoute)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleAudioLevels(object: UnsafeMutableRawPointer?, clientId: UInt32, capturedLevel: UInt16, receivedLevelArray: AppReceivedAudioLevelArray) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -886,6 +830,7 @@ func callManagerInterfaceHandleAudioLevels(object: UnsafeMutableRawPointer?, cli
     obj.handleAudioLevels(clientId: clientId, capturedLevel: capturedLevel, receivedLevels: finalReceivedLevels)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinState: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -904,6 +849,7 @@ func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?
     obj.handleJoinStateChanged(clientId: clientId, joinState: _joinState)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDeviceStates: AppRemoteDeviceStateArray) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -949,6 +895,7 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
     obj.handleRemoteDevicesChanged(clientId: clientId, remoteDeviceStates: finalRemoteDeviceStates)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -959,6 +906,7 @@ func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointe
     obj.handleIncomingVideoTrack(clientId: clientId, remoteDemuxId: remoteDemuxId, nativeVideoTrackBorrowedRc: nativeVideoTrackBorrowedRc)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, ringId: Int64, sender: AppByteSlice, update: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -984,6 +932,7 @@ func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, g
     obj.groupCallRingUpdate(groupId: groupId, ringId: ringId, sender: sender.uuid, update: update)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
@@ -1012,6 +961,7 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
     obj.handlePeekChanged(clientId: clientId, peekInfo: peekInfo)
 }
 
+@available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId: UInt32, reason: Int32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
