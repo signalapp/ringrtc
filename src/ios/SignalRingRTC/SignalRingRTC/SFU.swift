@@ -25,7 +25,7 @@ extension rtc_sfu_PeekRequest {
     // Don't forget to call deallocate()
     static func allocate(_ request: PeekRequest) -> Self {
         return Self(
-            sfu_url: rtc_Bytes.allocate(from: request.sfuURL),
+            sfu_url: rtc_String.allocate(from: request.sfuURL),
             membership_proof: rtc_Bytes.allocate(from: request.membershipProof),
             group_members: rtc_sfu_GroupMembers.allocate(request.groupMembers)
         )

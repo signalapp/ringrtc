@@ -480,7 +480,7 @@ pub fn received_http_response(
     };
 
     let response = http::Response {
-        status_code: status_code as u16,
+        status: (status_code as u16).into(),
         body,
     };
 

@@ -12,8 +12,6 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum IosError {
     // iOS error codes
-    #[error("Couldn't allocate memory for logging object")]
-    InitializeLogging,
     #[error("Creating RTCPeerConnection in App failed")]
     CreateAppPeerConnection,
     #[error("Creating MediaStream in App failed")]

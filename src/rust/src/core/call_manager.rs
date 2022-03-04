@@ -27,9 +27,8 @@ use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
-use crate::core::group_call::Observer;
+use crate::core::group_call::{HttpSfuClient, Observer};
 use crate::core::platform::Platform;
-use crate::core::sfu_client::SfuClient;
 use crate::core::util::{uuid_to_string, TaskQueueRuntime};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
@@ -2531,7 +2530,7 @@ where
             .map(|ring| ring.ring_id);
 
         let sfu_client =
-            SfuClient::new(Box::new(self.http_client.clone()), sfu_url, hkdf_extra_info);
+            HttpSfuClient::new(Box::new(self.http_client.clone()), sfu_url, hkdf_extra_info);
         let client = group_call::Client::start(
             group_id,
             client_id,

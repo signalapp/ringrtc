@@ -63,7 +63,6 @@ if (is_android) {
     "src/core/crypto.rs",
     "src/core/group_call.rs",
     "src/core/platform.rs",
-    "src/core/sfu_client.rs",
     "src/core/signaling.rs",
     "src/core/util.rs",
     "src/lite/http.rs",

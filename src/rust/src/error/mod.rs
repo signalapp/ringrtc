@@ -104,11 +104,11 @@ pub enum RingRtcError {
 
     // SFU client error codes
     #[error("SfuClient received unexpected response status code {0}")]
-    SfuClientReceivedUnexpectedResponseStatusCode(u16),
+    UnexpectedResponseCodeFromSFu(u16),
     #[error("SfuClient request failed")]
     SfuClientRequestFailed,
     #[error("The maximum number of participants has been reached")]
-    MaxParticipantsReached,
+    GroupCallFull,
 
     // Frame encryption error codes
     #[error("Frame Counter too big")]

@@ -1622,20 +1622,8 @@ impl sfu::Delegate for AndroidPlatform {
         info!("handle_peek_response():");
 
         // TODO: Pass failure error codes to app.
-        let PeekInfo {
-            devices,
-            creator,
-            era_id,
-            max_devices,
-            device_count,
-        } = peek_result.unwrap_or_default();
-
-        // We use a HashSet because the client expects a unique list of users,
-        // and there can be multiple devices from the same user.
-        let joined_members: HashSet<UserId> = devices
-            .into_iter()
-            .filter_map(|device| device.user_id)
-            .collect();
+        let peek_info = peek_result.unwrap_or_default();
+        let joined_members = peek_info.unique_users();
 
         let env = match self.java_env() {
             Ok(v) => v,
@@ -1660,7 +1648,7 @@ impl sfu::Delegate for AndroidPlatform {
             };
 
             for joined_member in joined_members {
-                let jni_opaque_user_id = match env.byte_array_from_slice(&joined_member) {
+                let jni_opaque_user_id = match env.byte_array_from_slice(joined_member) {
                     Ok(v) => JObject::from(v),
                     Err(error) => {
                         error!("{:?}", error);
@@ -1675,9 +1663,9 @@ impl sfu::Delegate for AndroidPlatform {
                 }
             }
 
-            let jni_creator = match creator {
+            let jni_creator = match peek_info.creator.as_ref() {
                 None => JObject::null(),
-                Some(creator) => match env.byte_array_from_slice(&creator) {
+                Some(creator) => match env.byte_array_from_slice(creator) {
                     Ok(v) => JObject::from(v),
                     Err(error) => {
                         error!("{:?}", error);
@@ -1686,7 +1674,7 @@ impl sfu::Delegate for AndroidPlatform {
                 },
             };
 
-            let jni_era_id = match era_id {
+            let jni_era_id = match peek_info.era_id.as_ref() {
                 None => JObject::null(),
                 Some(era_id) => match env.new_string(era_id) {
                     Ok(v) => JObject::from(v),
@@ -1697,15 +1685,16 @@ impl sfu::Delegate for AndroidPlatform {
                 },
             };
 
-            let jni_max_devices = match self.get_optional_u32_long_object(&env, max_devices) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("{:?}", error);
-                    return Ok(JObject::null());
-                }
-            };
+            let jni_max_devices =
+                match self.get_optional_u32_long_object(&env, peek_info.max_devices) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                };
 
-            let jni_device_count = device_count as jlong;
+            let jni_device_count = peek_info.device_count as jlong;
 
             let result = jni_call_method(
                 &env,

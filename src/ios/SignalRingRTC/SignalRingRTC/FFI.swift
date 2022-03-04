@@ -71,27 +71,11 @@ extension rtc_Bytes {
         return Self.allocate(from: Array(data))
     }
 
-    // Don't forget to call deallocate()
-    static func allocate(from maybe: String?) -> Self {
-        guard let string = maybe else {
-            return Self.empty()
-        }
-
-        return Self.allocate(from: Array(string.utf8))
-    }
-
     func deallocate() {
         if self.ptr == nil {
             return
         }
         self.ptr.deallocate()
-    }
-
-    func toString(encoding: String.Encoding = String.Encoding.utf8) -> String? {
-        if self.ptr == nil {
-            return nil
-        }
-        return String(bytes: self.asUnsafeBufferPointer(), encoding: encoding)
     }
 
     func toArray() -> [UInt8]? {
@@ -114,6 +98,38 @@ extension rtc_Bytes {
 
     func toUUID() -> UUID? {
         return self.toData()?.uuid
+    }
+}
+
+extension rtc_String {
+    static func empty() -> Self {
+        return Self(ptr: nil, count: 0)
+    }
+
+    // Don't forget to call deallocate()
+    static func allocate(from maybe: String?) -> Self {
+        guard let string = maybe else {
+            return Self.empty()
+        }
+
+        let bytes = Array(string.utf8);
+        let ptr = UnsafeMutablePointer<UInt8>.allocate(capacity: bytes.count)
+        ptr.initialize(from: bytes, count: bytes.count)
+        return Self(ptr: ptr, count: bytes.count)
+    }
+
+    func deallocate() {
+        if self.ptr == nil {
+            return
+        }
+        self.ptr.deallocate()
+    }
+
+    func toString() -> String? {
+        if self.ptr == nil {
+            return nil
+        }
+        return String(bytes: UnsafeBufferPointer(start: self.ptr, count: self.count), encoding: .utf8)
     }
 }
 

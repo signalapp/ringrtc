@@ -6,13 +6,11 @@
 //! iOS Call Manager
 
 use std::ffi::c_void;
-use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppObject};
 use crate::ios::ios_platform::IosPlatform;
-use crate::ios::logging::{init_logging, IosLogger};
 
 use crate::common::{CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
@@ -30,21 +28,6 @@ use crate::webrtc::peer_connection_factory::{self as pcf, PeerConnectionFactory}
 
 /// Public type for iOS CallManager
 pub type IosCallManager = CallManager<IosPlatform>;
-
-/// Library initialization routine.
-///
-/// Sets up the logging infrastructure.
-pub fn initialize(log_object: IosLogger) -> Result<()> {
-    init_logging(log_object)?;
-
-    // Set a custom panic handler that uses the logger instead of
-    // stderr, which is of no use on Android.
-    panic::set_hook(Box::new(|panic_info| {
-        error!("Critical error: {}", panic_info);
-    }));
-
-    Ok(())
-}
 
 /// Creates a new IosCallManager object.
 pub fn create(app_interface: AppInterface, http_client: http::ios::Client) -> Result<*mut c_void> {

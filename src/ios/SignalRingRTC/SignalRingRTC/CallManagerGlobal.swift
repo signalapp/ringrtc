@@ -24,14 +24,7 @@ public class CallManagerGlobal {
     private init() {
         // This initialization will be done only once per application
         // lifetime.
-
-        // Create a logger object and transfer ownership to RingRTC.
-        let logger = CallManagerLogger()
-
-        let retPtr = ringrtcInitialize(logger.getWrapper())
-        if retPtr == nil {
-            owsFailDebug("ringRtcInitialize failure")
-        }
+        initLogging()
 
         // Don't write WebRTC logs to stdout.
         RTCSetMinDebugLogLevel(.none)

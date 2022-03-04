@@ -14,10 +14,9 @@ use ringrtc::{
     core::{
         call_mutex::CallMutex,
         group_call::{
-            self, ClientId, ConnectionState, EndReason, JoinState, RemoteDeviceState,
-            RemoteDevicesChangedReason,
+            self, ClientId, ConnectionState, EndReason, HttpSfuClient, JoinState,
+            RemoteDeviceState, RemoteDevicesChangedReason,
         },
-        sfu_client::SfuClient,
     },
     lite::{
         http,
@@ -78,7 +77,10 @@ impl http::Client for HttpClient {
                     let status_code = response.status();
                     let mut body = Vec::new();
                     if response.into_reader().read_to_end(&mut body).is_ok() {
-                        response_callback(Some(http::Response { status_code, body }));
+                        response_callback(Some(http::Response {
+                            status: status_code.into(),
+                            body,
+                        }));
                     } else {
                         response_callback(None);
                     }
@@ -86,7 +88,10 @@ impl http::Client for HttpClient {
                 Err(ureq::Error::Status(status_code, response)) => {
                     let mut body = Vec::new();
                     if response.into_reader().read_to_end(&mut body).is_ok() {
-                        response_callback(Some(http::Response { status_code, body }));
+                        response_callback(Some(http::Response {
+                            status: status_code.into(),
+                            body,
+                        }));
                     } else {
                         response_callback(None);
                     }
@@ -263,7 +268,11 @@ fn main() {
 
     let group_id = b"Test Group".to_vec();
     let http_client: HttpClient = HttpClient::start();
-    let sfu_client = SfuClient::new(Box::new(http_client), url.to_string(), hkdf_extra_info);
+    let sfu_client = Box::new(HttpSfuClient::new(
+        Box::new(http_client),
+        url.to_string(),
+        hkdf_extra_info,
+    ));
     let observer = Observer::default();
     let config = peer_connection_factory::Config {
         use_injectable_network: false,
@@ -284,7 +293,7 @@ fn main() {
     let client = group_call::Client::start(
         group_id,
         1,
-        Box::new(sfu_client),
+        sfu_client,
         Box::new(observer.clone()),
         busy,
         self_uuid,

@@ -29,6 +29,7 @@ mod error;
 pub mod lite {
     pub mod ffi;
     pub mod http;
+    pub mod logging;
     pub mod sfu;
 }
 
@@ -44,7 +45,6 @@ pub mod core {
     pub mod crypto;
     pub mod group_call;
     pub mod platform;
-    pub mod sfu_client;
     pub mod signaling;
     pub mod util;
 }
@@ -84,7 +84,6 @@ mod ios {
     mod error;
     mod ios_media_stream;
     mod ios_platform;
-    mod logging;
 }
 
 #[cfg(feature = "electron")]

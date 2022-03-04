@@ -6,24 +6,43 @@
 //! Make calls to an SFU to see who is in the call.
 //! and define common types like PeekInfo, MembershipProof, MemberInfo
 
-use std::{collections::HashMap, iter::FromIterator};
+use std::{
+    collections::{HashMap, HashSet},
+    iter::FromIterator,
+    net::IpAddr,
+    net::SocketAddr,
+};
 
 use hex::ToHex;
 use serde::Deserialize;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::lite::http;
 
-pub const RESPONSE_CODE_NO_CONFERENCE: u16 = 404;
-pub const RESPONSE_CODE_MAX_PARTICIPANTS_REACHED: u16 = 413;
-// Artificial codes we basically use for logging.
-pub const RESPONSE_CODE_INVALID_AUTH: u16 = 601;
-pub const RESPONSE_CODE_REQUEST_FAILED: u16 = 602;
-pub const RESPONSE_CODE_INVALID_UTF8: u16 = 603;
-pub const RESPONSE_CODE_INVALID_JSON: u16 = 604;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(u16)]
+pub enum ResponseCode {
+    GroupCallNotStarted = 404,
+    GroupCallFull = 413,
+    // Artifical codes not actually returned by the server
+    InvalidClientAuth = 601,
+    RequestFailed = 602,
+    InvalidResponseBodyUtf8 = 603,
+    InvalidResponseBodyJson = 604,
+}
 
-// If it fails, you get an HTTP status code.
-pub type PeekResult = Result<PeekInfo, u16>;
+impl From<ResponseCode> for http::ResponseStatus {
+    fn from(code: ResponseCode) -> Self {
+        http::ResponseStatus::from(code as u16)
+    }
+}
+
+impl PartialEq<ResponseCode> for http::ResponseStatus {
+    fn eq(&self, code: &ResponseCode) -> bool {
+        self.code == (*code as u16)
+    }
+}
 
 /// The state that can be observed by "peeking".
 #[derive(Clone, Debug, Default)]
@@ -40,6 +59,14 @@ pub struct PeekInfo {
     pub device_count: u32,
 }
 
+impl PeekInfo {
+    pub fn unique_users(&self) -> HashSet<&UserId> {
+        self.devices
+            .iter()
+            .filter_map(|device| device.user_id.as_ref())
+            .collect()
+    }
+}
 /// The per-device state observed by "peeking".
 #[derive(Clone, Debug)]
 pub struct PeekDeviceInfo {
@@ -111,6 +138,46 @@ impl SerializedPeekDeviceInfo {
                 None
             }
         })
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct SerializedJoinResponse {
+    #[serde(rename = "demuxId")]
+    client_demux_id: u32,
+    #[serde(rename = "ip")]
+    server_ip: IpAddr,
+    #[serde(rename = "port")]
+    server_port: u16,
+    #[serde(rename = "iceUfrag")]
+    server_ice_ufrag: String,
+    #[serde(rename = "icePwd")]
+    server_ice_pwd: String,
+    #[serde(rename = "dhePublicKey", with = "hex")]
+    server_dhe_pub_key: [u8; 32],
+}
+
+#[derive(Debug)]
+pub struct JoinResponse {
+    pub client_demux_id: u32,
+    pub server_addresses: Vec<SocketAddr>,
+    pub server_ice_ufrag: String,
+    pub server_ice_pwd: String,
+    pub server_dhe_pub_key: [u8; 32],
+}
+
+impl From<SerializedJoinResponse> for JoinResponse {
+    fn from(deserialized: SerializedJoinResponse) -> Self {
+        Self {
+            client_demux_id: deserialized.client_demux_id,
+            server_addresses: vec![SocketAddr::new(
+                deserialized.server_ip,
+                deserialized.server_port,
+            )],
+            server_ice_ufrag: deserialized.server_ice_ufrag,
+            server_ice_pwd: deserialized.server_ice_pwd,
+            server_dhe_pub_key: deserialized.server_dhe_pub_key,
+        }
     }
 }
 
@@ -211,6 +278,28 @@ pub trait Delegate {
     fn handle_peek_result(&self, request_id: u32, peek_result: PeekResult);
 }
 
+fn participants_url_from_sfu_url(sfu_url: &str) -> String {
+    format!(
+        "{}/v2/conference/participants",
+        sfu_url.trim_end_matches('/')
+    )
+}
+
+fn parse_http_json_response<'a, D: Deserialize<'a>>(
+    response: Option<&'a http::Response>,
+) -> Result<D, http::ResponseStatus> {
+    let response = response.ok_or(ResponseCode::RequestFailed)?;
+    if !response.status.is_success() {
+        return Err(response.status);
+    }
+    let body =
+        std::str::from_utf8(&response.body).map_err(|_| ResponseCode::InvalidResponseBodyUtf8)?;
+    let deserialized =
+        serde_json::from_str(body).map_err(|_| ResponseCode::InvalidResponseBodyJson)?;
+    Ok(deserialized)
+}
+
+pub type PeekResult = Result<PeekInfo, http::ResponseStatus>;
 pub type PeekResultCallback = Box<dyn FnOnce(PeekResult) + Send>;
 
 pub fn peek(
@@ -220,53 +309,75 @@ pub fn peek(
     opaque_user_id_mappings: Vec<OpaqueUserIdMapping>,
     result_callback: PeekResultCallback,
 ) {
-    let sfu_url = sfu_url.trim_end_matches('/').to_string();
     http_client.send_request(
         http::Request {
             method: http::Method::Get,
-            url: format!("{}/v2/conference/participants", sfu_url),
+            url: participants_url_from_sfu_url(sfu_url),
             headers: HashMap::from_iter([("Authorization".to_string(), auth_header)]),
             body: None,
         },
         Box::new(move |http_response| {
-            let result = match http_response {
-                Some(http) if http.status_code >= 200 && http.status_code <= 300 => {
-                    if let Ok(body) = std::str::from_utf8(&http.body) {
-                        if let Ok(deserialized) = serde_json::from_str::<SerializedPeekInfo>(body) {
-                            Ok(deserialized.deobfuscate(&opaque_user_id_mappings))
-                        } else {
-                            Err(RESPONSE_CODE_INVALID_JSON)
-                        }
-                    } else {
-                        Err(RESPONSE_CODE_INVALID_UTF8)
+            let result =
+                match parse_http_json_response::<SerializedPeekInfo>(http_response.as_ref()) {
+                    Ok(deserialized) => Ok(deserialized.deobfuscate(&opaque_user_id_mappings)),
+                    Err(status) if status == ResponseCode::GroupCallNotStarted => {
+                        Ok(PeekInfo::default())
                     }
-                }
-                Some(http) if http.status_code == RESPONSE_CODE_NO_CONFERENCE => {
-                    Ok(PeekInfo::default())
-                }
-                Some(http) => {
-                    warn!("SFU: peek response status code {}", http.status_code);
-                    Err(http.status_code)
-                }
-                _ => {
-                    warn!("SFU: peek request failed (no response)");
-                    Err(RESPONSE_CODE_REQUEST_FAILED)
-                }
-            };
+                    Err(status) => Err(status),
+                };
             result_callback(result);
         }),
     )
 }
 
+pub type JoinResult = Result<JoinResponse, http::ResponseStatus>;
+pub type JoinResultCallback = Box<dyn FnOnce(JoinResult) + Send>;
+
+pub fn join(
+    http_client: &dyn http::Client,
+    sfu_url: &str,
+    auth_header: String,
+    client_ice_ufrag: &str,
+    client_dhe_pub_key: &[u8],
+    hkdf_extra_info: &[u8],
+    result_callback: JoinResultCallback,
+) {
+    info!("sfu::Join(): ");
+
+    http_client.send_request(
+        http::Request {
+            method: http::Method::Put,
+            url: participants_url_from_sfu_url(sfu_url),
+            headers: HashMap::from_iter([
+                ("Authorization".to_string(), auth_header),
+                ("Content-Type".to_string(), "application/json".to_string()),
+            ]),
+            body: Some(
+                json!({
+                    "iceUfrag" : client_ice_ufrag,
+                    "dhePublicKey": client_dhe_pub_key.encode_hex::<String>(),
+                    "hkdfExtraInfo": hkdf_extra_info.encode_hex::<String>(),
+                })
+                .to_string()
+                .into_bytes(),
+            ),
+        },
+        Box::new(move |http_response| {
+            let result = parse_http_json_response::<SerializedJoinResponse>(http_response.as_ref())
+                .map(JoinResponse::from);
+            result_callback(result)
+        }),
+    );
+}
+
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
     use crate::lite::{
-        ffi::ios::{rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32},
+        ffi::ios::{rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32, rtc_String, FromOrDefault},
         http, sfu,
-        sfu::{Delegate, GroupMember, PeekInfo, PeekResult, UserId},
+        sfu::{Delegate, GroupMember, PeekInfo, PeekResult},
     };
     use libc::{c_void, size_t};
-    use std::{collections::HashSet, ops::Deref};
 
     /// # Safety
     ///
@@ -311,7 +422,7 @@ pub mod ios {
     #[repr(C)]
     #[derive(Debug)]
     pub struct rtc_sfu_PeekRequest<'a> {
-        sfu_url: rtc_Bytes<'a>,
+        sfu_url: rtc_String<'a>,
         membership_proof: rtc_Bytes<'a>,
         group_members: rtc_sfu_GroupMembers<'a>,
     }
@@ -377,29 +488,19 @@ pub mod ios {
     impl sfu::Delegate for rtc_sfu_Delegate {
         fn handle_peek_result(&self, request_id: u32, peek_result: PeekResult) {
             let (peek_info, error_status_code) = match peek_result {
-                Ok(peek_info) => (peek_info, rtc_OptionalU16::none()),
-                Err(status_code) => (PeekInfo::default(), rtc_OptionalU16::from(status_code)),
+                Ok(peek_info) => (peek_info, rtc_OptionalU16::default()),
+                Err(status) => (PeekInfo::default(), rtc_OptionalU16::from(status.code)),
             };
-            let joined_members = peek_info
-                .devices
-                .into_iter()
-                .filter_map(|device| device.user_id)
-                .collect::<HashSet<UserId>>()
-                .into_iter()
-                .collect::<Vec<UserId>>();
-            let rtc_joined_members: Vec<rtc_Bytes<'_>> = joined_members
-                .iter()
-                .map(|m| rtc_Bytes::from(m.deref()))
-                .collect();
-            let rtc_rtc_joined_members = rtc_UserIds::from(rtc_joined_members.deref());
-
+            let joined_members = peek_info.unique_users();
+            let rtc_joined_members: Vec<rtc_Bytes<'_>> =
+                joined_members.iter().map(rtc_Bytes::from).collect();
             let response = rtc_sfu_PeekResponse {
                 error_status_code,
                 peek_info: rtc_sfu_PeekInfo {
-                    joined_members: rtc_rtc_joined_members,
-                    creator: rtc_Bytes::from(peek_info.creator.as_deref()),
-                    era_id: rtc_Bytes::from(peek_info.era_id.as_deref()),
-                    max_devices: rtc_OptionalU32::from(peek_info.max_devices),
+                    joined_members: rtc_UserIds::from(&rtc_joined_members),
+                    creator: rtc_Bytes::from_or_default(peek_info.creator.as_ref()),
+                    era_id: rtc_String::from_or_default(peek_info.era_id.as_ref()),
+                    max_devices: rtc_OptionalU32::from_or_default(peek_info.max_devices),
                     device_count: peek_info.device_count,
                 },
             };
@@ -419,7 +520,7 @@ pub mod ios {
     #[derive(Debug)]
     pub struct rtc_sfu_PeekInfo<'a> {
         creator: rtc_Bytes<'a>,
-        era_id: rtc_Bytes<'a>,
+        era_id: rtc_String<'a>,
         max_devices: rtc_OptionalU32,
         device_count: u32,
         joined_members: rtc_UserIds<'a>,
@@ -433,8 +534,9 @@ pub mod ios {
         phantom: std::marker::PhantomData<&'a rtc_UserIds<'a>>,
     }
 
-    impl<'a> From<&'a [rtc_Bytes<'a>]> for rtc_UserIds<'a> {
-        fn from(user_ids: &'a [rtc_Bytes<'a>]) -> Self {
+    impl<'a, T: AsRef<[rtc_Bytes<'a>]>> From<&'a T> for rtc_UserIds<'a> {
+        fn from(user_ids: &'a T) -> Self {
+            let user_ids = user_ids.as_ref();
             Self {
                 ptr: user_ids.as_ptr(),
                 count: user_ids.len(),

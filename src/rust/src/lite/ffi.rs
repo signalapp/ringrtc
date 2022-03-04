@@ -9,20 +9,21 @@
 pub mod ios {
     use libc::size_t;
 
+    pub trait FromOrDefault<S>: From<S> + Default {
+        fn from_or_default(maybe: Option<S>) -> Self;
+    }
+
+    impl<S, T: From<S> + Default> FromOrDefault<S> for T {
+        fn from_or_default(maybe: Option<S>) -> Self {
+            maybe.map(Self::from).unwrap_or_default()
+        }
+    }
+
     #[repr(C)]
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     pub struct rtc_OptionalU16 {
         pub value: u16,
         pub valid: bool,
-    }
-
-    impl rtc_OptionalU16 {
-        pub fn none() -> Self {
-            Self {
-                value: 0,
-                valid: false,
-            }
-        }
     }
 
     impl From<u16> for rtc_OptionalU16 {
@@ -33,19 +34,10 @@ pub mod ios {
 
     /// Swift "UInt32?"
     #[repr(C)]
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     pub struct rtc_OptionalU32 {
         pub value: u32,
         pub valid: bool,
-    }
-
-    impl rtc_OptionalU32 {
-        pub fn none() -> Self {
-            Self {
-                value: 0,
-                valid: false,
-            }
-        }
     }
 
     impl From<u32> for rtc_OptionalU32 {
@@ -54,16 +46,7 @@ pub mod ios {
         }
     }
 
-    impl From<Option<u32>> for rtc_OptionalU32 {
-        fn from(value: Option<u32>) -> Self {
-            match value {
-                Some(value) => Self::from(value),
-                None => Self::none(),
-            }
-        }
-    }
-
-    /// Swift String/Data/[UInt8]/UnsafeBufferPointer<UInt8>
+    /// Swift Data/[UInt8]/UnsafeBufferPointer<UInt8>
     #[repr(C)]
     #[derive(Debug)]
     pub struct rtc_Bytes<'a> {
@@ -72,8 +55,8 @@ pub mod ios {
         phantom: std::marker::PhantomData<&'a u8>,
     }
 
-    impl<'a> rtc_Bytes<'a> {
-        pub fn empty() -> Self {
+    impl<'a> Default for rtc_Bytes<'a> {
+        fn default() -> Self {
             Self {
                 ptr: std::ptr::null(),
                 count: 0,
@@ -82,28 +65,14 @@ pub mod ios {
         }
     }
 
-    impl<'a> From<&'a [u8]> for rtc_Bytes<'a> {
-        fn from(bytes: &[u8]) -> Self {
+    impl<'a, T: AsRef<[u8]> + ?Sized> From<&'a T> for rtc_Bytes<'a> {
+        fn from(bytes: &'a T) -> Self {
+            let bytes = bytes.as_ref();
             Self {
                 ptr: bytes.as_ptr(),
                 count: bytes.len(),
                 phantom: std::marker::PhantomData,
             }
-        }
-    }
-
-    impl<'a> From<&'a str> for rtc_Bytes<'a> {
-        fn from(s: &'a str) -> Self {
-            Self::from(s.as_bytes())
-        }
-    }
-
-    impl<'a, T> From<Option<T>> for rtc_Bytes<'a>
-    where
-        rtc_Bytes<'a>: From<T>,
-    {
-        fn from(maybe_bytes: Option<T>) -> Self {
-            maybe_bytes.map(Self::from).unwrap_or_else(Self::empty)
         }
     }
 
@@ -118,9 +87,45 @@ pub mod ios {
         pub fn to_vec(&self) -> Vec<u8> {
             self.as_slice().to_vec()
         }
+    }
 
+    /// Swift String
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct rtc_String<'a> {
+        pub ptr: *const u8,
+        pub count: size_t,
+        phantom: std::marker::PhantomData<&'a u8>,
+    }
+
+    impl<'a> Default for rtc_String<'a> {
+        fn default() -> Self {
+            Self {
+                ptr: std::ptr::null(),
+                count: 0,
+                phantom: std::marker::PhantomData,
+            }
+        }
+    }
+
+    impl<'a, T: AsRef<str> + ?Sized> From<&'a T> for rtc_String<'a> {
+        fn from(s: &'a T) -> Self {
+            let s = s.as_ref();
+            Self {
+                ptr: s.as_ptr(),
+                count: s.len(),
+                phantom: std::marker::PhantomData,
+            }
+        }
+    }
+
+    impl<'a> rtc_String<'a> {
         pub fn as_str(&self) -> Option<&str> {
-            std::str::from_utf8(self.as_slice()).ok()
+            if self.ptr.is_null() {
+                return None;
+            }
+            let bytes = unsafe { std::slice::from_raw_parts(self.ptr, self.count as usize) };
+            std::str::from_utf8(bytes).ok()
         }
 
         pub fn to_string(&self) -> Option<String> {

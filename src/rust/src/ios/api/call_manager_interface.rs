@@ -14,7 +14,6 @@ use libc::size_t;
 
 use crate::ios::call_manager;
 use crate::ios::call_manager::IosCallManager;
-use crate::ios::logging::IosLogger;
 
 use crate::common::{CallMediaType, DeviceId};
 use crate::core::bandwidth_mode::BandwidthMode;
@@ -500,18 +499,6 @@ pub fn string_from_app_slice(app_slice: &AppByteSlice) -> Option<String> {
     match std::str::from_utf8(slice) {
         Ok(s) => Some(s.to_string()),
         Err(_) => None,
-    }
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub extern "C" fn ringrtcInitialize(logObject: IosLogger) -> *mut c_void {
-    match call_manager::initialize(logObject) {
-        Ok(_v) => {
-            // Return non-null pointer to indicate success.
-            1 as *mut c_void
-        }
-        Err(_e) => ptr::null_mut(),
     }
 }
 

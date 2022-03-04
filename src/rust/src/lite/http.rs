@@ -30,8 +30,65 @@ pub struct Request {
 
 #[derive(Clone, Debug)]
 pub struct Response {
-    pub status_code: u16,
+    pub status: ResponseStatus,
     pub body: Vec<u8>,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ResponseStatus {
+    pub code: u16,
+}
+
+impl From<u16> for ResponseStatus {
+    fn from(code: u16) -> Self {
+        Self { code }
+    }
+}
+
+impl ResponseStatus {
+    pub fn r#type(self) -> ResponseStatusType {
+        ResponseStatusType::from_code(self.code)
+    }
+
+    pub fn is_success(self) -> bool {
+        self.r#type().is_success()
+    }
+
+    pub fn is_error(self) -> bool {
+        self.r#type().is_error()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(u16)]
+pub enum ResponseStatusType {
+    Unknown = 0,
+    Informational = 100,
+    Success = 200,
+    Redirection = 300,
+    ClientError = 400,
+    ServerError = 500,
+}
+
+impl ResponseStatusType {
+    pub fn from_code(code: u16) -> Self {
+        match code {
+            100..=199 => Self::Informational,
+            200..=299 => Self::Success,
+            300..=399 => Self::Redirection,
+            400..=499 => Self::ClientError,
+            500..=599 => Self::ServerError,
+            _ => Self::Unknown,
+        }
+    }
+
+    pub fn is_success(self) -> bool {
+        matches!(self, Self::Success)
+    }
+
+    pub fn is_error(self) -> bool {
+        matches!(self, Self::ClientError | Self::ServerError)
+    }
 }
 
 pub type ResponseCallback = Box<dyn FnOnce(Option<Response>) + Send>;
@@ -74,7 +131,7 @@ impl DelegatingClient {
 
         match response.as_ref() {
             Some(r) => {
-                info!("  status_code: {}", r.status_code);
+                info!("  status_code: {}", r.status.code);
                 debug!("  body: {} bytes", r.body.len())
             }
             None => {
@@ -145,9 +202,11 @@ impl ResponseCallbacks {
 
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
-    use crate::lite::{ffi::ios::rtc_Bytes, http};
+    use crate::lite::{
+        ffi::ios::{rtc_Bytes, rtc_String, FromOrDefault},
+        http,
+    };
     use libc::{c_void, size_t};
-    use std::ops::Deref;
 
     pub type Client = http::DelegatingClient;
 
@@ -170,7 +229,7 @@ pub mod ios {
     #[repr(C)]
     #[derive(Debug)]
     pub struct rtc_http_Request<'a> {
-        url: rtc_Bytes<'a>,
+        url: rtc_String<'a>,
         method: i32,
         headers: rtc_http_Headers<'a>,
         body: rtc_Bytes<'a>,
@@ -184,8 +243,9 @@ pub mod ios {
         phantom: std::marker::PhantomData<&'a rtc_http_Header<'a>>,
     }
 
-    impl<'a> From<&'a [rtc_http_Header<'a>]> for rtc_http_Headers<'a> {
-        fn from(headers: &'a [rtc_http_Header<'a>]) -> Self {
+    impl<'a, T: AsRef<[rtc_http_Header<'a>]>> From<&'a T> for rtc_http_Headers<'a> {
+        fn from(headers: &'a T) -> Self {
+            let headers = headers.as_ref();
             Self {
                 ptr: headers.as_ptr(),
                 count: headers.len(),
@@ -197,8 +257,8 @@ pub mod ios {
     #[repr(C)]
     #[derive(Debug)]
     pub struct rtc_http_Header<'a> {
-        pub name: rtc_Bytes<'a>,
-        pub value: rtc_Bytes<'a>,
+        pub name: rtc_String<'a>,
+        pub value: rtc_String<'a>,
     }
 
     #[repr(C)]
@@ -238,7 +298,7 @@ pub mod ios {
 
         if let Some(client) = client.as_ref() {
             let response = Some(http::Response {
-                status_code: response.status_code,
+                status: response.status_code.into(),
                 body: response.body.to_vec(),
             });
             client.received_response(request_id, response);
@@ -277,8 +337,8 @@ pub mod ios {
                 .headers
                 .iter()
                 .map(|(name, value)| rtc_http_Header {
-                    name: rtc_Bytes::from(name.deref()),
-                    value: rtc_Bytes::from(value.deref()),
+                    name: rtc_String::from(name),
+                    value: rtc_String::from(value),
                 })
                 .collect();
 
@@ -288,9 +348,9 @@ pub mod ios {
                 request_id,
                 rtc_http_Request {
                     method: request.method as i32,
-                    url: rtc_Bytes::from(request.url.deref()),
-                    headers: rtc_http_Headers::from(headers.deref()),
-                    body: rtc_Bytes::from(request.body.as_deref()),
+                    url: rtc_String::from(&request.url),
+                    headers: rtc_http_Headers::from(&headers),
+                    body: rtc_Bytes::from_or_default(request.body.as_ref()),
                 },
             );
         }

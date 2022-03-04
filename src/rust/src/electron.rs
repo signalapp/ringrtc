@@ -961,7 +961,10 @@ fn receivedHttpResponse(mut cx: FunctionContext) -> JsResult<JsValue> {
     let status_code = cx.argument::<JsNumber>(1)?.value(&mut cx) as u16;
     let body = cx.argument::<JsBuffer>(2)?;
     let body = cx.borrow(&body, |handle| handle.as_slice().to_vec());
-    let response = http::Response { status_code, body };
+    let response = http::Response {
+        status: status_code.into(),
+        body,
+    };
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint
