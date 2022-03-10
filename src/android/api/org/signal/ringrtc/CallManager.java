@@ -1528,8 +1528,13 @@ public class CallManager {
     /** The call ended because of a remote busy message. */
     ENDED_REMOTE_BUSY,
 
-    /** The call ended because of glare (received offer from same remote). */
+    /** The call ended because of glare, receiving an offer from same remote
+        while calling them. */
     ENDED_REMOTE_GLARE,
+
+    /** The call ended because of recall, receiving an offer from same remote
+        while still in an existing call with them. */
+    ENDED_REMOTE_RECALL,
 
     /** The call ended because it timed out during setup. */
     ENDED_TIMEOUT,
@@ -1539,6 +1544,9 @@ public class CallManager {
 
     /** The call ended because a signaling message couldn't be sent. */
     ENDED_SIGNALING_FAILURE,
+
+    /** The call ended because there was a failure during glare handling. */
+    ENDED_GLARE_HANDLING_FAILURE,
 
     /** The call ended because setting up the connection failed. */
     ENDED_CONNECTION_FAILURE,

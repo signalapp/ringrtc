@@ -37,7 +37,8 @@ use common::{random_received_ice_candidate, random_received_offer, test_init, Te
 // - check underlying Connection is in ConnectingBeforeAccepted state
 // - check call is in Connecting state
 // - check answer sent
-// Now in the Connecting state.
+//
+// Now in the ConnectingBeforeAccepted state.
 fn start_inbound_call() -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
@@ -113,7 +114,6 @@ fn inbound_ice_connecting() {
 // 3. local accept call
 //
 // Now in the ConnectedAndAccepted state.
-
 fn connect_inbound_call() -> TestContext {
     let context = start_inbound_call();
     let mut cm = context.cm();
@@ -640,6 +640,49 @@ fn receive_expired_offer_after_age_limit() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.offer_expired_count(), 1);
     assert!(!cm.busy());
+}
+
+// Two users are in an accepted call. The remote user's leg is ended and they
+// call the local user who is still in the original call. The local user should
+// quietly end the active call and start handling the new incoming one.
+#[test]
+fn recall_when_connected() {
+    test_init();
+
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+
+    // Verify that one incoming call was started so far.
+    assert_eq!(context.start_incoming_count(), 1);
+
+    // Create a new incoming call with same remote
+    let remote_peer = {
+        let active_call = context.active_call();
+        let remote_peer = active_call.remote_peer().expect(error_line!());
+        remote_peer.to_owned()
+    };
+    info!("active remote_peer: {}", remote_peer);
+
+    let call_id = CallId::new(context.prng.gen::<u64>());
+    cm.received_offer(
+        remote_peer,
+        call_id,
+        random_received_offer(&context.prng, Duration::from_secs(0)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteReCall), 1);
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(context.busys_sent(), 0);
+
+    // Previous call should be concluded.
+    assert_eq!(context.call_concluded_count(), 1);
+
+    // The newly incoming call should have been started (not yet proceeded).
+    assert_eq!(context.start_incoming_count(), 2);
 }
 
 #[test]

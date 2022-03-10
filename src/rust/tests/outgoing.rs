@@ -184,9 +184,47 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
 // - check underlying Connection is in ConnectingBeforeAccepted state
 // - check call is in Connecting state
 //
-// Now in the Connecting state.
+// Now in the ConnectingBeforeAccepted state.
 fn start_outbound_call() -> TestContext {
     start_outbound_n_remote_call(1)
+}
+
+// Create an outbound call session up to the Connected state.
+//
+// - create an offer
+// - send offer
+// - receive answer
+// - ice connected
+//
+// Now in the ConnectedBeforeAccepted state.
+fn connected_outbound_call() -> TestContext {
+    let context = start_outbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    info!("test: injecting ice connected");
+    active_connection
+        .inject_ice_connected()
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(
+        active_connection.state().expect(error_line!()),
+        ConnectionState::ConnectedBeforeAccepted
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::ConnectedBeforeAccepted
+    );
+    assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 0);
+
+    assert!(cm.busy());
+
+    context
 }
 
 // Create an outbound call session up to the Accepted state.
@@ -198,9 +236,8 @@ fn start_outbound_call() -> TestContext {
 // - media stream added
 // - call accepted
 //
-// Now in the Accepted state.
-
-fn connect_outbound_call() -> TestContext {
+// Now in the ConnectedAndAccepted state.
+fn connected_and_accepted_outbound_call() -> TestContext {
     let context = start_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
@@ -268,7 +305,7 @@ fn outbound_receive_answer() {
 fn outbound_call_connected() {
     test_init();
 
-    let _ = connect_outbound_call();
+    let _ = connected_and_accepted_outbound_call();
 }
 
 #[test]
@@ -429,7 +466,7 @@ fn outbound_call_accepted_with_stale_call_id() {
 fn outbound_call_connected_ice_failed() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -459,7 +496,7 @@ fn outbound_call_connected_ice_failed() {
 fn outbound_call_connected_local_hangup() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -486,7 +523,7 @@ fn outbound_call_connected_local_hangup() {
 fn outbound_ice_disconnected_after_call_connected_and_reconnect() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -534,7 +571,7 @@ fn outbound_ice_disconnected_after_call_connected_and_reconnect() {
 fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -579,7 +616,7 @@ fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
 fn inject_connection_error() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
@@ -598,7 +635,7 @@ fn inject_connection_error() {
 fn inject_call_error() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_call = context.active_call();
 
@@ -617,7 +654,7 @@ fn inject_call_error() {
 fn update_sender_status() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
@@ -692,7 +729,7 @@ fn update_sender_status() {
 fn update_bandwidth_mode_default() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_connection = context.active_connection();
 
@@ -711,7 +748,7 @@ fn update_bandwidth_mode_default() {
 fn update_bandwidth_mode_low() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_connection = context.active_connection();
 
@@ -730,7 +767,7 @@ fn update_bandwidth_mode_low() {
 fn inject_local_ice_candidate() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
@@ -749,7 +786,7 @@ fn inject_local_ice_candidate() {
 fn receive_remote_ice_candidate() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -769,7 +806,7 @@ fn receive_remote_ice_candidate() {
 fn ice_candidate_removal() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
@@ -862,7 +899,7 @@ fn ice_send_failures_cause_error_before_connection() {
 fn ignore_ice_send_failures_after_connection() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
     let active_call = context.active_call();
@@ -1081,7 +1118,7 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
 fn received_remote_hangup_after_connection() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -1133,7 +1170,7 @@ fn received_remote_needs_permission() {
 fn received_remote_video_status() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -1226,7 +1263,7 @@ fn received_remote_video_status() {
 fn received_remote_sharing_screen_status() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -1307,7 +1344,7 @@ fn received_remote_sharing_screen_status() {
 fn received_remote_multiple_status() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
     let mut active_connection = context.active_connection();
@@ -1367,7 +1404,7 @@ fn call_timeout_before_connect() {
 fn call_timeout_after_connect() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_call = context.active_call();
 
@@ -1440,7 +1477,7 @@ fn outbound_proceed_with_error() {
 fn outbound_call_connected_local_hangup_with_error() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -1470,7 +1507,7 @@ fn outbound_call_connected_local_hangup_with_error() {
 fn local_ice_candidate_with_error() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_and_accepted_outbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
@@ -1745,7 +1782,7 @@ fn glare_before_connect_equal() {
         0
     );
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        context.event_count(ApplicationEvent::EndedGlareHandlingFailure),
         1
     );
     assert_eq!(context.busys_sent(), 1);
@@ -1759,11 +1796,10 @@ fn glare_before_connect_equal() {
 fn glare_after_connect_winner() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_outbound_call();
     let mut cm = context.cm();
 
     // Create incoming call with same remote
-
     let remote_peer = {
         let active_call = context.active_call();
         let remote_peer = active_call.remote_peer().expect(error_line!());
@@ -1804,11 +1840,10 @@ fn glare_after_connect_winner() {
 fn glare_after_connect_loser() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_outbound_call();
     let mut cm = context.cm();
 
     // Create incoming call with same remote
-
     let remote_peer = {
         let active_call = context.active_call();
         let remote_peer = active_call.remote_peer().expect(error_line!());
@@ -1849,11 +1884,10 @@ fn glare_after_connect_loser() {
 fn glare_after_connect_equal() {
     test_init();
 
-    let context = connect_outbound_call();
+    let context = connected_outbound_call();
     let mut cm = context.cm();
 
     // Create incoming call with same remote
-
     let remote_peer = {
         let active_call = context.active_call();
         let remote_peer = active_call.remote_peer().expect(error_line!());
@@ -1880,11 +1914,54 @@ fn glare_after_connect_equal() {
         0
     );
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        context.event_count(ApplicationEvent::EndedGlareHandlingFailure),
         1
     );
     assert_eq!(context.busys_sent(), 1);
     assert_eq!(context.call_concluded_count(), 2);
+}
+
+// Two users are in an accepted call. The remote user's leg is ended and they
+// call the local user who is still in the original call. The local user should
+// quietly end the active call and start handling the new incoming one.
+#[test]
+fn recall_when_connected() {
+    test_init();
+
+    let context = connected_and_accepted_outbound_call();
+    let mut cm = context.cm();
+
+    // Verify that no incoming call was started yet.
+    assert_eq!(context.start_incoming_count(), 0);
+
+    // Create a new incoming call with same remote
+    let remote_peer = {
+        let active_call = context.active_call();
+        let remote_peer = active_call.remote_peer().expect(error_line!());
+        remote_peer.to_owned()
+    };
+    info!("active remote_peer: {}", remote_peer);
+
+    let call_id = CallId::new(context.prng.gen::<u64>());
+    cm.received_offer(
+        remote_peer,
+        call_id,
+        random_received_offer(&context.prng, Duration::from_secs(0)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteReCall), 1);
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(context.busys_sent(), 0);
+
+    // Previous call should be concluded.
+    assert_eq!(context.call_concluded_count(), 1);
+
+    // The newly incoming call should have been started (not yet proceeded).
+    assert_eq!(context.start_incoming_count(), 1);
 }
 
 // Receive a busy message when trying to establish outbound call

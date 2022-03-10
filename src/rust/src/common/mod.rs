@@ -68,7 +68,7 @@ impl From<u64> for CallId {
 pub type DeviceId = u32;
 
 /// Tracks the state of a call.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum CallState {
     /// The call has been created, but not yet started.
     NotYetStarted,
@@ -145,8 +145,13 @@ pub enum ApplicationEvent {
     /// The call ended because of a remote busy message from a callee.
     EndedRemoteBusy,
 
-    /// The call ended because of glare (received offer from same remote).
+    /// The call ended because of glare, receiving an offer from same remote
+    /// while calling them.
     EndedRemoteGlare,
+
+    /// The call ended because of recall, receiving an offer from same remote
+    /// while still in an existing call with them.
+    EndedRemoteReCall,
 
     /// The call ended because it timed out during setup.
     EndedTimeout,
@@ -159,6 +164,9 @@ pub enum ApplicationEvent {
 
     /// The call ended because setting up the connection failed.
     EndedConnectionFailure,
+
+    /// The call ended because there was a failure during glare handling.
+    EndedGlareHandlingFailure,
 
     /// The call ended because the application wanted to drop the call.
     EndedAppDroppedCall,

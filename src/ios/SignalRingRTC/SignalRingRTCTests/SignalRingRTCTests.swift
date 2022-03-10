@@ -93,7 +93,12 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     var eventEndedRemoteHangupNeedPermission = false
     var eventEndedRemoteBusy = false
     var eventEndedRemoteGlare = false
+    var eventEndedRemoteReCall = false
     var eventEndedSignalingFailure = false
+    var eventEndedGlareHandlingFailure = false
+    var eventEndedDropped = false
+    var eventReconnecting = false
+    var eventReconnected = false
     var eventReceivedOfferWhileActive = false
     var eventReceivedOfferWithGlare = false
     var eventIgnoreCallsFromNonMultiringCallers = false
@@ -260,6 +265,11 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
             eventGeneralEnded = true
             eventEndedRemoteGlare = true
 
+        case .endedRemoteReCall:
+            Logger.debug("TestDelegate:endedRemoteReCall")
+            eventGeneralEnded = true
+            eventEndedRemoteReCall = true
+
         case .endedTimeout:
             Logger.debug("TestDelegate:endedTimeout")
             eventGeneralEnded = true
@@ -273,6 +283,11 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
             eventGeneralEnded = true
             eventEndedSignalingFailure = true
 
+        case .endedGlareHandlingFailure:
+            Logger.debug("TestDelegate:endedGlareHandlingFailure")
+            eventGeneralEnded = true
+            eventEndedGlareHandlingFailure = true
+
         case .endedConnectionFailure:
             Logger.debug("TestDelegate:endedConnectionFailure")
             eventGeneralEnded = true
@@ -280,24 +295,35 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         case .endedDropped:
             Logger.debug("TestDelegate:endedDropped")
             eventGeneralEnded = true
+            eventEndedDropped = true
 
         case .remoteVideoEnable:
             Logger.debug("TestDelegate:remoteVideoEnable")
+
         case .remoteVideoDisable:
             Logger.debug("TestDelegate:remoteVideoDisable")
+
         case .remoteSharingScreenEnable:
             Logger.debug("TestDelegate:remoteSharingScreenEnable")
+
         case .remoteSharingScreenDisable:
             Logger.debug("TestDelegate:remoteSharingScreenDisable")
+
         case .reconnecting:
             Logger.debug("TestDelegate:reconnecting")
+            eventReconnecting = true
+
         case .reconnected:
             Logger.debug("TestDelegate:reconnected")
+            eventReconnected = true
+
         case .receivedOfferExpired:
             Logger.debug("TestDelegate:receivedOfferExpired")
+
         case .receivedOfferWhileActive:
             Logger.debug("TestDelegate:receivedOfferWhileActive")
             eventReceivedOfferWhileActive = true
+
         case .receivedOfferWithGlare:
             Logger.debug("TestDelegate:receivedOfferWithGlare")
             eventReceivedOfferWithGlare = true
@@ -383,6 +409,12 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
                 }
             }
         }
+    }
+
+    func resetIceHandlingState() {
+        canSendICE = false
+        sentIceCandidates = []
+        shouldSendIceCandidatesInvoked = false
     }
 
     func tryToSendIceCandidates(callId: UInt64, destinationDeviceId: UInt32?, candidates: [Data]) {
@@ -1688,7 +1720,7 @@ class SignalRingRTCTests: XCTestCase {
     }
 
     func glareTesting(scenario: GlareScenario, condition: GlareCondition) {
-        Logger.debug("Test: Testing glare for scenario: \(scenario)...")
+        Logger.debug("Test: Testing glare for scenario: \(scenario) and condition: \(condition)...")
 
         let delegateA = TestDelegate()
         var callManagerA = createCallManager(delegateA)
@@ -1827,8 +1859,8 @@ class SignalRingRTCTests: XCTestCase {
                 delegateB.shouldSendHangupNormalInvoked = false
             }
 
-            expect(delegateB.eventEndedSignalingFailure).toEventually(equal(true), timeout: .seconds(1))
-            delegateB.eventEndedSignalingFailure = false
+            expect(delegateB.eventEndedGlareHandlingFailure).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.eventEndedGlareHandlingFailure = false
 
             expect(delegateB.shouldSendBusyInvoked).toEventually(equal(true), timeout: .seconds(1))
             delegateB.shouldSendBusyInvoked = false
@@ -1870,6 +1902,222 @@ class SignalRingRTCTests: XCTestCase {
 
     func testGlareEqualAfterProceed() {
         glareTesting(scenario: .afterProceed, condition: .equal)
+    }
+
+    enum ReCallScenario {
+        // The "callee" here is for the device receiving the recall.
+        case calleeStillInCall
+        case calleeReconnecting
+    }
+
+    func reCallTesting(scenario: ReCallScenario) {
+        Logger.debug("Test: Testing ReCall for scenario: \(scenario)...")
+
+        let delegateCaller = TestDelegate()
+        let callManagerCaller = createCallManager(delegateCaller)
+        expect(callManagerCaller).toNot(beNil())
+
+        let delegateA = TestDelegate()
+        var callManagerA = createCallManager(delegateA)
+        expect(callManagerA).toNot(beNil())
+        delegateA.expectedValue = 12345
+        let aAddress: Int32 = 888888
+
+        let delegateB = TestDelegate()
+        var callManagerB = createCallManager(delegateB)
+        expect(callManagerB).toNot(beNil())
+        delegateB.expectedValue = 11111
+        let bAddress: Int32 = 777777
+
+        // Setup the automatic ICE flow for the call.
+        delegateA.callManagerICE = [(callManagerB!, delegateB, 1)]
+        delegateB.callManagerICE = [(callManagerA!, delegateA, 1)]
+        delegateA.doAutomaticICE = true
+        delegateB.doAutomaticICE = true
+
+        // For now, these variables will be common to both Call Managers.
+        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let useTurnOnly = false
+        let localDevice: UInt32 = 1
+        let sourceDevice: UInt32 = 1
+
+        let videoCaptureController = VideoCaptureController()
+
+        // Get A and B into a call.
+        do {
+            let callA = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
+            try callManagerA?.placeCall(call: callA, callMediaType: .audioCall, localDevice: localDevice)
+            expect(delegateA.startOutgoingCallInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateA.startOutgoingCallInvoked = false
+
+            let callIdAtoB = delegateA.recentCallId
+            _ = try callManagerA?.proceed(callId: callIdAtoB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal, audioLevelsIntervalMillis: nil)
+            expect(delegateA.shouldSendOfferInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateA.shouldSendOfferInvoked = false
+
+            let callB = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
+
+            guard let opaque = delegateA.sentOfferOpaque else {
+                XCTFail("No sentOfferOpaque detected!")
+                return
+            }
+
+            try callManagerB?.receivedOffer(call: callB, sourceDevice: sourceDevice, callId: callIdAtoB, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+            expect(delegateB.startIncomingCallInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.startIncomingCallInvoked = false
+
+            try callManagerB?.proceed(callId: callIdAtoB, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal, audioLevelsIntervalMillis: nil)
+            expect(delegateB.shouldSendAnswerInvoked).toEventually(equal(true), timeout: .seconds(2))
+            delegateB.shouldSendAnswerInvoked = false
+            expect(delegateB.recentCallId).to(equal(callIdAtoB))
+
+            guard let opaqueAnswer = delegateB.sentAnswerOpaque else {
+                XCTFail("No sentAnswerOpaque detected!")
+                return
+            }
+
+            try callManagerA?.receivedAnswer(sourceDevice: sourceDevice, callId: callIdAtoB, opaque: opaqueAnswer, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+
+            expect(delegateA.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateA.canSendICE = true
+            delegateA.tryToSendIceCandidates(callId: callIdAtoB, destinationDeviceId: nil, candidates: [])
+
+            expect(delegateB.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.canSendICE = true
+            delegateB.tryToSendIceCandidates(callId: callIdAtoB, destinationDeviceId: nil, candidates: [])
+
+            expect(delegateA.eventRemoteRingingInvoked).toEventually(equal(true), timeout: .seconds(5))
+            delegateA.eventRemoteRingingInvoked = false
+
+            expect(delegateB.eventLocalRingingInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.eventLocalRingingInvoked = false
+
+            delay(interval: 1.0)
+
+            try callManagerB?.accept(callId: callIdAtoB)
+
+            // Connected?
+            expect(delegateB.eventLocalConnectedInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.eventLocalConnectedInvoked = false;
+
+            expect(delegateA.eventRemoteConnectedInvoked).toEventually(equal(true), timeout: .seconds(2))
+            delegateA.eventRemoteConnectedInvoked = false;
+
+            // We should see a hangup/accepted from the callee here, who was the caller in this case.
+            expect(delegateA.shouldSendHangupAcceptedInvoked).toEventually(equal(true), timeout: .seconds(1))
+
+            // Neither side should have ended the call.
+            expect(delegateA.eventGeneralEnded).to(equal(false))
+            expect(delegateB.eventGeneralEnded).to(equal(false))
+
+            // Actual recall scenario starts now...
+            delegateA.resetIceHandlingState()
+            delegateB.resetIceHandlingState()
+
+            // End B quietly (no hangup) to simulate B ending before A is aware of it.
+            callManagerB?.drop(callId: callIdAtoB)
+
+            expect(delegateB.eventEndedDropped).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.eventEndedDropped = false
+            delegateB.eventGeneralEnded = false
+
+            if scenario == .calleeReconnecting {
+              // Give some time to get to the reconnecting state. There will be 10 seconds after this before ICE Failure.
+              expect(delegateA.eventReconnecting).toEventually(equal(true), timeout: .seconds(10))
+              delegateA.eventReconnecting = false
+            }
+
+            // Start the new call from B to A.
+            let callB2 = OpaqueCallData(value: delegateB.expectedValue, remote: aAddress)
+            try callManagerB?.placeCall(call: callB2, callMediaType: .audioCall, localDevice: localDevice)
+            expect(delegateB.startOutgoingCallInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.startOutgoingCallInvoked = false
+
+            let callIdB2toA = delegateB.recentCallId
+            _ = try callManagerB?.proceed(callId: callIdB2toA, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal, audioLevelsIntervalMillis: nil)
+            expect(delegateB.shouldSendOfferInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.shouldSendOfferInvoked = false
+
+            let callA2 = OpaqueCallData(value: delegateA.expectedValue, remote: bAddress)
+
+            guard let opaque = delegateB.sentOfferOpaque else {
+                XCTFail("No sentOfferOpaque detected!")
+                return
+            }
+
+            // Provide the offer to A for the new call.
+            try callManagerA?.receivedOffer(call: callA2, sourceDevice: sourceDevice, callId: callIdB2toA, opaque: opaque, messageAgeSec: 0, callMediaType: .audioCall, localDevice: localDevice, isLocalDevicePrimary: true, senderIdentityKey: dummyLocalIdentityKey, receiverIdentityKey: dummyRemoteIdentityKey)
+
+            // Existing call should end.
+            expect(delegateA.eventEndedRemoteReCall).toEventually(equal(true), timeout: .seconds(1))
+            delegateA.eventEndedRemoteReCall = false
+            delegateA.eventGeneralEnded = false
+
+            // New call should be started.
+            expect(delegateA.startIncomingCallInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateA.startIncomingCallInvoked = false
+
+            // Simulate getting in to the new call (like before, but this time B is calling A).
+            try callManagerA?.proceed(callId: callIdB2toA, iceServers: iceServers, hideIp: useTurnOnly, videoCaptureController: videoCaptureController, bandwidthMode: .normal, audioLevelsIntervalMillis: nil)
+            expect(delegateA.shouldSendAnswerInvoked).toEventually(equal(true), timeout: .seconds(2))
+            delegateA.shouldSendAnswerInvoked = false
+            expect(delegateA.recentCallId).to(equal(callIdB2toA))
+
+            guard let opaqueAnswer2 = delegateA.sentAnswerOpaque else {
+                XCTFail("No sentAnswerOpaque detected!")
+                return
+            }
+
+            try callManagerB?.receivedAnswer(sourceDevice: sourceDevice, callId: callIdB2toA, opaque: opaqueAnswer2, senderIdentityKey: dummyRemoteIdentityKey, receiverIdentityKey: dummyLocalIdentityKey)
+
+            expect(delegateB.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateB.canSendICE = true
+            delegateB.tryToSendIceCandidates(callId: callIdB2toA, destinationDeviceId: nil, candidates: [])
+
+            expect(delegateA.shouldSendIceCandidatesInvoked).toEventually(equal(true), timeout: .seconds(1))
+            delegateA.canSendICE = true
+            delegateA.tryToSendIceCandidates(callId: callIdB2toA, destinationDeviceId: nil, candidates: [])
+
+            expect(delegateB.eventRemoteRingingInvoked).toEventually(equal(true), timeout: .seconds(5))
+            expect(delegateA.eventLocalRingingInvoked).toEventually(equal(true), timeout: .seconds(1))
+
+            delay(interval: 1.0)
+
+            try callManagerA?.accept(callId: callIdB2toA)
+
+            // Connected?
+            expect(delegateA.eventLocalConnectedInvoked).toEventually(equal(true), timeout: .seconds(1))
+            expect(delegateB.eventRemoteConnectedInvoked).toEventually(equal(true), timeout: .seconds(2))
+
+            // We should see a hangup/accepted from the callee here, who was the caller in this case.
+            expect(delegateB.shouldSendHangupAcceptedInvoked).toEventually(equal(true), timeout: .seconds(1))
+
+            // Neither side should have ended the new call.
+            expect(delegateB.eventGeneralEnded).to(equal(false))
+            expect(delegateA.eventGeneralEnded).to(equal(false))
+
+            delay(interval: 1.0)
+        } catch {
+           XCTFail("Scenario failed: \(error)")
+           return
+       }
+
+        // Release the Call Managers (but there still might be references in the delegates!).
+        callManagerA = nil
+        callManagerB = nil
+
+        // See what clears up after closing the Call Manager...
+        delay(interval: 1.0)
+
+        Logger.debug("Test: Exiting test function...")
+    }
+
+    func testRecallStillInCall() {
+        reCallTesting(scenario: .calleeStillInCall)
+    }
+
+    func testRecallReconnecting() {
+        reCallTesting(scenario: .calleeReconnecting)
     }
 
     enum MultiRingScenario {
@@ -2577,8 +2825,8 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateA1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: .seconds(1))
                 delegateA1.shouldSendHangupNormalInvoked = false
 
-                expect(delegateA1.eventEndedSignalingFailure).toEventually(equal(true), timeout: .seconds(1))
-                delegateA1.eventEndedSignalingFailure = false
+                expect(delegateA1.eventEndedGlareHandlingFailure).toEventually(equal(true), timeout: .seconds(1))
+                delegateA1.eventEndedGlareHandlingFailure = false
 
                 expect(delegateA1.shouldSendBusyInvoked).toEventually(equal(true), timeout: .seconds(1))
                 delegateA1.shouldSendBusyInvoked = false
@@ -2612,8 +2860,8 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateB1.shouldSendHangupNormalInvoked).toEventually(equal(true), timeout: .seconds(2))
                 delegateB1.shouldSendHangupNormalInvoked = false
 
-                expect(delegateB1.eventEndedSignalingFailure).toEventually(equal(true), timeout: .seconds(1))
-                delegateB1.eventEndedSignalingFailure = false
+                expect(delegateB1.eventEndedGlareHandlingFailure).toEventually(equal(true), timeout: .seconds(1))
+                delegateB1.eventEndedGlareHandlingFailure = false
 
                 expect(delegateB1.shouldSendBusyInvoked).toEventually(equal(true), timeout: .seconds(1))
                 delegateB1.shouldSendBusyInvoked = false

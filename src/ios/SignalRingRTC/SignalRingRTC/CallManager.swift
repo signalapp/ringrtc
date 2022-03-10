@@ -38,8 +38,12 @@ public enum CallManagerEvent: Int32 {
     case endedRemoteHangupBusy
     /// The call ended because of a remote busy message.
     case endedRemoteBusy
-    /// The call ended because of glare (received offer from same remote).
+    /// The call ended because of glare, receiving an offer from same remote
+    /// while calling them.
     case endedRemoteGlare
+    /// The call ended because of recall, receiving an offer from same remote
+    /// while still in an existing call with them.
+    case endedRemoteReCall
     /// The call ended because it timed out during setup.
     case endedTimeout
     /// The call ended because of an internal error condition.
@@ -48,6 +52,8 @@ public enum CallManagerEvent: Int32 {
     case endedSignalingFailure
     /// The call ended because setting up the connection failed.
     case endedConnectionFailure
+    /// The call ended because there was a failure during glare handling.
+    case endedGlareHandlingFailure
     /// The call ended because the application wanted to drop the call.
     case endedDropped
     /// The remote side has enabled video.

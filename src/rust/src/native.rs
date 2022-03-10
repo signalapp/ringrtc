@@ -178,10 +178,12 @@ pub enum EndReason {
     Declined,
     Busy, // Remote side is busy
     Glare,
+    ReCall,
     ReceivedOfferExpired { age: Duration },
     ReceivedOfferWhileActive,
     ReceivedOfferWithGlare,
     SignalingFailure,
+    GlareFailure,
     ConnectionFailure,
     InternalFailure,
     Timeout,
@@ -199,10 +201,12 @@ impl fmt::Display for EndReason {
             EndReason::Declined => "Declined",
             EndReason::Busy => "Busy",
             EndReason::Glare => "Glare",
+            EndReason::ReCall => "ReCall",
             EndReason::ReceivedOfferExpired { .. } => "ReceivedOfferExpired",
             EndReason::ReceivedOfferWhileActive => "ReceivedOfferWhileActive",
             EndReason::ReceivedOfferWithGlare => "ReceivedOfferWithGlare",
             EndReason::SignalingFailure => "SignalingFailure",
+            EndReason::GlareFailure => "GlareFailure",
             EndReason::ConnectionFailure => "ConnectionFailure",
             EndReason::InternalFailure => "InternalFailure",
             EndReason::Timeout => "Timeout",
@@ -518,6 +522,9 @@ impl Platform for NativePlatform {
             ApplicationEvent::EndedRemoteGlare => {
                 self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Glare))
             }
+            ApplicationEvent::EndedRemoteReCall => {
+                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::ReCall))
+            }
             ApplicationEvent::EndedTimeout => {
                 self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Timeout))
             }
@@ -530,6 +537,11 @@ impl Platform for NativePlatform {
                 remote_peer,
                 call_id,
                 CallState::Ended(EndReason::SignalingFailure),
+            ),
+            ApplicationEvent::EndedGlareHandlingFailure => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Ended(EndReason::GlareFailure),
             ),
             ApplicationEvent::EndedConnectionFailure => self.send_state(
                 remote_peer,
