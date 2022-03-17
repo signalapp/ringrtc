@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.20.0
+
+- Clean up "lite" interfaces
+
+- Add recall support
+
+- Fix typos
+
+- Add WebRTC error and warning logs to RingRTC logging
+
+- Reference signalapp/webrtc@4638i
+  - Reduce noise from error/warning logs
+
 ## v2.19.2
 
 - Introduce a "lite" part of RingRTC
