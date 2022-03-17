@@ -100,8 +100,11 @@ public class CallManager {
       Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build)");
 
       if (buildInfo.debug) {
-        // Show WebRTC logs via application Logger while debugging.
+        // Show all WebRTC logs via application Logger while debugging.
         builder.setInjectableLogger(new WebRtcLogger(), Severity.LS_INFO);
+      } else {
+        // Show WebRTC error and warning logs via application Logger for release builds.
+        builder.setInjectableLogger(new WebRtcLogger(), Severity.LS_WARNING);
       }
 
       PeerConnectionFactory.initialize(builder.createInitializationOptions());

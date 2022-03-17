@@ -528,7 +528,7 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
             crate::webrtc::logging::set_logger(log::LevelFilter::Debug);
 
             #[cfg(not(debug_assertions))]
-            crate::webrtc::logging::set_logger(log::LevelFilter::Off);
+            crate::webrtc::logging::set_logger(log::LevelFilter::Warn);
         }
     }
 
