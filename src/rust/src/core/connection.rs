@@ -282,12 +282,12 @@ impl fmt::Display for BandwidthModes {
         match self.remote_bandwidth_mode {
             None => write!(
                 f,
-                "bandwidth_modes: local: {} remote: null",
+                "{{ local: {}, remote: null }}",
                 self.local_bandwidth_mode
             ),
             Some(remote_bandwidth_mode) => write!(
                 f,
-                "bandwidth_modes: local: {} remote: {}",
+                "{{ local: {}, remote: {} }}",
                 self.local_bandwidth_mode, remote_bandwidth_mode
             ),
         }
@@ -569,7 +569,10 @@ where
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
             let v4_offer = offer.to_v4(local_public_key.as_bytes().to_vec(), bandwidth_mode)?;
 
-            info!("Using V4 signaling for outgoing offer: {:?}", v4_offer);
+            info!(
+                "Outgoing offer codecs: {:?}, max_bitrate: {:?}",
+                v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps
+            );
 
             // The only purpose of this is to start gathering ICE candidates.
             // But we need to call set_local_description before we munge it.
@@ -630,8 +633,8 @@ where
                     let answer = SessionDescription::answer_from_v4(&v4_answer)?;
 
                     info!(
-                        "Using V4 signaling for incoming answer: {:?} {}",
-                        v4_answer, bandwidth_modes
+                        "Incoming answer codecs: {:?}, max_bitrate: {:?}, bandwidth_modes: {}",
+                        v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_modes
                     );
 
                     (offer, answer, v4_answer.public_key, bandwidth_mode)
@@ -726,8 +729,8 @@ where
                     let bandwidth_mode = bandwidth_modes.min();
 
                     info!(
-                        "Using V4 signaling for incoming offer: {:?} {}",
-                        v4_offer, bandwidth_modes
+                        "Incoming offer codecs: {:?}, max_bitrate: {:?}, bandwidth_modes: {}",
+                        v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps, bandwidth_modes
                     );
 
                     let offer = SessionDescription::offer_from_v4(v4_offer)?;
@@ -778,8 +781,8 @@ where
                 )?;
 
                 info!(
-                    "Using V4 signaling for outgoing answer: {:?} {}",
-                    v4_answer, bandwidth_modes
+                    "Outgoing answer codecs: {:?}, max_bitrate: {:?}, bandwidth_modes: {}",
+                    v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_modes
                 );
 
                 // We have to change the local answer to match what we send back
@@ -1024,7 +1027,7 @@ where
 
         bandwidth_modes.remote_bandwidth_mode = Some(remote_bandwidth_mode);
         info!(
-            "set_remote_max_bitrate(): {} {}",
+            "set_remote_max_bitrate(): {} bandwidth_modes: {}",
             remote_max_bitrate.as_bps(),
             bandwidth_modes
         );
@@ -1047,7 +1050,10 @@ where
         }
 
         bandwidth_modes.local_bandwidth_mode = bandwidth_mode;
-        info!("update_bandwidth_mode(): {}", bandwidth_modes);
+        info!(
+            "update_bandwidth_mode(): bandwidth_modes: {}",
+            bandwidth_modes
+        );
 
         // Use the minimum of the local and remote modes.
         let bandwidth_mode = bandwidth_modes.min();

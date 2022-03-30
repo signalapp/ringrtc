@@ -45,7 +45,7 @@ pub struct SocketAddr {
 pub struct VideoCodec {
     #[prost(enumeration="VideoCodecType", optional, tag="1")]
     pub r#type: ::core::option::Option<i32>,
-    /// Used for H264; Not used for VP8
+    /// Used for H264; Not used for VP8 or VP9
     #[prost(uint32, optional, tag="2")]
     pub level: ::core::option::Option<u32>,
 }
@@ -123,6 +123,7 @@ pub mod call_message {
 #[repr(i32)]
 pub enum VideoCodecType {
     Vp8 = 8,
+    Vp9 = 9,
     H264ConstrainedBaseline = 40,
     H264ConstrainedHigh = 46,
 }

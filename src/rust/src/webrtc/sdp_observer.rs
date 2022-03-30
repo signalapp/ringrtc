@@ -97,6 +97,7 @@ pub struct SessionDescription {
 #[derive(Clone, Copy, Debug)]
 pub enum RffiVideoCodecType {
     Vp8 = 8,
+    Vp9 = 9,
     H264ConstrainedHigh = 46,
     H264ConstrainedBaseline = 40,
 }
@@ -217,6 +218,7 @@ impl SessionDescription {
         .map(|rffi_codec| {
             let r#type = match rffi_codec.r#type {
                 RffiVideoCodecType::Vp8 => protobuf::signaling::VideoCodecType::Vp8,
+                RffiVideoCodecType::Vp9 => protobuf::signaling::VideoCodecType::Vp9,
                 RffiVideoCodecType::H264ConstrainedHigh => {
                     protobuf::signaling::VideoCodecType::H264ConstrainedHigh
                 }
@@ -264,12 +266,14 @@ impl SessionDescription {
             } = codec
             {
                 const VP8: i32 = protobuf::signaling::VideoCodecType::Vp8 as i32;
+                const VP9: i32 = protobuf::signaling::VideoCodecType::Vp9 as i32;
                 const H264_CHP: i32 =
                     protobuf::signaling::VideoCodecType::H264ConstrainedHigh as i32;
                 const H264_CBP: i32 =
                     protobuf::signaling::VideoCodecType::H264ConstrainedBaseline as i32;
                 let rffi_type = match *r#type {
                     VP8 => Some(RffiVideoCodecType::Vp8),
+                    VP9 => Some(RffiVideoCodecType::Vp9),
                     H264_CHP => Some(RffiVideoCodecType::H264ConstrainedHigh),
                     H264_CBP => Some(RffiVideoCodecType::H264ConstrainedBaseline),
                     _ => None,

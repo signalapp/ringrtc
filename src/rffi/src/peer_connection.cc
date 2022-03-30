@@ -8,6 +8,7 @@
 #include "api/jsep_session_description.h"
 #include "api/peer_connection_interface.h"
 #include "api/video_codecs/h264_profile_level_id.h"
+#include "api/video_codecs/vp9_profile.h"
 #include "modules/rtp_rtcp/source/rtp_header_extensions.h"
 #include "p2p/base/port.h"
 #include "pc/media_session.h"
@@ -161,7 +162,26 @@ Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_d
     bool has_h264_chp = false;
     for (const auto& codec : video->codecs()) {
       auto codec_type = webrtc::PayloadStringToCodecType(codec.name);
-      if (codec_type == webrtc::kVideoCodecVP8) {
+
+      if (codec_type == webrtc::kVideoCodecVP9) {
+        auto profile = ParseSdpForVP9Profile(codec.params);
+        if (!profile) {
+          std::string profile_id_string;
+          codec.GetParam("profile-id", &profile_id_string);
+          RTC_LOG(LS_WARNING) << "Ignoring VP9 codec because profile-id = " << profile_id_string;
+          continue;
+        }
+
+        if (profile != VP9Profile::kProfile0) {
+          RTC_LOG(LS_WARNING) << "Ignoring VP9 codec with profile-id != 0";
+          continue;
+        }
+
+        RffiVideoCodec vp9;
+        vp9.type = kRffiVideoCodecVp9;
+        vp9.level = 0;
+        v4->receive_video_codecs.push_back(vp9);
+      } else if (codec_type == webrtc::kVideoCodecVP8) {
         RffiVideoCodec vp8;
         vp8.type = kRffiVideoCodecVp8;
         vp8.level = 0;
@@ -184,7 +204,7 @@ Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_d
         if (!profile_level_id) {
           std::string profile_level_id_string;
           codec.GetParam("profile-level-id", &profile_level_id_string);
-          RTC_LOG(LS_WARNING) << "Ignoring H264 codec because profile-level-id=" << profile_level_id_string;  
+          RTC_LOG(LS_WARNING) << "Ignoring H264 codec because profile-level-id = " << profile_level_id_string;
           continue;
         }
 
@@ -236,7 +256,7 @@ Rust_deleteV4(RffiConnectionParametersV4* v4_owned) {
 RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_borrowed) {
   // Major changes from the default WebRTC behavior:
-  // 1. We remove all codecs except Opus, VP8, and H264
+  // 1. We remove all codecs except Opus, VP8, VP9, and H264
   // 2. We remove all header extensions except for transport-cc, video orientation,
   //    abs send time, and timestamp offset.
   // 3. Opus CBR is enabled.
@@ -253,6 +273,8 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   int OPUS_PT = 102;
   int VP8_PT = 108;
   int VP8_RTX_PT = 118;
+  int VP9_PT = 109;
+  int VP9_RTX_PT = 119;
   int H264_CHP_PT = 104;
   int H264_CHP_RTX_PT = 114;
   int H264_CBP_PT = 103;
@@ -338,7 +360,14 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   for (size_t i = 0; i < v4_borrowed->receive_video_codecs_size; i++) {
     RffiVideoCodec rffi_codec = v4_borrowed->receive_video_codecs_borrowed[i];
     cricket::VideoCodec codec;
-    if (rffi_codec.type == kRffiVideoCodecVp8) {
+    if (rffi_codec.type == kRffiVideoCodecVp9) {
+      auto vp9 = cricket::VideoCodec(VP9_PT, cricket::kVp9CodecName);
+      auto vp9_rtx = cricket::VideoCodec::CreateRtxCodec(VP9_RTX_PT, VP9_PT);
+      add_video_feedback_params(&vp9);
+
+      video->AddCodec(vp9);
+      video->AddCodec(vp9_rtx);
+    } else if (rffi_codec.type == kRffiVideoCodecVp8) {
       auto vp8 = cricket::VideoCodec(VP8_PT, cricket::kVp8CodecName);
       auto vp8_rtx = cricket::VideoCodec::CreateRtxCodec(VP8_RTX_PT, VP8_PT);
       add_video_feedback_params(&vp8);
