@@ -56,7 +56,9 @@ use futures::{Future, Stream};
 
 use crate::error::RingRtcError;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, CallState, DeviceId, Result};
+use crate::common::{
+    ApplicationEvent, CallDirection, CallState, ConnectionState, DeviceId, Result,
+};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::{Call, EventStream};
 use crate::core::connection::ConnectionObserverEvent;
@@ -288,6 +290,39 @@ where
         }
     }
 
+    fn schedule_work_until_terminating(
+        &mut self,
+        call: Call<T>,
+        error_msg: &'static str,
+        do_work: impl (FnOnce(Call<T>) -> Result<()>) + Send + 'static,
+    ) {
+        let mut err_call = call.clone();
+        self.worker_spawn(
+            lazy(move |_| {
+                if call.terminating()? {
+                    Ok(())
+                } else {
+                    do_work(call)
+                }
+            })
+            .map_err(move |err| {
+                err_call.inject_internal_error(err, error_msg);
+            }),
+        );
+    }
+
+    fn schedule_work_even_when_terminating(
+        &mut self,
+        call: Call<T>,
+        error_msg: &'static str,
+        do_work: impl (FnOnce(Call<T>) -> Result<()>) + Send + 'static,
+    ) {
+        let mut err_call = call.clone();
+        self.worker_spawn(lazy(move |_| do_work(call)).map_err(move |err| {
+            err_call.inject_internal_error(err, error_msg);
+        }));
+    }
+
     /// Spawn a future on the notify runtime if enabled.
     fn notify_spawn<F>(&mut self, future: F)
     where
@@ -312,6 +347,43 @@ where
         debug!("draining notify thread: complete");
     }
 
+    // For remotely-accepted (outgoing) calls, this is the first step: let other connections know to stop ringing,
+    // and drop the useless state.
+    fn handle_remotely_accepted_connection(
+        &mut self,
+        call: Call<T>,
+        accepted_remote_device_id: DeviceId,
+    ) -> Result<()> {
+        call.set_active_device_id(accepted_remote_device_id)?;
+
+        let hangup = signaling::Hangup::AcceptedOnAnotherDevice(accepted_remote_device_id);
+        call.send_hangup_via_rtp_data_to_all_except(hangup, accepted_remote_device_id)?;
+
+        self.schedule_work_until_terminating(
+            call,
+            "terminate_and_send_hangups_to_all_except_accepted failed",
+            move |mut call| {
+                call.send_hangup_via_signaling_to_all(hangup)?;
+                // This blocks.
+                call.terminate_connections_except_accepted(accepted_remote_device_id)?;
+                Ok(())
+            },
+        );
+        Ok(())
+    }
+
+    // For remotely-accepted (outgoing) calls, this is the second step: enable media and notify the application.
+    fn activate_remotely_accepted_connection(&mut self, call: Call<T>) {
+        self.schedule_work_until_terminating(
+            call,
+            "active_accepted_connection failed",
+            move |call| {
+                call.accept_remotely()?;
+                Ok(())
+            },
+        );
+    }
+
     /// Top level event dispatch.
     fn handle_event(&mut self, call: Call<T>, state: CallState, event: CallEvent) -> Result<()> {
         // Handle these events even while terminating, as the remote
@@ -327,14 +399,10 @@ where
 
         // If in the process of terminating the call, drop all other
         // events.
-        match state {
-            CallState::Terminating | CallState::Terminated => {
-                debug!("handle_event(): dropping event {} while terminating", event);
-                return Ok(());
-            }
-            _ => (),
+        if state.terminating_or_terminated() {
+            debug!("handle_event(): dropping event {} while terminating", event);
+            return Ok(());
         }
-
         match event {
             CallEvent::StartCall => self.handle_start_call(call, state),
             CallEvent::Proceed {
@@ -429,28 +497,18 @@ where
 
     fn handle_proceed(
         &mut self,
-        mut call: Call<T>,
+        call: Call<T>,
         state: CallState,
         bandwidth_mode: BandwidthMode,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         info!("handle_proceed():");
 
-        if let CallState::WaitingToProceed = state {
+        if state == CallState::WaitingToProceed {
             call.set_state(CallState::ConnectingBeforeAccepted)?;
-
-            let mut err_call = call.clone();
-            let proceed_future = async move {
-                if call.terminating()? {
-                    return Ok(());
-                }
+            self.schedule_work_until_terminating(call, "Proceed failed", move |mut call| {
                 call.proceed(bandwidth_mode, audio_levels_interval)
-            }
-            .map_err(move |err| {
-                err_call.inject_internal_error(err, "Proceed Future failed");
             });
-
-            self.worker_spawn(proceed_future);
         } else {
             self.unexpected_state(state, "Proceed");
         }
@@ -465,21 +523,15 @@ where
         received: signaling::ReceivedAnswer,
     ) -> Result<()> {
         // Accept answers when we are ringing so we can get answers for more than one connection.
-        if state == CallState::ConnectingBeforeAccepted
-            || state == CallState::ConnectedBeforeAccepted
-        {
-            let mut err_call = call.clone();
-            let received_answer_future = lazy(move |_| {
-                if call.terminating()? {
-                    return Ok(());
-                }
-                call.received_answer(received)
-            })
-            .map_err(move |err| {
-                err_call.inject_internal_error(err, "Handle Received Answer Future failed");
-            });
-
-            self.worker_spawn(received_answer_future);
+        if matches!(
+            state,
+            CallState::ConnectingBeforeAccepted | CallState::ConnectedBeforeAccepted
+        ) {
+            self.schedule_work_until_terminating(
+                call,
+                "Handle Received Answer failed",
+                move |call| call.received_answer(received),
+            )
         } else {
             self.unexpected_state(state, "HandleReceivedAnswer");
         }
@@ -492,26 +544,12 @@ where
         state: CallState,
         received: signaling::ReceivedIce,
     ) -> Result<()> {
-        match state {
-            CallState::WaitingToProceed
-            | CallState::ConnectingBeforeAccepted
-            | CallState::ConnectedBeforeAccepted
-            | CallState::ConnectedAndAccepted
-            | CallState::ReconnectingAfterAccepted => {
-                let mut err_call = call.clone();
-                let handle_received_ice_future = lazy(move |_| {
-                    if call.terminating()? {
-                        return Ok(());
-                    }
-                    call.received_ice(received)
-                })
-                .map_err(move |err| {
-                    err_call.inject_internal_error(err, "Handle Received Ice Future failed");
-                });
-
-                self.worker_spawn(handle_received_ice_future);
-            }
-            _ => self.unexpected_state(state, "HandleReceivedIceCandidates"),
+        if state.can_receive_ice_candidates() {
+            self.schedule_work_until_terminating(call, "Handle Received Ice failed", move |call| {
+                call.received_ice(received)
+            });
+        } else {
+            self.unexpected_state(state, "HandleReceivedIceCandidates");
         }
         Ok(())
     }
@@ -607,27 +645,13 @@ where
             );
         }
 
-        // Set the state to terminating here if not Idle | Terminating | Closed.
-        if let CallState::WaitingToProceed
-        | CallState::ConnectingBeforeAccepted
-        | CallState::ConnectedBeforeAccepted
-        | CallState::ConnectedAndAccepted
-        | CallState::ReconnectingAfterAccepted = state
-        {
+        if state.can_be_terminated_remotely() {
             call.set_state(CallState::Terminating)?;
         }
 
         // Only callers can propagate hangups to other callee devices.
         if let Some(hangup_to_propagate) = hangup_to_propagate {
-            // Don't propagate if we're already accepted because a
-            // Hangup/Accepted has been sent to the other callees.
-            // Don't propagate if we're already terminating/terminated because
-            // we already sent out a Hangup to the other callees.
-            // Not for NotYetStarted | ConnectedAndAccepted | ReconnectingAfterAccepted | Terminating | Terminated states:
-            if let CallState::WaitingToProceed
-            | CallState::ConnectingBeforeAccepted
-            | CallState::ConnectedBeforeAccepted = state
-            {
+            if state.should_propogate_hangup() {
                 let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
                 let excluded_remote_device_id = hangup_device_id.unwrap_or(0);
                 call.send_hangup_via_rtp_data_and_signaling_to_all_except(
@@ -639,42 +663,28 @@ where
 
         // Send a Hangup event to the UX, if a call is being remotely hungup, the user
         // should always know.
-        let mut err_call = call.clone();
-        self.worker_spawn(
-            lazy(move |_| {
+        self.schedule_work_even_when_terminating(
+            call,
+            "Processing remote hangup event failed",
+            move |call| {
                 call.call_manager()?
                     .remote_hangup(call.call_id(), app_event_override)
-            })
-            .map_err(move |err| {
-                err_call.inject_internal_error(err, "Processing remote hangup event failed");
-            }),
+            },
         );
         Ok(())
     }
 
     fn handle_accept_call(&mut self, call: Call<T>, state: CallState) -> Result<()> {
         info!("handle_accept_call():");
-        match state {
-            CallState::ConnectedBeforeAccepted => {
-                call.set_state(CallState::ConnectedAndAccepted)?;
-                let mut err_call = call.clone();
-                let accept_future = lazy(move |_| {
-                    if call.terminating()? {
-                        return Ok(());
-                    }
-                    let mut connection = call.active_connection()?;
-                    connection.inject_accept()?;
-                    connection.connect_incoming_media()?;
-                    connection.start_tick()?;
-                    call.notify_application(ApplicationEvent::LocalAccepted)
-                })
-                .map_err(move |err| {
-                    err_call.inject_internal_error(err, "Processing local accept request failed");
-                });
-
-                self.worker_spawn(accept_future);
-            }
-            _ => self.unexpected_state(state, "AcceptCall"),
+        if state.can_be_accepted_locally() {
+            call.set_state(CallState::ConnectedAndAccepted)?;
+            self.schedule_work_until_terminating(
+                call,
+                "Processing local accept request failed",
+                move |call| call.accept_locally(),
+            );
+        } else {
+            self.unexpected_state(state, "AcceptCall");
         }
         Ok(())
     }
@@ -686,134 +696,214 @@ where
         hangup: signaling::Hangup,
     ) -> Result<()> {
         info!("handle_send_hangup_via_rtp_data_to_all():");
-        match state {
-            CallState::NotYetStarted => self.unexpected_state(state, "LocalHangup"),
-            _ => {
-                let mut err_call = call.clone();
-                let future = lazy(move |_| call.send_hangup_via_rtp_data_to_all(hangup)).map_err(
-                    move |err| {
-                        err_call.inject_internal_error(err, "Send hangup request failed");
-                    },
-                );
-
-                self.worker_spawn(future);
-            }
+        if state.can_send_hangup_via_rtp() {
+            self.schedule_work_even_when_terminating(
+                call,
+                "Send hangup request failed",
+                move |call| call.send_hangup_via_rtp_data_to_all(hangup),
+            );
+        } else {
+            self.unexpected_state(state, "LocalHangup")
         }
         Ok(())
     }
 
-    fn ignore_connection_observer_event(
-        &self,
-        call_id: CallId,
-        remote_device_id: DeviceId,
-        state: CallState,
-        event: ConnectionObserverEvent,
-    ) {
-        info!(
-            "call_id: {} remote_device_id: {} Ignoring event: {}, while in state: {}",
-            call_id, remote_device_id, event, state
-        );
-    }
-
     fn handle_connection_observer_event(
         &mut self,
-        mut call: Call<T>,
+        call: Call<T>,
         state: CallState,
         event: ConnectionObserverEvent,
         remote_device_id: DeviceId,
     ) -> Result<()> {
         let call_id = call.call_id();
+        let direction = call.direction();
 
         match event {
-            ConnectionObserverEvent::ConnectedBeforeAccepted => {
-                match state {
-                    CallState::ConnectingBeforeAccepted => {
+            ConnectionObserverEvent::StateChanged(connection_state) => {
+                match (direction, state, connection_state) {
+                    (
+                        CallDirection::InComing,
+                        CallState::ConnectingBeforeAccepted,
+                        ConnectionState::ConnectedBeforeAccepted,
+                    ) => {
                         // We use the fact that we are connected via ICE
                         // as a signal that the application should ring.
                         call.set_state(CallState::ConnectedBeforeAccepted)?;
-                        if let CallDirection::InComing = call.direction() {
-                            self.notify_application(call, ApplicationEvent::LocalRinging)
-                        } else {
-                            self.notify_application(call, ApplicationEvent::RemoteRinging)
-                        }
+                        self.notify_application(call, ApplicationEvent::LocalRinging)
                     }
-                    _ => {
-                        self.ignore_connection_observer_event(
-                            call_id,
-                            remote_device_id,
-                            state,
-                            event,
+                    (
+                        CallDirection::OutGoing,
+                        CallState::ConnectingBeforeAccepted,
+                        ConnectionState::ConnectedBeforeAccepted,
+                    ) => {
+                        call.set_state(CallState::ConnectedBeforeAccepted)?;
+                        self.notify_application(call, ApplicationEvent::RemoteRinging)
+                    }
+                    | (
+                        CallDirection::OutGoing,
+                        // Note: It's possible to have one connection in ConnectedBeforeAccepted and another in ConnectingAfterAccepted.
+                        CallState::ConnectingBeforeAccepted | CallState::ConnectedBeforeAccepted,
+                        ConnectionState::ConnectingAfterAccepted,
+                    ) => {
+                        info!(
+                            "handle_connection_observer_event(): Accepted before connected from {}",
+                            remote_device_id
                         );
+                        call.set_state(CallState::ConnectingAfterAccepted)?;
+                        self.handle_remotely_accepted_connection(call, remote_device_id)?;
+                        // Don't activate the remotely accepted connection until it's connected.
                     }
-                }
-                Ok(())
-            }
-            ConnectionObserverEvent::ReceivedAcceptedViaRtpData => {
-                match call.direction() {
-                    CallDirection::OutGoing => match state {
-                        CallState::ConnectedBeforeAccepted => {
+                    (
+                        CallDirection::OutGoing,
+                        CallState::ConnectingAfterAccepted,
+                        ConnectionState::ConnectedAndAccepted,
+                    ) => {
+                        if call.active_device_id()? == remote_device_id {
                             info!(
-                                "handle_connection_observer_event(): Accepted from {}",
+                                "handle_connection_observer_event(): Connected after accepted from {}",
                                 remote_device_id
                             );
-
                             call.set_state(CallState::ConnectedAndAccepted)?;
-                            call.set_active_device_id(remote_device_id)?;
-
-                            // Send out hangup/accepted to all via RTP data except to the accepter.
-                            let hangup =
-                                signaling::Hangup::AcceptedOnAnotherDevice(remote_device_id);
-                            call.send_hangup_via_rtp_data_to_all_except(hangup, remote_device_id)?;
-
-                            let mut err_call = call.clone();
-                            let connected_future = lazy(move |_| {
-                                if call.terminating()? {
-                                    return Ok(());
-                                }
-
-                                // Get the media and application working for the first connection.
-                                let connection = call.active_connection()?;
-                                connection.connect_incoming_media()?;
-                                connection.start_tick()?;
-                                call.notify_application(ApplicationEvent::RemoteAccepted)?;
-                                // Now that we've picked a connection, we can notify the app of the
-                                // network route.
-                                call.notify_network_route_changed(connection.network_route()?)?;
-
-                                // Send the accepted indication via hangup signaling (it will be
-                                // replicated to all remote peers).
-                                let mut call_manager = call.call_manager()?;
-                                call_manager.send_hangup(
-                                    call.clone(),
-                                    call.call_id(),
-                                    signaling::SendHangup { hangup },
-                                )?;
-
-                                // Close all the other connections (this blocks).
-                                let mut call_clone = call.clone();
-                                call_clone.terminate_connections_except_accepted(remote_device_id)
-                            })
-                            .map_err(move |err| {
-                                err_call.inject_internal_error(
-                                    err,
-                                    "Processing connect_incoming_media request failed",
-                                );
-                            });
-                            self.worker_spawn(connected_future);
-                        }
-                        _ => {
-                            self.ignore_connection_observer_event(
-                                call_id,
-                                remote_device_id,
-                                state,
-                                event,
+                            // The other connections were already terminated and sent hangup messages.
+                            self.activate_remotely_accepted_connection(call);
+                        } else {
+                            info!(
+                                "call_id: {} remote_device_id: {} Ignoring event: {}, from inactive connection.",
+                                call_id, remote_device_id, event
                             );
                         }
-                    },
-                    CallDirection::InComing => {
-                        warn!(
-                            "Ignoring ReceivedAcceptedViaRtpData for incoming call: {}",
-                            call_id
+                    }
+                    (
+                        CallDirection::OutGoing,
+                        CallState::ConnectedBeforeAccepted,
+                        ConnectionState::ConnectedAndAccepted,
+                    ) => {
+                        info!(
+                            "handle_connection_observer_event(): Accepted after connected from {}",
+                            remote_device_id
+                        );
+                        call.set_state(CallState::ConnectedAndAccepted)?;
+                        self.handle_remotely_accepted_connection(call.clone(), remote_device_id)?;
+                        self.activate_remotely_accepted_connection(call);
+                    }
+                    (
+                        CallDirection::InComing,
+                        CallState::ConnectedBeforeAccepted,
+                        ConnectionState::ConnectedAndAccepted,
+                    ) => {
+                        // In Call::handle_accept_call, the CallState is set to ConnectedAndAccepted
+                        // before the ConnectionState is set to ConnectedAndAccepted, so there's nothing to do here.
+                    }
+                    (
+                        _,
+                        CallState::ConnectedAndAccepted,
+                        ConnectionState::ReconnectingAfterAccepted,
+                    ) => {
+                        if call.active_device_id()? == remote_device_id {
+                            call.set_state(CallState::ReconnectingAfterAccepted)?;
+                            self.notify_application(call, ApplicationEvent::Reconnecting)
+                        } else {
+                            info!(
+                                "call_id: {} remote_device_id: {} Ignoring event: {}, from inactive connection.",
+                                call_id, remote_device_id, event
+                            );
+                        }
+                    }
+                    (
+                        _,
+                        CallState::ReconnectingAfterAccepted,
+                        ConnectionState::ConnectedAndAccepted,
+                    ) => {
+                        if call.active_device_id()? == remote_device_id {
+                            call.set_state(CallState::ConnectedAndAccepted)?;
+                            self.notify_application(call, ApplicationEvent::Reconnected)
+                        } else {
+                            info!(
+                                "call_id: {} remote_device_id: {} Ignoring event: {}, from inactive connection.",
+                                call_id, remote_device_id, event
+                            );
+                        }
+                    }
+                    (_, _, ConnectionState::IceFailed) => {
+                        self.schedule_work_until_terminating(call, "Processing connection_failed request failed", move |mut call| {
+                            call.handle_ice_failed(remote_device_id)
+                        });
+                    }
+                    // The following state tranisitions make sense but aren't interesting.
+                    (
+                        _,
+                        _,
+                        ConnectionState::NotYetStarted
+                        | ConnectionState::Starting
+                        | ConnectionState::IceGathering
+                        | ConnectionState::ConnectingBeforeAccepted
+                        | ConnectionState::Terminating
+                        | ConnectionState::Terminated,
+                    )
+                    // This is possible for outgoing calls when multiple connections can all reach the connected state.
+                    | (
+                        CallDirection::OutGoing,
+                        CallState::ConnectedBeforeAccepted,
+                        ConnectionState::ConnectedBeforeAccepted,
+                    ) => {
+                    }
+                    // None of the following state transitions make any sense
+                    (
+                        _,
+                        CallState::NotYetStarted
+                        | CallState::WaitingToProceed
+                        | CallState::Terminating
+                        | CallState::Terminated,
+                        ConnectionState::ConnectedBeforeAccepted
+                        | ConnectionState::ConnectingAfterAccepted
+                        | ConnectionState::ConnectedAndAccepted
+                        | ConnectionState::ReconnectingAfterAccepted,
+                    )
+                    | (
+                        _,
+                        CallState::ConnectingBeforeAccepted,
+                        ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted,
+                    )
+                    // Note: This is possible for outgoing calls when multiple connections can all reach the connected state.
+                    // (See that handled case above)
+                    | (
+                        CallDirection::InComing,
+                        CallState::ConnectedBeforeAccepted,
+                        ConnectionState::ConnectedBeforeAccepted,
+                    )
+                    | (
+                        _,
+                        CallState::ConnectedBeforeAccepted,
+                        ConnectionState::ReconnectingAfterAccepted,
+                    )
+                    | (
+                        CallDirection::InComing,
+                        CallState::ConnectingAfterAccepted,
+                        _,
+                    )
+                    | (
+                        CallDirection::InComing,
+                        _,
+                        ConnectionState::ConnectingAfterAccepted,
+                    )
+                    | (
+                        CallDirection::OutGoing,
+                        CallState::ConnectingAfterAccepted,
+                        ConnectionState::ConnectedBeforeAccepted | ConnectionState::ConnectingAfterAccepted | ConnectionState::ReconnectingAfterAccepted,
+                    )
+                    | (
+                        _,
+                        CallState::ConnectedAndAccepted,
+                        ConnectionState::ConnectedBeforeAccepted | ConnectionState::ConnectingAfterAccepted | ConnectionState::ConnectedAndAccepted,
+                    )
+                    | (
+                        _,
+                        CallState::ReconnectingAfterAccepted,
+                        ConnectionState::ConnectedBeforeAccepted | ConnectionState::ConnectingAfterAccepted | ConnectionState::ReconnectingAfterAccepted,
+                    ) => {
+                        error!(
+                            "call_id: {} remote_device_id: {} direction: {}, call state: {} unexpected connection state: {}",
+                            call_id, remote_device_id, direction, state, connection_state
                         );
                     }
                 }
@@ -828,43 +918,31 @@ where
                 },
             ),
             ConnectionObserverEvent::ReceivedSenderStatusViaRtpData(status) => {
-                if call.active_device_id()? == remote_device_id {
-                    match state {
-                        CallState::ConnectedAndAccepted => {
-                            if let Some(video_enabled) = status.video_enabled {
-                                if video_enabled {
-                                    self.notify_application(
-                                        call.clone(),
-                                        ApplicationEvent::RemoteVideoEnable,
-                                    )
-                                } else {
-                                    self.notify_application(
-                                        call.clone(),
-                                        ApplicationEvent::RemoteVideoDisable,
-                                    )
-                                }
-                            }
-                            if let Some(sharing_screen) = status.sharing_screen {
-                                if sharing_screen {
-                                    self.notify_application(
-                                        call,
-                                        ApplicationEvent::RemoteSharingScreenEnable,
-                                    )
-                                } else {
-                                    self.notify_application(
-                                        call,
-                                        ApplicationEvent::RemoteSharingScreenDisable,
-                                    )
-                                }
-                            }
+                if state.active() && call.active_device_id()? == remote_device_id {
+                    if let Some(video_enabled) = status.video_enabled {
+                        if video_enabled {
+                            self.notify_application(
+                                call.clone(),
+                                ApplicationEvent::RemoteVideoEnable,
+                            )
+                        } else {
+                            self.notify_application(
+                                call.clone(),
+                                ApplicationEvent::RemoteVideoDisable,
+                            )
                         }
-                        _ => {
-                            self.ignore_connection_observer_event(
-                                call_id,
-                                remote_device_id,
-                                state,
-                                event,
-                            );
+                    }
+                    if let Some(sharing_screen) = status.sharing_screen {
+                        if sharing_screen {
+                            self.notify_application(
+                                call,
+                                ApplicationEvent::RemoteSharingScreenEnable,
+                            )
+                        } else {
+                            self.notify_application(
+                                call,
+                                ApplicationEvent::RemoteSharingScreenDisable,
+                            )
                         }
                     }
                 } else {
@@ -873,69 +951,6 @@ where
                         call_id, remote_device_id, event
                     );
                 }
-                Ok(())
-            }
-            ConnectionObserverEvent::ReconnectingAfterAccepted => {
-                if call.active_device_id()? == remote_device_id {
-                    match state {
-                        CallState::ConnectedAndAccepted => {
-                            call.set_state(CallState::ReconnectingAfterAccepted)?;
-                            self.notify_application(call, ApplicationEvent::Reconnecting)
-                        }
-                        _ => {
-                            self.ignore_connection_observer_event(
-                                call_id,
-                                remote_device_id,
-                                state,
-                                event,
-                            );
-                        }
-                    }
-                } else {
-                    info!(
-                        "call_id: {} remote_device_id: {} Ignoring event: {}, from inactive connection.",
-                        call_id, remote_device_id, event
-                    );
-                }
-                Ok(())
-            }
-            ConnectionObserverEvent::ReconnectedAfterAccepted => {
-                if call.active_device_id()? == remote_device_id {
-                    match state {
-                        CallState::ReconnectingAfterAccepted => {
-                            call.set_state(CallState::ConnectedAndAccepted)?;
-                            self.notify_application(call, ApplicationEvent::Reconnected)
-                        }
-                        _ => {
-                            self.ignore_connection_observer_event(
-                                call_id,
-                                remote_device_id,
-                                state,
-                                event,
-                            );
-                        }
-                    }
-                } else {
-                    info!(
-                        "call_id: {} remote_device_id: {} Ignoring event: {}, from inactive connection.",
-                        call_id, remote_device_id, event
-                    );
-                }
-                Ok(())
-            }
-            ConnectionObserverEvent::IceFailed => {
-                let mut err_call = call.clone();
-                let future = lazy(move |_| {
-                    if call.terminating()? {
-                        return Ok(());
-                    }
-                    call.handle_ice_failed(remote_device_id)
-                })
-                .map_err(move |err| {
-                    err_call
-                        .inject_internal_error(err, "Processing connection_failed request failed");
-                });
-                self.worker_spawn(future);
                 Ok(())
             }
             ConnectionObserverEvent::IceNetworkRouteChanged(network_route) => {
@@ -998,20 +1013,12 @@ where
     fn handle_call_timeout(&mut self, call: Call<T>, state: CallState) -> Result<()> {
         info!("handle_call_timeout():");
 
-        match state {
-            CallState::ConnectedAndAccepted | CallState::ReconnectingAfterAccepted => {} // Ok
-            _ => {
-                let mut err_call = call.clone();
-                let timeout_future = lazy(move |_| {
-                    let mut call_manager = call.call_manager()?;
-                    call_manager.timeout(call.call_id())
-                })
-                .map_err(move |err| {
-                    err_call.inject_internal_error(err, "Processing call timeout failed");
-                });
-
-                self.worker_spawn(timeout_future);
-            }
+        if !state.active() {
+            self.schedule_work_even_when_terminating(
+                call,
+                "Processing call timeout failed",
+                move |call| call.call_manager()?.timeout(call.call_id()),
+            );
         }
         Ok(())
     }

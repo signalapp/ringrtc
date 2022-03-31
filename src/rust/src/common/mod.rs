@@ -67,7 +67,35 @@ impl From<u64> for CallId {
 /// Unique remote device identification number.
 pub type DeviceId = u32;
 
-/// Tracks the state of a call.
+/// Tracks the state of a call:
+/// NotYetStarted
+///      |
+///      | start
+///      V
+/// WaitingToProceed -------------------------------->|
+///      |                                            |
+///      | proceed                                    |
+///      V                                            |
+/// ConnectingBeforeAccepted------------------------->|
+///   |                        |                      |
+///   | connected              | accepted             |
+///   V                        |                      |
+/// ConnectedBeforeAccepted--- V   ------------------>|
+///   |                      ConnectingAfterAccepted->| terminate
+///   |                        |                      |
+///   | accepted               | connected            |
+///   V                        V                      |
+/// ConnectedAndAccepted           ------------------>|
+///      |               ^                            |
+///      | disconnected  | connected                  |
+///      V               |                            |
+/// ReconnectingAfterAccepted------------------------>|
+///                                                   V
+/// Terminating<---------------------------------------
+///      |
+///      | terminated
+///      V
+/// Terminated
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum CallState {
     /// The call has been created, but not yet started.
@@ -82,6 +110,11 @@ pub enum CallState {
     /// We don't ring until we're connected with ICE to send an
     /// "accepted" message.
     ConnectingBeforeAccepted,
+
+    /// The callee accepted before the caller is connected.
+    /// This can happen, for example, if a remote callee gets ICE connected
+    /// and accepts before the local caller gets ICE connected.
+    ConnectingAfterAccepted,
 
     /// ICE is connected,
     /// But the callee has not yet accepted.
@@ -103,6 +136,159 @@ pub enum CallState {
 impl fmt::Display for CallState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+// Note: The code below in both CallState and ConnectionState doesn't use "matches!" or "==" or
+// default matching or similar because we want think about each state, especially for when
+// we add more states in the future.
+
+impl CallState {
+    pub fn can_receive_ice_candidates(self) -> bool {
+        match self {
+            // Can't use ICE candidates because nothing has been started.
+            CallState::NotYetStarted => false,
+
+            // Can use ICE candidates before proceeding because they are stored until proceeding.
+            CallState::WaitingToProceed => true,
+            // Can use ICE candidates because connectivity is in progress.
+            CallState::ConnectingBeforeAccepted => true,
+            CallState::ConnectingAfterAccepted => true,
+            CallState::ConnectedBeforeAccepted => true,
+            CallState::ConnectedAndAccepted => true,
+            CallState::ReconnectingAfterAccepted => true,
+
+            // No point in ICE candidates any more.
+            CallState::Terminating => false,
+            CallState::Terminated => false,
+        }
+    }
+
+    pub fn connected_or_reconnecting(self) -> bool {
+        match self {
+            CallState::NotYetStarted => false,
+            CallState::WaitingToProceed => false,
+            CallState::ConnectingBeforeAccepted => false,
+            CallState::ConnectingAfterAccepted => false,
+
+            CallState::ConnectedBeforeAccepted => true,
+            CallState::ConnectedAndAccepted => true,
+            CallState::ReconnectingAfterAccepted => true,
+
+            CallState::Terminating => false,
+            CallState::Terminated => false,
+        }
+    }
+
+    pub fn can_be_accepted_locally(self) -> bool {
+        match self {
+            // Not even started/proceeding yet, so can't be accepted yet.
+            CallState::NotYetStarted => false,
+            CallState::WaitingToProceed => false,
+            CallState::ConnectingBeforeAccepted => false,
+            // We don't support accepting before connected yet, but we could in the future.
+            CallState::ConnectingAfterAccepted => false,
+
+            CallState::ConnectedBeforeAccepted => true,
+
+            // Already accepted, so can't be accepted again.
+            CallState::ConnectedAndAccepted => false,
+            CallState::ReconnectingAfterAccepted => false,
+            // Terminating, so can't be accepted any more.
+            CallState::Terminating => false,
+            CallState::Terminated => false,
+        }
+    }
+
+    // AKA ConnectedAndAccepted or ReconnectingAfterAccepted
+    pub fn active(self) -> bool {
+        match self {
+            CallState::NotYetStarted => false,
+            CallState::WaitingToProceed => false,
+            CallState::ConnectingBeforeAccepted => false,
+            CallState::ConnectingAfterAccepted => false,
+            CallState::ConnectedBeforeAccepted => false,
+
+            CallState::ConnectedAndAccepted => true,
+            CallState::ReconnectingAfterAccepted => true,
+
+            CallState::Terminating => false,
+            CallState::Terminated => false,
+        }
+    }
+
+    pub fn can_send_hangup_via_rtp(self) -> bool {
+        match self {
+            CallState::NotYetStarted => false,
+
+            // Not sure why these are true, but they preserve logic during refactoring.
+            // Since the messasge won't go anywhere, we should consider removing it.
+            CallState::WaitingToProceed => true,
+            CallState::ConnectingBeforeAccepted => true,
+            CallState::ConnectingAfterAccepted => true,
+
+            CallState::ConnectedBeforeAccepted => true,
+            CallState::ConnectedAndAccepted => true,
+            CallState::ReconnectingAfterAccepted => true,
+            CallState::Terminating => true,
+
+            // Not sure why this is true, but it preserves logic during refactoring.
+            // Since the messasge won't go anywhere, we should consider removing it.
+            CallState::Terminated => true,
+        }
+    }
+
+    pub fn should_propogate_hangup(self) -> bool {
+        match self {
+            CallState::NotYetStarted => false,
+
+            CallState::WaitingToProceed => true,
+            CallState::ConnectingBeforeAccepted => true,
+            CallState::ConnectedBeforeAccepted => true,
+
+            // Don't propagate if we're already accepted because a
+            // Hangup/Accepted has been sent to the other callees.
+            CallState::ConnectingAfterAccepted => false,
+            CallState::ConnectedAndAccepted => false,
+            CallState::ReconnectingAfterAccepted => false,
+            // Don't propagate if we're already terminating/terminated because
+            // we already sent out a Hangup to the other callees.
+            CallState::Terminating => false,
+            CallState::Terminated => false,
+        }
+    }
+
+    pub fn can_be_terminated_remotely(self) -> bool {
+        match self {
+            // Can't be terminated if it hasn't started yet.
+            CallState::NotYetStarted => false,
+
+            CallState::WaitingToProceed => true,
+            CallState::ConnectingBeforeAccepted => true,
+            CallState::ConnectingAfterAccepted => true,
+            CallState::ConnectedBeforeAccepted => true,
+            CallState::ConnectedAndAccepted => true,
+            CallState::ReconnectingAfterAccepted => true,
+
+            // Already terminating or terminated, so can't be terminated again.
+            CallState::Terminating => false,
+            CallState::Terminated => false,
+        }
+    }
+
+    pub fn terminating_or_terminated(self) -> bool {
+        match self {
+            CallState::NotYetStarted => false,
+            CallState::WaitingToProceed => false,
+            CallState::ConnectingBeforeAccepted => false,
+            CallState::ConnectingAfterAccepted => false,
+            CallState::ConnectedBeforeAccepted => false,
+            CallState::ConnectedAndAccepted => false,
+            CallState::ReconnectingAfterAccepted => false,
+
+            CallState::Terminating => true,
+            CallState::Terminated => true,
+        }
     }
 }
 
@@ -211,8 +397,45 @@ impl fmt::Display for ApplicationEvent {
     }
 }
 
-/// Tracks the state of a connection.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// Tracks the state of a connection:
+/// NotYetStarted
+///      |
+///      | start
+///      V
+/// Starting----------------------------------------------->|
+///      |                              |                   |
+///      | (outgoing child or incoming) | (outgoing parent) |
+///      |                              V                   |
+///      V                           IceGathering---------->|
+/// ConnectingBeforeAccepted------------------------------->|
+///   |                        |                      |
+///   | connected              | accepted             |
+///   V                        |                      |
+/// ConnectedBeforeAccepted--- V   ------------------>|
+///   |                      ConnectingAfterAccepted->| terminate
+///   |                        |                      |
+///   | accepted               | connected            |
+///   V                        V                      |
+/// ConnectedAndAccepted           ------------------>|
+///      |               ^                            |
+///      | disconnected  | connected                  |
+///      V               |                            |
+/// ReconnectingAfterAccepted------------------------>|
+///                                                   V
+/// Terminating<---------------------------------------
+///      |                                            ^
+///      | terminated                                 |
+///      V                                            |
+/// Terminated                                        |
+///                                                   |
+/// (this should go above, but it's hard to draw)     |
+/// ConnectingBeforeAccepted|ConnectingAfterAccepted  |
+///         |                                         |
+///         | ICE failed                              |
+///         V                                         |
+/// IceFailed --------------------------------------->|
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ConnectionState {
     /// The connection has been created but not started
     /// (via start_outgoing_parent, start_outgoing_child, or start_incoming)
@@ -234,6 +457,9 @@ pub enum ConnectionState {
     /// It has both the local and remote descriptions.
     /// This can transition to ConnectedBeforeAccepted or IceFailed
     ConnectingBeforeAccepted,
+
+    /// The call has been accepted, but ICE hasn't connected yet.
+    ConnectingAfterAccepted,
 
     /// ICE has connected, but the call hasn't been accepted yet.
     ConnectedBeforeAccepted,
@@ -257,6 +483,170 @@ pub enum ConnectionState {
 impl fmt::Display for ConnectionState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+impl ConnectionState {
+    pub fn can_send_ice_candidates(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+
+            ConnectionState::Starting => true,
+            ConnectionState::IceGathering => true,
+            ConnectionState::ConnectingBeforeAccepted => true,
+            ConnectionState::ConnectingAfterAccepted => true,
+            ConnectionState::ConnectedBeforeAccepted => true,
+            ConnectionState::ConnectedAndAccepted => true,
+            ConnectionState::ReconnectingAfterAccepted => true,
+            // Not sure why this is true, but it preserves logic while refactoring
+            // Consider changing it to false because it won't do anything.
+            ConnectionState::IceFailed => true,
+
+            ConnectionState::Terminating => false,
+            ConnectionState::Terminated => false,
+        }
+    }
+
+    pub fn can_receive_ice_candidates(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+            ConnectionState::Starting => false,
+            ConnectionState::IceGathering => false,
+
+            ConnectionState::ConnectingBeforeAccepted => true,
+            ConnectionState::ConnectingAfterAccepted => true,
+            ConnectionState::ConnectedBeforeAccepted => true,
+            ConnectionState::ConnectedAndAccepted => true,
+            ConnectionState::ReconnectingAfterAccepted => true,
+
+            ConnectionState::IceFailed => false,
+            ConnectionState::Terminating => false,
+            ConnectionState::Terminated => false,
+        }
+    }
+
+    pub fn connecting_or_connected(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+            ConnectionState::Starting => false,
+            ConnectionState::IceGathering => false,
+
+            ConnectionState::ConnectingBeforeAccepted => true,
+            ConnectionState::ConnectingAfterAccepted => true,
+            ConnectionState::ConnectedBeforeAccepted => true,
+            ConnectionState::ConnectedAndAccepted => true,
+            ConnectionState::ReconnectingAfterAccepted => true,
+
+            ConnectionState::IceFailed => false,
+            ConnectionState::Terminating => false,
+            ConnectionState::Terminated => false,
+        }
+    }
+
+    pub fn connected_or_reconnecting(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+            ConnectionState::Starting => false,
+            ConnectionState::IceGathering => false,
+            ConnectionState::ConnectingBeforeAccepted => false,
+            ConnectionState::ConnectingAfterAccepted => false,
+
+            ConnectionState::ConnectedBeforeAccepted => true,
+            ConnectionState::ConnectedAndAccepted => true,
+            ConnectionState::ReconnectingAfterAccepted => true,
+
+            ConnectionState::IceFailed => false,
+            ConnectionState::Terminating => false,
+            ConnectionState::Terminated => false,
+        }
+    }
+
+    pub fn can_be_accepted_locally(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+            ConnectionState::Starting => false,
+            ConnectionState::IceGathering => false,
+
+            // Not sure why this is true, but it preserves logic while refactoring.
+            // We should consider changing it because we don't support
+            // accepting locally before ICE is connected.
+            ConnectionState::ConnectingBeforeAccepted => true,
+
+            ConnectionState::ConnectingAfterAccepted => false,
+
+            ConnectionState::ConnectedBeforeAccepted => true,
+
+            ConnectionState::ConnectedAndAccepted => false,
+
+            // Not sure why this is true, but it preserves logic while refactoring.
+            // We should consider changing it because it doesn't
+            // make sense to accept after accepting
+            ConnectionState::ReconnectingAfterAccepted => true,
+
+            ConnectionState::IceFailed => false,
+            ConnectionState::Terminating => false,
+            ConnectionState::Terminated => false,
+        }
+    }
+
+    pub fn active(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+            ConnectionState::Starting => false,
+            ConnectionState::IceGathering => false,
+            ConnectionState::ConnectingBeforeAccepted => false,
+            ConnectionState::ConnectingAfterAccepted => false,
+            ConnectionState::ConnectedBeforeAccepted => false,
+
+            ConnectionState::ConnectedAndAccepted => true,
+            ConnectionState::ReconnectingAfterAccepted => true,
+
+            ConnectionState::IceFailed => false,
+            ConnectionState::Terminating => false,
+            ConnectionState::Terminated => false,
+        }
+    }
+
+    pub fn can_send_hangup_via_rtp(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+
+            // Not sure why these are true, but they preserve logic during refactoring.
+            // We should consider making them false because the messages
+            // can't go anywhere.
+            ConnectionState::Starting => true,
+            ConnectionState::IceGathering => true,
+            ConnectionState::ConnectingBeforeAccepted => true,
+            ConnectionState::ConnectingAfterAccepted => true,
+
+            ConnectionState::ConnectedBeforeAccepted => true,
+            ConnectionState::ConnectedAndAccepted => true,
+            ConnectionState::ReconnectingAfterAccepted => true,
+
+            // Not sure why these are true, but they preserve logic during refactoring.
+            // We should consider making them false because the messages
+            // can't go anywhere.
+            ConnectionState::IceFailed => true,
+            ConnectionState::Terminating => true,
+            ConnectionState::Terminated => true,
+        }
+    }
+
+    pub fn terminating_or_terminated(self) -> bool {
+        match self {
+            ConnectionState::NotYetStarted => false,
+            ConnectionState::Starting => false,
+            ConnectionState::IceGathering => false,
+            ConnectionState::ConnectingBeforeAccepted => false,
+            ConnectionState::ConnectingAfterAccepted => false,
+            ConnectionState::ConnectedBeforeAccepted => false,
+            ConnectionState::ConnectedAndAccepted => false,
+            ConnectionState::ReconnectingAfterAccepted => false,
+            ConnectionState::IceFailed => false,
+
+            ConnectionState::Terminating => true,
+            ConnectionState::Terminated => true,
+        }
     }
 }
 

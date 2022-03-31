@@ -883,18 +883,12 @@ where
         let mut call_manager = self.clone();
         let cm_error = self.clone();
         let call_error = call.clone();
-        let call_clone = call.clone();
         let future = lazy(move |_| {
             if let Some(hangup) = hangup {
                 // If we want to send a hangup message, be sure that
                 // the call actually should send one.
                 if call.should_send_hangup() {
-                    // Send hangup via signaling channel.
-                    call_manager.send_hangup(
-                        call_clone,
-                        call_id,
-                        signaling::SendHangup { hangup },
-                    )?;
+                    call.send_hangup_via_signaling_to_all(hangup)?;
                 }
             }
             call_manager.terminate_and_drop_call(call_id)
@@ -1074,21 +1068,16 @@ where
             if active_call.call_id() == call_id {
                 is_active_call = true;
                 if let Ok(state) = active_call.state() {
-                    match state {
-                        CallState::ConnectedBeforeAccepted
-                        | CallState::ConnectedAndAccepted
-                        | CallState::ReconnectingAfterAccepted => {
-                            // Get the last sent message type and see if it was for ICE.
-                            // Since we are in a connected state, don't handle it if so.
-                            if let Ok(message_queue) = self.message_queue.lock() {
-                                if message_queue.last_sent_message_type
-                                    == Some(signaling::MessageType::Ice)
-                                {
-                                    should_handle = false
-                                }
+                    if state.connected_or_reconnecting() {
+                        // Get the last sent message type and see if it was for ICE.
+                        // Since we are in a connected state, don't handle it if so.
+                        if let Ok(message_queue) = self.message_queue.lock() {
+                            if message_queue.last_sent_message_type
+                                == Some(signaling::MessageType::Ice)
+                            {
+                                should_handle = false
                             }
                         }
-                        _ => {}
                     }
                 }
             }
@@ -1415,22 +1404,11 @@ where
         // Invoke hangup_other for the call, which will inject hangup/busy
         // to all connections, if any.
         let hangup = signaling::Hangup::BusyOnAnotherDevice(sender_device_id);
-        active_call.send_hangup_via_rtp_data_to_all_except(hangup, sender_device_id)?;
-
-        // Send out hangup/busy to all callees via signal messaging.
-        let mut call_manager = active_call.call_manager()?;
-        call_manager.send_hangup(
-            active_call.clone(),
-            active_call.call_id(),
-            signaling::SendHangup { hangup },
-        )?;
+        active_call
+            .send_hangup_via_rtp_data_and_signaling_to_all_except(hangup, sender_device_id)?;
 
         // Handle the normal processing of busy by concluding the call locally.
-        self.handle_terminate_active_call(
-            active_call.clone(),
-            None,
-            ApplicationEvent::EndedRemoteBusy,
-        )
+        self.handle_terminate_active_call(active_call, None, ApplicationEvent::EndedRemoteBusy)
     }
 
     /// Handle received_call_message() API from the application.

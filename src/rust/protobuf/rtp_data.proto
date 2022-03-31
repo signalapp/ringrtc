@@ -47,6 +47,6 @@ message Message {
   // Can be used to detect that messages are out of order.
   // Useful when sending over transports that don't have ordering
   // (or when sending over more than one transport)
-  optional uint64         sequenceNumber = 4;
+  optional uint64         seqnum = 4;
   optional ReceiverStatus receiverStatus = 5;
 }

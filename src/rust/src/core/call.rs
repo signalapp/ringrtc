@@ -411,6 +411,28 @@ where
         call_manager.start_call(&*remote_peer, self.call_id, self.direction, self.media_type)
     }
 
+    /// Enable media flowing through the active connection and notify the application.
+    pub fn accept_locally(&self) -> Result<()> {
+        let mut connection = self.active_connection()?;
+        connection.inject_accept()?;
+        connection.enable_media()?;
+        connection.start_tick()?;
+        self.notify_application(ApplicationEvent::LocalAccepted)?;
+        Ok(())
+    }
+
+    /// Enable media flowing through the active connection and notify the application.
+    pub fn accept_remotely(&self) -> Result<()> {
+        let connection = self.active_connection()?;
+        connection.enable_media()?;
+        connection.start_tick()?;
+        self.notify_application(ApplicationEvent::RemoteAccepted)?;
+        // Now that we've picked a connection, we can notify the app of the
+        // network route.
+        self.notify_network_route_changed(connection.network_route()?)?;
+        Ok(())
+    }
+
     /// Notify application of an event.
     ///
     /// This is a pass through to the CallManager.
@@ -688,6 +710,15 @@ where
         }
     }
 
+    /// Send a Hangup to all callees via signal messaging.
+    pub fn send_hangup_via_signaling_to_all(&self, hangup: signaling::Hangup) -> Result<()> {
+        self.call_manager()?.send_hangup(
+            self.clone(),
+            self.call_id(),
+            signaling::SendHangup { hangup },
+        )
+    }
+
     /// Send a Hangup on all underlying Connections via RTP data
     pub fn send_hangup_via_rtp_data_to_all(&self, hangup: signaling::Hangup) -> Result<()> {
         info!(
@@ -744,13 +775,7 @@ where
     ) -> Result<()> {
         // Send hangup via RTP data
         self.send_hangup_via_rtp_data_to_all_except(hangup, excluded_remote_device_id)?;
-
-        // Send hangup via signaling.
-        self.call_manager()?.send_hangup(
-            self.clone(),
-            self.call_id(),
-            signaling::SendHangup { hangup },
-        )
+        self.send_hangup_via_signaling_to_all(hangup)
     }
 
     /// ICE failed for a specific connection

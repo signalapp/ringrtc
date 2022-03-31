@@ -54,7 +54,7 @@ pub struct Message {
     /// Useful when sending over transports that don't have ordering
     /// (or when sending over more than one transport)
     #[prost(uint64, optional, tag="4")]
-    pub sequence_number: ::core::option::Option<u64>,
+    pub seqnum: ::core::option::Option<u64>,
     #[prost(message, optional, tag="5")]
     pub receiver_status: ::core::option::Option<ReceiverStatus>,
 }

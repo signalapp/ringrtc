@@ -75,13 +75,7 @@ pub const NEW_RTP_DATA_SSRC: rtp::Ssrc = 0xD;
 /// Sent from the Connection to the parent Call object
 #[derive(Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ConnectionObserverEvent {
-    /// ICE is connected, but the callee has not accepted.
-    /// The Call uses this to know when it should transition to the
-    /// Ringing state.
-    ConnectedBeforeAccepted,
-
-    /// The remote side sent an accepted message via RTP data.
-    ReceivedAcceptedViaRtpData,
+    StateChanged(ConnectionState),
 
     /// The remote side sent a sender status message via RTP data.
     ReceivedSenderStatusViaRtpData(signaling::SenderStatus),
@@ -89,15 +83,6 @@ pub enum ConnectionObserverEvent {
     /// The remote side sent a hangup message via RTP data
     /// or via signaling.
     ReceivedHangup(signaling::Hangup),
-
-    /// The call failed to connect during ICE negotiation.
-    IceFailed,
-
-    /// The connection temporarily disconnected and it attempting to reconnect.
-    ReconnectingAfterAccepted,
-
-    /// The connection temporarily disconnected and has now reconnecting.
-    ReconnectedAfterAccepted,
 
     /// The ICE network route changed
     IceNetworkRouteChanged(NetworkRoute),
@@ -879,15 +864,9 @@ where
     /// Update the current Call state.
     pub fn set_state(&self, new_state: ConnectionState) -> Result<()> {
         let mut state = self.state.lock()?;
-        *state = new_state;
-        if new_state == ConnectionState::ConnectedAndAccepted {
-            // Now that we are accepted, we can start rendering audio
-            // and enable outgoing and incoming RTP.
-            let webrtc = self.webrtc.lock()?;
-            let pc = webrtc.peer_connection()?;
-            pc.set_audio_playout_enabled(true);
-            pc.set_outgoing_media_enabled(true);
-            pc.set_incoming_media_enabled(true);
+        if *state != new_state {
+            *state = new_state;
+            self.notify_observer(ConnectionObserverEvent::StateChanged(new_state))?;
         }
         Ok(())
     }
@@ -1336,7 +1315,7 @@ where
             // Merge this message into accumulated_state and send out the latest version.
             let mut state = self.accumulated_rtp_data_message.lock()?;
             populate(&mut state);
-            state.sequence_number = Some(state.sequence_number.unwrap_or(0) + 1);
+            state.seqnum = Some(state.seqnum.unwrap_or(0) + 1);
             state.clone()
         };
         info!("Sending RTP data message: {:?}", message);
@@ -1433,11 +1412,18 @@ where
         self.set_incoming_media(incoming_media)
     }
 
-    /// Connect incoming media (stored by handle_incoming_media) to the application connection
-    pub fn connect_incoming_media(&self) -> Result<()> {
-        info!("connect_incoming_media(): id: {}", self.connection_id);
+    /// Connect incoming media (stored by handle_incoming_media) to the application connection,
+    /// and enabled audio playout, and enable outgoing and incoming RTP.
+    /// Make sure that if you call this, you also notify the app that media is flowing.
+    pub fn enable_media(&self) -> Result<()> {
+        info!("enable_media(): id: {}", self.connection_id);
 
         let webrtc = self.webrtc.lock()?;
+        let pc = webrtc.peer_connection()?;
+        pc.set_audio_playout_enabled(true);
+        pc.set_outgoing_media_enabled(true);
+        pc.set_incoming_media_enabled(true);
+
         let incoming_media = match webrtc.incoming_media.as_ref() {
             Some(v) => v,
             None => {
@@ -1742,23 +1728,23 @@ where
             .unwrap_or_else(|e| warn!("unable to inject remote hangup event: {}", e));
             message_handled = true;
         };
-        if let Some(sender_status) = message.sender_status {
+        if let (Some(sender_status), Some(seqnum)) = (message.sender_status, message.seqnum) {
             self.inject_received_sender_status_via_rtp_data(
                 CallId::new(sender_status.id()),
                 signaling::SenderStatus {
                     video_enabled: sender_status.video_enabled,
                     sharing_screen: sender_status.sharing_screen,
                 },
-                message.sequence_number,
+                seqnum,
             )
             .unwrap_or_else(|e| warn!("unable to inject remote sender status event: {}", e));
             message_handled = true;
         };
-        if let Some(receiver_status) = message.receiver_status {
+        if let (Some(receiver_status), Some(seqnum)) = (message.receiver_status, message.seqnum) {
             self.inject_received_receiver_status_via_rtp_data(
                 CallId::new(receiver_status.id()),
                 DataRate::from_bps(receiver_status.max_bitrate_bps()),
-                message.sequence_number,
+                seqnum,
             )
             .unwrap_or_else(|e| warn!("unable to inject remote receiver status event: {}", e));
             message_handled = true;
@@ -1802,12 +1788,10 @@ where
         &mut self,
         call_id: CallId,
         status: signaling::SenderStatus,
-        sequence_number: Option<u64>,
+        seqnum: u64,
     ) -> Result<()> {
         self.inject_event(ConnectionEvent::ReceivedSenderStatusViaRtpData(
-            call_id,
-            status,
-            sequence_number,
+            call_id, status, seqnum,
         ))
     }
 
@@ -1824,12 +1808,12 @@ where
         &mut self,
         call_id: CallId,
         max_bitrate: DataRate,
-        sequence_number: Option<u64>,
+        seqnum: u64,
     ) -> Result<()> {
         self.inject_event(ConnectionEvent::ReceivedReceiverStatusViaRtpData(
             call_id,
             max_bitrate,
-            sequence_number,
+            seqnum,
         ))
     }
 
