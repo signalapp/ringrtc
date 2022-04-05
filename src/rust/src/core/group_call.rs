@@ -1838,6 +1838,17 @@ impl Client {
                             // from earlier.  For now, it's close enough.
                             let peek_info = peek_info.clone();
                             Self::set_peek_result_inner(state, Ok(peek_info));
+                            if state.remote_devices.is_empty() {
+                                // If there are no remote devices, then Self::set_peek_result_inner
+                                // will not fire handle_remote_devices_changed and the observer can't tell the difference
+                                // between "we know we have no remote devices" and "we don't know what we have yet".
+                                // This way, the observer can.
+                                state.observer.handle_remote_devices_changed(
+                                    state.client_id,
+                                    &state.remote_devices,
+                                    RemoteDevicesChangedReason::DemuxIdsChanged,
+                                );
+                            }
                         }
                         state
                             .observer
@@ -1994,10 +2005,7 @@ impl Client {
         }
         let peek_info = result.unwrap();
 
-        let is_first_update = matches!(
-            state.remote_devices_request_state,
-            RemoteDevicesRequestState::NeverRequested
-        );
+        let is_first_peek_info = state.last_peek_info.is_none();
         let should_request_again = matches!(
             state.remote_devices_request_state,
             RemoteDevicesRequestState::Requested {
@@ -2023,7 +2031,7 @@ impl Client {
             }) => Some(era_id.clone()),
             _ => None,
         };
-        if old_user_ids != new_user_ids || old_era_id != peek_info.era_id {
+        if is_first_peek_info || old_user_ids != new_user_ids || old_era_id != peek_info.era_id {
             state
                 .observer
                 .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
@@ -2100,10 +2108,7 @@ impl Client {
                 }
             }
 
-            // Note: if the first call to set_peek_result is [], we still fire the
-            // handle_remote_devices_changed to ensure the observer can tell the difference
-            // between "we know we have no remote devices" and "we don't know what we have yet".
-            if demux_ids_changed || is_first_update {
+            if demux_ids_changed {
                 state.observer.handle_remote_devices_changed(
                     state.client_id,
                     &state.remote_devices,
@@ -3399,12 +3404,16 @@ mod tests {
             self.cvar.notify_all();
         }
 
-        fn wait(&self) -> T {
+        fn wait(&self, timeout: Duration) -> Option<T> {
             let mut val = self.val.lock().unwrap();
             while val.is_none() {
-                val = self.cvar.wait(val).unwrap();
+                let (wait_val, wait_result) = self.cvar.wait_timeout(val, timeout).unwrap();
+                if wait_result.timed_out() {
+                    return None;
+                }
+                val = wait_val
             }
-            val.clone().unwrap()
+            Some(val.clone().unwrap())
         }
     }
 
@@ -3418,8 +3427,8 @@ mod tests {
             self.waitable.set(());
         }
 
-        fn wait(&self) {
-            self.waitable.wait();
+        fn wait(&self, timeout: Duration) -> bool {
+            self.waitable.wait(timeout).is_some()
         }
     }
 
@@ -3441,7 +3450,10 @@ mod tests {
         outgoing_signaling_blocked: Arc<CallMutex<bool>>,
         sent_group_signaling_messages: Arc<CallMutex<Vec<protobuf::signaling::CallMessage>>>,
 
+        connecting: Event,
         joined: Event,
+        peek_changed: Event,
+        remote_devices_changed: Event,
         remote_devices: Arc<CallMutex<Vec<RemoteDeviceState>>>,
         remote_devices_at_join_time: Arc<CallMutex<Vec<RemoteDeviceState>>>,
         peek_state: Arc<CallMutex<FakeObserverPeekState>>,
@@ -3467,7 +3479,10 @@ mod tests {
                     Vec::new(),
                     "FakeObserver sent group messages",
                 )),
+                connecting: Event::default(),
                 joined: Event::default(),
+                peek_changed: Event::default(),
+                remote_devices_changed: Event::default(),
                 remote_devices: Arc::new(CallMutex::new(Vec::new(), "FakeObserver remote devices")),
                 remote_devices_at_join_time: Arc::new(CallMutex::new(
                     Vec::new(),
@@ -3567,11 +3582,15 @@ mod tests {
         }
 
         fn request_group_members(&self, _client_id: ClientId) {}
+
         fn handle_connection_state_changed(
             &self,
             _client_id: ClientId,
-            _connection_state: ConnectionState,
+            connection_state: ConnectionState,
         ) {
+            if connection_state == ConnectionState::Connecting {
+                self.connecting.set();
+            }
         }
 
         fn handle_join_state_changed(&self, _client_id: ClientId, join_state: JoinState) {
@@ -3601,6 +3620,7 @@ mod tests {
             *owned_remote_devices = remote_devices.to_vec();
             self.handle_remote_devices_changed_invocation_count
                 .fetch_add(1, Ordering::Relaxed);
+            self.remote_devices_changed.set();
         }
 
         fn handle_audio_levels(
@@ -3628,6 +3648,7 @@ mod tests {
             owned_state.era_id = peek_info.era_id.clone();
             owned_state.max_devices = peek_info.max_devices;
             owned_state.device_count = peek_info.device_count;
+            self.peek_changed.set();
         }
 
         fn handle_send_rates_changed(&self, _client_id: ClientId, send_rates: SendRates) {
@@ -3768,7 +3789,7 @@ mod tests {
         fn connect_join_and_wait_until_joined(&self) {
             self.client.connect();
             self.client.join();
-            self.observer.joined.wait();
+            assert!(self.observer.joined.wait(Duration::from_secs(5)));
         }
 
         fn set_remotes_and_wait_until_applied(&self, clients: &[&TestClient]) {
@@ -3821,7 +3842,7 @@ mod tests {
             self.client.actor.send(move |_state| {
                 cloned.set();
             });
-            event.wait();
+            event.wait(Duration::from_secs(5));
         }
 
         fn encrypt_media(&mut self, is_audio: bool, plaintext: &[u8]) -> Result<Vec<u8>> {
@@ -3883,7 +3904,7 @@ mod tests {
 
         fn disconnect_and_wait_until_ended(&self) {
             self.client.disconnect();
-            self.observer.ended.wait();
+            self.observer.ended.wait(Duration::from_secs(5));
         }
     }
 
@@ -4371,6 +4392,36 @@ mod tests {
     }
 
     #[test]
+    fn fire_events_on_first_peek_info() {
+        let client = TestClient::new(vec![1], 1, None);
+
+        client.client.connect();
+        client.client.set_peek_result(Ok(PeekInfo::default()));
+
+        assert!(client.observer.peek_changed.wait(Duration::from_secs(5)));
+
+        client.client.join();
+        client.client.set_peek_result(Ok(PeekInfo {
+            // This gets filtered out.  Make sure we still fire the event.
+            devices: vec![PeekDeviceInfo {
+                demux_id: 1,
+                user_id: Some(b"1".to_vec()),
+            }],
+            creator: None,
+            era_id: None,
+            max_devices: None,
+            device_count: 1,
+        }));
+
+        assert!(client
+            .observer
+            .remote_devices_changed
+            .wait(Duration::from_secs(5)));
+
+        assert_eq!(1, client.observer.peek_state().device_count);
+    }
+
+    #[test]
     fn joined_members() {
         // The peeker doesn't join
         let peeker = TestClient::new(vec![42], 42, None);
@@ -4476,7 +4527,7 @@ mod tests {
         // And when we join(), but only if it's been a while.
         // since we asked before.
         client1.client.join();
-        client1.observer.joined.wait();
+        client1.observer.joined.wait(Duration::from_secs(5));
         assert_eq!(1, client1.sfu_client.request_count());
         client1.client.leave();
         std::thread::sleep(std::time::Duration::from_millis(1200));
@@ -4806,7 +4857,7 @@ mod tests {
         );
 
         client1.client.join();
-        client1.observer.joined.wait();
+        client1.observer.joined.wait(Duration::from_secs(5));
         client1.wait_for_client_to_process();
         let remote_devices = client1.observer.remote_devices();
         assert_eq!(2, remote_devices.len());
@@ -4898,7 +4949,10 @@ mod tests {
             era_id: None,
         }));
         client1.client.join();
-        assert_eq!(EndReason::HasMaxDevices, client1.observer.ended.wait());
+        assert_eq!(
+            Some(EndReason::HasMaxDevices),
+            client1.observer.ended.wait(Duration::from_secs(5))
+        );
 
         let client1 = TestClient::new(vec![1], 1, None);
         client1.client.set_peek_result(Ok(PeekInfo {

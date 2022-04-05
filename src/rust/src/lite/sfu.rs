@@ -319,11 +319,24 @@ pub fn peek(
         Box::new(move |http_response| {
             let result =
                 match parse_http_json_response::<SerializedPeekInfo>(http_response.as_ref()) {
-                    Ok(deserialized) => Ok(deserialized.deobfuscate(&opaque_user_id_mappings)),
+                    Ok(deserialized) => {
+                        info!(
+                            "Got group call peek result with device count = {}",
+                            deserialized.devices.len()
+                        );
+                        Ok(deserialized.deobfuscate(&opaque_user_id_mappings))
+                    }
                     Err(status) if status == ResponseCode::GroupCallNotStarted => {
+                        info!("Got group call peek result with device count = 0 (status code 404)");
                         Ok(PeekInfo::default())
                     }
-                    Err(status) => Err(status),
+                    Err(status) => {
+                        info!(
+                            "Got group call peek result with status code = {}",
+                            status.code
+                        );
+                        Err(status)
+                    }
                 };
             result_callback(result);
         }),
