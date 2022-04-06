@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.20.1
+
+- Add VP9 codec support and enable for Android hardware/Electron
+
+- Add state for ConnectingAfterAccepted to fix connect/accept race on caller's end
+
+- Group Calls: Fire peek changed events even if the call is empty
+
+- Reference signalapp/webrtc@4638j
+  - Reduce more noise from error/warning logs
+
+- Update dependencies, builds, and ci
+
 ## v2.20.0
 
 - Clean up "lite" interfaces
