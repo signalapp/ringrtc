@@ -17,29 +17,33 @@ export enum VideoPixelFormatEnum {
   Rgba = 2,
 }
 
-function videoPixelFormatFromEnum(format: VideoPixelFormatEnum): VideoPixelFormat {
+function videoPixelFormatFromEnum(
+  format: VideoPixelFormatEnum
+): VideoPixelFormat {
   switch (format) {
     case VideoPixelFormatEnum.I420: {
-      return "I420";
+      return 'I420';
     }
     case VideoPixelFormatEnum.Nv12: {
-      return "NV12";
+      return 'NV12';
     }
     case VideoPixelFormatEnum.Rgba: {
-      return "RGBA";
+      return 'RGBA';
     }
   }
 }
 
-function videoPixelFormatToEnum(format: VideoPixelFormat): VideoPixelFormatEnum | undefined {
+function videoPixelFormatToEnum(
+  format: VideoPixelFormat
+): VideoPixelFormatEnum | undefined {
   switch (format) {
-    case "I420": {
+    case 'I420': {
       return VideoPixelFormatEnum.I420;
     }
-    case "NV12": {
+    case 'NV12': {
       return VideoPixelFormatEnum.Nv12;
     }
-    case "RGBA": {
+    case 'RGBA': {
       return VideoPixelFormatEnum.Rgba;
     }
   }
@@ -55,7 +59,12 @@ export interface VideoFrameSource {
 
 // Sends frames (after getting them from something like GumVideoCapturer, for example).
 interface VideoFrameSender {
-  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void;
+  sendVideoFrame(
+    width: number,
+    height: number,
+    format: VideoPixelFormatEnum,
+    buffer: Buffer
+  ): void;
 }
 
 export class GumVideoCaptureOptions {
@@ -103,7 +112,7 @@ export class GumVideoCapturer {
     }
     this.updateLocalPreviewIntervalId = setInterval(
       this.updateLocalPreviewSourceObject.bind(this),
-      1000,
+      1000
     );
   }
 
@@ -206,9 +215,13 @@ export class GumVideoCapturer {
       }
 
       this.mediaStream = mediaStream;
-      if (!this.spawnedSenderRunning && this.mediaStream != undefined && this.sender != undefined) {
+      if (
+        !this.spawnedSenderRunning &&
+        this.mediaStream != undefined &&
+        this.sender != undefined
+      ) {
         this.spawnSender(this.mediaStream, this.sender);
-      }  
+      }
 
       this.updateLocalPreviewSourceObject();
     } catch (e) {
@@ -260,13 +273,15 @@ export class GumVideoCapturer {
       return;
     }
 
-    const reader = (new MediaStreamTrackProcessor({ track })).readable.getReader();
+    const reader = new MediaStreamTrackProcessor({
+      track,
+    }).readable.getReader();
     const buffer = Buffer.alloc(MAX_VIDEO_CAPTURE_BUFFER_SIZE);
     this.spawnedSenderRunning = true;
     (async () => {
       try {
         while (sender === this.sender && mediaStream == this.mediaStream) {
-          const {done, value: frame} = await reader.read();
+          const { done, value: frame } = await reader.read();
           if (done) {
             break;
           }
@@ -274,7 +289,7 @@ export class GumVideoCapturer {
             continue;
           }
           try {
-            const format = videoPixelFormatToEnum(frame.format ?? "I420");
+            const format = videoPixelFormatToEnum(frame.format ?? 'I420');
             if (format == undefined) {
               console.warn(`Unsupported video frame format: ${frame.format}`);
               break;
@@ -287,7 +302,7 @@ export class GumVideoCapturer {
               buffer
             );
           } finally {
-            // This must be called for more frames to come.  
+            // This must be called for more frames to come.
             frame.close();
           }
         }

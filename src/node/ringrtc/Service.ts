@@ -374,9 +374,11 @@ export class RingRTCType {
     // Temporary: Force hangup in all glare scenarios until handled gracefully.
     // In case of a glare loser, an incoming call will be generated right
     // after the outgoing call is ended. In that case, ignore it once.
-    if (this._call &&
-        (this._call.endedReason === CallEndedReason.Glare ||
-         this._call.endedReason === CallEndedReason.ReCall)) {
+    if (
+      this._call &&
+      (this._call.endedReason === CallEndedReason.Glare ||
+        this._call.endedReason === CallEndedReason.ReCall)
+    ) {
       this._call.endedReason = undefined;
       // EVIL HACK: We are the "loser" of a glare collision and have ended the outgoing call
       // and are now receiving the incoming call from the remote side (the "winner").
@@ -430,7 +432,7 @@ export class RingRTCType {
         settings.iceServer.urls,
         settings.hideIp,
         settings.bandwidthMode,
-        settings.audioLevelsIntervalMillis || 0,
+        settings.audioLevelsIntervalMillis || 0
       );
     });
   }
@@ -466,9 +468,10 @@ export class RingRTCType {
       return;
     }
 
-    if (call &&
-        (reason === CallEndedReason.Glare ||
-         reason === CallEndedReason.ReCall)) {
+    if (
+      call &&
+      (reason === CallEndedReason.Glare || reason === CallEndedReason.ReCall)
+    ) {
       // The current call is the outgoing call.
       // The ended call is the outgoing call.
       // We're the "loser", so end the outgoing/current call and wait for a new incoming call.
@@ -498,7 +501,7 @@ export class RingRTCType {
         );
       }
 
-      if (call && (call.state === CallState.Prering && call.isIncoming)) {
+      if (call && call.state === CallState.Prering && call.isIncoming) {
         // Set the state to Ended without triggering a state update since we
         // already notified the client.
         call.endedReason = reason;
@@ -1506,7 +1509,12 @@ export class Call {
   }
 
   // With this method, a Call is a VideoFrameSender
-  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void {
+  sendVideoFrame(
+    width: number,
+    height: number,
+    format: VideoPixelFormatEnum,
+    buffer: Buffer
+  ): void {
     // This assumes we only have one active all.
     this._callManager.sendVideoFrame(width, height, format, buffer);
   }
@@ -1793,7 +1801,7 @@ export class GroupCall {
       groupId,
       sfuUrl,
       hkdfExtraInfo,
-      audioLevelsIntervalMillis || 0,
+      audioLevelsIntervalMillis || 0
     );
   }
 
@@ -1911,7 +1919,10 @@ export class GroupCall {
   }
 
   // Called by Rust via RingRTC object
-  handleJoinStateChanged(joinState: JoinState, demuxId: number | undefined): void {
+  handleJoinStateChanged(
+    joinState: JoinState,
+    demuxId: number | undefined
+  ): void {
     this._localDeviceState.joinState = joinState;
 
     // Don't set to undefined after we leave so we can still know the demuxId after we leave.
@@ -1980,7 +1991,12 @@ export class GroupCall {
   }
 
   // With this, a GroupCall is a VideoFrameSender
-  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void {
+  sendVideoFrame(
+    width: number,
+    height: number,
+    format: VideoPixelFormatEnum,
+    buffer: Buffer
+  ): void {
     // This assumes we only have one active all.
     this._callManager.sendVideoFrame(width, height, format, buffer);
   }
@@ -2146,7 +2162,7 @@ export interface CallManager {
     iceServerUrls: Array<string>,
     hideIp: boolean,
     bandwidthMode: BandwidthMode,
-    audioLevelsIntervalMillis: number,
+    audioLevelsIntervalMillis: number
   ): void;
   accept(callId: CallId): void;
   ignore(callId: CallId): void;
@@ -2162,7 +2178,12 @@ export interface CallManager {
   setOutgoingVideoEnabled(enabled: boolean): void;
   setOutgoingVideoIsScreenShare(enabled: boolean): void;
   updateBandwidthMode(bandwidthMode: BandwidthMode): void;
-  sendVideoFrame(width: number, height: number, format: VideoPixelFormatEnum, buffer: Buffer): void;
+  sendVideoFrame(
+    width: number,
+    height: number,
+    format: VideoPixelFormatEnum,
+    buffer: Buffer
+  ): void;
   receiveVideoFrame(buffer: Buffer): [number, number] | undefined;
   receivedOffer(
     remoteUserId: UserId,
@@ -2218,7 +2239,7 @@ export interface CallManager {
     groupId: Buffer,
     sfuUrl: string,
     hkdfExtraInfo: Buffer,
-    audioLevelsIntervalMillis: number,
+    audioLevelsIntervalMillis: number
   ): GroupCallClientId;
   deleteGroupCallClient(clientId: GroupCallClientId): void;
   connect(clientId: GroupCallClientId): void;

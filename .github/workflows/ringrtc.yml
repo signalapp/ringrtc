@@ -14,8 +14,15 @@ jobs:
       with:
         profile: minimal
         components: rustfmt
-    - name: Check format
-      run: cd src/rust && cargo fmt -- --check
+    - name: Check rust format
+      run: cargo fmt -- --check
+      working-directory: src/rust
+    - name: Install for node
+      run: yarn install --frozen-lockfile
+      working-directory: src/node
+    - name: Check typescript format
+      run: yarn format -c
+      working-directory: src/node
 
   lints:
     name: Lints
@@ -45,6 +52,12 @@ jobs:
     - name: Clippy (gctc)
       run: cargo clippy --bin gctc --features native,http -- -D warnings
       working-directory: src/rust
+    - name: Install for node
+      run: yarn install --frozen-lockfile
+      working-directory: src/node
+    - name: Check typescript
+      run: yarn lint
+      working-directory: src/node
 
   tests:
     name: Tests
