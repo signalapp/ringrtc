@@ -196,7 +196,7 @@ rtc::scoped_refptr<FrameEncryptorInterface> PeerConnectionObserverRffi::CreateEn
   // The PeerConnectionObserverRffi outlives the Encryptor because it outlives the PeerConnection,
   // which outlives the RtpSender, which owns the Encryptor.
   // So we know the PeerConnectionObserverRffi outlives the Encryptor.
-  return new rtc::RefCountedObject<Encryptor>(observer_, &callbacks_);
+  return rtc::make_ref_counted<Encryptor>(observer_, &callbacks_);
 }
 
 void PeerConnectionObserverRffi::AddVideoSink(VideoTrackInterface* track) {

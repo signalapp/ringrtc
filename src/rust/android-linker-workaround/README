@@ -1,0 +1,3 @@
+In NDK 23, Android removed libgcc along with GNU binutils. We can link with LLVM tools instead (-fuse-ld=lld), but the prebuilt Rust stdlib still links against libgcc, which results in -lgcc being added to the link command line. The libgcc.a in this folder redirects that to -lunwind, which Clang provides (and unwind support is the only thing libgcc.a is being used for).
+
+Based on https://github.com/rust-lang/rust/pull/85806#issuecomment-1096266946, but a little less brittle.

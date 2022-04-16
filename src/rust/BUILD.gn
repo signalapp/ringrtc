@@ -134,9 +134,10 @@ if (is_android) {
     }
 
     args += [ "--",
-              "-C", "link-arg=-fuse-ld=gold",
+              "-C", "link-arg=-fuse-ld=lld",
               "-C", "link-arg=-Wl,--dynamic-linker,/system/bin/linker",
               "-L", "native=" + rebase_path(root_build_dir),
+              "-L", "native=" + rebase_path("android-linker-workaround"),
               "-l", "dylib=ringrtc_rffi",
             ]
     # add  "--verbose" here (and above) to increase rustc verbosity

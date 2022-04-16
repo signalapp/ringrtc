@@ -403,11 +403,11 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   video->AddCodec(red_rtx);
   video->AddCodec(ulpfec);
 
-  auto transport_cc1 = webrtc::RtpExtension(webrtc::TransportSequenceNumber::kUri, TRANSPORT_CC1_EXT_ID);
-  auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::kUri, TRANSPORT_CC2_EXT_ID);
-  auto video_orientation = webrtc::RtpExtension(webrtc::VideoOrientation ::kUri, VIDEO_ORIENTATION_EXT_ID);
-  auto abs_send_time = webrtc::RtpExtension(webrtc::AbsoluteSendTime::kUri, ABS_SEND_TIME_EXT_ID);
-  auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::kUri, TX_TIME_OFFSET_EXT_ID);
+  auto transport_cc1 = webrtc::RtpExtension(webrtc::TransportSequenceNumber::Uri(), TRANSPORT_CC1_EXT_ID);
+  auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::Uri(), TRANSPORT_CC2_EXT_ID);
+  auto video_orientation = webrtc::RtpExtension(webrtc::VideoOrientation ::Uri(), VIDEO_ORIENTATION_EXT_ID);
+  auto abs_send_time = webrtc::RtpExtension(webrtc::AbsoluteSendTime::Uri(), ABS_SEND_TIME_EXT_ID);
+  auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::Uri(), TX_TIME_OFFSET_EXT_ID);
 
   audio->AddRtpHeaderExtension(transport_cc1);
   // TransportCC 2 isn't enabled by default yet, so maybe we shouldn't use it yet.
@@ -577,12 +577,12 @@ CreateSessionDescriptionForGroupCall(bool local,
   video->AddCodec(red);
   video->AddCodec(red_rtx);
 
-  auto transport_cc1 = webrtc::RtpExtension(webrtc::TransportSequenceNumber::kUri, TRANSPORT_CC1_EXT_ID);
-  auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::kUri, TRANSPORT_CC2_EXT_ID);
-  auto video_orientation = webrtc::RtpExtension(webrtc::VideoOrientation::kUri, VIDEO_ORIENTATION_EXT_ID);
-  auto audio_level = webrtc::RtpExtension(webrtc::AudioLevel::kUri, AUDIO_LEVEL_EXT_ID);
-  auto abs_send_time = webrtc::RtpExtension(webrtc::AbsoluteSendTime::kUri, ABS_SEND_TIME_EXT_ID);
-  auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::kUri, TX_TIME_OFFSET_EXT_ID);
+  auto transport_cc1 = webrtc::RtpExtension(webrtc::TransportSequenceNumber::Uri(), TRANSPORT_CC1_EXT_ID);
+  auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::Uri(), TRANSPORT_CC2_EXT_ID);
+  auto video_orientation = webrtc::RtpExtension(webrtc::VideoOrientation::Uri(), VIDEO_ORIENTATION_EXT_ID);
+  auto audio_level = webrtc::RtpExtension(webrtc::AudioLevel::Uri(), AUDIO_LEVEL_EXT_ID);
+  auto abs_send_time = webrtc::RtpExtension(webrtc::AbsoluteSendTime::Uri(), ABS_SEND_TIME_EXT_ID);
+  auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::Uri(), TX_TIME_OFFSET_EXT_ID);
 
   audio->AddRtpHeaderExtension(transport_cc1);
   // TransportCC 2 isn't enabled by default yet, so maybe we shouldn't use it yet.

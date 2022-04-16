@@ -310,6 +310,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     config.type = PeerConnectionInterface::kRelay;
   }
   config.enable_dtls_srtp = false;
+  config.sdp_semantics = SdpSemantics::kPlanB_DEPRECATED;
   if (ice_server.urls_size > 0) {
     webrtc::PeerConnectionInterface::IceServer rtc_ice_server;
     rtc_ice_server.username = std::string(ice_server.username_borrowed);
