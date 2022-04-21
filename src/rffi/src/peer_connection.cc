@@ -28,6 +28,29 @@
 namespace webrtc {
 namespace rffi {
 
+int TRANSPORT_CC1_EXT_ID = 1;
+int VIDEO_ORIENTATION_EXT_ID = 4;
+int AUDIO_LEVEL_EXT_ID = 5;
+int ABS_SEND_TIME_EXT_ID = 12;
+// Old clients used this value, so don't use it until they are all gone.
+int TX_TIME_OFFSET_EXT_ID = 13;
+
+// Payload types must be over 96 and less than 128.
+// 101 used by connection.rs
+int DATA_PT = 101;
+int OPUS_PT = 102;
+int VP8_PT = 108;
+int VP8_RTX_PT = 118;
+int VP9_PT = 109;
+int VP9_RTX_PT = 119;
+int H264_CHP_PT = 104;
+int H264_CHP_RTX_PT = 114;
+int H264_CBP_PT = 103;
+int H264_CBP_RTX_PT = 113;
+int RED_PT = 120;
+int RED_RTX_PT = 121;
+int ULPFEC_PT = 122;
+
 // Borrows the observer until the result is given to the observer,
 // so the observer must stay alive until it's given a result.
 RUSTEXPORT void
@@ -258,30 +281,10 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   // Major changes from the default WebRTC behavior:
   // 1. We remove all codecs except Opus, VP8, VP9, and H264
   // 2. We remove all header extensions except for transport-cc, video orientation,
-  //    abs send time, and timestamp offset.
+  //    and abs send time.
   // 3. Opus CBR is enabled.
 
-  // The constants we hardcode and must match between different clients.
-  int TRANSPORT_CC1_EXT_ID = 1;
-  int TRANSPORT_CC2_EXT_ID = 2;
-  int VIDEO_ORIENTATION_EXT_ID = 4;
-  int ABS_SEND_TIME_EXT_ID = 12;
-  int TX_TIME_OFFSET_EXT_ID = 13;
 
-  // Payload types must be over 96 and less than 128.
-  // 101 used by connection.rs
-  int OPUS_PT = 102;
-  int VP8_PT = 108;
-  int VP8_RTX_PT = 118;
-  int VP9_PT = 109;
-  int VP9_RTX_PT = 119;
-  int H264_CHP_PT = 104;
-  int H264_CHP_RTX_PT = 114;
-  int H264_CBP_PT = 103;
-  int H264_CBP_RTX_PT = 113;
-  int RED_PT = 120;
-  int RED_RTX_PT = 121;
-  int ULPFEC_PT = 122;
 
   // For some reason, WebRTC insists that the video SSRCs for one side don't 
   // overlap with SSRCs from the other side.  To avoid potential problems, we'll give the
@@ -404,22 +407,22 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   video->AddCodec(ulpfec);
 
   auto transport_cc1 = webrtc::RtpExtension(webrtc::TransportSequenceNumber::Uri(), TRANSPORT_CC1_EXT_ID);
-  auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::Uri(), TRANSPORT_CC2_EXT_ID);
+  // TransportCC V2 is now enabled by default, but the difference is that V2 doesn't send periodic updates
+  // and instead waits for feedback requests.  Since the existing clients don't send feedback
+  // requests, we can't enable V2.  We'd have to add it to signaling to move from V1 to V2.
+  // auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::Uri(), TRANSPORT_CC2_EXT_ID);
   auto video_orientation = webrtc::RtpExtension(webrtc::VideoOrientation ::Uri(), VIDEO_ORIENTATION_EXT_ID);
+  // abs_send_time and tx_time_offset are used for more accurate REMB messages from the receiver,
+  // which are used by googcc in some small ways.  So, keep it enabled.
+  // But it doesn't make sense to enable both abs_send_time and tx_time_offset, so only use abs_send_time.
   auto abs_send_time = webrtc::RtpExtension(webrtc::AbsoluteSendTime::Uri(), ABS_SEND_TIME_EXT_ID);
-  auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::Uri(), TX_TIME_OFFSET_EXT_ID);
+  // auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::Uri(), TX_TIME_OFFSET_EXT_ID);
 
-  audio->AddRtpHeaderExtension(transport_cc1);
-  // TransportCC 2 isn't enabled by default yet, so maybe we shouldn't use it yet.
-  // audio->AddRtpHeaderExtension(transport_cc2);
-  audio->AddRtpHeaderExtension(abs_send_time);
-
+  // Note: Do not add transport-cc for audio.  Using transport-cc with audio is still experimental in WebRTC.
+  // And don't add abs_send_time because it's only used for video.
   video->AddRtpHeaderExtension(transport_cc1);
-  // TransportCC 2 isn't enabled by default yet, so maybe we shouldn't use it yet.
-  // video->AddRtpHeaderExtension(transport_cc2);
   video->AddRtpHeaderExtension(video_orientation);
   video->AddRtpHeaderExtension(abs_send_time);
-  video->AddRtpHeaderExtension(tx_time_offset);
 
   auto audio_stream = cricket::StreamParams();
   audio_stream.id = AUDIO_TRACK_ID;
@@ -481,24 +484,8 @@ CreateSessionDescriptionForGroupCall(bool local,
   // Major changes from the default WebRTC behavior:
   // 1. We remove all codecs except Opus and VP8.
   // 2. We remove all header extensions except for transport-cc, video orientation,
-  //    abs send time, timestamp offset, and audio level.
+  //    abs send time, and audio level.
   // 3. Opus CBR is enabled.
-
-  // We hardcode the header extension IDs and Payload types.
-  int TRANSPORT_CC1_EXT_ID = 1;
-  int TRANSPORT_CC2_EXT_ID = 2;
-  int VIDEO_ORIENTATION_EXT_ID = 4;
-  int AUDIO_LEVEL_EXT_ID = 5;
-  int ABS_SEND_TIME_EXT_ID = 12;
-  int TX_TIME_OFFSET_EXT_ID = 13;
-
-  // Payload types must be over 96 and less than 128.
-  // int DATA_PT = 101;  Used by group_call.rs
-  int OPUS_PT = 102;
-  int VP8_PT = 108;
-  int VP8_RTX_PT = 118;
-  int RED_PT = 120;
-  int RED_RTX_PT = 121;
 
   // This must stay in sync with PeerConnectionFactory.createAudioTrack
   std::string LOCAL_AUDIO_TRACK_ID = "audio1";
@@ -578,24 +565,23 @@ CreateSessionDescriptionForGroupCall(bool local,
   video->AddCodec(red_rtx);
 
   auto transport_cc1 = webrtc::RtpExtension(webrtc::TransportSequenceNumber::Uri(), TRANSPORT_CC1_EXT_ID);
-  auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::Uri(), TRANSPORT_CC2_EXT_ID);
+  // TransportCC V2 is now enabled by default, but the difference is that V2 doesn't send periodic updates
+  // and instead waits for feedback requests.  Since the SFU doesn't currently send feedback requests,
+  // we can't enable V2.  We'd have to add it to the SFU to move from V1 to V2.
+  // auto transport_cc2 = webrtc::RtpExtension(webrtc::TransportSequenceNumberV2::Uri(), TRANSPORT_CC2_EXT_ID);
   auto video_orientation = webrtc::RtpExtension(webrtc::VideoOrientation::Uri(), VIDEO_ORIENTATION_EXT_ID);
   auto audio_level = webrtc::RtpExtension(webrtc::AudioLevel::Uri(), AUDIO_LEVEL_EXT_ID);
-  auto abs_send_time = webrtc::RtpExtension(webrtc::AbsoluteSendTime::Uri(), ABS_SEND_TIME_EXT_ID);
-  auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::Uri(), TX_TIME_OFFSET_EXT_ID);
+  // abs_send_time and tx_time_offset are used for more accurate REMB messages from the receiver,
+  // but the SFU doesn't process REMB messages anyway, nor does it send or receive these header extensions.
+  // So, don't waste bytes on them.
+  // auto abs_send_time = webrtc::RtpExtension(webrtc::AbsoluteSendTime::Uri(), ABS_SEND_TIME_EXT_ID);
+  // auto tx_time_offset = webrtc::RtpExtension(webrtc::TransmissionOffset::Uri(), TX_TIME_OFFSET_EXT_ID);
 
-  audio->AddRtpHeaderExtension(transport_cc1);
-  // TransportCC 2 isn't enabled by default yet, so maybe we shouldn't use it yet.
-  // audio->AddRtpHeaderExtension(transport_cc2);
+  // Note: Do not add transport-cc for audio.  Using transport-cc with audio is still experimental in WebRTC.
+  // And don't add abs_send_time because it's only used for video.
   audio->AddRtpHeaderExtension(audio_level);
-  audio->AddRtpHeaderExtension(abs_send_time);
-
   video->AddRtpHeaderExtension(transport_cc1);
-  // TransportCC 2 isn't enabled by default yet, so maybe we shouldn't use it yet.
-  // video->AddRtpHeaderExtension(transport_cc2);
   video->AddRtpHeaderExtension(video_orientation);
-  video->AddRtpHeaderExtension(abs_send_time);
-  video->AddRtpHeaderExtension(tx_time_offset);
 
   for (uint32_t rtp_demux_id : rtp_demux_ids) {
     if (rtp_demux_id == INVALID_DEMUX_ID) {
