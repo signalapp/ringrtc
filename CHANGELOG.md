@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.20.2
+
+- Update to WebRTC 4896 (M100)
+
+- Disable transport-cc for audio
+
 ## v2.20.1
 
 - Add VP9 codec support and enable for Android hardware/Electron
