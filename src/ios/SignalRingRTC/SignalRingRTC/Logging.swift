@@ -79,8 +79,8 @@ public func initLogging() {
                 switch record.level {
                 case .error: Logger.error(message, file: file, function: function, line: line)
                 case .warn: Logger.warn(message, file: file, function: function, line: line)
-                case .info: Logger.debug(message, file: file, function: function, line: line)
-                case .debug: Logger.info(message, file: file, function: function, line: line)
+                case .info: Logger.info(message, file: file, function: function, line: line)
+                case .debug: Logger.debug(message, file: file, function: function, line: line)
                 case .trace: Logger.verbose(message, file: file, function: function, line: line)
                 case .off:
                     // Do nothing.  This doesn't really come from Rust.
