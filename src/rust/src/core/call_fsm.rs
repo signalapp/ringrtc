@@ -917,7 +917,7 @@ where
                     hangup,
                 },
             ),
-            ConnectionObserverEvent::ReceivedSenderStatusViaRtpData(status) => {
+            ConnectionObserverEvent::RemoteSenderStatusChanged(status) => {
                 if state.active() && call.active_device_id()? == remote_device_id {
                     if let Some(video_enabled) = status.video_enabled {
                         if video_enabled {

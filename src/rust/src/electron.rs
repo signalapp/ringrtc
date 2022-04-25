@@ -123,12 +123,12 @@ pub enum Event {
     // The call with the given remote PeerId has changed state.
     // We assume only one call per remote PeerId at a time.
     CallState(PeerId, CallId, CallState),
-    // The state of the remote video (whether enabled or not)
+    // The state of the remote video (whether enabled or not) changed.
     // Like call state, we ID the call by PeerId and assume there is only one.
-    RemoteVideoState(PeerId, bool),
-    // Whether the remote is sharing its screen or not
+    RemoteVideoStateChange(PeerId, bool),
+    // Whether the remote is sharing its screen or not changed.
     // Like call state, we ID the call by PeerId and assume there is only one.
-    RemoteSharingScreen(PeerId, bool),
+    RemoteSharingScreenChange(PeerId, bool),
     // The group call has an update.
     GroupUpdate(GroupUpdate),
     // JavaScript should initiate an HTTP request.
@@ -245,12 +245,15 @@ impl CallStateHandler for EventReporter {
     }
 
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
-        self.send(Event::RemoteVideoState(remote_peer_id.to_string(), enabled))?;
+        self.send(Event::RemoteVideoStateChange(
+            remote_peer_id.to_string(),
+            enabled,
+        ))?;
         Ok(())
     }
 
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
-        self.send(Event::RemoteSharingScreen(
+        self.send(Event::RemoteSharingScreenChange(
             remote_peer_id.to_string(),
             enabled,
         ))?;
@@ -1845,7 +1848,14 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::RemoteVideoState(peer_id, enabled) => {
+            Event::RemoteVideoStateChange(peer_id, enabled) => {
+                if enabled {
+                    // Clear out data from the last time video was enabled.
+                    with_call_endpoint(&mut cx, |endpoint| {
+                        endpoint.incoming_video_sink.clear();
+                    });
+                }
+
                 let method_name = "onRemoteVideoEnabled";
                 let args: Vec<Handle<JsValue>> =
                     vec![cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
@@ -1856,7 +1866,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
-            Event::RemoteSharingScreen(peer_id, enabled) => {
+            Event::RemoteSharingScreenChange(peer_id, enabled) => {
                 let method_name = "onRemoteSharingScreen";
                 let args: Vec<Handle<JsValue>> =
                     vec![cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];

@@ -77,8 +77,9 @@ pub const NEW_RTP_DATA_SSRC: rtp::Ssrc = 0xD;
 pub enum ConnectionObserverEvent {
     StateChanged(ConnectionState),
 
-    /// The remote side sent a sender status message via RTP data.
-    ReceivedSenderStatusViaRtpData(signaling::SenderStatus),
+    /// The remote side sent a sender status message via RTP data
+    /// and the value changed.
+    RemoteSenderStatusChanged(signaling::SenderStatus),
 
     /// The remote side sent a hangup message via RTP data
     /// or via signaling.

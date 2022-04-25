@@ -223,12 +223,14 @@ where
     worker_runtime: Option<TaskQueueRuntime>,
     /// Runtime for processing observer notification events.
     notify_runtime: Option<TaskQueueRuntime>,
-    /// The sequence number of the last received remote sender status
-    /// We process remote sender status messages larger than this value.
-    last_remote_sender_status_seqnum: Option<u64>,
-    /// The sequence number of the last received remote receiver status
-    /// We process remote receiver status messages larger than this value.
-    last_remote_receiver_status_seqnum: Option<u64>,
+    /// The sequence number and last received remote sender status.
+    /// We process remote sender status messages larger than the seqnum
+    /// and fire events when the status changes.
+    last_remote_sender_status: Option<(u64, signaling::SenderStatus)>,
+    /// The sequence number of the last received remote receiver bitrate.
+    /// We process remote receiver status messages larger than the seqnum
+    /// and use the bitrate when it changes.
+    last_remote_receiver_status: Option<(u64, DataRate)>,
 }
 
 impl<T> fmt::Display for ConnectionStateMachine<T>
@@ -296,8 +298,8 @@ where
             event_stream,
             worker_runtime: Some(TaskQueueRuntime::new("connection-fsm-worker")?),
             notify_runtime: Some(TaskQueueRuntime::new("connection-fsm-notify")?),
-            last_remote_sender_status_seqnum: None,
-            last_remote_receiver_status_seqnum: None,
+            last_remote_sender_status: None,
+            last_remote_receiver_status: None,
         };
 
         if let Some(worker_runtime) = &mut fsm.worker_runtime {
@@ -536,31 +538,35 @@ where
             return Ok(());
         }
 
-        let out_of_order = match self.last_remote_sender_status_seqnum {
+        let changed = match self.last_remote_sender_status {
             // This is the first sequence number
-            None => false,
-            // If they are equal, we treat it as out of order as well.
-            Some(last_seqnum) => {
+            None => true,
+            Some((last_seqnum, last_status)) => {
                 if seqnum < last_seqnum {
-                    // Warn only when packets arrive out of order, but not on expected retransmits with the same
-                    // sequence number.
+                    // Warn only when packets arrive out of order, but not on expected retransmits
+                    // with the same sequence number.
                     warn!("Dropped remote sender status message because it arrived out of order.");
                 };
-                seqnum <= last_seqnum
+
+                // If they are equal, we treat it as out of order as well.
+                if seqnum <= last_seqnum {
+                    // Just ignore out of order status messages.
+                    return Ok(());
+                }
+
+                last_status != status
             }
         };
-        if out_of_order {
-            // Just ignore out of order status messages.
-            return Ok(());
-        }
-        self.last_remote_sender_status_seqnum = Some(seqnum);
+        self.last_remote_sender_status = Some((seqnum, status));
 
         match state {
             ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted => {
-                self.notify_observer(
-                    connection,
-                    ConnectionObserverEvent::ReceivedSenderStatusViaRtpData(status),
-                );
+                if changed {
+                    self.notify_observer(
+                        connection,
+                        ConnectionObserverEvent::RemoteSenderStatusChanged(status),
+                    );
+                }
             }
             ConnectionState::ConnectingBeforeAccepted
             | ConnectionState::ConnectingAfterAccepted
@@ -597,30 +603,34 @@ where
             return Ok(());
         }
 
-        let out_of_order = match self.last_remote_receiver_status_seqnum {
+        let changed = match self.last_remote_receiver_status {
             // This is the first sequence number
-            None => false,
-            // If they are equal, we treat it as out of order as well.
-            Some(last_seqnum) => {
+            None => true,
+            Some((last_seqnum, last_max_bitrate)) => {
                 if seqnum < last_seqnum {
-                    // Warn only when packets arrive out of order, but not on expected retransmits with the same
-                    // sequence number.
+                    // Warn only when packets arrive out of order, but not on expected retransmits
+                    // with the same sequence number.
                     warn!(
                         "Dropped remote receiver status message because it arrived out of order."
                     );
                 };
-                seqnum <= last_seqnum
+
+                // If they are equal, we treat it as out of order as well.
+                if seqnum <= last_seqnum {
+                    // Just ignore out of order status messages.
+                    return Ok(());
+                }
+
+                max_bitrate != last_max_bitrate
             }
         };
-        if out_of_order {
-            // Just ignore out of order status messages.
-            return Ok(());
-        }
-        self.last_remote_receiver_status_seqnum = Some(seqnum);
+        self.last_remote_receiver_status = Some((seqnum, max_bitrate));
 
         match state {
             ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted => {
-                connection.set_remote_max_bitrate(max_bitrate)?;
+                if changed {
+                    connection.set_remote_max_bitrate(max_bitrate)?;
+                }
             }
             ConnectionState::ConnectingBeforeAccepted
             | ConnectionState::ConnectingAfterAccepted
