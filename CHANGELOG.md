@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.20.3
+
+- iOS: Fix mapping of log output
+
 ## v2.20.2
 
 - Update to WebRTC 4896 (M100)
