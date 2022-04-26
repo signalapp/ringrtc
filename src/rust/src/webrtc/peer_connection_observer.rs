@@ -82,14 +82,8 @@ pub enum NetworkAdapterType {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct NetworkRoute {
     pub local_adapter_type: NetworkAdapterType,
-}
-
-impl Default for NetworkRoute {
-    fn default() -> Self {
-        Self {
-            local_adapter_type: NetworkAdapterType::Unknown,
-        }
-    }
+    // Either the local candidate or the remote candidate is a TURN candidate.
+    pub relayed: bool,
 }
 
 /// The callbacks from C++ will ultimately go to an impl of this.

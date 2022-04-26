@@ -66,8 +66,11 @@ void PeerConnectionObserverRffi::OnIceConnectionReceivingChange(bool receiving) 
 
 void PeerConnectionObserverRffi::OnIceSelectedCandidatePairChanged(
     const cricket::CandidatePairChangeEvent& event) {
-  auto local_adapter_type = event.selected_candidate_pair.local_candidate().network_type();
-  auto network_route = webrtc::rffi::NetworkRoute{ local_adapter_type, };
+  auto& local = event.selected_candidate_pair.local_candidate();
+  auto& remote = event.selected_candidate_pair.remote_candidate();
+  auto local_adapter_type = local.network_type();
+  bool relayed = (local.type() == cricket::RELAY_PORT_TYPE) || (remote.type() == cricket::RELAY_PORT_TYPE);
+  auto network_route = webrtc::rffi::NetworkRoute{ local_adapter_type, relayed, };
   callbacks_.onIceNetworkRouteChange(observer_, network_route);
 }
 

@@ -318,7 +318,7 @@ pub struct RffiAudioEncoderConfig {
 }
 
 // A nice form of RffiAudioEncoderConfig
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AudioEncoderConfig {
     // AKA ptime or frame size
     // Valid sizes: 10, 20, 40, 60, 120
@@ -379,7 +379,7 @@ impl From<&AudioEncoderConfig> for RffiAudioEncoderConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum AudioBandwidth {
     // Constants in libopus

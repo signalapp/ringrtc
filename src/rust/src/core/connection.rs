@@ -5,7 +5,6 @@
 
 //! A peer-to-peer connection interface.
 
-use std::cmp;
 use std::fmt;
 use std::net::SocketAddr;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -41,10 +40,10 @@ use crate::protobuf;
 
 use crate::webrtc;
 use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::{MediaStream, VideoFrame, VideoSink};
+use crate::webrtc::media::{AudioEncoderConfig, MediaStream, VideoFrame, VideoSink};
 use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, SendRates};
 use crate::webrtc::peer_connection_observer::{
-    IceConnectionState, NetworkRoute, PeerConnectionObserverTrait,
+    IceConnectionState, NetworkAdapterType, NetworkRoute, PeerConnectionObserverTrait,
 };
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
@@ -255,48 +254,60 @@ impl TickContext {
     }
 }
 
-/// Collection of bandwidth mode settings for the connection.
-struct BandwidthModes {
+// When a network route is relayed, don't send more than this.
+const RELAYED_MAX_SEND_RATE: DataRate = DataRate::from_mbps(1);
+
+/// State that decides the max send bitrate and audio configuration.
+/// It's decided by a combination of the local settings, the remote settings,
+/// and the network route (in particular, if it's relayed or not).
+#[derive(Debug)]
+pub struct BandwidthController {
     /// The current bandwidth mode being used for the local endpoint.
-    local_bandwidth_mode: BandwidthMode,
-    /// The current bandwidth mode being used for the remote endpoint, only if known.
-    remote_bandwidth_mode: Option<BandwidthMode>,
+    pub local_mode: BandwidthMode,
+    /// The max rate sent from the remote endpoint.
+    pub remote_max: Option<DataRate>,
+    // The current network route
+    pub network_route: NetworkRoute,
 }
 
-impl fmt::Display for BandwidthModes {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.remote_bandwidth_mode {
-            None => write!(
-                f,
-                "{{ local: {}, remote: null }}",
-                self.local_bandwidth_mode
-            ),
-            Some(remote_bandwidth_mode) => write!(
-                f,
-                "{{ local: {}, remote: {} }}",
-                self.local_bandwidth_mode, remote_bandwidth_mode
-            ),
-        }
-    }
-}
-
-impl BandwidthModes {
-    fn set_remote_from_bitrate(&mut self, remote_max_bitrate_bps: Option<u64>) {
-        if let Some(remote_max_bitrate_bps) = remote_max_bitrate_bps {
-            let remote_bandwidth_mode = BandwidthMode::from_bitrate(remote_max_bitrate_bps);
-            self.remote_bandwidth_mode = Some(remote_bandwidth_mode);
-        }
+impl BandwidthController {
+    // Min of local, remote, and relay maxs, but can't go below MIN_SEND_RATE
+    pub fn max_send_rate(&self) -> DataRate {
+        self.local_max()
+            .min(self.inferred_remote_mode().max_bitrate())
+            .min_opt(self.relay_max())
     }
 
-    fn min(&self) -> BandwidthMode {
-        match self.remote_bandwidth_mode {
-            None => {
-                // There is no bitrate from the remote. Use the local mode.
-                self.local_bandwidth_mode
+    pub fn audio_encoder_config(&self) -> AudioEncoderConfig {
+        // Min of local and inferred remote
+        self.local_mode
+            .min(self.inferred_remote_mode())
+            .audio_encoder_config()
+    }
+
+    fn local_max(&self) -> DataRate {
+        self.local_mode.max_bitrate()
+    }
+
+    fn relay_max(&self) -> Option<DataRate> {
+        if self.network_route.relayed {
+            Some(RELAYED_MAX_SEND_RATE)
+        } else {
+            None
+        }
+    }
+
+    // Since the remote side doesn't tell us what audio configuration to use, we have to infer it
+    // from the bandwidth sent.  But this should be used carefully.
+    fn inferred_remote_mode(&self) -> BandwidthMode {
+        match self.remote_max {
+            Some(remote_max) if remote_max < BandwidthMode::Low.max_bitrate() => {
+                BandwidthMode::VeryLow
             }
-            Some(remote_bandwidth_mode) => {
-                cmp::min(self.local_bandwidth_mode, remote_bandwidth_mode)
+            Some(remote_max) if remote_max < BandwidthMode::Normal.max_bitrate() => {
+                BandwidthMode::Low
             }
+            _ => BandwidthMode::Normal,
         }
     }
 }
@@ -324,14 +335,12 @@ where
     direction: CallDirection,
     /// The current state of the call connection
     state: Arc<CallMutex<ConnectionState>>,
-    /// The current network route of the connection
-    network_route: Arc<CallMutex<NetworkRoute>>,
     /// Execution context for the call connection FSM
     context: Arc<CallMutex<Context>>,
     /// Ancillary WebRTC data.
     webrtc: Arc<CallMutex<WebRtcData<T>>>,
-    /// The bandwidth modes that have been set for the connection.
-    bandwidth_modes: Arc<CallMutex<BandwidthModes>>,
+    /// State that decides what bandwidth to use for sending.
+    bandwidth_controller: Arc<CallMutex<BandwidthController>>,
     /// The interval for audio level polling
     audio_levels_interval: Option<Duration>,
     /// Local ICE candidates waiting to be sent over signaling.
@@ -421,10 +430,9 @@ where
             connection_id: self.connection_id,
             direction: self.direction,
             state: Arc::clone(&self.state),
-            network_route: Arc::clone(&self.network_route),
             context: Arc::clone(&self.context),
             webrtc: Arc::clone(&self.webrtc),
-            bandwidth_modes: Arc::clone(&self.bandwidth_modes),
+            bandwidth_controller: Arc::clone(&self.bandwidth_controller),
             audio_levels_interval: self.audio_levels_interval,
             buffered_local_ice_candidates: Arc::clone(&self.buffered_local_ice_candidates),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
@@ -475,13 +483,16 @@ where
             direction,
             call: Arc::new(CallMutex::new(call, "call")),
             state: Arc::new(CallMutex::new(ConnectionState::NotYetStarted, "state")),
-            network_route: Arc::new(CallMutex::new(NetworkRoute::default(), "network_route")),
             context: Arc::new(CallMutex::new(context, "context")),
             webrtc: Arc::new(CallMutex::new(webrtc, "webrtc")),
-            bandwidth_modes: Arc::new(CallMutex::new(
-                BandwidthModes {
-                    local_bandwidth_mode: bandwidth_mode,
-                    remote_bandwidth_mode: None,
+            bandwidth_controller: Arc::new(CallMutex::new(
+                BandwidthController {
+                    local_mode: bandwidth_mode,
+                    remote_max: None,
+                    network_route: NetworkRoute {
+                        local_adapter_type: NetworkAdapterType::Unknown,
+                        relayed: false,
+                    },
                 },
                 "webrtc",
             )),
@@ -592,6 +603,8 @@ where
         let result = (|| {
             self.set_state(ConnectionState::Starting)?;
 
+            // We need to always take the locks in this order. See reconfigure_send_bandwidth.
+            let mut bandwidth_controller = self.bandwidth_controller.lock()?;
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
@@ -605,25 +618,22 @@ where
             // Don't enable audio playout until the call is accepted.
             peer_connection.set_audio_playout_enabled(false);
 
-            let mut bandwidth_modes = self.bandwidth_modes.lock()?;
-
-            let (mut offer, mut answer, remote_public_key, bandwidth_mode) =
+            let (mut offer, mut answer, remote_public_key) =
                 if let (Some(v4_offer), Some(v4_answer)) = (offer.to_v4(), received.answer.to_v4())
                 {
-                    // Set the remote mode based on the bitrate in the answer.
-                    bandwidth_modes.set_remote_from_bitrate(v4_answer.max_bitrate_bps);
-                    // Get the lowest bandwidth mode and use it for constraints.
-                    let bandwidth_mode = bandwidth_modes.min();
+                    // Set the remote max based on the bitrate in the answer.
+                    bandwidth_controller.remote_max =
+                        v4_answer.max_bitrate_bps.map(DataRate::from_bps);
 
                     let offer = SessionDescription::offer_from_v4(&v4_offer)?;
                     let answer = SessionDescription::answer_from_v4(&v4_answer)?;
 
                     info!(
-                        "Incoming answer codecs: {:?}, max_bitrate: {:?}, bandwidth_modes: {}",
-                        v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_modes
-                    );
+                    "Incoming answer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
+                    v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_controller
+                );
 
-                    (offer, answer, v4_answer.public_key, bandwidth_mode)
+                    (offer, answer, v4_answer.public_key)
                 } else {
                     return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
                 };
@@ -666,7 +676,7 @@ where
             peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
             peer_connection.set_incoming_media_enabled(true);
 
-            self.apply_bandwidth_mode(peer_connection, &bandwidth_mode)?;
+            self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
 
             self.set_state(ConnectionState::ConnectingBeforeAccepted)?;
             Ok(())
@@ -693,6 +703,8 @@ where
         let result = (|| {
             self.set_state(ConnectionState::Starting)?;
 
+            // We need to always take the locks in this order. See reconfigure_send_bandwidth.
+            let mut bandwidth_controller = self.bandwidth_controller.lock()?;
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
@@ -704,27 +716,22 @@ where
             // Don't enable audio playout until the call is accepted.
             peer_connection.set_audio_playout_enabled(false);
 
-            let mut bandwidth_modes = self.bandwidth_modes.lock()?;
-
             let v4_offer = received.offer.to_v4();
-            let (mut offer, remote_public_key, bandwidth_mode) =
-                if let Some(v4_offer) = v4_offer.as_ref() {
-                    // Set the remote mode based on the bitrate in the offer.
-                    bandwidth_modes.set_remote_from_bitrate(v4_offer.max_bitrate_bps);
-                    // Get the lowest bandwidth mode and use it for constraints.
-                    let bandwidth_mode = bandwidth_modes.min();
+            let (mut offer, remote_public_key) = if let Some(v4_offer) = v4_offer.as_ref() {
+                // Set the remote mode based on the bitrate in the offer.
+                bandwidth_controller.remote_max = v4_offer.max_bitrate_bps.map(DataRate::from_bps);
 
-                    info!(
-                        "Incoming offer codecs: {:?}, max_bitrate: {:?}, bandwidth_modes: {}",
-                        v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps, bandwidth_modes
-                    );
+                info!(
+                    "Incoming offer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
+                    v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps, bandwidth_controller
+                );
 
-                    let offer = SessionDescription::offer_from_v4(v4_offer)?;
+                let offer = SessionDescription::offer_from_v4(v4_offer)?;
 
-                    (offer, v4_offer.public_key.clone(), bandwidth_mode)
-                } else {
-                    return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
-                };
+                (offer, v4_offer.public_key.clone())
+            } else {
+                return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
+            };
 
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
             let answer_key = match remote_public_key {
@@ -763,12 +770,12 @@ where
             let answer_to_send = if v4_offer.is_some() {
                 let v4_answer = answer.to_v4(
                     local_public_key.as_bytes().to_vec(),
-                    bandwidth_modes.local_bandwidth_mode,
+                    bandwidth_controller.local_mode,
                 )?;
 
                 info!(
-                    "Outgoing answer codecs: {:?}, max_bitrate: {:?}, bandwidth_modes: {}",
-                    v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_modes
+                    "Outgoing answer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
+                    v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_controller
                 );
 
                 // We have to change the local answer to match what we send back
@@ -805,7 +812,7 @@ where
             // handle_rtp_received.
             peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
 
-            self.apply_bandwidth_mode(peer_connection, &bandwidth_mode)?;
+            self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
 
             ringbench!(
                 RingBench::Conn,
@@ -813,6 +820,7 @@ where
                 format!("ice_candidates({})", remote_ice_candidates.len())
             );
 
+            let peer_connection = webrtc.peer_connection()?;
             self.add_and_remove_remote_ice_candidates(peer_connection, &remote_ice_candidates)?;
 
             self.set_state(ConnectionState::ConnectingBeforeAccepted)?;
@@ -874,14 +882,24 @@ where
 
     /// Return the current network route
     pub fn network_route(&self) -> Result<NetworkRoute> {
-        let network_route = self.network_route.lock()?;
-        Ok(*network_route)
+        let bandwidth_controller = self.bandwidth_controller.lock()?;
+        Ok(bandwidth_controller.network_route)
     }
 
     /// Update the current network route.
-    pub fn set_network_route(&self, new_network_route: NetworkRoute) -> Result<()> {
-        let mut network_route = self.network_route.lock()?;
-        *network_route = new_network_route;
+    pub fn set_network_route(&self, network_route: NetworkRoute) -> Result<()> {
+        self.update_bandwidth_controller(move |bandwidth_controller| {
+            if bandwidth_controller.network_route == network_route {
+                // Nothing changed
+                return false;
+            }
+            bandwidth_controller.network_route = network_route;
+            info!(
+                "set_network_route(): bandwidth_controller: {:?}",
+                bandwidth_controller
+            );
+            true
+        })?;
         Ok(())
     }
 
@@ -894,8 +912,8 @@ where
 
     /// Return the current local bandwidth mode used for this connection.
     pub fn local_bandwidth_mode(&self) -> Result<BandwidthMode> {
-        let bandwidth_modes = self.bandwidth_modes.lock()?;
-        Ok(bandwidth_modes.local_bandwidth_mode)
+        let bandwidth_controller = self.bandwidth_controller.lock()?;
+        Ok(bandwidth_controller.local_mode)
     }
 
     /// Needed for ICE forking (we must copy this value from the parent connection
@@ -993,63 +1011,51 @@ where
 
     /// The remote user is updating the max_bitrate via RTP data. They are
     /// making the request so only update locally (if changed).
-    pub fn set_remote_max_bitrate(&self, remote_max_bitrate: DataRate) -> Result<()> {
-        let mut bandwidth_modes = self.bandwidth_modes.lock()?;
-
-        let remote_bandwidth_mode = BandwidthMode::from_bitrate(remote_max_bitrate.as_bps());
-
-        if let Some(mode) = bandwidth_modes.remote_bandwidth_mode {
-            if mode == remote_bandwidth_mode {
-                // The remote bandwidth mode has not changed, so there is nothing to do.
-                return Ok(());
+    pub fn set_remote_max_bitrate(&self, remote_max: DataRate) -> Result<()> {
+        self.update_bandwidth_controller(move |bandwidth_controller| {
+            if bandwidth_controller.remote_max == Some(remote_max) {
+                // Nothing changed
+                return false;
             }
-        }
-
-        bandwidth_modes.remote_bandwidth_mode = Some(remote_bandwidth_mode);
-        info!(
-            "set_remote_max_bitrate(): {} bandwidth_modes: {}",
-            remote_max_bitrate.as_bps(),
-            bandwidth_modes
-        );
-
-        // Use the minimum of the local and remote modes.
-        let bandwidth_mode = bandwidth_modes.min();
-
-        let webrtc = self.webrtc.lock()?;
-        self.apply_bandwidth_mode(webrtc.peer_connection()?, &bandwidth_mode)
+            bandwidth_controller.remote_max = Some(remote_max);
+            info!(
+                "set_remote_max_bitrate(): bandwidth_controller: {:?}",
+                bandwidth_controller
+            );
+            true
+        })?;
+        Ok(())
     }
 
     /// The local user is updating the bandwidth mode via the API. Update locally and
     /// send an updated bitrate to the remote.
-    pub fn update_bandwidth_mode(&self, bandwidth_mode: BandwidthMode) -> Result<()> {
-        let mut bandwidth_modes = self.bandwidth_modes.lock()?;
+    pub fn update_bandwidth_mode(&self, local_mode: BandwidthMode) -> Result<()> {
+        let changed = self.update_bandwidth_controller(|bandwidth_controller| {
+            if bandwidth_controller.local_mode == local_mode {
+                // Nothing changed
+                return false;
+            }
+            bandwidth_controller.local_mode = local_mode;
+            info!(
+                "update_bandwidth_mode(): bandwidth_controller: {:?}",
+                bandwidth_controller
+            );
+            true
+        })?;
 
-        if bandwidth_mode == bandwidth_modes.local_bandwidth_mode {
-            // The local bandwidth mode has not changed, so there is nothing to do.
-            return Ok(());
+        if changed {
+            let mut receiver_status = protobuf::rtp_data::ReceiverStatus {
+                id: Some(u64::from(self.call_id)),
+                max_bitrate_bps: Some(local_mode.max_bitrate().as_bps()),
+            };
+            receiver_status.id = Some(u64::from(self.call_id));
+
+            let mut webrtc = self.webrtc.lock()?;
+            self.update_and_send_rtp_data_message(&mut webrtc, move |data| {
+                data.receiver_status = Some(receiver_status)
+            })?;
         }
-
-        bandwidth_modes.local_bandwidth_mode = bandwidth_mode;
-        info!(
-            "update_bandwidth_mode(): bandwidth_modes: {}",
-            bandwidth_modes
-        );
-
-        // Use the minimum of the local and remote modes.
-        let bandwidth_mode = bandwidth_modes.min();
-
-        let mut webrtc = self.webrtc.lock()?;
-        self.apply_bandwidth_mode(webrtc.peer_connection()?, &bandwidth_mode)?;
-
-        let mut receiver_status = protobuf::rtp_data::ReceiverStatus {
-            id: Some(u64::from(self.call_id)),
-            max_bitrate_bps: Some(bandwidth_modes.local_bandwidth_mode.max_bitrate().as_bps()),
-        };
-        receiver_status.id = Some(u64::from(self.call_id));
-
-        self.update_and_send_rtp_data_message(&mut webrtc, move |data| {
-            data.receiver_status = Some(receiver_status)
-        })
+        Ok(())
     }
 
     /// Creates a runtime for statistics to run a timer for the given interval
@@ -1271,18 +1277,40 @@ where
         })
     }
 
-    /// Based on the given bandwidth mode, configure the media encoders.
-    fn apply_bandwidth_mode(
+    fn update_bandwidth_controller(
         &self,
-        peer_connection: &PeerConnection,
-        bandwidth_mode: &BandwidthMode,
+        update: impl FnOnce(&mut BandwidthController) -> bool,
+    ) -> Result<bool> {
+        // We need to always take the locks in this order. See apply_bandwidth_controller.
+        let mut bandwidth_controller = self.bandwidth_controller.lock()?;
+
+        let changed = update(&mut bandwidth_controller);
+        if changed {
+            // We need to always take the locks in this order. See apply_bandwidth_controller.
+            let mut webrtc = self.webrtc.lock()?;
+            self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
+        }
+        Ok(changed)
+    }
+
+    /// Based on the given bandwidth mode, configure the media encoders.
+    /// Make sure we always take the locks in the order of (bandwidth_controller, webrtc).
+    /// We require passing in &mut MutexGuard<T> instead of &mut T to remind you about this.
+    fn apply_bandwidth_controller(
+        &self,
+        bandwidth_controller: &mut MutexGuard<BandwidthController>,
+        webrtc: &mut MutexGuard<WebRtcData<T>>,
     ) -> Result<()> {
-        info!("apply_bandwidth_mode(): mode: {}", bandwidth_mode);
+        let max_send_rate = bandwidth_controller.max_send_rate();
+        let audio_encoder_config = bandwidth_controller.audio_encoder_config();
+        info!("apply_bandwidth_controller(): bandwidth_controller: {:?}; max_send_rate: {:?}; audio_encoder_config: {:?}", bandwidth_controller, max_send_rate, audio_encoder_config);
+
+        let peer_connection = webrtc.peer_connection()?;
         peer_connection.set_send_rates(SendRates {
-            max: Some(bandwidth_mode.max_bitrate()),
+            max: Some(max_send_rate),
             ..SendRates::default()
         })?;
-        peer_connection.configure_audio_encoders(&bandwidth_mode.audio_encoder_config());
+        peer_connection.configure_audio_encoders(&audio_encoder_config);
         Ok(())
     }
 
@@ -2107,4 +2135,98 @@ fn negotiate_srtp_keys(
             salt: answer_salt.to_vec(),
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn expect(
+        max_send_rate_bps: u64,
+        audio_bandwidth_mode: BandwidthMode,
+    ) -> (DataRate, AudioEncoderConfig) {
+        (
+            DataRate::from_bps(max_send_rate_bps),
+            audio_bandwidth_mode.audio_encoder_config(),
+        )
+    }
+
+    fn compute(
+        local_mode: BandwidthMode,
+        remote_max_bps: u64,
+        relayed: bool,
+    ) -> (DataRate, AudioEncoderConfig) {
+        let controller = BandwidthController {
+            local_mode,
+            remote_max: Some(DataRate::from_bps(remote_max_bps)),
+            network_route: NetworkRoute {
+                local_adapter_type: NetworkAdapterType::Unknown,
+                relayed,
+            },
+        };
+        (
+            controller.max_send_rate(),
+            controller.audio_encoder_config(),
+        )
+    }
+
+    #[test]
+    fn bandwidth_controller() {
+        use BandwidthMode::*;
+        // Remote max can push down the audio and video, but only to a point.
+        assert_eq!(expect(2_000_000, Normal), compute(Normal, 3_000_000, false));
+        assert_eq!(expect(2_000_000, Normal), compute(Normal, 2_000_000, false));
+        // Because of inference
+        assert_eq!(expect(300_000, Low), compute(Normal, 1_999_999, false));
+        assert_eq!(expect(300_000, Low), compute(Normal, 1_000_000, false));
+        assert_eq!(expect(300_000, Low), compute(Normal, 300_000, false));
+        // Because of inference
+        assert_eq!(expect(125_000, VeryLow), compute(Normal, 299_000, false));
+        assert_eq!(expect(125_000, VeryLow), compute(Normal, 1_000, false));
+
+        // Local mode can also push it down
+        assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, false));
+        assert_eq!(expect(300_000, Low), compute(Low, 2_000_000, false));
+        assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, false));
+        assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, false));
+        assert_eq!(expect(300_000, Low), compute(Low, 300_000, false));
+        // Because of inference
+        assert_eq!(expect(125_000, VeryLow), compute(Low, 299_000, false));
+        assert_eq!(expect(125_000, VeryLow), compute(Low, 1_000, false));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 3_000_000, false));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 2_000_000, false));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_999_999, false));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000_000, false));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 300_000, false));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 299_000, false));
+        // Because of inference
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000, false));
+
+        // Being relayed can also push it down, but it doesn't affect the audio.
+        assert_eq!(expect(1_000_000, Normal), compute(Normal, 3_000_000, true));
+        assert_eq!(expect(1_000_000, Normal), compute(Normal, 2_000_000, true));
+        // Because of inference
+        assert_eq!(expect(300_000, Low), compute(Normal, 1_999_999, true));
+        assert_eq!(expect(300_000, Low), compute(Normal, 1_000_000, true));
+        assert_eq!(expect(300_000, Low), compute(Normal, 300_000, true));
+        // Because of inference
+        assert_eq!(expect(125_000, VeryLow), compute(Normal, 299_000, true));
+        assert_eq!(expect(125_000, VeryLow), compute(Normal, 1_000, true));
+        assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, true));
+        assert_eq!(expect(300_000, Low), compute(Low, 2_000_000, true));
+        assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, true));
+        assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, true));
+        assert_eq!(expect(300_000, Low), compute(Low, 300_000, true));
+        // Because of inference
+        assert_eq!(expect(125_000, VeryLow), compute(Low, 299_000, true));
+        assert_eq!(expect(125_000, VeryLow), compute(Low, 1_000, true));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 3_000_000, true));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 2_000_000, true));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_999_999, true));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000_000, true));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 300_000, true));
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 299_000, true));
+        // Because of inference
+        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000, true));
+    }
 }

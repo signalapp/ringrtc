@@ -9,6 +9,8 @@ use std::net::SocketAddr;
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
+use prost::Message;
+
 use crate::core::platform::PlatformItem;
 use crate::webrtc;
 use crate::webrtc::media::RffiAudioEncoderConfig;
@@ -54,6 +56,8 @@ impl RffiPeerConnection {
                 outgoing_audio_enabled: true,
                 rtp_packet_sink: None,
                 removed_ice_candidates: vec![],
+                max_bitrate_bps: None,
+                last_sent_rtp_data: None,
             })),
         }
     }
@@ -103,6 +107,25 @@ impl RffiPeerConnection {
         let state = self.state.lock().unwrap();
         state.removed_ice_candidates.clone()
     }
+
+    pub fn max_bitrate_bps(&self) -> Option<i32> {
+        let state = self.state.lock().unwrap();
+        state.max_bitrate_bps
+    }
+
+    pub fn last_sent_rtp_message(&self) -> Option<crate::protobuf::rtp_data::Message> {
+        let state = self.state.lock().unwrap();
+        Some(
+            crate::protobuf::rtp_data::Message::decode(&state.last_sent_rtp_data.as_deref()?[4..])
+                .unwrap(),
+        )
+    }
+
+    pub fn last_sent_max_bitrate_bps(&self) -> Option<u64> {
+        self.last_sent_rtp_message()?
+            .receiver_status?
+            .max_bitrate_bps
+    }
 }
 
 pub type BoxedRtpPacketSink = Box<dyn Fn(rtp::Header, &[u8]) + Send + 'static>;
@@ -113,6 +136,8 @@ struct RffiPeerConnectionState {
     outgoing_audio_enabled: bool,
     rtp_packet_sink: Option<BoxedRtpPacketSink>,
     removed_ice_candidates: Vec<SocketAddr>,
+    max_bitrate_bps: Option<i32>,
+    last_sent_rtp_data: Option<Vec<u8>>,
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -240,12 +265,13 @@ pub unsafe fn Rust_getStats(
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setSendBitrates(
-    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
     _min_bitrate_bps: i32,
     _start_bitrate_bps: i32,
-    _max_bitrate_bps: i32,
+    max_bitrate_bps: i32,
 ) {
-    info!("Rust_setSendBitrates:");
+    let mut state = (*peer_connection.as_ptr()).state.lock().unwrap();
+    state.max_bitrate_bps = Some(max_bitrate_bps);
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -259,7 +285,9 @@ pub unsafe fn Rust_sendRtp(
     payload_size: usize,
 ) -> bool {
     info!("Rust_sendRtp:");
-    let state = (*peer_connection.as_ptr()).state.lock().unwrap();
+    let mut state = (*peer_connection.as_ptr()).state.lock().unwrap();
+    let payload = std::slice::from_raw_parts(payload_data.as_ptr(), payload_size as usize);
+    state.last_sent_rtp_data = Some(payload.to_vec());
     if let Some(rtp_packet_sink) = &state.rtp_packet_sink {
         let header = rtp::Header {
             pt,
@@ -267,7 +295,6 @@ pub unsafe fn Rust_sendRtp(
             timestamp,
             ssrc,
         };
-        let payload = std::slice::from_raw_parts(payload_data.as_ptr(), payload_size as usize);
         rtp_packet_sink(header, payload);
     }
     true

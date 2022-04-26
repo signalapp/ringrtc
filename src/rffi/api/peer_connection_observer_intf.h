@@ -25,6 +25,8 @@ namespace rffi {
   /* NetworkRoute structure passed between Rust and C++ */
   typedef struct {
      rtc::AdapterType local_adapter_type;
+     // Either the local candidate or the remote candidate is a TURN candidate.
+     bool relayed;
   } NetworkRoute;
 } // namespace rffi
 } // namespace webrtc

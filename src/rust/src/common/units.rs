@@ -43,6 +43,16 @@ impl DataRate {
     pub fn as_mbps(self) -> u64 {
         self.size_per_second.as_megabits()
     }
+
+    // Only apply min if the other value is Some
+    #[must_use]
+    pub fn min_opt(self, other: Option<Self>) -> Self {
+        if let Some(other) = other {
+            self.min(other)
+        } else {
+            self
+        }
+    }
 }
 
 impl Mul<Duration> for DataRate {

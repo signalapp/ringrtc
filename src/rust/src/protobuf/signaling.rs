@@ -60,7 +60,8 @@ pub struct ConnectionParametersV4 {
     /// In other words, the video codecs the sender can receive.
     #[prost(message, repeated, tag="4")]
     pub receive_video_codecs: ::prost::alloc::vec::Vec<VideoCodec>,
-    /// Used at call establishment to convey the bitrate that should be used for sending.
+    /// Used at call establishment to convey the bitrate that the signaling sender (media receiver)
+    /// wants the signaling receiver (media sender) to send.
     #[prost(uint64, optional, tag="5")]
     pub max_bitrate_bps: ::core::option::Option<u64>,
 }

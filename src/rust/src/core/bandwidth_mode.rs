@@ -46,18 +46,6 @@ impl BandwidthMode {
         }
     }
 
-    /// Infer the mode based on the given bitrate.
-    /// Note: Since the conversion is quantized, there is no need to clamp input.
-    pub fn from_bitrate(max_bitrate_bps: u64) -> Self {
-        if max_bitrate_bps < 300_000 {
-            BandwidthMode::VeryLow
-        } else if max_bitrate_bps < 2_000_000 {
-            BandwidthMode::Low
-        } else {
-            BandwidthMode::Normal
-        }
-    }
-
     /// Return the maximum bitrate (for all media) allowed for the mode.
     pub fn max_bitrate(&self) -> units::DataRate {
         match self {

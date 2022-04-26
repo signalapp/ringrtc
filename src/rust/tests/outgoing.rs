@@ -24,6 +24,7 @@ use ringrtc::protobuf;
 use ringrtc::sim::error::SimError;
 use ringrtc::webrtc;
 use ringrtc::webrtc::media::MediaStream;
+use ringrtc::webrtc::peer_connection_observer::{NetworkAdapterType, NetworkRoute};
 
 #[macro_use]
 mod common;
@@ -920,6 +921,14 @@ fn update_bandwidth_mode_default() {
     let mut cm = context.cm();
     let active_connection = context.active_connection();
 
+    assert_eq!(
+        Some(2_000_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .max_bitrate_bps()
+    );
+
     active_connection
         .update_bandwidth_mode(BandwidthMode::Normal)
         .expect(error_line!());
@@ -927,8 +936,22 @@ fn update_bandwidth_mode_default() {
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
 
-    // TODO -- verify that the bitrate was changed
-    // TODO -- verify that the a message was sent via RTP data
+    assert_eq!(
+        Some(2_000_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .max_bitrate_bps()
+    );
+
+    // It's not sent because that's what it starts as.
+    assert_eq!(
+        None,
+        active_connection
+            .app_connection()
+            .unwrap()
+            .last_sent_max_bitrate_bps()
+    )
 }
 
 #[test]
@@ -946,8 +969,126 @@ fn update_bandwidth_mode_low() {
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
 
-    // TODO -- verify that the bitrate was changed
-    // TODO -- verify that the a message was sent via RTP data
+    assert_eq!(
+        Some(300_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .max_bitrate_bps()
+    );
+
+    assert_eq!(
+        Some(300_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .last_sent_max_bitrate_bps()
+    )
+}
+
+#[test]
+fn update_bandwidth_when_relayed() {
+    test_init();
+
+    let context = connected_and_accepted_outbound_call();
+    let mut cm = context.cm();
+    let mut active_connection = context.active_connection();
+
+    active_connection
+        .inject_ice_network_route_changed(NetworkRoute {
+            local_adapter_type: NetworkAdapterType::Unknown,
+            relayed: true,
+        })
+        .unwrap();
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    assert_eq!(
+        Some(1_000_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .max_bitrate_bps()
+    );
+
+    assert_eq!(
+        None,
+        active_connection
+            .app_connection()
+            .unwrap()
+            .last_sent_max_bitrate_bps()
+    );
+
+    active_connection
+        .update_bandwidth_mode(BandwidthMode::Low)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    assert_eq!(
+        Some(300_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .max_bitrate_bps()
+    );
+
+    assert_eq!(
+        Some(300_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .last_sent_max_bitrate_bps()
+    );
+
+    active_connection
+        .update_bandwidth_mode(BandwidthMode::Normal)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    assert_eq!(
+        Some(1_000_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .max_bitrate_bps()
+    );
+
+    // Even though we limit what we *send* when using TURN, we don't
+    // limit what we *request to be sent to us*.
+    assert_eq!(
+        Some(2_000_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .last_sent_max_bitrate_bps()
+    );
+
+    active_connection
+        .inject_ice_network_route_changed(NetworkRoute {
+            local_adapter_type: NetworkAdapterType::Unknown,
+            relayed: false,
+        })
+        .unwrap();
+    cm.synchronize().expect(error_line!());
+    assert_eq!(context.error_count(), 0);
+
+    assert_eq!(
+        Some(2_000_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .max_bitrate_bps()
+    );
+
+    assert_eq!(
+        Some(2_000_000),
+        active_connection
+            .app_connection()
+            .unwrap()
+            .last_sent_max_bitrate_bps()
+    );
 }
 
 #[test]
