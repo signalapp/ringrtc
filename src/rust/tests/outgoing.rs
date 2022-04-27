@@ -366,7 +366,7 @@ fn accepted_and_connected_outbound_call_one_callee() {
         CallState::ConnectedAndAccepted
     );
 
-    assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 0);
+    assert_eq!(context.event_count(ApplicationEvent::RemoteRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
 

@@ -118,6 +118,10 @@ where
     terminate_condvar: Arc<(Mutex<bool>, Condvar)>,
     /// Whether or not an offer has been sent via messaging for this call.
     did_send_offer: Arc<AtomicBool>,
+    /// Whether or not the application has already been notified of ApplicationEvent::RemoteRinging.
+    /// It's a little ugly, but we need to handle the case where we get ConnectionState::ConnectedBeforeAccepted
+    /// before a ConnectionState::ConnectingAfterAccepted and not notify the application twice.
+    did_notify_application_of_remote_ringing: Arc<AtomicBool>,
     /// When doing call forking, the parent that must be kept alive to keep
     /// ICE candidates and signaling alive.
     /// And we also need to keep around that parent's offer that it created.
@@ -199,6 +203,9 @@ where
             connection_map: Arc::clone(&self.connection_map),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
             did_send_offer: Arc::clone(&self.did_send_offer),
+            did_notify_application_of_remote_ringing: Arc::clone(
+                &self.did_notify_application_of_remote_ringing,
+            ),
             forking: Arc::clone(&self.forking),
         }
     }
@@ -243,6 +250,7 @@ where
             connection_map: Arc::new(CallMutex::new(HashMap::new(), "connection_map")),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             did_send_offer: Arc::new(AtomicBool::new(false)),
+            did_notify_application_of_remote_ringing: Arc::new(AtomicBool::new(false)),
             forking: Arc::new(CallMutex::new(None, "forking")),
         };
 
@@ -437,6 +445,16 @@ where
     ///
     /// This is a pass through to the CallManager.
     pub fn notify_application(&self, event: ApplicationEvent) -> Result<()> {
+        if event == ApplicationEvent::RemoteRinging {
+            let did_notify = self
+                .did_notify_application_of_remote_ringing
+                .swap(true, Ordering::SeqCst);
+            if did_notify {
+                // Don't notify the application of RemoteRinging more than once for the same call.
+                return Ok(());
+            }
+        }
+
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 

@@ -763,6 +763,9 @@ where
                                 "handle_connection_observer_event(): Connected after accepted from {}",
                                 remote_device_id
                             );
+                            // We need to tell the application we're ringing even though it won't last long
+                            // so that it goes through the same state machine it expects.
+                            self.notify_application(call.clone(), ApplicationEvent::RemoteRinging);
                             call.set_state(CallState::ConnectedAndAccepted)?;
                             // The other connections were already terminated and sent hangup messages.
                             self.activate_remotely_accepted_connection(call);
