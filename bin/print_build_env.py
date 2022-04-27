@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Copyright 2019-2021 Signal Messenger, LLC
@@ -9,7 +9,7 @@
 # Prints some details about the current build environment.
 #
 # Example Usage:
-#   ./print_build_env.py
+#   ./print_build_env.py --ringrtc-version 2.20.3 --webrtc-version 4896
 #
 
 from string import Template
@@ -47,15 +47,18 @@ def pushd(new_dir):
     yield
     os.chdir(previous_dir)
 
+def sh(args, **kwargs):
+    return subprocess.check_output(args, **kwargs).decode("UTF-8")
+
 def determine_git_branch(directory):
     with pushd(directory):
-        git_branch_output = subprocess.check_output(["git", "branch"])
+        git_branch_output = sh(["git", "branch"])
         git_branch = [line.replace("* ", "") for line in git_branch_output.split("\n") if re.search("^\*", line)][0]
         return git_branch
 
 def determine_git_sha(directory):
     with pushd(directory):
-        return subprocess.check_output(["git", "rev-parse", "HEAD"]).strip("\n")
+        return sh(["git", "rev-parse", "HEAD"]).strip("\n")
 
 def get_build_details(ringrtc_version, webrtc_version):
     template = Template("""## RingRTC Build Details
@@ -110,13 +113,13 @@ $hostname
     webrtc_git_branch = determine_git_branch(webrtc_src_dir)
     webrtc_git_sha = determine_git_sha(webrtc_src_dir)
     build_script_git_sha = determine_git_sha("./")
-    rustc_version = subprocess.check_output(["rustc", "--version"]).strip("\n")
-    cargo_version = subprocess.check_output(["cargo", "--version"]).strip("\n")
-    xcode_version = subprocess.check_output(["xcodebuild", "-version"]).strip("\n")
-    xcode_path = subprocess.check_output(["xcode-select", "-p"]).strip("\n")
-    gcc_version = subprocess.check_output(["gcc", "-v"], stderr=subprocess.STDOUT).strip("\n")
-    osx_version_details = subprocess.check_output(["sw_vers"]).strip("\n")
-    hostname = subprocess.check_output(["scutil", "--get", "ComputerName"]).strip("\n")
+    rustc_version = sh(["rustc", "--version"]).strip("\n")
+    cargo_version = sh(["cargo", "--version"]).strip("\n")
+    xcode_version = sh(["xcodebuild", "-version"]).strip("\n")
+    xcode_path = sh(["xcode-select", "-p"]).strip("\n")
+    gcc_version = sh(["gcc", "-v"], stderr=subprocess.STDOUT).strip("\n")
+    osx_version_details = sh(["sw_vers"]).strip("\n")
+    hostname = sh(["scutil", "--get", "ComputerName"]).strip("\n")
 
     details = template.substitute(
             ringrtc_version = ringrtc_version,

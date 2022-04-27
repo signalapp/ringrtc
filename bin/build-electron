@@ -83,7 +83,7 @@ hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and p
 RUSTFLAGS_WIN=
 
 case "$(rustup show active-toolchain)" in 
-    *"x86_64-apple-darwin"* )
+    *"x86_64-apple-darwin"* | *"aarch64-apple-darwin"* )
         DEFAULT_PLATFORM="darwin"
         CARGO_TARGET="${CARGO_ARCH}-apple-darwin"
         ;;

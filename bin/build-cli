@@ -61,7 +61,7 @@ get_default_platform()
     hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
 
     case "$(rustup show active-toolchain)" in 
-        *"x86_64-apple-darwin"* )
+        *"x86_64-apple-darwin"* | *"aarch64-apple-darwin"* )
             echo "darwin"
             ;;
         *"x86_64-pc-windows"* )
