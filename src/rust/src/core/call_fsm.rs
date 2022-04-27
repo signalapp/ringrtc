@@ -850,6 +850,16 @@ where
                         ConnectionState::ConnectedBeforeAccepted,
                     ) => {
                     }
+                    // This is possible if we hit "reconnecting" while ringing
+                    // and then go back to "connected" after accepting.
+                    // We could avoid it by having a ReconnectingBeforeAccepted
+                    // state but that doesn't seem worth it.
+                    | (
+                        _,
+                        CallState::ConnectedAndAccepted,
+                        ConnectionState::ConnectedAndAccepted,
+                    ) => {
+                    }
                     // None of the following state transitions make any sense
                     (
                         _,
@@ -897,7 +907,7 @@ where
                     | (
                         _,
                         CallState::ConnectedAndAccepted,
-                        ConnectionState::ConnectedBeforeAccepted | ConnectionState::ConnectingAfterAccepted | ConnectionState::ConnectedAndAccepted,
+                        ConnectionState::ConnectedBeforeAccepted | ConnectionState::ConnectingAfterAccepted,
                     )
                     | (
                         _,
