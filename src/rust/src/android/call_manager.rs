@@ -535,11 +535,15 @@ pub fn set_video_enable(call_manager: *mut AndroidCallManager, enable: bool) -> 
     info!("set_video_enable():");
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let mut active_connection = call_manager.active_connection()?;
-    active_connection.update_sender_status(signaling::SenderStatus {
-        video_enabled: Some(enable),
-        ..Default::default()
-    })
+
+    if let Ok(mut active_connection) = call_manager.active_connection() {
+        active_connection.update_sender_status(signaling::SenderStatus {
+            video_enabled: Some(enable),
+            ..Default::default()
+        })
+    } else {
+        Ok(())
+    }
 }
 
 /// Request to update the bandwidth mode on the direct connection
