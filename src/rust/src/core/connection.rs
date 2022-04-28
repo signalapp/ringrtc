@@ -254,6 +254,8 @@ impl TickContext {
     }
 }
 
+// Don't send below this, even if the remote side requests lower.
+const MIN_SEND_RATE: DataRate = DataRate::from_kbps(30);
 // When a network route is relayed, don't send more than this.
 const RELAYED_MAX_SEND_RATE: DataRate = DataRate::from_mbps(1);
 
@@ -274,8 +276,9 @@ impl BandwidthController {
     // Min of local, remote, and relay maxs, but can't go below MIN_SEND_RATE
     pub fn max_send_rate(&self) -> DataRate {
         self.local_max()
-            .min(self.inferred_remote_mode().max_bitrate())
+            .min_opt(self.remote_max)
             .min_opt(self.relay_max())
+            .max(MIN_SEND_RATE)
     }
 
     pub fn audio_encoder_config(&self) -> AudioEncoderConfig {
@@ -2176,13 +2179,11 @@ mod tests {
         // Remote max can push down the audio and video, but only to a point.
         assert_eq!(expect(2_000_000, Normal), compute(Normal, 3_000_000, false));
         assert_eq!(expect(2_000_000, Normal), compute(Normal, 2_000_000, false));
-        // Because of inference
-        assert_eq!(expect(300_000, Low), compute(Normal, 1_999_999, false));
-        assert_eq!(expect(300_000, Low), compute(Normal, 1_000_000, false));
+        assert_eq!(expect(1_999_999, Low), compute(Normal, 1_999_999, false));
+        assert_eq!(expect(1_000_000, Low), compute(Normal, 1_000_000, false));
         assert_eq!(expect(300_000, Low), compute(Normal, 300_000, false));
-        // Because of inference
-        assert_eq!(expect(125_000, VeryLow), compute(Normal, 299_000, false));
-        assert_eq!(expect(125_000, VeryLow), compute(Normal, 1_000, false));
+        assert_eq!(expect(299_000, VeryLow), compute(Normal, 299_000, false));
+        assert_eq!(expect(30_000, VeryLow), compute(Normal, 1_000, false));
 
         // Local mode can also push it down
         assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, false));
@@ -2190,43 +2191,37 @@ mod tests {
         assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, false));
         assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, false));
         assert_eq!(expect(300_000, Low), compute(Low, 300_000, false));
-        // Because of inference
-        assert_eq!(expect(125_000, VeryLow), compute(Low, 299_000, false));
-        assert_eq!(expect(125_000, VeryLow), compute(Low, 1_000, false));
+        assert_eq!(expect(299_000, VeryLow), compute(Low, 299_000, false));
+        assert_eq!(expect(30_000, VeryLow), compute(Low, 1_000, false));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 3_000_000, false));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 2_000_000, false));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_999_999, false));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000_000, false));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 300_000, false));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 299_000, false));
-        // Because of inference
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000, false));
+        assert_eq!(expect(30_000, VeryLow), compute(VeryLow, 1_000, false));
 
         // Being relayed can also push it down, but it doesn't affect the audio.
         assert_eq!(expect(1_000_000, Normal), compute(Normal, 3_000_000, true));
         assert_eq!(expect(1_000_000, Normal), compute(Normal, 2_000_000, true));
-        // Because of inference
-        assert_eq!(expect(300_000, Low), compute(Normal, 1_999_999, true));
-        assert_eq!(expect(300_000, Low), compute(Normal, 1_000_000, true));
+        assert_eq!(expect(1_000_000, Low), compute(Normal, 1_999_999, true));
+        assert_eq!(expect(1_000_000, Low), compute(Normal, 1_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Normal, 300_000, true));
-        // Because of inference
-        assert_eq!(expect(125_000, VeryLow), compute(Normal, 299_000, true));
-        assert_eq!(expect(125_000, VeryLow), compute(Normal, 1_000, true));
+        assert_eq!(expect(299_000, VeryLow), compute(Normal, 299_000, true));
+        assert_eq!(expect(30_000, VeryLow), compute(Normal, 1_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 2_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, true));
         assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 300_000, true));
-        // Because of inference
-        assert_eq!(expect(125_000, VeryLow), compute(Low, 299_000, true));
-        assert_eq!(expect(125_000, VeryLow), compute(Low, 1_000, true));
+        assert_eq!(expect(299_000, VeryLow), compute(Low, 299_000, true));
+        assert_eq!(expect(30_000, VeryLow), compute(Low, 1_000, true));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 3_000_000, true));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 2_000_000, true));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_999_999, true));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000_000, true));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 300_000, true));
         assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 299_000, true));
-        // Because of inference
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000, true));
+        assert_eq!(expect(30_000, VeryLow), compute(VeryLow, 1_000, true));
     }
 }
