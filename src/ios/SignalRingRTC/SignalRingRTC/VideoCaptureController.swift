@@ -150,7 +150,7 @@ public class VideoCaptureController {
         Logger.info("  targetHeight:         \(targetHeight)")
         Logger.info("  targetFrameRate:      \(targetFrameRate)")
         Logger.info("  preferredPixelFormat: \(getSubTypeString(pixelFormat: capturer.preferredOutputPixelFormat()))")
-        Logger.info("  formats:")
+        Logger.debug("  formats:")
 
         var selectedFormat: AVCaptureDevice.Format?
         var currentDiff: Int32 = Int32.max
@@ -160,7 +160,7 @@ public class VideoCaptureController {
             let pixelFormat = CMFormatDescriptionGetMediaSubType(format.formatDescription);
 
             for range in format.videoSupportedFrameRateRanges {
-                Logger.info("     width: \(dimension.width) height: \(dimension.height) pixelFormat: \(getSubTypeString(pixelFormat: pixelFormat)) fps range: \(range.minFrameRate) - \(range.maxFrameRate)")
+                Logger.debug("     width: \(dimension.width) height: \(dimension.height) pixelFormat: \(getSubTypeString(pixelFormat: pixelFormat)) fps range: \(range.minFrameRate) - \(range.maxFrameRate)")
             }
 
             let diff = abs(targetWidth - dimension.width) + abs(targetHeight - dimension.height)
