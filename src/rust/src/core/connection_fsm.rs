@@ -55,7 +55,7 @@ use futures::future::TryFutureExt;
 use futures::task::Poll;
 use futures::{Future, Stream};
 
-use crate::common::{units::DataRate, CallId, ConnectionState, Result, RingBench};
+use crate::common::{units::DataRate, CallDirection, CallId, ConnectionState, Result, RingBench};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
 use crate::core::platform::Platform;
@@ -440,6 +440,58 @@ where
         self.notify_spawn(notify_observer_future);
     }
 
+    fn handle_connected_and_accepted_for_the_first_time(
+        &mut self,
+        connection: Connection<T>,
+    ) -> Result<()> {
+        connection.set_state(ConnectionState::ConnectedAndAccepted)?;
+        // We may have received status messages while ringing, which we now must
+        // process because they are ignored before the call is accepted.
+        if let Some((_, max_bitrate)) = self.last_remote_receiver_status {
+            Self::handle_remote_receiver_status_changed(&connection, max_bitrate)?;
+        }
+        if let Some((_, status)) = self.last_remote_sender_status {
+            Self::handle_remote_sender_status_changed(&connection, status)?;
+        }
+        if connection.direction() == CallDirection::InComing {
+            self.send_accepted_via_rtp_data(connection);
+        }
+        Ok(())
+    }
+
+    // This can happen either when it changes or when we process a cached one
+    // when we are first ConnectedAndAccepted.
+    fn handle_remote_receiver_status_changed(
+        connection: &Connection<T>,
+        max_bitrate: DataRate,
+    ) -> Result<()> {
+        connection.set_remote_max_bitrate(max_bitrate)
+    }
+
+    // This can happen either when it changes or when we process a cached one
+    // when we are first ConnectedAndAccepted.
+    fn handle_remote_sender_status_changed(
+        connection: &Connection<T>,
+        status: signaling::SenderStatus,
+    ) -> Result<()> {
+        connection.notify_observer(ConnectionObserverEvent::RemoteSenderStatusChanged(status))
+    }
+
+    fn send_accepted_via_rtp_data(&mut self, connection: Connection<T>) {
+        let mut err_connection = connection.clone();
+        let connected_future = lazy(move |_| {
+            if connection.terminating()? {
+                return Ok(());
+            }
+            connection.send_accepted_via_rtp_data()?;
+            Ok(())
+        })
+        .map_err(move |err| {
+            err_connection.inject_internal_error(err, "Sending Connected failed");
+        });
+        self.worker_spawn(connected_future);
+    }
+
     fn handle_received_hangup(
         &mut self,
         connection: Connection<T>,
@@ -502,7 +554,7 @@ where
                         connection.connection_id()
                     )
                 );
-                connection.set_state(ConnectionState::ConnectedAndAccepted)?;
+                self.handle_connected_and_accepted_for_the_first_time(connection)?;
             }
             ConnectionState::ConnectingAfterAccepted
             | ConnectionState::ConnectedAndAccepted
@@ -562,10 +614,7 @@ where
         match state {
             ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted => {
                 if changed {
-                    self.notify_observer(
-                        connection,
-                        ConnectionObserverEvent::RemoteSenderStatusChanged(status),
-                    );
+                    Self::handle_remote_sender_status_changed(&connection, status)?;
                 }
             }
             ConnectionState::ConnectingBeforeAccepted
@@ -629,7 +678,7 @@ where
         match state {
             ConnectionState::ConnectedAndAccepted | ConnectionState::ReconnectingAfterAccepted => {
                 if changed {
-                    connection.set_remote_max_bitrate(max_bitrate)?;
+                    Self::handle_remote_receiver_status_changed(&connection, max_bitrate)?;
                 }
             }
             ConnectionState::ConnectingBeforeAccepted
@@ -671,21 +720,7 @@ where
 
     fn handle_accept(&mut self, connection: Connection<T>, state: ConnectionState) -> Result<()> {
         if state.can_be_accepted_locally() {
-            // notify the peer via an RTP data message.
-            let mut err_connection = connection.clone();
-            let connected_future = lazy(move |_| {
-                if connection.terminating()? {
-                    return Ok(());
-                }
-                connection.set_state(ConnectionState::ConnectedAndAccepted)?;
-                connection.send_accepted_via_rtp_data()?;
-                Ok(())
-            })
-            .map_err(move |err| {
-                err_connection.inject_internal_error(err, "Sending Connected failed");
-            });
-
-            self.worker_spawn(connected_future);
+            self.handle_connected_and_accepted_for_the_first_time(connection)?;
         } else {
             self.unexpected_state(state, "AcceptCall");
         }
@@ -811,7 +846,7 @@ where
                 connection.set_state(ConnectionState::ConnectedBeforeAccepted)?;
             }
             ConnectionState::ConnectingAfterAccepted => {
-                connection.set_state(ConnectionState::ConnectedAndAccepted)?;
+                self.handle_connected_and_accepted_for_the_first_time(connection)?;
             }
             ConnectionState::ConnectedBeforeAccepted | ConnectionState::ConnectedAndAccepted => {
                 // Already connected, so this shouldn't happen.
