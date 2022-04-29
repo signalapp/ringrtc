@@ -5,8 +5,8 @@
 
 [package]
 name = "ringrtc"
-version = "2.20.3"
-authors = ["Curt Brune <curt@signal.org>", "Jim Gustafson <jim@signal.org>", "Peter Thatcher <peter@signal.org>", "Vladimir Skuratovich <vlad@signal.org>", "Jordan Rose <jrose@signal.org>"]
+version = "2.20.4"
+authors = ["Calling Team <callingteam@signal.org>"]
 edition = "2018"
 description = "A Rust interface for WebRTC"
 license = "AGPL-3.0-only"

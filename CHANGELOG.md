@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.20.4
+
+- Remove old video frames when re-enabling video
+
+- Use less bandwidth when using TURN relays
+
+- Improve support when developing on M1 chips
+
+- Avoid notifying remote ringing in case of accepted before connected 
+
+- Process remote status events received before the call is accepted
+
+- Android: Allow local video recording to be started while ringing
+
+- Reference signalapp/webrtc@4896a
+  - Fix issue with opus frame length for AudioSendStream
+
+- Adjust logging
+
 ## v2.20.3
 
 - iOS: Fix mapping of log output
