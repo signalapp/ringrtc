@@ -23,6 +23,7 @@
 #include "rtc_base/string_encode.h"
 #include "rtc_base/third_party/base64/base64.h"
 
+#include <algorithm>
 #include <string>
 
 namespace webrtc {
@@ -152,6 +153,18 @@ Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* session_descr
   return true;
 }
 
+static int
+codecPriority(const RffiVideoCodec c) {
+  // Lower values are given higher priority
+  switch (c.type) {
+    case kRffiVideoCodecVp9: return 0;
+    case kRffiVideoCodecH264ConstrainedHigh: return 1;
+    case kRffiVideoCodecH264ConstrainedBaseline: return 2;
+    case kRffiVideoCodecVp8: return 3;
+    default: return 100;
+  }
+}
+
 RUSTEXPORT RffiConnectionParametersV4*
 Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_description_borrowed) {
   if (!session_description_borrowed) {
@@ -256,6 +269,10 @@ Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_d
     }
   }
 
+  std::stable_sort(v4->receive_video_codecs.begin(), v4->receive_video_codecs.end(), [](const RffiVideoCodec lhs, const RffiVideoCodec rhs) {
+      return codecPriority(lhs) < codecPriority(rhs);
+  });
+
   auto* rffi_v4 = new RffiConnectionParametersV4();
   rffi_v4->ice_ufrag_borrowed = v4->ice_ufrag.c_str();
   rffi_v4->ice_pwd_borrowed = v4->ice_pwd.c_str();
@@ -359,6 +376,10 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
       h264_codec->SetParam("profile-level-id", *profile_level_id_string);
     }
   };
+
+  std::stable_sort(v4_borrowed->receive_video_codecs_borrowed, v4_borrowed->receive_video_codecs_borrowed + v4_borrowed->receive_video_codecs_size, [](const RffiVideoCodec lhs, const RffiVideoCodec rhs) {
+      return codecPriority(lhs) < codecPriority(rhs);
+  });
 
   for (size_t i = 0; i < v4_borrowed->receive_video_codecs_size; i++) {
     RffiVideoCodec rffi_codec = v4_borrowed->receive_video_codecs_borrowed[i];

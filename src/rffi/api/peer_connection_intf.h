@@ -76,7 +76,7 @@ typedef struct {
   // These all just refer to the storage
   const char* ice_ufrag_borrowed;
   const char* ice_pwd_borrowed;
-  const RffiVideoCodec* receive_video_codecs_borrowed;
+  RffiVideoCodec* receive_video_codecs_borrowed;
   size_t receive_video_codecs_size;
 
   // When this is released, we must release the storage
