@@ -919,6 +919,7 @@ where
         connection: Connection<T>,
         network_route: NetworkRoute,
     ) -> Result<()> {
+        connection.set_network_route(network_route)?;
         self.notify_observer(
             connection,
             ConnectionObserverEvent::IceNetworkRouteChanged(network_route),

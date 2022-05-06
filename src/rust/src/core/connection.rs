@@ -1691,7 +1691,6 @@ where
     ///
     /// `Called By:` WebRTC `IceNetworkRouteChanged` call back thread.
     pub fn inject_ice_network_route_changed(&mut self, network_route: NetworkRoute) -> Result<()> {
-        self.set_network_route(network_route)?;
         self.inject_event(ConnectionEvent::IceNetworkRouteChanged(network_route))
     }
 
