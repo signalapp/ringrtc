@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.20.5
+
+- Fix a deadlock when calling set_network_route
+
 ## v2.20.4
 
 - Remove old video frames when re-enabling video
