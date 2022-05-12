@@ -65,8 +65,8 @@ message ConnectionParametersV4 {
   optional string ice_pwd = 3;
   // In other words, the video codecs the sender can receive.
   repeated VideoCodec receive_video_codecs = 4;
-  /// Used at call establishment to convey the bitrate that the signaling sender (media receiver)
-  /// wants the signaling receiver (media sender) to send.
+  // Used at call establishment to convey the bitrate that the signaling sender (media receiver)
+  // wants the signaling receiver (media sender) to send.
   optional uint64 max_bitrate_bps = 5;
 }
 

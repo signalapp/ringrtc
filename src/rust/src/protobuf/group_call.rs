@@ -80,7 +80,9 @@ pub struct SfuToDevice {
     #[prost(message, optional, tag="6")]
     pub device_joined_or_left: ::core::option::Option<sfu_to_device::DeviceJoinedOrLeft>,
     #[prost(message, optional, tag="7")]
-    pub forwarding_video: ::core::option::Option<sfu_to_device::ForwardingVideo>,
+    pub current_devices: ::core::option::Option<sfu_to_device::CurrentDevices>,
+    #[prost(message, optional, tag="8")]
+    pub stats: ::core::option::Option<sfu_to_device::Stats>,
 }
 /// Nested message and enum types in `SfuToDevice`.
 pub mod sfu_to_device {
@@ -100,8 +102,22 @@ pub mod sfu_to_device {
         pub height: ::core::option::Option<u32>,
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct ForwardingVideo {
+    pub struct CurrentDevices {
         #[prost(uint32, repeated, packed="false", tag="1")]
-        pub demux_ids: ::prost::alloc::vec::Vec<u32>,
+        pub demux_ids_with_video: ::prost::alloc::vec::Vec<u32>,
+        #[prost(fixed32, repeated, packed="false", tag="2")]
+        pub all_demux_ids: ::prost::alloc::vec::Vec<u32>,
+    }
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Stats {
+        /// server => client rate given by congestion control
+        #[prost(uint32, optional, tag="1")]
+        pub target_send_rate_kbps: ::core::option::Option<u32>,
+        /// server => client ideal rate
+        #[prost(uint32, optional, tag="2")]
+        pub ideal_send_rate_kbps: ::core::option::Option<u32>,
+        /// server => client rate allocated (likely less than target_send_rate_kbps)
+        #[prost(uint32, optional, tag="3")]
+        pub allocated_send_rate_kbps: ::core::option::Option<u32>,
     }
 }

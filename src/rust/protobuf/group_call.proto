@@ -1,78 +1,89 @@
 /*
  * Copyright 2019-2021 Signal Messenger, LLC
  * SPDX-License-Identifier: AGPL-3.0-only
- */
+*/
 
- syntax = "proto2";
+syntax = "proto2";
 
- package group_call;
+package group_call;
  
- message DeviceToDevice {
-   // Sent over signaling
-   message MediaKey {
-     optional uint32 ratchet_counter = 1;
-     optional bytes secret = 2;
-     optional uint32 demux_id = 3;
-   }
+message DeviceToDevice {
+  // Sent over signaling
+  message MediaKey {
+    optional uint32 ratchet_counter = 1;
+    optional bytes secret = 2;
+    optional uint32 demux_id = 3;
+  }
+
+  // Sent over RTP data
+  message Heartbeat {
+    optional bool audio_muted = 1;
+    optional bool video_muted = 2;
+    optional bool presenting = 3;
+    optional bool sharing_screen = 4;
+  }
  
-   // Sent over RTP data
-   message Heartbeat {
-     optional bool audio_muted = 1;
-     optional bool video_muted = 2;
-     optional bool presenting = 3;
-     optional bool sharing_screen = 4;
-   }
+  // Sent over RTP data *and* signaling
+  message Leaving {
+    // When sent over signaling, you must indicate which device is leaving.
+    optional uint32 demux_id = 1;
+  }
  
-   // Sent over RTP data *and* signaling
-   message Leaving {
-     // When sent over signaling, you must indicate which device is leaving.
-     optional uint32 demux_id = 1;
-   }
- 
-   optional bytes group_id = 1;
-   optional MediaKey media_key = 2;
-   optional Heartbeat heartbeat = 3;
-   optional Leaving leaving = 4;
- }
- 
- message DeviceToSfu {
-   message VideoRequestMessage {
-     message VideoRequest {
-       optional uint32 height = 2;
-       optional fixed32 demux_id = 3;
-     }
+  optional bytes group_id = 1;
+  optional MediaKey media_key = 2;
+  optional Heartbeat heartbeat = 3;
+  optional Leaving leaving = 4;
+}
+
+message DeviceToSfu {
+  message VideoRequestMessage {
+    message VideoRequest {
+      optional uint32 height = 2;
+      optional fixed32 demux_id = 3;
+    }
    
-     repeated VideoRequest requests = 1;
-     reserved 2; // tag 2 was previously "max_count", which is no longer used
-     optional uint32 max_kbps = 3;
-   }
+    repeated VideoRequest requests = 1;
+    reserved 2; // tag 2 was previously "max_count", which is no longer used
+    optional uint32 max_kbps = 3;
+  }
  
-   message LeaveMessage {}
+  message LeaveMessage {}
 
-   optional VideoRequestMessage video_request = 1;
-   optional LeaveMessage leave = 2;
- }
+  optional VideoRequestMessage video_request = 1;
+  optional LeaveMessage leave = 2;
+}
+
+message SfuToDevice {
+  message DeviceJoinedOrLeft {
+  }
  
- message SfuToDevice {
-   message DeviceJoinedOrLeft {
-   }
+  message Speaker {
+   optional fixed32 demux_id = 2;
+  }
  
-   message Speaker {
-     optional fixed32 demux_id = 2;
-   } 
- 
-   // The resolution the SFU wants you to send to it to satisfy the requests
-   // of all of the other devices.
-   message VideoRequest {
-       optional uint32 height = 1;
-   }
- 
-   message ForwardingVideo {
-       repeated uint32 demux_ids = 1;
-   }
- 
-   optional VideoRequest video_request               = 2;
-   optional Speaker speaker                          = 4;
-   optional DeviceJoinedOrLeft device_joined_or_left = 6;
-   optional ForwardingVideo forwarding_video         = 7;
- }
+  // The resolution the SFU wants you to send to it to satisfy the requests
+  // of all of the other devices.
+  message VideoRequest {
+    optional uint32 height = 1;
+  }
+
+  message CurrentDevices {
+    repeated uint32 demux_ids_with_video = 1;
+    repeated fixed32 all_demux_ids       = 2;
+  }
+
+  message Stats {
+    // server => client rate given by congestion control
+    optional uint32 target_send_rate_kbps = 1;
+    // server => client ideal rate
+    optional uint32 ideal_send_rate_kbps = 2;
+    // server => client rate allocated (likely less than target_send_rate_kbps)
+    optional uint32 allocated_send_rate_kbps = 3;
+  }
+
+  optional VideoRequest video_request               = 2;
+  optional Speaker speaker                          = 4;
+  optional DeviceJoinedOrLeft device_joined_or_left = 6;
+  optional CurrentDevices current_devices           = 7;
+  optional Stats stats                              = 8;
+}

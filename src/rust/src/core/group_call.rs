@@ -160,7 +160,7 @@ pub enum RemoteDevicesChangedReason {
     MediaKeyReceived(DemuxId),
     SpeakerTimeChanged(DemuxId),
     HeartbeatStateChanged(DemuxId),
-    ForwardeVideosChanged,
+    ForwardedVideosChanged,
 }
 
 // The callbacks from the Call to the Observer of the call.
@@ -2788,30 +2788,49 @@ impl Client {
 
     fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
         use protobuf::group_call::{
-            sfu_to_device::{DeviceJoinedOrLeft, ForwardingVideo, Speaker},
+            sfu_to_device::{CurrentDevices, DeviceJoinedOrLeft, Speaker},
             DeviceToDevice, SfuToDevice,
         };
 
         if header.pt == RTP_DATA_PAYLOAD_TYPE {
             if header.ssrc == RTP_DATA_TO_SFU_SSRC {
-                if let Ok(msg) = SfuToDevice::decode(payload) {
-                    let mut handled = false;
+                // TODO: Use video_request to throttle down how much we send when it's not needed.
+                if let Ok(SfuToDevice {
+                    speaker,
+                    device_joined_or_left,
+                    current_devices,
+                    stats,
+                    video_request: _,
+                }) = SfuToDevice::decode(payload)
+                {
                     if let Some(Speaker {
-                        demux_id: Some(demux_id),
-                    }) = &msg.speaker
+                        demux_id: speaker_demux_id,
+                    }) = speaker
                     {
-                        self.handle_speaker_received(header.timestamp, *demux_id);
-                        handled = true;
+                        if let Some(speaker_demux_id) = speaker_demux_id {
+                            self.handle_speaker_received(header.timestamp, speaker_demux_id);
+                        } else {
+                            warn!("Ignoring speaker demux ID of None from SFU");
+                        }
                     };
-                    if let Some(DeviceJoinedOrLeft { .. }) = msg.device_joined_or_left {
+                    if let Some(DeviceJoinedOrLeft {}) = device_joined_or_left {
                         self.handle_remote_device_joined_or_left();
                     }
-                    if let Some(ForwardingVideo { demux_ids }) = &msg.forwarding_video {
-                        self.handle_forwarding_video_received(demux_ids.iter().copied().collect());
-                        handled = true;
+                    // TODO: Use all_demux_ids to avoid polling
+                    if let Some(CurrentDevices {
+                        demux_ids_with_video,
+                        all_demux_ids: _,
+                    }) = current_devices
+                    {
+                        self.handle_forwarding_video_received(demux_ids_with_video);
                     }
-                    if !handled {
-                        info!("Received message from SFU over RTP data: {:?}", msg);
+                    if let Some(stats) = stats {
+                        info!(
+                            "ringrtc_stats!,sfu,recv,{},{},{}",
+                            stats.target_send_rate_kbps.unwrap_or(0),
+                            stats.ideal_send_rate_kbps.unwrap_or(0),
+                            stats.allocated_send_rate_kbps.unwrap_or(0)
+                        );
                     }
                 }
                 debug!("Received RTP data from SFU: {:?}.", payload);
@@ -2912,11 +2931,16 @@ impl Client {
         })
     }
 
-    fn handle_forwarding_video_received(&self, forwarding_video_demux_ids: HashSet<DemuxId>) {
+    fn handle_forwarding_video_received(&self, mut demux_ids_with_video: Vec<DemuxId>) {
         self.actor.send(move |state| {
-            let forwarding_video_demux_ids = forwarding_video_demux_ids.into_iter().collect();
+            let forwarding_video_demux_ids: HashSet<DemuxId> =
+                demux_ids_with_video.iter().copied().collect();
             if state.forwarding_video_demux_ids != forwarding_video_demux_ids {
-                info!("SFU notified that the set of forwardinge videos has changed");
+                demux_ids_with_video.sort_unstable();
+                info!(
+                    "SFU notified that the demux IDs with video has changed to {:?}",
+                    demux_ids_with_video
+                );
                 for remote_device in state.remote_devices.iter_mut() {
                     remote_device.forwarding_video =
                         Some(forwarding_video_demux_ids.contains(&remote_device.demux_id));
@@ -2925,7 +2949,7 @@ impl Client {
                 state.observer.handle_remote_devices_changed(
                     state.client_id,
                     &state.remote_devices,
-                    RemoteDevicesChangedReason::ForwardeVideosChanged,
+                    RemoteDevicesChangedReason::ForwardedVideosChanged,
                 )
             }
         })
@@ -5170,9 +5194,7 @@ mod tests {
 
         assert_eq!(vec![(2, None), (3, None)], get_forwarding_videos(&client1));
 
-        client1
-            .client
-            .handle_forwarding_video_received([2, 3].iter().copied().collect());
+        client1.client.handle_forwarding_video_received(vec![2, 3]);
         client1.wait_for_client_to_process();
 
         assert_eq!(
@@ -5180,9 +5202,7 @@ mod tests {
             get_forwarding_videos(&client1)
         );
 
-        client1
-            .client
-            .handle_forwarding_video_received([2].iter().copied().collect());
+        client1.client.handle_forwarding_video_received(vec![2]);
         client1.wait_for_client_to_process();
 
         assert_eq!(
