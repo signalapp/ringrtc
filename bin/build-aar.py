@@ -331,7 +331,7 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
     if compile_only is True:
         return
 
-    gradle_args.append('assemble')
+    gradle_args.extend(('debug:assembleDebug' if build_type == 'debug' else 'release:assembleRelease' for build_type in build_types))
 
     if install_local is True:
         gradle_args.append('installArchives')

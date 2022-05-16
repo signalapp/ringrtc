@@ -1,8 +1,5 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
-// Disable the stripping task itself because it can't distinguish between debug/release.
-project.gradle.startParameter.excludedTaskNames.add("stripDebugDebugSymbols")
-
 buildscript {
     repositories {
         jcenter()
