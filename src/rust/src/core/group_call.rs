@@ -3074,6 +3074,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         &mut self,
         _ice_candidate: signaling::IceCandidate,
         _sdp_for_logging: &str,
+        _relay_protocol: Option<webrtc::peer_connection_observer::TransportProtocol>,
     ) -> Result<()> {
         Ok(())
     }

@@ -919,6 +919,19 @@ where
         connection: Connection<T>,
         network_route: NetworkRoute,
     ) -> Result<()> {
+        if network_route.local_adapter_type
+            == crate::webrtc::peer_connection_observer::NetworkAdapterType::Vpn
+        {
+            info!(
+                "Local ICE network adapter type changed to {:?} going through a VPN",
+                network_route.local_adapter_type_under_vpn
+            );
+        } else {
+            info!(
+                "Local ICE network adapter type changed to {:?}",
+                network_route.local_adapter_type
+            );
+        }
         connection.set_network_route(network_route)?;
         self.notify_observer(
             connection,

@@ -379,6 +379,11 @@ public class CallManager {
     checkCallManagerExists();
 
     Log.i(TAG, "proceed(): callId: " + callId + ", hideIp: " + hideIp);
+    for (PeerConnection.IceServer iceServer : iceServers) {
+      for (String url : iceServer.urls) {
+        Log.i(TAG, "  server: " + url);
+      }
+    }
 
     PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase, audioProcessingMethod);
 

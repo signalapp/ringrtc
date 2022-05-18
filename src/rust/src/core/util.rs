@@ -206,7 +206,7 @@ fn redact_ipv6(text: &str) -> String {
     }
 
     match &*RE {
-        Some(v) => v.replace_all(text, "[REDACTED]").to_string(),
+        Some(v) => v.replace_all(text, "[REDACTED ipv6]").to_string(),
         None => "[REDACTED]".to_string(),
     }
 }
@@ -231,7 +231,7 @@ fn redact_ipv4(text: &str) -> String {
     }
 
     match &*RE {
-        Some(v) => v.replace_all(text, "[REDACTED]").to_string(),
+        Some(v) => v.replace_all(text, "[REDACTED ipv4]").to_string(),
         None => "[REDACTED]".to_string(),
     }
 }
@@ -393,7 +393,10 @@ mod tests {
                 for s in suffix.iter() {
                     let addr = format!("{}{}{}", p, a, s);
                     let scrubbed = redact_ipv6(&addr);
-                    assert_eq!((&addr, scrubbed), (&addr, format!("{}[REDACTED]{}", p, s)));
+                    assert_eq!(
+                        (&addr, scrubbed),
+                        (&addr, format!("{}[REDACTED ipv6]{}", p, s))
+                    );
                 }
             }
         }
@@ -439,7 +442,10 @@ mod tests {
                 for s in suffix.iter() {
                     let addr = format!("{}{}{}", p, a, s);
                     let scrubbed = redact_ipv4(&addr);
-                    assert_eq!((&addr, scrubbed), (&addr, format!("{}[REDACTED]{}", p, s)));
+                    assert_eq!(
+                        (&addr, scrubbed),
+                        (&addr, format!("{}[REDACTED ipv4]{}", p, s))
+                    );
                 }
             }
         }

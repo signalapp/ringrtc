@@ -818,7 +818,7 @@ impl Platform for NativePlatform {
         network_route: NetworkRoute,
     ) {
         info!(
-            "NativePlatformhandle_network_route_changed(): {:?}",
+            "NativePlatform::handle_network_route_changed(): {:?}",
             network_route
         );
         let result =

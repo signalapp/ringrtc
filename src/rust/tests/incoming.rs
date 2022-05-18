@@ -541,6 +541,7 @@ fn update_bandwidth_when_relayed() {
     active_connection
         .inject_ice_network_route_changed(NetworkRoute {
             local_adapter_type: NetworkAdapterType::Unknown,
+            local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
             relayed: true,
         })
         .unwrap();
@@ -612,6 +613,7 @@ fn update_bandwidth_when_relayed() {
     active_connection
         .inject_ice_network_route_changed(NetworkRoute {
             local_adapter_type: NetworkAdapterType::Unknown,
+            local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
             relayed: false,
         })
         .unwrap();

@@ -997,6 +997,7 @@ fn update_bandwidth_when_relayed() {
     active_connection
         .inject_ice_network_route_changed(NetworkRoute {
             local_adapter_type: NetworkAdapterType::Unknown,
+            local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
             relayed: true,
         })
         .unwrap();
@@ -1068,6 +1069,7 @@ fn update_bandwidth_when_relayed() {
     active_connection
         .inject_ice_network_route_changed(NetworkRoute {
             local_adapter_type: NetworkAdapterType::Unknown,
+            local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
             relayed: false,
         })
         .unwrap();
@@ -1102,7 +1104,7 @@ fn inject_local_ice_candidate() {
     let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     active_connection
-        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1196,7 +1198,7 @@ fn ice_send_failures_cause_error_before_connection() {
     let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     active_connection
-        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1244,7 +1246,7 @@ fn ignore_ice_send_failures_after_connection() {
     let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     active_connection
-        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1317,7 +1319,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     let force_send = true;
     parent_connection
         .unwrap()
-        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -1402,7 +1404,7 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     let force_send = true;
     parent_connection
         .unwrap()
-        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -2053,7 +2055,7 @@ fn local_ice_candidate_with_error() {
     let ice_candidate = random_ice_candidate(&context.prng);
     let force_send = true;
     active_connection
-        .inject_local_ice_candidate(ice_candidate, force_send, "")
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());

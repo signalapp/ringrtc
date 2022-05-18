@@ -40,11 +40,24 @@ pub enum IceConnectionState {
     Max,
 }
 
+/// Stays in sync with the C++ value in rffi_defs.h.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportProtocol {
+    Udp,
+    Tcp,
+    Tls,
+    Unknown,
+}
+
 /// Ice Candidate structure passed between Rust and C++.
 #[repr(C)]
 #[derive(Debug)]
 pub struct CppIceCandidate {
     sdp: webrtc::ptr::Borrowed<c_char>,
+    is_relayed: bool,
+    // Will be Unknown if !is_relayed, but may be Unknown for other reasons, so don't use that to check.
+    relay_protocol: TransportProtocol,
 }
 
 /// Rust version of WebRTC AdapterType
@@ -82,6 +95,7 @@ pub enum NetworkAdapterType {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct NetworkRoute {
     pub local_adapter_type: NetworkAdapterType,
+    pub local_adapter_type_under_vpn: NetworkAdapterType,
     // Either the local candidate or the remote candidate is a TURN candidate.
     pub relayed: bool,
 }
@@ -96,6 +110,7 @@ pub trait PeerConnectionObserverTrait {
         &mut self,
         ice_candidate: signaling::IceCandidate,
         sdp_for_logging: &str,
+        relay_protocol: Option<webrtc::peer_connection_observer::TransportProtocol>,
     ) -> Result<()>;
     fn handle_ice_candidates_removed(&mut self, removed_addresses: Vec<SocketAddr>) -> Result<()>;
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()>;
@@ -183,9 +198,14 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
             };
             // ICE candidates are the same for V2 and V3 and V4.
             let ice_candidate = signaling::IceCandidate::from_v3_sdp(sdp.clone());
+            let relay_protocol = if cpp_candidate.is_relayed {
+                Some(cpp_candidate.relay_protocol)
+            } else {
+                None
+            };
             if let Ok(ice_candidate) = ice_candidate {
                 observer
-                    .handle_ice_candidate_gathered(ice_candidate, sdp.as_str())
+                    .handle_ice_candidate_gathered(ice_candidate, sdp.as_str(), relay_protocol)
                     .unwrap_or_else(|e| error!("Problems handling ice candidate: {}", e));
             } else {
                 warn!("Failed to handle local ICE candidate SDP");

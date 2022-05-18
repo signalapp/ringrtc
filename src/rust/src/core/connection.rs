@@ -44,6 +44,7 @@ use crate::webrtc::media::{AudioEncoderConfig, MediaStream, VideoFrame, VideoSin
 use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, SendRates};
 use crate::webrtc::peer_connection_observer::{
     IceConnectionState, NetworkAdapterType, NetworkRoute, PeerConnectionObserverTrait,
+    TransportProtocol,
 };
 use crate::webrtc::rtp;
 use crate::webrtc::sdp_observer::{
@@ -494,6 +495,7 @@ where
                     remote_max: None,
                     network_route: NetworkRoute {
                         local_adapter_type: NetworkAdapterType::Unknown,
+                        local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
                         relayed: false,
                     },
                 },
@@ -1611,16 +1613,26 @@ where
         candidate: signaling::IceCandidate,
         force_send: bool,
         sdp_for_logging: &str,
+        relay_protocol: Option<TransportProtocol>,
     ) -> Result<()> {
         if !force_send && self.connection_type == ConnectionType::OutgoingChild {
             return Ok(());
         }
 
-        info!(
-            "Local ICE candidate: {}; {}",
-            candidate.to_info_string(),
-            redact_string(sdp_for_logging)
-        );
+        if let Some(relay_protocol) = relay_protocol {
+            info!(
+                "Local ICE candidate: {}; {}; relay_protocol={:?}",
+                candidate.to_info_string(),
+                redact_string(sdp_for_logging),
+                relay_protocol,
+            );
+        } else {
+            info!(
+                "Local ICE candidate: {}; {}",
+                candidate.to_info_string(),
+                redact_string(sdp_for_logging)
+            );
+        }
 
         self.inject_event(ConnectionEvent::LocalIceCandidates(vec![candidate]))?;
         Ok(())
@@ -1999,9 +2011,10 @@ where
         &mut self,
         ice_candidate: signaling::IceCandidate,
         sdp_for_logging: &str,
+        relay_protocol: Option<TransportProtocol>,
     ) -> Result<()> {
         let force_send = false;
-        self.inject_local_ice_candidate(ice_candidate, force_send, sdp_for_logging)
+        self.inject_local_ice_candidate(ice_candidate, force_send, sdp_for_logging, relay_protocol)
     }
 
     fn handle_ice_candidates_removed(&mut self, removed_addresses: Vec<SocketAddr>) -> Result<()> {
@@ -2163,6 +2176,7 @@ mod tests {
             remote_max: Some(DataRate::from_bps(remote_max_bps)),
             network_route: NetworkRoute {
                 local_adapter_type: NetworkAdapterType::Unknown,
+                local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
                 relayed,
             },
         };

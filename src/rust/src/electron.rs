@@ -643,11 +643,12 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         ice_server_urls.push(url);
     }
 
+    info!("proceed(): callId: {}, hideIp: {}", call_id, hide_ip);
+    for ice_server_url in &ice_server_urls {
+        info!("  server: {}", ice_server_url);
+    }
+
     let ice_server = IceServer::new(ice_server_username, ice_server_password, ice_server_urls);
-    debug!(
-        "JsCallManager.proceed({}, {:?}, {})",
-        call_id, ice_server, hide_ip
-    );
 
     let audio_levels_interval = if audio_levels_interval_millis == 0 {
         None
