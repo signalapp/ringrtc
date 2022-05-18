@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.20.6
+
+- Prioritize VP9 and H.264 hardware codecs for 1:1 calls
+
+- Add more logging for checking connectivity and group call issues
+
+- Update parse_log.py utility for more debugging
+
+- Reference signalapp/webrtc@4896b
+  - Cherry-pick upstream fixes for network crash and iOS audio/logging
+
+- Update Android builds
+
 ## v2.20.5
 
 - Fix a deadlock when calling set_network_route
