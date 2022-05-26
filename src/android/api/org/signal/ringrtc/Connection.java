@@ -64,7 +64,7 @@ public class Connection extends PeerConnection {
   }
 
   void setAudioEnabled(boolean enabled) {
-    // enable microphone
+    Log.i(TAG, "audioTrack.setEnabled(" + enabled + ")");
     audioTrack.setEnabled(enabled);
   }
 

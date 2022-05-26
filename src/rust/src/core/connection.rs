@@ -620,7 +620,8 @@ where
 
             peer_connection.use_shared_ice_gatherer(ice_gatherer)?;
 
-            // Don't enable audio playout until the call is accepted.
+            // Don't enable audio flow until the call is accepted.
+            peer_connection.set_audio_recording_enabled(false);
             peer_connection.set_audio_playout_enabled(false);
 
             let (mut offer, mut answer, remote_public_key) =
@@ -718,7 +719,8 @@ where
 
             let peer_connection = webrtc.peer_connection()?;
 
-            // Don't enable audio playout until the call is accepted.
+            // Don't enable audio flow until the call is accepted.
+            peer_connection.set_audio_recording_enabled(false);
             peer_connection.set_audio_playout_enabled(false);
 
             let v4_offer = received.offer.to_v4();
@@ -1454,6 +1456,7 @@ where
 
         let webrtc = self.webrtc.lock()?;
         let pc = webrtc.peer_connection()?;
+        pc.set_audio_recording_enabled(true);
         pc.set_audio_playout_enabled(true);
         pc.set_outgoing_media_enabled(true);
         pc.set_incoming_media_enabled(true);

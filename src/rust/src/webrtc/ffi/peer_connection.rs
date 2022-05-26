@@ -66,6 +66,11 @@ extern "C" {
         enabled: bool,
     );
 
+    pub fn Rust_setAudioRecordingEnabled(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        enabled: bool,
+    );
+
     pub fn Rust_addIceCandidateFromSdp(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         sdp: webrtc::ptr::Borrowed<c_char>,

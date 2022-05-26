@@ -782,6 +782,13 @@ Rust_setAudioPlayoutEnabled(webrtc::PeerConnectionInterface* peer_connection_bor
   peer_connection_borrowed_rc->SetAudioPlayout(enabled);
 }
 
+RUSTEXPORT void
+Rust_setAudioRecordingEnabled(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc,
+                              bool                             enabled) {
+  RTC_LOG(LS_INFO) << "Rust_setAudioRecordingEnabled(" << enabled << ")";
+  peer_connection_borrowed_rc->SetAudioRecording(enabled);
+}
+
 RUSTEXPORT bool
 Rust_addIceCandidateFromSdp(PeerConnectionInterface* peer_connection_borrowed_rc,
                             const char*              sdp_borrowed) {

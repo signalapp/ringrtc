@@ -167,6 +167,10 @@ impl PeerConnection {
         unsafe { pc::Rust_setAudioPlayoutEnabled(self.rffi.as_borrowed(), enabled) };
     }
 
+    pub fn set_audio_recording_enabled(&self, enabled: bool) {
+        unsafe { pc::Rust_setAudioRecordingEnabled(self.rffi.as_borrowed(), enabled) };
+    }
+
     /// Rust wrapper around C++ PeerConnection::AddIceCandidate().
     pub fn add_ice_candidate_from_sdp(&self, sdp: &str) -> Result<()> {
         info!("Remote ICE candidate: {}", redact_string(sdp));

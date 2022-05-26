@@ -204,6 +204,14 @@ pub unsafe fn Rust_setAudioPlayoutEnabled(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_setAudioRecordingEnabled(
+    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    _enabled: bool,
+) {
+    info!("Rust_setAudioRecordingEnabled:");
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_addIceCandidateFromSdp(
     _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
     _sdp: webrtc::ptr::Borrowed<c_char>,
