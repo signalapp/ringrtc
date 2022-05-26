@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.20.7
+
+- Log PeerConnection ICE gathering errors
+
+- Let rust core enable media (playback and recording), not clients
+
 ## v2.20.6
 
 - Prioritize VP9 and H.264 hardware codecs for 1:1 calls
