@@ -56,6 +56,19 @@ void PeerConnectionObserverRffi::OnIceCandidatesRemoved(
   callbacks_.onIceCandidatesRemoved(observer_, removed_addresses.data(), removed_addresses.size());
 }
 
+void PeerConnectionObserverRffi::OnIceCandidateError(
+    const std::string& address,
+    int port,
+    const std::string& url,
+    int error_code,
+    const std::string& error_text) {
+  // Error code 701 is when we have an IPv4 local port trying to reach an IPv6 server or vice versa.
+  // That's expected to not work, so we don't want to log that all the time.
+  if (error_code != 701) {
+    RTC_LOG(LS_WARNING) << "Failed to gather local ICE candidate from " << address << ":"  << port <<  " to " << url << "; error " << error_code << ": " << error_text;
+  }
+}
+
 void PeerConnectionObserverRffi::OnSignalingChange(
     PeerConnectionInterface::SignalingState new_state) {
 }
