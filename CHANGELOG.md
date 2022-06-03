@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.20.8
+
+- Reference signalapp/webrtc@4896c
+  - Remove bitrate multiplier
+
+- Electron: Add logging to video support
+
 ## v2.20.7
 
 - Log PeerConnection ICE gathering errors
