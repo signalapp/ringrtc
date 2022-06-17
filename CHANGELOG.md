@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.20.9
+
+- Reference signalapp/webrtc@4896d
+  - Have one default port allocator flags instead of two
+
 ## v2.20.8
 
 - Reference signalapp/webrtc@4896c
