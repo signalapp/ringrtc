@@ -1584,13 +1584,13 @@ impl Client {
     fn set_send_rates_inner(state: &mut State, send_rates: SendRates) {
         if state.send_rates != send_rates {
             if send_rates.max == Some(ALL_ALONE_MAX_SEND_RATE) {
-                info!(
-                    "Disable audio render and outgoing media because there are no other devices."
-                );
+                info!("Disable audio and outgoing media because there are no other devices.");
+                state.peer_connection.set_audio_recording_enabled(false);
                 state.peer_connection.set_audio_playout_enabled(false);
                 state.peer_connection.set_outgoing_media_enabled(false);
             } else {
-                info!("Enable audio render and outgoing media because there are other devices.");
+                info!("Enable audio and outgoing media because there are other devices.");
+                state.peer_connection.set_audio_recording_enabled(true);
                 state.peer_connection.set_audio_playout_enabled(true);
                 state.peer_connection.set_outgoing_media_enabled(true);
             }
