@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.20.10
+
+- Group Calls: Enable audio recording properly
+
 ## v2.20.9
 
 - Reference signalapp/webrtc@4896d
