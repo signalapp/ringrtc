@@ -30,6 +30,7 @@ typedef struct {
   double remote_round_trip_time;
   double audio_level;
   double total_audio_energy;
+  double echo_likelihood;
 } AudioSenderStatistics;
 
 typedef struct {
