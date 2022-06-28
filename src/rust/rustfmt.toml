@@ -2,8 +2,3 @@
 
 license_template_path        = "rustfmt.license-template"
 unstable_features            = true
-
-ignore = [
-       # Don't format the generated protobuf code
-       "src/protobuf",
-]

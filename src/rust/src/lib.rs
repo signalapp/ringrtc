@@ -50,11 +50,7 @@ pub mod core {
 }
 
 /// Protobuf Definitions.
-pub mod protobuf {
-    pub mod group_call;
-    pub mod rtp_data;
-    pub mod signaling;
-}
+pub mod protobuf;
 
 #[cfg(any(target_os = "android", feature = "check-all"))]
 /// Android specific implementation.

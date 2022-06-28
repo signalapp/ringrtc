@@ -1,9 +1,0 @@
-#!/bin/sh
-
-#
-# Copyright 2019-2021 Signal Messenger, LLC
-# SPDX-License-Identifier: AGPL-3.0-only
-#
-
-OUTPUT_DIR=/tmp/ringrtc-protobuf
-cargo run --bin protobuf-gen --features protobuf_gen_deps,sim --target-dir=$OUTPUT_DIR
