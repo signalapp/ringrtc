@@ -576,6 +576,13 @@ where
                 v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps
             );
 
+            if v4_offer.receive_video_codecs.is_empty() {
+                warn!(
+                    "No receive video codecs in outgoing offer. SDP:\n{}",
+                    redact_string(offer.to_sdp().as_deref().unwrap_or("None"))
+                );
+            }
+
             // The only purpose of this is to start gathering ICE candidates.
             // But we need to call set_local_description before we munge it.
             let observer = create_ssd_observer();
