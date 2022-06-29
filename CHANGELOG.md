@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.20.11
+
+- Add support for TURN over TLS
+
+- Android: Add echo likelihood to logs
+
+- Reference signalapp/webrtc@4896f
+  - Add support for TURN over TLS
+  - Enable echo detection
+
+- Update Rust
+
+- Update builds
+
 ## v2.20.10
 
 - Group Calls: Enable audio recording properly
