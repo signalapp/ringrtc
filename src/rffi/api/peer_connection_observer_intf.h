@@ -26,8 +26,9 @@ namespace rffi {
   typedef struct {
      rtc::AdapterType local_adapter_type;
      rtc::AdapterType local_adapter_type_under_vpn;
-     // Either the local candidate or the remote candidate is a TURN candidate.
-     bool relayed;
+     bool local_relayed;
+     TransportProtocol local_relay_protocol;
+     bool remote_relayed;
   } NetworkRoute;
 } // namespace rffi
 } // namespace webrtc

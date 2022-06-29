@@ -92,8 +92,17 @@ void PeerConnectionObserverRffi::OnIceSelectedCandidatePairChanged(
   auto& remote = event.selected_candidate_pair.remote_candidate();
   auto local_adapter_type = local.network_type();
   auto local_adapter_type_under_vpn = local.underlying_type_for_vpn();
-  bool relayed = (local.type() == cricket::RELAY_PORT_TYPE) || (remote.type() == cricket::RELAY_PORT_TYPE);
-  auto network_route = webrtc::rffi::NetworkRoute{ local_adapter_type, local_adapter_type_under_vpn, relayed, };
+  bool local_relayed = (local.type() == cricket::RELAY_PORT_TYPE) || !local.relay_protocol().empty();
+  TransportProtocol local_relay_protocol = TransportProtocol::kUnknown;
+  if (local.relay_protocol() == cricket::UDP_PROTOCOL_NAME) {
+    local_relay_protocol = TransportProtocol::kUdp;
+  } else if (local.relay_protocol() == cricket::TCP_PROTOCOL_NAME) {
+    local_relay_protocol = TransportProtocol::kTcp;
+  } else if (local.relay_protocol() == cricket::TLS_PROTOCOL_NAME) {
+    local_relay_protocol = TransportProtocol::kTls;
+  }
+  bool remote_relayed = (remote.type() == cricket::RELAY_PORT_TYPE);
+  auto network_route = webrtc::rffi::NetworkRoute{ local_adapter_type, local_adapter_type_under_vpn, local_relayed, local_relay_protocol, remote_relayed};
   callbacks_.onIceNetworkRouteChange(observer_, network_route);
 }
 

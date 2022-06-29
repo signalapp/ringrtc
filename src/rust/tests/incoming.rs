@@ -21,7 +21,9 @@ use ringrtc::core::signaling;
 use ringrtc::protobuf;
 use ringrtc::webrtc;
 use ringrtc::webrtc::media::MediaStream;
-use ringrtc::webrtc::peer_connection_observer::{NetworkAdapterType, NetworkRoute};
+use ringrtc::webrtc::peer_connection_observer::{
+    NetworkAdapterType, NetworkRoute, TransportProtocol,
+};
 
 #[macro_use]
 mod common;
@@ -542,7 +544,9 @@ fn update_bandwidth_when_relayed() {
         .inject_ice_network_route_changed(NetworkRoute {
             local_adapter_type: NetworkAdapterType::Unknown,
             local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
-            relayed: true,
+            local_relayed: true,
+            local_relay_protocol: TransportProtocol::Unknown,
+            remote_relayed: false,
         })
         .unwrap();
     cm.synchronize().expect(error_line!());
@@ -614,7 +618,9 @@ fn update_bandwidth_when_relayed() {
         .inject_ice_network_route_changed(NetworkRoute {
             local_adapter_type: NetworkAdapterType::Unknown,
             local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
-            relayed: false,
+            local_relayed: false,
+            local_relay_protocol: TransportProtocol::Unknown,
+            remote_relayed: false,
         })
         .unwrap();
     cm.synchronize().expect(error_line!());

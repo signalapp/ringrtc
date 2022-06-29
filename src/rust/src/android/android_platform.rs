@@ -405,7 +405,7 @@ impl Platform for AndroidPlatform {
         remote_peer: &Self::AppRemotePeer,
         network_route: NetworkRoute,
     ) -> Result<()> {
-        info!(
+        trace!(
             "on_network_route_changed(): network_route: {:?}",
             network_route
         );

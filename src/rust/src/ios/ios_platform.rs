@@ -206,7 +206,7 @@ impl Platform for IosPlatform {
         remote_peer: &Self::AppRemotePeer,
         network_route: NetworkRoute,
     ) -> Result<()> {
-        info!("on_network_route_changed(): {:?}", network_route);
+        trace!("on_network_route_changed(): {:?}", network_route);
 
         (self.app_interface.onNetworkRouteChanged)(
             self.app_interface.object,

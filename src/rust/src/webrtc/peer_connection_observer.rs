@@ -42,7 +42,7 @@ pub enum IceConnectionState {
 
 /// Stays in sync with the C++ value in rffi_defs.h.
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TransportProtocol {
     Udp,
     Tcp,
@@ -96,8 +96,9 @@ pub enum NetworkAdapterType {
 pub struct NetworkRoute {
     pub local_adapter_type: NetworkAdapterType,
     pub local_adapter_type_under_vpn: NetworkAdapterType,
-    // Either the local candidate or the remote candidate is a TURN candidate.
-    pub relayed: bool,
+    pub local_relayed: bool,
+    pub local_relay_protocol: TransportProtocol,
+    pub remote_relayed: bool,
 }
 
 /// The callbacks from C++ will ultimately go to an impl of this.

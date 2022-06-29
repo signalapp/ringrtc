@@ -294,7 +294,7 @@ impl BandwidthController {
     }
 
     fn relay_max(&self) -> Option<DataRate> {
-        if self.network_route.relayed {
+        if self.network_route.local_relayed || self.network_route.remote_relayed {
             Some(RELAYED_MAX_SEND_RATE)
         } else {
             None
@@ -496,7 +496,9 @@ where
                     network_route: NetworkRoute {
                         local_adapter_type: NetworkAdapterType::Unknown,
                         local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
-                        relayed: false,
+                        local_relayed: false,
+                        local_relay_protocol: TransportProtocol::Unknown,
+                        remote_relayed: false,
                     },
                 },
                 "webrtc",
@@ -2187,7 +2189,9 @@ mod tests {
             network_route: NetworkRoute {
                 local_adapter_type: NetworkAdapterType::Unknown,
                 local_adapter_type_under_vpn: NetworkAdapterType::Unknown,
-                relayed,
+                local_relayed: relayed,
+                local_relay_protocol: TransportProtocol::Unknown,
+                remote_relayed: false,
             },
         };
         (

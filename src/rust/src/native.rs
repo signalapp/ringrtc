@@ -599,7 +599,7 @@ impl Platform for NativePlatform {
         remote_peer: &Self::AppRemotePeer,
         network_route: NetworkRoute,
     ) -> Result<()> {
-        info!(
+        trace!(
             "NativePlatform::on_network_route_changed(): {:?}",
             network_route
         );
