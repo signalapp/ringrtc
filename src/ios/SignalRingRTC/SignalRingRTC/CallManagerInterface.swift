@@ -863,7 +863,7 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
         let remoteDeviceState = remoteDeviceStates.states[index]
 
         guard let userId = remoteDeviceState.user_id.asData() else {
-            Logger.debug("missing userId for demuxId: \(remoteDeviceState.demuxId)")
+            Logger.debug("missing userId for demuxId: 0x\(String(remoteDeviceState.demuxId, radix: 16))")
             continue
         }
 

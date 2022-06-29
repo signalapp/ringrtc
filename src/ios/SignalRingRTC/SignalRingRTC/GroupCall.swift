@@ -594,7 +594,7 @@ public class GroupCall {
 
     func handleIncomingVideoTrack(remoteDemuxId: UInt32, videoTrack: RTCVideoTrack) {
         AssertIsOnMainThread()
-        Logger.debug("handleIncomingVideoTrack() for remoteDemuxId: \(remoteDemuxId)")
+        Logger.debug("handleIncomingVideoTrack() for remoteDemuxId: 0x\(String(remoteDemuxId, radix: 16))")
 
         guard let remoteDeviceState = self.remoteDeviceStates[remoteDemuxId] else {
             Logger.debug("No remote device state found for remoteDemuxId")
