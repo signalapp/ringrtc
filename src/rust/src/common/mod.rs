@@ -96,7 +96,7 @@ pub type DeviceId = u32;
 ///      | terminated
 ///      V
 /// Terminated
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd)]
 pub enum CallState {
     /// The call has been created, but not yet started.
     NotYetStarted,
@@ -652,7 +652,7 @@ impl ConnectionState {
 
 /// The call direction.
 #[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallDirection {
     /// Incoming call.
     InComing = 0,
@@ -679,7 +679,7 @@ impl CallDirection {
 
 /// Type of media for a call at time of origination.
 #[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallMediaType {
     /// Call should start as audio only.
     Audio = 0,

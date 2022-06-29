@@ -208,7 +208,7 @@ pub enum ConnectionType {
     // This is like "signaling mode == unicast".
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConnectionId {
     call_id: CallId,
     remote_device_id: DeviceId,

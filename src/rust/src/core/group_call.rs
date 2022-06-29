@@ -262,7 +262,7 @@ pub trait Observer {
 // So the ConnectionState will remain Connecting until join() is called.
 // But updates to members joined (via handle_peek_changed)
 // will still be received even when only Connecting.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConnectionState {
     /// Connect() has not yet been called
     /// or disconnect() has been called
@@ -294,7 +294,7 @@ pub enum ConnectionState {
 //      | joined     |
 //      V            |
 //   Joined       -->|
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JoinState {
     /// Join() has not yet been called
     /// or leave() has been called
@@ -555,7 +555,7 @@ impl From<protobuf::group_call::device_to_device::Heartbeat> for HeartbeatState 
 }
 
 // The info about remote devices received from the SFU
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteDeviceState {
     pub demux_id: DemuxId,
     pub user_id: UserId,

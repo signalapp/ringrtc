@@ -26,7 +26,7 @@ extern "C" {
     ) -> jlong;
 }
 
-/// Get the native PeerConnection inside of the Java wrapper.
+// Get the native PeerConnection inside of the Java wrapper.
 extern "C" {
     pub fn Rust_borrowPeerConnectionFromJniOwnedPeerConnection(
         jni_owned_pc: i64,

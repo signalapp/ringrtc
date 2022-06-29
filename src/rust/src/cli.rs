@@ -275,7 +275,7 @@ impl CallEndpoint {
 
                 // Fill in fake group call things
                 let http_client = http::DelegatingClient::new(endpoint.clone());
-                let group_handler = Box::new(endpoint.clone());
+                let group_handler = Box::new(endpoint);
 
                 let platform = NativePlatform::new(
                     pcf.clone(),
@@ -517,7 +517,7 @@ impl SignalingSender for CallEndpoint {
             let sender_id = &state.peer_id;
             let sender_device_id = state.device_id;
             state.signaling_server.send_signaling(
-                &sender_id,
+                sender_id,
                 sender_device_id,
                 &recipient_id,
                 call_id,
@@ -685,7 +685,7 @@ impl SignalingServer {
             state
                 .endpoints_by_peer_id
                 .entry(peer_id)
-                .or_insert(Vec::with_capacity(1))
+                .or_insert_with(|| Vec::with_capacity(1))
                 .push(endpoint);
         });
     }

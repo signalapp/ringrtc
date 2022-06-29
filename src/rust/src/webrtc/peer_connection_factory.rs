@@ -97,7 +97,7 @@ impl IceServer {
 }
 
 /// Describes an audio input or output device.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AudioDevice {
     /// Name of the device
     pub name: String,

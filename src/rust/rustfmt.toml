@@ -1,4 +1,0 @@
-# rustfmt for ringrtc
-
-license_template_path        = "rustfmt.license-template"
-unstable_features            = true

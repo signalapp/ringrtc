@@ -353,7 +353,7 @@ impl Platform for AndroidPlatform {
             }
         };
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             jni_call_manager,
             "onStartCall",
@@ -386,7 +386,7 @@ impl Platform for AndroidPlatform {
             }
         };
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             self.jni_call_manager.as_obj(),
             "onEvent",
@@ -412,7 +412,7 @@ impl Platform for AndroidPlatform {
 
         let env = self.java_env()?;
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             self.jni_call_manager.as_obj(),
             "onNetworkRouteChanged",
@@ -438,7 +438,7 @@ impl Platform for AndroidPlatform {
 
         let env = self.java_env()?;
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             self.jni_call_manager.as_obj(),
             "onAudioLevels",
@@ -654,7 +654,7 @@ impl Platform for AndroidPlatform {
                 }
             };
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             jni_call_manager,
             "onSendHangup",
@@ -685,7 +685,7 @@ impl Platform for AndroidPlatform {
         let call_id_jlong = u64::from(call_id) as jlong;
         let receiver_device_id = receiver_device_id as jint;
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             jni_call_manager,
             "onSendBusy",
@@ -796,7 +796,7 @@ impl Platform for AndroidPlatform {
         let jni_call_context = app_call_context.to_jni();
         let jni_media_stream = incoming_media.global_ref(&env)?;
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             jni_call_manager,
             "onConnectMedia",
@@ -817,7 +817,7 @@ impl Platform for AndroidPlatform {
 
         let jni_call_context = app_call_context.to_jni();
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             jni_call_manager,
             "onCloseMedia",
@@ -873,7 +873,7 @@ impl Platform for AndroidPlatform {
 
         let jni_remote_peer = remote_peer.as_obj();
 
-        let _ = jni_call_method(
+        jni_call_method(
             &env,
             jni_call_manager,
             "onCallConcluded",

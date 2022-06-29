@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+#![allow(clippy::derive_partial_eq_without_eq)]
+
 pub mod group_call {
     include!(concat!(env!("OUT_DIR"), "/group_call.rs"));
 }

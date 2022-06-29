@@ -84,7 +84,7 @@ impl fmt::Debug for Message {
 // It's convenient to be able to now the type of a message without having
 // an entire message, so we have the related MessageType enum.
 #[repr(i32)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MessageType {
     Offer,
     Answer,

@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+// This lint is under review, check in a future nightly update.
+#![allow(clippy::significant_drop_in_scrutinee)]
+
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::{Arc, Mutex};
