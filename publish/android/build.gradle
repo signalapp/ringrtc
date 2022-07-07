@@ -1,47 +1,126 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-
 buildscript {
     repositories {
         jcenter()
         google()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.5.1'
+        classpath 'com.android.tools.build:gradle:7.0.3'
     }
 }
 
-allprojects {
-    repositories {
-        jcenter()
-        google()
+repositories {
+    jcenter()
+    google()
+}
+
+ext.version_number       = project.hasProperty("ringrtcVersion") ? ringrtcVersion : "0.0.1-SNAPSHOT"
+ext.isReleaseVersion     = ext.version_number.indexOf("-") == -1;
+ext.group_info           = "org.signal"
+
+ext.debug_jni_lib_dirs   = project.hasProperty("debugRingrtcLibDirs") ? Eval.me(debugRingrtcLibDirs) : []
+ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDirs") ? Eval.me(releaseRingrtcLibDirs) : []
+ext.releaseRepoUrl       = project.hasProperty("sonatypeRepo") ? sonatypeRepo
+    : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+ext.releaseRepoUsername  = project.hasProperty("signalSonatypeUsername") ? signalSonatypeUsername : ""
+ext.releaseRepoPassword  = project.hasProperty("signalSonatypePassword") ? signalSonatypePassword : ""
+
+ext.proguard_file = rootDir.getAbsolutePath() + '/proguard-rules.pro'
+
+tasks.withType(Javadoc) {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+
+archivesBaseName = "ringrtc-android"
+version          = version_number
+
+android {
+    compileSdkVersion 30
+    buildToolsVersion '30.0.2'
+
+    sourceSets {
+        release {
+            jniLibs.srcDirs = release_jni_lib_dirs
+        }
+        debug {
+            jniLibs.srcDirs = debug_jni_lib_dirs
+        }
+    }
+
+    defaultConfig {
+        consumerProguardFiles proguard_file
+    }
+
+    packagingOptions {
+        // Libraries are already stripped if necessary when linked.
+        doNotStrip "**/*.so"
     }
 }
 
-subprojects {
-    ext.version_number       = project.hasProperty("ringrtcVersion") ? ringrtcVersion : "0.0.1-SNAPSHOT"
-    ext.isReleaseVersion     = ext.version_number.indexOf("-") == -1;
-    ext.group_info           = "org.signal"
+dependencies {
+    for (String dir : release_jni_lib_dirs) {
+        releaseImplementation fileTree(dir: dir, include: ['*.jar'])
+    }
+    for (String dir : debug_jni_lib_dirs) {
+        debugImplementation fileTree(dir: dir, include: ['*.jar'])
+    }
+}
 
-    ext.debug_jni_lib_dirs   = project.hasProperty("debugRingrtcLibDirs") ? Eval.me(debugRingrtcLibDirs) : []
-    ext.debug_output_dir     = project.hasProperty("debugOutputDir") ? debugOutputDir : "/tmp/debug"
-    ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDirs") ? Eval.me(releaseRingrtcLibDirs) : []
-    ext.release_output_dir   = project.hasProperty("releaseOutputDir") ? releaseOutputDir : "/tmp/release"
-    ext.releaseRepoUrl       = project.hasProperty("sonatypeRepo") ? sonatypeRepo
-        : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
-    ext.releaseRepoUsername  = project.hasProperty("signalSonatypeUsername") ? signalSonatypeUsername : ""
-    ext.releaseRepoPassword  = project.hasProperty("signalSonatypePassword") ? signalSonatypePassword : ""
+afterEvaluate {
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.release
 
-    ext.proguard_file = rootDir.getAbsolutePath() + '/proguard-rules.pro'
+                group = group_info
+                artifactId = archivesBaseName
+                version = version_number
 
-    if (JavaVersion.current().isJava8Compatible()) {
-        allprojects {
-            tasks.withType(Javadoc) {
-                options.addStringOption('Xdoclint:none', '-quiet')
+                pom {
+                    name = 'ringrtc-android'
+                    packaging = 'aar'
+                    description = 'RingRTC for Android'
+                    url = 'https://github.com/signalapp/ringrtc/'
+
+                    scm {
+                        url = 'https://github.com/signalapp/ringrtc/'
+                        connection = 'scm:git:git@github.com:signalapp/ringrtc.git'
+                        developerConnection = 'scm:git:git@github.com:signalapp/ringrtc.git'
+                    }
+
+                    licenses {
+                        license {
+                            name = 'AGPL-3.0-only'
+                            url = 'https://www.gnu.org/licenses/agpl-3.0.txt'
+                            distribution = 'repo'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            name = 'Calling Team'
+                            organizationUrl = 'https://www.signal.org/'
+                        }
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                url = releaseRepoUrl
+                credentials {
+                    username = releaseRepoUsername
+                    password = releaseRepoPassword
+                }
             }
         }
     }
-}
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+    signing {
+        required { isReleaseVersion && gradle.taskGraph.hasTask(":publishMavenJavaPublicationToMavenRepository") }
+        sign publishing.publications.mavenJava
+    }
 }

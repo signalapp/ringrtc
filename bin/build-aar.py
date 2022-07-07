@@ -314,7 +314,6 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
             lib_dir = os.path.join(output_dir, 'libs')
             gradle_args = gradle_args + [
                 "-PdebugRingrtcLibDirs=['{}']".format(lib_dir),
-                "-PdebugOutputDir={}".format(output_dir),
             ]
         else:
             build_debug = False
@@ -322,7 +321,6 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
             lib_dir = os.path.join(output_dir, 'libs')
             gradle_args = gradle_args + [
                 "-PreleaseRingrtcLibDirs=['{}']".format(lib_dir),
-                "-PreleaseOutputDir={}".format(output_dir),
             ]
         CreateLibs(dry_run, build_dir, archs, output, build_debug, unstripped,
                    extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs,
@@ -331,13 +329,18 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
     if compile_only is True:
         return
 
-    gradle_args.extend(('debug:assembleDebug' if build_type == 'debug' else 'release:assembleRelease' for build_type in build_types))
+    gradle_args.extend(('assembleDebug' if build_type == 'debug' else 'assembleRelease' for build_type in build_types))
 
     if install_local is True:
-        gradle_args.append('installArchives')
+        if 'release' not in build_types:
+            raise Exception('The `debug` build type is not supported with '
+                    '--install-local. Remove --install-local and build again to '
+                    'have a debug AAR created in the Gradle output directory.')
+
+        gradle_args.append('publishToMavenLocal')
 
     if sonatype_repo is not None:
-        gradle_args.append('uploadArchives')
+        gradle_args.append(':publishMavenJavaPublicationToMavenRepository')
 
     gradle_args.extend(extra_gradle_args)
 
