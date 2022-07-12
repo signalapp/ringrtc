@@ -1563,13 +1563,15 @@ where
             // Take this opportunity to clear the outstanding rings table
             // (which should be small).
             outstanding_group_rings.retain(|_group_id, ring| !ring.has_expired());
-            // If there's an existing, non-expired ring, don't replace it.
-            outstanding_group_rings
-                .entry(group_id.clone())
-                .or_insert(OutstandingGroupRing {
+            // If there's an existing, non-expired ring, replace it so that the
+            // newly received ring will get cancelled upon joining.
+            outstanding_group_rings.insert(
+                group_id.clone(),
+                OutstandingGroupRing {
                     ring_id,
                     received: Instant::now(),
-                });
+                },
+            );
         }
 
         let mut self_for_timeout = self.clone();

@@ -2850,7 +2850,7 @@ fn group_call_ring_message_age_does_not_affect_ring_expiration() {
 }
 
 #[test]
-fn group_call_ring_first_ring_wins() {
+fn group_call_ring_last_ring_wins() {
     test_init();
 
     let context = TestContext::new();
@@ -2921,7 +2921,7 @@ fn group_call_ring_first_ring_wins() {
                 protobuf::signaling::CallMessage {
                     ring_response: Some(protobuf::signaling::call_message::RingResponse {
                         group_id: Some(group_id.to_vec()),
-                        ring_id: Some(first_ring_id.into()),
+                        ring_id: Some(second_ring_id.into()),
                         r#type: Some(
                             protobuf::signaling::call_message::ring_response::Type::Accepted.into()
                         ),
