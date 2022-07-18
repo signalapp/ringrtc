@@ -283,7 +283,7 @@ where
     /// Spawn a future on the worker runtime if enabled.
     fn worker_spawn<F>(&mut self, future: F)
     where
-        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         if let Some(worker_runtime) = &mut self.worker_runtime {
             worker_runtime.spawn(future);
@@ -305,7 +305,7 @@ where
                     do_work(call)
                 }
             })
-            .map_err(move |err| {
+            .unwrap_or_else(move |err| {
                 err_call.inject_internal_error(err, error_msg);
             }),
         );
@@ -318,7 +318,7 @@ where
         do_work: impl (FnOnce(Call<T>) -> Result<()>) + Send + 'static,
     ) {
         let mut err_call = call.clone();
-        self.worker_spawn(lazy(move |_| do_work(call)).map_err(move |err| {
+        self.worker_spawn(lazy(move |_| do_work(call)).unwrap_or_else(move |err| {
             err_call.inject_internal_error(err, error_msg);
         }));
     }
@@ -326,7 +326,7 @@ where
     /// Spawn a future on the notify runtime if enabled.
     fn notify_spawn<F>(&mut self, future: F)
     where
-        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         if let Some(notify_runtime) = &mut self.notify_runtime {
             notify_runtime.spawn(future);
@@ -440,7 +440,7 @@ where
             }
             call.notify_application(event)
         }
-        .map_err(move |err| {
+        .unwrap_or_else(move |err| {
             err_call.inject_internal_error(err, "Notify Application Future failed");
         });
 
@@ -455,7 +455,7 @@ where
             }
             call.notify_network_route_changed(network_route)
         }
-        .map_err(move |err| {
+        .unwrap_or_else(move |err| {
             err_call.inject_internal_error(err, "Notify Network Route Changed Future failed");
         });
 
@@ -475,7 +475,7 @@ where
             }
             call.notify_audio_levels(captured_level, received_level)
         }
-        .map_err(move |err| {
+        .unwrap_or_else(move |err| {
             err_call.inject_internal_error(err, "Notify Audio Levels Future failed");
         });
 
@@ -998,7 +998,7 @@ where
         info!("handle_internal_error():");
 
         let internal_error_future =
-            lazy(move |_| call.internal_error(error)).map_err(move |err: anyhow::Error| {
+            lazy(move |_| call.internal_error(error)).unwrap_or_else(move |err: anyhow::Error| {
                 error!("Processing internal error future failed: {}", err);
             });
 

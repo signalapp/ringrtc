@@ -532,7 +532,7 @@ where
         if let Some(fsm_receiver) = self.fsm_receiver.take() {
             info!("Starting Connection FSM for {}", self.connection_id);
             let connection_fsm = ConnectionStateMachine::new(fsm_receiver)?
-                .map_err(|e| info!("connection state machine returned error: {}", e));
+                .unwrap_or_else(|e| info!("connection state machine returned error: {}", e));
             context.worker_runtime.spawn(connection_fsm);
         } else {
             warn!(

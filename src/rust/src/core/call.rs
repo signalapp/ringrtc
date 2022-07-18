@@ -231,7 +231,7 @@ where
         let fsm_context = Context::new()?;
         let (fsm_sender, fsm_receiver) = futures::channel::mpsc::channel(256);
         let call_fsm = CallStateMachine::new(fsm_receiver)?
-            .map_err(|e| info!("call state machine returned error: {}", e));
+            .unwrap_or_else(|e| info!("call state machine returned error: {}", e));
         fsm_context.worker_runtime.spawn(call_fsm);
 
         let call = Self {
@@ -270,7 +270,7 @@ where
                     sleep.await;
                     call_clone
                         .inject_call_timeout()
-                        .map_err(|e| error!("Inject call timeout failed: {:?}", e))
+                        .unwrap_or_else(|e| error!("Inject call timeout failed: {:?}", e))
                 };
 
                 timeout_runtime.spawn(call_timeout_future);

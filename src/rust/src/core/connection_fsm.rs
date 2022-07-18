@@ -327,7 +327,7 @@ where
     /// Spawn a future on the worker runtime if enabled.
     fn worker_spawn<F>(&mut self, future: F)
     where
-        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         if let Some(worker_runtime) = &mut self.worker_runtime {
             worker_runtime.spawn(future);
@@ -337,7 +337,7 @@ where
     /// Spawn a future on the notify runtime if enabled.
     fn notify_spawn<F>(&mut self, future: F)
     where
-        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         if let Some(notify_runtime) = &mut self.notify_runtime {
             notify_runtime.spawn(future);
@@ -433,7 +433,7 @@ where
             }
             connection.notify_observer(event)
         })
-        .map_err(move |err| {
+        .unwrap_or_else(move |err| {
             err_connection.inject_internal_error(err, "Notify Observer Future failed");
         });
 
@@ -486,7 +486,7 @@ where
             connection.send_accepted_via_rtp_data()?;
             Ok(())
         })
-        .map_err(move |err| {
+        .unwrap_or_else(move |err| {
             err_connection.inject_internal_error(err, "Sending Connected failed");
         });
         self.worker_spawn(connected_future);
@@ -735,8 +735,8 @@ where
     ) -> Result<()> {
         if state.can_send_hangup_via_rtp() {
             let mut err_connection = connection.clone();
-            let hangup_future =
-                lazy(move |_| connection.send_hangup_via_rtp_data(hangup)).map_err(move |err| {
+            let hangup_future = lazy(move |_| connection.send_hangup_via_rtp_data(hangup))
+                .unwrap_or_else(move |err| {
                     err_connection.inject_internal_error(err, "Sending Hangup failed");
                 });
 
@@ -762,7 +762,7 @@ where
                 }
                 connection.update_sender_status_from_fsm(sender_status)
             })
-            .map_err(move |err| {
+            .unwrap_or_else(move |err| {
                 err_connection.inject_internal_error(err, "Sending local sender status failed");
             });
 
@@ -788,7 +788,7 @@ where
 
                 connection.update_bandwidth_mode(bandwidth_mode)
             })
-            .map_err(move |err| {
+            .unwrap_or_else(move |err| {
                 err_connection.inject_internal_error(err, "Updating bandwidth mode failed");
             });
 
@@ -819,7 +819,7 @@ where
                 }
                 connection.buffer_local_ice_candidates(candidates)
             })
-            .map_err(move |err| {
+            .unwrap_or_else(move |err| {
                 err_connection.inject_internal_error(err, "IceFuture failed");
             });
 
@@ -951,7 +951,7 @@ where
             }
             connection.internal_error(error)
         })
-        .map_err(|err| {
+        .unwrap_or_else(|err| {
             error!("Notify Error Future failed: {}", err);
             // Nothing else we can do here.
         });
@@ -974,7 +974,7 @@ where
                 }
                 connection.handle_received_incoming_media(stream)
             })
-            .map_err(move |err| {
+            .unwrap_or_else(move |err| {
                 err_connection.inject_internal_error(err, "Add Media Stream Future failed");
             });
 

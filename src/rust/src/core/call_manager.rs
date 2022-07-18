@@ -73,7 +73,7 @@ macro_rules! handle_active_call_api {
         info!("API:{}():", stringify!($f));
         let mut call_manager = $s.clone();
         let mut cm_error = $s.clone();
-        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).map_err(move |err| {
+        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).unwrap_or_else(move |err| {
             error!("Future {} failed: {}", stringify!($f), err);
             let _ = cm_error.internal_api_error( err);
         });
@@ -113,7 +113,7 @@ macro_rules! handle_api {
     ) => {{
         let mut call_manager = $s.clone();
         info!("API:{}():", stringify!($f));
-        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).map_err(move |err| {
+        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).unwrap_or_else(move |err| {
             error!("Future {} failed: {}", stringify!($f), err);
         });
         $s.worker_spawn(future)
@@ -379,7 +379,7 @@ where
         let future = lazy(move |_| {
             call_manager.handle_call(remote_peer, call_id, call_media_type, local_device_id)
         })
-        .map_err(move |err| {
+        .unwrap_or_else(move |err| {
             error!("Handle call failed: {}", err);
             cm_error.internal_create_api_error(&remote_peer_error, call_id, err);
         });
@@ -502,7 +502,7 @@ where
         let remote_peer_error = remote_peer.clone();
         let future =
             lazy(move |_| call_manager.handle_received_offer(remote_peer, call_id, received))
-                .map_err(move |err| {
+                .unwrap_or_else(move |err| {
                     error!("Handle received offer failed: {}", err);
                     cm_error.internal_create_api_error(&remote_peer_error, call_id, err);
                 });
@@ -705,7 +705,7 @@ where
     /// Spawn a future on the worker runtime if enabled.
     fn worker_spawn<F>(&mut self, future: F) -> Result<()>
     where
-        F: Future<Output = std::result::Result<(), ()>> + Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         let mut worker_runtime = self.worker_runtime.lock()?;
         if let Some(worker_runtime) = &mut *worker_runtime {
@@ -732,7 +732,7 @@ where
                 .into())
             }
         })
-        .map_err(move |err: anyhow::Error| {
+        .unwrap_or_else(move |err: anyhow::Error| {
             error!("Close call manager future failed: {}", err);
             // Not much else to do here.
         });
@@ -893,7 +893,7 @@ where
             }
             call_manager.terminate_and_drop_call(call_id)
         })
-        .map_err(move |err| {
+        .unwrap_or_else(move |err| {
             error!("Conclude call future failed: {}", err);
             if let Ok(remote_peer) = call_error.remote_peer() {
                 let _ = cm_error.notify_application(
@@ -1587,7 +1587,7 @@ where
                 );
                 Ok(())
             }
-            .map_err(|err: anyhow::Error| {
+            .unwrap_or_else(|err: anyhow::Error| {
                 error!("error handling group ring timeout: {}", err);
             }),
         )?;
