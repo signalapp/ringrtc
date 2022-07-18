@@ -13,6 +13,5 @@ There are a few places where minSdkVersion and targetSdkVersion show
 up in the build of RingRTC for Android.  Generally try to keep them in
 sync with Signal-Android/build.gradle.
 
-1. bin/install-ndk-toolchains -- which toolchain to install?
 1. src/android/AndroidManifest.xml -- what supported versions in our .aar
 

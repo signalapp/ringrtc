@@ -18,12 +18,20 @@ if (is_android) {
 
   if (target_cpu == "arm") {
     cargo_target = "armv7-linux-androideabi"
+    clang_target = "armv7a-linux-androideabi"
+    android_api_level = android32_ndk_api_level
   } else if (target_cpu == "arm64") {
     cargo_target = "aarch64-linux-android"
+    clang_target = cargo_target
+    android_api_level = android64_ndk_api_level
   } else if (target_cpu == "x86") {
     cargo_target = "i686-linux-android"
+    clang_target = cargo_target
+    android_api_level = android32_ndk_api_level
   } else if (target_cpu == "x64") {
     cargo_target = "x86_64-linux-android"
+    clang_target = cargo_target
+    android_api_level = android64_ndk_api_level
   }
   assert(defined(cargo_target), "Unsupported target_cpu for cargo: $target_cpu")
 
@@ -132,6 +140,7 @@ if (is_android) {
     }
 
     args += [ "--",
+              "-C", "linker=" + rebase_path(android_toolchain_root) + "/bin/" + clang_target + android_api_level + "-clang",
               "-C", "link-arg=-fuse-ld=lld",
               "-C", "link-arg=-Wl,--dynamic-linker,/system/bin/linker",
               "-L", "native=" + rebase_path(root_build_dir),
