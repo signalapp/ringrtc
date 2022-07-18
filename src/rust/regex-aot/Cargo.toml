@@ -1,0 +1,20 @@
+#
+# Copyright 2022 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+[package]
+name = "regex-aot"
+version = "0.1.0"
+authors = ["Calling Team <callingteam@signal.org>"]
+edition = "2018"
+license = "AGPL-3.0-only"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+regex-automata = "0.1.10"
+syn = "1.0"

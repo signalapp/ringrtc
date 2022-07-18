@@ -780,10 +780,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex-syntax"
-version = "0.6.25"
+name = "regex-aot"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex-automata",
+ "syn",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
+checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
+dependencies = [
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.6.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
 
 [[package]]
 name = "remove_dir_all"
@@ -832,7 +851,8 @@ dependencies = [
  "prost-build",
  "rand",
  "rand_chacha",
- "regex",
+ "regex-aot",
+ "regex-automata",
  "rustls",
  "serde",
  "serde_json",

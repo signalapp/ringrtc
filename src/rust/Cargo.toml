@@ -25,6 +25,8 @@ path = "src/gctc.rs"
 required-features = ["native", "http"]
 
 [dependencies]
+regex-aot         = { path = "regex-aot" }
+
 aes               = { version = "0.7", features = ["ctr"] }
 anyhow            = { version = "1.0"    }
 base64            = { version = "0.13"   }
@@ -37,7 +39,7 @@ log               = { version = "0.4", features = ["std", "max_level_trace", "re
 num_enum          = { version = "0.5"    }
 prost             = { version = "0.8"    }
 rand              = { version = "0.7", features = [] }
-regex             = { version = "1.5.5"  }
+regex-automata    = { version = "0.1.10" }
 hkdf              = { version = "0.11"   }
 serde_json        = { version = "1.0"    }
 serde             = { version = "1.0", features = ["derive"] }

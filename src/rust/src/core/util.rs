@@ -5,14 +5,10 @@
 
 //! Foreign Function Interface utility helpers and types.
 
+use std::borrow::Cow;
 use std::mem;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
-
-#[cfg(any(not(debug_assertions), test))]
-use lazy_static::lazy_static;
-#[cfg(any(not(debug_assertions), test))]
-use regex::Regex;
 
 use futures::future::Future;
 use tokio::runtime;
@@ -120,25 +116,25 @@ pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
     Ok(object)
 }
 
-#[allow(dead_code)]
-#[cfg(all(debug_assertions, not(test)))]
-fn redact_ice_password(text: &str) -> String {
-    text.to_string()
-}
-
-#[allow(dead_code)]
 #[cfg(any(not(debug_assertions), test))]
-fn redact_ice_password(text: &str) -> String {
-    let mut lines = text.lines().collect::<Vec<&str>>();
+fn redact_ice_password(text: Cow<'_, str>) -> Cow<'_, str> {
+    let mut lines = text.lines();
+    let first_ice_line_idx = match lines.position(|line| line.contains("ice-pwd")) {
+        Some(idx) => idx,
+        None => {
+            return text;
+        }
+    };
 
-    for line in lines.iter_mut() {
+    let mut result: Vec<_> = text.lines().collect();
+    for line in result[first_ice_line_idx..].iter_mut() {
         // Redact entire line as needed to mask Ice Password.
         if line.contains("ice-pwd") {
             *line = "a=ice-pwd:[ REDACTED ]";
         }
     }
 
-    lines.join("\n")
+    result.join("\n").into()
 }
 
 // Credit to the bulk of this RE to @syzdek on github.
@@ -172,68 +168,54 @@ fn redact_ice_password(text: &str) -> String {
 //            :((:IPV6SEG){1,7}|:)|                  # ::2:3:4:5:6:7:8    ::2:3:4:5:6:7:8  ::8       ::
 //            )
 
-#[allow(dead_code)]
-#[cfg(all(debug_assertions, not(test)))]
-fn redact_ipv6(text: &str) -> String {
-    text.to_string()
-}
-
-#[allow(dead_code)]
 #[cfg(any(not(debug_assertions), test))]
-fn redact_ipv6(text: &str) -> String {
-    lazy_static! {
-        static ref RE: Option<Regex> = {
-            let re_exps = [
-                "[Ff][Ee]80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}",
-                "(::)?([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])",
-                "([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}",
-                "([0-9a-fA-F]{1,4}:){1,1}(:[0-9a-fA-F]{1,4}){1,6}",
-                "([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}",
-                "([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}",
-                "([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}",
-                "([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}",
-                "([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}",
-                "([0-9a-fA-F]{1,4}:){1,7}:",
-                "::([fF]{4}(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])",
-                ":((:[0-9a-fA-F]{1,4}){1,7}|:)",
-            ];
-            let re = re_exps.join("|");
-            match Regex::new(&re) {
-                Ok(v) => Some(v),
-                Err(_) => None,
-            }
-        };
-    }
-
-    match &*RE {
-        Some(v) => v.replace_all(text, "[REDACTED ipv6]").to_string(),
-        None => "[REDACTED]".to_string(),
-    }
+fn redact_ipv6(text: Cow<'_, str>) -> Cow<'_, str> {
+    let re = regex_aot::regex!("\
+        [Ff][Ee]80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|\
+        (::)?([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|\
+        ([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|\
+        ([0-9a-fA-F]{1,4}:){1,1}(:[0-9a-fA-F]{1,4}){1,6}|\
+        ([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|\
+        ([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|\
+        ([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|\
+        ([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|\
+        ([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|\
+        ([0-9a-fA-F]{1,4}:){1,7}:|\
+        ::([fF]{4}(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|\
+        :((:[0-9a-fA-F]{1,4}){1,7}|:)\
+    ");
+    replace_all(text, re, "[REDACTED ipv6]")
 }
 
-#[allow(dead_code)]
-#[cfg(all(debug_assertions, not(test)))]
-fn redact_ipv4(text: &str) -> String {
-    text.to_string()
-}
-
-#[allow(dead_code)]
 #[cfg(any(not(debug_assertions), test))]
-fn redact_ipv4(text: &str) -> String {
-    lazy_static! {
-        static ref RE: Option<Regex> = {
-            let re = "(((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))\\.){3,3}((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))";
-            match Regex::new(re) {
-                Ok(v) => Some(v),
-                Err(_) => None,
-            }
-        };
+fn replace_all<'a>(
+    text: Cow<'a, str>,
+    re: regex_automata::Regex<impl regex_automata::DFA>,
+    replacement: &str,
+) -> Cow<'a, str> {
+    let mut result = String::new();
+    let mut end_of_previous_match = 0;
+    for (start, end) in re.find_iter(text.as_bytes()) {
+        debug_assert!(
+            end_of_previous_match <= start,
+            "should not produce overlapping results"
+        );
+        result.push_str(&text[end_of_previous_match..start]);
+        result.push_str(replacement);
+        end_of_previous_match = end;
     }
+    if end_of_previous_match == 0 {
+        text
+    } else {
+        result.push_str(&text[end_of_previous_match..]);
+        result.into()
+    }
+}
 
-    match &*RE {
-        Some(v) => v.replace_all(text, "[REDACTED ipv4]").to_string(),
-        None => "[REDACTED]".to_string(),
-    }
+#[cfg(any(not(debug_assertions), test))]
+fn redact_ipv4(text: Cow<'_, str>) -> Cow<'_, str> {
+    let re = regex_aot::regex!("(((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))\\.){3,3}((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))");
+    replace_all(text, re, "[REDACTED ipv4]")
 }
 
 /// Scrubs off sensitive information from the string for public
@@ -241,16 +223,16 @@ fn redact_ipv4(text: &str) -> String {
 /// - ICE passwords
 /// - IPv4 and IPv6 addresses
 #[cfg(not(debug_assertions))]
-pub fn redact_string(text: &str) -> String {
-    let mut string = redact_ice_password(text);
-    string = redact_ipv6(&string);
-    redact_ipv4(&string)
+pub fn redact_string<'a>(text: impl Into<Cow<'a, str>>) -> Cow<'a, str> {
+    let mut string = redact_ice_password(text.into());
+    string = redact_ipv6(string);
+    redact_ipv4(string)
 }
 
 /// For debug builds, redacting won't do anything.
 #[cfg(debug_assertions)]
-pub fn redact_string(text: &str) -> String {
-    text.to_string()
+pub fn redact_string<'a>(text: impl Into<Cow<'a, str>>) -> Cow<'a, str> {
+    text.into()
 }
 
 /// Encodes a slice of bytes representing a UUID as a string. Returns an empty
@@ -333,6 +315,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn check_replace_all() {
+        let re = regex_aot::regex!("bbb");
+        {
+            let test_str = "aaa bbb ccc bbbb ddd";
+            let result = replace_all(test_str.into(), re.clone(), "x");
+            assert_eq!("aaa x ccc xb ddd", result);
+        }
+        {
+            let test_str = "bbb ccc bbbb ddd";
+            let result = replace_all(test_str.into(), re.clone(), "x");
+            assert_eq!("x ccc xb ddd", result);
+        }
+        {
+            let test_str = "aaa bbb ccc bbb";
+            let result = replace_all(test_str.into(), re.clone(), "x");
+            assert_eq!("aaa x ccc x", result);
+        }
+        {
+            let test_str = "bbbbbbbbb";
+            let result = replace_all(test_str.into(), re, "x");
+            assert_eq!("xxx", result);
+        }
+    }
+
+    #[test]
     fn check_ipv6() {
         let addrs = [
             "fe80::2d8:61ff:fe57:83f6",
@@ -392,10 +399,10 @@ mod tests {
             for p in prefix.iter() {
                 for s in suffix.iter() {
                     let addr = format!("{}{}{}", p, a, s);
-                    let scrubbed = redact_ipv6(&addr);
+                    let scrubbed = redact_ipv6(Cow::from(&addr));
                     assert_eq!(
-                        (&addr, scrubbed),
-                        (&addr, format!("{}[REDACTED ipv6]{}", p, s))
+                        (&addr, &*scrubbed),
+                        (&addr, &*format!("{}[REDACTED ipv6]{}", p, s))
                     );
                 }
             }
@@ -441,13 +448,23 @@ mod tests {
             for p in prefix.iter() {
                 for s in suffix.iter() {
                     let addr = format!("{}{}{}", p, a, s);
-                    let scrubbed = redact_ipv4(&addr);
+                    let scrubbed = redact_ipv4(Cow::from(&addr));
                     assert_eq!(
-                        (&addr, scrubbed),
-                        (&addr, format!("{}[REDACTED ipv4]{}", p, s))
+                        (&addr, &*scrubbed),
+                        (&addr, &*format!("{}[REDACTED ipv4]{}", p, s))
                     );
                 }
             }
         }
+    }
+
+    #[test]
+    fn check_ice_pwd() {
+        let test_str = "abc\nice-pwd\ndef\n ice-pwd \nghi";
+        let result = redact_ice_password(test_str.into());
+        assert_eq!(
+            "abc\na=ice-pwd:[ REDACTED ]\ndef\na=ice-pwd:[ REDACTED ]\nghi",
+            result,
+        );
     }
 }
