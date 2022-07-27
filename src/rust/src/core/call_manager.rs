@@ -207,6 +207,84 @@ enum ReceivedOfferCollision {
     ReCall,
 }
 
+/// Management of 1:1 call messages that arrive before the offer for a particular call.
+///
+/// We don't save all message kinds here, only the ones that can affect an incoming call.
+enum PendingCallMessages {
+    None,
+    IceCandidates {
+        call_id: CallId,
+        received: Vec<signaling::ReceivedIce>,
+    },
+    Hangup {
+        call_id: CallId,
+        received: signaling::ReceivedHangup,
+    },
+}
+
+impl PendingCallMessages {
+    fn save_ice_candidates(&mut self, new_call_id: CallId, new_received: signaling::ReceivedIce) {
+        info!("no active call; saving ice candidates for {}", new_call_id);
+        match self {
+            PendingCallMessages::IceCandidates { call_id, received } if call_id == &new_call_id => {
+                // Avoid growing unbounded.
+                if received.len() >= 30 {
+                    received.remove(0);
+                }
+                received.push(new_received);
+                return;
+            }
+            PendingCallMessages::Hangup { call_id, .. } if call_id == &new_call_id => {
+                // Ice candidates arriving after a hangup are never needed.
+                return;
+            }
+            PendingCallMessages::IceCandidates { call_id, .. }
+            | PendingCallMessages::Hangup { call_id, .. } => {
+                warn!("dropping pending messages for {}", call_id);
+            }
+            PendingCallMessages::None => {}
+        }
+        *self = PendingCallMessages::IceCandidates {
+            call_id: new_call_id,
+            received: vec![new_received],
+        }
+    }
+
+    fn save_hangup(&mut self, new_call_id: CallId, new_received: signaling::ReceivedHangup) {
+        info!("no active call; saving hangup for {}", new_call_id);
+        match self {
+            PendingCallMessages::IceCandidates { call_id, .. } if call_id == &new_call_id => {
+                info!(
+                    "discarding pending ice candidates for {} in favor of hangup",
+                    call_id
+                );
+            }
+            PendingCallMessages::Hangup { call_id, .. } if call_id == &new_call_id => {
+                error!(
+                    "received two hangup messages for {}; taking the later one",
+                    call_id
+                );
+            }
+            PendingCallMessages::IceCandidates { call_id, .. }
+            | PendingCallMessages::Hangup { call_id, .. } => {
+                warn!("dropping pending messages for {}", call_id);
+            }
+            PendingCallMessages::None => {}
+        }
+
+        *self = PendingCallMessages::Hangup {
+            call_id: new_call_id,
+            received: new_received,
+        }
+    }
+}
+
+impl Default for PendingCallMessages {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 pub struct CallManager<T>
 where
     T: Platform,
@@ -219,6 +297,8 @@ where
     call_by_call_id: Arc<CallMutex<HashMap<CallId, Call<T>>>>,
     /// CallId of the active call.
     active_call_id: Arc<CallMutex<Option<CallId>>>,
+    /// 1:1 call messages that arrived before the Offer for a particular call.
+    pending_call_messages: Arc<CallMutex<PendingCallMessages>>,
     /// Map of all group calls.
     group_call_by_client_id: Arc<CallMutex<HashMap<group_call::ClientId, group_call::Client>>>,
     /// Next value of the group call client id (sequential).
@@ -290,6 +370,7 @@ where
             self_uuid: Arc::clone(&self.self_uuid),
             call_by_call_id: Arc::clone(&self.call_by_call_id),
             active_call_id: Arc::clone(&self.active_call_id),
+            pending_call_messages: Arc::clone(&self.pending_call_messages),
             group_call_by_client_id: Arc::clone(&self.group_call_by_client_id),
             next_group_call_client_id: Arc::clone(&self.next_group_call_client_id),
             outstanding_group_rings: Arc::clone(&self.outstanding_group_rings),
@@ -322,6 +403,10 @@ where
             self_uuid: Arc::new(CallMutex::new(None, "self_uuid")),
             call_by_call_id: Arc::new(CallMutex::new(HashMap::new(), "call_by_call_id")),
             active_call_id: Arc::new(CallMutex::new(None, "active_call_id")),
+            pending_call_messages: Arc::new(CallMutex::new(
+                PendingCallMessages::None,
+                "pending_individual_call_messages",
+            )),
             group_call_by_client_id: Arc::new(CallMutex::new(
                 HashMap::new(),
                 "group_call_by_client_id",
@@ -1300,7 +1385,27 @@ where
                 *active_call_id = Some(incoming_call_id);
                 incoming_call.start_timeout_timer(TIME_OUT_PERIOD)?;
                 incoming_call.handle_received_offer(received)?;
-                incoming_call.inject_start_call()?
+                incoming_call.inject_start_call()?;
+
+                match std::mem::take(&mut *self.pending_call_messages.lock()?) {
+                    PendingCallMessages::None => {}
+                    PendingCallMessages::IceCandidates { call_id, received }
+                        if call_id == incoming_call_id =>
+                    {
+                        for received in received {
+                            incoming_call.inject_received_ice(received)?;
+                        }
+                    }
+                    PendingCallMessages::Hangup { call_id, received }
+                        if call_id == incoming_call_id =>
+                    {
+                        incoming_call.inject_received_hangup(received)?;
+                    }
+                    PendingCallMessages::IceCandidates { call_id, .. }
+                    | PendingCallMessages::Hangup { call_id, .. } => {
+                        info!("dropping pending messages for {}", call_id);
+                    }
+                }
             }
         }
         Ok(())
@@ -1349,13 +1454,31 @@ where
             )
         );
 
-        let mut active_call = check_active_call!(self, "handle_received_ice");
-        if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
-            return Ok(());
+        match self.active_call() {
+            Ok(mut active_call) if active_call.call_id() == call_id => {
+                active_call.inject_received_ice(received)?;
+            }
+            Ok(active_call) => {
+                if active_call.direction() == CallDirection::OutGoing {
+                    // Save the ICE candidates anyway, in case we have a glare scenario.
+                    self.pending_call_messages
+                        .lock()?
+                        .save_ice_candidates(call_id, received);
+                }
+            }
+            Err(_) => {
+                if *self.busy.lock()? {
+                    // We're in a group call. Discard the candidates.
+                } else {
+                    // Save it for later in case it's arriving out-of-order.
+                    self.pending_call_messages
+                        .lock()?
+                        .save_ice_candidates(call_id, received);
+                }
+            }
         }
 
-        active_call.inject_received_ice(received)
+        Ok(())
     }
 
     /// Handle received_hangup() API from application.
@@ -1373,13 +1496,31 @@ where
             )
         );
 
-        let mut active_call = check_active_call!(self, "handle_received_hangup");
-        if active_call.call_id() != call_id {
-            ringbenchx!(RingBench::Cm, RingBench::App, "inactive call_id");
-            return Ok(());
+        match self.active_call() {
+            Ok(mut active_call) if active_call.call_id() == call_id => {
+                active_call.inject_received_hangup(received)?;
+            }
+            Ok(active_call) => {
+                if active_call.direction() == CallDirection::OutGoing {
+                    // Save the hangup anyway, in case we have a glare scenario.
+                    self.pending_call_messages
+                        .lock()?
+                        .save_hangup(call_id, received);
+                }
+            }
+            Err(_) => {
+                if *self.busy.lock()? {
+                    // We're in a group call. Discard the hangup.
+                } else {
+                    // Save it for later in case it's arriving out-of-order.
+                    self.pending_call_messages
+                        .lock()?
+                        .save_hangup(call_id, received);
+                }
+            }
         }
 
-        active_call.inject_received_hangup(received)
+        Ok(())
     }
 
     /// Handle received_busy() API from application.
