@@ -539,8 +539,6 @@ public final class GroupCall {
      *
      */
     void handleAudioLevels(int capturedLevel, List<ReceivedAudioLevel> receivedLevels) {
-        Log.d(TAG, "handleAudioLevels():");
-
         this.localDeviceState.audioLevel = capturedLevel;
         for (ReceivedAudioLevel received : receivedLevels) {
             RemoteDeviceState remoteDeviceState = this.remoteDeviceStates.get(received.demuxId);
