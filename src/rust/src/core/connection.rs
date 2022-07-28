@@ -40,7 +40,9 @@ use crate::protobuf;
 
 use crate::webrtc;
 use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::{AudioEncoderConfig, MediaStream, VideoFrame, VideoSink};
+use crate::webrtc::media::{
+    AudioEncoderConfig, MediaStream, VideoFrame, VideoFrameMetadata, VideoSink,
+};
 use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, SendRates};
 use crate::webrtc::peer_connection_observer::{
     IceConnectionState, NetworkAdapterType, NetworkRoute, PeerConnectionObserverTrait,
@@ -2056,9 +2058,12 @@ where
     fn handle_incoming_video_frame(
         &mut self,
         track_id: u32,
-        video_frame: VideoFrame,
+        _video_frame_metadata: VideoFrameMetadata,
+        video_frame: Option<VideoFrame>,
     ) -> Result<()> {
-        if let Some(incoming_video_sink) = self.incoming_video_sink.as_ref() {
+        if let (Some(incoming_video_sink), Some(video_frame)) =
+            (self.incoming_video_sink.as_ref(), video_frame)
+        {
             incoming_video_sink.on_video_frame(track_id, video_frame)
         }
         Ok(())

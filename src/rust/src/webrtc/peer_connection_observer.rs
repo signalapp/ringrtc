@@ -132,7 +132,8 @@ pub trait PeerConnectionObserverTrait {
     fn handle_incoming_video_frame(
         &mut self,
         _track_id: u32,
-        _video_frame: VideoFrame,
+        _video_frame_metadata: VideoFrameMetadata,
+        _video_frame: Option<VideoFrame>,
     ) -> Result<()> {
         Ok(())
     }
@@ -399,9 +400,16 @@ extern "C" fn pc_observer_OnVideoFrame<T>(
     if let Some(observer) = unsafe { observer.as_mut() } {
         debug!("pc_observer_OnVideoFrame(): track_id: {}", track_id,);
         // TODO: Figure out how to pass in a PeerConnection as an owner.
-        let frame = VideoFrame::from_buffer(metadata, webrtc::Arc::from_owned(rffi_buffer));
+        let frame = if !rffi_buffer.is_null() {
+            Some(VideoFrame::from_buffer(
+                metadata,
+                webrtc::Arc::from_owned(rffi_buffer),
+            ))
+        } else {
+            None
+        };
         observer
-            .handle_incoming_video_frame(track_id, frame)
+            .handle_incoming_video_frame(track_id, metadata, frame)
             .unwrap_or_else(|e| error!("Problems handling incoming video frame: {}", e));
     } else {
         error!("pc_observer_OnVideoFrame called with null observer");
@@ -676,6 +684,7 @@ where
         observer: webrtc::ptr::Borrowed<T>,
         enable_frame_encryption: bool,
         enable_video_frame_event: bool,
+        enable_video_frame_content: bool,
     ) -> Result<Self> {
         debug!(
             "create_pc_observer(): observer_ptr: {:p}",
@@ -718,6 +727,7 @@ where
                 webrtc::ptr::Borrowed::from_ptr(pc_observer_callbacks_ptr).to_void(),
                 enable_frame_encryption,
                 enable_video_frame_event,
+                enable_video_frame_content,
             )
         });
 

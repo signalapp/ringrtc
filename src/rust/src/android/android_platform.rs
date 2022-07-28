@@ -1187,6 +1187,15 @@ impl Platform for AndroidPlatform {
                         continue;
                     }
                 };
+                let jni_client_decoded_height = match self
+                    .get_optional_u32_long_object(&env, remote_device_state.client_decoded_height)
+                {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("jni_client_decoded_height: {:?}", error);
+                        continue;
+                    }
+                };
 
                 let args = jni_args!((
                     jni_demux_id => long,
@@ -1199,6 +1208,7 @@ impl Platform for AndroidPlatform {
                     jni_added_time => long,
                     jni_speaker_time => long,
                     jni_forwarding_video => java.lang.Boolean,
+                    jni_client_decoded_height => java.lang.Long,
                 ) -> void);
 
                 let remote_device_state_obj =

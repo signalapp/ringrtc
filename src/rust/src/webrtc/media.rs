@@ -90,7 +90,7 @@ pub enum VideoRotation {
 #[derive(Debug, Clone, Copy)]
 pub struct VideoFrameMetadata {
     width: u32,
-    height: u32,
+    pub height: u32,
     rotation: VideoRotation,
 }
 

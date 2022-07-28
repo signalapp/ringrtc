@@ -43,7 +43,7 @@ use crate::{
     protobuf,
     webrtc::{
         self,
-        media::{AudioTrack, VideoFrame, VideoSink, VideoTrack},
+        media::{AudioTrack, VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack},
         peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, SendRates},
         peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
         peer_connection_observer::{
@@ -161,6 +161,7 @@ pub enum RemoteDevicesChangedReason {
     SpeakerTimeChanged(DemuxId),
     HeartbeatStateChanged(DemuxId),
     ForwardedVideosChanged,
+    DecodedVideoHeightChanged,
 }
 
 // The callbacks from the Call to the Observer of the call.
@@ -573,6 +574,7 @@ pub struct RemoteDeviceState {
     pub speaker_time: Option<SystemTime>,
     pub leaving_received: bool,
     pub forwarding_video: Option<bool>,
+    pub client_decoded_height: Option<u32>,
 }
 
 fn as_unix_millis(t: Option<SystemTime>) -> u64 {
@@ -600,6 +602,7 @@ impl RemoteDeviceState {
             speaker_time: None,
             leaving_received: false,
             forwarding_video: None,
+            client_decoded_height: None,
         }
     }
 
@@ -2942,8 +2945,13 @@ impl Client {
                     demux_ids_with_video
                 );
                 for remote_device in state.remote_devices.iter_mut() {
-                    remote_device.forwarding_video =
-                        Some(forwarding_video_demux_ids.contains(&remote_device.demux_id));
+                    let is_forwarding =
+                        forwarding_video_demux_ids.contains(&remote_device.demux_id);
+                    remote_device.forwarding_video = Some(is_forwarding);
+
+                    if !is_forwarding {
+                        remote_device.client_decoded_height = None;
+                    }
                 }
                 state.forwarding_video_demux_ids = forwarding_video_demux_ids;
                 state.observer.handle_remote_devices_changed(
@@ -2969,7 +2977,12 @@ impl Client {
                     remote_device.heartbeat_rtp_timestamp = Some(timestamp);
                     let heartbeat_state = HeartbeatState::from(heartbeat);
                     if remote_device.heartbeat_state != heartbeat_state {
+                        if heartbeat_state.video_muted == Some(true) {
+                            remote_device.client_decoded_height = None;
+                        }
+
                         remote_device.heartbeat_state = heartbeat_state;
+
                         state.observer.handle_remote_devices_changed(
                             state.client_id,
                             &state.remote_devices,
@@ -3037,21 +3050,24 @@ fn encode_proto(msg: impl prost::Message) -> Result<BytesMut> {
 struct PeerConnectionObserverImpl {
     client: Option<Client>,
     incoming_video_sink: Option<Box<dyn VideoSink>>,
+    last_height_by_track_id: HashMap<u32, u32>,
 }
 
 impl PeerConnectionObserverImpl {
     fn uninitialized(
         incoming_video_sink: Option<Box<dyn VideoSink>>,
     ) -> Result<(Box<Self>, PeerConnectionObserver<Self>)> {
-        let enable_video_frame_event = incoming_video_sink.is_some();
+        let enable_video_frame_content = incoming_video_sink.is_some();
         let boxed_observer_impl = Box::new(Self {
             client: None,
             incoming_video_sink,
+            last_height_by_track_id: HashMap::new(),
         });
         let observer = PeerConnectionObserver::new(
             webrtc::ptr::Borrowed::from_ptr(&*boxed_observer_impl),
             true, /* enable_frame_encryption */
-            enable_video_frame_event,
+            true, /* enable_video_frame_event */
+            enable_video_frame_content,
         )?;
         Ok((boxed_observer_impl, observer))
     }
@@ -3193,11 +3209,40 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
     fn handle_incoming_video_frame(
         &mut self,
         track_id: u32,
-        video_frame: VideoFrame,
+        video_frame_metadata: VideoFrameMetadata,
+        video_frame: Option<VideoFrame>,
     ) -> Result<()> {
-        if let Some(incoming_video_sink) = self.incoming_video_sink.as_ref() {
+        let height = video_frame_metadata.height;
+        if let (Some(incoming_video_sink), Some(video_frame)) =
+            (self.incoming_video_sink.as_ref(), video_frame)
+        {
             incoming_video_sink.on_video_frame(track_id, video_frame)
         }
+        if let Some(client) = &self.client {
+            let prev_height = self.last_height_by_track_id.insert(track_id, height);
+            if prev_height != Some(height) {
+                client.actor.send(move |state| {
+                    if let Some(remote_device) = state.remote_devices.find_by_demux_id_mut(track_id)
+                    {
+                        // The height needs to be checked again because last_height_by_track_id
+                        // doesn't account for video mute or forwarding state.
+                        if remote_device.client_decoded_height != Some(height)
+                            // Workaround for a race where a frame is received after video muting
+                            && remote_device.heartbeat_state.video_muted != Some(true)
+                        {
+                            remote_device.client_decoded_height = Some(height);
+
+                            state.observer.handle_remote_devices_changed(
+                                state.client_id,
+                                &state.remote_devices,
+                                RemoteDevicesChangedReason::DecodedVideoHeightChanged,
+                            );
+                        }
+                    }
+                });
+            }
+        }
+
         Ok(())
     }
 
@@ -5210,6 +5255,43 @@ mod tests {
             vec![(2, Some(true)), (3, Some(false))],
             get_forwarding_videos(&client1)
         );
+
+        client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn client_decoded_height() {
+        let get_client_decoded_height = |client: &TestClient| -> Option<u32> {
+            client
+                .observer
+                .remote_devices()
+                .iter()
+                .map(|remote| remote.client_decoded_height)
+                .next()
+                .unwrap()
+        };
+        let set_client_decoded_height = |client: &TestClient, height: u32| -> () {
+            let mut remote_devices = client.observer.remote_devices.lock().unwrap();
+            remote_devices.get_mut(0).unwrap().client_decoded_height = Some(height);
+        };
+
+        let client1 = TestClient::new(vec![1], 1, None);
+        let client2 = TestClient::new(vec![2], 2, None);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+
+        assert_eq!(None, get_client_decoded_height(&client1));
+
+        client1.client.handle_forwarding_video_received(vec![2]);
+        client1.wait_for_client_to_process();
+
+        set_client_decoded_height(&client1, 480);
+
+        // There is no video when forwarding stops, so the height is None
+        client1.client.handle_forwarding_video_received(vec![]);
+        client1.wait_for_client_to_process();
+
+        assert_eq!(None, get_client_decoded_height(&client1));
 
         client1.disconnect_and_wait_until_ended();
     }

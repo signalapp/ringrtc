@@ -1718,6 +1718,7 @@ export class RemoteDeviceState {
   addedTime: string | undefined; // unix millis (to be converted to a numeric type)
   speakerTime: string | undefined; // unix millis; 0 if they've never spoken (to be converted to a numeric type)
   forwardingVideo: boolean | undefined;
+  clientDecodedHeight: number | undefined;
 
   constructor(demuxId: number, userId: Buffer, mediaKeysReceived: boolean) {
     this.demuxId = demuxId;

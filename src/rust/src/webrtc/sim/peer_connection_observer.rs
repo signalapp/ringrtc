@@ -22,6 +22,7 @@ pub unsafe fn Rust_createPeerConnectionObserver(
     _pc_observer_cb: webrtc::ptr::Borrowed<std::ffi::c_void>,
     _enable_frame_encryption: bool,
     _enable_video_frame_event: bool,
+    _enable_video_frame_content: bool,
 ) -> webrtc::ptr::Owned<RffiPeerConnectionObserver> {
     info!("Rust_createPeerConnectionObserver():");
     webrtc::ptr::Owned::from_ptr(&FAKE_OBSERVER)

@@ -889,6 +889,10 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
             deviceState.forwardingVideo = remoteDeviceState.forwardingVideo.value
         }
 
+        if remoteDeviceState.clientDecodedHeight.valid {
+            deviceState.clientDecodedHeight = remoteDeviceState.clientDecodedHeight.value
+        }
+
         finalRemoteDeviceStates.append(deviceState)
     }
 

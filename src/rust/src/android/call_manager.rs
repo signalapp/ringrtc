@@ -103,6 +103,7 @@ pub fn create_peer_connection(
         native_connection,
         false, /* enable_frame_encryption */
         false, /* enable_video_frame_event */
+        false, /* enable_video_frame_content */
     )?;
 
     // construct JNI OwnedPeerConnection object

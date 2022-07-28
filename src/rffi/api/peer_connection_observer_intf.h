@@ -66,7 +66,8 @@ RUSTEXPORT webrtc::rffi::PeerConnectionObserverRffi*
 Rust_createPeerConnectionObserver(void* observer_borrowed,
                                   const PeerConnectionObserverCallbacks* callbacks_borrowed,
                                   bool enable_frame_encryption,
-                                  bool enable_video_frame_event);
+                                  bool enable_video_frame_event,
+                                  bool enable_video_frame_content);
 
 RUSTEXPORT void
 Rust_deletePeerConnectionObserver(webrtc::rffi::PeerConnectionObserverRffi* observer_owned);

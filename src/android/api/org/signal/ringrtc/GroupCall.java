@@ -825,6 +825,7 @@ public final class GroupCall {
         long                 addedTime;   // unix millis
         long                 speakerTime; // unix millis; 0 if was never the speaker
         @Nullable Boolean    forwardingVideo;
+        @Nullable Long       clientDecodedHeight;
 
         @Nullable VideoTrack videoTrack;
         @NonNull  int        audioLevel;
@@ -838,7 +839,8 @@ public final class GroupCall {
                                  @Nullable Boolean sharingScreen,
                                            long    addedTime,
                                            long    speakerTime,
-                                 @Nullable Boolean forwardingVideo) {
+                                 @Nullable Boolean forwardingVideo,
+                                 @Nullable Long    clientDecodedHeight) {
             this.demuxId = demuxId;
             this.userIdByteArray = userIdByteArray;
             this.mediaKeysReceived = mediaKeysReceived;
@@ -850,6 +852,7 @@ public final class GroupCall {
             this.addedTime = addedTime;
             this.speakerTime = speakerTime;
             this.forwardingVideo = forwardingVideo;
+            this.clientDecodedHeight = clientDecodedHeight;
             this.audioLevel = 0;
         }
 
@@ -893,6 +896,10 @@ public final class GroupCall {
 
         public @Nullable Boolean getForwardingVideo() {
             return forwardingVideo;
+        }
+
+        public @Nullable Long getClientDecodedHeight() {
+            return clientDecodedHeight;
         }
 
         public @Nullable VideoTrack getVideoTrack() {

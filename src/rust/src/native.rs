@@ -419,6 +419,7 @@ impl Platform for NativePlatform {
             connection.get_connection_ptr()?,
             false, /* enable_frame_encryption */
             true,  /* enable_video_frame_event */
+            true,  /* enable_video_frame_content */
         )?;
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,

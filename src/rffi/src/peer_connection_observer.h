@@ -27,7 +27,8 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver {
   PeerConnectionObserverRffi(void* observer,
                              const PeerConnectionObserverCallbacks* callbacks,
                              bool enable_frame_encryption,
-                             bool enable_video_frame_event);
+                             bool enable_video_frame_event,
+                             bool enable_video_frame_content);
   ~PeerConnectionObserverRffi() override;
 
   // If enabled, the PeerConnection will be configured to encrypt and decrypt
@@ -85,6 +86,7 @@ class PeerConnectionObserverRffi : public PeerConnectionObserver {
   PeerConnectionObserverCallbacks callbacks_;
   bool enable_frame_encryption_ = false;
   bool enable_video_frame_event_ = false;
+  bool enable_video_frame_content_ = false;
   std::vector<std::unique_ptr<VideoSink>> video_sinks_;
 };
 
