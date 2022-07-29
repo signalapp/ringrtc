@@ -47,8 +47,6 @@ pub mod ios {
             warn!("Invalid max log level = {:?}.  Using Debug", max_level);
         }
 
-        std::env::set_var("RUST_BACKTRACE", "1");
-
         std::panic::set_hook(Box::new(|panic_info| {
             error!("Critical error: {}", panic_info);
         }));
