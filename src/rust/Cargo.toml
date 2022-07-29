@@ -5,7 +5,7 @@
 
 [package]
 name = "ringrtc"
-version = "2.20.12"
+version = "2.20.13"
 authors = ["Calling Team <callingteam@signal.org>"]
 edition = "2018"
 description = "A Rust interface for WebRTC"

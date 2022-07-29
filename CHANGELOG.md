@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.20.13
+
+- Android: Remove audio level debug logging
+
+- Group Calls: Expose decoded video height to apps
+
+- Handle out-of-order IceCandidate and Hangup messages
+
+- Turn off backtraces to stderr by default
+
 ## v2.20.12
 
 - Group Calls: Prefer recently received group call rings
