@@ -584,11 +584,12 @@ pub fn request_video(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,
     rendered_resolutions: Vec<group_call::VideoRequest>,
+    active_speaker_height: u16,
 ) -> Result<()> {
     info!("request_video(): id: {}", client_id);
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.request_video(client_id, rendered_resolutions);
+    call_manager.request_video(client_id, rendered_resolutions, active_speaker_height);
     Ok(())
 }
 

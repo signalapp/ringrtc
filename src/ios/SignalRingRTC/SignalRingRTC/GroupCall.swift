@@ -426,7 +426,14 @@ public class GroupCall {
         ringrtcSetBandwidthMode(self.ringRtcCallManager, clientId, bandwidthMode.rawValue)
     }
 
-    public func updateVideoRequests(resolutions: [VideoRequest]) {
+    /// Provides a collection of VideoRequest objects to the group call
+    /// object which are sent to the SFU. This allows the appropriate
+    /// video resolution to be sent from the SFU to efficiently fit in
+    /// rendered resolution on the screen.
+    ///
+    /// - parameter resolutions: the VideoRequest objects for each user rendered on the screen
+    /// - parameter activeSpeakerHeight: the height of the view for the active speaker, in pixels
+    public func updateVideoRequests(resolutions: [VideoRequest], activeSpeakerHeight: UInt16) {
         AssertIsOnMainThread()
         Logger.debug("updateVideoRequests")
 
@@ -453,7 +460,7 @@ public class GroupCall {
             )
         }
 
-        ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray)
+        ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray, activeSpeakerHeight)
     }
 
     public func updateGroupMembers(members: [GroupMember]) {

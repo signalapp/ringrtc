@@ -372,7 +372,7 @@ fn main() {
         {
             info!("  {} {:?}", track_id, metadata);
         }
-        client.request_video(requests);
+        client.request_video(requests, height);
         std::thread::sleep(std::time::Duration::from_secs(10));
     }
 }

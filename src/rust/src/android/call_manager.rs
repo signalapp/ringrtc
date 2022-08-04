@@ -823,6 +823,7 @@ pub fn request_video(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     jni_rendered_resolutions: JObject,
+    active_speaker_height: jint,
 ) -> Result<()> {
     info!("request_video(): id: {}", client_id);
 
@@ -888,7 +889,11 @@ pub fn request_video(
     }
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.request_video(client_id, rendered_resolutions);
+    call_manager.request_video(
+        client_id,
+        rendered_resolutions,
+        active_speaker_height as u16,
+    );
     Ok(())
 }
 

@@ -1888,8 +1888,8 @@ export class GroupCall {
   }
 
   // Called by UI
-  requestVideo(resolutions: Array<VideoRequest>): void {
-    this._callManager.requestVideo(this._clientId, resolutions);
+  requestVideo(resolutions: Array<VideoRequest>, activeSpeakerHeight: number): void {
+    this._callManager.requestVideo(this._clientId, resolutions, activeSpeakerHeight);
   }
 
   // Called by UI
@@ -2262,7 +2262,8 @@ export interface CallManager {
   ): void;
   requestVideo(
     clientId: GroupCallClientId,
-    resolutions: Array<VideoRequest>
+    resolutions: Array<VideoRequest>,
+    activeSpeakerHeight: number
   ): void;
   setGroupMembers(
     clientId: GroupCallClientId,

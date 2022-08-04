@@ -1363,6 +1363,7 @@ fn setBandwidthMode(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let js_resolutions = *cx.argument::<JsArray>(1)?;
+    let active_speaker_height = cx.argument::<JsNumber>(2)?.value(&mut cx) as u16;
 
     let mut resolutions = Vec::with_capacity(js_resolutions.len(&mut cx) as usize);
     for i in 0..js_resolutions.len(&mut cx) {
@@ -1413,7 +1414,9 @@ fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
     }
 
     with_call_endpoint(&mut cx, |endpoint| {
-        endpoint.call_manager.request_video(client_id, resolutions);
+        endpoint
+            .call_manager
+            .request_video(client_id, resolutions, active_speaker_height);
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;

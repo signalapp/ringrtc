@@ -836,12 +836,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRequestVideo(
     call_manager: jlong,
     client_id: jlong,
     jni_rendered_resolutions: JObject,
+    active_speaker_height: jint,
 ) {
     match call_manager::request_video(
         &env,
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
         jni_rendered_resolutions,
+        active_speaker_height,
     ) {
         Ok(v) => v,
         Err(e) => {

@@ -45,6 +45,7 @@ message DeviceToSfu {
     repeated VideoRequest requests = 1;
     reserved 2; // tag 2 was previously "max_count", which is no longer used
     optional uint32 max_kbps = 3;
+    optional uint32 active_speaker_height = 4;
   }
  
   message LeaveMessage {}

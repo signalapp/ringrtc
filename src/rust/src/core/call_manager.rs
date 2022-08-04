@@ -2719,6 +2719,7 @@ macro_rules! group_call_api_handler {
         $i:ident,
         $f:tt
         $(, $a:expr)*
+        $(,)?
     ) => {{
         let group_call_map = $s.group_call_by_client_id.lock();
         match group_call_map {
@@ -2807,9 +2808,16 @@ where
         &mut self,
         client_id: group_call::ClientId,
         rendered_resolutions: Vec<group_call::VideoRequest>,
+        active_speaker_height: u16,
     ) {
         info!("request_video(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, request_video, rendered_resolutions);
+        group_call_api_handler!(
+            self,
+            client_id,
+            request_video,
+            rendered_resolutions,
+            active_speaker_height,
+        );
     }
 
     pub fn set_group_members(

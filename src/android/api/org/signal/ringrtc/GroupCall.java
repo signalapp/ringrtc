@@ -411,17 +411,21 @@ public final class GroupCall {
      * video resolution to be sent from the SFU to efficiently fit in
      * rendered resolution on the screen.
      *
-     * @param resolutions    the VideoRequest objects for each user rendered on the screen
+     * @param resolutions         the VideoRequest objects for each user rendered on the screen
+     * @param activeSpeakerHeight the height of the view for the active speaker, in pixels
      *
      * @throws CallException for native code failures
      *
      */
-    public void requestVideo(@NonNull Collection<VideoRequest> resolutions)
+    public void requestVideo(@NonNull Collection<VideoRequest> resolutions, int activeSpeakerHeight)
         throws CallException
     {
         Log.i(TAG, "requestVideo():");
 
-        ringrtcRequestVideo(nativeCallManager, this.clientId, new ArrayList<>(resolutions));
+        ringrtcRequestVideo(nativeCallManager,
+                            this.clientId,
+                            new ArrayList<>(resolutions),
+                            activeSpeakerHeight);
     }
 
     /**
@@ -1074,7 +1078,8 @@ public final class GroupCall {
     private native
         void ringrtcRequestVideo(long nativeCallManager,
                                  long clientId,
-                                 List<VideoRequest> renderedResolutions)
+                                 List<VideoRequest> renderedResolutions,
+                                 int activeSpeakerHeight)
         throws CallException;
 
     private native
