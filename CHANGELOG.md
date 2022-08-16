@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.20.14
+
+- Reference signalapp/webrtc@4896g
+  - Windows: Support multi-channel output
+
 ## v2.20.13
 
 - Android: Remove audio level debug logging
