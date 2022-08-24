@@ -920,8 +920,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             configuration.iceTransportPolicy = .relay
         }
 
-        configuration.enableDtlsSrtp = false
-
         // Create the default media constraints.
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 

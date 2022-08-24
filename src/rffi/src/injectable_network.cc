@@ -245,12 +245,16 @@ class InjectableNetworkImpl : public InjectableNetwork, public rtc::NetworkManag
   }
 
   // As NetworkManager
-  void GetNetworks(std::vector<rtc::Network*>* networks) const override {
+  std::vector<const rtc::Network*> GetNetworks() const override {
     RTC_LOG(LS_INFO) << "InjectableNetworkImpl::GetNetworks()";
     RTC_DCHECK(network_thread_->IsCurrent());
+
+    std::vector<const rtc::Network*> networks;
     for (const auto& kv : interface_by_name_) {
-      networks->push_back(kv.second.get());
+      networks.push_back(kv.second.get());
     }
+
+    return networks;
   }
 
   // As NetworkManager
@@ -260,9 +264,12 @@ class InjectableNetworkImpl : public InjectableNetwork, public rtc::NetworkManag
   }
 
   // As NetworkManager
-  void GetAnyAddressNetworks(std::vector<rtc::Network*>* networks) override {
+  std::vector<const rtc::Network*> GetAnyAddressNetworks() override {
     // TODO: Add support for using a default route instead of choosing a particular network.
     // (such as when we can't enumerate networks or IPs)
+    std::vector<const rtc::Network*> networks;
+
+    return networks;
   }
 
   // As NetworkManager

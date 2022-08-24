@@ -309,7 +309,6 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
   if (hide_ip) {
     config.type = PeerConnectionInterface::kRelay;
   }
-  config.enable_dtls_srtp = false;
   config.sdp_semantics = SdpSemantics::kPlanB_DEPRECATED;
   if (ice_server.urls_size > 0) {
     webrtc::PeerConnectionInterface::IceServer rtc_ice_server;
