@@ -32,9 +32,10 @@ help:
 	$(Q) echo "  ios      -- download WebRTC and build for the iOS platform"
 	$(Q) echo "  android  -- download WebRTC and build for the Android platform"
 	$(Q) echo "  electron -- build an Electron library"
-	$(Q) echo "  cli      -- build the test cli"
+	$(Q) echo "  cli      -- build the test cli (1:1 calls)"
+	$(Q) echo "  gctc     -- build the test cli (group calls)"
 	$(Q) echo
-	$(Q) echo "For the electron/cli builds, you can specify an optional platform"
+	$(Q) echo "For the electon/cli/gctc builds, you can specify an optional platform"
 	$(Q) echo "which will download WebRTC. For example:"
 	$(Q) echo "  $ make electron PLATFORM=unix"
 	$(Q) echo
@@ -98,10 +99,24 @@ cli:
 		./bin/build-cli -d ; \
 	fi
 
+gctc:
+	$(Q) if [ "$(PLATFORM)" != "" ] ; then \
+		echo "gctc: Preparing workspace for $(PLATFORM)" ; \
+		./bin/prepare-workspace $(PLATFORM) ; \
+	fi
+	$(Q) if [ "$(TYPE)" = "release" ] ; then \
+		echo "gctc: Release build" ; \
+		./bin/build-gctc -r ; \
+	else \
+		echo "gctc: Debug build" ; \
+		./bin/build-gctc -d ; \
+	fi
+
 PHONY += clean
 clean:
 	$(Q) ./bin/build-aar --clean
 	$(Q) ./bin/build-cli --clean
+	$(Q) ./bin/build-gctc --clean
 	$(Q) ./bin/build-electron --clean
 	$(Q) ./bin/build-ios --clean
 	$(Q) rm -rf ./src/webrtc/src/out

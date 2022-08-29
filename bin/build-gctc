@@ -1,0 +1,122 @@
+#!/bin/sh
+
+#
+# Copyright 2022 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+set -e
+
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
+
+usage()
+{
+    echo 'usage: build-gctc [-d|-r|-c]
+    where:
+        -d to create a debug build (default)
+        -r to create a release build
+        -c to clean the build artifacts'
+}
+
+clean()
+{
+    # Remove all possible artifact directories.
+    rm -rf ./src/node/build
+    rm -rf ./src/node/dist
+    rm -rf ./src/node/node_modules
+    rm -rf ./src/rust/target/debug
+    rm -rf ./src/rust/target/release
+    rm -rf ./src/webrtc/src/out/debug
+    rm -rf ./src/webrtc/src/out/release
+}
+
+BUILD_TYPE=debug
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -d | --debug )
+            BUILD_TYPE=debug
+            ;;
+        -r | --release )
+            BUILD_TYPE=release
+            ;;
+        -c | --clean )
+            clean
+            exit
+            ;;
+        -h | --help )
+            usage
+            exit
+            ;;
+        * )
+            usage
+            exit 1
+    esac
+    shift
+done
+
+get_default_platform()
+{
+    hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
+
+    case "$(rustup show active-toolchain)" in
+        *"x86_64-apple-darwin"* | *"aarch64-apple-darwin"* )
+            echo "darwin"
+            ;;
+        *"x86_64-pc-windows"* )
+            echo "win32"
+            ;;
+        *"x86_64-unknown-linux"* )
+            echo "linux"
+            ;;
+        * )
+            echo "unknown"
+    esac
+}
+
+DEFAULT_PLATFORM=$(get_default_platform)
+if [ "${DEFAULT_PLATFORM}" = "unknown" ]
+then
+    printf "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting.\n"
+    exit 1
+fi
+
+export MACOSX_DEPLOYMENT_TARGET="10.10"
+
+# Build WebRTC.
+(
+    cd src/webrtc/src
+    WEBRTC_ARGS="rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=false rtc_include_ilbc=false"
+
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}"
+        ninja -C "${OUTPUT_DIR}"/debug
+    else
+        gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false"
+        ninja -C "${OUTPUT_DIR}"/release
+    fi
+)
+
+# Build and link the final RingRTC library.
+(
+    cd src/rust
+
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
+        # TODO: Figure out why and fix this
+        rm -f target/debug/deps/libringrtc.rlib
+
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin gctc --features=native,http
+        echo "Can run with src/rust/target/debug/gctc"
+    else
+        # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
+        # TODO: Figure out why and fix this
+        rm -f target/release/deps/libringrtc.rlib
+
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin gctc --features=native,http --release
+        echo "Can run with src/rust/target/release/gctc"
+    fi
+)

@@ -13,7 +13,10 @@ use std::sync::{Arc, Mutex};
 use log::info;
 
 use ringrtc::{
-    common::actor::{Actor, Stopper},
+    common::{
+        actor::{Actor, Stopper},
+        units::DataRate,
+    },
     core::{
         call_mutex::CallMutex,
         group_call::{
@@ -28,7 +31,7 @@ use ringrtc::{
     protobuf,
     webrtc::{
         media::{VideoFrame, VideoFrameMetadata, VideoPixelFormat, VideoSink, VideoTrack},
-        peer_connection::{AudioLevel, ReceivedAudioLevel},
+        peer_connection::{AudioLevel, ReceivedAudioLevel, SendRates},
         peer_connection_factory::{self, PeerConnectionFactory},
     },
 };
@@ -309,6 +312,12 @@ fn main() {
     )
     .unwrap();
 
+    let send_rate_override = DataRate::from_mbps(10);
+    client.override_send_rates(SendRates {
+        min: Some(send_rate_override),
+        start: Some(send_rate_override),
+        max: Some(send_rate_override),
+    });
     client.set_membership_proof(membership_proof.as_bytes().to_vec());
     client.connect();
     client.join();
