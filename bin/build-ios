@@ -173,6 +173,9 @@ then
     IS_RELEASE=yes
   fi
 
+  # The Rust compiler expects this to always be in the form "major.minor".
+  export IPHONEOS_DEPLOYMENT_TARGET="12.2"
+
   for TARGET in ${TARGETS}; do
     (
       cd "${RINGRTC_SRC_DIR}"/rust
@@ -205,7 +208,7 @@ then
     s.source   = { git: "https://github.com/signalapp/webrtc.git" }
     s.author   = { "iOS Team": "ios@signal.org" }
 
-    s.platform = :ios, "11.0"
+    s.platform = :ios, "'${IPHONEOS_DEPLOYMENT_TARGET}'"
     s.vendored_frameworks = "WebRTC.xcframework"
   end' >"${OUTPUT_DIR}"/WebRTCForTesting.podspec
 
