@@ -5,7 +5,7 @@
 
 //! WebRTC Create Session Description
 
-use std::slice;
+use std::{borrow::Cow, slice};
 
 use crate::webrtc;
 
@@ -175,7 +175,7 @@ impl StatsObserver {
                       video_sender.nack_count,
                       video_sender.fir_count,
                       video_sender.pli_count,
-                      video_sender.quality_limitation_reason,
+                      video_sender.quality_limitation_reason_description(),
                       video_sender.quality_limitation_resolution_changes,
                       video_sender.remote_packets_lost,
                       video_sender.remote_jitter,
@@ -287,6 +287,19 @@ pub struct VideoSenderStatistics {
     pub remote_packets_lost: i32,
     pub remote_jitter: f64,
     pub remote_round_trip_time: f64,
+}
+
+impl VideoSenderStatistics {
+    fn quality_limitation_reason_description(&self) -> Cow<'static, str> {
+        // See https://w3c.github.io/webrtc-stats/#rtcqualitylimitationreason-enum.
+        match self.quality_limitation_reason {
+            0 => "none".into(),
+            1 => "cpu".into(),
+            2 => "bandwidth".into(),
+            3 => "other".into(),
+            x => x.to_string().into(),
+        }
+    }
 }
 
 #[repr(C)]
