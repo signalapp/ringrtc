@@ -71,6 +71,7 @@ message SfuToDevice {
   message CurrentDevices {
     repeated uint32 demux_ids_with_video = 1;
     repeated fixed32 all_demux_ids       = 2;
+    repeated uint32 allocated_heights    = 3;
   }
 
   message Stats {

@@ -2108,13 +2108,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                             None => cx.undefined().upcast(),
                             Some(forwarding_video) => cx.boolean(forwarding_video).upcast(),
                         };
-                    let client_decoded_height: neon::handle::Handle<JsValue> =
-                        match remote_device_state.client_decoded_height {
-                            None => cx.undefined().upcast(),
-                            Some(client_decoded_height) => {
-                                cx.number(client_decoded_height).upcast()
-                            }
-                        };
+                    let is_higher_resolution_pending =
+                        cx.boolean(remote_device_state.is_higher_resolution_pending);
 
                     let js_remote_device_state = cx.empty_object();
                     js_remote_device_state.set(&mut cx, "demuxId", demux_id)?;
@@ -2133,8 +2128,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_remote_device_state.set(&mut cx, "forwardingVideo", forwarding_video)?;
                     js_remote_device_state.set(
                         &mut cx,
-                        "clientDecodedHeight",
-                        client_decoded_height,
+                        "isHigherResolutionPending",
+                        is_higher_resolution_pending,
                     )?;
 
                     js_remote_device_states.set(&mut cx, i as u32, js_remote_device_state)?;

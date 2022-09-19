@@ -616,7 +616,7 @@ impl Platform for IosPlatform {
                 addedTime: remote_device_state.added_time_as_unix_millis(),
                 speakerTime: remote_device_state.speaker_time_as_unix_millis(),
                 forwardingVideo: app_option_from_bool(remote_device_state.forwarding_video),
-                clientDecodedHeight: app_option_from_u32(remote_device_state.client_decoded_height),
+                isHigherResolutionPending: remote_device_state.is_higher_resolution_pending,
             };
 
             app_remote_device_states.push(app_remote_device_state);

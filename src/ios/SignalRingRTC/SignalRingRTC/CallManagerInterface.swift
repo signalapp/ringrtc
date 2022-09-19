@@ -867,7 +867,14 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
             continue
         }
 
-        let deviceState = RemoteDeviceState(demuxId: remoteDeviceState.demuxId, userId: userId.uuid, mediaKeysReceived: remoteDeviceState.mediaKeysReceived, addedTime: remoteDeviceState.addedTime, speakerTime: remoteDeviceState.speakerTime)
+        let deviceState = RemoteDeviceState(
+            demuxId: remoteDeviceState.demuxId,
+            userId: userId.uuid,
+            mediaKeysReceived: remoteDeviceState.mediaKeysReceived,
+            addedTime: remoteDeviceState.addedTime,
+            speakerTime: remoteDeviceState.speakerTime,
+            isHigherResolutionPending: remoteDeviceState.isHigherResolutionPending
+        )
 
         if remoteDeviceState.audioMuted.valid {
             deviceState.audioMuted = remoteDeviceState.audioMuted.value
@@ -887,10 +894,6 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
 
         if remoteDeviceState.forwardingVideo.valid {
             deviceState.forwardingVideo = remoteDeviceState.forwardingVideo.value
-        }
-
-        if remoteDeviceState.clientDecodedHeight.valid {
-            deviceState.clientDecodedHeight = remoteDeviceState.clientDecodedHeight.value
         }
 
         finalRemoteDeviceStates.append(deviceState)

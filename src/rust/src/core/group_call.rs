@@ -161,7 +161,7 @@ pub enum RemoteDevicesChangedReason {
     SpeakerTimeChanged(DemuxId),
     HeartbeatStateChanged(DemuxId),
     ForwardedVideosChanged,
-    DecodedVideoHeightChanged,
+    HigherResolutionPendingChanged,
 }
 
 // The callbacks from the Call to the Observer of the call.
@@ -574,7 +574,9 @@ pub struct RemoteDeviceState {
     pub speaker_time: Option<SystemTime>,
     pub leaving_received: bool,
     pub forwarding_video: Option<bool>,
+    pub server_allocated_height: u16,
     pub client_decoded_height: Option<u32>,
+    pub is_higher_resolution_pending: bool,
 }
 
 fn as_unix_millis(t: Option<SystemTime>) -> u64 {
@@ -602,7 +604,9 @@ impl RemoteDeviceState {
             speaker_time: None,
             leaving_received: false,
             forwarding_video: None,
+            server_allocated_height: 0,
             client_decoded_height: None,
+            is_higher_resolution_pending: false,
         }
     }
 
@@ -612,6 +616,19 @@ impl RemoteDeviceState {
 
     pub fn added_time_as_unix_millis(&self) -> u64 {
         as_unix_millis(Some(self.added_time))
+    }
+
+    fn recalculate_higher_resolution_pending(&mut self) {
+        let was_pending = self.is_higher_resolution_pending;
+        self.is_higher_resolution_pending =
+            self.server_allocated_height as u32 > self.client_decoded_height.unwrap_or(0);
+
+        if !was_pending && self.is_higher_resolution_pending {
+            info!(
+                "Higher resolution video (height={}) now pending for {}. Current height is {:?}",
+                self.server_allocated_height, self.demux_id, self.client_decoded_height
+            );
+        }
     }
 }
 
@@ -836,7 +853,8 @@ struct State {
     // If set, will always overide the send_rates.  Intended for testing.
     send_rates_override: Option<SendRates>,
     max_receive_rate: Option<DataRate>,
-    forwarding_video_demux_ids: HashSet<DemuxId>,
+    // Demux IDs where video is being forward from, mapped to the server allocated height.
+    forwarding_videos: HashMap<DemuxId, u16>,
 
     /// A ring sent to the whole group when the call was created.
     ///
@@ -1007,7 +1025,7 @@ impl Client {
                     send_rates_override: None,
                     // If the client never calls set_bandwidth_mode, use the normal max receive rate.
                     max_receive_rate: Some(NORMAL_MAX_RECEIVE_RATE),
-                    forwarding_video_demux_ids: HashSet::default(),
+                    forwarding_videos: HashMap::default(),
 
                     cancellable_initial_ring: None,
 
@@ -2841,9 +2859,13 @@ impl Client {
                     if let Some(CurrentDevices {
                         demux_ids_with_video,
                         all_demux_ids: _,
+                        allocated_heights,
                     }) = current_devices
                     {
-                        self.handle_forwarding_video_received(demux_ids_with_video);
+                        self.handle_forwarding_video_received(
+                            demux_ids_with_video,
+                            allocated_heights,
+                        );
                     }
                     if let Some(stats) = stats {
                         info!(
@@ -2952,26 +2974,36 @@ impl Client {
         })
     }
 
-    fn handle_forwarding_video_received(&self, mut demux_ids_with_video: Vec<DemuxId>) {
+    fn handle_forwarding_video_received(
+        &self,
+        mut demux_ids_with_video: Vec<DemuxId>,
+        allocated_heights: Vec<u32>,
+    ) {
         self.actor.send(move |state| {
-            let forwarding_video_demux_ids: HashSet<DemuxId> =
-                demux_ids_with_video.iter().copied().collect();
-            if state.forwarding_video_demux_ids != forwarding_video_demux_ids {
+            let forwarding_videos: HashMap<DemuxId, u16> = demux_ids_with_video
+                .iter()
+                .zip(allocated_heights.iter())
+                .map(|(&demux_id, &height)| (demux_id, height as u16))
+                .collect();
+            if state.forwarding_videos != forwarding_videos {
                 demux_ids_with_video.sort_unstable();
                 info!(
-                    "SFU notified that the demux IDs with video has changed to {:?}",
+                    "SFU notified that the forwarding videos changed. Demux IDs with video is now {:?}",
                     demux_ids_with_video
                 );
                 for remote_device in state.remote_devices.iter_mut() {
-                    let is_forwarding =
-                        forwarding_video_demux_ids.contains(&remote_device.demux_id);
+                    let server_allocated_height = forwarding_videos.get(&remote_device.demux_id);
+                    let is_forwarding = server_allocated_height.is_some();
                     remote_device.forwarding_video = Some(is_forwarding);
+                    remote_device.server_allocated_height = server_allocated_height.copied().unwrap_or(0);
 
                     if !is_forwarding {
                         remote_device.client_decoded_height = None;
                     }
+
+                    remote_device.recalculate_higher_resolution_pending();
                 }
-                state.forwarding_video_demux_ids = forwarding_video_demux_ids;
+                state.forwarding_videos = forwarding_videos;
                 state.observer.handle_remote_devices_changed(
                     state.client_id,
                     &state.remote_devices,
@@ -2997,6 +3029,7 @@ impl Client {
                     if remote_device.heartbeat_state != heartbeat_state {
                         if heartbeat_state.video_muted == Some(true) {
                             remote_device.client_decoded_height = None;
+                            remote_device.recalculate_higher_resolution_pending();
                         }
 
                         remote_device.heartbeat_state = heartbeat_state;
@@ -3250,11 +3283,19 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                         {
                             remote_device.client_decoded_height = Some(height);
 
-                            state.observer.handle_remote_devices_changed(
-                                state.client_id,
-                                &state.remote_devices,
-                                RemoteDevicesChangedReason::DecodedVideoHeightChanged,
-                            );
+                            let was_higher_resolution_pending =
+                                remote_device.is_higher_resolution_pending;
+                            remote_device.recalculate_higher_resolution_pending();
+
+                            if remote_device.is_higher_resolution_pending
+                                != was_higher_resolution_pending
+                            {
+                                state.observer.handle_remote_devices_changed(
+                                    state.client_id,
+                                    &state.remote_devices,
+                                    RemoteDevicesChangedReason::HigherResolutionPendingChanged,
+                                );
+                            }
                         }
                     }
                 });
@@ -5245,12 +5286,18 @@ mod tests {
 
     #[test]
     fn forwarding_video() {
-        let get_forwarding_videos = |client: &TestClient| -> Vec<(DemuxId, Option<bool>)> {
+        let get_forwarding_videos = |client: &TestClient| -> Vec<(DemuxId, Option<bool>, u16)> {
             client
                 .observer
                 .remote_devices()
                 .iter()
-                .map(|remote| (remote.demux_id, remote.forwarding_video))
+                .map(|remote| {
+                    (
+                        remote.demux_id,
+                        remote.forwarding_video,
+                        remote.server_allocated_height,
+                    )
+                })
                 .collect()
         };
 
@@ -5260,21 +5307,28 @@ mod tests {
         client1.connect_join_and_wait_until_joined();
         client1.set_remotes_and_wait_until_applied(&[&client2, &client3]);
 
-        assert_eq!(vec![(2, None), (3, None)], get_forwarding_videos(&client1));
-
-        client1.client.handle_forwarding_video_received(vec![2, 3]);
-        client1.wait_for_client_to_process();
-
         assert_eq!(
-            vec![(2, Some(true)), (3, Some(true))],
+            vec![(2, None, 0), (3, None, 0)],
             get_forwarding_videos(&client1)
         );
 
-        client1.client.handle_forwarding_video_received(vec![2]);
+        client1
+            .client
+            .handle_forwarding_video_received(vec![2, 3], vec![240, 120]);
         client1.wait_for_client_to_process();
 
         assert_eq!(
-            vec![(2, Some(true)), (3, Some(false))],
+            vec![(2, Some(true), 240), (3, Some(true), 120)],
+            get_forwarding_videos(&client1)
+        );
+
+        client1
+            .client
+            .handle_forwarding_video_received(vec![2], vec![120]);
+        client1.wait_for_client_to_process();
+
+        assert_eq!(
+            vec![(2, Some(true), 120), (3, Some(false), 0)],
             get_forwarding_videos(&client1)
         );
 
@@ -5304,16 +5358,71 @@ mod tests {
 
         assert_eq!(None, get_client_decoded_height(&client1));
 
-        client1.client.handle_forwarding_video_received(vec![2]);
+        client1
+            .client
+            .handle_forwarding_video_received(vec![2], vec![480]);
         client1.wait_for_client_to_process();
 
         set_client_decoded_height(&client1, 480);
 
         // There is no video when forwarding stops, so the height is None
-        client1.client.handle_forwarding_video_received(vec![]);
+        client1
+            .client
+            .handle_forwarding_video_received(vec![], vec![]);
         client1.wait_for_client_to_process();
 
         assert_eq!(None, get_client_decoded_height(&client1));
+
+        client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn is_higher_resolution_pending() {
+        let get_forwarding_videos = |client: &TestClient| -> Vec<(DemuxId, u16)> {
+            client
+                .observer
+                .remote_devices()
+                .iter()
+                .map(|remote| (remote.demux_id, remote.server_allocated_height))
+                .collect()
+        };
+        let set_client_decoded_height = |client: &TestClient, height: u32| -> () {
+            let mut remote_devices = client.observer.remote_devices.lock().unwrap();
+            let mut device = remote_devices.get_mut(0).unwrap();
+            device.client_decoded_height = Some(height);
+            device.recalculate_higher_resolution_pending();
+        };
+        let is_higher_resolution_pending = |client: &TestClient| -> bool {
+            let mut remote_devices = client.observer.remote_devices.lock().unwrap();
+            remote_devices
+                .get_mut(0)
+                .unwrap()
+                .is_higher_resolution_pending
+        };
+
+        let client1 = TestClient::new(vec![1], 1, None);
+        let client2 = TestClient::new(vec![2], 2, None);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+
+        assert_eq!(vec![(2, 0)], get_forwarding_videos(&client1));
+        assert_eq!(false, is_higher_resolution_pending(&client1));
+
+        client1
+            .client
+            .handle_forwarding_video_received(vec![2], vec![240]);
+        client1.wait_for_client_to_process();
+
+        assert_eq!(vec![(2, 240)], get_forwarding_videos(&client1));
+
+        // A higher resolution is pending because the server allocated a height of 240, but no
+        // video has been decoded yet.
+        assert!(is_higher_resolution_pending(&client1));
+
+        // After receiving the higher resolution video, the pending status is cleared.
+        set_client_decoded_height(&client1, 240);
+
+        assert_eq!(false, is_higher_resolution_pending(&client1));
 
         client1.disconnect_and_wait_until_ended();
     }
