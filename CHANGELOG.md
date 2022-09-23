@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.21.1
+
+- Group Calls: Expose `isHigherResolutionPending` to apps
+
+- Android: Fix race when audio levels change early
+
+- iOS: Set deployment target to 12.2
+
+- Other logging improvements
+
 ## v2.21.0
 
 - Update to WebRTC 5005 (m102)
