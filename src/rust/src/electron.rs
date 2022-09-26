@@ -34,6 +34,7 @@ use crate::webrtc::peer_connection_factory::{
     self as pcf, AudioDevice, IceServer, PeerConnectionFactory,
 };
 use crate::webrtc::peer_connection_observer::NetworkRoute;
+use neon::types::buffer::TypedArray;
 
 use neon::prelude::*;
 
@@ -363,10 +364,7 @@ impl CallEndpoint {
 
                     let observer = js_object.as_ref().to_inner(&mut cx);
                     let method_name = "processEvents";
-                    let method = *observer
-                        .get(&mut cx, method_name)?
-                        .downcast::<JsFunction, _>(&mut cx)
-                        .expect("processEvents is a function");
+                    let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                     method.call(&mut cx, observer, Vec::<Handle<JsValue>>::new())?;
                     Ok(())
                 });
@@ -455,17 +453,13 @@ fn u64_to_js_num(val: u64) -> f64 {
 fn get_id_arg(cx: &mut FunctionContext, i: i32) -> u64 {
     let obj = cx.argument::<JsObject>(i).expect("Get id argument");
     let high = js_num_to_u64(
-        obj.get(cx, "high")
+        obj.get::<JsNumber, _, _>(cx, "high")
             .expect("Get id.high")
-            .downcast::<JsNumber, _>(cx)
-            .expect("id.high is a number")
             .value(cx),
     );
     let low = js_num_to_u64(
-        obj.get(cx, "low")
+        obj.get::<JsNumber, _, _>(cx, "low")
             .expect("Get id.low")
-            .downcast::<JsNumber, _>(cx)
-            .expect("id.low is a number")
             .value(cx),
     );
     let id = ((high << 32) & 0xFFFFFFFF00000000) | (low & 0xFFFFFFFF);
@@ -485,10 +479,9 @@ fn create_id_arg<'a>(cx: &mut FunctionContext<'a>, id: u64) -> Handle<'a, JsValu
 }
 
 fn to_js_buffer<'a>(cx: &mut FunctionContext<'a>, data: &[u8]) -> Handle<'a, JsValue> {
-    let mut js_buffer = cx.buffer(data.len() as u32).expect("create Buffer");
-    cx.borrow_mut(&mut js_buffer, |handle| {
-        handle.as_mut_slice().copy_from_slice(data.as_ref());
-    });
+    let mut js_buffer = cx.buffer(data.len()).expect("create Buffer");
+    js_buffer.as_mut_slice(cx).copy_from_slice(data.as_ref());
+
     js_buffer.upcast()
 }
 
@@ -497,11 +490,8 @@ static CALL_ENDPOINT_PROPERTY_KEY: &str = "__call_endpoint_addr";
 fn with_call_endpoint<T>(cx: &mut FunctionContext, body: impl FnOnce(&mut CallEndpoint) -> T) -> T {
     let endpoint = cx
         .this()
-        .get(cx, CALL_ENDPOINT_PROPERTY_KEY)
+        .get::<JsBox<RefCell<CallEndpoint>>, _, _>(cx, CALL_ENDPOINT_PROPERTY_KEY)
         .expect("has endpoint");
-    let endpoint = endpoint
-        .downcast::<JsBox<RefCell<CallEndpoint>>, _>(cx)
-        .expect("has correct type");
     let mut endpoint = endpoint.borrow_mut();
     body(&mut *endpoint)
 }
@@ -546,7 +536,7 @@ fn setSelfUuid(mut cx: FunctionContext) -> JsResult<JsValue> {
     debug!("JsCallManager.setSelfUuid()");
 
     let uuid = cx.argument::<JsBuffer>(0)?;
-    let uuid = cx.borrow(&uuid, |handle| handle.as_slice().to_vec());
+    let uuid = uuid.as_slice(&cx).to_vec();
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.call_manager.set_self_uuid(uuid)?;
@@ -592,7 +582,7 @@ fn cancelGroupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
     debug!("JsCallManager.cancelGroupRing()");
 
     let group_id = cx.argument::<JsBuffer>(0)?;
-    let group_id = cx.borrow(&group_id, |handle| handle.as_slice().to_vec());
+    let group_id = group_id.as_slice(&cx).to_vec();
     let ring_id = cx
         .argument::<JsString>(1)?
         .value(&mut cx)
@@ -636,9 +626,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len(&mut cx) as usize);
     for i in 0..js_ice_server_urls.len(&mut cx) {
         let url: String = js_ice_server_urls
-            .get(&mut cx, i as u32)?
-            .downcast::<JsString, _>(&mut cx)
-            .expect("ICE server URLs are strings")
+            .get::<JsString, _, _>(&mut cx, i as u32)?
             .value(&mut cx);
         ice_server_urls.push(url);
     }
@@ -770,10 +758,9 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sender_identity_key = cx.argument::<JsBuffer>(7)?;
     let receiver_identity_key = cx.argument::<JsBuffer>(8)?;
 
-    let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
-    let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
-    let receiver_identity_key =
-        cx.borrow(&receiver_identity_key, |handle| handle.as_slice().to_vec());
+    let opaque = opaque.as_slice(&cx).to_vec();
+    let sender_identity_key = sender_identity_key.as_slice(&cx).to_vec();
+    let receiver_identity_key = receiver_identity_key.as_slice(&cx).to_vec();
 
     let call_media_type = match offer_type {
         1 => CallMediaType::Video,
@@ -812,10 +799,9 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sender_identity_key = cx.argument::<JsBuffer>(4)?;
     let receiver_identity_key = cx.argument::<JsBuffer>(5)?;
 
-    let opaque = cx.borrow(&opaque, |handle| handle.as_slice().to_vec());
-    let sender_identity_key = cx.borrow(&sender_identity_key, |handle| handle.as_slice().to_vec());
-    let receiver_identity_key =
-        cx.borrow(&receiver_identity_key, |handle| handle.as_slice().to_vec());
+    let opaque = opaque.as_slice(&cx).to_vec();
+    let sender_identity_key = sender_identity_key.as_slice(&cx).to_vec();
+    let receiver_identity_key = receiver_identity_key.as_slice(&cx).to_vec();
 
     with_call_endpoint(&mut cx, |endpoint| {
         let answer = signaling::Answer::new(opaque)?;
@@ -839,15 +825,12 @@ fn receivedIceCandidates(mut cx: FunctionContext) -> JsResult<JsValue> {
     let peer_id = cx.argument::<JsString>(0)?.value(&mut cx) as PeerId;
     let sender_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let call_id = CallId::new(get_id_arg(&mut cx, 2));
-    let js_candidates = *cx.argument::<JsArray>(3)?;
+    let js_candidates = cx.argument::<JsArray>(3)?;
 
     let mut candidates = Vec::with_capacity(js_candidates.len(&mut cx) as usize);
     for i in 0..js_candidates.len(&mut cx) {
-        let js_candidate = js_candidates
-            .get(&mut cx, i as u32)?
-            .downcast::<JsBuffer, _>(&mut cx)
-            .expect("ICE candidates");
-        let opaque = cx.borrow(&js_candidate, |handle| handle.as_slice().to_vec());
+        let js_candidate = js_candidates.get::<JsBuffer, _, _>(&mut cx, i as u32)?;
+        let opaque = js_candidate.as_slice(&cx).to_vec();
         candidates.push(signaling::IceCandidate::new(opaque));
     }
     debug!(
@@ -938,11 +921,11 @@ fn receivedBusy(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
     let remote_user_id = cx.argument::<JsBuffer>(0)?;
-    let remote_user_id = cx.borrow(&remote_user_id, |handle| handle.as_slice().to_vec());
+    let remote_user_id = remote_user_id.as_slice(&cx).to_vec();
     let remote_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let local_device_id = cx.argument::<JsNumber>(2)?.value(&mut cx) as DeviceId;
     let data = cx.argument::<JsBuffer>(3)?;
-    let data = cx.borrow(&data, |handle| handle.as_slice().to_vec());
+    let data = data.as_slice(&cx).to_vec();
     let message_age_sec = cx.argument::<JsNumber>(4)?.value(&mut cx) as u64;
 
     with_call_endpoint(&mut cx, |endpoint| {
@@ -964,7 +947,7 @@ fn receivedHttpResponse(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let status_code = cx.argument::<JsNumber>(1)?.value(&mut cx) as u16;
     let body = cx.argument::<JsBuffer>(2)?;
-    let body = cx.borrow(&body, |handle| handle.as_slice().to_vec());
+    let body = body.as_slice(&cx).to_vec();
     let response = http::Response {
         status: status_code.into(),
         body,
@@ -1066,9 +1049,7 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     }
     let pixel_format = pixel_format.unwrap();
 
-    let frame = cx.borrow(&buffer, |buffer| {
-        VideoFrame::copy_from_slice(width, height, pixel_format, buffer.as_slice())
-    });
+    let frame = VideoFrame::copy_from_slice(width, height, pixel_format, buffer.as_slice(&cx));
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_video_source.push_frame(frame);
         Ok(())
@@ -1079,13 +1060,11 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let rgba_buffer = cx.argument::<JsBuffer>(0)?;
+    let mut rgba_buffer = cx.argument::<JsBuffer>(0)?;
     let frame = with_call_endpoint(&mut cx, |endpoint| endpoint.incoming_video_sink.pop(0));
     if let Some(frame) = frame {
         let frame = frame.apply_rotation();
-        cx.borrow(&rgba_buffer, |handle| {
-            frame.to_rgba(handle.as_mut_slice());
-        });
+        frame.to_rgba(rgba_buffer.as_mut_slice(&mut cx));
         let js_width = cx.number(frame.width());
         let js_height = cx.number(frame.height());
         let result = JsArray::new(&mut cx, 2);
@@ -1103,7 +1082,7 @@ fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let _client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let remote_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
-    let rgba_buffer = cx.argument::<JsBuffer>(2)?;
+    let mut rgba_buffer = cx.argument::<JsBuffer>(2)?;
 
     let frame = with_call_endpoint(&mut cx, |endpoint| {
         endpoint.incoming_video_sink.pop(remote_demux_id)
@@ -1111,9 +1090,7 @@ fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     if let Some(frame) = frame {
         let frame = frame.apply_rotation();
-        cx.borrow(&rgba_buffer, |handle| {
-            frame.to_rgba(handle.as_mut_slice());
-        });
+        frame.to_rgba(rgba_buffer.as_mut_slice(&mut cx));
         let js_width = cx.number(frame.width());
         let js_height = cx.number(frame.height());
         let result = JsArray::new(&mut cx, 2);
@@ -1135,14 +1112,14 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let mut client_id = group_call::INVALID_CLIENT_ID;
 
     let group_id: std::vec::Vec<u8> = match group_id.downcast::<JsBuffer, _>(&mut cx) {
-        Ok(handle) => cx.borrow(&handle, |handle| handle.as_slice().to_vec()),
+        Ok(handle) => handle.as_slice(&cx).to_vec(),
         Err(_) => {
             return Ok(cx.number(client_id).upcast());
         }
     };
     let hkdf_extra_info: std::vec::Vec<u8> = match hkdf_extra_info.downcast::<JsBuffer, _>(&mut cx)
     {
-        Ok(handle) => cx.borrow(&handle, |handle| handle.as_slice().to_vec()),
+        Ok(handle) => handle.as_slice(&cx).to_vec(),
         Err(_) => {
             return Ok(cx.number(client_id).upcast());
         }
@@ -1320,7 +1297,7 @@ fn groupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
         Err(_) => {
             // By checking 'undefined' first, we get an error message that mentions Buffer.
             let recipient_buffer = recipient_or_undef.downcast_or_throw::<JsBuffer, _>(&mut cx)?;
-            Some(cx.borrow(&recipient_buffer, |handle| handle.as_slice().to_vec()))
+            Some(recipient_buffer.as_slice(&cx).to_vec())
         }
     };
 
@@ -1362,44 +1339,25 @@ fn setBandwidthMode(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
-    let js_resolutions = *cx.argument::<JsArray>(1)?;
+    let js_resolutions = cx.argument::<JsArray>(1)?;
     let active_speaker_height = cx.argument::<JsNumber>(2)?.value(&mut cx) as u16;
 
     let mut resolutions = Vec::with_capacity(js_resolutions.len(&mut cx) as usize);
     for i in 0..js_resolutions.len(&mut cx) {
-        let js_resolution = js_resolutions
-            .get(&mut cx, i as u32)?
-            .downcast::<JsObject, _>(&mut cx)
-            .expect("VideoRequest");
+        let js_resolution = js_resolutions.get::<JsObject, _, _>(&mut cx, i as u32)?;
 
-        let demux_id = match js_resolution
-            .get(&mut cx, "demuxId")?
-            .downcast::<JsNumber, _>(&mut cx)
-        {
-            Ok(handle) => Some(handle.value(&mut cx) as DemuxId),
-            Err(_) => None,
-        };
-        let width = match js_resolution
-            .get(&mut cx, "width")?
-            .downcast::<JsNumber, _>(&mut cx)
-        {
-            Ok(handle) => Some(handle.value(&mut cx) as u16),
-            Err(_) => None,
-        };
-        let height = match js_resolution
-            .get(&mut cx, "height")?
-            .downcast::<JsNumber, _>(&mut cx)
-        {
-            Ok(handle) => Some(handle.value(&mut cx) as u16),
-            Err(_) => None,
-        };
-        let framerate = match js_resolution
-            .get(&mut cx, "framerate")?
-            .downcast::<JsNumber, _>(&mut cx)
-        {
-            Ok(handle) => Some(handle.value(&mut cx) as u16),
-            Err(_) => None,
-        };
+        let demux_id = js_resolution
+            .get_opt::<JsNumber, _, _>(&mut cx, "demuxId")?
+            .map(|handle| handle.value(&mut cx) as DemuxId);
+        let width = js_resolution
+            .get_opt::<JsNumber, _, _>(&mut cx, "width")?
+            .map(|handle| handle.value(&mut cx) as u16);
+        let height = js_resolution
+            .get_opt::<JsNumber, _, _>(&mut cx, "height")?
+            .map(|handle| handle.value(&mut cx) as u16);
+        let framerate = js_resolution
+            .get_opt::<JsNumber, _, _>(&mut cx, "framerate")?
+            .map(|handle| handle.value(&mut cx) as u16);
 
         if let (Some(demux_id), Some(width), Some(height)) = (demux_id, width, height) {
             resolutions.push(group_call::VideoRequest {
@@ -1426,28 +1384,17 @@ fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
-    let js_members = *cx.argument::<JsArray>(1)?;
+    let js_members = cx.argument::<JsArray>(1)?;
 
     let mut members = Vec::with_capacity(js_members.len(&mut cx) as usize);
     for i in 0..js_members.len(&mut cx) {
-        let js_member = js_members
-            .get(&mut cx, i as u32)?
-            .downcast::<JsObject, _>(&mut cx)
-            .expect("group_member");
-        let user_id = match js_member
-            .get(&mut cx, "userId")?
-            .downcast::<JsBuffer, _>(&mut cx)
-        {
-            Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
-            Err(_) => None,
-        };
-        let member_id = match js_member
-            .get(&mut cx, "userIdCipherText")?
-            .downcast::<JsBuffer, _>(&mut cx)
-        {
-            Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
-            Err(_) => None,
-        };
+        let js_member = js_members.get::<JsObject, _, _>(&mut cx, i as u32)?;
+        let user_id = js_member
+            .get_opt::<JsBuffer, _, _>(&mut cx, "userId")?
+            .map(|handle| handle.as_slice(&cx).to_vec());
+        let member_id = js_member
+            .get_opt::<JsBuffer, _, _>(&mut cx, "userIdCipherText")?
+            .map(|handle| handle.as_slice(&cx).to_vec());
 
         match (user_id, member_id) {
             (Some(user_id), Some(member_id)) => {
@@ -1473,7 +1420,7 @@ fn setMembershipProof(mut cx: FunctionContext) -> JsResult<JsValue> {
     let proof = cx.argument::<JsValue>(1)?.as_value(&mut cx);
 
     let proof: std::vec::Vec<u8> = match proof.downcast::<JsBuffer, _>(&mut cx) {
-        Ok(handle) => cx.borrow(&handle, |handle| handle.as_slice().to_vec()),
+        Ok(handle) => handle.as_slice(&cx).to_vec(),
         Err(_) => {
             return Ok(cx.undefined().upcast());
         }
@@ -1494,29 +1441,19 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx) as PeerId;
 
     let membership_proof = cx.argument::<JsBuffer>(2)?;
-    let membership_proof = cx.borrow(&membership_proof, |handle| handle.as_slice().to_vec());
+    let membership_proof = membership_proof.as_slice(&cx).to_vec();
 
-    let js_members = *cx.argument::<JsArray>(3)?;
+    let js_members = cx.argument::<JsArray>(3)?;
     let mut members = Vec::with_capacity(js_members.len(&mut cx) as usize);
     for i in 0..js_members.len(&mut cx) {
-        let js_member = js_members
-            .get(&mut cx, i as u32)?
-            .downcast::<JsObject, _>(&mut cx)
-            .expect("group_member");
-        let user_id = match js_member
-            .get(&mut cx, "userId")?
-            .downcast::<JsBuffer, _>(&mut cx)
-        {
-            Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
-            Err(_) => None,
-        };
-        let member_id = match js_member
-            .get(&mut cx, "userIdCipherText")?
-            .downcast::<JsBuffer, _>(&mut cx)
-        {
-            Ok(handle) => Some(cx.borrow(&handle, |handle| handle.as_slice().to_vec())),
-            Err(_) => None,
-        };
+        let js_member = js_members.get::<JsObject, _, _>(&mut cx, i as u32)?;
+        let user_id = js_member
+            .get_opt::<JsBuffer, _, _>(&mut cx, "userId")?
+            .map(|handle| handle.as_slice(&cx).to_vec());
+
+        let member_id = js_member
+            .get_opt::<JsBuffer, _, _>(&mut cx, "userIdCipherText")?
+            .map(|handle| handle.as_slice(&cx).to_vec());
 
         match (user_id, member_id) {
             (Some(user_id), Some(member_id)) => {
@@ -1623,9 +1560,7 @@ fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
     let this = cx.this();
-    let observer = this
-        .get(&mut cx, "observer")?
-        .downcast_or_throw::<JsObject, _>(&mut cx)?;
+    let observer = this.get::<JsObject, _, _>(&mut cx, "observer")?;
 
     let log_entries = std::mem::take(&mut *LOG_MESSAGES.lock().expect("lock log messages"));
     for log_entry in log_entries {
@@ -1636,10 +1571,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             cx.number(log_entry.line).upcast(),
             cx.string(log_entry.message).upcast(),
         ];
-        let method = *observer
-            .get(&mut cx, method_name)?
-            .downcast::<JsFunction, _>(&mut cx)
-            .expect("onLogMessage is a function");
+        let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
         method.call(&mut cx, observer, args)?;
     }
 
@@ -1657,10 +1589,9 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     Handle<JsValue>,
                 ) = match signal {
                     signaling::Message::Offer(offer) => {
-                        let mut opaque = cx.buffer(offer.opaque.len() as u32)?;
-                        cx.borrow_mut(&mut opaque, |handle| {
-                            handle.as_mut_slice().copy_from_slice(&offer.opaque);
-                        });
+                        let mut opaque = cx.buffer(offer.opaque.len())?;
+                        opaque.as_mut_slice(&mut cx).copy_from_slice(&offer.opaque);
+
                         (
                             "onSendOffer",
                             cx.number(offer.call_media_type as i32).upcast(),
@@ -1669,10 +1600,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         )
                     }
                     signaling::Message::Answer(answer) => {
-                        let mut opaque = cx.buffer(answer.opaque.len() as u32)?;
-                        cx.borrow_mut(&mut opaque, |handle| {
-                            handle.as_mut_slice().copy_from_slice(&answer.opaque);
-                        });
+                        let mut opaque = cx.buffer(answer.opaque.len())?;
+                        opaque.as_mut_slice(&mut cx).copy_from_slice(&answer.opaque);
 
                         (
                             "onSendAnswer",
@@ -1685,12 +1614,10 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         let js_candidates = JsArray::new(&mut cx, ice.candidates.len() as u32);
                         for (i, candidate) in ice.candidates.iter().enumerate() {
                             let opaque: neon::handle::Handle<JsValue> = {
-                                let mut js_opaque = cx.buffer(candidate.opaque.len() as u32)?;
-                                cx.borrow_mut(&mut js_opaque, |handle| {
-                                    handle
-                                        .as_mut_slice()
-                                        .copy_from_slice(candidate.opaque.as_ref());
-                                });
+                                let mut js_opaque = cx.buffer(candidate.opaque.len())?;
+                                js_opaque
+                                    .as_mut_slice(&mut cx)
+                                    .copy_from_slice(candidate.opaque.as_ref());
                                 js_opaque.upcast()
                             };
 
@@ -1724,11 +1651,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         cx.undefined().upcast(),
                     ),
                 };
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 let args = vec![
                     cx.string(peer_id).upcast(),
                     cx.number(maybe_device_id.unwrap_or(0) as f64).upcast(),
@@ -1748,10 +1671,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     create_id_arg(&mut cx, call_id.as_u64()),
                     cx.boolean(call_media_type == CallMediaType::Video).upcast(),
                 ];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onStartIncomingCall is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1761,10 +1681,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.string(peer_id).upcast(),
                     create_id_arg(&mut cx, call_id.as_u64()),
                 ];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onStartOutgoingCall is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1800,10 +1717,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.string(reason_string).upcast(),
                     cx.number(age.as_secs_f64()).upcast(),
                 ];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onCallEnded is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1831,11 +1745,11 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     CallState::Outgoing(_) => "outgoing",
                     CallState::Ended(_) => "ended",
                 };
-                let args = vec![cx.string(peer_id), cx.string(state_string)];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onCallState is a function");
+                let args = vec![
+                    cx.string(peer_id).upcast(),
+                    cx.string(state_string).upcast(),
+                ];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1845,10 +1759,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.string(peer_id).upcast::<JsValue>(),
                     cx.number(network_route.local_adapter_type as i32).upcast(),
                 ];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onNetworkRouteChanged is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1863,10 +1774,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method_name = "onRemoteVideoEnabled";
                 let args: Vec<Handle<JsValue>> =
                     vec![cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onRemoteVideoEnabled is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1874,10 +1782,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method_name = "onRemoteSharingScreen";
                 let args: Vec<Handle<JsValue>> =
                     vec![cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onRemoteSharingScreen is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1893,10 +1798,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.number(received_level).upcast(),
                 ];
 
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("onAudioLevels is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1922,10 +1824,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let body = match body {
                     None => cx.undefined().upcast(),
                     Some(body) => {
-                        let mut js_body = cx.buffer(body.len() as u32)?;
-                        cx.borrow_mut(&mut js_body, |handle| {
-                            handle.as_mut_slice().copy_from_slice(&body);
-                        });
+                        let mut js_body = cx.buffer(body.len())?;
+                        js_body.as_mut_slice(&mut cx).copy_from_slice(&body);
                         js_body.upcast()
                     }
                 };
@@ -1936,11 +1836,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_headers.upcast(),
                     body,
                 ];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1954,10 +1850,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
                 let args: Vec<Handle<JsValue>> = vec![recipient_uuid, message, urgency];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("sendCallMessage is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1971,10 +1864,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
                 let args: Vec<Handle<JsValue>> = vec![group_id, message, urgency];
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("sendCallMessageToGroup is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1983,11 +1873,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method_name = "requestMembershipProof";
 
                 let args: Vec<Handle<JsValue>> = vec![cx.number(client_id).upcast()];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -1995,11 +1881,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method_name = "requestGroupMembers";
 
                 let args: Vec<Handle<JsValue>> = vec![cx.number(client_id).upcast()];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2013,11 +1895,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.number(client_id).upcast(),
                     cx.number(connection_state as i32).upcast(),
                 ];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2028,11 +1906,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.number(client_id).upcast::<JsValue>(),
                     cx.number(network_route.local_adapter_type as i32).upcast(),
                 ];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2052,11 +1926,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         _ => cx.null().upcast(),
                     },
                 ];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2139,11 +2009,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.number(client_id).upcast(),
                     js_remote_device_states.upcast(),
                 ];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2195,11 +2061,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
                 let args: Vec<Handle<JsValue>> =
                     vec![cx.number(client_id).upcast(), js_info.upcast()];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2251,11 +2113,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
                 let args: Vec<Handle<JsValue>> =
                     vec![cx.number(request_id).upcast(), js_info.upcast()];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2270,11 +2128,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     Ok(())
                 })
                 .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2292,11 +2146,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     to_js_buffer(&mut cx, &sender).upcast(),
                     cx.number(update as i32).upcast(),
                 ];
-                let error_message = format!("{} is a function", method_name);
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect(&error_message);
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
@@ -2322,10 +2172,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_received_levels.upcast(),
                 ];
 
-                let method = *observer
-                    .get(&mut cx, method_name)?
-                    .downcast::<JsFunction, _>(&mut cx)
-                    .expect("handleAudioLevels is a function");
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
         }
