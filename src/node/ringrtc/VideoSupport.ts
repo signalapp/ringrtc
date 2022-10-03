@@ -247,8 +247,10 @@ export class GumVideoCapturer {
 
   private stopCapturing(): void {
     if (!this.capturing()) {
+      RingRTC.logWarn('stopCapturing(): not capturing');
       return;
     }
+    RingRTC.logInfo('stopCapturing()');
     this.captureOptions = undefined;
     if (!!this.mediaStream) {
       for (const track of this.mediaStream.getVideoTracks()) {
