@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.21.2
+
+- Android: Fix possible crash from AndroidNetworkMonitor
+
+- Electron: Update dependencies (neon mainly)
+
+- Reference signalapp/webrtc@5005b
+  - Cherry-pick commits to fix issues
+
 ## v2.21.1
 
 - Group Calls: Expose `isHigherResolutionPending` to apps
