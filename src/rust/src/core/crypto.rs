@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use aes::cipher::{NewCipher, StreamCipher};
-use aes::Aes256Ctr;
+use aes::cipher::{KeyIvInit, StreamCipher};
+use aes::Aes256;
 use hkdf::Hkdf;
-use hmac::{Hmac, Mac as _, NewMac};
+use hmac::{Hmac, Mac as _};
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 use std::collections::HashMap;
@@ -29,6 +29,7 @@ pub const MAC_SIZE_BYTES: usize = 16;
 const HMAC_SHA256_SIZE_BYTES: usize = 256 / 8;
 
 type HmacSha256 = Hmac<Sha256>;
+type Aes256Ctr = ctr::Ctr64BE<Aes256>;
 type AesKey = [u8; 32];
 type HmacKey = [u8; 32];
 type Iv = [u8; 16];
