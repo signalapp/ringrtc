@@ -16,6 +16,8 @@ public class CallManagerGlobal {
     static let shared = CallManagerGlobal()
 
     let webRtcLogger: RTCCallbackLogger
+    private let lock = NSLock()
+    private var hasInitializedFieldTrials = false
 
     // MARK: Object Lifetime
 
@@ -55,6 +57,24 @@ public class CallManagerGlobal {
         #endif
 
         Logger.debug("object! CallManagerGlobal created... \(ObjectIdentifier(self))")
+    }
+
+    static func initialize(fieldTrials: [String: Bool]) {
+        // Implicitly initialize the shared instance, then use it to track whether we've set up the field trials.
+        Self.shared.initFieldTrials(fieldTrials)
+    }
+
+    private func initFieldTrials(_ fieldTrials: [String: Bool]) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !hasInitializedFieldTrials else {
+            return
+        }
+        hasInitializedFieldTrials = true
+
+        RTCInitFieldTrialDictionary(fieldTrials.mapValues({ $0 ? "Enabled" : "Disabled" }))
+        Logger.info("Initialized field trials with \(fieldTrials)")
     }
 
     deinit {

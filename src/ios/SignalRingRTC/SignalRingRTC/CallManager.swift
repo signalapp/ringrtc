@@ -329,9 +329,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     private var videoCaptureController: VideoCaptureController?
 
-    public init(httpClient: HTTPClient) {
+    public init(httpClient: HTTPClient, fieldTrials: [String: Bool] = [:]) {
         // Initialize the global object (mainly for logging).
-        _ = CallManagerGlobal.shared
+        CallManagerGlobal.initialize(fieldTrials: fieldTrials)
 
         self.httpClient = httpClient
         self.sfuClient = SFUClient(httpClient: httpClient)
