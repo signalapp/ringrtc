@@ -80,7 +80,7 @@ esac
 
 hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
 
-RUSTFLAGS_WIN=
+RUSTFLAGS="${RUSTFLAGS:-}"
 
 case "$(rustup show active-toolchain)" in 
     *"x86_64-apple-darwin"* | *"aarch64-apple-darwin"* )
@@ -91,7 +91,7 @@ case "$(rustup show active-toolchain)" in
         DEFAULT_PLATFORM="win32"
         CARGO_TARGET="${CARGO_ARCH}-pc-windows-msvc"
         # Static linking to prevent build errors on Windows ia32
-        RUSTFLAGS_WIN="-C target-feature=+crt-static"
+        RUSTFLAGS="${RUSTFLAGS} -C target-feature=+crt-static"
         ;;
     *"x86_64-unknown-linux"* )
         DEFAULT_PLATFORM="linux"
@@ -116,7 +116,8 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
         gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}"
         ninja -C "${OUTPUT_DIR}"/debug
     else
-        gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false"
+        # Build with debug line tables, but not full debug info.
+        gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1"
         ninja -C "${OUTPUT_DIR}"/release
     fi
 )
@@ -125,24 +126,56 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
 (
     cd src/rust
 
-    if [ "${BUILD_TYPE}" = "debug" ]
+    INCLUDE_RELEASE_FLAG=
+    if [ "${BUILD_TYPE}" = "release" ]
     then
-        RUSTFLAGS="${RUSTFLAGS_WIN}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --target ${CARGO_TARGET} --features electron
-    else
-        RUSTFLAGS="-C link-arg=-s ${RUSTFLAGS_WIN}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --target ${CARGO_TARGET} --features electron --release
+        INCLUDE_RELEASE_FLAG=yes
     fi
+
+    # Build with debug line tables, but not full debug info.
+    export CARGO_PROFILE_RELEASE_DEBUG=1
+
+    copy_to_node() {
+        cp -f "$1" "$2"
+    }
 
     if [ $DEFAULT_PLATFORM = "darwin" ]
     then
-        mkdir -p ../node/build/darwin
-        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/libringrtc.dylib ../node/build/darwin/libringrtc-"${TARGET_ARCH}".node
+        # Save the debug info in dSYM format...
+        export CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed
+        # ...then have Rust strip the library.
+        export CARGO_PROFILE_RELEASE_STRIP=symbols
+        OUTPUT_LIBRARY=libringrtc.dylib
+        DEBUG_PACKAGE=libringrtc.dylib.dSYM
     elif [ $DEFAULT_PLATFORM = "win32" ]
     then
-        mkdir -p ../node/build/win32
-        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/ringrtc.dll ../node/build/win32/libringrtc-"${TARGET_ARCH}".node
+        # Save the debug info in PDB format...
+        export CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed
+        # ...and DLLs don't have anything to strip.
+        # (If you turn on stripping the PDB doesn't get generated at all.)
+        OUTPUT_LIBRARY=ringrtc.dll
+        DEBUG_PACKAGE=ringrtc.pdb
     elif [ $DEFAULT_PLATFORM = "linux" ]
     then
-        mkdir -p ../node/build/linux
-        cp -f target/${CARGO_TARGET}/${BUILD_TYPE}/libringrtc.so ../node/build/linux/libringrtc-"${TARGET_ARCH}".node
+        # DWP files don't seem ready for everyday use.
+        # We'll just save the whole unstripped binary.
+        OUTPUT_LIBRARY=libringrtc.so
+        DEBUG_PACKAGE=libringrtc.so
+        # Manually strip on copy for release builds.
+        if [ "${BUILD_TYPE}" = "release" ]; then
+            copy_to_node() {
+                objcopy -S "$1" "$2"
+            }
+        fi
+    fi
+
+    RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
+
+    mkdir -p ../node/build/${DEFAULT_PLATFORM}
+    copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} ../node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
+
+    if [ "${BUILD_TYPE}" = "release" ]
+    then
+        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc-"${PROJECT_VERSION}"-${DEFAULT_PLATFORM}-"${TARGET_ARCH}"-debuginfo.tar.bz2 -C "$(dirname target/${CARGO_TARGET}/${BUILD_TYPE}/${DEBUG_PACKAGE})" "$(basename ${DEBUG_PACKAGE})"
     fi
 )
