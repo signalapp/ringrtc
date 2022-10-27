@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.21.3
+
+- iOS: Allow WebRTC field trials to be set
+
+- Update dependencies, builds
+
 ## v2.21.2
 
 - Android: Fix possible crash from AndroidNetworkMonitor
