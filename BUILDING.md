@@ -205,6 +205,13 @@ the dependencies, at least once:
     bundle install
     bundle exec pod install
 
+Some of the tests rely on creating incoming connections, which your system "Firewall Options" may
+prevent. All tests should pass if you do not have "Block all incoming connections" on and `xctest`
+appears in the list of software allowed to receive incoming connections. If it isn't, you can add it
+manually by dragging it in from
+
+    open -R $(xcrun --show-sdk-platform-path --sdk iphonesimulator)/Developer/Library/Xcode/Agents/xctest
+
 ### Formatting
 
 We use `rustfmt` to keep the rust code tidy. To run:
