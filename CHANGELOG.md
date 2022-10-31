@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.21.4
+
+- iOS: Add isValidOfferMessage and isValidOpaqueRing to the API
+
 ## v2.21.3
 
 - iOS: Allow WebRTC field trials to be set
