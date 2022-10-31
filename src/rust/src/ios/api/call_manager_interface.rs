@@ -82,6 +82,15 @@ pub struct AppByteSlice {
     pub len: size_t,
 }
 
+impl AppByteSlice {
+    fn as_slice(&self) -> Option<&[u8]> {
+        if self.bytes.is_null() {
+            return None;
+        }
+        Some(unsafe { slice::from_raw_parts(self.bytes, self.len as usize) })
+    }
+}
+
 /// Structure for passing optional u16 values to/from Swift.
 #[repr(C)]
 #[derive(Debug)]
@@ -485,22 +494,11 @@ impl Drop for AppInterface {
 }
 
 pub fn byte_vec_from_app_slice(app_slice: &AppByteSlice) -> Option<Vec<u8>> {
-    if app_slice.bytes.is_null() {
-        return None;
-    }
-    let slice = unsafe { slice::from_raw_parts(app_slice.bytes, app_slice.len as usize) };
-    Some(slice.to_vec())
+    Some(app_slice.as_slice()?.to_vec())
 }
 
 pub fn string_from_app_slice(app_slice: &AppByteSlice) -> Option<String> {
-    if app_slice.bytes.is_null() {
-        return None;
-    }
-    let slice = unsafe { slice::from_raw_parts(app_slice.bytes, app_slice.len as usize) };
-    match std::str::from_utf8(slice) {
-        Ok(s) => Some(s.to_string()),
-        Err(_) => None,
-    }
+    Some(std::str::from_utf8(app_slice.as_slice()?).ok()?.to_string())
 }
 
 #[no_mangle]
@@ -1261,5 +1259,61 @@ pub extern "C" fn ringrtcSetMembershipProof(
     );
     if result.is_err() {
         error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcIsValidOffer(
+    opaque: AppByteSlice,
+    messageAgeSec: u64,
+    callMediaType: i32,
+) -> bool {
+    match call_manager::validate_offer(
+        byte_vec_from_app_slice(&opaque),
+        messageAgeSec,
+        CallMediaType::from_i32(callMediaType),
+    ) {
+        Ok(()) => true,
+        Err(e) => {
+            error!("{:?}", e);
+            false
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcIsCallMessageValidOpaqueRing(
+    message: AppByteSlice,
+    messageAgeSec: u64,
+    callbackContext: *mut c_void,
+    validateGroupIdAndRing: extern "C" fn(AppByteSlice, i64, *mut c_void) -> bool,
+) -> bool {
+    let message = message.as_slice();
+    if message.is_none() {
+        error!("Invalid message");
+        return false;
+    }
+
+    match call_manager::validate_call_message_as_opaque_ring(
+        message.unwrap(),
+        Duration::from_secs(messageAgeSec),
+        |group_id, ring_id| {
+            validateGroupIdAndRing(
+                AppByteSlice {
+                    bytes: group_id.as_ptr(),
+                    len: group_id.len(),
+                },
+                ring_id.into(),
+                callbackContext,
+            )
+        },
+    ) {
+        Ok(()) => true,
+        Err(e) => {
+            error!("{:?}", e);
+            false
+        }
     }
 }

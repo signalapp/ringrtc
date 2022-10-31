@@ -1432,7 +1432,7 @@ fn group_call_ring_expired() {
         1,
         2,
         buf,
-        ringrtc::core::call_manager::MAX_MESSAGE_AGE,
+        ringrtc::core::call_manager::MAX_MESSAGE_AGE + Duration::from_millis(1),
     )
     .expect(error_line!());
     cm.synchronize().expect(error_line!());

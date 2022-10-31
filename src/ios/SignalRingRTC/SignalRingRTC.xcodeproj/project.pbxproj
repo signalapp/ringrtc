@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		17EC850A291057C200319C82 /* RingValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17EC8509291057C200319C82 /* RingValidation.swift */; };
 		38205E6B231845CF00B4BAFD /* Pods_SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */; };
 		383347EE23AA952F00D53B63 /* CallManagerInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E623AA952F00D53B63 /* CallManagerInterface.swift */; };
 		383347EF23AA952F00D53B63 /* CallManagerUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E723AA952F00D53B63 /* CallManagerUtil.swift */; };
@@ -40,6 +41,7 @@
 
 /* Begin PBXFileReference section */
 		17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = CARGO_BUILD_TARGET.xcconfig; sourceTree = "<group>"; };
+		17EC8509291057C200319C82 /* RingValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingValidation.swift; sourceTree = "<group>"; };
 		2C724194C4821B07AE3B7C25 /* Pods_SignalRingRTCTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SignalRingRTCTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		356D59CC1462BF3E3314D693 /* Pods-SignalRingRTCTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTCTests.release.xcconfig"; path = "Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests.release.xcconfig"; sourceTree = "<group>"; };
 		38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Pods_SignalRingRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -128,11 +130,12 @@
 				383347E823AA952F00D53B63 /* Connection.swift */,
 				383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */,
 				38C4E532251A73AC005C2ACB /* GroupCall.swift */,
+				17EC8509291057C200319C82 /* RingValidation.swift */,
+				387059A624EB276700916F99 /* VideoCaptureController.swift */,
 				388AC0CB22FA8B2D00BEC609 /* Info.plist */,
 				388AC0F222FA8F1600BEC609 /* libringrtc */,
 				388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */,
 				38B4DB352331D29200015A3F /* SignalRingRTC.modulemap */,
-				387059A624EB276700916F99 /* VideoCaptureController.swift */,
 			);
 			path = SignalRingRTC;
 			sourceTree = "<group>";
@@ -354,6 +357,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				17EC850A291057C200319C82 /* RingValidation.swift in Sources */,
 				387059A724EB276700916F99 /* VideoCaptureController.swift in Sources */,
 				D0A033A727DA6EF200B0BDC7 /* Logging.swift in Sources */,
 				383347EF23AA952F00D53B63 /* CallManagerUtil.swift in Sources */,
@@ -521,6 +525,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = DE6C4831733C40B0AA3F9822 /* Pods-SignalRingRTC.debug.xcconfig */;
 			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGN_STYLE = Automatic;
@@ -572,6 +577,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EBFBB74B7B1783321FE6EEA7 /* Pods-SignalRingRTC.release.xcconfig */;
 			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGN_STYLE = Automatic;

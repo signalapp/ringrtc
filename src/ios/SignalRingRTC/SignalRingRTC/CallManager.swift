@@ -113,15 +113,6 @@ public struct NetworkRoute {
     }
 }
 
-/// Type of media for call at time of origination.
-@available(iOSApplicationExtension, unavailable)
-public enum CallMediaType: Int32 {
-    /// Call should start as audio only.
-    case audioCall = 0
-    /// Call should start as audio/video.
-    case videoCall = 1
-}
-
 /// Modes of operation when working with different bandwidth environments.
 @available(iOSApplicationExtension, unavailable)
 public enum BandwidthMode: Int32 {

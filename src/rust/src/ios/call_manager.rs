@@ -9,6 +9,8 @@ use std::ffi::c_void;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::anyhow;
+
 use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppObject};
 use crate::ios::ios_platform::IosPlatform;
 
@@ -16,12 +18,13 @@ use crate::common::{CallId, CallMediaType, DeviceId, Result};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call_manager::CallManager;
 use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
-use crate::core::{group_call, signaling};
+use crate::core::{call_manager, group_call, signaling};
 use crate::error::RingRtcError;
 use crate::lite::{
     http,
     sfu::{GroupMember, UserId},
 };
+use crate::protobuf;
 use crate::webrtc;
 use crate::webrtc::media;
 use crate::webrtc::peer_connection_factory::{self as pcf, PeerConnectionFactory};
@@ -615,4 +618,45 @@ pub fn set_membership_proof(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_membership_proof(client_id, proof);
     Ok(())
+}
+
+pub fn validate_offer(
+    opaque: Option<Vec<u8>>,
+    age_sec: u64,
+    call_media_type: CallMediaType,
+) -> Result<()> {
+    info!("validate_offer()");
+
+    let opaque = match opaque {
+        Some(v) => v,
+        None => {
+            return Err(RingRtcError::OptionValueNotSet(
+                "validate_offer()".to_owned(),
+                "opaque".to_owned(),
+            )
+            .into());
+        }
+    };
+
+    call_manager::validate_offer(&signaling::ReceivedOffer {
+        offer: signaling::Offer::new(call_media_type, opaque)?,
+        age: Duration::from_secs(age_sec),
+        sender_device_id: 1,
+        receiver_device_id: 1,
+        receiver_device_is_primary: true,
+        sender_identity_key: vec![],
+        receiver_identity_key: vec![],
+    })
+    .map_err(|e| anyhow!("{:?}", e))
+}
+
+pub fn validate_call_message_as_opaque_ring(
+    message: &[u8],
+    age: Duration,
+    validate_group_ring: impl FnOnce(group_call::GroupIdRef, group_call::RingId) -> bool,
+) -> Result<()> {
+    info!("validate_call_message_as_opaque_ring()");
+    let message: protobuf::signaling::CallMessage = prost::Message::decode(message)?;
+    call_manager::validate_call_message_as_opaque_ring(&message, age, validate_group_ring)
+        .map_err(|e| anyhow!("{:?}", e))
 }
