@@ -51,6 +51,7 @@ extension rtc_sfu_GroupMembers {
         for i in 0..<self.count {
             self.ptr[i].deallocate()
         }
+        self.ptr.deallocate()
     }
 }
 
