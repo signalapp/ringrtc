@@ -59,8 +59,9 @@ const TICK_INTERVAL_MILLIS: u64 = 200;
 const TICK_INTERVAL: Duration = Duration::from_millis(TICK_INTERVAL_MILLIS);
 
 /// How often to get and log stats
-const POLL_STATS_INTERVAL_MILLIS: u64 = 10_000;
-const POLL_STATS_INTERVAL_TICKS: u64 = POLL_STATS_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
+const POLL_STATS_INTERVAL: Duration = Duration::from_secs(10);
+const POLL_STATS_INTERVAL_TICKS: u64 =
+    POLL_STATS_INTERVAL.as_millis() as u64 / TICK_INTERVAL_MILLIS;
 
 /// How often to retransmit RTP messages.
 const SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS: u64 = 1000;
@@ -624,7 +625,7 @@ where
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
-            let stats_observer = create_stats_observer();
+            let stats_observer = create_stats_observer(POLL_STATS_INTERVAL);
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;
@@ -725,7 +726,7 @@ where
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
-            let stats_observer = create_stats_observer();
+            let stats_observer = create_stats_observer(POLL_STATS_INTERVAL);
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;

@@ -54,7 +54,6 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
       if (stat->media_source_id.is_defined()) {
         auto audio_source_stat = report->GetAs<RTCAudioSourceStats>(*stat->media_source_id);
         if (audio_source_stat) {
-          audio_sender.audio_level = audio_source_stat->audio_level.ValueOrDefault(0.0);
           audio_sender.total_audio_energy = audio_source_stat->total_audio_energy.ValueOrDefault(0.0);
           audio_sender.echo_likelihood = audio_source_stat->echo_likelihood.ValueOrDefault(0.0);
         }
@@ -76,7 +75,6 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
       video_sender.retransmitted_bytes_sent = stat->retransmitted_bytes_sent.ValueOrDefault(0);
       video_sender.total_packet_send_delay = stat->total_packet_send_delay.ValueOrDefault(0.0);
       video_sender.nack_count = stat->nack_count.ValueOrDefault(0);
-      video_sender.fir_count = stat->fir_count.ValueOrDefault(0);
       video_sender.pli_count = stat->pli_count.ValueOrDefault(0);
       if (stat->quality_limitation_reason.is_defined()) {
         // "none" = 0 (the default)
@@ -112,13 +110,10 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
       audio_receiver.packets_lost = stat->packets_lost.ValueOrDefault(0);
       audio_receiver.bytes_received = stat->bytes_received.ValueOrDefault(0);
       audio_receiver.jitter = stat->jitter.ValueOrDefault(0.0);
-      audio_receiver.frames_decoded = stat->frames_decoded.ValueOrDefault(0);
-      audio_receiver.total_decode_time = stat->total_decode_time.ValueOrDefault(0.0);
 
       if (stat->track_id.is_defined()) {
         auto track_stat = report->GetAs<RTCMediaStreamTrackStats>(*stat->track_id);
         if (track_stat) {
-          audio_receiver.audio_level = track_stat->audio_level.ValueOrDefault(0.0);
           audio_receiver.total_audio_energy = track_stat->total_audio_energy.ValueOrDefault(0.0);
         }
       }

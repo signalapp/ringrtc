@@ -1005,7 +1005,7 @@ impl Client {
                     next_heartbeat_time: None,
 
                     next_stats_time: None,
-                    stats_observer: create_stats_observer(),
+                    stats_observer: create_stats_observer(STATS_INTERVAL),
 
                     audio_levels_interval,
                     next_audio_levels_time: None,

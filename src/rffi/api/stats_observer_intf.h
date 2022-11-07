@@ -28,7 +28,6 @@ typedef struct {
   int32_t remote_packets_lost;
   double remote_jitter;
   double remote_round_trip_time;
-  double audio_level;
   double total_audio_energy;
   double echo_likelihood;
 } AudioSenderStatistics;
@@ -46,7 +45,6 @@ typedef struct {
   uint64_t retransmitted_bytes_sent;
   double total_packet_send_delay;
   uint32_t nack_count;
-  uint32_t fir_count;
   uint32_t pli_count;
   uint32_t quality_limitation_reason;  // 0 - kNone, 1 - kCpu, 2 - kBandwidth, 3 - kOther
   uint32_t quality_limitation_resolution_changes;
@@ -61,9 +59,6 @@ typedef struct {
     int32_t packets_lost;
     uint64_t bytes_received;
     double jitter;
-    uint32_t frames_decoded;
-    double total_decode_time;
-    double audio_level;
     double total_audio_energy;
 } AudioReceiverStatistics;
 
