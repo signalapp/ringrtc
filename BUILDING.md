@@ -14,6 +14,10 @@ The following is derived from the depot_tools tutorial: https://commondatastorag
     git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
     export PATH=<somewhere>/depot_tools:"$PATH"
 
+### Protobuf
+
+The protobuf compiler, protoc, is needed to build RingRTC. Installation is platform specific and can be found [here](https://grpc.io/docs/protoc-installation/).
+
 ### Rust Components
 
 Install rustup, the Rust management system:
