@@ -2912,6 +2912,85 @@ fn group_call_ring_accepted() {
 }
 
 #[test]
+fn group_call_ring_accepted_with_existing_call() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let sender = vec![1, 2, 3];
+    let ring_id = group_call::RingId::from(42);
+
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    assert_eq!(
+        &[] as &[ringrtc::sim::sim_platform::OutgoingCallMessage],
+        &messages[..]
+    );
+
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    match &messages[..] {
+        [message] => {
+            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(
+                group_call::SignalingMessageUrgency::HandleImmediately,
+                message.urgency
+            );
+            let call_message = protobuf::signaling::CallMessage::decode(&message.message[..])
+                .expect(error_line!());
+            assert_eq!(
+                protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(group_id.to_vec()),
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
+                            protobuf::signaling::call_message::ring_response::Type::Accepted.into()
+                        ),
+                    }),
+                    ..Default::default()
+                },
+                call_message
+            );
+        }
+        _ => panic!("unexpected messages: {:?}", messages),
+    }
+}
+
+#[test]
 fn group_call_ring_too_old() {
     test_init();
 

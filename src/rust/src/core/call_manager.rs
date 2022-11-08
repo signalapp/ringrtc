@@ -1779,6 +1779,17 @@ where
             );
         }
 
+        {
+            if let Ok(mut group_calls) = self.group_call_by_client_id.lock() {
+                group_calls
+                    .values_mut()
+                    .filter(|call| call.group_id == group_id)
+                    .for_each(|call| call.provide_ring_id_if_absent(ring_id))
+            } else {
+                // Ignore the failure to lock; it's more important that we cancel the ring.
+            }
+        }
+
         let mut self_for_timeout = self.clone();
         self.worker_spawn(
             async move {

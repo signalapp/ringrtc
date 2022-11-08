@@ -1046,6 +1046,30 @@ impl Client {
         Ok(client)
     }
 
+    pub fn provide_ring_id_if_absent(&self, ring_id: RingId) {
+        self.actor.send(move |state| match &mut state.join_state {
+            JoinState::NotJoined(Some(existing_ring_id)) => {
+                // Note that we prefer older rings to newer, unlike when processing incoming rings.
+                // This is because we expect the call to already be handling the existing ring
+                // (maybe that's what's actively ringing in the app).
+                warn!(
+                    "discarding ring {}; already have a ring for the same group ({})",
+                    ring_id, existing_ring_id
+                );
+            }
+            JoinState::NotJoined(saved_ring_id) => {
+                debug_assert!(saved_ring_id.is_none());
+                *saved_ring_id = Some(ring_id);
+            }
+            JoinState::Joining | JoinState::Joined(_) => {
+                warn!(
+                    "ignoring ring {} for a call we have already joined or are currently joining",
+                    ring_id
+                );
+            }
+        });
+    }
+
     // Should only be used for testing
     pub fn override_send_rates(&self, send_rates_override: SendRates) {
         self.actor.send(move |state| {
