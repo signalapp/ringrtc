@@ -9,11 +9,8 @@ jobs:
     name: Code Formatting
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        components: rustfmt
+    - uses: actions/checkout@v3
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component rustfmt
     - name: Check rust format
       run: cargo fmt -- --check
       working-directory: src/rust
@@ -30,18 +27,12 @@ jobs:
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        components: clippy
+    - uses: actions/checkout@v3
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
     - run: shellcheck **/*.sh bin/build-aar bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-android-deps bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check src/rust/scripts/run-tests
-    - run: rm -rf out/rust-lint
-    - uses: actions-rs/clippy-check@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        args: --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --tests --features sim -- -D warnings
-    - run: rustup target add aarch64-linux-android aarch64-apple-ios
+    - name: Clippy
+      run: cargo clippy --tests --features sim -- -D warnings
+      working-directory: src/rust
     - name: Clippy (Android)
       run: cargo clippy --target aarch64-linux-android -- -D warnings
       working-directory: src/rust
@@ -67,9 +58,7 @@ jobs:
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
+    - uses: actions/checkout@v3
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - name: Run rust tests
       run: cd src/rust && ./scripts/run-tests
