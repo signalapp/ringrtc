@@ -40,7 +40,7 @@ jobs:
     - uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        args: --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --features sim -- -D warnings
+        args: --target-dir=out/rust-lint --manifest-path=./src/rust/Cargo.toml --tests --features sim -- -D warnings
     - run: rustup target add aarch64-linux-android aarch64-apple-ios
     - name: Clippy (Android)
       run: cargo clippy --target aarch64-linux-android -- -D warnings

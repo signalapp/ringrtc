@@ -5346,7 +5346,7 @@ mod tests {
                 .next()
                 .unwrap()
         };
-        let set_client_decoded_height = |client: &TestClient, height: u32| -> () {
+        let set_client_decoded_height = |client: &TestClient, height: u32| {
             let mut remote_devices = client.observer.remote_devices.lock().unwrap();
             remote_devices.get_mut(0).unwrap().client_decoded_height = Some(height);
         };
@@ -5386,7 +5386,7 @@ mod tests {
                 .map(|remote| (remote.demux_id, remote.server_allocated_height))
                 .collect()
         };
-        let set_client_decoded_height = |client: &TestClient, height: u32| -> () {
+        let set_client_decoded_height = |client: &TestClient, height: u32| {
             let mut remote_devices = client.observer.remote_devices.lock().unwrap();
             let mut device = remote_devices.get_mut(0).unwrap();
             device.client_decoded_height = Some(height);
@@ -5406,7 +5406,7 @@ mod tests {
         client1.set_remotes_and_wait_until_applied(&[&client2]);
 
         assert_eq!(vec![(2, 0)], get_forwarding_videos(&client1));
-        assert_eq!(false, is_higher_resolution_pending(&client1));
+        assert!(!is_higher_resolution_pending(&client1));
 
         client1
             .client
@@ -5422,7 +5422,7 @@ mod tests {
         // After receiving the higher resolution video, the pending status is cleared.
         set_client_decoded_height(&client1, 240);
 
-        assert_eq!(false, is_higher_resolution_pending(&client1));
+        assert!(!is_higher_resolution_pending(&client1));
 
         client1.disconnect_and_wait_until_ended();
     }
