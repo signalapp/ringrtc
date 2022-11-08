@@ -2427,6 +2427,13 @@ impl Client {
                 "Storing media receive key from {} because we don't know who they are yet.",
                 demux_id
             );
+            if state.pending_media_receive_keys.is_empty() {
+                // Proactively ask for the group members again.
+                // Since pending_media_receive_keys is re-processed every time we get a device
+                // update, this will effectively be requested once per peek as long as there's an
+                // unknown device in the call.
+                state.observer.request_group_members(state.client_id);
+            }
             state
                 .pending_media_receive_keys
                 .push((user_id, demux_id, ratchet_counter, secret));
@@ -3591,6 +3598,7 @@ mod tests {
         era_id: Option<String>,
 
         request_membership_proof_invocation_count: Arc<AtomicU64>,
+        request_group_members_invocation_count: Arc<AtomicU64>,
         handle_remote_devices_changed_invocation_count: Arc<AtomicU64>,
         handle_audio_levels_invocation_count: Arc<AtomicU64>,
     }
@@ -3625,6 +3633,7 @@ mod tests {
                 ended: Waitable::default(),
                 era_id: None,
                 request_membership_proof_invocation_count: Default::default(),
+                request_group_members_invocation_count: Default::default(),
                 handle_remote_devices_changed_invocation_count: Default::default(),
                 handle_audio_levels_invocation_count: Default::default(),
             }
@@ -3691,6 +3700,12 @@ mod tests {
                 .swap(0, Ordering::Relaxed)
         }
 
+        /// Gets the number of `request_group_members` since last checked.
+        fn request_group_members_invocation_count(&self) -> u64 {
+            self.request_group_members_invocation_count
+                .swap(0, Ordering::Relaxed)
+        }
+
         /// Gets the number of `handle_remote_devices_changed` since last checked.
         fn handle_remote_devices_changed_invocation_count(&self) -> u64 {
             self.handle_remote_devices_changed_invocation_count
@@ -3710,7 +3725,10 @@ mod tests {
                 .fetch_add(1, Ordering::Relaxed);
         }
 
-        fn request_group_members(&self, _client_id: ClientId) {}
+        fn request_group_members(&self, _client_id: ClientId) {
+            self.request_group_members_invocation_count
+                .fetch_add(1, Ordering::Relaxed);
+        }
 
         fn handle_connection_state_changed(
             &self,
@@ -4411,6 +4429,64 @@ mod tests {
         client1.disconnect_and_wait_until_ended();
         client2.disconnect_and_wait_until_ended();
         client3.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn ask_for_group_membership_when_receiving_unknown_media_keys() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        client1.connect_join_and_wait_until_joined();
+        assert_eq!(1, client1.observer.request_group_members_invocation_count());
+
+        let client2 = TestClient::new(vec![2], 2, None);
+        client2.connect_join_and_wait_until_joined();
+
+        let client3 = TestClient::new(vec![3], 3, None);
+        client3.connect_join_and_wait_until_joined();
+
+        assert_eq!(0, client1.observer.request_group_members_invocation_count());
+
+        // Request group membership for the first unknown media key...
+        client2.set_remotes_and_wait_until_applied(&[&client1]);
+        client1.wait_for_client_to_process();
+        assert_eq!(1, client1.observer.request_group_members_invocation_count());
+
+        // ...but not any after that.
+        client3.set_remotes_and_wait_until_applied(&[&client1]);
+        client1.wait_for_client_to_process();
+        assert_eq!(0, client1.observer.request_group_members_invocation_count());
+
+        // Re-process (and maybe re-request) when the list of active devices changes.
+        client1.set_remotes_and_wait_until_applied(&[]);
+        assert_eq!(1, client1.observer.request_group_members_invocation_count());
+
+        // Resolving one member results in a re-request, just in case.
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+        assert_eq!(1, client1.observer.request_group_members_invocation_count());
+
+        // But resolving the other member is enough to clear the saved list,
+        // showing that we already processed the first.
+        client1.set_remotes_and_wait_until_applied(&[&client3]);
+        assert_eq!(0, client1.observer.request_group_members_invocation_count());
+    }
+
+    #[test]
+    fn do_not_ask_for_group_membership_when_receiving_known_media_keys() {
+        let client1 = TestClient::new(vec![1], 1, None);
+        client1.connect_join_and_wait_until_joined();
+        assert_eq!(1, client1.observer.request_group_members_invocation_count());
+
+        let client2 = TestClient::new(vec![2], 2, None);
+        client2.connect_join_and_wait_until_joined();
+
+        assert_eq!(0, client1.observer.request_group_members_invocation_count());
+
+        // This time, the receiver finds out about the sender first...
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+
+        // ...so the media key sent here won't be unknown.
+        client2.set_remotes_and_wait_until_applied(&[&client1]);
+        client1.wait_for_client_to_process();
+        assert_eq!(0, client1.observer.request_group_members_invocation_count());
     }
 
     #[test]
