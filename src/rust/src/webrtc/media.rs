@@ -372,9 +372,9 @@ impl From<&AudioEncoderConfig> for RffiAudioEncoderConfig {
             min_bitrate_bps: config.min_bitrate_bps as i32,
             max_bitrate_bps: config.max_bitrate_bps as i32,
             complexity: config.complexity as i32,
-            enable_vbr: if config.enable_cbr { 0 } else { 1 },
-            enable_dtx: if config.enable_dtx { 1 } else { 0 },
-            enable_fec: if config.enable_fec { 1 } else { 0 },
+            enable_vbr: i32::from(!config.enable_cbr),
+            enable_dtx: i32::from(config.enable_dtx),
+            enable_fec: i32::from(config.enable_fec),
         }
     }
 }

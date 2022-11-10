@@ -335,7 +335,7 @@ impl CallEndpoint {
         let outgoing_video_track =
             peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
         outgoing_video_track.set_enabled(false);
-        let incoming_video_sink = Box::new(LastFramesVideoSink::default());
+        let incoming_video_sink = Box::<LastFramesVideoSink>::default();
 
         let event_reported = Arc::new(AtomicBool::new(false));
         let js_object = Arc::new(Root::new(cx, &*js_object));
@@ -493,7 +493,7 @@ fn with_call_endpoint<T>(cx: &mut FunctionContext, body: impl FnOnce(&mut CallEn
         .get::<JsBox<RefCell<CallEndpoint>>, _, _>(cx, CALL_ENDPOINT_PROPERTY_KEY)
         .expect("has endpoint");
     let mut endpoint = endpoint.borrow_mut();
-    body(&mut *endpoint)
+    body(&mut endpoint)
 }
 
 impl Finalize for CallEndpoint {
@@ -626,7 +626,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len(&mut cx) as usize);
     for i in 0..js_ice_server_urls.len(&mut cx) {
         let url: String = js_ice_server_urls
-            .get::<JsString, _, _>(&mut cx, i as u32)?
+            .get::<JsString, _, _>(&mut cx, i)?
             .value(&mut cx);
         ice_server_urls.push(url);
     }
@@ -829,7 +829,7 @@ fn receivedIceCandidates(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let mut candidates = Vec::with_capacity(js_candidates.len(&mut cx) as usize);
     for i in 0..js_candidates.len(&mut cx) {
-        let js_candidate = js_candidates.get::<JsBuffer, _, _>(&mut cx, i as u32)?;
+        let js_candidate = js_candidates.get::<JsBuffer, _, _>(&mut cx, i)?;
         let opaque = js_candidate.as_slice(&cx).to_vec();
         candidates.push(signaling::IceCandidate::new(opaque));
     }
@@ -1344,7 +1344,7 @@ fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let mut resolutions = Vec::with_capacity(js_resolutions.len(&mut cx) as usize);
     for i in 0..js_resolutions.len(&mut cx) {
-        let js_resolution = js_resolutions.get::<JsObject, _, _>(&mut cx, i as u32)?;
+        let js_resolution = js_resolutions.get::<JsObject, _, _>(&mut cx, i)?;
 
         let demux_id = js_resolution
             .get_opt::<JsNumber, _, _>(&mut cx, "demuxId")?
@@ -1388,7 +1388,7 @@ fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let mut members = Vec::with_capacity(js_members.len(&mut cx) as usize);
     for i in 0..js_members.len(&mut cx) {
-        let js_member = js_members.get::<JsObject, _, _>(&mut cx, i as u32)?;
+        let js_member = js_members.get::<JsObject, _, _>(&mut cx, i)?;
         let user_id = js_member
             .get_opt::<JsBuffer, _, _>(&mut cx, "userId")?
             .map(|handle| handle.as_slice(&cx).to_vec());
@@ -1446,7 +1446,7 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     let js_members = cx.argument::<JsArray>(3)?;
     let mut members = Vec::with_capacity(js_members.len(&mut cx) as usize);
     for i in 0..js_members.len(&mut cx) {
-        let js_member = js_members.get::<JsObject, _, _>(&mut cx, i as u32)?;
+        let js_member = js_members.get::<JsObject, _, _>(&mut cx, i)?;
         let user_id = js_member
             .get_opt::<JsBuffer, _, _>(&mut cx, "userId")?
             .map(|handle| handle.as_slice(&cx).to_vec());

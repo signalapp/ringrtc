@@ -181,7 +181,7 @@ impl Platform for IosPlatform {
         (self.app_interface.onStartCall)(
             self.app_interface.object,
             remote_peer.ptr,
-            u64::from(call_id) as u64,
+            u64::from(call_id),
             direction == CallDirection::OutGoing,
             call_media_type as i32,
         );
@@ -228,8 +228,8 @@ impl Platform for IosPlatform {
         (self.app_interface.onAudioLevels)(
             self.app_interface.object,
             remote_peer.ptr,
-            captured_level as u16,
-            received_level as u16,
+            captured_level,
+            received_level,
         );
 
         Ok(())
@@ -249,7 +249,7 @@ impl Platform for IosPlatform {
 
         (self.app_interface.onSendOffer)(
             self.app_interface.object,
-            u64::from(call_id) as u64,
+            u64::from(call_id),
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
@@ -277,7 +277,7 @@ impl Platform for IosPlatform {
 
         (self.app_interface.onSendAnswer)(
             self.app_interface.object,
-            u64::from(call_id) as u64,
+            u64::from(call_id),
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
@@ -324,7 +324,7 @@ impl Platform for IosPlatform {
         // be consumed by the integration layer before returning.
         (self.app_interface.onSendIceCandidates)(
             self.app_interface.object,
-            u64::from(call_id) as u64,
+            u64::from(call_id),
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
@@ -353,7 +353,7 @@ impl Platform for IosPlatform {
 
         (self.app_interface.onSendHangup)(
             self.app_interface.object,
-            u64::from(call_id) as u64,
+            u64::from(call_id),
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
@@ -373,7 +373,7 @@ impl Platform for IosPlatform {
 
         (self.app_interface.onSendBusy)(
             self.app_interface.object,
-            u64::from(call_id) as u64,
+            u64::from(call_id),
             remote_peer.ptr,
             receiver_device_id,
             broadcast,
@@ -573,7 +573,7 @@ impl Platform for IosPlatform {
         (self.app_interface.handleAudioLevels)(
             self.app_interface.object,
             client_id,
-            captured_level as u16,
+            captured_level,
             app_received_levels_array,
         );
     }

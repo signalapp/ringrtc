@@ -81,7 +81,7 @@ pub mod ios {
             if self.ptr.is_null() {
                 return &[];
             }
-            unsafe { std::slice::from_raw_parts(self.ptr, self.count as usize) }
+            unsafe { std::slice::from_raw_parts(self.ptr, self.count) }
         }
 
         pub fn to_vec(&self) -> Vec<u8> {
@@ -124,7 +124,7 @@ pub mod ios {
             if self.ptr.is_null() {
                 return None;
             }
-            let bytes = unsafe { std::slice::from_raw_parts(self.ptr, self.count as usize) };
+            let bytes = unsafe { std::slice::from_raw_parts(self.ptr, self.count) };
             std::str::from_utf8(bytes).ok()
         }
 

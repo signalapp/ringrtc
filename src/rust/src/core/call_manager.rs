@@ -141,6 +141,7 @@ where
     /// The type of message the item corresponds to.
     message_type: signaling::MessageType,
     /// The closure to be called which will send the message.
+    #[allow(clippy::type_complexity)]
     message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<MessageSendResult> + Send>,
 }
 
@@ -977,7 +978,7 @@ where
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_hangup(&*remote_peer, call_id, send)?;
+            platform.on_send_hangup(&remote_peer, call_id, send)?;
 
             Ok(MessageSendResult::Sent)
         });
@@ -1013,7 +1014,7 @@ where
 
         if let Some(event) = event {
             let remote_peer = call.remote_peer()?;
-            self.notify_application(&*remote_peer, call_id, event)?;
+            self.notify_application(&remote_peer, call_id, event)?;
         }
 
         if let Some(hangup) = hangup {
@@ -1038,7 +1039,7 @@ where
             error!("Conclude call future failed: {}", err);
             if let Ok(remote_peer) = call_error.remote_peer() {
                 let _ = cm_error.notify_application(
-                    &*remote_peer,
+                    &remote_peer,
                     call_id,
                     ApplicationEvent::EndedInternalFailure,
                 );
@@ -1878,7 +1879,7 @@ where
             let remote_peer = call.remote_peer()?;
 
             let platform = cm.platform.lock()?;
-            platform.on_send_busy(&*remote_peer, call_id)?;
+            platform.on_send_busy(&remote_peer, call_id)?;
 
             Ok(MessageSendResult::Sent)
         });
@@ -2372,7 +2373,7 @@ where
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_offer(&*remote_peer, call_id, offer)?;
+                platform.on_send_offer(&remote_peer, call_id, offer)?;
                 Ok(MessageSendResult::Sent)
             } else {
                 Ok(MessageSendResult::NotSent)
@@ -2413,7 +2414,7 @@ where
 
             if connection.can_send_messages() {
                 let platform = cm.platform.lock()?;
-                platform.on_send_answer(&*remote_peer, call_id, send)?;
+                platform.on_send_answer(&remote_peer, call_id, send)?;
                 Ok(MessageSendResult::Sent)
             } else {
                 Ok(MessageSendResult::NotSent)
@@ -2460,7 +2461,7 @@ where
 
             let platform = cm.platform.lock()?;
             platform.on_send_ice(
-                &*remote_peer,
+                &remote_peer,
                 call_id,
                 signaling::SendIce {
                     receiver_device_id: if broadcast {

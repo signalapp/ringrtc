@@ -169,7 +169,7 @@ where
             // release the the remote object.
             if let Ok(call_manager) = self.call_manager() {
                 if let Ok(remote_peer) = self.remote_peer() {
-                    let _ = call_manager.notify_call_concluded(&*remote_peer, self.call_id);
+                    let _ = call_manager.notify_call_concluded(&remote_peer, self.call_id);
                 }
             }
         } else {
@@ -416,7 +416,7 @@ where
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.start_call(&*remote_peer, self.call_id, self.direction, self.media_type)
+        call_manager.start_call(&remote_peer, self.call_id, self.direction, self.media_type)
     }
 
     /// Enable media flowing through the active connection and notify the application.
@@ -458,7 +458,7 @@ where
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.notify_application(&*remote_peer, self.call_id, event)
+        call_manager.notify_application(&remote_peer, self.call_id, event)
     }
 
     /// Notify application of a change to the network route.
@@ -468,7 +468,7 @@ where
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.notify_network_route_changed(&*remote_peer, network_route)
+        call_manager.notify_network_route_changed(&remote_peer, network_route)
     }
 
     /// Notify application of audio levels
@@ -482,7 +482,7 @@ where
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.notify_audio_levels(&*remote_peer, captured_level, received_level)
+        call_manager.notify_audio_levels(&remote_peer, captured_level, received_level)
     }
 
     /// Notify call manager of an internal error.
@@ -541,7 +541,7 @@ where
         let call_manager = self.call_manager()?;
         let remote_peer = self.remote_peer()?;
 
-        call_manager.connect_incoming_media(&*remote_peer, &self.call_context()?, incoming_media)
+        call_manager.connect_incoming_media(&remote_peer, &self.call_context()?, incoming_media)
     }
 
     /// Proceed with the current call.

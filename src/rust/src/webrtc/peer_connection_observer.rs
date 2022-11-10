@@ -243,7 +243,7 @@ extern "C" fn pc_observer_OnIceCandidatesRemoved<T>(
         trace!("pc_observer_OnIceCandidatesRemoved(): length: {}", length);
 
         let removed_addresses =
-            unsafe { slice::from_raw_parts(removed_addresses.as_ptr(), length as usize) }
+            unsafe { slice::from_raw_parts(removed_addresses.as_ptr(), length) }
                 .iter()
                 .map(|address| address.into())
                 .collect();
@@ -440,8 +440,7 @@ extern "C" fn pc_observer_OnRtpReceived<T>(
             timestamp,
             ssrc,
         };
-        let payload =
-            unsafe { slice::from_raw_parts(payload_data.as_ptr(), payload_size as usize) };
+        let payload = unsafe { slice::from_raw_parts(payload_data.as_ptr(), payload_size) };
         observer.handle_rtp_received(header, payload)
     } else {
         error!("pc_observer_OnRtpReceived called with null observer");
@@ -499,10 +498,8 @@ where
 
     // Safe because the observer should still be alive (it was just passed to us)
     if let Some(observer) = unsafe { observer.as_mut() } {
-        let plaintext =
-            unsafe { slice::from_raw_parts(plaintext.as_ptr(), plaintext_size as usize) };
-        let ciphertext =
-            unsafe { slice::from_raw_parts_mut(ciphertext_out, ciphertext_out_size as usize) };
+        let plaintext = unsafe { slice::from_raw_parts(plaintext.as_ptr(), plaintext_size) };
+        let ciphertext = unsafe { slice::from_raw_parts_mut(ciphertext_out, ciphertext_out_size) };
 
         match observer.encrypt_media(is_audio, plaintext, ciphertext) {
             Ok(size) => {
@@ -565,10 +562,8 @@ where
 
     // Safe because the observer should still be alive (it was just passed to us)
     if let Some(observer) = unsafe { observer.as_mut() } {
-        let ciphertext =
-            unsafe { slice::from_raw_parts(ciphertext.as_ptr(), ciphertext_size as usize) };
-        let plaintext =
-            unsafe { slice::from_raw_parts_mut(plaintext_out, plaintext_out_size as usize) };
+        let ciphertext = unsafe { slice::from_raw_parts(ciphertext.as_ptr(), ciphertext_size) };
+        let plaintext = unsafe { slice::from_raw_parts_mut(plaintext_out, plaintext_out_size) };
 
         match observer.decrypt_media(track_id, is_audio, ciphertext, plaintext) {
             Ok(size) => {

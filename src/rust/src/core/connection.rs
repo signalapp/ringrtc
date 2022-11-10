@@ -2108,7 +2108,7 @@ where
 }
 
 fn generate_local_secret_and_public_key() -> Result<(StaticSecret, PublicKey)> {
-    let secret = StaticSecret::new(&mut OsRng);
+    let secret = StaticSecret::new(OsRng);
     let public = PublicKey::from(&secret);
     Ok((secret, public))
 }

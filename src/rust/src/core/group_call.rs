@@ -1332,7 +1332,7 @@ impl Client {
                         state.observer.request_membership_proof(state.client_id);
                         state.next_membership_proof_request_time = Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
 
-                        let client_secret = EphemeralSecret::new(&mut OsRng);
+                        let client_secret = EphemeralSecret::new(OsRng);
                         let client_pub_key = PublicKey::from(&client_secret);
                         state.dhe_state = DheState::start(client_secret);
                         state.sfu_client.join(
@@ -5568,7 +5568,7 @@ mod tests {
         );
 
         client1.client.set_peek_result(Ok(PeekInfo {
-            devices: (&devices[..1]).to_vec(),
+            devices: devices[..1].to_vec(),
             device_count: 1,
             max_devices: None,
             creator: None,
@@ -5585,7 +5585,7 @@ mod tests {
         );
 
         client1.client.set_peek_result(Ok(PeekInfo {
-            devices: (&devices[..2]).to_vec(),
+            devices: devices[..2].to_vec(),
             device_count: 1,
             max_devices: None,
             creator: None,
@@ -5602,7 +5602,7 @@ mod tests {
         );
 
         client1.client.set_peek_result(Ok(PeekInfo {
-            devices: (&devices[..5]).to_vec(),
+            devices: devices[..5].to_vec(),
             device_count: 5,
             max_devices: None,
             creator: None,
@@ -5619,7 +5619,7 @@ mod tests {
         );
 
         client1.client.set_peek_result(Ok(PeekInfo {
-            devices: (&devices[..20]).to_vec(),
+            devices: devices[..20].to_vec(),
             device_count: 20,
             max_devices: None,
             creator: None,
@@ -5658,7 +5658,7 @@ mod tests {
         );
 
         client1.client.set_peek_result(Ok(PeekInfo {
-            devices: (&devices[..0]).to_vec(),
+            devices: devices[..0].to_vec(),
             device_count: 0,
             max_devices: None,
             creator: None,
@@ -5686,7 +5686,7 @@ mod tests {
         );
 
         client1.client.set_peek_result(Ok(PeekInfo {
-            devices: (&devices[..20]).to_vec(),
+            devices: devices[..20].to_vec(),
             device_count: 20,
             max_devices: None,
             creator: None,

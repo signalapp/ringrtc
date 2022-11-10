@@ -87,7 +87,7 @@ impl AppByteSlice {
         if self.bytes.is_null() {
             return None;
         }
-        Some(unsafe { slice::from_raw_parts(self.bytes, self.len as usize) })
+        Some(unsafe { slice::from_raw_parts(self.bytes, self.len) })
     }
 }
 

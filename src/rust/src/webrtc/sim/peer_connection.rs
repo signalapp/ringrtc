@@ -294,7 +294,7 @@ pub unsafe fn Rust_sendRtp(
 ) -> bool {
     info!("Rust_sendRtp:");
     let mut state = (*peer_connection.as_ptr()).state.lock().unwrap();
-    let payload = std::slice::from_raw_parts(payload_data.as_ptr(), payload_size as usize);
+    let payload = std::slice::from_raw_parts(payload_data.as_ptr(), payload_size);
     state.last_sent_rtp_data = Some(payload.to_vec());
     if let Some(rtp_packet_sink) = &state.rtp_packet_sink {
         let header = rtp::Header {
