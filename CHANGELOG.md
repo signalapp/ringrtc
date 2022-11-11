@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.21.5
+
+- Group Calls: Improve ring handling
+
+- Group Calls: Update group membership upon unknown media keys 
+
+- Improve display of stats in logs
+
+- Update builds and documentation
+
+- Update Rust
+
 ## v2.21.4
 
 - iOS: Add isValidOfferMessage and isValidOpaqueRing to the API
