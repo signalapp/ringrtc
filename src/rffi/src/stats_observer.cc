@@ -125,7 +125,6 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
       video_receiver.ssrc = stat->ssrc.ValueOrDefault(0);
       video_receiver.packets_received = stat->packets_received.ValueOrDefault(0);
       video_receiver.packets_lost = stat->packets_lost.ValueOrDefault(0);
-      video_receiver.packets_repaired = stat->packets_repaired.ValueOrDefault(0);
       video_receiver.bytes_received = stat->bytes_received.ValueOrDefault(0);
       video_receiver.frames_decoded = stat->frames_decoded.ValueOrDefault(0);
       video_receiver.key_frames_decoded = stat->key_frames_decoded.ValueOrDefault(0);

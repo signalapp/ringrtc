@@ -66,7 +66,6 @@ typedef struct {
     uint32_t ssrc;
     uint32_t packets_received;
     int32_t packets_lost;
-    uint32_t packets_repaired;
     uint64_t bytes_received;
     uint32_t frames_decoded;
     uint32_t key_frames_decoded;

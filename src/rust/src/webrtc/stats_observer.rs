@@ -114,7 +114,6 @@ impl StatsObserver {
                 ssrc,\
                 packets_per_second,\
                 packets_lost,\
-                packets_repaired,\
                 bitrate,\
                 framerate,\
                 key_frames_decoded,\
@@ -216,12 +215,11 @@ impl StatsObserver {
     ) {
         let frames_decoded = video_receiver.frames_decoded - prev_video_receiver.frames_decoded;
         info!(
-            "ringrtc_stats!,video,recv,{ssrc},{packets_per_second:.1},{packets_lost},{packets_repaired},{bitrate:.0}bps,{framerate:.1}fps,{key_frames_decoded},{decode_time_per_frame:.1}ms,{width}x{height}",
+            "ringrtc_stats!,video,recv,{ssrc},{packets_per_second:.1},{packets_lost},{bitrate:.0}bps,{framerate:.1}fps,{key_frames_decoded},{decode_time_per_frame:.1}ms,{width}x{height}",
             ssrc = video_receiver.ssrc,
             packets_per_second = (video_receiver.packets_received - prev_video_receiver.packets_received) as f32
                 / seconds_elapsed,
             packets_lost = video_receiver.packets_lost - prev_video_receiver.packets_lost,
-            packets_repaired = video_receiver.packets_repaired - prev_video_receiver.packets_repaired,
             bitrate = (video_receiver.bytes_received - prev_video_receiver.bytes_received) as f32 * 8.0
                 / seconds_elapsed,
             framerate = frames_decoded as f32 / seconds_elapsed,
@@ -451,7 +449,6 @@ pub struct VideoReceiverStatistics {
     pub ssrc: u32,
     pub packets_received: u32,
     pub packets_lost: i32,
-    pub packets_repaired: u32,
     pub bytes_received: u64,
     pub frames_decoded: u32,
     pub key_frames_decoded: u32,
