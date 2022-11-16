@@ -68,7 +68,7 @@ impl StatsObserver {
                 packets_per_second,\
                 average_packet_size,\
                 bitrate,\
-                remote_packets_lost,\
+                remote_packets_lost_pct,\
                 remote_jitter,\
                 remote_round_trip_time,\
                 audio_energy"
@@ -92,7 +92,7 @@ impl StatsObserver {
                 pli_count,\
                 quality_limitation_reason,\
                 quality_limitation_resolution_changes,\
-                remote_packets_lost,\
+                remote_packets_lost_pct,\
                 remote_jitter,\
                 remote_round_trip_time"
         );
@@ -102,7 +102,7 @@ impl StatsObserver {
                 recv,\
                 ssrc,\
                 packets_per_second,\
-                packets_lost,\
+                packets_lost_pct,\
                 bitrate,\
                 jitter,\
                 audio_energy"
@@ -113,7 +113,7 @@ impl StatsObserver {
                 recv,\
                 ssrc,\
                 packets_per_second,\
-                packets_lost,\
+                packets_lost_pct,\
                 bitrate,\
                 framerate,\
                 key_frames_decoded,\
@@ -141,16 +141,17 @@ impl StatsObserver {
         prev_audio_sender: &AudioSenderStatistics,
         seconds_elapsed: f32,
     ) {
+        let packets_lost = audio_sender.remote_packets_lost - prev_audio_sender.remote_packets_lost;
         let packets_sent = audio_sender.packets_sent - prev_audio_sender.packets_sent;
         let bytes_sent = audio_sender.bytes_sent - prev_audio_sender.bytes_sent;
 
         info!(
-            "ringrtc_stats!,audio,send,{ssrc},{packets_per_second:.1},{average_packet_size:.1},{bitrate:.1}bps,{remote_packets_lost},{remote_jitter:.0}ms,{remote_round_trip_time:.0}ms,{audio_energy:.3}",
+            "ringrtc_stats!,audio,send,{ssrc},{packets_per_second:.1},{average_packet_size:.1},{bitrate:.1}bps,{remote_packets_lost_pct:.1}%,{remote_jitter:.0}ms,{remote_round_trip_time:.0}ms,{audio_energy:.3}",
             ssrc = audio_sender.ssrc,
             packets_per_second = packets_sent as f32 / seconds_elapsed,
             average_packet_size = if packets_sent > 0 { bytes_sent as f32 / packets_sent as f32 } else { 0.0 },
             bitrate = bytes_sent as f32 * 8.0 / seconds_elapsed,
-            remote_packets_lost = audio_sender.remote_packets_lost - prev_audio_sender.remote_packets_lost,
+            remote_packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_sent as i32),
             remote_jitter = audio_sender.remote_jitter * 1000.0,
             remote_round_trip_time = audio_sender.remote_round_trip_time * 1000.0,
             audio_energy = audio_sender.total_audio_energy - prev_audio_sender.total_audio_energy,
@@ -162,12 +163,13 @@ impl StatsObserver {
         prev_video_sender: &VideoSenderStatistics,
         seconds_elapsed: f32,
     ) {
+        let packets_lost = video_sender.remote_packets_lost - prev_video_sender.remote_packets_lost;
         let packets_sent = video_sender.packets_sent - prev_video_sender.packets_sent;
         let bytes_sent = video_sender.bytes_sent - prev_video_sender.bytes_sent;
         let frames_encoded = video_sender.frames_encoded - prev_video_sender.frames_encoded;
 
         info!(
-            "ringrtc_stats!,video,send,{ssrc},{packets_per_second:.1},{average_packet_size:.1},{bitrate:.0}bps,{framerate:.1}fps,{key_frames_encoded},{encode_time_per_frame:.1}ms,{width}x{height},{retransmitted_packets_sent},{retransmitted_bitrate:.1}bps,{send_delay_per_packet:.1}ms,{nack_count},{pli_count},{quality_limitation_reason},{quality_limitation_resolution_changes},{remote_packets_lost},{remote_jitter:.1}ms,{remote_round_trip_time:.1}ms",
+            "ringrtc_stats!,video,send,{ssrc},{packets_per_second:.1},{average_packet_size:.1},{bitrate:.0}bps,{framerate:.1}fps,{key_frames_encoded},{encode_time_per_frame:.1}ms,{width}x{height},{retransmitted_packets_sent},{retransmitted_bitrate:.1}bps,{send_delay_per_packet:.1}ms,{nack_count},{pli_count},{quality_limitation_reason},{quality_limitation_resolution_changes},{remote_packets_lost_pct:.1}%,{remote_jitter:.1}ms,{remote_round_trip_time:.1}ms",
             ssrc = video_sender.ssrc,
             packets_per_second = packets_sent as f32 / seconds_elapsed,
             average_packet_size = if packets_sent > 0 { bytes_sent as f32 / packets_sent as f32 } else { 0.0 },
@@ -184,7 +186,7 @@ impl StatsObserver {
             pli_count = video_sender.pli_count - prev_video_sender.pli_count,
             quality_limitation_reason = video_sender.quality_limitation_reason_description(),
             quality_limitation_resolution_changes = video_sender.quality_limitation_resolution_changes - prev_video_sender.quality_limitation_resolution_changes,
-            remote_packets_lost = video_sender.remote_packets_lost - prev_video_sender.remote_packets_lost,
+            remote_packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_sent as i32),
             remote_jitter = video_sender.remote_jitter * 1000.0,
             remote_round_trip_time = video_sender.remote_round_trip_time * 1000.0,
         );
@@ -195,12 +197,16 @@ impl StatsObserver {
         prev_audio_receiver: &AudioReceiverStatistics,
         seconds_elapsed: f32,
     ) {
+        let packets_lost = audio_receiver.packets_lost - prev_audio_receiver.packets_lost;
+        let packets_received =
+            audio_receiver.packets_received - prev_audio_receiver.packets_received;
+
         info!(
-            "ringrtc_stats!,audio,recv,{ssrc},{packets_per_second:.1},{packets_lost},{bitrate:.1}bps,{jitter:.0}ms,{audio_energy:.3}",
+            "ringrtc_stats!,audio,recv,{ssrc},{packets_per_second:.1},{packets_lost_pct:.1}%,{bitrate:.1}bps,{jitter:.0}ms,{audio_energy:.3}",
             ssrc = audio_receiver.ssrc,
             packets_per_second = (audio_receiver.packets_received - prev_audio_receiver.packets_received) as f32
                 / seconds_elapsed,
-            packets_lost = audio_receiver.packets_lost - prev_audio_receiver.packets_lost,
+            packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_received as i32 + packets_lost),
             bitrate = (audio_receiver.bytes_received - prev_audio_receiver.bytes_received) as f32 * 8.0
                 / seconds_elapsed,
             jitter = audio_receiver.jitter * 1000.0,
@@ -213,13 +219,17 @@ impl StatsObserver {
         prev_video_receiver: &VideoReceiverStatistics,
         seconds_elapsed: f32,
     ) {
+        let packets_lost = video_receiver.packets_lost - prev_video_receiver.packets_lost;
+        let packets_received =
+            video_receiver.packets_received - prev_video_receiver.packets_received;
         let frames_decoded = video_receiver.frames_decoded - prev_video_receiver.frames_decoded;
+
         info!(
-            "ringrtc_stats!,video,recv,{ssrc},{packets_per_second:.1},{packets_lost},{bitrate:.0}bps,{framerate:.1}fps,{key_frames_decoded},{decode_time_per_frame:.1}ms,{width}x{height}",
+            "ringrtc_stats!,video,recv,{ssrc},{packets_per_second:.1},{packets_lost_pct:.1}%,{bitrate:.0}bps,{framerate:.1}fps,{key_frames_decoded},{decode_time_per_frame:.1}ms,{width}x{height}",
             ssrc = video_receiver.ssrc,
             packets_per_second = (video_receiver.packets_received - prev_video_receiver.packets_received) as f32
                 / seconds_elapsed,
-            packets_lost = video_receiver.packets_lost - prev_video_receiver.packets_lost,
+            packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_received as i32 + packets_lost),
             bitrate = (video_receiver.bytes_received - prev_video_receiver.bytes_received) as f32 * 8.0
                 / seconds_elapsed,
             framerate = frames_decoded as f32 / seconds_elapsed,
@@ -232,6 +242,20 @@ impl StatsObserver {
             width = video_receiver.frame_width,
             height = video_receiver.frame_height,
         );
+    }
+
+    fn compute_packets_lost_pct(packets_lost: i32, packets: i32) -> f32 {
+        if packets > 0 {
+            packets_lost as f32 / packets as f32 * 100.0
+        } else if packets_lost < 0 {
+            // Only negative packets lost
+            -100.0
+        } else if packets_lost > 0 {
+            // Only positive packets lost
+            100.0
+        } else {
+            0.0
+        }
     }
 
     /// Create a new StatsObserver.
