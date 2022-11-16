@@ -52,9 +52,6 @@ thiserror         = { version = "1.0.20" }
 tokio             = { version = "1.13.0", features = ["rt-multi-thread", "time"] }
 x25519-dalek      = { version = "1.1"    }
 
-# Optional, needed by the 'sim' feature
-rand_chacha = { version = "0.2", optional = true }
-
 # Optional, needed by the "electron" feature
 neon = { version = "0.10.1", optional = true, default-features = false, features = ["napi-6", "channel-api"] }
 
@@ -68,7 +65,7 @@ webpki = { version = "0.21", optional = true }
 
 [features]
 default = []
-sim = ["rand_chacha"]
+sim = []
 electron = ["neon", "native"]
 native = []  # We have this so we can more easily disable things only native clients need
 simnet = []  # We have this so we can more easily disable things only simulated native client need
@@ -93,3 +90,4 @@ prost-build = { version = "0.11" }
 
 [dev-dependencies]
 env_logger = { version = "0.9" }
+rand_chacha = { version = "0.2" }
