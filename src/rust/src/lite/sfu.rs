@@ -155,6 +155,8 @@ struct SerializedJoinResponse {
     server_ice_pwd: String,
     #[serde(rename = "dhePublicKey", with = "hex")]
     server_dhe_pub_key: [u8; 32],
+    #[serde(rename = "callCreator", default)]
+    call_creator: String,
 }
 
 #[derive(Debug)]
@@ -164,10 +166,14 @@ pub struct JoinResponse {
     pub server_ice_ufrag: String,
     pub server_ice_pwd: String,
     pub server_dhe_pub_key: [u8; 32],
+    pub call_creator: Option<UserId>,
 }
 
-impl From<SerializedJoinResponse> for JoinResponse {
-    fn from(deserialized: SerializedJoinResponse) -> Self {
+impl JoinResponse {
+    fn from(
+        deserialized: SerializedJoinResponse,
+        opaque_user_id_mappings: &[OpaqueUserIdMapping],
+    ) -> Self {
         Self {
             client_demux_id: deserialized.client_demux_id,
             server_addresses: vec![SocketAddr::new(
@@ -177,6 +183,10 @@ impl From<SerializedJoinResponse> for JoinResponse {
             server_ice_ufrag: deserialized.server_ice_ufrag,
             server_ice_pwd: deserialized.server_ice_pwd,
             server_dhe_pub_key: deserialized.server_dhe_pub_key,
+            call_creator: SerializedPeekDeviceInfo::deobfuscate_user_id(
+                opaque_user_id_mappings,
+                &deserialized.call_creator,
+            ),
         }
     }
 }
@@ -344,6 +354,7 @@ pub fn peek(
 pub type JoinResult = Result<JoinResponse, http::ResponseStatus>;
 pub type JoinResultCallback = Box<dyn FnOnce(JoinResult) + Send>;
 
+#[allow(clippy::too_many_arguments)]
 pub fn join(
     http_client: &dyn http::Client,
     sfu_url: &str,
@@ -351,6 +362,7 @@ pub fn join(
     client_ice_ufrag: &str,
     client_dhe_pub_key: &[u8],
     hkdf_extra_info: &[u8],
+    opaque_user_id_mappings: Vec<OpaqueUserIdMapping>,
     result_callback: JoinResultCallback,
 ) {
     info!("sfu::Join(): ");
@@ -375,7 +387,7 @@ pub fn join(
         },
         Box::new(move |http_response| {
             let result = parse_http_json_response::<SerializedJoinResponse>(http_response.as_ref())
-                .map(JoinResponse::from);
+                .map(|deserialized| JoinResponse::from(deserialized, &opaque_user_id_mappings));
             result_callback(result)
         }),
     );

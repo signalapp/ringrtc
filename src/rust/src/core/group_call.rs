@@ -417,6 +417,7 @@ pub struct Joined {
     pub local_demux_id: DemuxId,
     pub server_dhe_pub_key: [u8; 32],
     pub hkdf_extra_info: Vec<u8>,
+    pub creator: Option<UserId>,
 }
 
 /// Communicates with the SFU using HTTP.
@@ -461,6 +462,7 @@ impl HttpSfuClient {
             ice_ufrag,
             dhe_pub_key,
             &self.hkdf_extra_info,
+            self.opaque_user_id_mappings.clone(),
             Box::new(move |join_response| {
                 let join_result: Result<Joined> = match join_response {
                     Ok(join_response) => Ok(Joined {
@@ -471,6 +473,7 @@ impl HttpSfuClient {
                         },
                         local_demux_id: join_response.client_demux_id,
                         server_dhe_pub_key: join_response.server_dhe_pub_key,
+                        creator: join_response.call_creator,
                         hkdf_extra_info,
                     }),
                     Err(http_status) if http_status == sfu::ResponseCode::RequestFailed => {
@@ -762,6 +765,23 @@ impl IntoIterator for RemoteDevices {
     }
 }
 
+#[derive(Debug)]
+enum OutgoingRingState {
+    /// The initial state
+    Unknown,
+    /// The local client is permitted to send a ring if they choose, but has not requested one.
+    PermittedToRing,
+    /// The local client has requested to ring, but it is unknown whether it is permitted.
+    WantsToRing { recipient: Option<UserId> },
+    /// The local client has, in fact, sent a ring (and may still cancel it).
+    HasSentRing { ring_id: RingId },
+    /// The local client is not permitted to send rings at this time.
+    ///
+    /// They may not be the creator of the call, or they may have already sent a ring and had other
+    /// people join.
+    NotPermittedToRing,
+}
+
 /// The state inside the Actor
 struct State {
     // Things passed in that never change
@@ -856,11 +876,7 @@ struct State {
     // Demux IDs where video is being forward from, mapped to the server allocated height.
     forwarding_videos: HashMap<DemuxId, u16>,
 
-    /// A ring sent to the whole group when the call was created.
-    ///
-    /// If present, the ring is still cancellable, and the cancellation will be sent
-    /// to the whole group if the current client leaves before anyone else joins.
-    cancellable_initial_ring: Option<RingId>,
+    outgoing_ring_state: OutgoingRingState,
 
     actor: Actor<State>,
 }
@@ -1027,7 +1043,7 @@ impl Client {
                     max_receive_rate: Some(NORMAL_MAX_RECEIVE_RATE),
                     forwarding_videos: HashMap::default(),
 
-                    cancellable_initial_ring: None,
+                    outgoing_ring_state: OutgoingRingState::Unknown,
 
                     actor,
                 })
@@ -1444,48 +1460,77 @@ impl Client {
             "group_call::Client(outer)::ring(client_id: {}, recipient: {:?})",
             self.client_id, recipient,
         );
-        self.actor.send(move |state| {
-            debug!(
-                "group_call::Client(inner)::ring(client_id: {}, recipient: {:?})",
-                state.client_id, recipient
-            );
+        self.actor
+            .send(move |state| Self::ring_inner(state, recipient));
+    }
 
-            // All ring IDs are possible except "0".
-            let ring_id = RingId::from(
-                rand::rngs::OsRng
-                    .gen_range(i64::MIN, i64::MAX)
-                    .wrapping_sub(i64::MAX),
-            );
-            let message = protobuf::signaling::CallMessage {
-                ring_intention: Some(protobuf::signaling::call_message::RingIntention {
-                    group_id: Some(state.group_id.clone()),
-                    ring_id: Some(ring_id.into()),
-                    r#type: Some(
-                        protobuf::signaling::call_message::ring_intention::Type::Ring.into(),
-                    ),
-                }),
-                ..Default::default()
-            };
+    fn ring_inner(state: &mut State, recipient: Option<UserId>) {
+        debug!(
+            "group_call::Client(inner)::ring(client_id: {}, recipient: {:?})",
+            state.client_id, recipient
+        );
 
-            if let Some(_recipient) = recipient {
-                unimplemented!("cannot ring just one person yet");
-            } else {
-                state.observer.send_signaling_message_to_group(
-                    state.group_id.clone(),
-                    message,
-                    SignalingMessageUrgency::HandleImmediately,
+        match &state.outgoing_ring_state {
+            OutgoingRingState::PermittedToRing => {
+                // All ring IDs are possible except "0".
+                let ring_id = RingId::from(
+                    rand::rngs::OsRng
+                        .gen_range(i64::MIN, i64::MAX)
+                        .wrapping_sub(i64::MAX),
                 );
+                let message = protobuf::signaling::CallMessage {
+                    ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+                        group_id: Some(state.group_id.clone()),
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
+                            protobuf::signaling::call_message::ring_intention::Type::Ring.into(),
+                        ),
+                    }),
+                    ..Default::default()
+                };
 
-                // If you're the only one in the call at the time of the ring,
-                // and then you leave before anyone joins, the ring is auto-cancelled.
-                // Note that this means the ring will be cancelled if you *never*
-                // join the call, even if others do, but that's probably correct
-                // (and extremely unlikely).
-                if state.remote_devices.is_empty() {
-                    state.cancellable_initial_ring = Some(ring_id)
+                if recipient.is_some() {
+                    unimplemented!("cannot ring just one person yet");
+                } else {
+                    state.observer.send_signaling_message_to_group(
+                        state.group_id.clone(),
+                        message,
+                        SignalingMessageUrgency::HandleImmediately,
+                    );
+
+                    if state.remote_devices.is_empty() {
+                        // If you're the only one in the call at the time of the ring,
+                        // and then you leave before anyone joins, the ring is auto-cancelled.
+                        state.outgoing_ring_state = OutgoingRingState::HasSentRing { ring_id };
+                    } else {
+                        // Otherwise, the ring is sent-and-forgotten.
+                        state.outgoing_ring_state = OutgoingRingState::NotPermittedToRing;
+                    }
                 }
             }
-        });
+            OutgoingRingState::WantsToRing { .. } => {
+                warn!(
+                    "repeat ring request not supported (client_id: {}, ring not yet sent)",
+                    state.client_id
+                );
+            }
+            OutgoingRingState::HasSentRing { ring_id } => {
+                warn!(
+                    "repeat ring request not supported (client_id: {}, previous ring id: {})",
+                    state.client_id, ring_id
+                );
+            }
+            OutgoingRingState::Unknown => {
+                // Need to wait until joining
+                state.outgoing_ring_state = OutgoingRingState::WantsToRing { recipient };
+            }
+            OutgoingRingState::NotPermittedToRing => {
+                info!(
+                    "ringing is not permitted (client_id: {}); most likely someone else started the call first",
+                    state.client_id
+                );
+            }
+        }
     }
 
     pub fn set_outgoing_audio_muted(&self, muted: bool) {
@@ -1845,6 +1890,7 @@ impl Client {
                 local_demux_id,
                 server_dhe_pub_key,
                 hkdf_extra_info,
+                creator,
             }) = joined
             {
                 match state.connection_state {
@@ -1916,6 +1962,28 @@ impl Client {
                         state
                             .observer
                             .handle_join_state_changed(state.client_id, state.join_state);
+
+                        if creator.is_some() {
+                            // Check if we're permitted to ring
+                            let self_uuid_guard = state.self_uuid.lock();
+                            let creator_is_self = self_uuid_guard
+                                .map(|guarded_uuid| creator == *guarded_uuid)
+                                .unwrap_or(false);
+                            let new_ring_state = if creator_is_self {
+                                OutgoingRingState::PermittedToRing
+                            } else {
+                                OutgoingRingState::NotPermittedToRing
+                            };
+                            debug!("updating ring state to {:?}", new_ring_state);
+                            let previous_ring_state =
+                                std::mem::replace(&mut state.outgoing_ring_state, new_ring_state);
+                            if let OutgoingRingState::WantsToRing { recipient } =
+                                previous_ring_state
+                            {
+                                Self::ring_inner(state, recipient)
+                            }
+                        }
+
                         // We just now appeared in the participants list, and possibly even updated
                         // the eraId.
                         Self::request_remote_devices_as_soon_as_possible(state);
@@ -2237,8 +2305,13 @@ impl Client {
             }
 
             // If anyone has joined besides us, we won't cancel the ring on leave.
-            if !new_demux_ids.is_empty() {
-                state.cancellable_initial_ring = None;
+            if !new_demux_ids.is_empty()
+                && matches!(
+                    state.outgoing_ring_state,
+                    OutgoingRingState::HasSentRing { .. }
+                )
+            {
+                state.outgoing_ring_state = OutgoingRingState::NotPermittedToRing;
             }
         }
         state.last_peek_info = Some(peek_info_to_remember);
@@ -2788,7 +2861,7 @@ impl Client {
             state.client_id,
         );
 
-        if let Some(ring_id) = state.cancellable_initial_ring {
+        if let OutgoingRingState::HasSentRing { ring_id } = state.outgoing_ring_state {
             let message = protobuf::signaling::CallMessage {
                 ring_intention: Some(protobuf::signaling::call_message::RingIntention {
                     group_id: Some(state.group_id.clone()),
@@ -3506,11 +3579,12 @@ mod tests {
     struct FakeSfuClient {
         sfu_info: SfuInfo,
         local_demux_id: DemuxId,
+        call_creator: Option<UserId>,
         request_count: Arc<AtomicU64>,
     }
 
     impl FakeSfuClient {
-        fn new(local_demux_id: DemuxId) -> Self {
+        fn new(local_demux_id: DemuxId, call_creator: Option<UserId>) -> Self {
             Self {
                 sfu_info: SfuInfo {
                     udp_addresses: Vec::new(),
@@ -3518,6 +3592,7 @@ mod tests {
                     ice_pwd: "fake ICE pwd".to_string(),
                 },
                 local_demux_id,
+                call_creator,
                 request_count: Arc::new(AtomicU64::new(0)),
             }
         }
@@ -3536,6 +3611,7 @@ mod tests {
                 local_demux_id: self.local_demux_id,
                 server_dhe_pub_key: [0u8; 32],
                 hkdf_extra_info: b"hkdf_extra_info".to_vec(),
+                creator: self.call_creator.clone(),
             }));
         }
         fn peek(&mut self, _peek_result_callback: PeekResultCallback) {
@@ -3918,7 +3994,7 @@ mod tests {
 
     impl TestClient {
         fn new(user_id: UserId, demux_id: DemuxId) -> Self {
-            Self::with_sfu_client(user_id, demux_id, FakeSfuClient::new(demux_id))
+            Self::with_sfu_client(user_id, demux_id, FakeSfuClient::new(demux_id, None))
         }
 
         fn with_sfu_client(user_id: UserId, demux_id: DemuxId, sfu_client: FakeSfuClient) -> Self {
@@ -4429,7 +4505,7 @@ mod tests {
         client2.connect_join_and_wait_until_joined();
 
         // Client3 is pretending to have demux ID 1 when sending media keys
-        let mut client3 = TestClient::with_sfu_client(vec![3], 3, FakeSfuClient::new(1));
+        let mut client3 = TestClient::with_sfu_client(vec![3], 3, FakeSfuClient::new(1, None));
         client3.connect_join_and_wait_until_joined();
 
         set_group_and_wait_until_applied(&[&client1, &client2, &client3]);
@@ -5707,48 +5783,61 @@ mod tests {
 
     #[test]
     fn group_ring() {
-        let client1 = TestClient::new(vec![1], 1);
-        // Ring twice to make sure we get different IDs.
-        client1.client.ring(None);
-        client1.client.ring(None);
-        client1.wait_for_client_to_process();
-        let sent_messages = std::mem::take(
-            &mut *client1
-                .observer
-                .sent_group_signaling_messages
-                .lock()
-                .expect("finished processing"),
-        );
-        match &sent_messages[..] {
-            [protobuf::signaling::CallMessage {
-                ring_intention:
-                    Some(protobuf::signaling::call_message::RingIntention {
-                        ring_id: first_ring_id,
-                        ..
-                    }),
-                ..
-            }, protobuf::signaling::CallMessage {
-                ring_intention:
-                    Some(protobuf::signaling::call_message::RingIntention {
-                        ring_id: second_ring_id,
-                        ..
-                    }),
-                ..
-            }] => {
-                assert_ne!(first_ring_id, second_ring_id, "ring IDs were the same");
-            }
-            _ => {
-                panic!(
-                    "group messages not as expected; here's what we got: {:?}",
-                    sent_messages
-                );
+        fn ring_once() -> RingId {
+            let user_id = vec![1];
+            let demux_id = 1;
+            let client1 = TestClient::with_sfu_client(
+                user_id.clone(),
+                demux_id,
+                FakeSfuClient::new(demux_id, Some(user_id)),
+            );
+            client1.connect_join_and_wait_until_joined();
+
+            client1.client.ring(None);
+            client1.wait_for_client_to_process();
+            let sent_messages = std::mem::take(
+                &mut *client1
+                    .observer
+                    .sent_group_signaling_messages
+                    .lock()
+                    .expect("finished processing"),
+            );
+            match &sent_messages[..] {
+                [protobuf::signaling::CallMessage {
+                    ring_intention: Some(ring),
+                    ..
+                }] => {
+                    assert_eq!(
+                        Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+                        ring.r#type,
+                    );
+                    ring.ring_id.expect("should have an ID").into()
+                }
+                _ => {
+                    panic!(
+                        "group messages not as expected; here's what we got: {:?}",
+                        sent_messages
+                    );
+                }
             }
         }
+
+        // Try twice to make sure we get different ring IDs
+        let first_ring_id = ring_once();
+        let second_ring_id = ring_once();
+        assert_ne!(first_ring_id, second_ring_id, "ring IDs were the same");
     }
 
     #[test]
     fn group_ring_cancel() {
-        let client1 = TestClient::new(vec![1], 1);
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id.clone(),
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(user_id)),
+        );
+        client1.connect_join_and_wait_until_joined();
         client1.client.ring(None);
         client1.client.leave();
         client1.wait_for_client_to_process();
@@ -5788,7 +5877,13 @@ mod tests {
 
     #[test]
     fn group_ring_no_cancel_if_someone_joins() {
-        let client1 = TestClient::new(vec![1], 1);
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id.clone(),
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(user_id)),
+        );
         client1.connect_join_and_wait_until_joined();
         client1.client.ring(None);
 
@@ -5825,7 +5920,13 @@ mod tests {
 
     #[test]
     fn group_ring_no_cancel_if_call_was_not_empty() {
-        let client1 = TestClient::new(vec![1], 1);
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id.clone(),
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(user_id)),
+        );
         client1.connect_join_and_wait_until_joined();
 
         let client2 = TestClient::new(vec![2], 2);
@@ -5862,7 +5963,13 @@ mod tests {
 
     #[test]
     fn group_ring_cancel_if_call_is_currently_empty() {
-        let client1 = TestClient::new(vec![1], 1);
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id.clone(),
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(user_id)),
+        );
         client1.connect_join_and_wait_until_joined();
 
         let client2 = TestClient::new(vec![2], 2);
@@ -5908,7 +6015,13 @@ mod tests {
 
     #[test]
     fn group_ring_cancel_if_call_is_just_you() {
-        let client1 = TestClient::new(vec![1], 1);
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id.clone(),
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(user_id)),
+        );
         client1.connect_join_and_wait_until_joined();
 
         client1.set_remotes_and_wait_until_applied(&[&client1]);
@@ -5948,6 +6061,111 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn group_ring_not_sent_on_different_creator() {
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id,
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(vec![2])),
+        );
+        client1.connect_join_and_wait_until_joined();
+        client1.client.ring(None);
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing"),
+        );
+        assert_eq!(&sent_messages, &[]);
+    }
+
+    #[test]
+    fn group_ring_delayed_until_join() {
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id.clone(),
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(user_id)),
+        );
+        client1.client.connect();
+        client1.client.ring(None);
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing"),
+        );
+        assert_eq!(&sent_messages, &[]);
+
+        client1.connect_join_and_wait_until_joined();
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing"),
+        );
+
+        match &sent_messages[..] {
+            [protobuf::signaling::CallMessage {
+                ring_intention: Some(ring),
+                ..
+            }] => {
+                assert_eq!(
+                    Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+                    ring.r#type,
+                );
+            }
+            _ => {
+                panic!(
+                    "group messages not as expected; here's what we got: {:#?}",
+                    sent_messages
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn group_ring_delayed_with_different_creator() {
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id,
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(vec![2])),
+        );
+        client1.client.connect();
+        client1.client.ring(None);
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing"),
+        );
+        assert_eq!(&sent_messages, &[]);
+
+        client1.connect_join_and_wait_until_joined();
+        client1.wait_for_client_to_process();
+        let sent_messages = std::mem::take(
+            &mut *client1
+                .observer
+                .sent_group_signaling_messages
+                .lock()
+                .expect("finished processing"),
+        );
+        assert_eq!(&sent_messages, &[]);
     }
 }
 
