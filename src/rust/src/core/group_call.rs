@@ -3510,9 +3510,13 @@ mod tests {
     }
 
     impl FakeSfuClient {
-        fn new(sfu_info: SfuInfo, local_demux_id: DemuxId) -> Self {
+        fn new(local_demux_id: DemuxId) -> Self {
             Self {
-                sfu_info,
+                sfu_info: SfuInfo {
+                    udp_addresses: Vec::new(),
+                    ice_ufrag: "fake ICE ufrag".to_string(),
+                    ice_pwd: "fake ICE pwd".to_string(),
+                },
                 local_demux_id,
                 request_count: Arc::new(AtomicU64::new(0)),
             }
@@ -3913,15 +3917,11 @@ mod tests {
     }
 
     impl TestClient {
-        fn new(user_id: UserId, demux_id: DemuxId, forged_demux_id: Option<DemuxId>) -> Self {
-            let sfu_client = FakeSfuClient::new(
-                SfuInfo {
-                    udp_addresses: Vec::new(),
-                    ice_ufrag: "fake ICE ufrag".to_string(),
-                    ice_pwd: "fake ICE pwd".to_string(),
-                },
-                forged_demux_id.unwrap_or(demux_id),
-            );
+        fn new(user_id: UserId, demux_id: DemuxId) -> Self {
+            Self::with_sfu_client(user_id, demux_id, FakeSfuClient::new(demux_id))
+        }
+
+        fn with_sfu_client(user_id: UserId, demux_id: DemuxId, sfu_client: FakeSfuClient) -> Self {
             let observer = FakeObserver::new(user_id.clone());
             let fake_busy = Arc::new(CallMutex::new(false, "fake_busy"));
             let fake_self_uuid = Arc::new(CallMutex::new(Some(user_id.clone()), "fake_self_uuid"));
@@ -4099,10 +4099,10 @@ mod tests {
 
     #[test]
     fn frame_encryption_normal() {
-        let mut client1 = TestClient::new(vec![1], 1, None);
+        let mut client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
-        let mut client2 = TestClient::new(vec![2], 2, None);
+        let mut client2 = TestClient::new(vec![2], 2);
         client2.connect_join_and_wait_until_joined();
 
         client2.set_remotes_and_wait_until_applied(&[&client1]);
@@ -4190,19 +4190,19 @@ mod tests {
     #[test]
     #[ignore] // Because it's too slow
     fn frame_encryption_rotation_is_delayed() {
-        let mut client1 = TestClient::new(vec![1], 1, None);
+        let mut client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
-        let mut client2 = TestClient::new(vec![2], 2, None);
+        let mut client2 = TestClient::new(vec![2], 2);
         client2.connect_join_and_wait_until_joined();
 
-        let mut client3 = TestClient::new(vec![3], 3, None);
+        let mut client3 = TestClient::new(vec![3], 3);
         client3.connect_join_and_wait_until_joined();
 
-        let mut client4 = TestClient::new(vec![4], 4, None);
+        let mut client4 = TestClient::new(vec![4], 4);
         client4.connect_join_and_wait_until_joined();
 
-        let mut client5 = TestClient::new(vec![5], 5, None);
+        let mut client5 = TestClient::new(vec![5], 5);
         client5.connect_join_and_wait_until_joined();
 
         set_group_and_wait_until_applied(&[&client1, &client2, &client3]);
@@ -4349,10 +4349,10 @@ mod tests {
 
     #[test]
     fn frame_encryption_resend_keys() {
-        let mut client1 = TestClient::new(vec![1], 1, None);
+        let mut client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
-        let mut client2 = TestClient::new(vec![2], 2, None);
+        let mut client2 = TestClient::new(vec![2], 2);
         client2.connect_join_and_wait_until_joined();
 
         // Prevent client1 from sharing keys with client2
@@ -4390,9 +4390,9 @@ mod tests {
 
     #[test]
     fn frame_encryption_send_advanced_key_to_same_user() {
-        let mut client1a = TestClient::new(vec![1], 11, None);
-        let mut client2a = TestClient::new(vec![2], 21, None);
-        let mut client2b = TestClient::new(vec![2], 22, None);
+        let mut client1a = TestClient::new(vec![1], 11);
+        let mut client2a = TestClient::new(vec![2], 21);
+        let mut client2b = TestClient::new(vec![2], 22);
 
         client1a.connect_join_and_wait_until_joined();
         client2a.connect_join_and_wait_until_joined();
@@ -4422,14 +4422,14 @@ mod tests {
 
     #[test]
     fn frame_encryption_someone_forging_demux_id() {
-        let mut client1 = TestClient::new(vec![1], 1, None);
+        let mut client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
-        let mut client2 = TestClient::new(vec![2], 2, None);
+        let mut client2 = TestClient::new(vec![2], 2);
         client2.connect_join_and_wait_until_joined();
 
         // Client3 is pretending to have demux ID 1 when sending media keys
-        let mut client3 = TestClient::new(vec![3], 3, Some(1));
+        let mut client3 = TestClient::with_sfu_client(vec![3], 3, FakeSfuClient::new(1));
         client3.connect_join_and_wait_until_joined();
 
         set_group_and_wait_until_applied(&[&client1, &client2, &client3]);
@@ -4457,14 +4457,14 @@ mod tests {
 
     #[test]
     fn ask_for_group_membership_when_receiving_unknown_media_keys() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
         assert_eq!(1, client1.observer.request_group_members_invocation_count());
 
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client2 = TestClient::new(vec![2], 2);
         client2.connect_join_and_wait_until_joined();
 
-        let client3 = TestClient::new(vec![3], 3, None);
+        let client3 = TestClient::new(vec![3], 3);
         client3.connect_join_and_wait_until_joined();
 
         assert_eq!(0, client1.observer.request_group_members_invocation_count());
@@ -4495,11 +4495,11 @@ mod tests {
 
     #[test]
     fn do_not_ask_for_group_membership_when_receiving_known_media_keys() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
         assert_eq!(1, client1.observer.request_group_members_invocation_count());
 
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client2 = TestClient::new(vec![2], 2);
         client2.connect_join_and_wait_until_joined();
 
         assert_eq!(0, client1.observer.request_group_members_invocation_count());
@@ -4515,10 +4515,10 @@ mod tests {
 
     #[test]
     fn remote_heartbeat_state() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client2 = TestClient::new(vec![2], 2);
         client2.connect_join_and_wait_until_joined();
 
         set_group_and_wait_until_applied(&[&client1, &client2]);
@@ -4589,7 +4589,7 @@ mod tests {
 
     #[test]
     fn ignore_devices_that_arent_members() {
-        let client = TestClient::new(vec![1], 1, None);
+        let client = TestClient::new(vec![1], 1);
         client.connect_join_and_wait_until_joined();
 
         assert!(client.observer.remote_devices().is_empty());
@@ -4622,7 +4622,7 @@ mod tests {
 
     #[test]
     fn fire_events_on_first_peek_info() {
-        let client = TestClient::new(vec![1], 1, None);
+        let client = TestClient::new(vec![1], 1);
 
         client.client.connect();
         client.client.set_peek_result(Ok(PeekInfo::default()));
@@ -4653,14 +4653,14 @@ mod tests {
     #[test]
     fn joined_members() {
         // The peeker doesn't join
-        let peeker = TestClient::new(vec![42], 42, None);
+        let peeker = TestClient::new(vec![42], 42);
         peeker.client.connect();
         peeker.wait_for_client_to_process();
 
         assert_eq!(0, peeker.observer.joined_members().len());
 
-        let joiner1 = TestClient::new(vec![1], 1, None);
-        let joiner2 = TestClient::new(vec![2], 2, None);
+        let joiner1 = TestClient::new(vec![1], 1);
+        let joiner2 = TestClient::new(vec![2], 2);
 
         // The peeker sees updates to the joined members before joining
         peeker.set_remotes_and_wait_until_applied(&[&joiner1]);
@@ -4739,8 +4739,8 @@ mod tests {
     #[test]
     #[ignore] // Because it's too slow
     fn smart_polling() {
-        let client1 = TestClient::new(vec![1], 1, None);
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
 
         assert_eq!(0, client1.sfu_client.request_count());
 
@@ -4810,7 +4810,7 @@ mod tests {
     #[ignore]
     fn polling_error_handling() {
         init_logging();
-        let client = TestClient::new(vec![1], 1, None);
+        let client = TestClient::new(vec![1], 1);
         client.client.set_membership_proof(b"proof".to_vec());
         client.connect_join_and_wait_until_joined();
 
@@ -4843,10 +4843,10 @@ mod tests {
             DeviceToSfu,
         };
 
-        let mut client1 = TestClient::new(vec![1], 1, None);
-        let client2 = TestClient::new(vec![2], 2, None);
-        let client3 = TestClient::new(vec![3], 3, None);
-        let client4 = TestClient::new(vec![4], 4, None);
+        let mut client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
+        let client3 = TestClient::new(vec![3], 3);
+        let client4 = TestClient::new(vec![4], 4);
 
         let (sender, receiver) = mpsc::channel();
         client1.sfu_rtp_packet_sender = Some(sender);
@@ -5038,7 +5038,7 @@ mod tests {
 
     #[test]
     fn audio_level_polling() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         assert_eq!(0, client1.observer.handle_audio_levels_invocation_count());
         client1.connect_join_and_wait_until_joined();
         assert_eq!(1, client1.observer.handle_audio_levels_invocation_count());
@@ -5052,7 +5052,7 @@ mod tests {
     fn device_to_sfu_leave() {
         use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
 
-        let mut client1 = TestClient::new(vec![1], 1, None);
+        let mut client1 = TestClient::new(vec![1], 1);
 
         let (sender, receiver) = mpsc::channel();
         client1.sfu_rtp_packet_sender = Some(sender);
@@ -5075,9 +5075,9 @@ mod tests {
 
     #[test]
     fn carry_over_devices_from_peeking_to_joined() {
-        let client1 = TestClient::new(vec![1], 1, None);
-        let client2 = TestClient::new(vec![2], 2, None);
-        let client3 = TestClient::new(vec![3], 3, None);
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
+        let client3 = TestClient::new(vec![3], 3);
 
         client1.client.set_membership_proof(b"proof".to_vec());
         client1.client.connect();
@@ -5106,7 +5106,7 @@ mod tests {
 
     #[test]
     fn era_id_populated_after_join() {
-        let mut client1 = TestClient::new(vec![1], 1, None);
+        let mut client1 = TestClient::new(vec![1], 1);
 
         client1.client.set_membership_proof(b"proof".to_vec());
         client1.client.connect();
@@ -5127,7 +5127,7 @@ mod tests {
 
     #[test]
     fn changing_group_members_triggers_poll() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.client.set_membership_proof(b"proof".to_vec());
         client1.client.connect();
         client1.wait_for_client_to_process();
@@ -5169,7 +5169,7 @@ mod tests {
 
     #[test]
     fn full_call() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.client.connect();
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![PeekDeviceInfo {
@@ -5187,7 +5187,7 @@ mod tests {
             client1.observer.ended.wait(Duration::from_secs(5))
         );
 
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
@@ -5205,7 +5205,7 @@ mod tests {
     #[test]
     #[ignore] // Because it's too slow
     fn membership_proof_requests() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![PeekDeviceInfo {
                 demux_id: 2,
@@ -5246,10 +5246,10 @@ mod tests {
 
     #[test]
     fn speakers() {
-        let client1 = TestClient::new(vec![1], 1, None);
-        let client2 = TestClient::new(vec![2], 2, None);
-        let client3 = TestClient::new(vec![3], 3, None);
-        let client4 = TestClient::new(vec![4], 4, None);
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
+        let client3 = TestClient::new(vec![3], 3);
+        let client4 = TestClient::new(vec![4], 4);
         client1.connect_join_and_wait_until_joined();
         client1.set_remotes_and_wait_until_applied(&[&client3, &client4]);
         assert_eq!(vec![3, 4], client1.speakers());
@@ -5401,9 +5401,9 @@ mod tests {
                 .collect()
         };
 
-        let client1 = TestClient::new(vec![1], 1, None);
-        let client2 = TestClient::new(vec![2], 2, None);
-        let client3 = TestClient::new(vec![3], 3, None);
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
+        let client3 = TestClient::new(vec![3], 3);
         client1.connect_join_and_wait_until_joined();
         client1.set_remotes_and_wait_until_applied(&[&client2, &client3]);
 
@@ -5451,8 +5451,8 @@ mod tests {
             remote_devices.get_mut(0).unwrap().client_decoded_height = Some(height);
         };
 
-        let client1 = TestClient::new(vec![1], 1, None);
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
         client1.connect_join_and_wait_until_joined();
         client1.set_remotes_and_wait_until_applied(&[&client2]);
 
@@ -5500,8 +5500,8 @@ mod tests {
                 .is_higher_resolution_pending
         };
 
-        let client1 = TestClient::new(vec![1], 1, None);
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
         client1.connect_join_and_wait_until_joined();
         client1.set_remotes_and_wait_until_applied(&[&client2]);
 
@@ -5530,7 +5530,7 @@ mod tests {
     #[test]
     fn send_rates() {
         init_logging();
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
         assert_eq!(
             Some(SendRates {
@@ -5707,7 +5707,7 @@ mod tests {
 
     #[test]
     fn group_ring() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         // Ring twice to make sure we get different IDs.
         client1.client.ring(None);
         client1.client.ring(None);
@@ -5748,7 +5748,7 @@ mod tests {
 
     #[test]
     fn group_ring_cancel() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.client.ring(None);
         client1.client.leave();
         client1.wait_for_client_to_process();
@@ -5788,11 +5788,11 @@ mod tests {
 
     #[test]
     fn group_ring_no_cancel_if_someone_joins() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
         client1.client.ring(None);
 
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client2 = TestClient::new(vec![2], 2);
         client1.set_remotes_and_wait_until_applied(&[&client2]);
 
         client1.client.leave();
@@ -5825,10 +5825,10 @@ mod tests {
 
     #[test]
     fn group_ring_no_cancel_if_call_was_not_empty() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client2 = TestClient::new(vec![2], 2);
         client1.set_remotes_and_wait_until_applied(&[&client2]);
 
         client1.client.ring(None);
@@ -5862,10 +5862,10 @@ mod tests {
 
     #[test]
     fn group_ring_cancel_if_call_is_currently_empty() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
-        let client2 = TestClient::new(vec![2], 2, None);
+        let client2 = TestClient::new(vec![2], 2);
         client1.set_remotes_and_wait_until_applied(&[&client2]);
         client1.set_remotes_and_wait_until_applied(&[]);
 
@@ -5908,7 +5908,7 @@ mod tests {
 
     #[test]
     fn group_ring_cancel_if_call_is_just_you() {
-        let client1 = TestClient::new(vec![1], 1, None);
+        let client1 = TestClient::new(vec![1], 1);
         client1.connect_join_and_wait_until_joined();
 
         client1.set_remotes_and_wait_until_applied(&[&client1]);
