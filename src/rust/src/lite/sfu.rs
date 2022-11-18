@@ -292,10 +292,8 @@ fn parse_http_json_response<'a, D: Deserialize<'a>>(
     if !response.status.is_success() {
         return Err(response.status);
     }
-    let body =
-        std::str::from_utf8(&response.body).map_err(|_| ResponseCode::InvalidResponseBodyUtf8)?;
-    let deserialized =
-        serde_json::from_str(body).map_err(|_| ResponseCode::InvalidResponseBodyJson)?;
+    let deserialized = serde_json::from_slice(&response.body)
+        .map_err(|_| ResponseCode::InvalidResponseBodyJson)?;
     Ok(deserialized)
 }
 
