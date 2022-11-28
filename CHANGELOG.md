@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.22.0
+
+- Group Calls: Only allow ringing if you are the call creator
+
+- Electron: Add callId to the call ended notification function
+
+- Improve display of stats in logs
+
+- Update dependencies
+
+- Electron: Save debug information when building
+
 ## v2.21.5
 
 - Group Calls: Improve ring handling
