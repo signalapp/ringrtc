@@ -28,6 +28,7 @@ describe('RingRTC', () => {
       const { reason, ageSec: reportedAge } = await new Promise(
         (resolve, _reject) => {
           RingRTC.handleAutoEndedIncomingCallRequest = (
+            _callId,
             _remoteUserId,
             reason,
             ageSec
@@ -67,6 +68,7 @@ describe('RingRTC', () => {
       const { reason, ageSec: reportedAge } = await new Promise(
         (resolve, _reject) => {
           RingRTC.handleAutoEndedIncomingCallRequest = (
+            _callId,
             _remoteUserId,
             reason,
             ageSec

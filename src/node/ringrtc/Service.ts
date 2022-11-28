@@ -254,6 +254,7 @@ export class RingRTCType {
     null;
   handleAutoEndedIncomingCallRequest:
     | ((
+        callId: CallId,
         remoteUserId: UserId,
         reason: CallEndedReason,
         ageSec: number,
@@ -493,6 +494,7 @@ export class RingRTCType {
     ) {
       if (this.handleAutoEndedIncomingCallRequest) {
         this.handleAutoEndedIncomingCallRequest(
+          callId,
           remoteUserId,
           reason,
           ageSec,
