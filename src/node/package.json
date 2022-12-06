@@ -1,12 +1,12 @@
 {
-  "name": "ringrtc",
+  "name": "@signalapp/ringrtc",
   "version": "2.22.0",
   "description": "Signal Messenger voice and video calling library.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist/ringrtc/*",
-    "build/*"
+    "dist/*",
+    "scripts/fetch-prebuild.js"
   ],
   "scripts": {
     "build": "tsc",
@@ -14,11 +14,19 @@
     "test": "electron-mocha --recursive dist/test",
     "eslint": "eslint --cache .",
     "lint": "yarn format --list-different && yarn eslint",
-    "format": "prettier --write \"*.{css,js,json,md,scss,ts,tsx}\" \"./**/*.{css,js,json,md,scss,ts,tsx}\""
+    "format": "prettier --write \"*.{css,js,json,md,scss,ts,tsx}\" \"./**/*.{css,js,json,md,scss,ts,tsx}\"",
+    "install": "node scripts/fetch-prebuild.js",
+    "prepublishOnly": "node scripts/prepublish.js"
+  },
+  "config": {
+    "prebuildUrl": "https://build-artifacts.signal.org/libraries/ringrtc-desktop-build-v${npm_package_version}.tar.gz",
+    "prebuildChecksum": ""
   },
   "author": "",
   "license": "AGPL-3.0-only",
-  "dependencies": {},
+  "dependencies": {
+    "tar": "^6.1.0"
+  },
   "devDependencies": {
     "@types/chai": "4.2.18",
     "@types/chai-as-promised": "^7.1.3",
