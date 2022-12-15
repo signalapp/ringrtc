@@ -51,6 +51,10 @@ jobs:
     - name: Check typescript
       run: yarn lint
       working-directory: src/node
+    - name: Check package.json for prebuildChecksum
+      run: >-
+        grep -q '"prebuildChecksum": ""' package.json
+      working-directory: src/node
 
   tests:
     name: Tests
