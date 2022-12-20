@@ -82,6 +82,9 @@ fn main() {
         } else {
             println!("cargo:rustc-link-lib=stdc++");
         }
+    } else if env::var("CARGO_CFG_TARGET_OS").unwrap() == "android" {
+        // Rely on the compile invocation to provide the right search path.
+        println!("cargo:rustc-link-lib=ringrtc_rffi");
     }
 }
 

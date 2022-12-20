@@ -32,7 +32,7 @@ if (is_android) {
 
   rtc_shared_library("libringrtc_rffi") {
 
-    visibility = [ "../rust:libringrtc_lint" ]
+    visibility = [ "//ringrtc:*" ]
 
     android_sdk = "//sdk/android"
     # jni_onload.cc -- taken from webrtc/sdk/android/BUILD.gn.

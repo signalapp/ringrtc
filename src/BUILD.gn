@@ -11,7 +11,7 @@ if (is_android) {
   group("ringrtc") {
     public_deps = [
       "android",
-      "rust",
+      "rffi:libringrtc_rffi",
     ]
   }
 }

@@ -18,13 +18,11 @@ try:
     import argparse
     import logging
     import subprocess
-    import sys
     import os
-    import zipfile
     import shutil
 
 except ImportError as e:
-    raise ImportError(str(e) + "- required module not found")
+    raise ImportError(str(e) + '- required module not found')
 
 
 DEFAULT_ARCHS = ['arm', 'arm64', 'x86', 'x64']
@@ -51,6 +49,9 @@ def ParseArgs():
     parser.add_argument('-q', '--quiet',
                         action='store_true',
                         help='Quiet output')
+    parser.add_argument('--project-dir',
+                        default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        help='Project root directory')
     parser.add_argument('-b', '--build-dir',
                         required=True,
                         help='Build directory')
@@ -83,6 +84,9 @@ def ParseArgs():
                         nargs='*', default=[],
                         help='''Additional GN flags, overriding anything set internally
                                 by this script.''')
+    parser.add_argument('--extra-cargo-flags',
+                        nargs='*', default=[],
+                        help='Additional Cargo arguments')
     parser.add_argument('-j', '--jobs',
                         default=32,
                         help='Number of parallel ninja jobs to run.')
@@ -138,14 +142,7 @@ def RunSdkmanagerLicenses(dry_run):
     if dry_run is False:
         subprocess.check_call(cmd)
 
-def RunGn(dry_run, args):
-    cmd = [ 'gn' ] + args
-    logging.debug('Running: {}'.format(cmd))
-    if dry_run is False:
-        subprocess.check_call(cmd)
-
-def RunNinja(dry_run, args):
-    cmd = [ 'ninja' ] + args
+def RunCmd(dry_run, cmd):
     logging.debug('Running: {}'.format(cmd))
     if dry_run is False:
         subprocess.check_call(cmd)
@@ -172,8 +169,8 @@ def GetOutputDir(build_dir, debug_build):
 def GetGradleBuildDir(build_dir):
     return os.path.join(build_dir, 'gradle')
 
-def BuildArch(dry_run, build_dir, arch, debug_build, extra_gn_args,
-              extra_gn_flags, extra_ninja_flags, jobs):
+def BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
+              extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs):
 
     logging.info('Building: {} ...'.format(arch))
 
@@ -197,11 +194,56 @@ def BuildArch(dry_run, build_dir, arch, debug_build, extra_gn_args,
     gn_args_string = '--args=' + ' '.join(
         [k + '=' + v for k, v in gn_args.items()] + extra_gn_args)
 
-    gn_total_args = [ 'gen', output_dir, gn_args_string ] + extra_gn_flags
-    RunGn(dry_run, gn_total_args)
+    gn_total_args = [ 'gn', 'gen', output_dir, gn_args_string ] + extra_gn_flags
+    RunCmd(dry_run, gn_total_args)
 
-    ninja_args = [ '-C', output_dir ] + NINJA_TARGETS + [ '-j', jobs ] + extra_ninja_flags
-    RunNinja(dry_run, ninja_args)
+    ninja_args = [ 'ninja', '-C', output_dir ] + NINJA_TARGETS + [ '-j', jobs ] + extra_ninja_flags
+    RunCmd(dry_run, ninja_args)
+
+    # FIXME: Shouldn't hardcode Linux, but eventually this won't use WebRTC's NDK anyway.
+    ndk_toolchain_dir = os.path.join(
+        os.getcwd(),
+        'third_party',
+        'android_ndk',
+        'toolchains',
+        'llvm',
+        'prebuilt',
+        'linux-x86_64'
+    )
+    cargo_args = [
+        'cargo', 'rustc',
+        '--target', GetCargoTarget(arch),
+        '--target-dir', output_dir,
+        '--manifest-path', os.path.join(project_dir, 'src', 'rust', 'Cargo.toml'),
+    ]
+    if not debug_build:
+        cargo_args += ['--release']
+    cargo_args += extra_cargo_flags
+    # Arguments directly for rustc
+    cargo_args += [
+        '--',
+        '-C', 'debuginfo=2',
+        '-C', 'linker={}/bin/{}{}-clang'.format(ndk_toolchain_dir, GetClangTarget(arch), GetAndroidApiLevel(arch)),
+        '-C', 'link-arg=-fuse-ld=lld',
+        '-L', 'native=' + output_dir,
+    ]
+    RunCmd(dry_run, cargo_args)
+
+    if dry_run:
+        return
+
+    # Copy the built library alongside libringrtc_rffi.so.
+    shutil.copyfile(
+        os.path.join(output_dir, GetCargoTarget(arch), 'debug' if debug_build else 'release', 'libringrtc.so'),
+        os.path.join(output_dir, 'lib.unstripped', 'libringrtc.so'))
+    # And strip another copy.
+    strip_args = [
+        '{}/bin/llvm-strip'.format(ndk_toolchain_dir),
+        '-s',
+        os.path.join(output_dir, 'lib.unstripped', 'libringrtc.so'),
+        '-o', os.path.join(output_dir, 'libringrtc.so'),
+    ]
+    RunCmd(dry_run, strip_args)
 
 def GetABI(arch):
     if arch == 'arm':
@@ -215,13 +257,37 @@ def GetABI(arch):
     else:
         raise Exception('Unknown architecture: ' + arch)
 
-def CreateLibs(dry_run, build_dir, archs, output, debug_build, unstripped,
-               extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs,
-               compile_only):
+def GetCargoTarget(arch):
+    if arch == 'arm':
+        return 'armv7-linux-androideabi'
+    elif arch == 'arm64':
+        return 'aarch64-linux-android'
+    elif arch == 'x86':
+        return 'i686-linux-android'
+    elif arch == 'x64':
+        return 'x86_64-linux-android'
+    else:
+        raise Exception('Unknown architecture: ' + arch)
+
+def GetClangTarget(arch):
+    if arch == 'arm':
+        return 'armv7a-linux-androideabi'
+    else:
+        return GetCargoTarget(arch)
+
+def GetAndroidApiLevel(arch):
+    if arch == 'arm' or arch == 'x86':
+        return 19
+    else:
+        return 21
+
+def CreateLibs(dry_run, project_dir, build_dir, archs, output, debug_build, unstripped,
+               extra_gn_args, extra_gn_flags, extra_ninja_flags,
+               extra_cargo_flags, jobs, compile_only):
 
     for arch in archs:
-        BuildArch(dry_run, build_dir, arch, debug_build, extra_gn_args,
-                  extra_gn_flags, extra_ninja_flags, jobs)
+        BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
+                  extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs)
 
     if compile_only is True:
         return
@@ -246,7 +312,7 @@ def CreateLibs(dry_run, build_dir, archs, output, debug_build, unstripped,
             output_arch_dir = GetArchBuildDir(build_dir, arch, debug_build)
             if unstripped is True:
                 # package the unstripped libraries
-                lib_file = os.path.join("lib.unstripped", lib)
+                lib_file = os.path.join('lib.unstripped', lib)
             else:
                 lib_file = lib
             target_dir = os.path.join(output_dir, GetABI(arch))
@@ -266,9 +332,10 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
               sonatype_repo, sonatype_user, sonatype_password,
               signing_keyid, signing_password, signing_secret_keyring,
               compile_only,
-              install_local, install_dir, build_dir, archs,
+              install_local, install_dir, project_dir, build_dir, archs,
               output, debug_build, release_build, unstripped,
-              extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs):
+              extra_gn_args, extra_gn_flags, extra_ninja_flags,
+              extra_cargo_flags, jobs):
 
     build_types = []
     if not (debug_build or release_build):
@@ -322,9 +389,9 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
             gradle_args = gradle_args + [
                 "-PreleaseRingrtcLibDirs=['{}']".format(lib_dir),
             ]
-        CreateLibs(dry_run, build_dir, archs, output, build_debug, unstripped,
-                   extra_gn_args, extra_gn_flags, extra_ninja_flags, jobs,
-                   compile_only)
+        CreateLibs(dry_run, project_dir, build_dir, archs, output, build_debug, unstripped,
+                   extra_gn_args, extra_gn_flags, extra_ninja_flags,
+                   extra_cargo_flags, jobs, compile_only)
 
     if compile_only is True:
         return
@@ -392,6 +459,7 @@ def main():
 
     if args.verbose is True:
         args.extra_ninja_flags = args.extra_ninja_flags + ['-v']
+        args.extra_cargo_flags = args.extra_cargo_flags + ['-v']
 
     gradle_dir = os.path.abspath(args.gradle_dir)
     logging.debug('Using gradle directory: {}'.format(gradle_dir))
@@ -429,9 +497,10 @@ def main():
               args.signing_keyid, args.signing_password, args.signing_secret_keyring,
               args.compile_only,
               args.install_local, args.install_dir,
-              build_dir, args.arch, args.output,
+              args.project_dir, build_dir, args.arch, args.output,
               args.debug_build, args.release_build, args.unstripped, args.extra_gn_args,
-              args.extra_gn_flags, args.extra_ninja_flags, str(args.jobs))
+              args.extra_gn_flags, args.extra_ninja_flags, args.extra_cargo_flags,
+              str(args.jobs))
 
     logging.info('''
 Version           : {}
