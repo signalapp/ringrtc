@@ -59,7 +59,10 @@ impl http::Client for HttpClient {
         } = request;
 
         self.actor.send(move |_| {
-            let mut tls_config = rustls::ClientConfig::new();
+            let mut tls_config = rustls::client::ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(rustls::RootCertStore::empty())
+                .with_no_client_auth();
             tls_config
                 .dangerous()
                 .set_certificate_verifier(Arc::new(ServerCertVerifier {}));
@@ -112,15 +115,17 @@ impl http::Client for HttpClient {
 
 struct ServerCertVerifier {}
 
-impl rustls::ServerCertVerifier for ServerCertVerifier {
+impl rustls::client::ServerCertVerifier for ServerCertVerifier {
     fn verify_server_cert(
         &self,
-        _roots: &rustls::RootCertStore,
-        _presented_certs: &[rustls::Certificate],
-        _dns_name: webpki::DNSNameRef,
-        _ocsp_response: &[u8],
-    ) -> core::result::Result<rustls::ServerCertVerified, rustls::TLSError> {
-        Ok(rustls::ServerCertVerified::assertion())
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
     }
 }
 #[derive(Clone, Default)]
