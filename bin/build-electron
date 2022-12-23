@@ -15,7 +15,7 @@ TARGET_ARCH=${TARGET_ARCH:-x64}
 
 usage()
 {
-    echo 'usage: build-electron [-d|-r|-c]
+    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only]
     where:
         -d to create a debug build (default)
         -r to create a release build
@@ -35,6 +35,7 @@ clean()
 }
 
 BUILD_TYPE=debug
+BUILD_WHAT=all
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -43,6 +44,12 @@ while [ "$1" != "" ]; do
             ;;
         -r | --release )
             BUILD_TYPE=release
+            ;;
+        --webrtc-only )
+            BUILD_WHAT=webrtc
+            ;;
+        --ringrtc-only )
+            BUILD_WHAT=ringrtc
             ;;
         -c | --clean )
             clean
@@ -78,104 +85,109 @@ case "$TARGET_ARCH" in
         ;;
 esac
 
-hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
-
-RUSTFLAGS="${RUSTFLAGS:-}"
-
-case "$(rustup show active-toolchain)" in 
-    *"x86_64-apple-darwin"* | *"aarch64-apple-darwin"* )
-        DEFAULT_PLATFORM="darwin"
-        CARGO_TARGET="${CARGO_ARCH}-apple-darwin"
-        ;;
-    *"x86_64-pc-windows"* )
-        DEFAULT_PLATFORM="win32"
-        CARGO_TARGET="${CARGO_ARCH}-pc-windows-msvc"
-        # Static linking to prevent build errors on Windows ia32
-        RUSTFLAGS="${RUSTFLAGS} -C target-feature=+crt-static"
-        ;;
-    *"x86_64-unknown-linux"* )
-        DEFAULT_PLATFORM="linux"
-        CARGO_TARGET="${CARGO_ARCH}-unknown-linux-gnu"
-        ;;
-    * )
-        printf "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting.\n"
-        exit 1
-esac
-
-echo "Building for platform ${DEFAULT_PLATFORM}, TARGET_ARCH=${TARGET_ARCH}, GN_ARCH=${GN_ARCH}, CARGO_TARGET=${CARGO_TARGET}"
-
 export MACOSX_DEPLOYMENT_TARGET="10.10"
 
 # Build WebRTC.
-(
-    cd src/webrtc/src
+if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
+then
+    echo "Building WebRTC for ${GN_ARCH}"
+
     WEBRTC_ARGS="target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_include_ilbc=false"
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}"
+        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}")
         ninja -C "${OUTPUT_DIR}"/debug
     else
         # Build with debug line tables, but not full debug info.
-        gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1"
+        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1")
         ninja -C "${OUTPUT_DIR}"/release
     fi
-)
+fi
 
-# Build and link the final RingRTC library.
-(
-    cd src/rust
+if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
+then
+    hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
 
-    INCLUDE_RELEASE_FLAG=
-    if [ "${BUILD_TYPE}" = "release" ]
-    then
-        INCLUDE_RELEASE_FLAG=yes
-    fi
+    RUSTFLAGS="${RUSTFLAGS:-}"
 
-    # Build with debug line tables, but not full debug info.
-    export CARGO_PROFILE_RELEASE_DEBUG=1
+    case "$(rustup show active-toolchain)" in
+        *"-apple-darwin"* )
+            DEFAULT_PLATFORM="darwin"
+            CARGO_TARGET="${CARGO_ARCH}-apple-darwin"
+            ;;
+        *"-pc-windows"* )
+            DEFAULT_PLATFORM="win32"
+            CARGO_TARGET="${CARGO_ARCH}-pc-windows-msvc"
+            # Static linking to prevent build errors on Windows ia32
+            RUSTFLAGS="${RUSTFLAGS} -C target-feature=+crt-static"
+            ;;
+        *"-unknown-linux"* )
+            DEFAULT_PLATFORM="linux"
+            CARGO_TARGET="${CARGO_ARCH}-unknown-linux-gnu"
+            ;;
+        * )
+            printf "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting.\n"
+            exit 1
+    esac
 
-    copy_to_node() {
-        cp -f "$1" "$2"
-    }
+    echo "Building for platform ${DEFAULT_PLATFORM}, TARGET_ARCH=${TARGET_ARCH}, CARGO_TARGET=${CARGO_TARGET}"
 
-    if [ $DEFAULT_PLATFORM = "darwin" ]
-    then
-        # Save the debug info in dSYM format...
-        export CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed
-        # ...then have Rust strip the library.
-        export CARGO_PROFILE_RELEASE_STRIP=symbols
-        OUTPUT_LIBRARY=libringrtc.dylib
-        DEBUG_PACKAGE=libringrtc.dylib.dSYM
-    elif [ $DEFAULT_PLATFORM = "win32" ]
-    then
-        # Save the debug info in PDB format...
-        export CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed
-        # ...and DLLs don't have anything to strip.
-        # (If you turn on stripping the PDB doesn't get generated at all.)
-        OUTPUT_LIBRARY=ringrtc.dll
-        DEBUG_PACKAGE=ringrtc.pdb
-    elif [ $DEFAULT_PLATFORM = "linux" ]
-    then
-        # DWP files don't seem ready for everyday use.
-        # We'll just save the whole unstripped binary.
-        OUTPUT_LIBRARY=libringrtc.so
-        DEBUG_PACKAGE=libringrtc.so
-        # Manually strip on copy for release builds.
-        if [ "${BUILD_TYPE}" = "release" ]; then
-            copy_to_node() {
-                objcopy -S "$1" "$2"
-            }
+    # Build and link the final RingRTC library.
+    (
+        cd src/rust
+
+        INCLUDE_RELEASE_FLAG=
+        if [ "${BUILD_TYPE}" = "release" ]
+        then
+            INCLUDE_RELEASE_FLAG=yes
         fi
-    fi
 
-    RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
+        # Build with debug line tables, but not full debug info.
+        export CARGO_PROFILE_RELEASE_DEBUG=1
 
-    mkdir -p ../node/build/${DEFAULT_PLATFORM}
-    copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} ../node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
+        copy_to_node() {
+            cp -f "$1" "$2"
+        }
 
-    if [ "${BUILD_TYPE}" = "release" ]
-    then
-        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc-"${PROJECT_VERSION}"-${DEFAULT_PLATFORM}-"${TARGET_ARCH}"-debuginfo.tar.bz2 -C "$(dirname target/${CARGO_TARGET}/${BUILD_TYPE}/${DEBUG_PACKAGE})" "$(basename ${DEBUG_PACKAGE})"
-    fi
-)
+        if [ $DEFAULT_PLATFORM = "darwin" ]
+        then
+            # Save the debug info in dSYM format...
+            export CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed
+            # ...then have Rust strip the library.
+            export CARGO_PROFILE_RELEASE_STRIP=symbols
+            OUTPUT_LIBRARY=libringrtc.dylib
+            DEBUG_PACKAGE=libringrtc.dylib.dSYM
+        elif [ $DEFAULT_PLATFORM = "win32" ]
+        then
+            # Save the debug info in PDB format...
+            export CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed
+            # ...and DLLs don't have anything to strip.
+            # (If you turn on stripping the PDB doesn't get generated at all.)
+            OUTPUT_LIBRARY=ringrtc.dll
+            DEBUG_PACKAGE=ringrtc.pdb
+        elif [ $DEFAULT_PLATFORM = "linux" ]
+        then
+            # DWP files don't seem ready for everyday use.
+            # We'll just save the whole unstripped binary.
+            OUTPUT_LIBRARY=libringrtc.so
+            DEBUG_PACKAGE=libringrtc.so
+            # Manually strip on copy for release builds.
+            if [ "${BUILD_TYPE}" = "release" ]; then
+                copy_to_node() {
+                    objcopy -S "$1" "$2"
+                }
+            fi
+        fi
+
+        RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
+
+        mkdir -p ../node/build/${DEFAULT_PLATFORM}
+        copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} ../node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
+
+        if [ "${BUILD_TYPE}" = "release" ]
+        then
+            tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc-"${PROJECT_VERSION}"-${DEFAULT_PLATFORM}-"${TARGET_ARCH}"-debuginfo.tar.bz2 -C "$(dirname target/${CARGO_TARGET}/${BUILD_TYPE}/${DEBUG_PACKAGE})" "$(basename ${DEBUG_PACKAGE})"
+        fi
+    )
+fi

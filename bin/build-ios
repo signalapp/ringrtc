@@ -31,7 +31,7 @@ set -e
 
 usage()
 {
-    echo 'usage: build-ios [-d|-r|-c] [--webrtc-only|--ring-rtc-only] [--host-sim-only]
+    echo 'usage: build-ios [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--host-sim-only]
     where:
         -d is for debug builds
         -r is for release builds (default)
