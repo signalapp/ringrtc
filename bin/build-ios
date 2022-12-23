@@ -52,13 +52,11 @@ clean()
   # Remove all possible artifact directories.
   rm -r -f "${OUTPUT_DIR}"/debug
   rm -r -f "${OUTPUT_DIR}"/release
+  rm -r -f "${OUTPUT_DIR}"/build
+  # Remove obsolete output paths too.
   rm -r -f "${OUTPUT_DIR}"/WebRTC.xcframework
   rm -r -f "${OUTPUT_DIR}"/libringrtc
-  rm -r -f "${OUTPUT_DIR}"/build
 }
-
-# The default build (out of git) is release. However, we don't keep
-# both types at the same time. It is either debug OR release.
 
 BUILD_WHAT=all
 BUILD_TYPE=release
@@ -111,10 +109,13 @@ webrtc_arch_for_host_sim() {
   esac
 }
 
+# The Rust compiler expects this to always be in the form "major.minor".
+export IPHONEOS_DEPLOYMENT_TARGET="12.2"
+
 # The WebRTC part of the build resulting in WebRTC.xcframework.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
-  echo "Building WebRTC.xcframework in ${OUTPUT_DIR}..."
+  echo "Building WebRTC.xcframework in ${OUTPUT_DIR}/${BUILD_TYPE}..."
 
   if [[ -n "${HOST_SIM_ONLY}" ]]; then
     ARCHS=$(webrtc_arch_for_host_sim)
@@ -123,17 +124,33 @@ then
   fi
   EXTRA_GN_ARGS="rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_enable_sctp=false rtc_libvpx_build_vp9=false rtc_include_ilbc=false"
 
-  (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/" --build_config ${BUILD_TYPE} --arch "${ARCHS[@]}" --extra-gn-args "${EXTRA_GN_ARGS}")
+  (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/${BUILD_TYPE}/" --build_config ${BUILD_TYPE} --arch "${ARCHS[@]}" --extra-gn-args "${EXTRA_GN_ARGS}")
 
   "${BIN_DIR}/print_build_env.py" \
       --webrtc-version="${WEBRTC_VERSION}" \
-      --ringrtc-version="${PROJECT_VERSION}" > "${OUTPUT_DIR}"/WebRTC.xcframework/build_env.txt
+      --ringrtc-version="${PROJECT_VERSION}" > "${OUTPUT_DIR}"/${BUILD_TYPE}/WebRTC.xcframework/build_env.txt
 
   # Delete dSYMs out of the built XCFramework.
   # FIXME: In the future, we probably want to keep these,
   # which is why we aren't changing WebRTC's build script to skip them altogether.
-  rm -r "${OUTPUT_DIR}"/WebRTC.xcframework/*/dSYMs
-  plutil -remove AvailableLibraries.DebugSymbolsPath "${OUTPUT_DIR}"/WebRTC.xcframework/Info.plist
+  rm -r "${OUTPUT_DIR}"/${BUILD_TYPE}/WebRTC.xcframework/*/dSYMs
+  plutil -remove AvailableLibraries.DebugSymbolsPath "${OUTPUT_DIR}"/${BUILD_TYPE}/WebRTC.xcframework/Info.plist
+
+  # Create the test podspec for WebRTC.
+  # Note that this is at the top level, specifying the most recently built of "debug" or "release"
+  # so that the testing project doesn't have to change.
+  echo 'Pod::Spec.new do |s|
+    s.name     = "WebRTCForTesting"
+    s.version  = "0.0.1"
+    s.summary  = "Intended only for testing SignalRingRTC within this repository"
+    s.license  = "BSD"
+    s.homepage = "https://github.com/signalapp/webrtc"
+    s.source   = { git: "https://github.com/signalapp/webrtc.git" }
+    s.author   = { "iOS Team": "ios@signal.org" }
+
+    s.platform = :ios, "'${IPHONEOS_DEPLOYMENT_TARGET}'"
+    s.vendored_frameworks = "'${BUILD_TYPE}'/WebRTC.xcframework"
+  end' >"${OUTPUT_DIR}"/WebRTCForTesting.podspec
 fi
 
 cargo_flags() {
@@ -173,16 +190,13 @@ then
     IS_RELEASE=yes
   fi
 
-  # The Rust compiler expects this to always be in the form "major.minor".
-  export IPHONEOS_DEPLOYMENT_TARGET="12.2"
-
   for TARGET in ${TARGETS}; do
     (
       cd "${RINGRTC_SRC_DIR}"/rust
       # shellcheck disable=SC2046 # word splitting for cargo_flags
       CARGO_TARGET_DIR="${OUTPUT_DIR}"/build cargo rustc --target "${TARGET}" ${IS_RELEASE:+--release} $(cargo_flags "${TARGET}") --crate-type staticlib
-      mkdir -p "${OUTPUT_DIR}/libringrtc/${TARGET}"
-      cp "${OUTPUT_DIR}/build/${TARGET}/${BUILD_TYPE}/libringrtc.a" "${OUTPUT_DIR}/libringrtc/${TARGET}/"
+      mkdir -p "${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc/${TARGET}"
+      cp "${OUTPUT_DIR}/build/${TARGET}/${BUILD_TYPE}/libringrtc.a" "${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc/${TARGET}/"
     )
   done
 
@@ -196,24 +210,10 @@ then
           link "ringrtc"
           export *
       }
-  }' >"${OUTPUT_DIR}"/libringrtc/RingRTC.modulemap
+  }' >"${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc/RingRTC.modulemap
 
-  # Create the test podspec for WebRTC:
-  echo 'Pod::Spec.new do |s|
-    s.name     = "WebRTCForTesting"
-    s.version  = "0.0.1"
-    s.summary  = "Intended only for testing SignalRingRTC within this repository"
-    s.license  = "BSD"
-    s.homepage = "https://github.com/signalapp/webrtc"
-    s.source   = { git: "https://github.com/signalapp/webrtc.git" }
-    s.author   = { "iOS Team": "ios@signal.org" }
-
-    s.platform = :ios, "'${IPHONEOS_DEPLOYMENT_TARGET}'"
-    s.vendored_frameworks = "WebRTC.xcframework"
-  end' >"${OUTPUT_DIR}"/WebRTCForTesting.podspec
-
-  echo "Creating header file in ${OUTPUT_DIR}/libringrtc..."
-  cbindgen "${RINGRTC_SRC_DIR}"/rust/src/lib.rs --config "${RINGRTC_SRC_DIR}"/rust/cbindgen.toml -o "${OUTPUT_DIR}"/libringrtc/ringrtc.h
+  echo "Creating header file in ${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc..."
+  cbindgen "${RINGRTC_SRC_DIR}"/rust/src/lib.rs --config "${RINGRTC_SRC_DIR}"/rust/cbindgen.toml -o "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc/ringrtc.h
 fi
 
 echo "Done with the iOS build for RingRTC!"
