@@ -87,7 +87,7 @@ class PeerConnectionFactoryWithOwnedThreads
 
     // The audio device module must be created (and destroyed) on the _worker_ thread.
     // It is safe to release the reference on this thread, however, because the PeerConnectionFactory keeps its own reference.
-    auto adm = worker_thread->Invoke<rtc::scoped_refptr<AudioDeviceModule>>(RTC_FROM_HERE, [&]() {
+    auto adm = worker_thread->BlockingCall([&]() {
       if (use_new_audio_device_module) {
 #if defined(WEBRTC_WIN)
         com_initializer = std::make_unique<ScopedCOMInitializer>(ScopedCOMInitializer::kMTA);
@@ -120,7 +120,7 @@ class PeerConnectionFactoryWithOwnedThreads
 #if defined(WEBRTC_WIN)
         std::move(com_initializer),
 #endif
-        adm);
+        adm.get());
   }
 
   ~PeerConnectionFactoryWithOwnedThreads() override {
@@ -136,19 +136,19 @@ class PeerConnectionFactoryWithOwnedThreads
   }
 
   int16_t AudioPlayoutDevices() override {
-    return owned_worker_thread_->Invoke<int16_t>(RTC_FROM_HERE, [&]() {
+    return owned_worker_thread_->BlockingCall([&]() {
       return audio_device_module_->PlayoutDevices();
     });
   }
 
   int32_t AudioPlayoutDeviceName(uint16_t index, char* name_out, char* uuid_out) override {
-    return owned_worker_thread_->Invoke<int32_t>(RTC_FROM_HERE, [&]() {
+    return owned_worker_thread_->BlockingCall([&]() {
       return audio_device_module_->PlayoutDeviceName(index, name_out, uuid_out);
     });
   }
 
   bool SetAudioPlayoutDevice(uint16_t index) override {
-    return owned_worker_thread_->Invoke<bool>(RTC_FROM_HERE, [&]() {
+    return owned_worker_thread_->BlockingCall([&]() {
       // We need to stop and restart playout if it's already in progress.
       bool was_initialized = audio_device_module_->PlayoutIsInitialized();
       bool was_playing = audio_device_module_->Playing();
@@ -175,19 +175,19 @@ class PeerConnectionFactoryWithOwnedThreads
   }
 
   int16_t AudioRecordingDevices() override {
-    return owned_worker_thread_->Invoke<int16_t>(RTC_FROM_HERE, [&]() {
+    return owned_worker_thread_->BlockingCall([&]() {
       return audio_device_module_->RecordingDevices();
     });
   }
 
   int32_t AudioRecordingDeviceName(uint16_t index, char* name_out, char* uuid_out) override {
-    return owned_worker_thread_->Invoke<int32_t>(RTC_FROM_HERE, [&]() {
+    return owned_worker_thread_->BlockingCall([&]() {
       return audio_device_module_->RecordingDeviceName(index, name_out, uuid_out);
     });
   }
 
   bool SetAudioRecordingDevice(uint16_t index) override {
-    return owned_worker_thread_->Invoke<bool>(RTC_FROM_HERE, [&]() {
+    return owned_worker_thread_->BlockingCall([&]() {
       // We need to stop and restart recording if it is already in progress.
       bool was_initialized = audio_device_module_->RecordingIsInitialized();
       bool was_recording = audio_device_module_->Recording();
@@ -386,7 +386,7 @@ RUSTEXPORT AudioTrackInterface* Rust_createAudioTrack(
   cricket::AudioOptions options;
   auto source = factory->CreateAudioSource(options);
   // Note: This must stay "audio1" to stay in sync with V4 signaling.
-  return take_rc(factory->CreateAudioTrack("audio1", std::move(source)));
+  return take_rc(factory->CreateAudioTrack("audio1", source.get()));
 }
 
 // Returns an owned RC.

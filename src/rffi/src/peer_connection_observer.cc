@@ -152,7 +152,7 @@ void PeerConnectionObserverRffi::OnAddTrack(
   // eventually.
   if (receiver->media_type() == cricket::MEDIA_TYPE_AUDIO) {
     if (enable_frame_encryption_) {
-      uint32_t id = Rust_getTrackIdAsUint32(receiver->track());
+      uint32_t id = Rust_getTrackIdAsUint32(receiver->track().get());
       if (id != 0) {
         receiver->SetFrameDecryptor(CreateDecryptor(id));
         callbacks_.onAddAudioRtpReceiver(observer_, take_rc(receiver->track()));
@@ -164,7 +164,7 @@ void PeerConnectionObserverRffi::OnAddTrack(
     }
   } else if (receiver->media_type() == cricket::MEDIA_TYPE_VIDEO) {
     if (enable_frame_encryption_) {
-      uint32_t id = Rust_getTrackIdAsUint32(receiver->track());
+      uint32_t id = Rust_getTrackIdAsUint32(receiver->track().get());
       if (id != 0) {
         receiver->SetFrameDecryptor(CreateDecryptor(id));
         AddVideoSink(static_cast<webrtc::VideoTrackInterface*>(receiver->track().get()));
