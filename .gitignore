@@ -4,6 +4,7 @@ cscope.*
 .DS_Store
 .dir-locals.el
 .cargo
+.gradle/
 *.code-workspace
 **/.vscode
 .idea

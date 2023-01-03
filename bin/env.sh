@@ -30,9 +30,6 @@ RINGRTC_SRC_DIR="${PROJECT_DIR}/src"
 # build products
 OUTPUT_DIR=$(realpath "${OUTPUT_DIR:-${PROJECT_DIR}/out}")
 
-# publish directory
-PUBLISH_DIR="${PROJECT_DIR}/publish"
-
 # patch hash file
 PATCH_HASH="${OUTPUT_DIR}/patch-hash"
 

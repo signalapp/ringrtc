@@ -1,0 +1,151 @@
+plugins {
+    id 'com.android.library' version '7.0.0'
+    id 'maven-publish'
+    id 'signing'
+}
+
+repositories {
+    google()
+    mavenCentral()
+    mavenLocal()
+}
+
+def versionProperties = new Properties()
+file("../../config/version.properties").withInputStream { versionProperties.load(it) }
+
+if (!project.hasProperty("ringrtcVersion")) {
+    ext.ringrtcVersion =
+        "${versionProperties.getProperty("ringrtc.version.major")}." +
+        "${versionProperties.getProperty("ringrtc.version.minor")}." +
+        "${versionProperties.getProperty("ringrtc.version.revision")}"
+}
+ext.isReleaseVersion = ringrtcVersion.indexOf("-") == -1;
+
+ext.debug_jni_lib_dirs   = project.hasProperty("debugRingrtcLibDir") ? [debugRingrtcLibDir] : ["jniLibs"]
+ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDir") ? [releaseRingrtcLibDir] : ["jniLibs"]
+ext.webrtc_jar           = project.hasProperty("webrtcJar") ? webrtcJar : "libs/libwebrtc.jar"
+
+android {
+    compileSdk 30
+
+    defaultConfig {
+        minSdk 19
+        targetSdk 31
+        versionName ringrtcVersion
+        archivesBaseName = "ringrtc-android"
+        consumerProguardFiles "proguard-rules.pro"
+    }
+
+    sourceSets {
+        release {
+            jniLibs.srcDirs = release_jni_lib_dirs
+            java.srcDirs = ['api/']
+        }
+        debug {
+            jniLibs.srcDirs = debug_jni_lib_dirs
+            java.srcDirs = ['api/']
+        }
+    }
+
+    packagingOptions {
+        // Libraries are already stripped if necessary when linked.
+        doNotStrip "**/*.so"
+    }
+}
+
+dependencies {
+    api files(webrtc_jar)
+    api 'androidx.annotation:annotation:1.2.0'
+}
+
+task javadoc(type: Javadoc) {
+    source = android.sourceSets.release.java.sourceFiles
+    classpath += files(android.bootClasspath)
+    // There doesn't seem to be a convenient way to do this with just one variant.
+    android.libraryVariants.all { v ->
+        classpath += v.getCompileClasspath(null)
+    }
+    // Normally this is set by the 'java' plugin, but that's not compatible with 'android-library'
+    if (project.hasProperty("docsDir")) {
+        destinationDir = new File(docsDir, "javadoc")
+    }
+}
+
+ext.releaseRepoUrl       = project.hasProperty("sonatypeRepo") ? sonatypeRepo
+    : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+ext.releaseRepoUsername  = project.hasProperty("signalSonatypeUsername") ? signalSonatypeUsername : ""
+ext.releaseRepoPassword  = project.hasProperty("signalSonatypePassword") ? signalSonatypePassword : ""
+
+afterEvaluate {
+    publishing {
+        publications {
+            debug(MavenPublication) {
+                from components.debug
+
+                groupId = 'org.signal'
+                artifactId = archivesBaseName
+                version = "${ringrtcVersion}-DEBUG"
+            }
+            mavenJava(MavenPublication) {
+                from components.release
+
+                group = 'org.signal'
+                artifactId = archivesBaseName
+                version = ringrtcVersion
+
+                pom {
+                    name = 'ringrtc-android'
+                    packaging = 'aar'
+                    description = 'RingRTC for Android'
+                    url = 'https://github.com/signalapp/ringrtc/'
+
+                    scm {
+                        url = 'https://github.com/signalapp/ringrtc/'
+                        connection = 'scm:git:git@github.com:signalapp/ringrtc.git'
+                        developerConnection = 'scm:git:git@github.com:signalapp/ringrtc.git'
+                    }
+
+                    licenses {
+                        license {
+                            name = 'AGPL-3.0-only'
+                            url = 'https://www.gnu.org/licenses/agpl-3.0.txt'
+                            distribution = 'repo'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            name = 'Calling Team'
+                            organizationUrl = 'https://www.signal.org/'
+                        }
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                url = releaseRepoUrl
+                credentials {
+                    username = releaseRepoUsername
+                    password = releaseRepoPassword
+                }
+            }
+        }
+    }
+
+    signing {
+        required { isReleaseVersion && gradle.taskGraph.hasTask(":publishMavenJavaPublicationToMavenRepository") }
+        sign publishing.publications.mavenJava
+    }
+}
+
+ext.webrtc_version = "${versionProperties.getProperty("webrtc.version")}"
+
+task version {
+    group 'Info'
+    description = 'Prints the versions as read from the version config file.'
+    doLast {
+        println "RingRTC version: " + version
+        println "WebRTC version : " + project.webrtc_version
+    }
+}

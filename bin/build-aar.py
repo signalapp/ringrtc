@@ -16,6 +16,7 @@ This script generates libringrtc.aar for distribution
 
 try:
     import argparse
+    import enum
     import logging
     import subprocess
     import os
@@ -28,13 +29,22 @@ except ImportError as e:
 DEFAULT_ARCHS = ['arm', 'arm64', 'x86', 'x64']
 NINJA_TARGETS = ['ringrtc']
 JAR_FILES     = [
-    'lib.java/ringrtc/libringrtc.jar',
     'lib.java/sdk/android/libwebrtc.jar',
 ]
 SO_LIBS       = [
     'libringrtc_rffi.so',
     'libringrtc.so',
 ]
+
+class Project(enum.Flag):
+    WEBRTC = enum.auto()
+    RINGRTC = enum.auto()
+    AAR = enum.auto()
+    ALL = WEBRTC | RINGRTC | AAR
+
+    def __sub__(self, other):
+        return self & ~other
+
 
 # ------------------------------------------------------------------------------
 #
@@ -125,9 +135,15 @@ def ParseArgs():
     parser.add_argument('-u', '--unstripped',
                         action='store_true',
                         help='Store the unstripped libraries in the .aar. Default is false')
-    parser.add_argument('-c', '--compile-only',
-                        action='store_true',
+    parser.add_argument('-c', '--compile-only', dest='disabled_projects',
+                        action='append_const', const=Project.AAR,
                         help='Only compile the code, do not build the .aar. Default is false')
+    parser.add_argument('--webrtc-only', dest='disabled_projects',
+                        action='append_const', const=Project.RINGRTC | Project.AAR,
+                        help='''Compile WebRTC's libraries only, then stop building''')
+    parser.add_argument('--ringrtc-only', dest='disabled_projects',
+                        action='append_const', const=Project.WEBRTC,
+                        help='Compile RingRTC only, assuming WebRTC is already built')
     parser.add_argument('--clean',
                         action='store_true',
                         help='Remove all the build products. Default is false')
@@ -170,80 +186,82 @@ def GetGradleBuildDir(build_dir):
     return os.path.join(build_dir, 'gradle')
 
 def BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
-              extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs):
+              extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs, build_projects):
 
     logging.info('Building: {} ...'.format(arch))
 
     output_dir = GetArchBuildDir(build_dir, arch, debug_build)
-    gn_args = {
-        'target_os'           : '"android"',
-        'target_cpu'          : '"{}"'.format(arch),
-        'is_debug'            : 'false',
-        'rtc_include_tests'   : 'false',
-        'rtc_build_examples'  : 'false',
-        'rtc_build_tools'     : 'false',
-        'rtc_enable_protobuf' : 'false',
-        'rtc_enable_sctp'     : 'false',
-        'rtc_libvpx_build_vp9': 'false',
-        'rtc_include_ilbc'    : 'false',
-    }
-    if debug_build is True:
-        gn_args['is_debug'] = 'true'
-        gn_args['symbol_level'] = '2'
+    if Project.WEBRTC in build_projects:
+        gn_args = {
+            'target_os'           : '"android"',
+            'target_cpu'          : '"{}"'.format(arch),
+            'is_debug'            : 'false',
+            'rtc_include_tests'   : 'false',
+            'rtc_build_examples'  : 'false',
+            'rtc_build_tools'     : 'false',
+            'rtc_enable_protobuf' : 'false',
+            'rtc_enable_sctp'     : 'false',
+            'rtc_libvpx_build_vp9': 'false',
+            'rtc_include_ilbc'    : 'false',
+        }
+        if debug_build is True:
+            gn_args['is_debug'] = 'true'
+            gn_args['symbol_level'] = '2'
 
-    gn_args_string = '--args=' + ' '.join(
-        [k + '=' + v for k, v in gn_args.items()] + extra_gn_args)
+        gn_args_string = '--args=' + ' '.join(
+            [k + '=' + v for k, v in gn_args.items()] + extra_gn_args)
 
-    gn_total_args = [ 'gn', 'gen', output_dir, gn_args_string ] + extra_gn_flags
-    RunCmd(dry_run, gn_total_args)
+        gn_total_args = [ 'gn', 'gen', output_dir, gn_args_string ] + extra_gn_flags
+        RunCmd(dry_run, gn_total_args)
 
-    ninja_args = [ 'ninja', '-C', output_dir ] + NINJA_TARGETS + [ '-j', jobs ] + extra_ninja_flags
-    RunCmd(dry_run, ninja_args)
+        ninja_args = [ 'ninja', '-C', output_dir ] + NINJA_TARGETS + [ '-j', jobs ] + extra_ninja_flags
+        RunCmd(dry_run, ninja_args)
 
-    # FIXME: Shouldn't hardcode Linux, but eventually this won't use WebRTC's NDK anyway.
-    ndk_toolchain_dir = os.path.join(
-        os.getcwd(),
-        'third_party',
-        'android_ndk',
-        'toolchains',
-        'llvm',
-        'prebuilt',
-        'linux-x86_64'
-    )
-    cargo_args = [
-        'cargo', 'rustc',
-        '--target', GetCargoTarget(arch),
-        '--target-dir', output_dir,
-        '--manifest-path', os.path.join(project_dir, 'src', 'rust', 'Cargo.toml'),
-    ]
-    if not debug_build:
-        cargo_args += ['--release']
-    cargo_args += extra_cargo_flags
-    # Arguments directly for rustc
-    cargo_args += [
-        '--',
-        '-C', 'debuginfo=2',
-        '-C', 'linker={}/bin/{}{}-clang'.format(ndk_toolchain_dir, GetClangTarget(arch), GetAndroidApiLevel(arch)),
-        '-C', 'link-arg=-fuse-ld=lld',
-        '-L', 'native=' + output_dir,
-    ]
-    RunCmd(dry_run, cargo_args)
+    if Project.RINGRTC in build_projects:
+        # FIXME: Shouldn't hardcode Linux, but eventually this won't use WebRTC's NDK anyway.
+        ndk_toolchain_dir = os.path.join(
+            os.getcwd(),
+            'third_party',
+            'android_ndk',
+            'toolchains',
+            'llvm',
+            'prebuilt',
+            'linux-x86_64'
+        )
+        cargo_args = [
+            'cargo', 'rustc',
+            '--target', GetCargoTarget(arch),
+            '--target-dir', output_dir,
+            '--manifest-path', os.path.join(project_dir, 'src', 'rust', 'Cargo.toml'),
+        ]
+        if not debug_build:
+            cargo_args += ['--release']
+        cargo_args += extra_cargo_flags
+        # Arguments directly for rustc
+        cargo_args += [
+            '--',
+            '-C', 'debuginfo=2',
+            '-C', 'linker={}/bin/{}{}-clang'.format(ndk_toolchain_dir, GetClangTarget(arch), GetAndroidApiLevel(arch)),
+            '-C', 'link-arg=-fuse-ld=lld',
+            '-L', 'native=' + output_dir,
+        ]
+        RunCmd(dry_run, cargo_args)
 
-    if dry_run:
-        return
+        if dry_run:
+            return
 
-    # Copy the built library alongside libringrtc_rffi.so.
-    shutil.copyfile(
-        os.path.join(output_dir, GetCargoTarget(arch), 'debug' if debug_build else 'release', 'libringrtc.so'),
-        os.path.join(output_dir, 'lib.unstripped', 'libringrtc.so'))
-    # And strip another copy.
-    strip_args = [
-        '{}/bin/llvm-strip'.format(ndk_toolchain_dir),
-        '-s',
-        os.path.join(output_dir, 'lib.unstripped', 'libringrtc.so'),
-        '-o', os.path.join(output_dir, 'libringrtc.so'),
-    ]
-    RunCmd(dry_run, strip_args)
+        # Copy the built library alongside libringrtc_rffi.so.
+        shutil.copyfile(
+            os.path.join(output_dir, GetCargoTarget(arch), 'debug' if debug_build else 'release', 'libringrtc.so'),
+            os.path.join(output_dir, 'lib.unstripped', 'libringrtc.so'))
+        # And strip another copy.
+        strip_args = [
+            '{}/bin/llvm-strip'.format(ndk_toolchain_dir),
+            '-s',
+            os.path.join(output_dir, 'lib.unstripped', 'libringrtc.so'),
+            '-o', os.path.join(output_dir, 'libringrtc.so'),
+        ]
+        RunCmd(dry_run, strip_args)
 
 def GetABI(arch):
     if arch == 'arm':
@@ -283,13 +301,16 @@ def GetAndroidApiLevel(arch):
 
 def CreateLibs(dry_run, project_dir, build_dir, archs, output, debug_build, unstripped,
                extra_gn_args, extra_gn_flags, extra_ninja_flags,
-               extra_cargo_flags, jobs, compile_only):
+               extra_cargo_flags, jobs, build_projects):
 
     for arch in archs:
         BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
-                  extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs)
+                  extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs, build_projects)
 
-    if compile_only is True:
+    # The rest is considered part of the AAR build rather than the WebRTC or
+    # RingRTC Rust builds mostly by process of elimination: sometimes we want
+    # to do a "compile-only" build that skips assembling the libs/ directory.
+    if Project.AAR not in build_projects:
         return
 
     output_dir = os.path.join(GetOutputDir(build_dir, debug_build),
@@ -331,7 +352,7 @@ def RunGradle(dry_run, args):
 def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
               sonatype_repo, sonatype_user, sonatype_password,
               signing_keyid, signing_password, signing_secret_keyring,
-              compile_only,
+              build_projects,
               install_local, install_dir, project_dir, build_dir, archs,
               output, debug_build, release_build, unstripped,
               extra_gn_args, extra_gn_flags, extra_ninja_flags,
@@ -380,20 +401,22 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
             output_dir = GetOutputDir(build_dir, build_debug)
             lib_dir = os.path.join(output_dir, 'libs')
             gradle_args = gradle_args + [
-                "-PdebugRingrtcLibDirs=['{}']".format(lib_dir),
+                "-PdebugRingrtcLibDir={}".format(lib_dir),
+                "-PwebrtcJar={}/libwebrtc.jar".format(lib_dir),
             ]
         else:
             build_debug = False
             output_dir = GetOutputDir(build_dir, build_debug)
             lib_dir = os.path.join(output_dir, 'libs')
             gradle_args = gradle_args + [
-                "-PreleaseRingrtcLibDirs=['{}']".format(lib_dir),
+                "-PreleaseRingrtcLibDir={}".format(lib_dir),
+                "-PwebrtcJar={}/libwebrtc.jar".format(lib_dir),
             ]
         CreateLibs(dry_run, project_dir, build_dir, archs, output, build_debug, unstripped,
                    extra_gn_args, extra_gn_flags, extra_ninja_flags,
-                   extra_cargo_flags, jobs, compile_only)
+                   extra_cargo_flags, jobs, build_projects)
 
-    if compile_only is True:
+    if Project.AAR not in build_projects:
         return
 
     gradle_args.extend(('assembleDebug' if build_type == 'debug' else 'assembleRelease' for build_type in build_types))
@@ -461,6 +484,10 @@ def main():
         args.extra_ninja_flags = args.extra_ninja_flags + ['-v']
         args.extra_cargo_flags = args.extra_cargo_flags + ['-v']
 
+    build_projects = Project.ALL
+    for disabled_project in (args.disabled_projects or []):
+        build_projects -= disabled_project
+
     gradle_dir = os.path.abspath(args.gradle_dir)
     logging.debug('Using gradle directory: {}'.format(gradle_dir))
 
@@ -495,7 +522,7 @@ def main():
     CreateAar(args.dry_run, args.extra_gradle_args, args.publish_version, args.gradle_dir,
               args.upload_sonatype_repo, args.upload_sonatype_user, args.upload_sonatype_password,
               args.signing_keyid, args.signing_password, args.signing_secret_keyring,
-              args.compile_only,
+              build_projects,
               args.install_local, args.install_dir,
               args.project_dir, build_dir, args.arch, args.output,
               args.debug_build, args.release_build, args.unstripped, args.extra_gn_args,

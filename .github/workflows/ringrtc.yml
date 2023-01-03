@@ -29,7 +29,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     - uses: actions/checkout@v3
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
-    - run: shellcheck **/*.sh bin/build-aar bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-android-deps bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check src/rust/scripts/run-tests
+    - run: shellcheck **/*.sh bin/build-aar bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check src/rust/scripts/run-tests
     - name: Clippy
       run: cargo clippy --tests --features sim -- -D warnings
       working-directory: src/rust

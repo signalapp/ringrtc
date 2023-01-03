@@ -13,6 +13,6 @@ set -e
 "${0}.py"                                  \
     --build-dir="${OUTPUT_DIR}"            \
     --webrtc-src-dir="${WEBRTC_SRC_DIR}"   \
-    --gradle-dir="${ANDROID_GRADLE_DIR}"   \
+    --gradle-dir="${PROJECT_DIR}"          \
     --publish-version="${PROJECT_VERSION}" \
     "$@"

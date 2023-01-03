@@ -1,0 +1,13 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "RingRtcGradle"
+include ':ringrtc'
+project(':ringrtc').projectDir = file('src')
+
+include ':ringrtc:android'

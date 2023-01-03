@@ -4,13 +4,11 @@
 #
 
 if (is_android) {
-  import("//build/config/android/config.gni")
-  import("//build/config/android/rules.gni")
   import("//webrtc.gni")
 
   group("ringrtc") {
     public_deps = [
-      "android",
+      "//sdk/android:libwebrtc",
       "rffi:libringrtc_rffi",
     ]
   }
