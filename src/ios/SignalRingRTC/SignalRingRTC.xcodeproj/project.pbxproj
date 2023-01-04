@@ -156,7 +156,7 @@
 				388AC0F522FA8F1600BEC609 /* ringrtc.h */,
 			);
 			name = libringrtc;
-			path = ../../../../out/libringrtc;
+			path = "../../../../out/libringrtc-for-testing";
 			sourceTree = "<group>";
 		};
 		388AC0FB22FB403800BEC609 /* Frameworks */ = {
@@ -554,7 +554,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../../out/libringrtc/$(CARGO_BUILD_TARGET)",
+					"$(PROJECT_DIR)/../../../out/libringrtc-for-testing/$(CARGO_BUILD_TARGET)",
 				);
 				MODULEMAP_FILE = SignalRingRTC/SignalRingRTC.modulemap;
 				MODULEMAP_PRIVATE_FILE = "";
@@ -566,7 +566,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = org.whispersystems.SignalRingRTC;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/../../../out/libringrtc";
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/../../../out/libringrtc-for-testing";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
@@ -605,7 +605,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../../out/libringrtc/$(CARGO_BUILD_TARGET)",
+					"$(PROJECT_DIR)/../../../out/libringrtc-for-testing/$(CARGO_BUILD_TARGET)",
 				);
 				MODULEMAP_FILE = SignalRingRTC/SignalRingRTC.modulemap;
 				MODULEMAP_PRIVATE_FILE = "";
@@ -616,7 +616,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = org.whispersystems.SignalRingRTC;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/../../../out/libringrtc";
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/../../../out/libringrtc-for-testing";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
 			};

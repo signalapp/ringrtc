@@ -214,6 +214,10 @@ then
 
   echo "Creating header file in ${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc..."
   cbindgen "${RINGRTC_SRC_DIR}"/rust/src/lib.rs --config "${RINGRTC_SRC_DIR}"/rust/cbindgen.toml -o "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc/ringrtc.h
+
+  # Create a relative symlink at top level, specifying "debug" or "release"
+  # so that the testing project doesn't have to change.
+  ln -fs ${BUILD_TYPE}/libringrtc "${OUTPUT_DIR}"/libringrtc-for-testing
 fi
 
 echo "Done with the iOS build for RingRTC!"
