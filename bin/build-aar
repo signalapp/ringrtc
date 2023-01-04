@@ -15,4 +15,5 @@ set -e
     --webrtc-src-dir="${WEBRTC_SRC_DIR}"   \
     --gradle-dir="${PROJECT_DIR}"          \
     --publish-version="${PROJECT_VERSION}" \
+    --webrtc-version="${WEBRTC_VERSION}"   \
     "$@"

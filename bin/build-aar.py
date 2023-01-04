@@ -21,26 +21,26 @@ try:
     import subprocess
     import os
     import shutil
+    import tarfile
 
 except ImportError as e:
     raise ImportError(str(e) + '- required module not found')
 
 
-DEFAULT_ARCHS = ['arm', 'arm64', 'x86', 'x64']
-NINJA_TARGETS = ['ringrtc']
-JAR_FILES     = [
+DEFAULT_ARCHS  = ['arm', 'arm64', 'x86', 'x64']
+NINJA_TARGETS  = ['ringrtc']
+JAR_FILES      = [
     'lib.java/sdk/android/libwebrtc.jar',
 ]
-SO_LIBS       = [
-    'libringrtc_rffi.so',
-    'libringrtc.so',
-]
+WEBRTC_SO_LIBS = ['libringrtc_rffi.so']
+SO_LIBS        = WEBRTC_SO_LIBS + ['libringrtc.so']
 
 class Project(enum.Flag):
     WEBRTC = enum.auto()
+    WEBRTC_ARCHIVE = enum.auto()
     RINGRTC = enum.auto()
     AAR = enum.auto()
-    ALL = WEBRTC | RINGRTC | AAR
+    DEFAULT = WEBRTC | RINGRTC | AAR
 
     def __sub__(self, other):
         return self & ~other
@@ -106,6 +106,9 @@ def ParseArgs():
     parser.add_argument('--publish-version',
                         required=True,
                         help='Library version to publish')
+    parser.add_argument('--webrtc-version',
+                        required=True,
+                        help='WebRTC version')
     parser.add_argument('--extra-gradle-args',
                         nargs='*', default=[],
                         help='Additional gradle arguments')
@@ -144,6 +147,9 @@ def ParseArgs():
     parser.add_argument('--ringrtc-only', dest='disabled_projects',
                         action='append_const', const=Project.WEBRTC,
                         help='Compile RingRTC only, assuming WebRTC is already built')
+    parser.add_argument('--archive-webrtc',
+                        action='store_true',
+                        help='After building WebRTC, archive its libraries')
     parser.add_argument('--clean',
                         action='store_true',
                         help='Remove all the build products. Default is false')
@@ -299,13 +305,39 @@ def GetAndroidApiLevel(arch):
     else:
         return 21
 
+def ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version):
+    build_mode = 'debug' if debug_build else 'release'
+    archive_name = f'webrtc-{webrtc_version}-android-{build_mode}.tar.bz2'
+    logging.info(f'Archiving to {archive_name} ...')
+    with tarfile.open(os.path.join(build_dir, archive_name), 'w:bz2') as archive:
+        def add(rel_path):
+            archive.add(os.path.join(build_dir, rel_path), arcname=rel_path)
+
+        for arch in archs:
+            logging.debug('  For arch: {} ...'.format(arch))
+            output_arch_rel_path = GetArchBuildDir('.', arch, debug_build)
+            # All archs will have the same jars, but storing it in every directory
+            # makes it easier to build single-arch RingRTC later.
+            # The jars are small anyway.
+            for jar in JAR_FILES:
+                logging.debug('  Adding jar: {} ...'.format(jar))
+                add(os.path.join(output_arch_rel_path, jar))
+            for lib in WEBRTC_SO_LIBS:
+                logging.debug('  Adding lib: {} ...'.format(lib))
+                add(os.path.join(output_arch_rel_path, lib))
+                logging.debug('  Adding lib: {} (unstripped) ...'.format(lib))
+                add(os.path.join(output_arch_rel_path, 'lib.unstripped', lib))
+
 def CreateLibs(dry_run, project_dir, build_dir, archs, output, debug_build, unstripped,
                extra_gn_args, extra_gn_flags, extra_ninja_flags,
-               extra_cargo_flags, jobs, build_projects):
+               extra_cargo_flags, jobs, build_projects, webrtc_version):
 
     for arch in archs:
         BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
                   extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs, build_projects)
+
+    if Project.WEBRTC_ARCHIVE in build_projects:
+        ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version)
 
     # The rest is considered part of the AAR build rather than the WebRTC or
     # RingRTC Rust builds mostly by process of elimination: sometimes we want
@@ -349,14 +381,14 @@ def RunGradle(dry_run, args):
     if dry_run is False:
         subprocess.check_call(cmd)
 
-def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
-              sonatype_repo, sonatype_user, sonatype_password,
-              signing_keyid, signing_password, signing_secret_keyring,
-              build_projects,
-              install_local, install_dir, project_dir, build_dir, archs,
-              output, debug_build, release_build, unstripped,
-              extra_gn_args, extra_gn_flags, extra_ninja_flags,
-              extra_cargo_flags, jobs):
+def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir,
+                 sonatype_repo, sonatype_user, sonatype_password,
+                 signing_keyid, signing_password, signing_secret_keyring,
+                 build_projects,
+                 install_local, install_dir, project_dir, build_dir, archs,
+                 output, debug_build, release_build, unstripped,
+                 extra_gn_args, extra_gn_flags, extra_ninja_flags,
+                 extra_cargo_flags, jobs):
 
     build_types = []
     if not (debug_build or release_build):
@@ -414,7 +446,7 @@ def CreateAar(dry_run, extra_gradle_args, version, gradle_dir,
             ]
         CreateLibs(dry_run, project_dir, build_dir, archs, output, build_debug, unstripped,
                    extra_gn_args, extra_gn_flags, extra_ninja_flags,
-                   extra_cargo_flags, jobs, build_projects)
+                   extra_cargo_flags, jobs, build_projects, webrtc_version)
 
     if Project.AAR not in build_projects:
         return
@@ -484,9 +516,11 @@ def main():
         args.extra_ninja_flags = args.extra_ninja_flags + ['-v']
         args.extra_cargo_flags = args.extra_cargo_flags + ['-v']
 
-    build_projects = Project.ALL
+    build_projects = Project.DEFAULT
     for disabled_project in (args.disabled_projects or []):
         build_projects -= disabled_project
+    if args.archive_webrtc:
+        build_projects |= Project.WEBRTC_ARCHIVE
 
     gradle_dir = os.path.abspath(args.gradle_dir)
     logging.debug('Using gradle directory: {}'.format(gradle_dir))
@@ -519,15 +553,16 @@ def main():
             print('ERROR: If --upload-sonatype-repo argument set, then all of --signing-keyid, --signing-password, and --signing-secret-keyring must also be set.')
             return 1
 
-    CreateAar(args.dry_run, args.extra_gradle_args, args.publish_version, args.gradle_dir,
-              args.upload_sonatype_repo, args.upload_sonatype_user, args.upload_sonatype_password,
-              args.signing_keyid, args.signing_password, args.signing_secret_keyring,
-              build_projects,
-              args.install_local, args.install_dir,
-              args.project_dir, build_dir, args.arch, args.output,
-              args.debug_build, args.release_build, args.unstripped, args.extra_gn_args,
-              args.extra_gn_flags, args.extra_ninja_flags, args.extra_cargo_flags,
-              str(args.jobs))
+    PerformBuild(args.dry_run, args.extra_gradle_args, args.publish_version, args.webrtc_version,
+                 args.gradle_dir,
+                 args.upload_sonatype_repo, args.upload_sonatype_user, args.upload_sonatype_password,
+                 args.signing_keyid, args.signing_password, args.signing_secret_keyring,
+                 build_projects,
+                 args.install_local, args.install_dir,
+                 args.project_dir, build_dir, args.arch, args.output,
+                 args.debug_build, args.release_build, args.unstripped, args.extra_gn_args,
+                 args.extra_gn_flags, args.extra_ninja_flags, args.extra_cargo_flags,
+                 str(args.jobs))
 
     logging.info('''
 Version           : {}

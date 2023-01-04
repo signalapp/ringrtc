@@ -31,7 +31,7 @@ set -e
 
 usage()
 {
-    echo 'usage: build-ios [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--host-sim-only]
+    echo 'usage: build-ios [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--archive-webrtc] [--host-sim-only]
     where:
         -d is for debug builds
         -r is for release builds (default)
@@ -39,6 +39,8 @@ usage()
 
         --webrtc-only builds WebRTC.xcframework only
         --ringrtc-only builds libringrtc.a/h only
+
+        --archive-webrtc generates an archive suitable for later --ringrtc-only builds
 
         --host-sim-only builds a simulator slice for the host
             architecture (and no other slices)
@@ -61,6 +63,7 @@ clean()
 BUILD_WHAT=all
 BUILD_TYPE=release
 HOST_SIM_ONLY=
+ARCHIVE_WEBRTC=
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -78,6 +81,9 @@ while [ "$1" != "" ]; do
             ;;
         --host-sim-only )
             HOST_SIM_ONLY=yes
+            ;;
+        --archive-webrtc )
+            ARCHIVE_WEBRTC=yes
             ;;
         -c | --clean )
             clean
@@ -151,6 +157,11 @@ then
     s.platform = :ios, "'${IPHONEOS_DEPLOYMENT_TARGET}'"
     s.vendored_frameworks = "'${BUILD_TYPE}'/WebRTC.xcframework"
   end' >"${OUTPUT_DIR}"/WebRTCForTesting.podspec
+
+  if [[ -n "${ARCHIVE_WEBRTC}" ]]
+  then
+    tar -c --auto-compress --no-mac-metadata -f "${OUTPUT_DIR}/webrtc-${WEBRTC_VERSION}-ios-${BUILD_TYPE}.tar.bz2" -C "${OUTPUT_DIR}" WebRTCForTesting.podspec "${BUILD_TYPE}/WebRTC.xcframework"
+  fi
 fi
 
 cargo_flags() {

@@ -38,6 +38,21 @@ WEBRTC_SRC_DIR="${WEBRTC_DIR}/src"
 
 RINGRTC_WEBRTC_SRC_DIR="${WEBRTC_DIR}/src/ringrtc"
 
+case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
+    linux)
+        HOST_PLATFORM="linux"
+        ;;
+    msys*|mingw*)
+        HOST_PLATFORM="windows"
+        ;;
+    darwin)
+        HOST_PLATFORM="mac"
+        ;;
+    *)
+        HOST_PLATFORM="unknown"
+        ;;
+esac
+
 VERSION_INFO="${CONFIG_DIR}/version.sh"
 [ -f "$VERSION_INFO" ] || {
     echo "ERROR: unable to load version configuration: $VERSION_INFO"

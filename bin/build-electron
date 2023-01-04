@@ -15,11 +15,16 @@ TARGET_ARCH=${TARGET_ARCH:-x64}
 
 usage()
 {
-    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only]
+    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--archive-webrtc]
     where:
         -d to create a debug build (default)
         -r to create a release build
-        -c to clean the build artifacts'
+        -c to clean the build artifacts
+
+        --webrtc-only builds libwebrtc.a only
+        --ringrtc-only builds libringrtc-ARCH.node only
+
+        --archive-webrtc generates an archive suitable for later --ringrtc-only builds'
 }
 
 clean()
@@ -36,6 +41,7 @@ clean()
 
 BUILD_TYPE=debug
 BUILD_WHAT=all
+ARCHIVE_WEBRTC=
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -50,6 +56,9 @@ while [ "$1" != "" ]; do
             ;;
         --ringrtc-only )
             BUILD_WHAT=ringrtc
+            ;;
+        --archive-webrtc )
+            ARCHIVE_WEBRTC=yes
             ;;
         -c | --clean )
             clean
@@ -102,6 +111,11 @@ then
         # Build with debug line tables, but not full debug info.
         (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1")
         ninja -C "${OUTPUT_DIR}"/release
+    fi
+
+    if [ -n "${ARCHIVE_WEBRTC}" ]
+    then
+        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-${BUILD_TYPE}.tar.bz2 -C "${OUTPUT_DIR}" "${BUILD_TYPE}"/obj/libwebrtc.a
     fi
 fi
 
@@ -178,6 +192,9 @@ then
                     objcopy -S "$1" "$2"
                 }
             fi
+        else
+            echo 'should not get here; platforms checked above' >&2
+            exit 1 # unreachable
         fi
 
         RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
