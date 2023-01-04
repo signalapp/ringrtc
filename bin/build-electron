@@ -105,12 +105,10 @@ then
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}")
-        ninja -C "${OUTPUT_DIR}"/debug
+        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}" && ninja -C "${OUTPUT_DIR}"/debug)
     else
         # Build with debug line tables, but not full debug info.
-        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1")
-        ninja -C "${OUTPUT_DIR}"/release
+        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1" && ninja -C "${OUTPUT_DIR}"/release)
     fi
 
     if [ -n "${ARCHIVE_WEBRTC}" ]
