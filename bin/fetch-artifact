@@ -1,0 +1,16 @@
+#!/bin/sh
+
+#
+# Copyright 2023 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+set -e
+
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
+
+"${0}.py"                                \
+    --output-dir="${OUTPUT_DIR}"         \
+    --webrtc-version="${WEBRTC_VERSION}" \
+    "$@"
