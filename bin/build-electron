@@ -188,8 +188,9 @@ then
             DEBUG_PACKAGE=libringrtc.so
             # Manually strip on copy for release builds.
             if [ "${BUILD_TYPE}" = "release" ]; then
+                OBJCOPY=$(command -v "${CARGO_ARCH}"-linux-gnu-objcopy || echo objcopy)
                 copy_to_node() {
-                    objcopy -S "$1" "$2"
+                    "${OBJCOPY}" -S "$1" "$2"
                 }
             fi
         else
