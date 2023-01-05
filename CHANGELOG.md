@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.23.0
+
+- Update to WebRTC 5359 (m108)
+
+- Enable Opus DTX and set default encoding bitrate to 32kbps
+
+- Desktop: Handle failure when entering PiP 
+
+- Desktop: Move builds to NPM
+
+- Update dependencies, builds
+
 ## v2.22.0
 
 - Group Calls: Only allow ringing if you are the call creator
