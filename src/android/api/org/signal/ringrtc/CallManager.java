@@ -1626,12 +1626,6 @@ public class CallManager {
   public enum BandwidthMode {
 
     /**
-     * Intended for audio-only, to help ensure reliable audio over
-     * severely constrained networks.
-     */
-    VERY_LOW,
-
-    /**
      * Intended for low bitrate video calls. Useful to reduce
      * bandwidth costs, especially on mobile networks.
      */

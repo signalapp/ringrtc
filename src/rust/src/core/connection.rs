@@ -305,12 +305,9 @@ impl BandwidthController {
     }
 
     // Since the remote side doesn't tell us what audio configuration to use, we have to infer it
-    // from the bandwidth sent.  But this should be used carefully.
+    // from the bandwidth sent. This should be used carefully.
     fn inferred_remote_mode(&self) -> BandwidthMode {
         match self.remote_max {
-            Some(remote_max) if remote_max < BandwidthMode::Low.max_bitrate() => {
-                BandwidthMode::VeryLow
-            }
             Some(remote_max) if remote_max < BandwidthMode::Normal.max_bitrate() => {
                 BandwidthMode::Low
             }
@@ -2209,14 +2206,13 @@ mod tests {
     #[test]
     fn bandwidth_controller() {
         use BandwidthMode::*;
+
         // Remote max can push down the audio and video, but only to a point.
         assert_eq!(expect(2_000_000, Normal), compute(Normal, 3_000_000, false));
         assert_eq!(expect(2_000_000, Normal), compute(Normal, 2_000_000, false));
         assert_eq!(expect(1_999_999, Low), compute(Normal, 1_999_999, false));
         assert_eq!(expect(1_000_000, Low), compute(Normal, 1_000_000, false));
         assert_eq!(expect(300_000, Low), compute(Normal, 300_000, false));
-        assert_eq!(expect(299_000, VeryLow), compute(Normal, 299_000, false));
-        assert_eq!(expect(30_000, VeryLow), compute(Normal, 1_000, false));
 
         // Local mode can also push it down
         assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, false));
@@ -2224,15 +2220,6 @@ mod tests {
         assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, false));
         assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, false));
         assert_eq!(expect(300_000, Low), compute(Low, 300_000, false));
-        assert_eq!(expect(299_000, VeryLow), compute(Low, 299_000, false));
-        assert_eq!(expect(30_000, VeryLow), compute(Low, 1_000, false));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 3_000_000, false));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 2_000_000, false));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_999_999, false));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000_000, false));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 300_000, false));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 299_000, false));
-        assert_eq!(expect(30_000, VeryLow), compute(VeryLow, 1_000, false));
 
         // Being relayed can also push it down, but it doesn't affect the audio.
         assert_eq!(expect(1_000_000, Normal), compute(Normal, 3_000_000, true));
@@ -2240,21 +2227,10 @@ mod tests {
         assert_eq!(expect(1_000_000, Low), compute(Normal, 1_999_999, true));
         assert_eq!(expect(1_000_000, Low), compute(Normal, 1_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Normal, 300_000, true));
-        assert_eq!(expect(299_000, VeryLow), compute(Normal, 299_000, true));
-        assert_eq!(expect(30_000, VeryLow), compute(Normal, 1_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 2_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, true));
         assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, true));
         assert_eq!(expect(300_000, Low), compute(Low, 300_000, true));
-        assert_eq!(expect(299_000, VeryLow), compute(Low, 299_000, true));
-        assert_eq!(expect(30_000, VeryLow), compute(Low, 1_000, true));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 3_000_000, true));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 2_000_000, true));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_999_999, true));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 1_000_000, true));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 300_000, true));
-        assert_eq!(expect(125_000, VeryLow), compute(VeryLow, 299_000, true));
-        assert_eq!(expect(30_000, VeryLow), compute(VeryLow, 1_000, true));
     }
 }

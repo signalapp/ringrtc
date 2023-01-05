@@ -851,10 +851,6 @@ class SignalRingRTCTests: XCTestCase {
         outgoingTesting(bandwidthMode: .low)
     }
 
-    func testOutgoingVeryLow() {
-        outgoingTesting(bandwidthMode: .veryLow)
-    }
-
     func testOutgoingSendOfferFail() {
         Logger.debug("Test: Outgoing Call Send Offer Fail...")
 

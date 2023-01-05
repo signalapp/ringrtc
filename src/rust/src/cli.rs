@@ -571,7 +571,7 @@ impl CallStateHandler for CallEndpoint {
                     .proceed(
                         call_id,
                         state.call_context.clone(),
-                        BandwidthMode::VeryLow,
+                        BandwidthMode::Low,
                         None,
                     )
                     .expect("proceed with call");

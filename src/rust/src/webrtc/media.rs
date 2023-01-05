@@ -325,22 +325,22 @@ pub struct AudioEncoderConfig {
     // Default is 20ms
     pub packet_size_ms: u32,
 
-    // Default in Auto
+    // Default is Auto
     pub bandwidth: AudioBandwidth,
 
-    // Valid range: 500-192000
-    // Default is to start at 40000 and move between 16000 and 40000.
+    // Valid range: 6000-510000
+    // Default is to start at 32000 and move between 16000 and 32000.
     pub start_bitrate_bps: u16,
     pub min_bitrate_bps: u16,
     pub max_bitrate_bps: u16,
-    // Valid range: 0-9 (9 must complex)
-    // Default is 9
+    // Valid range: 0-10 (10 most complex)
+    // Default is 9.
     pub complexity: u16,
     // Default is true.
     pub enable_cbr: bool,
-    // Default in false.
+    // Default is true.
     pub enable_dtx: bool,
-    // Default in true.
+    // Default is true.
     pub enable_fec: bool,
 }
 
@@ -351,12 +351,12 @@ impl Default for AudioEncoderConfig {
 
             bandwidth: AudioBandwidth::Auto,
 
-            start_bitrate_bps: 40000,
+            start_bitrate_bps: 32000,
             min_bitrate_bps: 16000,
-            max_bitrate_bps: 40000,
+            max_bitrate_bps: 32000,
             complexity: 9,
             enable_cbr: true,
-            enable_dtx: false,
+            enable_dtx: true,
             enable_fec: true,
         }
     }

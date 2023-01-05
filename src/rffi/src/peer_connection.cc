@@ -299,9 +299,7 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   // 1. We remove all codecs except Opus, VP8, VP9, and H264
   // 2. We remove all header extensions except for transport-cc, video orientation,
   //    and abs send time.
-  // 3. Opus CBR is enabled.
-
-
+  // 3. Opus CBR and DTX is enabled.
 
   // For some reason, WebRTC insists that the video SSRCs for one side don't 
   // overlap with SSRCs from the other side.  To avoid potential problems, we'll give the
@@ -347,10 +345,10 @@ Rust_sessionDescriptionFromV4(bool offer, const RffiConnectionParametersV4* v4_b
   opus.SetParam("minptime", "10");
   opus.SetParam("maxptime", "120");
   opus.SetParam("useinbandfec", "1");
-  opus.SetParam("usedtx", "0");
-  // This is not a default. WebRTC has a "send" default of 32000 and a "receive" default
-  // of 64000. We use 40000 because as per RFC-7587 (3.1.1), it is the top end of FB speech.
-  opus.SetParam("maxaveragebitrate", "40000");
+  // This is not a default. We enable this to help reduce bandwidth because we
+  // are using CBR.
+  opus.SetParam("usedtx", "1");
+  opus.SetParam("maxaveragebitrate", "32000");
   // This is not a default. We enable this for privacy.
   opus.SetParam("cbr", "1");
   opus.AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamTransportCc, cricket::kParamValueEmpty));
@@ -506,7 +504,7 @@ CreateSessionDescriptionForGroupCall(bool local,
   // 1. We remove all codecs except Opus and VP8.
   // 2. We remove all header extensions except for transport-cc, video orientation,
   //    abs send time, and audio level.
-  // 3. Opus CBR is enabled.
+  // 3. Opus CBR and DTX is enabled.
 
   // This must stay in sync with PeerConnectionFactory.createAudioTrack
   std::string LOCAL_AUDIO_TRACK_ID = "audio1";
@@ -553,10 +551,10 @@ CreateSessionDescriptionForGroupCall(bool local,
   opus.SetParam("minptime", "10");
   opus.SetParam("maxptime", "120");
   opus.SetParam("useinbandfec", "1");
-  opus.SetParam("usedtx", "0");
-  // This is not a default. WebRTC has a "send" default of 32000 and a "receive" default
-  // of 64000. We use 40000 because as per RFC-7587 (3.1.1), it is the top end of FB speech.
-  opus.SetParam("maxaveragebitrate", "40000");
+  // This is not a default. We enable this to help reduce bandwidth because we
+  // are using CBR.
+  opus.SetParam("usedtx", "1");
+  opus.SetParam("maxaveragebitrate", "32000");
   // This is not a default. We enable this for privacy.
   opus.SetParam("cbr", "1");
   opus.AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamTransportCc, cricket::kParamValueEmpty));

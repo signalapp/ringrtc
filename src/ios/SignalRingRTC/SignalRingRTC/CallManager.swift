@@ -116,15 +116,12 @@ public struct NetworkRoute {
 /// Modes of operation when working with different bandwidth environments.
 @available(iOSApplicationExtension, unavailable)
 public enum BandwidthMode: Int32 {
-    /// Intended for audio-only, to help ensure reliable audio over
-    /// severely constrained networks.
-    case veryLow = 0
     /// Intended for low bitrate video calls. Useful to reduce
     /// bandwidth costs, especially on mobile networks.
-    case low = 1
+    case low = 0
     /// (Default) No specific constraints, but keep a relatively
     /// high bitrate to ensure good quality.
-    case normal = 2
+    case normal = 1
 }
 
 /// Type of hangup message.

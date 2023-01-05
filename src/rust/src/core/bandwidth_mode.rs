@@ -15,12 +15,9 @@ pub const MAXIMUM_BITRATE_BPS: u64 = 2_000_001;
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum BandwidthMode {
-    /// Intended for audio-only, to help ensure reliable audio over
-    /// severely constrained networks.
-    VeryLow = 0,
     /// Intended for low bitrate video calls. Useful to reduce
     /// bandwidth costs, especially on mobile networks.
-    Low,
+    Low = 0,
     /// (Default) No specific constraints, but keep a relatively
     /// high bitrate to ensure good quality.
     Normal,
@@ -35,9 +32,8 @@ impl fmt::Display for BandwidthMode {
 impl BandwidthMode {
     pub fn from_i32(value: i32) -> Self {
         match value {
-            0 => BandwidthMode::VeryLow,
-            1 => BandwidthMode::Low,
-            2 => BandwidthMode::Normal,
+            0 => BandwidthMode::Low,
+            1 => BandwidthMode::Normal,
             _ => {
                 // Log but otherwise assume normal if not valid.
                 warn!("Invalid bandwidth_mode: {}", value);
@@ -49,7 +45,6 @@ impl BandwidthMode {
     /// Return the maximum bitrate (for all media) allowed for the mode.
     pub fn max_bitrate(&self) -> units::DataRate {
         match self {
-            BandwidthMode::VeryLow => units::DataRate::from_kbps(125),
             BandwidthMode::Low => units::DataRate::from_kbps(300),
             BandwidthMode::Normal => units::DataRate::from_kbps(2_000),
         }
@@ -57,9 +52,8 @@ impl BandwidthMode {
 
     pub fn audio_encoder_config(&self) -> crate::webrtc::media::AudioEncoderConfig {
         let (packet_size_ms, start_bitrate_bps, min_bitrate_bps, max_bitrate_bps) = match self {
-            BandwidthMode::VeryLow => (60, 16_000, 16_000, 16_000),
             BandwidthMode::Low => (40, 28_000, 16_000, 28_000),
-            BandwidthMode::Normal => (20, 40_000, 20_000, 40_000),
+            BandwidthMode::Normal => (20, 32_000, 20_000, 32_000),
         };
         crate::webrtc::media::AudioEncoderConfig {
             packet_size_ms,

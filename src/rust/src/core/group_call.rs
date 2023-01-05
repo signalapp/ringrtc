@@ -669,8 +669,6 @@ const SCREENSHARE_MIN_SEND_RATE: DataRate = DataRate::from_mbps(2);
 const SCREENSHARE_START_SEND_RATE: DataRate = DataRate::from_mbps(2);
 const SCREENSHARE_MAX_SEND_RATE: DataRate = DataRate::from_mbps(5);
 
-const AUDIO_ONLY_MAX_RECEIVE_RATE: DataRate = DataRate::from_kbps(1);
-
 const LOW_MAX_RECEIVE_RATE: DataRate = DataRate::from_kbps(500);
 
 const NORMAL_MAX_RECEIVE_RATE: DataRate = DataRate::from_mbps(20);
@@ -1673,7 +1671,6 @@ impl Client {
             );
 
             state.max_receive_rate = Some(match bandwidth_mode {
-                BandwidthMode::VeryLow => AUDIO_ONLY_MAX_RECEIVE_RATE,
                 BandwidthMode::Low => LOW_MAX_RECEIVE_RATE,
                 BandwidthMode::Normal => NORMAL_MAX_RECEIVE_RATE,
             });
@@ -5018,36 +5015,6 @@ mod tests {
             .expect("Get RTP packet to SFU");
         let elapsed = Instant::now() - before;
         assert!(elapsed > Duration::from_millis(1000));
-
-        client1.client.set_bandwidth_mode(BandwidthMode::VeryLow);
-        let (header, payload) = receiver
-            .recv_timeout(Duration::from_secs(1))
-            .expect("Get RTP packet to SFU");
-        assert_eq!(1, header.ssrc);
-        assert_eq!(
-            DeviceToSfu {
-                video_request: Some(VideoRequestMessage {
-                    requests: vec![
-                        VideoRequestProto {
-                            demux_id: Some(2),
-                            height: Some(1080),
-                        },
-                        VideoRequestProto {
-                            demux_id: Some(3),
-                            height: Some(80),
-                        },
-                        VideoRequestProto {
-                            demux_id: Some(4),
-                            height: Some(0),
-                        },
-                    ],
-                    max_kbps: Some(1),
-                    active_speaker_height: Some(1080),
-                }),
-                ..Default::default()
-            },
-            DeviceToSfu::decode(&payload[..]).unwrap()
-        );
 
         client1.client.set_bandwidth_mode(BandwidthMode::Low);
         let (header, payload) = receiver
