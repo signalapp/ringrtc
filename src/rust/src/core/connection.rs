@@ -622,7 +622,7 @@ where
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
-            let stats_observer = create_stats_observer(POLL_STATS_INTERVAL);
+            let stats_observer = create_stats_observer(self.call_id(), POLL_STATS_INTERVAL);
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;
@@ -723,7 +723,7 @@ where
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
-            let stats_observer = create_stats_observer(POLL_STATS_INTERVAL);
+            let stats_observer = create_stats_observer(self.call_id(), POLL_STATS_INTERVAL);
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;

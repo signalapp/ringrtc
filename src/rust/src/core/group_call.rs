@@ -22,7 +22,7 @@ use rand::{rngs::OsRng, Rng};
 use sha2::Sha256;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-use crate::core::util::uuid_to_string;
+use crate::{common::CallId, core::util::uuid_to_string};
 use crate::{
     common::{
         actor::{Actor, Stopper},
@@ -985,6 +985,7 @@ impl Client {
                         observer.handle_ended(client_id, EndReason::FailedToCreatePeerConnection);
                         e
                     })?;
+                let call_id_for_stats = CallId::from(client_id as u64);
                 Ok(State {
                     client_id,
                     group_id,
@@ -1019,7 +1020,7 @@ impl Client {
                     next_heartbeat_time: None,
 
                     next_stats_time: None,
-                    stats_observer: create_stats_observer(STATS_INTERVAL),
+                    stats_observer: create_stats_observer(call_id_for_stats, STATS_INTERVAL),
 
                     audio_levels_interval,
                     next_audio_levels_time: None,

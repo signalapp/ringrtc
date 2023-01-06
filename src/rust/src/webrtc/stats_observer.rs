@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::webrtc;
+use crate::{common::CallId, webrtc};
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::stats_observer as stats;
@@ -45,6 +45,7 @@ struct Stats {
 /// Collector object for obtaining statistics.
 #[derive(Debug)]
 pub struct StatsObserver {
+    call_id: CallId,
     rffi: webrtc::Arc<RffiStatsObserver>,
     stats: Stats,
     stats_interval: Duration,
@@ -56,6 +57,7 @@ impl StatsObserver {
         info!(
             "ringrtc_stats!,\
                 connection,\
+                call_id,\
                 timestamp_us,\
                 current_round_trip_time,\
                 available_outgoing_bitrate"
@@ -122,9 +124,10 @@ impl StatsObserver {
         );
     }
 
-    fn print_connection(media_statistics: &MediaStatistics) {
+    fn print_connection(&self, media_statistics: &MediaStatistics) {
         info!(
-            "ringrtc_stats!,connection,{timestamp_us},{current_round_trip_time:.0}ms,{available_outgoing_bitrate:.0}bps",
+            "ringrtc_stats!,connection,{call_id},{timestamp_us},{current_round_trip_time:.0}ms,{available_outgoing_bitrate:.0}bps",
+            call_id = self.call_id,
             timestamp_us = media_statistics.timestamp_us,
             current_round_trip_time = media_statistics
                 .connection_statistics
@@ -259,10 +262,11 @@ impl StatsObserver {
     }
 
     /// Create a new StatsObserver.
-    fn new(stats_interval: Duration) -> Self {
+    fn new(call_id: CallId, stats_interval: Duration) -> Self {
         Self::print_headers();
 
         Self {
+            call_id,
             rffi: webrtc::Arc::null(),
             stats: Default::default(),
             stats_interval,
@@ -272,15 +276,15 @@ impl StatsObserver {
 
     /// Invoked when statistics are received via the stats observer callback.
     fn on_stats_complete(&mut self, media_statistics: &MediaStatistics) {
-        let mut stats = &mut self.stats;
-
-        let seconds_elapsed = if stats.timestamp_us > 0 {
-            (media_statistics.timestamp_us - stats.timestamp_us) as f32 / 1_000_000.0
+        let seconds_elapsed = if self.stats.timestamp_us > 0 {
+            (media_statistics.timestamp_us - self.stats.timestamp_us) as f32 / 1_000_000.0
         } else {
             self.stats_interval.as_secs() as f32
         };
 
-        Self::print_connection(media_statistics);
+        self.print_connection(media_statistics);
+
+        let mut stats = &mut self.stats;
 
         if media_statistics.audio_sender_statistics_size > 0 {
             let audio_senders = unsafe {
@@ -544,8 +548,8 @@ const STATS_OBSERVER_CBS_PTR: *const StatsObserverCallbacks = &STATS_OBSERVER_CB
 /// Creates a new WebRTC C++ StatsObserver object,
 /// registering the collector callbacks to this module, and wraps the
 /// result in a Rust StatsObserver object.
-pub fn create_stats_observer(stats_interval: Duration) -> Box<StatsObserver> {
-    let stats_observer = Box::new(StatsObserver::new(stats_interval));
+pub fn create_stats_observer(call_id: CallId, stats_interval: Duration) -> Box<StatsObserver> {
+    let stats_observer = Box::new(StatsObserver::new(call_id, stats_interval));
     let stats_observer_ptr = Box::into_raw(stats_observer);
     let rffi_stats_observer = webrtc::Arc::from_owned(unsafe {
         stats::Rust_createStatsObserver(
