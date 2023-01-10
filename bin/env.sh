@@ -8,8 +8,14 @@
 # Allow non-exported environment variables
 # shellcheck disable=SC2034
 
+REALPATH=realpath
+if ! $REALPATH -e . >/dev/null 2>&1 ; then
+  # Can be true on macOS Ventura+ and coreutils from HomeBrew
+  REALPATH=grealpath
+fi
+
 BIN_DIR=$(dirname "$0")
-BIN_DIR=$(realpath -e "$BIN_DIR")
+BIN_DIR=$($REALPATH "$BIN_DIR")
 
 [ -d "$BIN_DIR" ] || {
     echo "ERROR: project bin directory does not exist: $BIN_DIR"
@@ -28,7 +34,10 @@ PATCH_DIR="${PROJECT_DIR}/patches/webrtc"
 RINGRTC_SRC_DIR="${PROJECT_DIR}/src"
 
 # build products
-OUTPUT_DIR=$(realpath "${OUTPUT_DIR:-${PROJECT_DIR}/out}")
+
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_DIR}/out}"
+OUTPUT_DIR="$($REALPATH "$OUTPUT_DIR")"
+
 
 # patch hash file
 PATCH_HASH="${OUTPUT_DIR}/patch-hash"
