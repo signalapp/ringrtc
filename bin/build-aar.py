@@ -20,6 +20,7 @@ try:
     import logging
     import subprocess
     import os
+    import platform
     import shutil
     import tarfile
 
@@ -109,6 +110,9 @@ def ParseArgs():
     parser.add_argument('--webrtc-version',
                         required=True,
                         help='WebRTC version')
+    parser.add_argument('--use-webrtc-ndk',
+                        action='store_true',
+                        help='''Use WebRTC's vendored NDK to build RingRTC''')
     parser.add_argument('--extra-gradle-args',
                         nargs='*', default=[],
                         help='Additional gradle arguments')
@@ -191,8 +195,9 @@ def GetOutputDir(build_dir, debug_build):
 def GetGradleBuildDir(build_dir):
     return os.path.join(build_dir, 'gradle')
 
-def BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
-              extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs, build_projects):
+def BuildArch(dry_run, project_dir, build_dir, arch, debug_build, use_webrtc_ndk,
+              extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
+              jobs, build_projects):
 
     logging.info('Building: {} ...'.format(arch))
 
@@ -224,15 +229,18 @@ def BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
         RunCmd(dry_run, ninja_args)
 
     if Project.RINGRTC in build_projects:
-        # FIXME: Shouldn't hardcode Linux, but eventually this won't use WebRTC's NDK anyway.
+        if use_webrtc_ndk:
+            ndk_dir = os.path.join(os.getcwd(), 'third_party', 'android_ndk')
+        else:
+            ndk_dir = os.environ['ANDROID_NDK_HOME']
+
+        ndk_host_os = platform.system().lower()
         ndk_toolchain_dir = os.path.join(
-            os.getcwd(),
-            'third_party',
-            'android_ndk',
+            ndk_dir,
             'toolchains',
             'llvm',
             'prebuilt',
-            'linux-x86_64'
+            ndk_host_os + '-x86_64' # contains universal binaries on macOS
         )
         cargo_args = [
             'cargo', 'rustc',
@@ -329,12 +337,13 @@ def ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version):
                 add(os.path.join(output_arch_rel_path, 'lib.unstripped', lib))
 
 def CreateLibs(dry_run, project_dir, build_dir, archs, output, debug_build, unstripped,
-               extra_gn_args, extra_gn_flags, extra_ninja_flags,
+               use_webrtc_ndk, extra_gn_args, extra_gn_flags, extra_ninja_flags,
                extra_cargo_flags, jobs, build_projects, webrtc_version):
 
     for arch in archs:
-        BuildArch(dry_run, project_dir, build_dir, arch, debug_build, extra_gn_args,
-                  extra_gn_flags, extra_ninja_flags, extra_cargo_flags, jobs, build_projects)
+        BuildArch(dry_run, project_dir, build_dir, arch, debug_build, use_webrtc_ndk,
+                  extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
+                  jobs, build_projects)
 
     if Project.WEBRTC_ARCHIVE in build_projects:
         ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version)
@@ -384,7 +393,7 @@ def RunGradle(dry_run, args):
 def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir,
                  sonatype_repo, sonatype_user, sonatype_password,
                  signing_keyid, signing_password, signing_secret_keyring,
-                 build_projects,
+                 use_webrtc_ndk, build_projects,
                  install_local, install_dir, project_dir, build_dir, archs,
                  output, debug_build, release_build, unstripped,
                  extra_gn_args, extra_gn_flags, extra_ninja_flags,
@@ -445,6 +454,7 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir
                 "-PwebrtcJar={}/libwebrtc.jar".format(lib_dir),
             ]
         CreateLibs(dry_run, project_dir, build_dir, archs, output, build_debug, unstripped,
+                   use_webrtc_ndk,
                    extra_gn_args, extra_gn_flags, extra_ninja_flags,
                    extra_cargo_flags, jobs, build_projects, webrtc_version)
 
@@ -557,7 +567,7 @@ def main():
                  args.gradle_dir,
                  args.upload_sonatype_repo, args.upload_sonatype_user, args.upload_sonatype_password,
                  args.signing_keyid, args.signing_password, args.signing_secret_keyring,
-                 build_projects,
+                 args.use_webrtc_ndk, build_projects,
                  args.install_local, args.install_dir,
                  args.project_dir, build_dir, args.arch, args.output,
                  args.debug_build, args.release_build, args.unstripped, args.extra_gn_args,
