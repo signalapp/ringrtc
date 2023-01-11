@@ -36,7 +36,9 @@ import org.webrtc.audio.JavaAudioDeviceModule;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.List;
 import java.util.UUID;
@@ -87,8 +89,9 @@ public class CallManager {
    *
    * @param applicationContext  The global application context
    * @param logger              An instance of the package specific logger class
+   * @param fieldTrials         Configuration to alter WebRTC's default behavior
    */
-  public static void initialize(Context applicationContext, Log.Logger logger) {
+  public static void initialize(Context applicationContext, Log.Logger logger, Map<String, String> fieldTrials) {
 
     try {
       Log.initialize(logger);
@@ -97,7 +100,8 @@ public class CallManager {
         .setNativeLibraryLoader(new NoOpLoader());
 
       BuildInfo buildInfo = ringrtcGetBuildInfo();
-      Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build)");
+      String fieldTrialsString = buildFieldTrialsString(fieldTrials);
+      Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build, field trials = " + fieldTrialsString + ")");
 
       if (buildInfo.debug) {
         // Show all WebRTC logs via application Logger while debugging.
@@ -106,6 +110,8 @@ public class CallManager {
         // Show WebRTC error and warning logs via application Logger for release builds.
         builder.setInjectableLogger(new WebRtcLogger(), Severity.LS_WARNING);
       }
+
+      builder.setFieldTrials(fieldTrialsString);
 
       PeerConnectionFactory.initialize(builder.createInitializationOptions());
       ringrtcInitialize();
@@ -125,6 +131,19 @@ public class CallManager {
     if (!CallManager.isInitialized) {
       throw new IllegalStateException("CallManager.initialize has not been called");
     }
+  }
+
+  private static String buildFieldTrialsString(Map<String, String> fieldTrials) {
+    StringBuilder builder = new StringBuilder();
+
+    for (Map.Entry<String, String> entry : fieldTrials.entrySet()) {
+      builder.append(entry.getKey());
+      builder.append('/');
+      builder.append(entry.getValue());
+      builder.append('/');
+    }
+
+    return builder.toString();
   }
 
   class PeerConnectionFactoryOptions extends PeerConnectionFactory.Options {

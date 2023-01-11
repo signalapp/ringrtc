@@ -317,7 +317,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     private var videoCaptureController: VideoCaptureController?
 
-    public init(httpClient: HTTPClient, fieldTrials: [String: Bool] = [:]) {
+    public init(httpClient: HTTPClient, fieldTrials: [String: String] = [:]) {
         // Initialize the global object (mainly for logging).
         CallManagerGlobal.initialize(fieldTrials: fieldTrials)
 

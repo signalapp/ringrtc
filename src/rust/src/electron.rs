@@ -26,6 +26,7 @@ use crate::native::{
     CallState, CallStateHandler, EndReason, GroupUpdate, GroupUpdateHandler, NativeCallContext,
     NativePlatform, PeerId, SignalingSender,
 };
+use crate::webrtc::field_trial;
 use crate::webrtc::media::{
     AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack,
 };
@@ -506,6 +507,7 @@ impl Finalize for CallEndpoint {
 fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     let js_call_manager = cx.argument::<JsObject>(0)?;
     let use_new_audio_device_module = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let field_trial_string = cx.argument::<JsString>(2)?.value(&mut cx);
 
     if ENABLE_LOGGING {
         let is_first_time_initializing_logger = log::set_logger(&LOG).is_ok();
@@ -526,6 +528,10 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     }
 
     debug!("JsCallManager()");
+
+    let _ = field_trial::init(&field_trial_string);
+    info!("initialized field trials with {}", field_trial_string);
+
     let endpoint = CallEndpoint::new(&mut cx, js_call_manager, use_new_audio_device_module)
         .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.boxed(RefCell::new(endpoint)).upcast())

@@ -59,12 +59,12 @@ public class CallManagerGlobal {
         Logger.debug("object! CallManagerGlobal created... \(ObjectIdentifier(self))")
     }
 
-    static func initialize(fieldTrials: [String: Bool]) {
+    static func initialize(fieldTrials: [String: String]) {
         // Implicitly initialize the shared instance, then use it to track whether we've set up the field trials.
         Self.shared.initFieldTrials(fieldTrials)
     }
 
-    private func initFieldTrials(_ fieldTrials: [String: Bool]) {
+    private func initFieldTrials(_ fieldTrials: [String: String]) {
         lock.lock()
         defer { lock.unlock() }
 
@@ -73,7 +73,7 @@ public class CallManagerGlobal {
         }
         hasInitializedFieldTrials = true
 
-        RTCInitFieldTrialDictionary(fieldTrials.mapValues({ $0 ? "Enabled" : "Disabled" }))
+        RTCInitFieldTrialDictionary(fieldTrials)
         Logger.info("Initialized field trials with \(fieldTrials)")
     }
 

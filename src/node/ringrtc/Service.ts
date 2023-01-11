@@ -19,6 +19,7 @@ const Native = require('../../build/' +
 
 class Config {
   use_new_audio_device_module: boolean = false;
+  field_trials: Record<string, string> | undefined;
 }
 
 // tslint:disable-next-line no-unnecessary-class
@@ -35,9 +36,14 @@ class NativeCallManager {
   }
 
   private createCallEndpoint(config: Config) {
+    const fieldTrialsString =
+      Object.entries(config.field_trials || {})
+        .map(([k, v]) => `${k}/${v}`)
+        .join('/') + '/';
     const callEndpoint = Native.createCallEndpoint(
       this,
-      config.use_new_audio_device_module
+      config.use_new_audio_device_module,
+      fieldTrialsString
     );
     Object.defineProperty(this, Native.callEndpointPropertyKey, {
       value: callEndpoint,
@@ -1891,8 +1897,15 @@ export class GroupCall {
   }
 
   // Called by UI
-  requestVideo(resolutions: Array<VideoRequest>, activeSpeakerHeight: number): void {
-    this._callManager.requestVideo(this._clientId, resolutions, activeSpeakerHeight);
+  requestVideo(
+    resolutions: Array<VideoRequest>,
+    activeSpeakerHeight: number
+  ): void {
+    this._callManager.requestVideo(
+      this._clientId,
+      resolutions,
+      activeSpeakerHeight
+    );
   }
 
   // Called by UI

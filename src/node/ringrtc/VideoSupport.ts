@@ -285,9 +285,11 @@ export class GumVideoCapturer {
       return;
     }
 
-    if (track.readyState === "ended") {
+    if (track.readyState === 'ended') {
       this.stopCapturing();
-      RingRTC.logError(`spawnSender(): Video track ended before spawning sender`);
+      RingRTC.logError(
+        `spawnSender(): Video track ended before spawning sender`
+      );
       return;
     }
 

@@ -95,6 +95,7 @@ pub mod native;
 pub mod webrtc {
     pub mod arc;
     pub use arc::Arc;
+    pub mod field_trial;
     pub mod ice_gatherer;
     #[cfg(feature = "simnet")]
     pub mod injectable_network;
@@ -112,6 +113,7 @@ pub mod webrtc {
     pub mod stats_observer;
     #[cfg(not(feature = "sim"))]
     mod ffi {
+        pub mod field_trial;
         pub mod ice_gatherer;
         pub mod logging;
         pub mod media;
@@ -124,6 +126,7 @@ pub mod webrtc {
     }
     #[cfg(feature = "sim")]
     pub mod sim {
+        pub mod field_trial;
         pub mod ice_gatherer;
         pub mod media;
         pub mod peer_connection;
