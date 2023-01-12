@@ -986,6 +986,14 @@ impl Client {
                         e
                     })?;
                 let call_id_for_stats = CallId::from(client_id as u64);
+                info!(
+                    "ringrtc_stats!,\
+                        sfu,\
+                        recv,\
+                        target_send_rate,\
+                        ideal_send_rate,\
+                        allocated_send_rate"
+                );
                 Ok(State {
                     client_id,
                     group_id,
