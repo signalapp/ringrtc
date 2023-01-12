@@ -18,14 +18,14 @@ from typing import BinaryIO
 UNVERIFIED_DOWNLOAD_NAME = "unverified.tmp"
 
 PREBUILD_CHECKSUMS = {
-    'android': None,
-    'ios': None,
-    'windows-x64': None,
-    'windows-arm64': None,
-    'mac-x64': None,
-    'mac-arm64': None,
-    'linux-x64': None,
-    'linux-arm64': None,
+    'android': 'e9fae8e1dcbb837bba669c3aa22f7f61ab0cefbc4b0f70a44aaf2a76f7e2a464',
+    'ios': '74f94b1a5c974c1dffe38304c339ef587dc32245db69c4d8184282afcf8d6e71',
+    'windows-x64': 'e30da35e168b377557f5234ab0ad62da440cfad338e30fd636d869c60b87ff58',
+    'windows-arm64': 'ec3d6198b455edf8ea93de7e734115928add6ea96f77a38ee62dc2b53b53c18e',
+    'mac-x64': '3ea7cb23bc0e0258a3f1142004a597d0ae4e5712084008d682941ea689ebb92a',
+    'mac-arm64': '3f091086565a54764428c818935f0c020ac3b54437c77cfe002602a7a9bc2a35',
+    'linux-x64': '18365c39ce9542bc0b62feaeffbad367349d6b7d93d089c5792bad072c2c5bce',
+    'linux-arm64': '091ee72acba704e39d162093601b453d0f22b074944a83e4c810a893a25e64d0',
 }
 
 
