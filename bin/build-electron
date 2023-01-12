@@ -113,7 +113,11 @@ then
 
     if [ -n "${ARCHIVE_WEBRTC}" ]
     then
-        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-${BUILD_TYPE}.tar.bz2 -C "${OUTPUT_DIR}" "${BUILD_TYPE}"/obj/libwebrtc.a
+        STATIC_LIB_PATH="${BUILD_TYPE}"/obj/webrtc.lib
+        if [ ! -e "${OUTPUT_DIR}/${STATIC_LIB_PATH}" ]; then
+            STATIC_LIB_PATH="${BUILD_TYPE}"/obj/libwebrtc.a
+        fi
+        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-${BUILD_TYPE}.tar.bz2 -C "${OUTPUT_DIR}" "${STATIC_LIB_PATH}"
     fi
 fi
 
