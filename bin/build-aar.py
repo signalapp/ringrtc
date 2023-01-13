@@ -472,7 +472,7 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir
         gradle_args.append('publishToMavenLocal')
 
     if sonatype_repo is not None:
-        gradle_args.append(':publishMavenJavaPublicationToMavenRepository')
+        gradle_args.append('publishMavenJavaPublicationToMavenRepository')
 
     gradle_args.extend(extra_gradle_args)
 
