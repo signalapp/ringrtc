@@ -960,7 +960,10 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        expect(delegate.shouldSendAnswerInvoked).toEventually(equal(true), timeout: .seconds(2))
+        // Long timeout for this one specifically.
+        // We're not sure why GitHub Actions sometimes takes a long time on this one,
+        // but it does.
+        expect(delegate.shouldSendAnswerInvoked).toEventually(equal(true), timeout: .seconds(5))
         delegate.shouldSendAnswerInvoked = false
 
         expect(delegate.recentCallId).to(equal(callId))

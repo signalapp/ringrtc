@@ -114,7 +114,7 @@ webrtc_arch_for_host_sim() {
       echo 'simulator:arm64'
       ;;
     * )
-      echo 'error: unrecoginzed host architecture ' "$(machine)" >&2
+      echo 'error: unrecoginzed host architecture' "$(machine)" >&2
       exit 1
       ;;
   esac
@@ -185,14 +185,14 @@ if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
 then
   if [[ -n "${HOST_SIM_ONLY}" ]]; then
     case $(machine) in
-      x86_64* )
+      x86_64* | i486* ) # i486 for GitHub Actions images, weirdly
         TARGETS=x86_64-apple-ios
         ;;
       arm64* )
         TARGETS=aarch64-apple-ios-sim
         ;;
       * )
-        echo 'error: unrecoginzed host architecture ' "$(machine)" >&2
+        echo 'error: unrecoginzed host architecture' "$(machine)" >&2
         exit 1
         ;;
     esac

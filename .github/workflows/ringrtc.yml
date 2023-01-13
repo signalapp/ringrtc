@@ -112,3 +112,18 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
     - run: bin/fetch-artifact -p android
     - run: bin/build-aar --release --ringrtc-only
+
+  ios:
+    name: iOS Tests
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - run: brew install protobuf coreutils # for grealpath
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios
+    - run: bin/fetch-artifact -p ios
+    - run: bin/build-ios --release --ringrtc-only --host-sim-only
+    - run: pod install
+      working-directory: src/ios/SignalRingRTC
+    # Pick a phone model here that's likely to work on recent Xcodes.
+    - run: xcodebuild test -workspace SignalRingRTC.xcworkspace -scheme SignalRingRTC -destination 'platform=iOS Simulator,name=iPhone 13'
+      working-directory: src/ios/SignalRingRTC
