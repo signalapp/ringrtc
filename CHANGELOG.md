@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.23.1
+
+- Support fetching prebuilds from build-artifacts.signal.org
+
+- Add support for setting WebRTC field trials
+
+- Android: Add support non-vendored NDK
+
+- Update logging, builds
+
 ## v2.23.0
 
 - Update to WebRTC 5359 (m108)
