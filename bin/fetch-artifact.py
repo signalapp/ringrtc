@@ -100,7 +100,9 @@ def download_if_needed(archive_file: str, url: str, checksum: str) -> BinaryIO:
                 f.write(chunk)
                 chunk = response.read1()
             assert digest.hexdigest() == checksum.lower(), "expected {}, actual {}".format(checksum.lower(), digest.hexdigest())
+            f.close()
             os.replace(UNVERIFIED_DOWNLOAD_NAME, archive_file)
+            f = open(archive_file, 'rb')
             return f
     except urllib.error.HTTPError as e:
         print(e, e.filename, file=sys.stderr)
