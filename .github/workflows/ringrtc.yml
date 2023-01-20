@@ -66,3 +66,23 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - name: Run rust tests
       run: cd src/rust && ./scripts/run-tests
+
+  electron:
+    name: Electron Tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install protoc
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version-file: 'src/node/.nvmrc'
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+    - run: bin/fetch-artifact -p desktop
+    - run: bin/build-electron --release --ringrtc-only
+    - run: yarn install
+      working-directory: src/node
+    - run: yarn build
+      working-directory: src/node
+    - run: xvfb-run --auto-servernum yarn test
+      working-directory: src/node
