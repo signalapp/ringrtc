@@ -134,7 +134,7 @@ afterEvaluate {
     }
 
     signing {
-        required { isReleaseVersion && gradle.taskGraph.hasTask(":publishMavenJavaPublicationToMavenRepository") }
+        required { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publishMavenJavaPublicationToMavenRepository") }
         sign publishing.publications.mavenJava
     }
 }

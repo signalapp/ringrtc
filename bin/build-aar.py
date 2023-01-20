@@ -112,7 +112,7 @@ def ParseArgs():
                         help='WebRTC version')
     parser.add_argument('--use-webrtc-ndk',
                         action='store_true',
-                        help='''Use WebRTC's vendored NDK to build RingRTC''')
+                        help='''Use WebRTC's vendored NDK (and SDK) to build RingRTC''')
     parser.add_argument('--extra-gradle-args',
                         nargs='*', default=[],
                         help='Additional gradle arguments')
@@ -160,18 +160,10 @@ def ParseArgs():
 
     return parser.parse_args()
 
-def RunSdkmanagerLicenses(dry_run):
-    executable = os.path.join('third_party', 'android_sdk', 'public',
-                              'cmdline-tools', 'latest', 'bin', 'sdkmanager')
-    cmd = [ executable, '--licenses' ]
+def RunCmd(dry_run, cmd, cwd=None):
     logging.debug('Running: {}'.format(cmd))
     if dry_run is False:
-        subprocess.check_call(cmd)
-
-def RunCmd(dry_run, cmd):
-    logging.debug('Running: {}'.format(cmd))
-    if dry_run is False:
-        subprocess.check_call(cmd)
+        subprocess.check_call(cmd, cwd=cwd)
 
 def GetArchBuildRoot(build_dir, arch):
     return os.path.join(build_dir, 'android-{}'.format(arch))
@@ -195,7 +187,14 @@ def GetOutputDir(build_dir, debug_build):
 def GetGradleBuildDir(build_dir):
     return os.path.join(build_dir, 'gradle')
 
-def BuildArch(dry_run, project_dir, build_dir, arch, debug_build, use_webrtc_ndk,
+def RunSdkmanagerLicenses(webrtc_src_dir, dry_run):
+    executable = os.path.join(webrtc_src_dir, 'third_party', 'android_sdk', 'public',
+                              'cmdline-tools', 'latest', 'bin', 'sdkmanager')
+    cmd = [ executable, '--licenses' ]
+    RunCmd(dry_run, cmd)
+
+def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build,
+              use_webrtc_ndk,
               extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
               jobs, build_projects):
 
@@ -223,14 +222,14 @@ def BuildArch(dry_run, project_dir, build_dir, arch, debug_build, use_webrtc_ndk
             [k + '=' + v for k, v in gn_args.items()] + extra_gn_args)
 
         gn_total_args = [ 'gn', 'gen', output_dir, gn_args_string ] + extra_gn_flags
-        RunCmd(dry_run, gn_total_args)
+        RunCmd(dry_run, gn_total_args, cwd=webrtc_src_dir)
 
         ninja_args = [ 'ninja', '-C', output_dir ] + NINJA_TARGETS + [ '-j', jobs ] + extra_ninja_flags
         RunCmd(dry_run, ninja_args)
 
     if Project.RINGRTC in build_projects:
         if use_webrtc_ndk:
-            ndk_dir = os.path.join(os.getcwd(), 'third_party', 'android_ndk')
+            ndk_dir = os.path.join(webrtc_src_dir, 'third_party', 'android_ndk')
         else:
             ndk_dir = os.environ['ANDROID_NDK_HOME']
 
@@ -336,12 +335,14 @@ def ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version):
                 logging.debug('  Adding lib: {} (unstripped) ...'.format(lib))
                 add(os.path.join(output_arch_rel_path, 'lib.unstripped', lib))
 
-def CreateLibs(dry_run, project_dir, build_dir, archs, output, debug_build, unstripped,
-               use_webrtc_ndk, extra_gn_args, extra_gn_flags, extra_ninja_flags,
+def CreateLibs(dry_run, project_dir, webrtc_src_dir, build_dir, archs, output,
+               debug_build, unstripped, use_webrtc_ndk,
+               extra_gn_args, extra_gn_flags, extra_ninja_flags,
                extra_cargo_flags, jobs, build_projects, webrtc_version):
 
     for arch in archs:
-        BuildArch(dry_run, project_dir, build_dir, arch, debug_build, use_webrtc_ndk,
+        BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch,
+                  debug_build, use_webrtc_ndk,
                   extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
                   jobs, build_projects)
 
@@ -384,18 +385,12 @@ def CreateLibs(dry_run, project_dir, build_dir, archs, output, debug_build, unst
                             os.path.join(target_dir,
                                          os.path.basename(lib)))
 
-def RunGradle(dry_run, args):
-    cmd = [ './gradlew' ] + args
-    logging.debug('Running: {}'.format(cmd))
-    if dry_run is False:
-        subprocess.check_call(cmd)
-
-def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir,
-                 sonatype_repo, sonatype_user, sonatype_password,
+def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
+                 gradle_dir, sonatype_repo, sonatype_user, sonatype_password,
                  signing_keyid, signing_password, signing_secret_keyring,
                  use_webrtc_ndk, build_projects,
-                 install_local, install_dir, project_dir, build_dir, archs,
-                 output, debug_build, release_build, unstripped,
+                 install_local, install_dir, project_dir, webrtc_src_dir, build_dir,
+                 archs, output, debug_build, release_build, unstripped,
                  extra_gn_args, extra_gn_flags, extra_ninja_flags,
                  extra_cargo_flags, jobs):
 
@@ -409,9 +404,14 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir
         if release_build:
             build_types = build_types + ['release']
 
+    if use_webrtc_ndk:
+        os.environ['ANDROID_SDK_ROOT'] = os.path.join(
+            webrtc_src_dir, 'third_party', 'android_sdk', 'public')
+
     gradle_build_dir = GetGradleBuildDir(build_dir)
     shutil.rmtree(gradle_build_dir, ignore_errors=True)
-    gradle_args = [
+    gradle_exec = [
+        './gradlew',
         '-PringrtcVersion={}'.format(version),
         '-PbuildDir={}'.format(gradle_build_dir),
     ]
@@ -422,18 +422,18 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir
             '-PsignalSonatypeUsername={}'.format(sonatype_user),
             '-PsignalSonatypePassword={}'.format(sonatype_password),
         ]
-        gradle_args.extend(sonatype_args)
+        gradle_exec.extend(sonatype_args)
 
     if signing_keyid is not None:
-        gradle_args.append(
+        gradle_exec.append(
             '-Psigning.keyId={}'.format(signing_keyid))
 
     if signing_password is not None:
-        gradle_args.append(
+        gradle_exec.append(
             '-Psigning.password={}'.format(signing_password))
 
     if signing_secret_keyring is not None:
-        gradle_args.append(
+        gradle_exec.append(
             '-Psigning.secretKeyRingFile={}'.format(signing_secret_keyring))
 
     for build_type in build_types:
@@ -441,7 +441,7 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir
             build_debug = True
             output_dir = GetOutputDir(build_dir, build_debug)
             lib_dir = os.path.join(output_dir, 'libs')
-            gradle_args = gradle_args + [
+            gradle_exec = gradle_exec + [
                 "-PdebugRingrtcLibDir={}".format(lib_dir),
                 "-PwebrtcJar={}/libwebrtc.jar".format(lib_dir),
             ]
@@ -449,19 +449,19 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir
             build_debug = False
             output_dir = GetOutputDir(build_dir, build_debug)
             lib_dir = os.path.join(output_dir, 'libs')
-            gradle_args = gradle_args + [
+            gradle_exec = gradle_exec + [
                 "-PreleaseRingrtcLibDir={}".format(lib_dir),
                 "-PwebrtcJar={}/libwebrtc.jar".format(lib_dir),
             ]
-        CreateLibs(dry_run, project_dir, build_dir, archs, output, build_debug, unstripped,
-                   use_webrtc_ndk,
+        CreateLibs(dry_run, project_dir, webrtc_src_dir, build_dir,
+                   archs, output, build_debug, unstripped, use_webrtc_ndk,
                    extra_gn_args, extra_gn_flags, extra_ninja_flags,
                    extra_cargo_flags, jobs, build_projects, webrtc_version)
 
     if Project.AAR not in build_projects:
         return
 
-    gradle_args.extend(('assembleDebug' if build_type == 'debug' else 'assembleRelease' for build_type in build_types))
+    gradle_exec.extend(('assembleDebug' if build_type == 'debug' else 'assembleRelease' for build_type in build_types))
 
     if install_local is True:
         if 'release' not in build_types:
@@ -469,16 +469,15 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version, gradle_dir
                     '--install-local. Remove --install-local and build again to '
                     'have a debug AAR created in the Gradle output directory.')
 
-        gradle_args.append('publishToMavenLocal')
+        gradle_exec.append('publishToMavenLocal')
 
     if sonatype_repo is not None:
-        gradle_args.append('publishMavenJavaPublicationToMavenRepository')
+        gradle_exec.append('publishMavenJavaPublicationToMavenRepository')
 
-    gradle_args.extend(extra_gradle_args)
+    gradle_exec.extend(extra_gradle_args)
 
     # Run gradle
-    os.chdir(os.path.abspath(gradle_dir))
-    RunGradle(dry_run, gradle_args)
+    RunCmd(dry_run, gradle_exec, cwd=gradle_dir)
 
     if install_dir is not None:
         for build_type in build_types:
@@ -544,13 +543,15 @@ def main():
             clean_dir(os.path.join(build_dir, dir), args.dry_run)
         return 0
 
-    os.chdir(os.path.abspath(args.webrtc_src_dir))
-    RunSdkmanagerLicenses(args.dry_run)
+    if args.use_webrtc_ndk:
+        # This is potentially still useful for a non-WebRTC NDK,
+        # but trying to find the location of the sdkmanager tool is more trouble than it's worth,
+        # especially when most people install SDKs and NDKs through Android Studio.
+        RunSdkmanagerLicenses(args.webrtc_src_dir, args.dry_run)
 
     if args.upload_sonatype_repo is not None:
-        if args.debug_build is True or args.release_build is True:
-            print('ERROR: When uploading, must upload complete release and debug builds')
-            print('ERROR: You cannot specify either --release or --debug while uploading')
+        if args.debug_build is True:
+            print('ERROR: Only the release build can be uploaded')
             return 1
 
         if args.upload_sonatype_user is None or args.upload_sonatype_password is None:
@@ -569,7 +570,7 @@ def main():
                  args.signing_keyid, args.signing_password, args.signing_secret_keyring,
                  args.use_webrtc_ndk, build_projects,
                  args.install_local, args.install_dir,
-                 args.project_dir, build_dir, args.arch, args.output,
+                 args.project_dir, args.webrtc_src_dir, build_dir, args.arch, args.output,
                  args.debug_build, args.release_build, args.unstripped, args.extra_gn_args,
                  args.extra_gn_flags, args.extra_ninja_flags, args.extra_cargo_flags,
                  str(args.jobs))
