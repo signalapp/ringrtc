@@ -101,3 +101,14 @@ jobs:
       working-directory: src/node
     - run: ${{ matrix.test-runner }} yarn test
       working-directory: src/node
+
+  android:
+    name: Android Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install protoc
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    - uses: actions/checkout@v3
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+    - run: bin/fetch-artifact -p android
+    - run: bin/build-aar --release --ringrtc-only
