@@ -482,8 +482,6 @@ pub fn delete_group_call_client(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,
 ) -> Result<()> {
-    info!("delete_group_call_client(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.delete_group_call_client(client_id);
     Ok(())
