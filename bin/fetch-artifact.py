@@ -53,13 +53,17 @@ def resolve_platform(platform_name: str) -> str:
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description='Download and unpack a build artifact archive for a given platform, or from an arbitrary URL.')
+
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument('-u', '--url',
                               help='URL of an explicitly-specified artifact archive')
     source_group.add_argument('-p', '--platform',
                               help='WebRTC prebuild platform to fetch artifacts for')
+
     parser.add_argument('-c', '--checksum',
                         help='sha256sum of the unexpanded artifact archive (can be omitted for standard prebuilds)')
+    parser.add_argument('--skip-extract', action='store_true',
+                        help='download the archive if necessary, but skip extracting it')
 
     build_mode_group = parser.add_mutually_exclusive_group()
     build_mode_group.add_argument('--debug', action='store_true',
@@ -69,15 +73,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
     parser.add_argument('--webrtc-version', metavar='TAG',
                         help='WebRTC tag, used to identify a prebuild (provided implicitly if running through the shell wrapper)')
+    parser.add_argument('--archive-dir',
+                        help='Directory to download archives to (defaults to output directory)')
     parser.add_argument('-o', '--output-dir',
                         required=True,
                         help='Build directory (provided implicitly if running through the shell wrapper)')
     return parser
 
 
-def download_if_needed(archive_file: str, url: str, checksum: str) -> BinaryIO:
+def download_if_needed(archive_file: str, url: str, checksum: str, archive_dir: str) -> BinaryIO:
+    archive_path = os.path.join(archive_dir, archive_file)
+
     try:
-        f = open(archive_file, 'rb')
+        f = open(archive_path, 'rb')
         digest = hashlib.sha256()
         chunk = f.read1()
         while chunk:
@@ -93,7 +101,8 @@ def download_if_needed(archive_file: str, url: str, checksum: str) -> BinaryIO:
     try:
         with urllib.request.urlopen(url) as response:
             digest = hashlib.sha256()
-            f = open(UNVERIFIED_DOWNLOAD_NAME, 'w+b')
+            download_path = os.path.join(archive_dir, UNVERIFIED_DOWNLOAD_NAME)
+            f = open(download_path, 'w+b')
             chunk = response.read1()
             while chunk:
                 digest.update(chunk)
@@ -101,8 +110,8 @@ def download_if_needed(archive_file: str, url: str, checksum: str) -> BinaryIO:
                 chunk = response.read1()
             assert digest.hexdigest() == checksum.lower(), "expected {}, actual {}".format(checksum.lower(), digest.hexdigest())
             f.close()
-            os.replace(UNVERIFIED_DOWNLOAD_NAME, archive_file)
-            f = open(archive_file, 'rb')
+            os.replace(download_path, archive_path)
+            f = open(archive_path, 'rb')
             return f
     except urllib.error.HTTPError as e:
         print(e, e.filename, file=sys.stderr)
@@ -113,7 +122,6 @@ def main() -> None:
     parser = build_argument_parser()
     args = parser.parse_args()
     os.makedirs(os.path.abspath(args.output_dir), exist_ok=True)
-    os.chdir(args.output_dir)
 
     url = args.url
     checksum = args.checksum
@@ -129,12 +137,17 @@ def main() -> None:
     if not checksum:
         parser.error(message='missing --checksum')
 
+    archive_dir = args.archive_dir or args.output_dir
+
     archive_file = os.path.basename(url)
-    open_archive = download_if_needed(archive_file, url, checksum)
+    open_archive = download_if_needed(archive_file, url, checksum, archive_dir)
+
+    if args.skip_extract:
+        return
 
     print("extracting {}...".format(archive_file), file=sys.stderr)
     open_archive.seek(0)
-    tarfile.open(fileobj=open_archive).extractall()
+    tarfile.open(fileobj=open_archive).extractall(path=args.output_dir)
 
 
 main()

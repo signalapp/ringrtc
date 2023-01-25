@@ -32,7 +32,14 @@ Pod::Spec.new do |s|
 
   s.module_map = 'src/ios/SignalRingRTC/SignalRingRTC/SignalRingRTC.modulemap'
 
-  s.preserve_paths = 'out/release/libringrtc/*/libringrtc.a'
+  s.preserve_paths = [
+    'out/release/libringrtc', # a symlink controlled by bin/set-up-for-cocoapods
+    'bin/set-up-for-cocoapods',
+    'bin/fetch-artifact.py', # env.sh has extra dependencies, so we go directly to the Python script
+    'config/version.sh',
+    'config/version.properties',
+    'prebuild-checksum',
+  ]
 
   s.dependency 'SignalCoreKit'
 
@@ -41,6 +48,8 @@ Pod::Spec.new do |s|
     # Use an extra level of indirection because CocoaPods messes with OTHER_LDFLAGS too.
     'LIBRINGRTC_IF_NEEDED' => '$(PODS_TARGET_SRCROOT)/out/release/libringrtc/$(CARGO_BUILD_TARGET)/libringrtc.a',
     'OTHER_LDFLAGS' => '$(LIBRINGRTC_IF_NEEDED)',
+
+    'RINGRTC_PREBUILD_DIR' => "$(USER_LIBRARY_DIR)/Caches/org.signal.ringrtc/prebuild-#{s.version.to_s}",
 
     'CARGO_BUILD_TARGET[sdk=iphonesimulator*][arch=arm64]' => 'aarch64-apple-ios-sim',
     'CARGO_BUILD_TARGET[sdk=iphonesimulator*][arch=*]' => 'x86_64-apple-ios',
@@ -56,6 +65,27 @@ Pod::Spec.new do |s|
     'CARGO_BUILD_TARGET[sdk=macosx*][arch=*]' => '$(CARGO_BUILD_TARGET_MAC_CATALYST_X86_$(IS_MACCATALYST))',
   }
 
+  s.script_phases = [
+    { name: 'Check prebuild',
+      execution_position: :before_compile,
+      input_files: ['$(PODS_TARGET_SRCROOT)/prebuild-checksum', '$(RINGRTC_PREBUILD_DIR)/prebuild-checksum'],
+      output_files: ['$(DERIVED_FILE_DIR)/prebuild-checksum'],
+      script: %q(
+        set -euo pipefail
+        if [[ ! -f "${SCRIPT_INPUT_FILE_0}" ]]; then
+          # Local development, ignore
+          exit
+        elif ! diff -q "${SCRIPT_INPUT_FILE_0}" "${SCRIPT_INPUT_FILE_1}"; then
+          # Why not run it now? Because Xcode may have already processed some of the files.
+          echo 'error: Please run Pods/SignalRingRTC/bin/set-up-for-cocoapods' >&2
+          echo 'note: If you are in the Signal iOS repo, you can use `make dependencies`' >&2
+          exit 1
+        fi
+        cp "${SCRIPT_INPUT_FILE_0}" "${SCRIPT_OUTPUT_FILE_0}"
+      ),
+    },
+  ]
+
   s.test_spec 'Tests' do |test_spec|
     test_spec.source_files = 'src/ios/SignalRingRTC/SignalRingRTCTests/**/*.{h,m,swift}'
     test_spec.dependency 'Nimble'
@@ -64,4 +94,6 @@ Pod::Spec.new do |s|
   s.subspec 'WebRTC' do |webrtc|
     webrtc.vendored_frameworks = 'out/release/WebRTC.xcframework'
   end
+
+  s.prepare_command = 'bin/set-up-for-cocoapods'
 end

@@ -1,0 +1,46 @@
+#!/bin/sh
+
+#
+# Copyright 2023 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+# Do NOT include env.sh here; this script needs to work without grealpath installed.
+
+set -eu
+
+PROJECT_DIR=$(dirname "$0")/..
+cd "$PROJECT_DIR"
+
+. config/version.sh
+
+CACHE_DIR=~/Library/Caches/org.signal.ringrtc
+PREBUILD_DIR=${CACHE_DIR}/prebuild-${RINGRTC_VERSION}
+
+if [ -n "${RINGRTC_PREBUILD_CHECKSUM:-}" ]; then
+    echo "${RINGRTC_PREBUILD_CHECKSUM}" > prebuild-checksum
+elif [ -f prebuild-checksum ]; then
+    RINGRTC_PREBUILD_CHECKSUM=$(cat prebuild-checksum)
+else
+    echo 'RINGRTC_PREBUILD_CHECKSUM not set; assuming local development' >&2
+    exit
+fi
+
+echo 'using' "${PREBUILD_DIR}" 'as cache directory' >&2
+
+mkdir -p "${PREBUILD_DIR}"
+rm -rf "${PREBUILD_DIR}"/release
+
+rm -rf out
+mkdir -p out/release/libringrtc
+
+# Unfortunately we can't symlink the whole build directory at once.
+# CocoaPods wants to see every referenced file exist within the source directory.
+# But we can symlink the whole xcframework and everything in the libringrtc/ directory.
+bin/fetch-artifact.py -p ios --webrtc-version "${WEBRTC_VERSION}" -o "${PREBUILD_DIR}" --archive-dir "${CACHE_DIR}"
+ln -fhs "${PREBUILD_DIR}"/release/WebRTC.xcframework out/release
+
+bin/fetch-artifact.py -u "https://build-artifacts.signal.org/libraries/ringrtc-ios-build-v${RINGRTC_VERSION}.tar.bz2" -c "${RINGRTC_PREBUILD_CHECKSUM}" -o "${PREBUILD_DIR}"
+ln -fhs "${PREBUILD_DIR}"/release/libringrtc/* out/release/libringrtc
+
+cp prebuild-checksum "${PREBUILD_DIR}"
