@@ -31,7 +31,7 @@ set -e
 
 usage()
 {
-    echo 'usage: build-ios [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--archive-webrtc] [--host-sim-only]
+    echo 'usage: build-ios [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--archive-webrtc] [--archive-ringrtc] [--host-sim-only]
     where:
         -d is for debug builds
         -r is for release builds (default)
@@ -41,6 +41,7 @@ usage()
         --ringrtc-only builds libringrtc.a/h only
 
         --archive-webrtc generates an archive suitable for later --ringrtc-only builds
+        --archive-ringrtc generates an archive used by the Signal iOS app
 
         --host-sim-only builds a simulator slice for the host
             architecture (and no other slices)
@@ -64,6 +65,7 @@ BUILD_WHAT=all
 BUILD_TYPE=release
 HOST_SIM_ONLY=
 ARCHIVE_WEBRTC=
+ARCHIVE_RINGRTC=
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -84,6 +86,9 @@ while [ "$1" != "" ]; do
             ;;
         --archive-webrtc )
             ARCHIVE_WEBRTC=yes
+            ;;
+        --archive-ringrtc )
+            ARCHIVE_RINGRTC=yes
             ;;
         -c | --clean )
             clean
@@ -229,6 +234,19 @@ then
   # Create a relative symlink at top level, specifying "debug" or "release"
   # so that the testing project doesn't have to change.
   ln -fhs ${BUILD_TYPE}/libringrtc "${OUTPUT_DIR}"/libringrtc-for-testing
+
+  if [[ -n "${ARCHIVE_RINGRTC}" ]]
+  then
+    if [[ -z "${IS_RELEASE}" ]]
+    then
+      echo 'warning: ignoring --archive-ringrtc for a debug build'
+    elif [[ -n "${HOST_SIM_ONLY}" ]]
+    then
+      echo 'warning: ignoring --archive-ringrtc for --host-sim-only build'
+    else
+      tar -c --auto-compress --no-mac-metadata -f "${OUTPUT_DIR}/ringrtc-ios-build-v${RINGRTC_VERSION}.tar.bz2" -C "${OUTPUT_DIR}" ${BUILD_TYPE}/libringrtc
+    fi
+  fi
 fi
 
 echo "Done with the iOS build for RingRTC!"
