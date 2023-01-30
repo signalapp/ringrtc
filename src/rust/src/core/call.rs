@@ -808,18 +808,20 @@ where
                 let mut call_manager = self.call_manager()?;
                 call_manager.connection_failure(self.call_id)?;
             }
-        } else if self.connection_map.lock()?.len() == 1 {
-            // Only one connection left for this call and it just
-            // failed.
-            info!("ice_failed(): last connection");
-            let mut call_manager = self.call_manager()?;
-            call_manager.connection_failure(self.call_id)?;
         } else {
-            // Close this connection and remove it from the map
             let mut connection_map = self.connection_map.lock()?;
-            if let Some(mut connection) = connection_map.remove(&remote_device) {
-                info!("ice_failed(): terminating inactive connection");
-                connection.terminate()?;
+            if connection_map.len() == 1 {
+                // Only one connection left for this call and it just
+                // failed.
+                info!("ice_failed(): last connection");
+                let mut call_manager = self.call_manager()?;
+                call_manager.connection_failure(self.call_id)?;
+            } else {
+                // Close this connection and remove it from the map
+                if let Some(mut connection) = connection_map.remove(&remote_device) {
+                    info!("ice_failed(): terminating inactive connection");
+                    connection.terminate()?;
+                }
             }
         }
 

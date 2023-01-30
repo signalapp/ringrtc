@@ -1971,10 +1971,12 @@ impl Client {
 
                         if creator.is_some() {
                             // Check if we're permitted to ring
-                            let self_uuid_guard = state.self_uuid.lock();
-                            let creator_is_self = self_uuid_guard
-                                .map(|guarded_uuid| creator == *guarded_uuid)
-                                .unwrap_or(false);
+                            let creator_is_self = {
+                                let self_uuid_guard = state.self_uuid.lock();
+                                self_uuid_guard
+                                    .map(|guarded_uuid| creator == *guarded_uuid)
+                                    .unwrap_or(false)
+                            };
                             let new_ring_state = if creator_is_self {
                                 OutgoingRingState::PermittedToRing
                             } else {
@@ -2508,11 +2510,13 @@ impl Client {
                     "Adding media receive key from {}. client_id: {}",
                     device.demux_id, state.client_id
                 );
-                let mut frame_crypto_context = state
-                    .frame_crypto_context
-                    .lock()
-                    .expect("Get lock for frame encryption context to add media receive key");
-                frame_crypto_context.add_receive_secret(demux_id, ratchet_counter, secret);
+                {
+                    let mut frame_crypto_context = state
+                        .frame_crypto_context
+                        .lock()
+                        .expect("Get lock for frame encryption context to add media receive key");
+                    frame_crypto_context.add_receive_secret(demux_id, ratchet_counter, secret);
+                }
                 let had_media_keys = std::mem::replace(&mut device.media_keys_received, true);
                 if !had_media_keys {
                     state.observer.handle_remote_devices_changed(

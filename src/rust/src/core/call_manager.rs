@@ -2726,19 +2726,24 @@ where
             sfu_url
         );
 
-        let mut next_group_call_client_id = self.next_group_call_client_id.lock()?;
-        if *next_group_call_client_id == group_call::INVALID_CLIENT_ID {
-            *next_group_call_client_id += 1;
-        }
-        let client_id = *next_group_call_client_id;
-        *next_group_call_client_id += 1;
+        let client_id = {
+            let mut next_group_call_client_id = self.next_group_call_client_id.lock()?;
+            if *next_group_call_client_id == group_call::INVALID_CLIENT_ID {
+                *next_group_call_client_id = next_group_call_client_id.wrapping_add(1);
+            }
+            let client_id = *next_group_call_client_id;
+            *next_group_call_client_id = next_group_call_client_id.wrapping_add(1);
+            client_id
+        };
 
-        let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
-        // Take this opportunity to clear the outstanding rings table (which should be small).
-        outstanding_group_rings.retain(|_group_id, ring| !ring.has_expired());
-        let ring_id = outstanding_group_rings
-            .get(&group_id)
-            .map(|ring| ring.ring_id);
+        let ring_id = {
+            let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
+            // Take this opportunity to clear the outstanding rings table (which should be small).
+            outstanding_group_rings.retain(|_group_id, ring| !ring.has_expired());
+            outstanding_group_rings
+                .get(&group_id)
+                .map(|ring| ring.ring_id)
+        };
 
         let sfu_client =
             HttpSfuClient::new(Box::new(self.http_client.clone()), sfu_url, hkdf_extra_info);

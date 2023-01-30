@@ -1199,13 +1199,9 @@ where
     /// Get the current local ICE candidates to send to the remote peer.
     pub fn take_buffered_local_ice_candidates(&self) -> Result<Vec<signaling::IceCandidate>> {
         info!("take_buffered_local_ice_candidates():");
-
-        let mut ice_candidates = self.buffered_local_ice_candidates.lock()?;
-
-        let copy_candidates = ice_candidates.clone();
-        ice_candidates.clear();
-
-        Ok(copy_candidates)
+        Ok(std::mem::take(
+            &mut *self.buffered_local_ice_candidates.lock()?,
+        ))
     }
 
     pub fn handle_received_ice(&self, ice: signaling::Ice) -> Result<()> {
@@ -1442,18 +1438,20 @@ where
             self.connection_id
         );
 
-        let call = self.call.lock()?;
-        // When PeerConnection::SetRemoteDescription triggers PeerConnectionObserver::OnAddStream,
-        // the MediaStream is wrapped via create_incoming_media, which does the following on different platforms:
-        // - Android: wraps it in layers of JavaMediaStream/jni::JavaMediaStream.
-        // - iOS: wraps it in layers of IosMediaStream/AppMediaStreamInterface/ConnectionMediaStream/RTCMediaStream.
-        // - Desktop: does no additional wrapping
-        // Later, when the call is accepted, the wrapped media
-        // is passed to connect_incoming_media, which does the following on different platforms:
-        // - iOS: The RTCMediaStream level of wrapping is passed to the app via onConnectMedia, which adds a sink to the first video track.
-        // - Android: The JavaMediaStream level of wrapping is passed to the app via onConnectMedia, which adds a sink to the first video track.
-        // - Desktop: Uses the PeerConnectionObserver for video sinks rather than adding its own.
-        let incoming_media = call.create_incoming_media(self, stream)?;
+        let incoming_media = {
+            let call = self.call.lock()?;
+            // When PeerConnection::SetRemoteDescription triggers PeerConnectionObserver::OnAddStream,
+            // the MediaStream is wrapped via create_incoming_media, which does the following on different platforms:
+            // - Android: wraps it in layers of JavaMediaStream/jni::JavaMediaStream.
+            // - iOS: wraps it in layers of IosMediaStream/AppMediaStreamInterface/ConnectionMediaStream/RTCMediaStream.
+            // - Desktop: does no additional wrapping
+            // Later, when the call is accepted, the wrapped media
+            // is passed to connect_incoming_media, which does the following on different platforms:
+            // - iOS: The RTCMediaStream level of wrapping is passed to the app via onConnectMedia, which adds a sink to the first video track.
+            // - Android: The JavaMediaStream level of wrapping is passed to the app via onConnectMedia, which adds a sink to the first video track.
+            // - Desktop: Uses the PeerConnectionObserver for video sinks rather than adding its own.
+            call.create_incoming_media(self, stream)?
+        };
         self.set_incoming_media(incoming_media)
     }
 
