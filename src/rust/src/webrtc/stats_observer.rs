@@ -12,6 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use sysinfo::{CpuExt, SystemExt};
+
 use crate::{common::CallId, webrtc};
 
 #[cfg(not(feature = "sim"))]
@@ -50,6 +52,7 @@ pub struct StatsObserver {
     stats: Stats,
     stats_interval: Duration,
     stats_received_count: u32,
+    system_stats: sysinfo::System,
 }
 
 impl StatsObserver {
@@ -61,6 +64,11 @@ impl StatsObserver {
                 timestamp_us,\
                 current_round_trip_time,\
                 available_outgoing_bitrate"
+        );
+        info!(
+            "ringrtc_stats!,\
+                system,\
+                cpu_usage_pct"
         );
         info!(
             "ringrtc_stats!,\
@@ -137,6 +145,16 @@ impl StatsObserver {
                 .connection_statistics
                 .available_outgoing_bitrate,
         );
+    }
+
+    fn print_system(&mut self) {
+        // Be careful adding new stats;
+        // some have a fair amount of persistent state that raises memory usage.
+        self.system_stats.refresh_cpu();
+        info!(
+            "ringrtc_stats!,system,{cpu_pct:.0}%",
+            cpu_pct = self.system_stats.global_cpu_info().cpu_usage(),
+        )
     }
 
     fn print_audio_sender(
@@ -265,12 +283,19 @@ impl StatsObserver {
     fn new(call_id: CallId, stats_interval: Duration) -> Self {
         Self::print_headers();
 
+        let mut system_stats = sysinfo::System::new();
+        // Do an initial refresh for meaningful results on the first log.
+        // Be careful adding new stats;
+        // some have a fair amount of persistent state that raises memory usage.
+        system_stats.refresh_cpu();
+
         Self {
             call_id,
             rffi: webrtc::Arc::null(),
             stats: Default::default(),
             stats_interval,
             stats_received_count: 0,
+            system_stats,
         }
     }
 
@@ -283,6 +308,7 @@ impl StatsObserver {
         };
 
         self.print_connection(media_statistics);
+        self.print_system();
 
         let mut stats = &mut self.stats;
 

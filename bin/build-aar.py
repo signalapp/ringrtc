@@ -241,9 +241,15 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             'prebuilt',
             ndk_host_os + '-x86_64' # contains universal binaries on macOS
         )
+
+        cargo_target = GetCargoTarget(arch)
+        # Set the linker as an environment variable, so it's available to dependencies as well.
+        linker = '{}/bin/{}{}-clang'.format(ndk_toolchain_dir, GetClangTarget(arch), GetAndroidApiLevel(arch))
+        os.environ['CARGO_TARGET_{}_LINKER'.format(cargo_target.replace('-', '_').upper())] =  linker
+
         cargo_args = [
             'cargo', 'rustc',
-            '--target', GetCargoTarget(arch),
+            '--target', cargo_target,
             '--target-dir', output_dir,
             '--manifest-path', os.path.join(project_dir, 'src', 'rust', 'Cargo.toml'),
         ]
@@ -254,7 +260,6 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
         cargo_args += [
             '--',
             '-C', 'debuginfo=2',
-            '-C', 'linker={}/bin/{}{}-clang'.format(ndk_toolchain_dir, GetClangTarget(arch), GetAndroidApiLevel(arch)),
             '-C', 'link-arg=-fuse-ld=lld',
             '-L', 'native=' + output_dir,
         ]
