@@ -225,7 +225,7 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
         RunCmd(dry_run, gn_total_args, cwd=webrtc_src_dir)
 
         ninja_args = [ 'ninja', '-C', output_dir ] + NINJA_TARGETS + [ '-j', jobs ] + extra_ninja_flags
-        RunCmd(dry_run, ninja_args)
+        RunCmd(dry_run, ninja_args, cwd=webrtc_src_dir)
 
     if Project.RINGRTC in build_projects:
         if use_webrtc_ndk:
