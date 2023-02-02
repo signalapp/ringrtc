@@ -72,11 +72,6 @@ public class CallManager {
   private              PeerConnectionFactory      groupFactory;
 
   static {
-    if (Build.VERSION.SDK_INT < 21) {
-      Log.i(TAG, "Preloading ringrtc_rffi library for SDK: " + Build.VERSION.SDK_INT);
-      System.loadLibrary("ringrtc_rffi");
-    }
-
     Log.d(TAG, "Loading ringrtc library");
     System.loadLibrary("ringrtc");
   }
