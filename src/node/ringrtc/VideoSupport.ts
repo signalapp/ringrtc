@@ -186,6 +186,7 @@ export class GumVideoCapturer {
           chromeMediaSourceId: options.screenShareSourceId,
           maxWidth: options.maxWidth,
           maxHeight: options.maxHeight,
+          minFrameRate: 1,
           maxFrameRate: options.maxFramerate,
         },
       };
