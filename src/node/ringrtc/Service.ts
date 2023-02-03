@@ -2181,9 +2181,8 @@ export enum HangupType {
 }
 
 export enum BandwidthMode {
-  VeryLow = 0,
-  Low = 1,
-  Normal = 2,
+  Low = 0,
+  Normal = 1,
 }
 
 /// Describes why a ring was cancelled.
