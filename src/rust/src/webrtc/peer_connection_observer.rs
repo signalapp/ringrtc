@@ -15,6 +15,7 @@ use std::time::SystemTime;
 
 use crate::common::{Result, RingBench};
 use crate::core::signaling;
+use crate::core::util::redact_string;
 use crate::error::RingRtcError;
 use crate::webrtc;
 use crate::webrtc::media::{
@@ -289,6 +290,8 @@ extern "C" fn pc_observer_OnIceConnectionChange<T>(
 extern "C" fn pc_observer_OnIceNetworkRouteChange<T>(
     observer: webrtc::ptr::Borrowed<T>,
     network_route: NetworkRoute,
+    local_description: webrtc::ptr::Borrowed<c_char>,
+    remote_description: webrtc::ptr::Borrowed<c_char>,
 ) where
     T: PeerConnectionObserverTrait,
 {
@@ -302,6 +305,18 @@ extern "C" fn pc_observer_OnIceNetworkRouteChange<T>(
                 network_route,
                 observer.log_id()
             )
+        );
+
+        let local_description =
+            redact_string(unsafe { CStr::from_ptr(local_description.as_ptr()) }.to_string_lossy());
+        let remote_description =
+            redact_string(unsafe { CStr::from_ptr(remote_description.as_ptr()) }.to_string_lossy());
+
+        info!(
+            "ice_network_route_change\t{}\n local: {}\nremote: {}",
+            observer.log_id(),
+            local_description,
+            remote_description,
         );
 
         observer
@@ -595,7 +610,12 @@ where
     onIceCandidatesRemoved:
         extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::Borrowed<RffiIpPort>, size_t),
     onIceConnectionChange: extern "C" fn(webrtc::ptr::Borrowed<T>, IceConnectionState),
-    onIceNetworkRouteChange: extern "C" fn(webrtc::ptr::Borrowed<T>, NetworkRoute),
+    onIceNetworkRouteChange: extern "C" fn(
+        webrtc::ptr::Borrowed<T>,
+        NetworkRoute,
+        webrtc::ptr::Borrowed<c_char>,
+        webrtc::ptr::Borrowed<c_char>,
+    ),
 
     // Media events
     onAddStream: extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiMediaStream>),
