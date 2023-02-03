@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.24.0
+
+- Desktop: Get TURN servers after call creation to improve glare handling
+
+- Desktop: Add test cases for glare handling
+
+- Desktop: Set a minimum frame rate for screenshare capture
+
+- Reference signalapp/webrtc@5359c
+  - Remove Android API 19 support
+  - Cleanup merge diffs
+  - Include candidate information for ICE route changes
+  - Allow any address ports to be disabled
+
+- Log when the selected ICE candidate pair changes
+
+- Add debuglogs notebook for analyzing logs
+
+- CI: Add builds and tests for all platforms
+
+- Build improvements
+
 ## v2.23.1
 
 - Support fetching prebuilds from build-artifacts.signal.org
