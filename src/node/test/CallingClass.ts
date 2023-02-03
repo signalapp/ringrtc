@@ -27,10 +27,14 @@ export class CallingClass {
   private _id: string;
   private _localDeviceId: number;
   private _call: Call | undefined;
-  private _delayCallSettingsRequest: number;
+  private _delayIncomingCallSettingsRequest: number;
+  private _delayOutgoingCallSettingsRequest: number;
 
-  set delayCallSettingsRequest(value: number) {
-    this._delayCallSettingsRequest = value;
+  set delayIncomingCallSettingsRequest(value: number) {
+    this._delayIncomingCallSettingsRequest = value;
+  }
+  set delayOutgoingCallSettingsRequest(value: number) {
+    this._delayIncomingCallSettingsRequest = value;
   }
 
   constructor(name: string, id: string) {
@@ -39,7 +43,8 @@ export class CallingClass {
 
     this._localDeviceId = 1;
 
-    this._delayCallSettingsRequest = 0;
+    this._delayIncomingCallSettingsRequest = 0;
+    this._delayOutgoingCallSettingsRequest = 0;
   }
 
   private setupCallCallbacks(call: Call) {
@@ -77,14 +82,22 @@ export class CallingClass {
     return true;
   }
 
-  private async handleIncomingCall(call: Call): Promise<CallSettings | null> {
+  private async handleIncomingCall(call: Call): Promise<boolean> {
     log('handleIncomingCall');
 
     this._call = call;
 
     this.setupCallCallbacks(call);
 
-    return await this.getCallSettings();
+    return true;
+  }
+
+  private async handleStartCall(call: Call): Promise<boolean> {
+    const callSettings = await this.getCallSettings(call.isIncoming);
+
+    RingRTC.proceed(call.callId, callSettings);
+
+    return true;
   }
 
   private async handleAutoEndedIncomingCallRequest(
@@ -162,13 +175,22 @@ export class CallingClass {
   ////////////////////////////////////////////////////////////////////////////////
   // Support
 
-  private async getCallSettings(): Promise<CallSettings> {
-    log(
-      'getCallSettings delayed by ' +
-        this._delayCallSettingsRequest.toString() +
-        'ms'
-    );
-    await sleep(this._delayCallSettingsRequest);
+  private async getCallSettings(isIncoming: boolean): Promise<CallSettings> {
+    if (isIncoming) {
+      log(
+        'getCallSettings delayed by ' +
+          this._delayIncomingCallSettingsRequest.toString() +
+          'ms'
+      );
+      await sleep(this._delayIncomingCallSettingsRequest);
+    } else {
+      log(
+        'getCallSettings delayed by ' +
+          this._delayOutgoingCallSettingsRequest.toString() +
+          'ms'
+      );
+      await sleep(this._delayOutgoingCallSettingsRequest);
+    }
 
     return {
       iceServer: {
@@ -192,6 +214,7 @@ export class CallingClass {
 
     RingRTC.handleOutgoingSignaling = this.handleOutgoingSignaling.bind(this);
     RingRTC.handleIncomingCall = this.handleIncomingCall.bind(this);
+    RingRTC.handleStartCall = this.handleStartCall.bind(this);
     RingRTC.handleAutoEndedIncomingCallRequest =
       this.handleAutoEndedIncomingCallRequest.bind(this);
     RingRTC.handleLogMessage = this.handleLogMessage.bind(this);
@@ -208,8 +231,6 @@ export class CallingClass {
   async startOutgoingDirectCall(remoteUserId: string): Promise<void> {
     log('startOutgoingDirectCall');
 
-    const callSettings = await this.getCallSettings();
-
     if (RingRTC.call && RingRTC.call.state !== CallState.Ended) {
       log('Call already in progress, new call not allowed.');
       return;
@@ -218,8 +239,7 @@ export class CallingClass {
     const call = RingRTC.startOutgoingCall(
       remoteUserId,
       false,
-      this._localDeviceId,
-      callSettings
+      this._localDeviceId
     );
 
     log('Outgoing callId ' + Long.fromValue(call.callId).toString());

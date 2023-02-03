@@ -211,205 +211,28 @@ describe('RingRTC', () => {
     assert.equal(CallState.Ended, RingRTC.call!.state);
   });
 
-  it('ignores outgoing call when incoming call is in progress', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
-    calling.initialize();
-    initializeSpies();
-
-    // Delay the outgoing direct call emulating the case when an incoming call is already in progress
-    calling.delayCallSettingsRequest = 1000;
-
-    const c = countDownLatch(1);
-
-    calling
-      .startOutgoingDirectCall(user2_id)
-      .then(result => {
-        assert.fail('Outgoing direct call not rejected');
-      })
-      .catch(e => {
-        log('Outgoing call failed as expected');
-        c.countDown();
-      });
-
-    // Start an incoming call
-
-    // Generate incoming calling message
-    const message_age_sec = 1;
-    const message_received_at_counter = 10;
-    const callId = new Long(1, 1, true);
-    const offerCallingMessage = generateOfferCallingMessage(callId);
-
-    calling.delayCallSettingsRequest = 0;
-
-    RingRTC.handleCallingMessage(
-      user2_id,
-      Buffer.from(uuidToBytes(user2_id)),
-      user2_device_id,
-      user1_device_id,
-      message_age_sec,
-      message_received_at_counter,
-      offerCallingMessage,
-      user2_identity_key,
-      user1_identity_key
-    );
-
-    await sleep(1000);
-
-    try {
-      await c.finished;
-    } catch (e) {
-      assert.fail('Outgoing call did not fail as expected');
-    }
-
-    // Validate that the incoming call is the current RingRTC call
-    assert.isTrue(callId.eq(Long.fromValue(RingRTC.call!.callId)));
-
-    handleIncomingCallSpy.should.have.been.calledOnce;
-    assert.equal(CallState.Prering, RingRTC.call!.state);
-
-    // Hangup call
-    expect(calling.hangup()).to.be.true;
-    await sleep(500);
-
-    // Validate hangup related callbacks and call state
-    handleAutoEndedIncomingCallRequestSpy.should.have.been.calledOnce;
-    expect(handleOutgoingSignalingSpy.callCount).to.be.gt(0);
-    assert.equal(CallState.Ended, RingRTC.call!.state);
-  });
-
-  it('ignores incoming call when outgoing call in progress', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
-    calling.initialize();
-    initializeSpies();
-
-    const outgoingCallLatch = countDownLatch(1);
-
-    calling
-      .startOutgoingDirectCall(user2_id)
-      .then(result => {
-        log('Outgoing call succeeded as expected');
-        outgoingCallLatch.countDown();
-      })
-      .catch(e => {
-        assert.fail('Outgoing direct call should not have been rejected');
-      });
-
-    await sleep(1000);
-
-    expect(handleOutgoingSignalingSpy.callCount).to.be.gt(1);
-    assert.equal(CallState.Prering, RingRTC.call!.state);
-
-    // Start an incoming call
-
-    // Generate incoming calling message
-    const message_age_sec = 1;
-    const message_received_at_counter = 10;
-    const callId = new Long(1, 1, true);
-    const offerCallingMessage = generateOfferCallingMessage(callId);
-
-    RingRTC.handleCallingMessage(
-      user2_id,
-      Buffer.from(uuidToBytes(user2_id)),
-      user2_device_id,
-      user1_device_id,
-      message_age_sec,
-      message_received_at_counter,
-      offerCallingMessage,
-      user2_identity_key,
-      user1_identity_key
-    );
-
-    await sleep(1000);
-
-    try {
-      await outgoingCallLatch.finished;
-    } catch (e) {
-      assert.fail('Outgoing call did not succeed as expected');
-    }
-
-    // Validate that the incoming call is not the current RingRTC call
-    assert.isTrue(callId.neq(Long.fromValue(RingRTC.call!.callId)));
-
-    const handleStateChangedSpy = sinon.spy(
-      RingRTC.call!,
-      'handleStateChanged'
-    );
-
-    // Cleanup.
-    expect(calling.hangup()).to.be.true;
-    await sleep(500);
-    handleStateChangedSpy.should.have.been.calledOnce;
-    expect(calling.hangup()).to.be.false;
-    await sleep(100);
-  });
-
-  it('outgoing call is replaced by incoming call when call settings delayed for the outgoing call', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
-    calling.initialize();
-    initializeSpies();
-
-    const outgoingCallLatch = countDownLatch(1);
-
-    calling.delayCallSettingsRequest = 1000;
-
-    calling
-      .startOutgoingDirectCall(user2_id)
-      .then(result => {
-        assert.fail('Outgoing call should not have succeeded');
-      })
-      .catch(e => {
-        log('Outgoing call failed as expected');
-        outgoingCallLatch.countDown();
-      });
-
-    // Start an incoming call
-    calling.delayCallSettingsRequest = 0;
-
-    // Generate incoming calling message
-    const message_age_sec = 1;
-    const message_received_at_counter = 10;
-    const callId = new Long(1, 1, true);
-    const offerCallingMessage = generateOfferCallingMessage(callId);
-
-    RingRTC.handleCallingMessage(
-      user2_id,
-      Buffer.from(uuidToBytes(user2_id)),
-      user2_device_id,
-      user1_device_id,
-      message_age_sec,
-      message_received_at_counter,
-      offerCallingMessage,
-      user2_identity_key,
-      user1_identity_key
-    );
-
-    await sleep(1000);
-
-    try {
-      await outgoingCallLatch.finished;
-    } catch (e) {
-      assert.fail('Outgoing call failed as expected');
-    }
-
-    // Validate that the incoming call is the current RingRTC call
-    assert.isTrue(callId.eq(Long.fromValue(RingRTC.call!.callId)));
-
-    // Cleanup.
-    expect(calling.hangup()).to.be.true;
-    await sleep(500);
-
-    // Validate hangup related callbacks and call state
-    handleAutoEndedIncomingCallRequestSpy.should.have.been.calledOnce;
-    expect(handleOutgoingSignalingSpy.callCount).to.be.gt(0);
-    assert.equal(CallState.Ended, RingRTC.call!.state);
-  });
-
   it('outgoing call wins glare when incoming call id is lower', async () => {
     let calling = new CallingClass(user1_name, user1_id);
     calling.initialize();
     initializeSpies();
 
-    await runGlareScenario(calling, true);
+    await runGlareScenario(calling, true, 0, 0);
+  });
+
+  it('outgoing call wins glare when incoming call id is lower even when outgoing call settings are delayed', async () => {
+    let calling = new CallingClass(user1_name, user1_id);
+    calling.initialize();
+    initializeSpies();
+
+    await runGlareScenario(calling, true, 0, 1000);
+  });
+
+  it('outgoing call loses glare when incoming call id is higher even when outgoing call settings are delayed', async () => {
+    let calling = new CallingClass(user1_name, user1_id);
+    calling.initialize();
+    initializeSpies();
+
+    await runGlareScenario(calling, false, 0, 1000);
   });
 
   it('outgoing call loses glare when incoming call id is higher', async () => {
@@ -417,13 +240,18 @@ describe('RingRTC', () => {
     calling.initialize();
     initializeSpies();
 
-    await runGlareScenario(calling, false);
+    await runGlareScenario(calling, false, 0, 0);
   });
 
   async function runGlareScenario(
     calling: CallingClass,
-    outgoingWinner: boolean
+    outgoingWinner: boolean,
+    delayIncomingCallSetings: number,
+    delayOutgoingCallSetings: number
   ) {
+    calling.delayOutgoingCallSettingsRequest = delayOutgoingCallSetings;
+    calling.delayIncomingCallSettingsRequest = delayIncomingCallSetings;
+
     const outgoingCallLatch = countDownLatch(1);
     calling
       .startOutgoingDirectCall(user2_id)

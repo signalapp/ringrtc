@@ -256,8 +256,8 @@ export class RingRTCType {
   handleOutgoingSignaling:
     | ((remoteUserId: UserId, message: CallingMessage) => Promise<boolean>)
     | null = null;
-  handleIncomingCall: ((call: Call) => Promise<CallSettings | null>) | null =
-    null;
+  handleIncomingCall: ((call: Call) => Promise<boolean>) | null = null;
+  handleStartCall: ((call: Call) => Promise<boolean>) | null = null;
   handleAutoEndedIncomingCallRequest:
     | ((
         callId: CallId,
@@ -325,8 +325,7 @@ export class RingRTCType {
   startOutgoingCall(
     remoteUserId: UserId,
     isVideoCall: boolean,
-    localDeviceId: DeviceId,
-    settings: CallSettings
+    localDeviceId: DeviceId
   ): Call {
     const callId = this.callManager.createOutgoingCall(
       remoteUserId,
@@ -340,7 +339,6 @@ export class RingRTCType {
       callId,
       isIncoming,
       isVideoCall,
-      settings,
       CallState.Prering
     );
     this._call = call;
@@ -364,12 +362,31 @@ export class RingRTCType {
   // Called by Rust
   onStartOutgoingCall(remoteUserId: UserId, callId: CallId): void {
     const call = this._call;
-    if (!call || call.remoteUserId !== remoteUserId || !call.settings) {
+    if (!call || call.remoteUserId !== remoteUserId) {
       return;
     }
 
     call.callId = callId;
-    this.proceed(callId, call.settings);
+
+    const handleStartCall = this.handleStartCall;
+    if (!handleStartCall) {
+      call.ignore();
+      return;
+    }
+
+    handleStartCall(call)
+      .then(result => {
+        if (!result) {
+          this.logWarn(
+            'RingRTC.handleStartCall failed for outgoing call. Call ignored.'
+          );
+          call.ignore();
+        }
+      })
+      .catch(e => {
+        this.logError('RingRTC.handleStartCall exception: ' + e.toString());
+        call.ignore();
+      });
   }
 
   // Called by Rust
@@ -406,31 +423,48 @@ export class RingRTCType {
       callId,
       isIncoming,
       isVideoCall,
-      null,
       CallState.Prering
     );
-    // Callback to UX not set
     const handleIncomingCall = this.handleIncomingCall;
-    if (!handleIncomingCall) {
+    const handleStartCall = this.handleStartCall;
+    if (!handleIncomingCall || !handleStartCall) {
       call.ignore();
       return;
     }
     this._call = call;
 
-    // tslint:disable no-floating-promises
-    (async () => {
-      const settings = await handleIncomingCall(call);
-      if (!settings) {
+    handleIncomingCall(call)
+      .then(success => {
+        if (!success) {
+          this.logWarn(
+            'RingRTC.handleIncomingCall failed for incoming call. Call ignored.'
+          );
+          call.ignore();
+        } else {
+          handleStartCall(call)
+            .then(success => {
+              if (!success) {
+                this.logWarn(
+                  'RingRTC.handleStartCall failed for incoming call. Call ignored.'
+                );
+                call.ignore();
+              }
+            })
+            .catch(e => {
+              this.logError(
+                'RingRTC.handleStartCall exception: ' + e.toString()
+              );
+              call.ignore();
+            });
+        }
+      })
+      .catch(e => {
+        this.logError('RingRTC.handleIncomingCall exception: ' + e.toString());
         call.ignore();
-        return;
-      }
-
-      call.settings = settings;
-      this.proceed(callId, settings);
-    })();
+      });
   }
 
-  private proceed(callId: CallId, settings: CallSettings): void {
+  proceed(callId: CallId, settings: CallSettings): void {
     silly_deadlock_protection(() => {
       this.callManager.proceed(
         callId,
@@ -1365,8 +1399,6 @@ export class Call {
   callId: CallId;
   private readonly _isIncoming: boolean;
   private readonly _isVideoCall: boolean;
-  // We can have a null CallSettings while we're waiting for the UX to give us one.
-  settings: CallSettings | null;
   private _state: CallState;
   private _outgoingAudioEnabled: boolean = false;
   private _outgoingVideoEnabled: boolean = false;
@@ -1397,7 +1429,6 @@ export class Call {
     callId: CallId,
     isIncoming: boolean,
     isVideoCall: boolean,
-    settings: CallSettings | null,
     state: CallState
   ) {
     this._callManager = callManager;
@@ -1405,7 +1436,6 @@ export class Call {
     this.callId = callId;
     this._isIncoming = isIncoming;
     this._isVideoCall = isVideoCall;
-    this.settings = settings;
     this._state = state;
   }
 
