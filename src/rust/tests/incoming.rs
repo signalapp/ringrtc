@@ -684,19 +684,10 @@ fn start_inbound_call_with_error() {
 
     cm.synchronize().expect(error_line!());
 
-    context.force_internal_fault(false);
+    active_call.get_connection(1).expect_err(error_line!());
 
-    let connection = active_call.get_connection(1).expect(error_line!());
-
-    assert_eq!(
-        connection.state().expect(error_line!()),
-        ConnectionState::Terminating
-    );
-
-    // Two errors -- one from the failed send_answer and another from
-    // the failed send_hangup, sent as part of the error clean up.
-    assert_eq!(context.error_count(), 2);
-    assert_eq!(context.ended_count(), 2);
+    assert_eq!(context.error_count(), 1);
+    assert_eq!(context.ended_count(), 1);
     assert_eq!(context.answers_sent(), 0);
     assert_eq!(
         active_call.state().expect(error_line!()),

@@ -2013,12 +2013,10 @@ fn outbound_proceed_with_error() {
         CallState::Terminated
     );
 
-    // Two errors -- one from the failed send_offer and another from
-    // the failed send_hangup, sent as part of the error clean up.
-    assert_eq!(context.error_count(), 2);
+    assert_eq!(context.error_count(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::EndedInternalFailure),
-        2
+        1
     );
     assert_eq!(context.offers_sent(), 0);
     assert!(!cm.busy());
@@ -2041,15 +2039,17 @@ fn outbound_call_connected_local_hangup_with_error() {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(context.error_count(), 1);
+    // Even though there will be a failure during send_hangup,
+    // that doesn't get propagated out because the call is already terminating.
+    assert_eq!(context.error_count(), 0);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Terminated
     );
-    assert_eq!(context.ended_count(), 2);
+    assert_eq!(context.ended_count(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::EndedInternalFailure),
-        1
+        0
     );
     assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
@@ -2075,13 +2075,10 @@ fn local_ice_candidate_with_error() {
 
     cm.synchronize().expect(error_line!());
 
-    // Two errors -- one from the failed send_ice_candidates and another from
-    // the failed send_hangup, sent as part of the error clean up.
-    assert_eq!(context.error_count(), 2);
-
+    assert_eq!(context.error_count(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::EndedInternalFailure),
-        2
+        1
     );
     // We should see that no ICE candidates were sent
     assert_eq!(context.ice_candidates_sent(), 0);
