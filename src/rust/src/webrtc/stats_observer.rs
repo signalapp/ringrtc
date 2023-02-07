@@ -346,9 +346,12 @@ impl StatsObserver {
             for video_sender in video_senders.iter() {
                 let prev_video_send_stats = stats.video_send.entry(video_sender.ssrc).or_default();
 
-                // If the total number of packets sent is reduced, that means that the stats for
-                // the stream were reset. This can happen when entering or exiting screenshare mode.
-                if video_sender.packets_sent < prev_video_send_stats.packets_sent {
+                // If the total number of packets sent or frames encoded is reduced, that means
+                // that the stats for the stream were reset. This can happen when entering or
+                // exiting screenshare mode.
+                if video_sender.packets_sent < prev_video_send_stats.packets_sent
+                    || video_sender.frames_encoded < prev_video_send_stats.frames_encoded
+                {
                     *prev_video_send_stats = Default::default();
                 }
 
