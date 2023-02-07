@@ -233,7 +233,7 @@ then
 
   # Create a relative symlink at top level, specifying "debug" or "release"
   # so that the testing project doesn't have to change.
-  ln -fhs ${BUILD_TYPE}/libringrtc "${OUTPUT_DIR}"/libringrtc-for-testing
+  ln -fns ${BUILD_TYPE}/libringrtc "${OUTPUT_DIR}"/libringrtc-for-testing
 
   if [[ -n "${ARCHIVE_RINGRTC}" ]]
   then
