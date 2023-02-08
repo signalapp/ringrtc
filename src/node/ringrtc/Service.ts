@@ -40,14 +40,20 @@ class NativeCallManager {
       Object.entries(config.field_trials || {})
         .map(([k, v]) => `${k}/${v}`)
         .join('/') + '/';
-    const callEndpoint = Native.createCallEndpoint(
-      this,
-      config.use_new_audio_device_module,
-      fieldTrialsString
-    );
     Object.defineProperty(this, Native.callEndpointPropertyKey, {
-      value: callEndpoint,
       configurable: true, // allows it to be changed
+      get() {
+        const callEndpoint = Native.createCallEndpoint(
+          this,
+          config.use_new_audio_device_module,
+          fieldTrialsString
+        );
+        Object.defineProperty(this, Native.callEndpointPropertyKey, {
+          configurable: true, // allows it to be changed
+          value: callEndpoint,
+        });
+        return callEndpoint;
+      },
     });
   }
 }
