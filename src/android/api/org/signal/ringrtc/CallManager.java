@@ -988,6 +988,10 @@ public class CallManager {
       configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;
     }
 
+    // Use the same buffer capacity as other platforms:
+    // https://webrtc.googlesource.com/src/+/647d5e6d9166be75324a2702cf18f8a270fa3ffa
+    configuration.audioJitterBufferMaxPackets = 200;
+
     PeerConnectionFactory factory       = callContext.factory;
     CameraControl         cameraControl = callContext.cameraControl;
     try {
