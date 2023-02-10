@@ -186,6 +186,9 @@ public class CallManager {
       add("SM-A320F/DS");
       add("SM-A320Y/DS");
       add("SM-A320Y");
+
+      // Samsung S22 5G with Exynos 2200 SoC
+      add("SM-S901B");
     }};
 
     VideoEncoderFactory encoderFactory;
