@@ -261,6 +261,10 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             '--',
             '-C', 'debuginfo=2',
             '-C', 'link-arg=-fuse-ld=lld',
+            # Don't try to link against getifaddrs, which isn't available before Android 24
+            # As long as we don't call it this should be okay.
+            '-C', 'link-arg=-Wl,--defsym=getifaddrs=0',
+            '-C', 'link-arg=-Wl,--defsym=freeifaddrs=0',
             '-L', 'native=' + output_dir,
         ]
         RunCmd(dry_run, cargo_args)
