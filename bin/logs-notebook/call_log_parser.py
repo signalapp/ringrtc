@@ -243,6 +243,9 @@ def _parse_calls(logs: list[str]) -> list[Call]:
             # Parse out the network route timestamp
             timestamp = line.split('\t')[1]
 
+            if '{' not in line:
+                continue
+
             # Parse out the NetworkRoute info
             line = line.split("{ ")[1]
             line = line.split(" }")[0]
@@ -365,6 +368,10 @@ def load_calls(url: str) -> list[Call]:
     logs = _extract_logs(url, response)
     return _parse_calls(logs)
 
+def load_calls_from_file(path_to_file: str) -> list[Call]:
+    with open(path_to_file, "r") as file:
+        logs = file.read()
+    return _parse_calls(logs.split('\n'))
 
 def describe(calls: list[Call]) -> pd.DataFrame:
     def ssrc_count(call: Call) -> Optional[int]:
