@@ -22,9 +22,22 @@ public class CallManagerGlobal {
     // MARK: Object Lifetime
 
     private init() {
-        // This initialization will be done only once per application
-        // lifetime.
-        initLogging()
+        // This initialization will be done only once per application lifetime.
+
+        let maxLogLevel: LogLevel
+        #if DEBUG
+        if let overrideLogLevelString = ProcessInfo().environment["RINGRTC_MAX_LOG_LEVEL"],
+           let overrideLogLevelRaw = UInt8(overrideLogLevelString),
+           let overrideLogLevel = LogLevel(rawValue: overrideLogLevelRaw) {
+            maxLogLevel = overrideLogLevel
+        } else {
+            maxLogLevel = .trace
+        }
+        #else
+        maxLogLevel = .trace
+        #endif
+
+        initLogging(maxLogLevel: maxLogLevel)
 
         // Don't write WebRTC logs to stdout.
         RTCSetMinDebugLogLevel(.none)
@@ -32,29 +45,32 @@ public class CallManagerGlobal {
         // Show WebRTC logs via application Logger.
         webRtcLogger = RTCCallbackLogger()
 
+        let webRtcLogLevel: LogLevel
         #if DEBUG
-        webRtcLogger.severity = .info
-
-        webRtcLogger.start { (message, severity) in
-            if severity == .info {
-                OWSLogger.info(message)
-            } else if severity == .warning {
-                OWSLogger.warn(message)
-            } else if severity == .error {
-                OWSLogger.error(message)
-            }
-        }
+        webRtcLogLevel = min(maxLogLevel, .info)
         #else
-        webRtcLogger.severity = .warning
+        webRtcLogLevel = min(maxLogLevel, .warn)
+        #endif
+
+        webRtcLogger.severity = webRtcLogLevel.toWebRTC
 
         webRtcLogger.start { (message, severity) in
-            if severity == .warning {
+            switch severity {
+            case .verbose:
+                OWSLogger.verbose(message)
+            case .info:
+                OWSLogger.info(message)
+            case .warning:
                 OWSLogger.warn(message)
-            } else if severity == .error {
+            case .error:
                 OWSLogger.error(message)
+            case .none:
+                // should not happen
+                break
+            @unknown default:
+                break
             }
         }
-        #endif
 
         Logger.debug("object! CallManagerGlobal created... \(ObjectIdentifier(self))")
     }

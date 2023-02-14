@@ -8,9 +8,10 @@
 
 import SignalRingRTC.RingRTC
 import SignalCoreKit
+import WebRTC
 
 // Same as rust log::Level (from the log crate)
-public enum LogLevel: UInt8 {
+public enum LogLevel: UInt8, Comparable {
     case off = 0
     case error = 1
     case warn = 2
@@ -18,7 +19,7 @@ public enum LogLevel: UInt8 {
     case debug = 4
     case trace = 5
 
-    static func fromRtc(_ rtcLevel: UInt8) -> Self? {
+    static func fromRingRtc(_ rtcLevel: UInt8) -> Self? {
         return LogLevel(rawValue: rtcLevel)
     }
 
@@ -37,6 +38,26 @@ public enum LogLevel: UInt8 {
             return .off
         }
     }
+
+    var toWebRTC: RTCLoggingSeverity {
+        switch self {
+        case .off:
+            return .none
+        case .error:
+            return .error
+        case .warn:
+            return .warning
+        case .info:
+            return .info
+        case .debug, .trace:
+            return .verbose
+        }
+    }
+
+    public static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
+        // Lower log levels == less log output
+        return lhs.rawValue < rhs.rawValue
+    }
 }
 
 // Same as rust log::Record (nicer version of rtc_log_Record)
@@ -48,7 +69,7 @@ public struct LogRecord {
     public let level: LogLevel
 
     static func fromRtc(_ rtcRecord: rtc_log_Record) -> Self {
-        let level = LogLevel.fromRtc(rtcRecord.level)
+        let level = LogLevel.fromRingRtc(rtcRecord.level)
         if level == nil {
             owsFailDebug("Invalid log level: \(rtcRecord.level).  Using Error")
         }
@@ -65,8 +86,8 @@ public struct LogRecord {
 
 // The application doesn't need to do anything and there's no state,
 // so we don't need a LogDelegate or LogDelegateWrapper.
-public func initLogging() {
-    let maxLevel = LogLevel.fromSignal()
+public func initLogging(maxLogLevel: LogLevel = .trace) {
+    let maxLevel = min(maxLogLevel, LogLevel.fromSignal())
     rtc_log_init(
         rtc_log_Delegate(
             log: { (rtcRecord: rtc_log_Record) in
