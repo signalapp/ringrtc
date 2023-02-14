@@ -145,8 +145,8 @@ impl SerializedPeekDeviceInfo {
 struct SerializedJoinResponse {
     #[serde(rename = "demuxId")]
     client_demux_id: u32,
-    #[serde(rename = "ip")]
-    server_ip: IpAddr,
+    #[serde(rename = "ips")]
+    server_ips: Vec<IpAddr>,
     #[serde(rename = "port")]
     server_port: u16,
     #[serde(rename = "iceUfrag")]
@@ -174,12 +174,15 @@ impl JoinResponse {
         deserialized: SerializedJoinResponse,
         opaque_user_id_mappings: &[OpaqueUserIdMapping],
     ) -> Self {
+        let server_addresses = deserialized
+            .server_ips
+            .iter()
+            .map(|ip| SocketAddr::new(*ip, deserialized.server_port))
+            .collect();
+
         Self {
             client_demux_id: deserialized.client_demux_id,
-            server_addresses: vec![SocketAddr::new(
-                deserialized.server_ip,
-                deserialized.server_port,
-            )],
+            server_addresses,
             server_ice_ufrag: deserialized.server_ice_ufrag,
             server_ice_pwd: deserialized.server_ice_pwd,
             server_dhe_pub_key: deserialized.server_dhe_pub_key,
