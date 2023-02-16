@@ -34,6 +34,7 @@ android {
         versionName ringrtcVersion
         archivesBaseName = "ringrtc-android"
         consumerProguardFiles "proguard-rules.pro"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     sourceSets {
@@ -47,6 +48,10 @@ android {
         }
     }
 
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+    }
+
     packagingOptions {
         // Libraries are already stripped if necessary when linked.
         doNotStrip "**/*.so"
@@ -56,6 +61,10 @@ android {
 dependencies {
     api files(webrtc_jar)
     api 'androidx.annotation:annotation:1.2.0'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.6'
+    androidTestImplementation "androidx.test:runner:1.4.0"
+    androidTestImplementation "androidx.test:core:1.4.0"
+    androidTestImplementation "org.mockito:mockito-android:5.1.1"
 }
 
 task javadoc(type: Javadoc) {
