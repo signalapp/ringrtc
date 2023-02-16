@@ -1,0 +1,98 @@
+name: Slow Tests
+
+on:
+  schedule:
+    # "High load times include the start of every hour.
+    #  To decrease the chance of delay, schedule your workflow to run
+    #  at a different time of the hour."
+    # We pick 8:25 UTC, aiming for "later than PST/UTC-8 night work" and
+    # "earlier than ADT/UTC-3 morning work".
+    - cron: '25 8 * * *'
+  workflow_dispatch: {} # no parameters
+
+jobs:
+  check-up-to-date:
+    name: Already up to date?
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' }}
+    outputs:
+      has-changes: ${{ steps.check.outputs.has-changes }}
+    steps:
+    - uses: actions/checkout@v3
+    - run: git log --after '24 hours ago' --exit-code || echo 'has-changes=true' >> $GITHUB_OUTPUT
+      id: check
+
+  android:
+    name: Build for Android
+    runs-on: ubuntu-latest
+    needs: [check-up-to-date]
+    if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || needs.check-up-to-date.result == 'skipped') }}
+
+    steps:
+    - name: Install protoc
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    - uses: actions/checkout@v3
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+    - run: bin/fetch-artifact -p android
+    - run: bin/build-aar --release --ringrtc-only
+    - name: Upload libraries
+      uses: actions/upload-artifact@v3
+      with:
+        name: libs
+        path: out/release/libs/*
+        retention-days: 2
+
+  android-emulator-tests:
+    name: Android Emulator Tests
+    # For hardware acceleration; see https://github.com/ReactiveCircus/android-emulator-runner/issues/46
+    runs-on: macos-latest
+    needs: [android]
+    if: ${{ always() && needs.android.result == 'success' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x86_64]
+
+    steps:
+      - run: 'echo "JAVA_HOME=$JAVA_HOME_11_X64" >> "$GITHUB_ENV"'
+
+      - uses: actions/checkout@v3
+
+      - name: Download JNI libraries
+        id: download
+        uses: actions/download-artifact@v3
+        with:
+          name: libs
+          path: out/release/libs
+
+      # From reactivecircus/android-emulator-runner
+      - name: AVD cache
+        uses: actions/cache@v3
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.arch }}-21
+
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@50986b1464923454c95e261820bc626f38490ec0 # v2.27.0
+        with:
+          arch: ${{ matrix.arch }}
+          api-level: 21
+          force-avd-creation: false
+          emulator-options: -no-window -noaudio -no-boot-anim
+          script: echo "Generated AVD snapshot for caching."
+
+      - name: Run tests
+        uses: reactivecircus/android-emulator-runner@50986b1464923454c95e261820bc626f38490ec0 # v2.27.0
+        with:
+          arch: ${{ matrix.arch }}
+          api-level: 21
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -noaudio -no-boot-anim
+          # It is correct that we use *debug*RingrtcLibDir below (specified by connectedCheck),
+          # even though we are using *release* artifacts.
+          script: ./gradlew ringrtc:android:connectedCheck -PdebugRingrtcLibDir=${{ github.workspace }}/out/release/libs -PwebrtcJar=${{ github.workspace }}/out/release/libs/libwebrtc.jar
