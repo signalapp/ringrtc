@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.25.0
+
+- Allow SFU to return multiple ICE candidates (for IPv6 support)
+
+- Android: Add more devices to hardware encoding blocklist
+
+- Android: Increase max jitter buffer size
+
+- Desktop: Initialize call endpoint lazily
+
+- Desktop: Allow explicitly rejecting very tall or very wide frames
+
+- Add cpu statistics to logging
+
+- Reference signalapp/webrtc@5359d
+  - Improved logging around network switch
+  - Allow TURN ports to be pruned
+
+- CI: Add "Slow Tests" that will run once every night
+
+- Update dependencies, logging, build improvements
+
 ## v2.24.0
 
 - Desktop: Get TURN servers after call creation to improve glare handling
