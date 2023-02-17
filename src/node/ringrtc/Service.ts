@@ -1559,14 +1559,18 @@ export class Call {
     format: VideoPixelFormatEnum,
     buffer: Buffer
   ): void {
-    // This assumes we only have one active all.
+    // This assumes we only have one active call.
     this._callManager.sendVideoFrame(width, height, format, buffer);
   }
 
   // With this method, a Call is a VideoFrameSource
-  receiveVideoFrame(buffer: Buffer): [number, number] | undefined {
-    // This assumes we only have one active all.
-    return this._callManager.receiveVideoFrame(buffer);
+  receiveVideoFrame(
+    buffer: Buffer,
+    maxWidth: number,
+    maxHeight: number
+  ): [number, number] | undefined {
+    // This assumes we only have one active call.
+    return this._callManager.receiveVideoFrame(buffer, maxWidth, maxHeight);
   }
 
   private enableOrDisableCapturer(): void {
@@ -2050,7 +2054,7 @@ export class GroupCall {
     format: VideoPixelFormatEnum,
     buffer: Buffer
   ): void {
-    // This assumes we only have one active all.
+    // This assumes we only have one active call.
     this._callManager.sendVideoFrame(width, height, format, buffer);
   }
 
@@ -2091,12 +2095,18 @@ class GroupCallVideoFrameSource {
     this._remoteDemuxId = remoteDemuxId;
   }
 
-  receiveVideoFrame(buffer: Buffer): [number, number] | undefined {
-    // This assumes we only have one active all.
+  receiveVideoFrame(
+    buffer: Buffer,
+    maxWidth: number,
+    maxHeight: number
+  ): [number, number] | undefined {
+    // This assumes we only have one active call.
     const frame = this._callManager.receiveGroupCallVideoFrame(
       this._groupCall.clientId,
       this._remoteDemuxId,
-      buffer
+      buffer,
+      maxWidth,
+      maxHeight
     );
     if (!!frame) {
       const [width, height] = frame;
@@ -2236,7 +2246,11 @@ export interface CallManager {
     format: VideoPixelFormatEnum,
     buffer: Buffer
   ): void;
-  receiveVideoFrame(buffer: Buffer): [number, number] | undefined;
+  receiveVideoFrame(
+    buffer: Buffer,
+    maxWidth: number,
+    maxHeight: number
+  ): [number, number] | undefined;
   receivedOffer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
@@ -2325,7 +2339,9 @@ export interface CallManager {
   receiveGroupCallVideoFrame(
     clientId: GroupCallClientId,
     remoteDemuxId: number,
-    buffer: Buffer
+    buffer: Buffer,
+    maxWidth: number,
+    maxHeight: number
   ): [number, number] | undefined;
   // Response comes back via handlePeekResponse
   peekGroupCall(

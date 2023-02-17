@@ -116,6 +116,15 @@ pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
     Ok(object)
 }
 
+/// Given two values `a` and `b`, returns them in sorted order.
+pub fn minmax<T: Ord>(a: T, b: T) -> (T, T) {
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
 #[cfg(any(not(debug_assertions), test))]
 fn redact_ice_password(text: Cow<'_, str>) -> Cow<'_, str> {
     let mut lines = text.lines();
@@ -313,6 +322,13 @@ impl TaskQueueRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn check_minmax() {
+        assert_eq!(minmax(1, 2), (1, 2));
+        assert_eq!(minmax(2, 2), (2, 2));
+        assert_eq!(minmax(3, 2), (2, 3));
+    }
 
     #[test]
     fn check_replace_all() {

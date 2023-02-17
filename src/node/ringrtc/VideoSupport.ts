@@ -52,10 +52,21 @@ function videoPixelFormatToEnum(
 
 // The way a CanvasVideoRender gets VideoFrames
 export interface VideoFrameSource {
-  // Fills in the given buffer and returns the width x height
-  // or returns undefined if nothing was filled in because no
-  // video frame was available.
-  receiveVideoFrame(buffer: Buffer): [number, number] | undefined;
+  /**
+   * Copies the latest frame into `buffer`.
+   *
+   * Note that `maxWidth` and `maxHeight` specify maximum dimensions,
+   * but allow for rotation, i.e. a maximum of 1920x1080 will also allow
+   * portrait-mode 1080x1920.
+   *
+   * Returns a `[width, height]` pair for the resulting frame,
+   * or `undefined` if there's no new frame ready to be displayed.
+   */
+  receiveVideoFrame(
+    buffer: Buffer,
+    maxWidth: number,
+    maxHeight: number
+  ): [number, number] | undefined;
 }
 
 // Sends frames (after getting them from something like GumVideoCapturer, for example).
@@ -456,7 +467,11 @@ export class CanvasVideoRenderer {
       return;
     }
 
-    const frame = this.source.receiveVideoFrame(this.buffer);
+    const frame = this.source.receiveVideoFrame(
+      this.buffer,
+      MAX_VIDEO_CAPTURE_WIDTH,
+      MAX_VIDEO_CAPTURE_HEIGHT
+    );
     if (!frame) {
       return;
     }

@@ -18,6 +18,7 @@ use crate::core::call_manager::CallManager;
 use crate::core::group_call;
 use crate::core::group_call::{GroupId, SignalingMessageUrgency};
 use crate::core::signaling;
+use crate::core::util::minmax;
 use crate::lite::{
     http,
     sfu::{DemuxId, GroupMember, PeekInfo, UserId},
@@ -316,6 +317,8 @@ pub struct CallEndpoint {
     // If Neon ever adds a Weak type, we should use that instead.
     // See https://github.com/neon-bindings/neon/issues/674.
     js_object: Arc<Root<JsObject>>,
+
+    most_recent_overlarge_frame_dimensions: (u32, u32),
 }
 
 impl CallEndpoint {
@@ -406,6 +409,7 @@ impl CallEndpoint {
             incoming_video_sink,
             peer_connection_factory,
             js_object,
+            most_recent_overlarge_frame_dimensions: (0, 0),
         })
     }
 }
@@ -1064,22 +1068,55 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
-#[allow(non_snake_case)]
-fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let mut rgba_buffer = cx.argument::<JsBuffer>(0)?;
-    let frame = with_call_endpoint(&mut cx, |endpoint| endpoint.incoming_video_sink.pop(0));
+fn receive_video_frame<'a>(
+    cx: &mut FunctionContext<'a>,
+    mut rgba_buffer: Handle<JsBuffer>,
+    demux_id: DemuxId,
+    max_width: u32,
+    max_height: u32,
+) -> JsResult<'a, JsValue> {
+    let frame = with_call_endpoint(cx, |endpoint| {
+        if let Some(frame) = endpoint.incoming_video_sink.pop(demux_id) {
+            // For max dimensions of e.g. 1920x1080, also allow 1080x1920,
+            // in case someone has HD portrait video.
+            let (frame_short, frame_long) = minmax(frame.width(), frame.height());
+            let (max_short, max_long) = minmax(max_width, max_height);
+            if frame_short <= max_short && frame_long <= max_long {
+                return Some(frame);
+            }
+            if endpoint.most_recent_overlarge_frame_dimensions != (frame_short, frame_long) {
+                warn!(
+                    "dropping overlarge frames {}x{} ({}); this is likely a problem on the send side",
+                    frame.width(),
+                    frame.height(),
+                    demux_id,
+                );
+                endpoint.most_recent_overlarge_frame_dimensions = (frame_short, frame_long);
+            }
+        }
+        None
+    });
+
     if let Some(frame) = frame {
         let frame = frame.apply_rotation();
-        frame.to_rgba(rgba_buffer.as_mut_slice(&mut cx));
+        frame.to_rgba(rgba_buffer.as_mut_slice(cx));
         let js_width = cx.number(frame.width());
         let js_height = cx.number(frame.height());
-        let result = JsArray::new(&mut cx, 2);
-        result.set(&mut cx, 0, js_width)?;
-        result.set(&mut cx, 1, js_height)?;
+        let result = JsArray::new(cx, 2);
+        result.set(cx, 0, js_width)?;
+        result.set(cx, 1, js_height)?;
         Ok(result.upcast())
     } else {
         Ok(cx.undefined().upcast())
     }
+}
+
+#[allow(non_snake_case)]
+fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let rgba_buffer = cx.argument::<JsBuffer>(0)?;
+    let max_width = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32; // saturating cast
+    let max_height = cx.argument::<JsNumber>(2)?.value(&mut cx) as u32; // saturating cast
+    receive_video_frame(&mut cx, rgba_buffer, 0, max_width, max_height)
 }
 
 // Group Calls
@@ -1088,24 +1125,10 @@ fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let _client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let remote_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
-    let mut rgba_buffer = cx.argument::<JsBuffer>(2)?;
-
-    let frame = with_call_endpoint(&mut cx, |endpoint| {
-        endpoint.incoming_video_sink.pop(remote_demux_id)
-    });
-
-    if let Some(frame) = frame {
-        let frame = frame.apply_rotation();
-        frame.to_rgba(rgba_buffer.as_mut_slice(&mut cx));
-        let js_width = cx.number(frame.width());
-        let js_height = cx.number(frame.height());
-        let result = JsArray::new(&mut cx, 2);
-        result.set(&mut cx, 0, js_width)?;
-        result.set(&mut cx, 1, js_height)?;
-        Ok(result.upcast())
-    } else {
-        Ok(cx.undefined().upcast())
-    }
+    let rgba_buffer = cx.argument::<JsBuffer>(2)?;
+    let max_width = cx.argument::<JsNumber>(3)?.value(&mut cx) as u32; // saturating cast
+    let max_height = cx.argument::<JsNumber>(4)?.value(&mut cx) as u32; // saturating cast
+    receive_video_frame(&mut cx, rgba_buffer, remote_demux_id, max_width, max_height)
 }
 
 #[allow(non_snake_case)]
