@@ -9,8 +9,8 @@ import SignalCoreKit
 @available(iOSApplicationExtension, unavailable)
 public class VideoCaptureController {
     // The maximum video format allowable for any type of call.
-    static let maxCaptureWidth: Int32 = 1280
-    static let maxCaptureHeight: Int32 = 720
+    static let maxCaptureWidth: Int32 = 1920
+    static let maxCaptureHeight: Int32 = 1080
     static let maxCaptureFrameRate: Int32 = 30
 
     private let capturer = RTCCameraVideoCapturer()

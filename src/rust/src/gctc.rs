@@ -330,8 +330,8 @@ fn main() {
 
     std::thread::spawn(move || {
         for index in 0u64.. {
-            let width = 1280;
-            let height = 720;
+            let width = 1920;
+            let height = 1080;
             let rgba_data: Vec<u8> = (0..(width * height * 4))
                 .map(|i: u32| i.wrapping_add(index as u32) as u8)
                 .collect();

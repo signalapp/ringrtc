@@ -458,8 +458,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         // Define maximum output video format for 1:1 calls.
         videoSource.adaptOutputFormat(
-            toWidth: 1280,
-            height: 720,
+            toWidth: 1920,
+            height: 1080,
             fps: 30
         )
 
