@@ -65,29 +65,30 @@ describe('RingRTC', () => {
     };
     const age = 60 * 60;
     try {
-      const { reason, ageSec: reportedAge } = await new Promise(
-        (resolve, _reject) => {
-          RingRTC.handleAutoEndedIncomingCallRequest = (
-            _callId,
-            _remoteUserId,
-            reason,
-            ageSec
-          ) => {
-            resolve({ reason, ageSec });
-          };
-          RingRTC.handleCallingMessage(
-            'remote',
-            null,
-            4,
-            2,
-            age,
-            1,
-            offer,
-            Buffer.from([]),
-            Buffer.from([])
-          );
-        }
-      );
+      const { reason, ageSec: reportedAge } = await new Promise<{
+        reason: CallEndedReason;
+        ageSec: number;
+      }>((resolve, _reject) => {
+        RingRTC.handleAutoEndedIncomingCallRequest = (
+          _callId,
+          _remoteUserId,
+          reason,
+          ageSec
+        ) => {
+          resolve({ reason, ageSec });
+        };
+        RingRTC.handleCallingMessage(
+          'remote',
+          null,
+          4,
+          2,
+          age,
+          1,
+          offer,
+          Buffer.from([]),
+          Buffer.from([])
+        );
+      });
       assert.equal(reason, CallEndedReason.ReceivedOfferExpired);
       assert.equal(reportedAge, age);
     } finally {
@@ -105,29 +106,30 @@ describe('RingRTC', () => {
       supportsMultiRing: true,
     };
     try {
-      const { reason, ageSec: reportedAge } = await new Promise(
-        (resolve, _reject) => {
-          RingRTC.handleAutoEndedIncomingCallRequest = (
-            _callId,
-            _remoteUserId,
-            reason,
-            ageSec
-          ) => {
-            resolve({ reason, ageSec });
-          };
-          RingRTC.handleCallingMessage(
-            'remote',
-            null,
-            4,
-            2,
-            10,
-            2,
-            offer,
-            Buffer.from([]),
-            Buffer.from([])
-          );
-        }
-      );
+      const { reason, ageSec: reportedAge } = await new Promise<{
+        reason: CallEndedReason;
+        ageSec: number;
+      }>((resolve, _reject) => {
+        RingRTC.handleAutoEndedIncomingCallRequest = (
+          _callId,
+          _remoteUserId,
+          reason,
+          ageSec
+        ) => {
+          resolve({ reason, ageSec });
+        };
+        RingRTC.handleCallingMessage(
+          'remote',
+          null,
+          4,
+          2,
+          10,
+          2,
+          offer,
+          Buffer.from([]),
+          Buffer.from([])
+        );
+      });
       assert.equal(reason, CallEndedReason.Declined); // because we didn't set handleIncomingCall.
       assert.equal(reportedAge, 0);
     } finally {
