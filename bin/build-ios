@@ -209,13 +209,8 @@ then
   for TARGET in ${TARGETS}; do
     (
       cd "${RINGRTC_SRC_DIR}"/rust
-      # Disable linking for Catalyst targets by setting the linker to "echo".
-      # The sysinfo crate tries to build a cdylib, but Rust doesn't properly support that for Catalyst.
-      # But we don't need the cdylib, so we can skip that.
       # shellcheck disable=SC2046 # word splitting for cargo_flags
       CARGO_TARGET_DIR="${OUTPUT_DIR}"/build \
-        CARGO_TARGET_X86_64_APPLE_IOS_MACABI_LINKER=echo \
-        CARGO_TARGET_AARCH64_APPLE_IOS_MACABI_LINKER=echo \
         cargo rustc --target "${TARGET}" ${IS_RELEASE:+--release} $(cargo_flags "${TARGET}") --crate-type staticlib
       mkdir -p "${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc/${TARGET}"
       cp "${OUTPUT_DIR}/build/${TARGET}/${BUILD_TYPE}/libringrtc.a" "${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc/${TARGET}/"

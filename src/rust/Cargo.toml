@@ -48,7 +48,7 @@ hex               = { version = "0.4", features = ["serde"] }
 sha2              = { version = "0.10"   }
 static_assertions = { version = "1.1.0"  }
 subtle            = { version = "2.3.0"  }
-sysinfo           = { version = "0.27.7", default-features = false }
+sysinfo           = { version = "0.28.0", default-features = false }
 thiserror         = { version = "1.0.20" }
 tokio             = { version = "1.13.0", features = ["rt-multi-thread", "time"] }
 x25519-dalek      = { version = "1.1"    }
