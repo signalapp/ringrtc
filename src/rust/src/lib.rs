@@ -11,9 +11,6 @@
 //! call signaling transport.
 //!
 
-// This lint is under review, check in a future nightly update.
-#![allow(clippy::significant_drop_in_scrutinee)]
-
 #[macro_use]
 extern crate futures;
 
