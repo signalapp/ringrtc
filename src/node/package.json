@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rimraf dist",
-    "test": "electron-mocha --recursive dist/test --timeout 10000",
+    "test": "electron-mocha --renderer --recursive dist/test --timeout 10000",
     "eslint": "eslint --cache .",
     "lint": "yarn format --list-different && yarn eslint",
     "format": "prettier --write \"*.{css,js,json,md,scss,ts,tsx}\" \"./**/*.{css,js,json,md,scss,ts,tsx}\"",

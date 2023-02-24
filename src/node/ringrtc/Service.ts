@@ -48,6 +48,13 @@ class NativeCallManager {
           config.use_new_audio_device_module,
           fieldTrialsString
         );
+
+        if (process.platform === 'darwin') {
+          // Preload devices to work around
+          // https://bugs.chromium.org/p/chromium/issues/detail?id=1287628
+          window.navigator.mediaDevices.enumerateDevices();
+        }
+
         Object.defineProperty(this, Native.callEndpointPropertyKey, {
           configurable: true, // allows it to be changed
           value: callEndpoint,
