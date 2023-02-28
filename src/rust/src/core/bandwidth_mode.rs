@@ -51,12 +51,11 @@ impl BandwidthMode {
     }
 
     pub fn audio_encoder_config(&self) -> crate::webrtc::media::AudioEncoderConfig {
-        let (packet_size_ms, start_bitrate_bps, min_bitrate_bps, max_bitrate_bps) = match self {
-            BandwidthMode::Low => (40, 28_000, 16_000, 28_000),
-            BandwidthMode::Normal => (20, 32_000, 20_000, 32_000),
+        let (start_bitrate_bps, min_bitrate_bps, max_bitrate_bps) = match self {
+            BandwidthMode::Low => (28_000, 16_000, 28_000),
+            BandwidthMode::Normal => (32_000, 20_000, 32_000),
         };
         crate::webrtc::media::AudioEncoderConfig {
-            packet_size_ms,
             start_bitrate_bps,
             min_bitrate_bps,
             max_bitrate_bps,
