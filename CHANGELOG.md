@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.25.1
+
+- Update to WebRTC 5481 (m110)
+
+- Use default ptime for all bandwidth modes
+
+- Desktop: Add workaround for slow call to enumerateDevices
+
+- Update dependencies (Rust and Electron)
+
 ## v2.25.0
 
 - Allow SFU to return multiple ICE candidates (for IPv6 support)
