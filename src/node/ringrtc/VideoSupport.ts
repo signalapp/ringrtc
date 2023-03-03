@@ -312,7 +312,7 @@ export class GumVideoCapturer {
     this.spawnedSenderRunning = true;
     (async () => {
       try {
-        while (sender === this.sender && mediaStream == this.mediaStream) {
+        while (mediaStream == this.mediaStream) {
           const { done, value: frame } = await reader.read();
           if (done) {
             break;
@@ -328,7 +328,10 @@ export class GumVideoCapturer {
               );
               break;
             }
-            frame.copyTo(buffer);
+            await frame.copyTo(buffer);
+            if (sender !== this.sender) {
+              break;
+            }
             sender.sendVideoFrame(
               frame.codedWidth,
               frame.codedHeight,
