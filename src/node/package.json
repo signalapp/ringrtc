@@ -14,7 +14,7 @@
     "test": "electron-mocha --renderer --recursive dist/test --timeout 10000",
     "eslint": "eslint --cache .",
     "lint": "yarn format --list-different && yarn eslint",
-    "format": "prettier --write \"*.{css,js,json,md,scss,ts,tsx}\" \"./**/*.{css,js,json,md,scss,ts,tsx}\"",
+    "format": "prettier --write .",
     "install": "node scripts/fetch-prebuild.js",
     "prepublishOnly": "node scripts/prepublish.js"
   },
