@@ -1,8 +1,6 @@
 // Copyright 2018-2021 Signal Messenger, LLC
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// For reference: https://github.com/airbnb/javascript
-
 const rules = {
   'comma-dangle': [
     'error',
@@ -17,9 +15,6 @@ const rules = {
 
   // prevents us from accidentally checking in exclusive tests (`.only`):
   'mocha/no-exclusive-tests': 'error',
-
-  // encourage consistent use of `async` / `await` instead of `then`
-  'more/no-then': 'error',
 
   // it helps readability to put public API at top,
   'no-use-before-define': 'off',
@@ -44,61 +39,22 @@ const rules = {
   ],
 
   'no-continue': 'off',
+  'no-bitwise': 'off',
+  'no-plusplus': 'off',
 
   // Prettier overrides:
   'arrow-parens': 'off',
   'function-paren-newline': 'off',
-  'max-len': [
-    'error',
-    {
-      // Prettier generally limits line length to 80 but sometimes goes over.
-      // The `max-len` plugin doesn’t let us omit `code` so we set it to a
-      // high value as a buffer to let Prettier control the line length:
-      code: 999,
-      // We still want to limit comments as before:
-      comments: 90,
-      ignoreUrls: true,
-    },
-  ],
-
-  'react/jsx-props-no-spreading': 'off',
-
-  // Updated to reflect future airbnb standard
-  // Allows for declaring defaultProps inside a class
-  'react/static-property-placement': ['error', 'static public field'],
-
-  // JIRA: DESKTOP-657
-  'react/sort-comp': 'off',
-
-  // We don't have control over the media we're sharing, so can't require
-  // captions.
-  'jsx-a11y/media-has-caption': 'off',
 
   // We prefer named exports
   'import/prefer-default-export': 'off',
 
-  // Prefer functional components with default params
-  'react/require-default-props': 'off',
-
-  'jsx-a11y/label-has-associated-control': ['error', { assert: 'either' }],
-
   'no-restricted-syntax': [
     'error',
-    {
-      selector: 'TSInterfaceDeclaration',
-      message:
-        'Prefer `type`. Interfaces are mutable and less powerful, so we prefer `type` for simplicity.',
-    },
-    // Defaults
     {
       selector: 'ForInStatement',
       message:
         'for..in loops iterate over the entire prototype chain, which is virtually never what you want. Use Object.{keys,values,entries}, and iterate over the resulting array.',
-    },
-    {
-      selector: 'ForOfStatement',
-      message:
-        'iterators/generators require regenerator-runtime, which is too heavyweight for this guide to allow them. Separately, loops should be avoided in favor of array iterations.',
     },
     {
       selector: 'LabeledStatement',
@@ -112,6 +68,13 @@ const rules = {
     },
   ],
   curly: 'error',
+
+  'prefer-template': 'error',
+
+  // Things present in our existing code that we may want to be stricter about in the future.
+  eqeqeq: 'off',
+  // The RingRTC singleton is used in VideoSupport; maybe we should untangle this.
+  'import/no-cycle': 'off',
 };
 
 const typescriptRules = {
@@ -122,7 +85,7 @@ const typescriptRules = {
   // Overrides recommended by typescript-eslint
   //   https://github.com/typescript-eslint/typescript-eslint/releases/tag/v4.0.0
   '@typescript-eslint/no-redeclare': 'error',
-  '@typescript-eslint/no-shadow': 'error',
+  '@typescript-eslint/no-shadow': ['error', { ignoreOnInitialization: true }],
   '@typescript-eslint/no-useless-constructor': ['error'],
   'no-shadow': 'off',
   'no-useless-constructor': 'off',
@@ -135,69 +98,45 @@ const typescriptRules = {
 
   // Already enforced by TypeScript
   'consistent-return': 'off',
+
+  // Things present in our existing code that we may want to be stricter about in the future.
+  '@typescript-eslint/no-explicit-any': 'off',
+  '@typescript-eslint/no-unsafe-assignment': 'off',
+  '@typescript-eslint/no-unsafe-argument': 'off',
+  '@typescript-eslint/no-unsafe-member-access': 'off',
+  '@typescript-eslint/no-unsafe-call': 'off',
+  '@typescript-eslint/restrict-template-expressions': 'off',
+  '@typescript-eslint/no-use-before-define': 'off',
 };
 
 module.exports = {
   root: true,
+  env: {
+    node: true,
+    es2018: true,
+  },
   settings: {
-    react: {
-      version: 'detect',
-    },
     'import/core-modules': ['electron'],
   },
 
-  extends: ['airbnb-base', 'prettier'],
+  extends: ['eslint:recommended', 'prettier'],
 
-  plugins: ['mocha', 'more'],
+  plugins: ['import', 'mocha', 'more'],
 
   overrides: [
     {
-      files: ['ts/**/*.ts', 'ts/**/*.tsx', 'app/**/*.ts'],
+      files: ['**/*.ts'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
         project: 'tsconfig.json',
-        ecmaFeatures: {
-          jsx: true,
-        },
-        ecmaVersion: 2018,
         sourceType: 'module',
       },
       plugins: ['@typescript-eslint'],
       extends: [
-        'eslint:recommended',
         'plugin:@typescript-eslint/recommended',
-        'plugin:react/recommended',
-        'airbnb-typescript-prettier',
+        'plugin:@typescript-eslint/recommended-requiring-type-checking',
       ],
       rules: typescriptRules,
-    },
-    {
-      files: ['sticker-creator/**/*.ts', 'sticker-creator/**/*.tsx'],
-      parser: '@typescript-eslint/parser',
-      parserOptions: {
-        project: './sticker-creator/tsconfig.json',
-        ecmaFeatures: {
-          jsx: true,
-        },
-        ecmaVersion: 2018,
-        sourceType: 'module',
-      },
-      plugins: ['@typescript-eslint'],
-      extends: [
-        'eslint:recommended',
-        'plugin:@typescript-eslint/recommended',
-        'plugin:react/recommended',
-        'airbnb-typescript-prettier',
-      ],
-      rules: typescriptRules,
-    },
-    {
-      files: ['**/*.stories.tsx', 'ts/build/**', 'ts/test-*/**'],
-      rules: {
-        ...typescriptRules,
-        'import/no-extraneous-dependencies': 'off',
-        'react/no-array-index-key': 'off',
-      },
     },
   ],
 

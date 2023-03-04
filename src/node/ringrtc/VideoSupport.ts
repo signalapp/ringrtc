@@ -4,7 +4,6 @@
 //
 
 import { RingRTC } from '../index';
-import { Call } from './Service';
 
 // Match a React.RefObject without relying on React.
 interface Ref<T> {
@@ -18,6 +17,7 @@ export enum VideoPixelFormatEnum {
   Rgba = 2,
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function videoPixelFormatFromEnum(
   format: VideoPixelFormatEnum
 ): VideoPixelFormat {
@@ -80,9 +80,9 @@ interface VideoFrameSender {
 }
 
 export class GumVideoCaptureOptions {
-  maxWidth: number = 640;
-  maxHeight: number = 480;
-  maxFramerate: number = 30;
+  maxWidth = 640;
+  maxHeight = 480;
+  maxFramerate = 30;
   preferredDeviceId?: string;
   screenShareSourceId?: string;
 }
@@ -93,7 +93,7 @@ export class GumVideoCapturer {
   private captureOptions?: GumVideoCaptureOptions;
   private sender?: VideoFrameSender;
   private mediaStream?: MediaStream;
-  private spawnedSenderRunning: boolean = false;
+  private spawnedSenderRunning = false;
   private preferredDeviceId?: string;
   private updateLocalPreviewIntervalId?: any;
 
@@ -101,11 +101,11 @@ export class GumVideoCapturer {
     this.defaultCaptureOptions = defaultCaptureOptions;
   }
 
-  capturing() {
+  capturing(): boolean {
     return this.captureOptions != undefined;
   }
 
-  setLocalPreview(localPreview: Ref<HTMLVideoElement> | undefined) {
+  setLocalPreview(localPreview: Ref<HTMLVideoElement> | undefined): void {
     const oldLocalPreview = this.localPreview?.current;
     if (oldLocalPreview) {
       oldLocalPreview.srcObject = null;
@@ -129,7 +129,7 @@ export class GumVideoCapturer {
   }
 
   enableCapture(): void {
-    // tslint:disable no-floating-promises
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     this.startCapturing(this.defaultCaptureOptions);
   }
 
@@ -137,7 +137,7 @@ export class GumVideoCapturer {
     sender: VideoFrameSender,
     options?: GumVideoCaptureOptions
   ): void {
-    // tslint:disable no-floating-promises
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     this.startCapturing(options ?? this.defaultCaptureOptions);
     this.startSending(sender);
   }
@@ -152,14 +152,15 @@ export class GumVideoCapturer {
     this.updateLocalPreviewIntervalId = undefined;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async setPreferredDevice(deviceId: string): Promise<void> {
     this.preferredDeviceId = deviceId;
 
     if (this.captureOptions) {
-      const captureOptions = this.captureOptions;
-      const sender = this.sender;
+      const { captureOptions, sender } = this;
 
       this.disable();
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
       this.startCapturing(captureOptions);
       if (sender) {
         this.startSending(sender);
@@ -167,7 +168,7 @@ export class GumVideoCapturer {
     }
   }
 
-  async enumerateDevices(): Promise<MediaDeviceInfo[]> {
+  async enumerateDevices(): Promise<Array<MediaDeviceInfo>> {
     const devices = await window.navigator.mediaDevices.enumerateDevices();
     const cameras = devices.filter(d => d.kind == 'videoinput');
     return cameras;
@@ -175,7 +176,7 @@ export class GumVideoCapturer {
 
   private getUserMedia(options: GumVideoCaptureOptions): Promise<MediaStream> {
     // TODO: Figure out a better way to make typescript accept "mandatory".
-    let constraints: any = {
+    const constraints: any = {
       audio: false,
       video: {
         deviceId: options.preferredDeviceId ?? this.preferredDeviceId,
@@ -264,7 +265,7 @@ export class GumVideoCapturer {
     }
     RingRTC.logInfo('stopCapturing()');
     this.captureOptions = undefined;
-    if (!!this.mediaStream) {
+    if (this.mediaStream) {
       for (const track of this.mediaStream.getVideoTracks()) {
         // Make the light turn off faster
         track.stop();
@@ -279,7 +280,7 @@ export class GumVideoCapturer {
     if (this.sender === sender) {
       return;
     }
-    if (!!this.sender) {
+    if (this.sender) {
       // If we're replacing an existing sender, make sure we stop the
       // current setInterval loop before starting another one.
       this.stopSending();
@@ -300,7 +301,7 @@ export class GumVideoCapturer {
     if (track.readyState === 'ended') {
       this.stopCapturing();
       RingRTC.logError(
-        `spawnSender(): Video track ended before spawning sender`
+        'spawnSender(): Video track ended before spawning sender'
       );
       return;
     }
@@ -310,6 +311,7 @@ export class GumVideoCapturer {
     }).readable.getReader();
     const buffer = Buffer.alloc(MAX_VIDEO_CAPTURE_BUFFER_SIZE);
     this.spawnedSenderRunning = true;
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     (async () => {
       try {
         while (mediaStream == this.mediaStream) {
@@ -374,13 +376,13 @@ export class GumVideoCapturer {
       return;
     }
 
-    if (mediaStream) {
+    if (mediaStream && this.captureOptions) {
       localPreview.srcObject = mediaStream;
       if (localPreview.width === 0) {
-        localPreview.width = this.captureOptions!.maxWidth;
+        localPreview.width = this.captureOptions.maxWidth;
       }
       if (localPreview.height === 0) {
-        localPreview.height = this.captureOptions!.maxHeight;
+        localPreview.height = this.captureOptions.maxHeight;
       }
     } else {
       localPreview.srcObject = null;
@@ -407,7 +409,7 @@ export class CanvasVideoRenderer {
     this.buffer = Buffer.alloc(MAX_VIDEO_CAPTURE_BUFFER_SIZE);
   }
 
-  setCanvas(canvas: Ref<HTMLCanvasElement> | undefined) {
+  setCanvas(canvas: Ref<HTMLCanvasElement> | undefined): void {
     this.canvas = canvas;
   }
 
@@ -415,7 +417,7 @@ export class CanvasVideoRenderer {
     if (this.source === source) {
       return;
     }
-    if (!!this.source) {
+    if (this.source) {
       // If we're replacing an existing source, make sure we stop the
       // current rAF loop before starting another one.
       if (this.rafId) {
@@ -426,7 +428,7 @@ export class CanvasVideoRenderer {
     this.requestAnimationFrameCallback();
   }
 
-  disable() {
+  disable(): void {
     this.renderBlack();
     this.source = undefined;
     if (this.rafId) {

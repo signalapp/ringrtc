@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
+
 import { assert, expect, use } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import { randomBytes } from 'crypto';
@@ -69,6 +71,7 @@ describe('RingRTC', () => {
         reason: CallEndedReason;
         ageSec: number;
       }>((resolve, _reject) => {
+        /* eslint-disable @typescript-eslint/no-shadow */
         RingRTC.handleAutoEndedIncomingCallRequest = (
           _callId,
           _remoteUserId,
@@ -77,6 +80,7 @@ describe('RingRTC', () => {
         ) => {
           resolve({ reason, ageSec });
         };
+        /* eslint-enable @typescript-eslint/no-shadow */
         RingRTC.handleCallingMessage(
           'remote',
           null,
@@ -110,6 +114,7 @@ describe('RingRTC', () => {
         reason: CallEndedReason;
         ageSec: number;
       }>((resolve, _reject) => {
+        /* eslint-disable @typescript-eslint/no-shadow */
         RingRTC.handleAutoEndedIncomingCallRequest = (
           _callId,
           _remoteUserId,
@@ -118,6 +123,7 @@ describe('RingRTC', () => {
         ) => {
           resolve({ reason, ageSec });
         };
+        /* eslint-enable @typescript-eslint/no-shadow */
         RingRTC.handleCallingMessage(
           'remote',
           null,
@@ -151,7 +157,7 @@ describe('RingRTC', () => {
   });
 
   it('can establish outgoing call', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
+    const calling = new CallingClass(user1_name, user1_id);
     calling.initialize();
     initializeSpies();
 
@@ -177,7 +183,7 @@ describe('RingRTC', () => {
   });
 
   it('can establish incoming call', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
+    const calling = new CallingClass(user1_name, user1_id);
     calling.initialize();
     initializeSpies();
 
@@ -214,7 +220,7 @@ describe('RingRTC', () => {
   });
 
   it('outgoing call wins glare when incoming call id is lower', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
+    const calling = new CallingClass(user1_name, user1_id);
     calling.initialize();
     initializeSpies();
 
@@ -222,7 +228,7 @@ describe('RingRTC', () => {
   });
 
   it('outgoing call wins glare when incoming call id is lower even when outgoing call settings are delayed', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
+    const calling = new CallingClass(user1_name, user1_id);
     calling.initialize();
     initializeSpies();
 
@@ -230,7 +236,7 @@ describe('RingRTC', () => {
   });
 
   it('outgoing call loses glare when incoming call id is higher even when outgoing call settings are delayed', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
+    const calling = new CallingClass(user1_name, user1_id);
     calling.initialize();
     initializeSpies();
 
@@ -238,7 +244,7 @@ describe('RingRTC', () => {
   });
 
   it('outgoing call loses glare when incoming call id is higher', async () => {
-    let calling = new CallingClass(user1_name, user1_id);
+    const calling = new CallingClass(user1_name, user1_id);
     calling.initialize();
     initializeSpies();
 
@@ -257,12 +263,12 @@ describe('RingRTC', () => {
     const outgoingCallLatch = countDownLatch(1);
     calling
       .startOutgoingDirectCall(user2_id)
-      .then(result => {
+      .then(_result => {
         log('Outgoing call succeeded as expected');
         outgoingCallLatch.countDown();
       })
       .catch(e => {
-        assert.fail('Outgoing call should not have failed');
+        assert.fail(`Outgoing call should not have failed: ${e}`);
       });
 
     await outgoingCallLatch.finished;

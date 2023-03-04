@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+/* eslint-disable no-console, @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
+
 import {
   BandwidthMode,
   Call,
@@ -49,7 +51,7 @@ export class CallingClass {
 
   private setupCallCallbacks(call: Call) {
     // eslint-disable-next-line no-param-reassign
-    call.handleStateChanged = async () => {
+    call.handleStateChanged = () => {
       log('handleCallStateChanged');
       log(`call.state === ${call.state}`);
       if (call.state === CallState.Ended) {
@@ -77,7 +79,7 @@ export class CallingClass {
     message: CallingMessage,
     urgency?: CallMessageUrgency
   ): Promise<boolean> {
-    log('handleOutgoingSignaling remoteUserId: ' + remoteUserId);
+    log(`handleOutgoingSignaling remoteUserId: ${remoteUserId}`);
 
     return true;
   }
@@ -100,7 +102,7 @@ export class CallingClass {
     return true;
   }
 
-  private async handleAutoEndedIncomingCallRequest(
+  private handleAutoEndedIncomingCallRequest(
     callId: CallId,
     remoteUserId: UserId,
     reason: CallEndedReason,
@@ -111,7 +113,7 @@ export class CallingClass {
     log('handleAutoEndedIncomingCallRequest');
   }
 
-  private async handleLogMessage(
+  private handleLogMessage(
     level: CallLogLevel,
     fileName: string,
     line: number,
@@ -135,7 +137,7 @@ export class CallingClass {
     }
   }
 
-  private async handleSendHttpRequest(
+  private handleSendHttpRequest(
     requestId: number,
     url: string,
     method: HttpMethod,
@@ -145,30 +147,30 @@ export class CallingClass {
     log('handleSendHttpRequest');
   }
 
-  private async handleSendCallMessage(
+  private handleSendCallMessage(
     recipient: Uint8Array,
     data: Uint8Array,
     urgency: CallMessageUrgency
-  ): Promise<boolean> {
+  ): boolean {
     log('handleSendCallMessage');
 
     return true;
   }
 
-  private async handleSendCallMessageToGroup(
+  private handleSendCallMessageToGroup(
     groupIdBytes: Buffer,
     data: Buffer,
     urgency: CallMessageUrgency
-  ): Promise<void> {
+  ): void {
     log('handleSendCallMessageToGroup');
   }
 
-  private async handleGroupCallRingUpdate(
+  private handleGroupCallRingUpdate(
     groupIdBytes: Buffer,
     ringId: bigint,
     ringerBytes: Buffer,
     update: RingUpdate
-  ): Promise<void> {
+  ): void {
     log('handleGroupCallRingUpdate');
   }
 
@@ -178,16 +180,12 @@ export class CallingClass {
   private async getCallSettings(isIncoming: boolean): Promise<CallSettings> {
     if (isIncoming) {
       log(
-        'getCallSettings delayed by ' +
-          this._delayIncomingCallSettingsRequest.toString() +
-          'ms'
+        `getCallSettings delayed by ${this._delayIncomingCallSettingsRequest}ms`
       );
       await sleep(this._delayIncomingCallSettingsRequest);
     } else {
       log(
-        'getCallSettings delayed by ' +
-          this._delayOutgoingCallSettingsRequest.toString() +
-          'ms'
+        `getCallSettings delayed by ${this._delayOutgoingCallSettingsRequest}ms`
       );
       await sleep(this._delayOutgoingCallSettingsRequest);
     }
@@ -204,7 +202,7 @@ export class CallingClass {
   ////////////////////////////////////////////////////////////////////////////////
   // Actions
 
-  initialize() {
+  initialize(): void {
     log('initialize');
 
     RingRTC.setConfig({
@@ -242,7 +240,7 @@ export class CallingClass {
       this._localDeviceId
     );
 
-    log('Outgoing callId ' + Long.fromValue(call.callId).toString());
+    log(`Outgoing callId ${Long.fromValue(call.callId)}`);
 
     RingRTC.setOutgoingAudio(call.callId, true);
 
