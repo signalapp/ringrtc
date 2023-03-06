@@ -915,6 +915,7 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 
 // How often to get and log stats.
 const STATS_INTERVAL: Duration = Duration::from_secs(10);
+const STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
 
 // How often to request an updated membership proof (24 hours).
 const MEMBERSHIP_PROOF_REQUEST_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -1995,7 +1996,7 @@ impl Client {
                         // We just now appeared in the participants list, and possibly even updated
                         // the eraId.
                         Self::request_remote_devices_as_soon_as_possible(state);
-                        state.next_stats_time = Some(Instant::now() + STATS_INTERVAL);
+                        state.next_stats_time = Some(Instant::now() + STATS_INITIAL_OFFSET);
                     }
                     JoinState::Joined(_) => {
                         warn!("The SFU completed joining more than once.");

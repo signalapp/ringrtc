@@ -62,6 +62,9 @@ const TICK_INTERVAL: Duration = Duration::from_millis(TICK_INTERVAL_MILLIS);
 const POLL_STATS_INTERVAL: Duration = Duration::from_secs(10);
 const POLL_STATS_INTERVAL_TICKS: u64 =
     POLL_STATS_INTERVAL.as_millis() as u64 / TICK_INTERVAL_MILLIS;
+const POLL_STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
+const POLL_STATS_INITIAL_OFFSET_TICKS: u64 =
+    POLL_STATS_INITIAL_OFFSET.as_millis() as u64 / TICK_INTERVAL_MILLIS;
 
 /// How often to retransmit RTP messages.
 const SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS: u64 = 1000;
@@ -1120,7 +1123,7 @@ where
             self.send_latest_rtp_data_message(&mut webrtc)?;
         }
 
-        if ticks_elapsed % POLL_STATS_INTERVAL_TICKS == 0 {
+        if ticks_elapsed % POLL_STATS_INTERVAL_TICKS == POLL_STATS_INITIAL_OFFSET_TICKS {
             if let Some(observer) = webrtc.stats_observer.as_ref() {
                 let _ = webrtc.peer_connection()?.get_stats(observer);
             } else {
