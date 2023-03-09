@@ -29,6 +29,11 @@ else
     exit
 fi
 
+if [ -f out/release/libringrtc/ringrtc.h ] && [ ! -L out/release/libringrtc/ringrtc.h ]; then
+    echo 'Existing RingRTC build detected; assuming local development' >&2
+    exit
+fi
+
 echo 'using' "${PREBUILD_DIR}" 'as cache directory' >&2
 
 mkdir -p "${PREBUILD_DIR}"
