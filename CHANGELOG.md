@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.25.2
+
+- Node: Ensure that a frame is fully copied before sending it to WebRTC
+
+- Node: Clean up our eslint config, and fix uncovered issues
+
+- Log stats 2sec into a call, then every 10sec after
+
+- Build improvements
+
 ## v2.25.1
 
 - Update to WebRTC 5481 (m110)
