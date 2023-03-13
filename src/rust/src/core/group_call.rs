@@ -995,12 +995,11 @@ impl Client {
                 // but we can't uses dashes due to the sfu.
                 let local_ice_ufrag = random_alphanumeric(4);
                 let local_ice_pwd = random_alphanumeric(22);
-                let hide_ip = false;
                 let ice_server = IceServer::none();
                 let peer_connection = peer_connection_factory
                     .create_peer_connection(
                         peer_connection_observer,
-                        hide_ip,
+                        pcf::RffiPeerConnectionKind::GroupCall,
                         &ice_server,
                         outgoing_audio_track,
                         outgoing_video_track,

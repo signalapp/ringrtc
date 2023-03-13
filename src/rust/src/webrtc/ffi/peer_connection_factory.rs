@@ -9,7 +9,7 @@ use crate::webrtc::ffi::peer_connection::RffiPeerConnection;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
 #[cfg(feature = "simnet")]
 use crate::webrtc::injectable_network::RffiInjectableNetwork;
-use crate::webrtc::peer_connection_factory::RffiIceServer;
+use crate::webrtc::peer_connection_factory::{RffiIceServer, RffiPeerConnectionKind};
 #[cfg(feature = "native")]
 use std::os::raw::c_char;
 
@@ -58,7 +58,7 @@ extern "C" {
     pub fn Rust_createPeerConnection(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
-        hide_ip: bool,
+        kind: RffiPeerConnectionKind,
         ice_server: RffiIceServer,
         outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
         outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,

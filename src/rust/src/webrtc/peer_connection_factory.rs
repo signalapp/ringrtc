@@ -46,6 +46,13 @@ pub struct RffiIceServer {
     pub urls_size: usize,
 }
 
+#[repr(u8)]
+pub enum RffiPeerConnectionKind {
+    Direct,
+    Relayed,
+    GroupCall,
+}
+
 #[derive(Clone, Debug)]
 pub struct IceServer {
     username: CString,
@@ -205,7 +212,7 @@ impl PeerConnectionFactory {
     pub fn create_peer_connection<T: PeerConnectionObserverTrait>(
         &self,
         pc_observer: PeerConnectionObserver<T>,
-        hide_ip: bool,
+        kind: RffiPeerConnectionKind,
         ice_servers: &IceServer,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
@@ -227,7 +234,7 @@ impl PeerConnectionFactory {
             pcf::Rust_createPeerConnection(
                 self.rffi.as_borrowed(),
                 pc_observer_rffi.borrow(),
-                hide_ip,
+                kind,
                 ice_servers.rffi(),
                 outgoing_audio_track.rffi().as_borrowed(),
                 outgoing_video_track

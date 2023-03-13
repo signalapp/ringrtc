@@ -23,7 +23,9 @@ use crate::lite::{
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
 use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
-use crate::webrtc::peer_connection_factory::{IceServer, PeerConnectionFactory};
+use crate::webrtc::peer_connection_factory::{
+    IceServer, PeerConnectionFactory, RffiPeerConnectionKind,
+};
 use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
 // This serves as the Platform::AppCallContext
@@ -421,9 +423,14 @@ impl Platform for NativePlatform {
             true,  /* enable_video_frame_event */
             true,  /* enable_video_frame_content */
         )?;
+        let kind = if context.hide_ip {
+            RffiPeerConnectionKind::Relayed
+        } else {
+            RffiPeerConnectionKind::Direct
+        };
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,
-            context.hide_ip,
+            kind,
             &context.ice_server,
             context.outgoing_audio_track.clone(),
             Some(context.outgoing_video_track.clone()),
