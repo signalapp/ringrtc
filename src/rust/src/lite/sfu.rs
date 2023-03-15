@@ -157,6 +157,8 @@ struct SerializedJoinResponse {
     server_dhe_pub_key: [u8; 32],
     #[serde(rename = "callCreator", default)]
     call_creator: String,
+    #[serde(rename = "conferenceId")]
+    era_id: String,
 }
 
 #[derive(Debug)]
@@ -167,6 +169,7 @@ pub struct JoinResponse {
     pub server_ice_pwd: String,
     pub server_dhe_pub_key: [u8; 32],
     pub call_creator: Option<UserId>,
+    pub era_id: String,
 }
 
 impl JoinResponse {
@@ -190,6 +193,7 @@ impl JoinResponse {
                 opaque_user_id_mappings,
                 &deserialized.call_creator,
             ),
+            era_id: deserialized.era_id,
         }
     }
 }

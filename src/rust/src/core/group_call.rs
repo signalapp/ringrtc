@@ -19,7 +19,7 @@ use hkdf::Hkdf;
 use num_enum::TryFromPrimitive;
 use prost::Message;
 use rand::{rngs::OsRng, Rng};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 use crate::{common::CallId, core::util::uuid_to_string};
@@ -64,6 +64,27 @@ pub type GroupIdRef<'a> = &'a [u8];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RingId(i64);
+
+impl RingId {
+    pub fn from_era_id(era_id: &str) -> Self {
+        // Happy path: 16 hex digits
+        if era_id.len() == 16 {
+            if let Ok(i) = u64::from_str_radix(era_id, 16) {
+                // We reserve 0 as an invalid ring ID; treat it as the equally-unlikely -1.
+                // This does make -1 twice as likely! Out of 2^64 - 1 possibilities.
+                if i == 0 {
+                    return Self(-1);
+                }
+                return Self(i as i64);
+            }
+        }
+        // Sad path: arbitrary strings get a truncated hash as their ring ID.
+        // We have no current plans to change era IDs from being 16 hex digits,
+        // but nothing enforces this today, and we may want to change them in the future.
+        let truncated_hash: [u8; 8] = Sha256::digest(era_id).as_slice()[..8].try_into().unwrap();
+        Self(i64::from_le_bytes(truncated_hash))
+    }
+}
 
 impl From<i64> for RingId {
     fn from(raw_id: i64) -> Self {
@@ -418,6 +439,7 @@ pub struct Joined {
     pub server_dhe_pub_key: [u8; 32],
     pub hkdf_extra_info: Vec<u8>,
     pub creator: Option<UserId>,
+    pub era_id: String,
 }
 
 /// Communicates with the SFU using HTTP.
@@ -474,6 +496,7 @@ impl HttpSfuClient {
                         local_demux_id: join_response.client_demux_id,
                         server_dhe_pub_key: join_response.server_dhe_pub_key,
                         creator: join_response.call_creator,
+                        era_id: join_response.era_id,
                         hkdf_extra_info,
                     }),
                     Err(http_status) if http_status == sfu::ResponseCode::RequestFailed => {
@@ -768,7 +791,7 @@ enum OutgoingRingState {
     /// The initial state
     Unknown,
     /// The local client is permitted to send a ring if they choose, but has not requested one.
-    PermittedToRing,
+    PermittedToRing { ring_id: RingId },
     /// The local client has requested to ring, but it is unknown whether it is permitted.
     WantsToRing { recipient: Option<UserId> },
     /// The local client has, in fact, sent a ring (and may still cancel it).
@@ -1478,14 +1501,8 @@ impl Client {
             state.client_id, recipient
         );
 
-        match &state.outgoing_ring_state {
-            OutgoingRingState::PermittedToRing => {
-                // All ring IDs are possible except "0".
-                let ring_id = RingId::from(
-                    rand::rngs::OsRng
-                        .gen_range(i64::MIN, i64::MAX)
-                        .wrapping_sub(i64::MAX),
-                );
+        match state.outgoing_ring_state {
+            OutgoingRingState::PermittedToRing { ring_id } => {
                 let message = protobuf::signaling::CallMessage {
                     ring_intention: Some(protobuf::signaling::call_message::RingIntention {
                         group_id: Some(state.group_id.clone()),
@@ -1522,7 +1539,7 @@ impl Client {
                     state.client_id
                 );
             }
-            OutgoingRingState::HasSentRing { ring_id } => {
+            OutgoingRingState::HasSentRing { ring_id, .. } => {
                 warn!(
                     "repeat ring request not supported (client_id: {}, previous ring id: {})",
                     state.client_id, ring_id
@@ -1898,6 +1915,7 @@ impl Client {
                 server_dhe_pub_key,
                 hkdf_extra_info,
                 creator,
+                era_id,
             }) = joined
             {
                 match state.connection_state {
@@ -1979,7 +1997,9 @@ impl Client {
                                     .unwrap_or(false)
                             };
                             let new_ring_state = if creator_is_self {
-                                OutgoingRingState::PermittedToRing
+                                OutgoingRingState::PermittedToRing {
+                                    ring_id: RingId::from_era_id(&era_id),
+                                }
                             } else {
                                 OutgoingRingState::NotPermittedToRing
                             };
@@ -3592,6 +3612,7 @@ mod tests {
         local_demux_id: DemuxId,
         call_creator: Option<UserId>,
         request_count: Arc<AtomicU64>,
+        era_id: String,
     }
 
     impl FakeSfuClient {
@@ -3605,6 +3626,7 @@ mod tests {
                 local_demux_id,
                 call_creator,
                 request_count: Arc::new(AtomicU64::new(0)),
+                era_id: "1111111111111111".to_string(),
             }
         }
     }
@@ -3623,6 +3645,7 @@ mod tests {
                 server_dhe_pub_key: [0u8; 32],
                 hkdf_extra_info: b"hkdf_extra_info".to_vec(),
                 creator: self.call_creator.clone(),
+                era_id: self.era_id.clone(),
             }));
         }
         fn peek(&mut self, _peek_result_callback: PeekResultCallback) {
@@ -5764,14 +5787,14 @@ mod tests {
 
     #[test]
     fn group_ring() {
-        fn ring_once() -> RingId {
+        fn ring_once(era_id: &str) -> RingId {
             let user_id = vec![1];
             let demux_id = 1;
-            let client1 = TestClient::with_sfu_client(
-                user_id.clone(),
-                demux_id,
-                FakeSfuClient::new(demux_id, Some(user_id)),
-            );
+
+            let mut sfu_client = FakeSfuClient::new(demux_id, Some(user_id.clone()));
+            sfu_client.era_id = era_id.to_string();
+
+            let client1 = TestClient::with_sfu_client(user_id, demux_id, sfu_client);
             client1.connect_join_and_wait_until_joined();
 
             client1.client.ring(None);
@@ -5803,10 +5826,16 @@ mod tests {
             }
         }
 
-        // Try twice to make sure we get different ring IDs
-        let first_ring_id = ring_once();
-        let second_ring_id = ring_once();
+        // Check that the ring IDs are derived from the era ID.
+        let first_ring_id = ring_once("1122334455667788");
+        let first_ring_id_again = ring_once("1122334455667788");
+        assert_eq!(first_ring_id, first_ring_id_again);
+        let second_ring_id = ring_once("99aabbccddeeff00");
         assert_ne!(first_ring_id, second_ring_id, "ring IDs were the same");
+
+        // Check that non-hex era IDs are okay too, just in case.
+        let non_hex_ring_id = ring_once("mesozoic");
+        assert_ne!(first_ring_id, non_hex_ring_id, "ring IDs were the same");
     }
 
     #[test]
