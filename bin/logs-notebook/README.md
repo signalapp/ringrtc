@@ -43,16 +43,17 @@ associated value is a `DataFrame` of the parsed CSV values.
 
 The following methods are also available on `Call`:
 
-|Method               |Description|
-|---------------------|-----------|
-|`ssrc`               |Prints the SSRCs of the audio and the lowest layer video stream of the participant who submitted the logs.|
-|`describe_connection`|Plots the `connection` stats.|
-|`describe_audio_send`|Plots the `audio,send` stats.|
-|`describe_audio_recv`|Plots the `audio,recv` stats. For group calls, the SSRC of the desired stream needs to be passed.|
-|`describe_video_send`|Plots the `video,send` stats. All video layers are plotted by default for group calls. Pass the index of the layer to show only one.|
-|`describe_video_recv`|Plots the `video,recv` stats. For group calls, the SSRC of the desired stream needs to be passed.|
-|`describe_sfu_recv`  |Plots the `sfu,recv` stats. Only for group calls.|
-|`logs`               |Prints the logs for the call that contain the passed query.|
+|Method                              |Description|
+|------------------------------------|-----------|
+|`ssrc`                              |Prints the SSRCs of the audio and the lowest layer video stream of the participant who submitted the logs.|
+|`describe_connection`               |Plots the `connection` stats.|
+|`describe_audio_send`               |Plots the `audio,send` stats.|
+|`describe_audio_recv`               |Plots the `audio,recv` stats. For group calls, the SSRC of the desired stream needs to be passed.|
+|`describe_video_send`               |Plots the `video,send` stats. All video layers are plotted by default for group calls. Pass the index of the layer to show only one.|
+|`describe_video_recv`               |Plots the `video,recv` stats. For group calls, the SSRC of the desired stream needs to be passed.|
+|`describe_sfu_recv`                 |Plots the `sfu,recv` stats. Only for group calls.|
+|`describe_ice_network_route_change` |Plots the `ice_network_route_change` local and remote relay values.|
+|`logs`                              |Prints the logs for the call that contain the passed query.|
 
 ## Dependencies
 

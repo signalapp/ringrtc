@@ -32,6 +32,7 @@ class Call():
         self.start = kwargs['start']
         self.end = kwargs['end']
         self.type = kwargs['type']
+        self.id = kwargs['id']
 
     def ssrc(self) -> None:
         """
@@ -40,6 +41,11 @@ class Call():
         """
         print(f'Audio {self.audio_send.ssrc[0]}')
         print(f'Video {self.video_send.ssrc[0]}')
+
+    def describe_ice_network_route_change(self) -> None:
+        self.ice_network_route_change[
+            ['local_relayed', 'remote_relayed']
+        ].plot(subplots=True, figsize=(10,10), grid=True)
 
     def describe_connection(self) -> None:
         self.connection[
@@ -152,6 +158,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
             'start': '',
             'end': '',
             'type': 'Unknown',
+            'id': 'Unknown',
         }
 
     def extract_timestamp(line: str) -> str:
@@ -172,6 +179,10 @@ def _parse_calls(logs: list[str]) -> list[Call]:
 
         return line
 
+    def extract_call_id(line: str) -> str:
+        id = re.findall('0[x][0-9a-fA-F]+|0[x]\[ REDACTED_HEX.*\]', line)
+        return id[0] if len(id) > 0 else 'Unknown'
+
     raw_calls = []
     raw_call = {}
 
@@ -189,6 +200,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
 
             raw_call = new_raw_call()
             raw_call['start'] = extract_timestamp(line)
+            raw_call['id'] = extract_call_id(line)
 
             typ = re.findall('direction: (\w+)', line)
             if typ:
@@ -358,6 +370,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
             start=raw_call['start'],
             end=raw_call['end'],
             type=raw_call['type'],
+            id=raw_call['id']
         )
 
     return [create_call(raw_call) for raw_call in raw_calls]
@@ -382,5 +395,5 @@ def describe(calls: list[Call]) -> pd.DataFrame:
 
         return call.audio_recv.ssrc.unique().size if not call.audio_recv.empty else 0
 
-    rows = [[call.type, call.start, call.end, ssrc_count(call)] for call in calls]
-    return pd.DataFrame(rows, columns=['type', 'start', 'end', 'other_participants'])
+    rows = [[call.id, call.type, call.start, call.end, ssrc_count(call)] for call in calls]
+    return pd.DataFrame(rows, columns=['id', 'type', 'start', 'end', 'other_participants'])
