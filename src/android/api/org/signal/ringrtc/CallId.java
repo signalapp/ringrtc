@@ -19,25 +19,25 @@ import java.lang.Comparable;
 public final class CallId implements Comparable<CallId> {
   private final String TAG = CallId.class.getSimpleName();
 
-  @NonNull private final Long callId;
+  private final long callId;
 
   /**
    *
-   * Create a new CallId from an existing Long object.
+   * Create a new CallId from a raw integer value.
    *
    * @param callId  64-bit call identifier.
    */
-  public CallId(Long callId) {
+  public CallId(long callId) {
     this.callId = callId;
   }
 
   /**
    *
-   * Returns a Long object representation of the CallId
+   * Returns an integer representation of the CallId
    *
-   * @return  The internal Long representation.
+   * @return  The internal representation.
    */
-  public Long longValue() {
+  public long longValue() {
     return callId;
   }
 
@@ -73,12 +73,11 @@ public final class CallId implements Comparable<CallId> {
 
   @Override
   public int hashCode() {
-    return callId.hashCode();
+    return Long.valueOf(callId).hashCode();
   }
 
   @Override
   public int compareTo(CallId obj) {
-    return callId.compareTo(obj.callId);
+    return Long.compare(callId, obj.callId);
   }
-
 }
