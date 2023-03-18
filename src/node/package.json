@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rimraf dist",
-    "test": "electron-mocha --renderer --recursive dist/test --timeout 10000",
+    "test": "electron-mocha --renderer --recursive dist/test --timeout 10000 --require source-map-support/register",
     "eslint": "eslint --cache .",
     "lint": "yarn format --list-different && yarn eslint",
     "format": "prettier --write .",
@@ -52,6 +52,7 @@
     "rimraf": "4.1.2",
     "sinon": "^15.0.1",
     "sinon-chai": "^3.7.0",
+    "source-map-support": "^0.5.19",
     "typescript": "4.9.3",
     "yarn-audit-fix": "^9.3.9"
   }
