@@ -114,10 +114,10 @@ public class CallManager {
       Log.i(TAG, "CallManager.initialize() returned");
     } catch (UnsatisfiedLinkError e) {
       Log.w(TAG, "Unable to load ringrtc library", e);
-      throw new AssertionError("Unable to load ringrtc library");
+      throw new AssertionError("Unable to load ringrtc library", e);
     } catch  (CallException e) {
       Log.w(TAG, "Unable to initialize ringrtc library", e);
-      throw new AssertionError("Unable to initialize ringrtc library");
+      throw new AssertionError("Unable to initialize ringrtc library", e);
     }
 
   }

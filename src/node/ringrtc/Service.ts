@@ -14,6 +14,8 @@ const Native = require(`../../build/${os.platform()}/libringrtc-${
   process.arch
 }.node`);
 
+export const callIdFromEra: (era: string) => CallId = Native.callIdFromEra;
+
 class Config {
   use_new_audio_device_module = false;
   field_trials: Record<string, string> | undefined;

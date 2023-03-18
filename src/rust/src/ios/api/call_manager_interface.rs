@@ -1317,3 +1317,16 @@ pub extern "C" fn ringrtcIsCallMessageValidOpaqueRing(
         }
     }
 }
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcCallIdFromEraId(era_bytes: AppByteSlice) -> u64 {
+    let Some(era) = era_bytes
+        .as_slice()
+        .and_then(|era_bytes| std::str::from_utf8(era_bytes).ok())
+    else {
+        error!("invalid era");
+        return 0;
+    };
+    i64::from(group_call::RingId::from_era_id(era)) as u64
+}

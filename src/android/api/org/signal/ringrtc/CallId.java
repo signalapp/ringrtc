@@ -32,6 +32,17 @@ public final class CallId implements Comparable<CallId> {
   }
 
   /**
+   * Derive a call ID from a group call era.
+   */
+  public static CallId fromEra(@NonNull String eraId) {
+    try {
+      return new CallId(ringrtcFromEraId(eraId));
+    } catch (CallException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  /**
    *
    * Returns an integer representation of the CallId
    *
@@ -80,4 +91,8 @@ public final class CallId implements Comparable<CallId> {
   public int compareTo(CallId obj) {
     return Long.compare(callId, obj.callId);
   }
+
+  private static native
+    long ringrtcFromEraId(String eraId)
+    throws CallException;
 }

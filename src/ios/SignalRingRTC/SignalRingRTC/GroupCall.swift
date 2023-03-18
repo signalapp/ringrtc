@@ -129,6 +129,14 @@ public struct VideoRequest {
     }
 }
 
+public func callIdFromEra(_ era: String) -> UInt64 {
+    // Necessary because withUTF8 might reallocate to get a contiguous UTF-8 string.
+    var era = era
+    return era.withUTF8 { eraBytes in
+        ringrtcCallIdFromEraId(AppByteSlice(bytes: eraBytes.baseAddress, len: eraBytes.count))
+    }
+}
+
 /// The group call observer.
 @available(iOSApplicationExtension, unavailable)
 public protocol GroupCallDelegate: AnyObject {

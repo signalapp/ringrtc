@@ -2209,9 +2209,18 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
+#[allow(non_snake_case)]
+fn callIdFromEra(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let era = cx.argument::<JsString>(0)?.value(&mut cx);
+    let result = i64::from(group_call::RingId::from_era_id(&era)) as u64;
+    Ok(create_id_arg(&mut cx, result))
+}
+
 #[neon::main]
 fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("createCallEndpoint", createCallEndpoint)?;
+    cx.export_function("callIdFromEra", callIdFromEra)?;
+
     let js_property_key = cx.string(CALL_ENDPOINT_PROPERTY_KEY);
     cx.export_value("callEndpointPropertyKey", js_property_key)?;
 

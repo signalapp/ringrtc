@@ -9,6 +9,7 @@
 //! org.signal.ringrtc.CallManager objects.
 
 use jni::objects::{JClass, JObject, JString};
+use jni::strings::JavaStr;
 use jni::sys::{jboolean, jbyteArray, jint, jlong, jobject};
 use jni::JNIEnv;
 
@@ -19,8 +20,11 @@ use crate::android::error;
 use crate::common::{CallMediaType, DeviceId};
 use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::connection::Connection;
+use crate::core::util::try_scoped;
 use crate::core::{group_call, signaling};
 use crate::webrtc;
+
+use std::borrow::Cow;
 use std::time::Duration;
 
 #[no_mangle]
@@ -894,4 +898,23 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetMembershipP
             error::throw_error(&env, e);
         }
     }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallId_ringrtcFromEraId(
+    env: JNIEnv,
+    _class: JClass,
+    era: JString,
+) -> jlong {
+    try_scoped(|| {
+        // Avoid copying if we don't need to.
+        let era_cesu8: JavaStr = env.get_string(era)?;
+        let era_utf8: Cow<str> = Cow::from(&era_cesu8);
+        Ok(group_call::RingId::from_era_id(&era_utf8).into())
+    })
+    .unwrap_or_else(|e| {
+        error::throw_error(&env, e);
+        0
+    })
 }

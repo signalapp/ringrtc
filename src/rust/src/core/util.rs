@@ -271,6 +271,11 @@ pub fn uuid_to_string(bytes: &[u8]) -> String {
     }
 }
 
+// Allows using `?` syntax in a scope and collecting failures in a `Result`.
+pub fn try_scoped<T>(call: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result<T> {
+    call()
+}
+
 /// A specially configured tokio::Runtime for processing sequential tasks
 /// in the context of a Call or Connection.
 /// Pre-configured with the right parameters for single-threaded operation,

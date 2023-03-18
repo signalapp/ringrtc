@@ -38,6 +38,7 @@ export {
   VideoCapturer,
   VideoRenderer,
   VideoRequest,
+  callIdFromEra,
 } from './ringrtc/Service';
 
 export {

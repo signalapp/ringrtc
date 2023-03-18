@@ -3194,6 +3194,15 @@ class SignalRingRTCTests: XCTestCase {
         multiRingGlareTesting(scenario: .differentDevice)
     }
 
+    func testCallIdFromEra() {
+        let fromHex = callIdFromEra("1122334455667788")
+        XCTAssertEqual(fromHex, 0x1122334455667788)
+
+        let fromUnusualEra = callIdFromEra("mesozoic")
+        XCTAssertNotEqual(fromHex, fromUnusualEra)
+        XCTAssertNotEqual(0, fromUnusualEra)
+    }
+
     // MARK: - Constants
 
     let exampleV4V3V2Offer = Data(

@@ -14,6 +14,7 @@ import {
   CallState,
   OfferType,
   RingRTC,
+  callIdFromEra,
 } from '../index';
 import Long from 'long';
 import { should } from 'chai';
@@ -319,4 +320,15 @@ describe('RingRTC', () => {
     await sleep(500);
     assert.equal(CallState.Ended, RingRTC.call!.state);
   }
+
+  it('converts eras to call IDs', () => {
+    const fromHex = callIdFromEra('8877665544332211');
+    assert.isTrue(
+      Long.fromValue(fromHex).eq(Long.fromString('8877665544332211', true, 16))
+    );
+
+    const fromUnusualEra = callIdFromEra('mesozoic');
+    assert.isFalse(Long.fromValue(fromUnusualEra).eq(Long.fromValue(fromHex)));
+    assert.isFalse(Long.fromValue(fromUnusualEra).isZero());
+  });
 });

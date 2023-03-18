@@ -7,14 +7,11 @@ import org.signal.ringrtc.CallManager;
 
 import androidx.test.core.app.ApplicationProvider;
 import java.util.HashMap;
-import org.junit.Test;
 
 import static org.mockito.Mockito.mock;
 
-public class SmokeTest {
-    @Test
-    public void testInitialization() throws Exception {
+public class CallTestBase {
+    static {
         CallManager.initialize(ApplicationProvider.getApplicationContext(), mock(), new HashMap<>());
-        CallManager.createCallManager(mock());
     }
 }
