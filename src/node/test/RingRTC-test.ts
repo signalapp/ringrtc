@@ -59,7 +59,7 @@ describe('RingRTC', () => {
   it('reports an age for expired offers', async () => {
     const offer: CallingMessage = {
       offer: {
-        callId: { high: 0, low: 123 },
+        callId: { high: 0, low: 123, unsigned: true },
         type: OfferType.AudioCall,
         opaque: Buffer.from([]),
       },
@@ -103,7 +103,7 @@ describe('RingRTC', () => {
   it('reports 0 as the age of other auto-ended offers', async () => {
     const offer: CallingMessage = {
       offer: {
-        callId: { high: 0, low: 123 },
+        callId: { high: 0, low: 123, unsigned: true },
         type: OfferType.AudioCall,
         opaque: Buffer.from([]),
       },

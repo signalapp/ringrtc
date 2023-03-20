@@ -262,7 +262,10 @@ export class RingRTCType {
 
   private getCallInfoKey(callId: CallId): string {
     // CallId is u64 so use a string key instead.
-    return `${callId.high}${callId.low}`;
+    // Note that the representation is not padded, so we include a separator.
+    // Otherwise {1, 123} and {11, 23} would have the same key.
+    // (We could use Long.toString as well, but it doesn't matter what the key is.)
+    return `${callId.high} ${callId.low}`;
   }
 
   // Set by UX
@@ -1142,6 +1145,11 @@ export class RingRTCType {
         this.logWarn(
           'handleCallingMessage(): No ice candidates in ice message, remote should update'
         );
+        return;
+      }
+
+      if (!callId) {
+        this.logWarn('handleCallingMessage(): No call ID in ice message');
         return;
       }
 
@@ -2138,7 +2146,14 @@ export type UserId = string;
 
 export type DeviceId = number;
 
-export type CallId = any;
+// A stripped-down version of Long.
+export type CallId = {
+  high: number;
+  low: number;
+  // RingRTC always treats call IDs as unsigned internally regardless of what this is set to.
+  // Call IDs produced by RingRTC will always set this to `true`.
+  unsigned: boolean;
+};
 
 export class CallingMessage {
   offer?: OfferMessage;
@@ -2258,10 +2273,10 @@ export interface CallManager {
   receivedOffer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
+    localDeviceId: DeviceId,
     messageAgeSec: number,
     callId: CallId,
     offerType: OfferType,
-    localDeviceId: DeviceId,
     opaque: Buffer,
     senderIdentityKey: Buffer,
     receiverIdentityKey: Buffer
