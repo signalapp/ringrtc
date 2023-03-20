@@ -137,6 +137,10 @@ public func callIdFromEra(_ era: String) -> UInt64 {
     }
 }
 
+public func callIdFromRingId(_ ringId: Int64) -> UInt64 {
+    return UInt64(bitPattern: ringId)
+}
+
 /// The group call observer.
 @available(iOSApplicationExtension, unavailable)
 public protocol GroupCallDelegate: AnyObject {

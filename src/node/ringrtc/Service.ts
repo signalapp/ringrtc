@@ -16,6 +16,14 @@ const Native = require(`../../build/${os.platform()}/libringrtc-${
 
 export const callIdFromEra: (era: string) => CallId = Native.callIdFromEra;
 
+export function callIdFromRingId(ringId: bigint): CallId {
+  return {
+    low: Number(BigInt.asIntN(32, ringId)),
+    high: Number(BigInt.asIntN(32, ringId >> BigInt(32))),
+    unsigned: true,
+  };
+}
+
 class Config {
   use_new_audio_device_module = false;
   field_trials: Record<string, string> | undefined;

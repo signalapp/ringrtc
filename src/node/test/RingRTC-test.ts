@@ -15,6 +15,7 @@ import {
   OfferType,
   RingRTC,
   callIdFromEra,
+  callIdFromRingId,
 } from '../index';
 import Long from 'long';
 import { should } from 'chai';
@@ -330,5 +331,23 @@ describe('RingRTC', () => {
     const fromUnusualEra = callIdFromEra('mesozoic');
     assert.isFalse(Long.fromValue(fromUnusualEra).eq(Long.fromValue(fromHex)));
     assert.isFalse(Long.fromValue(fromUnusualEra).isZero());
+  });
+
+  it('converts ring IDs to call IDs', () => {
+    function testConversion(ringIdAsString: string) {
+      const ringId = BigInt(ringIdAsString);
+      const callId = callIdFromRingId(ringId);
+      const expectedCallId = Long.fromValue(ringIdAsString).toUnsigned();
+      assert.isTrue(
+        Long.fromValue(callId).eq(expectedCallId),
+        `${ringId} was converted to ${callId}, should be ${expectedCallId}`
+      );
+    }
+    testConversion('0');
+    testConversion('1');
+    testConversion('-1');
+    testConversion(Long.MAX_VALUE.toString());
+    testConversion((-Long.MAX_VALUE).toString());
+    testConversion(Long.MIN_VALUE.toString());
   });
 });
