@@ -5,7 +5,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist/*",
+    "dist/*.js",
+    "dist/*.d.ts",
+    "dist/ringrtc/*.js",
+    "dist/ringrtc/*.d.ts",
     "scripts/fetch-prebuild.js"
   ],
   "scripts": {
