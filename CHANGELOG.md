@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.26.0
+
+- Adjustments to CallId, EraId, RingId and derivations/conversions
+
+- Group Calls: Limit bitrate for the lowest layer
+
+- Reference signalapp/webrtc@5481b
+  - VideoAdapter: Fix scaling of very large frames
+  - Log more info when video input starts
+
+- Reference signalapp/webrtc@5481a
+  - Set inactive timeout to 30s
+  - rffi: Set a bandwidth limit on the lowest layer of a group call
+  - Allow tcp candidates in group calls
+
+- Log notebook improvements
+
+- Build improvements
+
 ## v2.25.2
 
 - Node: Ensure that a frame is fully copied before sending it to WebRTC
