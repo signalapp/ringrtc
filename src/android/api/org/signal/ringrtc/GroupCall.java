@@ -262,8 +262,6 @@ public final class GroupCall {
     @NonNull
     public LocalDeviceState getLocalDeviceState()
     {
-        Log.i(TAG, "getLocalDevice():");
-
         return this.localDeviceState;
     }
 
@@ -274,8 +272,6 @@ public final class GroupCall {
     @NonNull
     public LongSparseArray<RemoteDeviceState> getRemoteDeviceStates()
     {
-        Log.i(TAG, "getRemoteDevices():");
-
         return this.remoteDeviceStates;
     }
 
