@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.26.1
+
+- Revert "Android: Increase max jitter buffer size" (from v2.25.0)
+
 ## v2.26.0
 
 - Adjustments to CallId, EraId, RingId and derivations/conversions
