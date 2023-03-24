@@ -9,6 +9,7 @@ import re
 import requests
 import zipfile
 
+from emos import compute_emos
 from io import BytesIO, StringIO
 from pandas.api.types import is_numeric_dtype
 from typing import Any, Optional
@@ -54,7 +55,7 @@ class Call():
 
     def describe_audio_send(self) -> None:
         self.audio_send[
-            ['audio_energy', 'bitrate', 'remote_packets_lost_pct', 'remote_jitter', 'remote_round_trip_time']
+            ['audio_energy', 'bitrate', 'remote_packets_lost_pct', 'remote_jitter', 'remote_round_trip_time', 'remote_mos']
         ].plot(subplots=True, figsize=(10,10), grid=True)
 
     def describe_audio_recv(self, ssrc: Optional[int] = None) -> None:
@@ -66,7 +67,7 @@ class Call():
             df = self.audio_recv[self.audio_recv.ssrc == ssrc]
 
         df[
-            ['audio_energy', 'bitrate', 'packets_lost_pct', 'jitter']
+            ['audio_energy', 'bitrate', 'packets_lost_pct', 'jitter', 'mos']
         ].plot(subplots=True, figsize=(10,10), grid=True)
 
     def describe_video_send(self, layer: Optional[int] = None) -> None:
@@ -358,10 +359,33 @@ def _parse_calls(logs: list[str]) -> list[Call]:
         return df
 
     def create_call(raw_call: dict[str, Any]) -> Call:
+        audio_send = clean_columns(lines_to_df(raw_call['audio_send']))
+        connection = clean_columns(lines_to_df(raw_call['connection']))
+        audio_recv = clean_columns(lines_to_df(raw_call['audio_recv']))
+
+        # Compute audio_send mos score
+        if not audio_send.empty:
+            audio_send['remote_mos'] = audio_send.apply(
+                lambda row: compute_emos(row['remote_round_trip_time'], row['remote_jitter'], row['remote_packets_lost_pct']),
+                axis=1)
+        else:
+            audio_send['remote_mos'] = pd.DataFrame({'remote_mos' : []})
+
+        # Compute audio_recv mos score
+        if not connection.empty and not audio_recv.empty:
+            # Merge dfs to have required columns in a single df
+            audio_recv_mos = pd.concat([connection, audio_recv], axis=1)
+            audio_recv_mos['mos'] = audio_recv_mos.apply(
+                lambda row: compute_emos(row['current_round_trip_time'], row['jitter'], row['packets_lost_pct']),
+                axis=1)
+            audio_recv = pd.concat([audio_recv, audio_recv_mos['mos']], axis=1)
+        else:
+            audio_recv['mos'] = pd.DataFrame({'mos' : []})
+
         return Call(
-            connection=clean_columns(lines_to_df(raw_call['connection'])),
-            audio_send=clean_columns(lines_to_df(raw_call['audio_send'])),
-            audio_recv=clean_columns(lines_to_df(raw_call['audio_recv'])),
+            connection=connection,
+            audio_send=audio_send,
+            audio_recv=audio_recv,
             video_send=clean_columns(lines_to_df(raw_call['video_send'])),
             video_recv=clean_columns(lines_to_df(raw_call['video_recv'])),
             sfu_recv=clean_columns(lines_to_df(raw_call['sfu_recv'])),
