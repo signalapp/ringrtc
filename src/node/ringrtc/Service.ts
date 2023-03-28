@@ -667,10 +667,7 @@ export class RingRTCType {
     opaque: Buffer
   ): void {
     const message = new CallingMessage();
-    message.offer = new OfferMessage();
-    message.offer.callId = callId;
-    message.offer.type = offerType;
-    message.offer.opaque = opaque;
+    message.offer = new OfferMessage(callId, offerType, opaque);
     this.sendSignaling(
       remoteUserId,
       remoteDeviceId,
@@ -689,9 +686,7 @@ export class RingRTCType {
     opaque: Buffer
   ): void {
     const message = new CallingMessage();
-    message.answer = new AnswerMessage();
-    message.answer.callId = callId;
-    message.answer.opaque = opaque;
+    message.answer = new AnswerMessage(callId, opaque);
     this.sendSignaling(
       remoteUserId,
       remoteDeviceId,
@@ -712,9 +707,7 @@ export class RingRTCType {
     const message = new CallingMessage();
     message.iceCandidates = [];
     for (const candidate of candidates) {
-      const copy = new IceCandidateMessage();
-      copy.callId = callId;
-      copy.opaque = candidate;
+      const copy = new IceCandidateMessage(callId, candidate);
       message.iceCandidates.push(copy);
     }
     this.sendSignaling(
@@ -736,10 +729,7 @@ export class RingRTCType {
     deviceId: DeviceId | null
   ): void {
     const message = new CallingMessage();
-    message.hangup = new HangupMessage();
-    message.hangup.callId = callId;
-    message.hangup.type = hangupType;
-    message.hangup.deviceId = deviceId || 0;
+    message.hangup = new HangupMessage(callId, hangupType, deviceId || 0);
     this.sendSignaling(
       remoteUserId,
       remoteDeviceId,
@@ -757,8 +747,7 @@ export class RingRTCType {
     broadcast: boolean
   ): void {
     const message = new CallingMessage();
-    message.busy = new BusyMessage();
-    message.busy.callId = callId;
+    message.busy = new BusyMessage(callId);
     this.sendSignaling(
       remoteUserId,
       remoteDeviceId,
@@ -2178,10 +2167,15 @@ export class CallingMessage {
 }
 
 export class OfferMessage {
-  callId?: CallId;
-  type?: OfferType;
-  opaque?: ProtobufBuffer;
-  sdp?: string;
+  callId: CallId;
+  type: OfferType;
+  opaque: ProtobufBuffer;
+
+  constructor(callId: CallId, type: OfferType, opaque: ProtobufBuffer) {
+    this.callId = callId;
+    this.type = type;
+    this.opaque = opaque;
+  }
 }
 
 export enum OfferType {
@@ -2190,27 +2184,43 @@ export enum OfferType {
 }
 
 export class AnswerMessage {
-  callId?: CallId;
-  opaque?: ProtobufBuffer;
-  sdp?: string;
+  callId: CallId;
+  opaque: ProtobufBuffer;
+
+  constructor(callId: CallId, opaque: ProtobufBuffer) {
+    this.callId = callId;
+    this.opaque = opaque;
+  }
 }
 
 export class IceCandidateMessage {
-  callId?: CallId;
-  mid?: string;
-  line?: number;
-  opaque?: ProtobufBuffer;
-  sdp?: string;
+  callId: CallId;
+  opaque: ProtobufBuffer;
+
+  constructor(callId: CallId, opaque: ProtobufBuffer) {
+    this.callId = callId;
+    this.opaque = opaque;
+  }
 }
 
 export class BusyMessage {
-  callId?: CallId;
+  callId: CallId;
+
+  constructor(callId: CallId) {
+    this.callId = callId;
+  }
 }
 
 export class HangupMessage {
-  callId?: CallId;
-  type?: HangupType;
-  deviceId?: DeviceId;
+  callId: CallId;
+  type: HangupType;
+  deviceId: DeviceId;
+
+  constructor(callId: CallId, type: HangupType, deviceId: DeviceId) {
+    this.callId = callId;
+    this.type = type;
+    this.deviceId = deviceId;
+  }
 }
 
 export class OpaqueMessage {

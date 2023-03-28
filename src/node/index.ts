@@ -6,8 +6,10 @@
 import { RingRTCType } from './ringrtc/Service';
 
 export {
+  AnswerMessage,
   AudioDevice,
   BandwidthMode,
+  BusyMessage,
   Call,
   CallEndedReason,
   CallId,
@@ -25,8 +27,10 @@ export {
   HangupMessage,
   HangupType,
   HttpMethod,
+  IceCandidateMessage,
   JoinState,
   LocalDeviceState,
+  OfferMessage,
   OfferType,
   OpaqueMessage,
   PeekInfo,
