@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.26.2
+
+- Node: Require expected calling message fields
+
+- Log notebook improvements
+
 ## v2.26.1
 
 - Revert "Android: Increase max jitter buffer size" (from v2.25.0)
