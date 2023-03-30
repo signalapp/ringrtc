@@ -43,9 +43,14 @@ class NativeCallManager {
   }
 
   private createCallEndpoint(config: Config) {
+    const fieldTrials = Object.assign(
+      { 'RingRTC-AnyAddressPortsKillSwitch': 'Enabled' },
+      config.field_trials
+    );
+
     /* eslint-disable prefer-template */
     const fieldTrialsString =
-      Object.entries(config.field_trials || {})
+      Object.entries(fieldTrials)
         .map(([k, v]) => `${k}/${v}`)
         .join('/') + '/';
     /* eslint-enable prefer-template */

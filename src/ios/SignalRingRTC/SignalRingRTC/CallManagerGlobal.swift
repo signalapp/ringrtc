@@ -89,8 +89,9 @@ public class CallManagerGlobal {
         }
         hasInitializedFieldTrials = true
 
-        RTCInitFieldTrialDictionary(fieldTrials)
-        Logger.info("Initialized field trials with \(fieldTrials)")
+        let fieldTrialsWithDefaults = fieldTrials.merging(["RingRTC-AnyAddressPortsKillSwitch": "Enabled"]) { (provided, _) in provided }
+        RTCInitFieldTrialDictionary(fieldTrialsWithDefaults)
+        Logger.info("Initialized field trials with \(fieldTrialsWithDefaults)")
     }
 
     deinit {
