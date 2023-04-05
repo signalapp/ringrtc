@@ -19,6 +19,7 @@ try:
     import subprocess
     import os
     import re
+    import sys
     import contextlib
 
 except ImportError as e:
@@ -47,18 +48,22 @@ def pushd(new_dir):
     yield
     os.chdir(previous_dir)
 
-def sh(args, **kwargs):
-    return subprocess.check_output(args, **kwargs).decode("UTF-8")
+def sh_or_empty(args, **kwargs):
+    try:
+        return subprocess.check_output(args, **kwargs).decode("UTF-8")
+    except FileNotFoundError as e:
+        print(e, file=sys.stderr)
+        return ""
 
 def determine_git_branch(directory):
     with pushd(directory):
-        git_branch_output = sh(["git", "branch"])
+        git_branch_output = sh_or_empty(["git", "branch"])
         git_branch = [line.replace("* ", "") for line in git_branch_output.split("\n") if re.search("^\*", line)][0]
         return git_branch
 
 def determine_git_sha(directory):
     with pushd(directory):
-        return sh(["git", "rev-parse", "HEAD"]).strip("\n")
+        return sh_or_empty(["git", "rev-parse", "HEAD"]).strip("\n")
 
 def get_build_details(ringrtc_version, webrtc_version):
     template = Template("""## RingRTC Build Details
@@ -113,13 +118,13 @@ $hostname
     webrtc_git_branch = determine_git_branch(webrtc_src_dir)
     webrtc_git_sha = determine_git_sha(webrtc_src_dir)
     build_script_git_sha = determine_git_sha("./")
-    rustc_version = sh(["rustc", "--version"]).strip("\n")
-    cargo_version = sh(["cargo", "--version"]).strip("\n")
-    xcode_version = sh(["xcodebuild", "-version"]).strip("\n")
-    xcode_path = sh(["xcode-select", "-p"]).strip("\n")
-    gcc_version = sh(["gcc", "-v"], stderr=subprocess.STDOUT).strip("\n")
-    osx_version_details = sh(["sw_vers"]).strip("\n")
-    hostname = sh(["scutil", "--get", "ComputerName"]).strip("\n")
+    rustc_version = sh_or_empty(["rustc", "--version"]).strip("\n")
+    cargo_version = sh_or_empty(["cargo", "--version"]).strip("\n")
+    xcode_version = sh_or_empty(["xcodebuild", "-version"]).strip("\n")
+    xcode_path = sh_or_empty(["xcode-select", "-p"]).strip("\n")
+    gcc_version = sh_or_empty(["gcc", "-v"], stderr=subprocess.STDOUT).strip("\n")
+    osx_version_details = sh_or_empty(["sw_vers"]).strip("\n")
+    hostname = sh_or_empty(["scutil", "--get", "ComputerName"]).strip("\n")
 
     details = template.substitute(
             ringrtc_version = ringrtc_version,
