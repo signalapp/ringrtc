@@ -20,30 +20,6 @@ use sha2::{Digest, Sha256};
 
 use crate::lite::http;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[repr(u16)]
-pub enum ResponseCode {
-    GroupCallNotStarted = 404,
-    GroupCallFull = 413,
-    // Artifical codes not actually returned by the server
-    InvalidClientAuth = 601,
-    RequestFailed = 602,
-    InvalidResponseBodyUtf8 = 603,
-    InvalidResponseBodyJson = 604,
-}
-
-impl From<ResponseCode> for http::ResponseStatus {
-    fn from(code: ResponseCode) -> Self {
-        http::ResponseStatus::from(code as u16)
-    }
-}
-
-impl PartialEq<ResponseCode> for http::ResponseStatus {
-    fn eq(&self, code: &ResponseCode) -> bool {
-        self.code == (*code as u16)
-    }
-}
-
 /// The state that can be observed by "peeking".
 #[derive(Clone, Debug, Default)]
 pub struct PeekInfo {
@@ -302,18 +278,6 @@ fn participants_url_from_sfu_url(sfu_url: &str) -> String {
     )
 }
 
-fn parse_http_json_response<'a, D: Deserialize<'a>>(
-    response: Option<&'a http::Response>,
-) -> Result<D, http::ResponseStatus> {
-    let response = response.ok_or(ResponseCode::RequestFailed)?;
-    if !response.status.is_success() {
-        return Err(response.status);
-    }
-    let deserialized = serde_json::from_slice(&response.body)
-        .map_err(|_| ResponseCode::InvalidResponseBodyJson)?;
-    Ok(deserialized)
-}
-
 pub type PeekResult = Result<PeekInfo, http::ResponseStatus>;
 pub type PeekResultCallback = Box<dyn FnOnce(PeekResult) + Send>;
 
@@ -333,7 +297,7 @@ pub fn peek(
         },
         Box::new(move |http_response| {
             let result =
-                match parse_http_json_response::<SerializedPeekInfo>(http_response.as_ref()) {
+                match http::parse_json_response::<SerializedPeekInfo>(http_response.as_ref()) {
                     Ok(deserialized) => {
                         info!(
                             "Got group call peek result with device count = {}",
@@ -341,7 +305,7 @@ pub fn peek(
                         );
                         Ok(deserialized.deobfuscate(&opaque_user_id_mappings))
                     }
-                    Err(status) if status == ResponseCode::GroupCallNotStarted => {
+                    Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
                         info!("Got group call peek result with device count = 0 (status code 404)");
                         Ok(PeekInfo::default())
                     }
@@ -393,7 +357,7 @@ pub fn join(
             ),
         },
         Box::new(move |http_response| {
-            let result = parse_http_json_response::<SerializedJoinResponse>(http_response.as_ref())
+            let result = http::parse_json_response::<SerializedJoinResponse>(http_response.as_ref())
                 .map(|deserialized| JoinResponse::from(deserialized, &opaque_user_id_mappings));
             result_callback(result)
         }),

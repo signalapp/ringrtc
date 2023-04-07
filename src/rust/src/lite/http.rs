@@ -11,6 +11,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use serde::Deserialize;
+
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Method {
@@ -34,7 +36,7 @@ pub struct Response {
     pub body: Vec<u8>,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ResponseStatus {
     pub code: u16,
 }
@@ -57,6 +59,15 @@ impl ResponseStatus {
     pub fn is_error(self) -> bool {
         self.r#type().is_error()
     }
+
+    pub const GROUP_CALL_NOT_STARTED: Self = Self { code: 404 };
+    pub const GROUP_CALL_FULL: Self = Self { code: 413 };
+
+    // Artifical codes not actually returned by the server
+    pub const INVALID_CLIENT_AUTH: Self = Self { code: 601 };
+    pub const REQUEST_FAILED: Self = Self { code: 602 };
+    pub const INVALID_RESPONSE_BODY_UTF8: Self = Self { code: 701 };
+    pub const INVALID_RESPONSE_BODY_JSON: Self = Self { code: 702 };
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -68,6 +79,8 @@ pub enum ResponseStatusType {
     Redirection = 300,
     ClientError = 400,
     ServerError = 500,
+    RequestError = 600,
+    ResponseError = 700,
 }
 
 impl ResponseStatusType {
@@ -78,6 +91,8 @@ impl ResponseStatusType {
             300..=399 => Self::Redirection,
             400..=499 => Self::ClientError,
             500..=599 => Self::ServerError,
+            600..=699 => Self::RequestError,
+            700..=799 => Self::ResponseError,
             _ => Self::Unknown,
         }
     }
@@ -87,8 +102,23 @@ impl ResponseStatusType {
     }
 
     pub fn is_error(self) -> bool {
-        matches!(self, Self::ClientError | Self::ServerError)
+        matches!(
+            self,
+            Self::ClientError | Self::ServerError | Self::RequestError | Self::ResponseError
+        )
     }
+}
+
+pub fn parse_json_response<'a, D: Deserialize<'a>>(
+    response: Option<&'a Response>,
+) -> Result<D, ResponseStatus> {
+    let response = response.ok_or(ResponseStatus::REQUEST_FAILED)?;
+    if !response.status.is_success() {
+        return Err(response.status);
+    }
+    let deserialized = serde_json::from_slice(&response.body)
+        .map_err(|_| ResponseStatus::INVALID_RESPONSE_BODY_JSON)?;
+    Ok(deserialized)
 }
 
 pub type ResponseCallback = Box<dyn FnOnce(Option<Response>) + Send>;

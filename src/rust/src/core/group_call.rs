@@ -499,10 +499,10 @@ impl HttpSfuClient {
                         era_id: join_response.era_id,
                         hkdf_extra_info,
                     }),
-                    Err(http_status) if http_status == sfu::ResponseCode::RequestFailed => {
+                    Err(http_status) if http_status == http::ResponseStatus::REQUEST_FAILED => {
                         Err(RingRtcError::SfuClientRequestFailed.into())
                     }
-                    Err(http_status) if http_status == sfu::ResponseCode::GroupCallFull => {
+                    Err(http_status) if http_status == http::ResponseStatus::GROUP_CALL_FULL => {
                         Err(RingRtcError::GroupCallFull.into())
                     }
                     Err(http_status) => {
@@ -548,7 +548,7 @@ impl SfuClient for HttpSfuClient {
                 result_callback,
             ),
             None => {
-                result_callback(Err(sfu::ResponseCode::InvalidClientAuth.into()));
+                result_callback(Err(http::ResponseStatus::INVALID_CLIENT_AUTH));
             }
         }
     }
