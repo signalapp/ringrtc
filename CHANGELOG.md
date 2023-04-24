@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.26.3
+
+- Remove h264 video codec support
+  - Reference signalapp/webrtc@5481c
+
+- Disable ANY address ports by default
+
+- Build improvements
+
 ## v2.26.2
 
 - Node: Require expected calling message fields
