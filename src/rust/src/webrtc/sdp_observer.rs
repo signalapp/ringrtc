@@ -98,15 +98,12 @@ pub struct SessionDescription {
 pub enum RffiVideoCodecType {
     Vp8 = 8,
     Vp9 = 9,
-    H264ConstrainedHigh = 46,
-    H264ConstrainedBaseline = 40,
 }
 
 /// cbindgen:field-names=[type, level]
 #[repr(C)]
 pub struct RffiVideoCodec {
     r#type: RffiVideoCodecType,
-    level: u32,
 }
 
 #[repr(C)]
@@ -219,21 +216,9 @@ impl SessionDescription {
             let r#type = match rffi_codec.r#type {
                 RffiVideoCodecType::Vp8 => protobuf::signaling::VideoCodecType::Vp8,
                 RffiVideoCodecType::Vp9 => protobuf::signaling::VideoCodecType::Vp9,
-                RffiVideoCodecType::H264ConstrainedHigh => {
-                    protobuf::signaling::VideoCodecType::H264ConstrainedHigh
-                }
-                RffiVideoCodecType::H264ConstrainedBaseline => {
-                    protobuf::signaling::VideoCodecType::H264ConstrainedBaseline
-                }
-            };
-            let level = if rffi_codec.level > 0 {
-                Some(rffi_codec.level)
-            } else {
-                None
             };
             protobuf::signaling::VideoCodec {
                 r#type: Some(r#type as i32),
-                level,
             }
         })
         .collect();
@@ -262,28 +247,17 @@ impl SessionDescription {
         for codec in &v4.receive_video_codecs {
             if let protobuf::signaling::VideoCodec {
                 r#type: Some(r#type),
-                level,
             } = codec
             {
                 const VP8: i32 = protobuf::signaling::VideoCodecType::Vp8 as i32;
                 const VP9: i32 = protobuf::signaling::VideoCodecType::Vp9 as i32;
-                const H264_CHP: i32 =
-                    protobuf::signaling::VideoCodecType::H264ConstrainedHigh as i32;
-                const H264_CBP: i32 =
-                    protobuf::signaling::VideoCodecType::H264ConstrainedBaseline as i32;
                 let rffi_type = match *r#type {
                     VP8 => Some(RffiVideoCodecType::Vp8),
                     VP9 => Some(RffiVideoCodecType::Vp9),
-                    H264_CHP => Some(RffiVideoCodecType::H264ConstrainedHigh),
-                    H264_CBP => Some(RffiVideoCodecType::H264ConstrainedBaseline),
                     _ => None,
                 };
-                let rffi_level = level.unwrap_or(0);
                 if let Some(rffi_type) = rffi_type {
-                    rffi_video_codecs.push(RffiVideoCodec {
-                        r#type: rffi_type,
-                        level: rffi_level,
-                    });
+                    rffi_video_codecs.push(RffiVideoCodec { r#type: rffi_type });
                 }
             }
         }

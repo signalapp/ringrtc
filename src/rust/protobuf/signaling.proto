@@ -49,14 +49,14 @@ message SocketAddr {
 enum VideoCodecType {
   VP8 = 8;
   VP9 = 9;
+  // Keep these H264 definitions for better logging.
   H264_CONSTRAINED_BASELINE = 40;
   H264_CONSTRAINED_HIGH = 46;
 }
 
 message VideoCodec {
   optional VideoCodecType type = 1;
-  // Used for H264; Not used for VP8 or VP9
-  optional uint32 level = 2;
+  reserved 2; // Was used for H264 level
 }
 
 message ConnectionParametersV4 {
