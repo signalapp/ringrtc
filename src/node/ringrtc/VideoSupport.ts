@@ -235,6 +235,21 @@ export class GumVideoCapturer {
         return;
       }
 
+      if (
+        this.mediaStream !== undefined &&
+        this.mediaStream.getVideoTracks().length > 0
+      ) {
+        // We have a stream and track for the requested camera already. Stop
+        // the duplicate track that we just started.
+        RingRTC.logWarn(
+          'startCapturing(): dropping duplicate call to startCapturing'
+        );
+        for (const track of mediaStream.getVideoTracks()) {
+          track.stop();
+        }
+        return;
+      }
+
       this.mediaStream = mediaStream;
       if (
         !this.spawnedSenderRunning &&
