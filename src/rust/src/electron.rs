@@ -20,6 +20,9 @@ use crate::core::group_call::{GroupId, SignalingMessageUrgency};
 use crate::core::signaling;
 use crate::core::util::minmax;
 use crate::lite::{
+    call_links::{
+        self, CallLinkRestrictions, CallLinkRootKey, CallLinkState, CallLinkUpdateRequest,
+    },
     http,
     sfu::{DemuxId, GroupMember, PeekInfo, UserId},
 };
@@ -134,6 +137,11 @@ pub enum Event {
     RemoteSharingScreenChange(PeerId, bool),
     // The group call has an update.
     GroupUpdate(GroupUpdate),
+    // A call link request has completed.
+    CallLinkResponse {
+        request_id: u32,
+        result: std::result::Result<CallLinkState, http::ResponseStatus>,
+    },
     // JavaScript should initiate an HTTP request.
     SendHttpRequest {
         request_id: u32,
@@ -298,6 +306,7 @@ pub struct CallEndpoint {
     call_manager: CallManager<NativePlatform>,
 
     events_receiver: Receiver<Event>,
+    event_reporter: EventReporter,
     // This is what we use to control mute/not.
     // It should probably be per-call, but for now it's easier to have only one.
     outgoing_audio_track: AudioTrack,
@@ -366,10 +375,23 @@ impl CallEndpoint {
                     // because otherwise a new event could come in *during* the processing.
                     event_reported_for_callback.store(false, std::sync::atomic::Ordering::Relaxed);
 
-                    let observer = js_object.as_ref().to_inner(&mut cx);
-                    let method_name = "processEvents";
-                    let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
-                    method.call(&mut cx, observer, Vec::<Handle<JsValue>>::new())?;
+                    match cx.try_catch(|cx| {
+                        let observer = js_object.as_ref().to_inner(cx);
+                        let method_name = "processEvents";
+                        let method = observer.get::<JsFunction, _, _>(cx, method_name)?;
+                        method.call(cx, observer, Vec::<Handle<JsValue>>::new())?;
+                        Ok(())
+                    }) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(
+                                "{}",
+                                e.to_string(&mut cx)
+                                    .map(|s| s.value(&mut cx))
+                                    .unwrap_or_else(|_| "[failed to stringify]".to_string())
+                            );
+                        }
+                    }
                     Ok(())
                 });
             }
@@ -389,7 +411,7 @@ impl CallEndpoint {
 
         // Only relevant for group calls
         let http_client = http::DelegatingClient::new(event_reporter.clone());
-        let group_handler = Box::new(event_reporter);
+        let group_handler = Box::new(event_reporter.clone());
 
         let platform = NativePlatform::new(
             peer_connection_factory.clone(),
@@ -403,6 +425,7 @@ impl CallEndpoint {
         Ok(Self {
             call_manager,
             events_receiver,
+            event_reporter,
             outgoing_audio_track,
             outgoing_video_source,
             outgoing_video_track,
@@ -1467,7 +1490,7 @@ fn setMembershipProof(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
 
-    let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx) as PeerId;
+    let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
 
     let membership_proof = cx.argument::<JsBuffer>(2)?;
     let membership_proof = membership_proof.as_slice(&cx).to_vec();
@@ -1498,6 +1521,143 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint
             .call_manager
             .peek_group_call(request_id, sfu_url, membership_proof, members);
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
+    let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
+    let auth_presentation = cx.argument::<JsBuffer>(2)?;
+    let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
+    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
+        .or_else(|e| cx.throw_type_error(e.to_string()))?;
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        let event_reporter = endpoint.event_reporter.clone();
+        call_links::read_call_link(
+            endpoint.call_manager.http_client(),
+            &sfu_url,
+            root_key,
+            &auth_presentation,
+            Box::new(move |result| {
+                // Ignore errors, that can only mean we're shutting down.
+                let _ = event_reporter.send(Event::CallLinkResponse { request_id, result });
+            }),
+        );
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn createCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
+    let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
+    let create_presentation = cx.argument::<JsBuffer>(2)?;
+    let create_presentation = create_presentation.as_slice(&cx).to_vec();
+    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
+        .or_else(|e| cx.throw_type_error(e.to_string()))?;
+    let admin_passkey = cx.argument::<JsBuffer>(4)?;
+    let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
+    let public_zkparams = cx.argument::<JsBuffer>(5)?;
+    let public_zkparams = public_zkparams.as_slice(&cx).to_vec();
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        let event_reporter = endpoint.event_reporter.clone();
+        call_links::create_call_link(
+            endpoint.call_manager.http_client(),
+            &sfu_url,
+            root_key,
+            &create_presentation,
+            &admin_passkey,
+            &public_zkparams,
+            Box::new(move |result| {
+                // Ignore errors, that can only mean we're shutting down.
+                let _ = event_reporter.send(Event::CallLinkResponse { request_id, result });
+            }),
+        );
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
+    let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
+    let create_presentation = cx.argument::<JsBuffer>(2)?;
+    let create_presentation = create_presentation.as_slice(&cx).to_vec();
+    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
+        .or_else(|e| cx.throw_type_error(e.to_string()))?;
+    let admin_passkey = cx.argument::<JsBuffer>(4)?;
+    let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
+
+    let new_name = cx.argument::<JsValue>(5)?;
+    let new_name = if new_name.is_a::<JsUndefined, _>(&mut cx) {
+        None
+    } else {
+        let name = new_name
+            .downcast_or_throw::<JsString, _>(&mut cx)?
+            .value(&mut cx);
+        Some(if name.is_empty() {
+            vec![]
+        } else {
+            root_key.encrypt(name.as_bytes(), rand::rngs::OsRng)
+        })
+    };
+
+    let new_restrictions = cx.argument::<JsValue>(6)?;
+    let new_restrictions = if new_restrictions.is_a::<JsUndefined, _>(&mut cx) {
+        None
+    } else {
+        let raw_restrictions = new_restrictions
+            .downcast_or_throw::<JsNumber, _>(&mut cx)?
+            .value(&mut cx);
+        match raw_restrictions as i8 {
+            0 => Some(CallLinkRestrictions::None),
+            1 => Some(CallLinkRestrictions::AdminApproval),
+            _ => None,
+        }
+    };
+
+    let new_revoked = cx.argument::<JsValue>(7)?;
+    let new_revoked = if new_revoked.is_a::<JsUndefined, _>(&mut cx) {
+        None
+    } else {
+        Some(
+            new_revoked
+                .downcast_or_throw::<JsBoolean, _>(&mut cx)?
+                .value(&mut cx),
+        )
+    };
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        let event_reporter = endpoint.event_reporter.clone();
+        call_links::update_call_link(
+            endpoint.call_manager.http_client(),
+            &sfu_url,
+            root_key,
+            &create_presentation,
+            &CallLinkUpdateRequest {
+                admin_passkey: &admin_passkey,
+                encrypted_name: new_name.as_deref(),
+                restrictions: new_restrictions,
+                revoked: new_revoked,
+            },
+            Box::new(move |result| {
+                // Ignore errors, that can only mean we're shutting down.
+                let _ = event_reporter.send(Event::CallLinkResponse { request_id, result });
+            }),
+        );
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
@@ -1959,6 +2119,46 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
+            Event::CallLinkResponse { request_id, result } => {
+                let method_name = "handleCallLinkResponse";
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+
+                let js_request_id = cx.number(request_id);
+                let (status, state_object) = match result {
+                    Ok(state) => {
+                        let state_object = cx.empty_object();
+                        let js_name = cx.string(state.name);
+                        state_object.set(&mut cx, "name", js_name)?;
+                        let js_revoked = cx.boolean(state.revoked);
+                        state_object.set(&mut cx, "revoked", js_revoked)?;
+                        let js_restrictions = cx.number(match state.restrictions {
+                            call_links::CallLinkRestrictions::None => 0,
+                            call_links::CallLinkRestrictions::AdminApproval => 1,
+                            call_links::CallLinkRestrictions::Unknown => -1,
+                        });
+                        state_object.set(&mut cx, "rawRestrictions", js_restrictions)?;
+                        let js_expiration = cx
+                            .date(
+                                state
+                                    .expiration
+                                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as f64,
+                            )
+                            .or_else(|e| cx.throw_range_error(e.to_string()))?;
+                        state_object.set(&mut cx, "expiration", js_expiration)?;
+                        (cx.number(200), state_object.upcast())
+                    }
+                    Err(status_code) => (cx.number(status_code.code), cx.undefined().upcast()),
+                };
+
+                method.call(
+                    &mut cx,
+                    observer,
+                    [js_request_id.upcast(), status.upcast(), state_object],
+                )?;
+            }
+
             Event::GroupUpdate(GroupUpdate::RemoteDeviceStatesChanged(
                 client_id,
                 remote_device_states,
@@ -2216,10 +2416,87 @@ fn callIdFromEra(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(create_id_arg(&mut cx, result))
 }
 
+#[allow(non_snake_case)]
+fn CallLinkRootKey_parse(mut cx: FunctionContext) -> JsResult<JsBuffer> {
+    let string = cx.argument::<JsString>(0)?.value(&mut cx);
+    match CallLinkRootKey::try_from(string.as_str()) {
+        Ok(key) => {
+            let mut buffer = cx.buffer(key.bytes().len())?;
+            buffer.as_mut_slice(&mut cx).copy_from_slice(&key.bytes());
+            Ok(buffer)
+        }
+        Err(e) => cx.throw_error(e.to_string()),
+    }
+}
+
+#[allow(non_snake_case)]
+fn CallLinkRootKey_validate(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let bytes = cx.argument::<JsBuffer>(0)?;
+    match CallLinkRootKey::try_from(bytes.as_slice(&cx)) {
+        Ok(_) => Ok(cx.undefined()),
+        Err(e) => cx.throw_error(e.to_string()),
+    }
+}
+
+#[allow(non_snake_case)]
+fn CallLinkRootKey_generate(mut cx: FunctionContext) -> JsResult<JsBuffer> {
+    let key = CallLinkRootKey::generate(rand::rngs::OsRng);
+    let mut buffer = cx.buffer(key.bytes().len())?;
+    buffer.as_mut_slice(&mut cx).copy_from_slice(&key.bytes());
+    Ok(buffer)
+}
+
+#[allow(non_snake_case)]
+fn CallLinkRootKey_generateAdminPasskey(mut cx: FunctionContext) -> JsResult<JsBuffer> {
+    let passkey = CallLinkRootKey::generate_admin_passkey(rand::rngs::OsRng);
+    let mut buffer = cx.buffer(passkey.len())?;
+    buffer.as_mut_slice(&mut cx).copy_from_slice(&passkey);
+    Ok(buffer)
+}
+
+#[allow(non_snake_case)]
+fn CallLinkRootKey_deriveRoomId(mut cx: FunctionContext) -> JsResult<JsBuffer> {
+    let bytes = cx.argument::<JsBuffer>(0)?;
+    match CallLinkRootKey::try_from(bytes.as_slice(&cx)) {
+        Ok(key) => {
+            let room_id = key.derive_room_id();
+            let mut buffer = cx.buffer(room_id.len())?;
+            buffer.as_mut_slice(&mut cx).copy_from_slice(&room_id);
+            Ok(buffer)
+        }
+        Err(e) => cx.throw_error(e.to_string()),
+    }
+}
+
+#[allow(non_snake_case)]
+fn CallLinkRootKey_toFormattedString(mut cx: FunctionContext) -> JsResult<JsString> {
+    let bytes = cx.argument::<JsBuffer>(0)?;
+    match CallLinkRootKey::try_from(bytes.as_slice(&cx)) {
+        Ok(key) => {
+            let result = key.to_formatted_string();
+            Ok(cx.string(result))
+        }
+        Err(e) => cx.throw_error(e.to_string()),
+    }
+}
+
 #[neon::main]
 fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("createCallEndpoint", createCallEndpoint)?;
     cx.export_function("callIdFromEra", callIdFromEra)?;
+
+    cx.export_function("CallLinkRootKey_parse", CallLinkRootKey_parse)?;
+    cx.export_function("CallLinkRootKey_validate", CallLinkRootKey_validate)?;
+    cx.export_function("CallLinkRootKey_generate", CallLinkRootKey_generate)?;
+    cx.export_function(
+        "CallLinkRootKey_generateAdminPasskey",
+        CallLinkRootKey_generateAdminPasskey,
+    )?;
+    cx.export_function("CallLinkRootKey_deriveRoomId", CallLinkRootKey_deriveRoomId)?;
+    cx.export_function(
+        "CallLinkRootKey_toFormattedString",
+        CallLinkRootKey_toFormattedString,
+    )?;
 
     let js_property_key = cx.string(CALL_ENDPOINT_PROPERTY_KEY);
     cx.export_value("callEndpointPropertyKey", js_property_key)?;
@@ -2271,6 +2548,9 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_setGroupMembers", setGroupMembers)?;
     cx.export_function("cm_setMembershipProof", setMembershipProof)?;
     cx.export_function("cm_peekGroupCall", peekGroupCall)?;
+    cx.export_function("cm_readCallLink", readCallLink)?;
+    cx.export_function("cm_createCallLink", createCallLink)?;
+    cx.export_function("cm_updateCallLink", updateCallLink)?;
     cx.export_function("cm_getAudioInputs", getAudioInputs)?;
     cx.export_function("cm_setAudioInput", setAudioInput)?;
     cx.export_function("cm_getAudioOutputs", getAudioOutputs)?;

@@ -27,6 +27,7 @@ mod error;
 
 // Doesn't depend on WebRTC
 pub mod lite {
+    pub mod call_links;
     pub mod ffi;
     pub mod http;
     pub mod logging;
@@ -60,6 +61,7 @@ mod android {
 
     #[allow(clippy::missing_safety_doc)]
     mod api {
+        mod call_link_root_key;
         mod jni_call_manager;
     }
     mod android_platform;

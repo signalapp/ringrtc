@@ -27,6 +27,7 @@ export {
   HangupMessage,
   HangupType,
   HttpMethod,
+  HttpResult,
   IceCandidateMessage,
   JoinState,
   LocalDeviceState,
@@ -55,5 +56,11 @@ export {
   MAX_VIDEO_CAPTURE_HEIGHT,
   MAX_VIDEO_CAPTURE_WIDTH,
 } from './ringrtc/VideoSupport';
+
+export {
+  CallLinkRootKey,
+  CallLinkRestrictions,
+  CallLinkState,
+} from './ringrtc/CallLinks';
 
 export const RingRTC = new RingRTCType();

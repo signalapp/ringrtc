@@ -8,10 +8,10 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use jni::objects::{AutoLocal, GlobalRef, JObject, JValue};
-use jni::sys::{jint, jlong};
+use jni::sys::{jint, jlong, jshort};
 use jni::{JNIEnv, JavaVM};
 
 use crate::android::error::AndroidError;
@@ -23,6 +23,7 @@ use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
+use crate::lite::call_links::{CallLinkRestrictions, CallLinkState};
 use crate::lite::{
     http, sfu,
     sfu::{DemuxId, PeekInfo, PeekResult, UserId},
@@ -34,10 +35,12 @@ use crate::webrtc::peer_connection_observer::NetworkRoute;
 const RINGRTC_PACKAGE: &str = jni_class_name!(org.signal.ringrtc);
 const CALL_MANAGER_CLASS: &str = "CallManager";
 const HTTP_HEADER_CLASS: &str = jni_class_name!(org.signal.ringrtc.HttpHeader);
+const HTTP_RESULT_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallManager::HttpResult);
 const REMOTE_DEVICE_STATE_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.GroupCall::RemoteDeviceState);
 const RECEIVED_AUDIO_LEVEL_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.GroupCall::ReceivedAudioLevel);
+const CALL_LINK_STATE_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkState);
 
 /// Android implementation for platform::Platform::AppIncomingMedia
 pub type AndroidMediaStream = JavaMediaStream;
@@ -1401,8 +1404,10 @@ impl AndroidPlatform {
             jni_class_name!(org.signal.ringrtc.GroupCall::JoinState),
             jni_class_name!(org.signal.ringrtc.GroupCall::GroupCallEndReason),
             HTTP_HEADER_CLASS,
+            HTTP_RESULT_CLASS,
             REMOTE_DEVICE_STATE_CLASS,
             RECEIVED_AUDIO_LEVEL_CLASS,
+            CALL_LINK_STATE_CLASS,
             jni_class_name!(java.lang.Boolean),
             jni_class_name!(java.lang.Float),
             jni_class_name!(java.lang.Integer),
@@ -1607,6 +1612,114 @@ impl AndroidPlatform {
             Ok(JObject::null())
         })?;
         Ok(())
+    }
+
+    pub fn handle_call_link_result(
+        &self,
+        request_id: u32,
+        response: std::result::Result<CallLinkState, http::ResponseStatus>,
+    ) {
+        let env = match self.java_env() {
+            Ok(v) => v,
+            Err(error) => {
+                error!("{:?}", error);
+                return;
+            }
+        };
+        let jni_call_manager = self.jni_call_manager.as_obj();
+
+        let http_result_class = match self.class_cache.get_class(HTTP_RESULT_CLASS) {
+            Ok(v) => v,
+            Err(error) => {
+                error!("http_result_class: {:?}", error);
+                return;
+            }
+        };
+
+        let result_object = match response {
+            Ok(result) => {
+                let call_link_state_class = match self.class_cache.get_class(CALL_LINK_STATE_CLASS)
+                {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("call_link_state_class: {:?}", error);
+                        return;
+                    }
+                };
+
+                let name_object = match env.new_string(result.name) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("convert name: {:?}", error);
+                        return;
+                    }
+                };
+                let raw_restrictions: jint = match result.restrictions {
+                    CallLinkRestrictions::None => 0,
+                    CallLinkRestrictions::AdminApproval => 1,
+                    CallLinkRestrictions::Unknown => -1,
+                };
+                let expiration_in_epoch_seconds = result
+                    .expiration
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
+                let args = jni_args!((
+                    name_object => java.lang.String,
+                    raw_restrictions => int,
+                    result.revoked => boolean,
+                    expiration_in_epoch_seconds as jlong => long,
+                ) -> void);
+                let call_link_state_object =
+                    match env.new_object(call_link_state_class, args.sig, &args.args) {
+                        Ok(v) => v,
+                        Err(error) => {
+                            error!("new CallLinkState: {:?}", error);
+                            return;
+                        }
+                    };
+
+                // Unconstrained generics get erased to java.lang.Object.
+                let args = jni_args!((
+                    call_link_state_object => java.lang.Object,
+                ) -> void);
+                match env.new_object(http_result_class, args.sig, &args.args) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("new HttpResult(CallLinkState): {:?}", error);
+                        return;
+                    }
+                }
+            }
+            Err(status) => {
+                let args = jni_args!((
+                    status.code as jshort => short,
+                ) -> void);
+                match env.new_object(http_result_class, args.sig, &args.args) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("new HttpResult(short): {:?}", error);
+                        return;
+                    }
+                }
+            }
+        };
+
+        match jni_call_method(
+            &env,
+            jni_call_manager,
+            "handleCallLinkResponse",
+            jni_args!((
+                request_id as jlong => long,
+                result_object => org.signal.ringrtc.CallManager::HttpResult,
+            ) -> void),
+        ) {
+            Ok(()) => {}
+            Err(error) => {
+                error!("handleCallLinkResponse: {:?}", error);
+            }
+        }
     }
 }
 

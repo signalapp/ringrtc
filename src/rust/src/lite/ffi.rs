@@ -132,4 +132,20 @@ pub mod ios {
             Some(self.as_str()?.to_string())
         }
     }
+
+    /// Creates a static [`std::ffi::CStr`] from a literal.
+    ///
+    /// Implicitly adds a null terminator. (It's up to you to make sure there are no embedded NUL
+    /// bytes earlier in the string.)
+    ///
+    /// ```
+    /// assert_eq!(cstr!("abc").to_bytes(), b"abc\0");
+    /// ```
+    macro_rules! cstr {
+        ($str:literal) => {
+            unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(concat!($str, "\0").as_bytes()) }
+        };
+    }
+    // Allows the macro to be used from other modules without #[macro_use].
+    pub(crate) use cstr;
 }

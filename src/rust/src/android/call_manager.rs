@@ -5,6 +5,7 @@
 
 //! Android CallManager Interface.
 
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::panic;
 use std::time::Duration;
@@ -27,6 +28,7 @@ use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::lite::call_links::{self, CallLinkRestrictions, CallLinkUpdateRequest};
 use crate::lite::{http, sfu::GroupMember};
 use crate::webrtc;
 use crate::webrtc::media;
@@ -587,6 +589,140 @@ pub fn close(call_manager: *mut AndroidCallManager) -> Result<()> {
     // scope when this function exits.
     let mut call_manager = unsafe { ptr_as_box(call_manager)? };
     call_manager.close()
+}
+
+// Call Links
+
+pub fn read_call_link(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    sfu_url: JString,
+    auth_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+    request_id: jlong,
+) -> Result<()> {
+    info!("read_call_link():");
+
+    let sfu_url = env.get_string(sfu_url)?;
+    let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
+    let root_key =
+        call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let platform = call_manager.platform()?.try_clone()?;
+    call_links::read_call_link(
+        call_manager.http_client(),
+        &Cow::from(&sfu_url),
+        root_key,
+        &auth_credential_presentation,
+        Box::new(move |result| {
+            platform.handle_call_link_result(request_id as u32, result);
+        }),
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn create_call_link(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    sfu_url: JString,
+    create_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+    admin_passkey: jbyteArray,
+    call_link_public_params: jbyteArray,
+    request_id: jlong,
+) -> Result<()> {
+    info!("create_call_link():");
+
+    let sfu_url = env.get_string(sfu_url)?;
+    let create_credential_presentation = env.convert_byte_array(create_credential_presentation)?;
+    let root_key =
+        call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
+    let admin_passkey = env.convert_byte_array(admin_passkey)?;
+    let call_link_public_params = env.convert_byte_array(call_link_public_params)?;
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let platform = call_manager.platform()?.try_clone()?;
+    call_links::create_call_link(
+        call_manager.http_client(),
+        &Cow::from(&sfu_url),
+        root_key,
+        &create_credential_presentation,
+        &admin_passkey,
+        &call_link_public_params,
+        Box::new(move |result| {
+            platform.handle_call_link_result(request_id as u32, result);
+        }),
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn update_call_link(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    sfu_url: JString,
+    auth_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+    admin_passkey: jbyteArray,
+    new_name: JString,
+    new_restrictions: jint,
+    new_revoked: jint,
+    request_id: jlong,
+) -> Result<()> {
+    info!("update_call_link():");
+
+    let sfu_url = env.get_string(sfu_url)?;
+    let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
+    let root_key =
+        call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
+    let admin_passkey = env.convert_byte_array(admin_passkey)?;
+    let new_name = if new_name.is_null() {
+        None
+    } else {
+        Some(env.get_string(new_name)?)
+    };
+    let encrypted_name = new_name.map(|name| {
+        let name = Cow::from(&name);
+        if name.is_empty() {
+            vec![]
+        } else {
+            root_key.encrypt(name.as_bytes(), rand::rngs::OsRng)
+        }
+    });
+    let new_restrictions = match new_restrictions {
+        0 => Some(CallLinkRestrictions::None),
+        1 => Some(CallLinkRestrictions::AdminApproval),
+        _ => None,
+    };
+    let new_revoked = match new_revoked {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    };
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let platform = call_manager.platform()?.try_clone()?;
+    call_links::update_call_link(
+        call_manager.http_client(),
+        &Cow::from(&sfu_url),
+        root_key,
+        &auth_credential_presentation,
+        &CallLinkUpdateRequest {
+            admin_passkey: &admin_passkey,
+            encrypted_name: encrypted_name.as_deref(),
+            restrictions: new_restrictions,
+            revoked: new_revoked,
+        },
+        Box::new(move |result| {
+            platform.handle_call_link_result(request_id as u32, result);
+        }),
+    );
+
+    Ok(())
 }
 
 // Group Calls

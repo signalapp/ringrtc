@@ -90,14 +90,14 @@ public struct PeekResponse {
     public let errorStatusCode: UInt16?
     public let peekInfo: PeekInfo
 
-    static func fromRtc(_ rtcPeekResponse: rtc_sfu_PeekResponse) -> Self {
+    static func fromRtc(_ rtcPeekResponse: rtc_sfu_Response_rtc_sfu_PeekInfo) -> Self {
         var errorStatusCode: UInt16? = rtcPeekResponse.error_status_code.asUInt16()
         if errorStatusCode == 0 {
             errorStatusCode = nil
         }
         return PeekResponse(
             errorStatusCode: errorStatusCode,
-            peekInfo: PeekInfo.fromRtc(rtcPeekResponse.peek_info)
+            peekInfo: PeekInfo.fromRtc(rtcPeekResponse.value)
         )
     }
 }
@@ -135,9 +135,15 @@ extension rtc_UserIds {
     }
 }
 
+public enum SFUResult<Value> {
+    case success(Value)
+    case failure(UInt16)
+}
+
 public class SFUClient {
     private let httpClient: HTTPClient
-    private let requests: Requests<PeekResponse> = Requests()
+    private let peekRequests: Requests<PeekResponse> = Requests()
+    private let callLinkRequests: Requests<SFUResult<CallLinkState>> = Requests()
 
     public init(httpClient: HTTPClient) {
         self.httpClient = httpClient
@@ -147,7 +153,7 @@ public class SFUClient {
         AssertIsOnMainThread()
         Logger.debug("peekGroupCall")
 
-        let (requestId, seal) = self.requests.add()
+        let (requestId, seal) = self.peekRequests.add()
         let rtcRequest: rtc_sfu_PeekRequest = rtc_sfu_PeekRequest.allocate(request)
         defer {
             rtcRequest.deallocate()
@@ -158,10 +164,186 @@ public class SFUClient {
     }
 
     func handlePeekResponse(requestId: UInt32, response: PeekResponse) {
-        let resolved = self.requests.resolve(id: requestId, response: response);
+        let resolved = self.peekRequests.resolve(id: requestId, response: response);
         if !resolved {
             Logger.warn("Invalid requestId for handlePeekResponse: \(requestId)")
         }
+    }
+
+    func handleCallLinkResponse(requestId: UInt32, response: SFUResult<CallLinkState>) {
+        let resolved = self.callLinkRequests.resolve(id: requestId, response: response)
+        if !resolved {
+            Logger.warn("Invalid requestId for handleCallLinkResponse: \(requestId)")
+        }
+    }
+
+    /// Asynchronous request to get information about a call link.
+    ///
+    /// - Parameter sfuUrl: the URL to use when accessing the SFU
+    /// - Parameter authCredentialPresentation: a serialized CallLinkAuthCredentialPresentation
+    /// - Parameter linkRootKey: the root key for the call link
+    ///
+    /// Expected failure codes include:
+    /// - 404: the room does not exist (or expired so long ago that it has been removed from the server)
+    public func readCallLink(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey) -> Guarantee<SFUResult<CallLinkState>> {
+        AssertIsOnMainThread()
+        Logger.debug("createCallLink")
+
+        let (requestId, seal) = self.callLinkRequests.add()
+        let delegateWrapper = SFUDelegateWrapper(self)
+        authCredentialPresentation.withRtcBytes { authCredentialPresentation in
+            linkRootKey.bytes.withRtcBytes { linkRootKey in
+                rtc_sfu_readCallLink(self.httpClient.rtcClient, requestId, sfuUrl, authCredentialPresentation, linkRootKey, delegateWrapper.asRtc())
+            }
+        }
+        return seal
+    }
+
+    /// Asynchronous request to create a new call link.
+    ///
+    /// This request is idempotent; if it fails due to a network issue, it is safe to retry.
+    ///
+    /// ```
+    /// let linkKey = CallLinkRootKey.generate()
+    /// let adminPasskey = CallLinkRootKey.generateAdminPasskey()
+    /// let roomId = linkKey.deriveRoomId()
+    /// CreateCallLinkCredential credential = requestCreateCredentialFromChatServer(roomId) // using libsignal
+    /// let secretParams = CallLinkSecretParams.deriveFromRootKey(linkKey.bytes)
+    /// let credentialPresentation = credential.present(roomId, secretParams).serialize()
+    /// let serializedPublicParams = secretParams.getPublicParams().serialize()
+    /// sfu.createCallLink(sfuUrl: sfuUrl, createCredentialPresentation: credentialPresentation, linkRootKey: linkKey, adminPasskey: adminPasskey, callLinkPublicParams: serializedPublicParams)
+    ///     .done { result in
+    ///   switch result {
+    ///   case .success(let state):
+    ///     // In actuality you may not want to do this until the user clicks Done.
+    ///     saveToDatabase(linkKey.bytes, adminPasskey, state)
+    ///     syncToOtherDevices(linkKey.bytes, adminPasskey)
+    ///   case .failure(409):
+    ///     // The room already exists (and isn't yours), i.e. you've hit a 1-in-a-billion conflict.
+    ///     fallthrough
+    ///   case .failure(let code):
+    ///     // Unexpected error, kick the user out for now.
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// - Parameter sfuUrl: the URL to use when accessing the SFU
+    /// - Parameter createCredentialPresentation: a serialized CreateCallLinkCredentialPresentation
+    /// - Parameter linkRootKey: the root key for the call link
+    /// - Parameter adminPasskey: the arbitrary passkey to use for the new room
+    /// - Parameter callLinkPublicParams: the serialized CallLinkPublicParams for the new room
+    public func createCallLink(sfuUrl: String, createCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, callLinkPublicParams: [UInt8]) -> Guarantee<SFUResult<CallLinkState>> {
+        AssertIsOnMainThread()
+        Logger.debug("createCallLink")
+
+        let (requestId, seal) = self.callLinkRequests.add()
+        let delegateWrapper = SFUDelegateWrapper(self)
+        createCredentialPresentation.withRtcBytes { createCredentialPresentation in
+            linkRootKey.bytes.withRtcBytes { linkRootKey in
+                adminPasskey.withRtcBytes { adminPasskey in
+                    callLinkPublicParams.withRtcBytes { callLinkPublicParams in
+                        rtc_sfu_createCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, callLinkPublicParams, delegateWrapper.asRtc())
+                    }
+                }
+            }
+        }
+        return seal
+    }
+
+    /// Asynchronous request to update a call link's name.
+    ///
+    /// Possible failure codes include:
+    /// - 401: the room does not exist (and this is the wrong API to create a new room)
+    /// - 403: the admin passkey is incorrect
+    ///
+    /// This request is idempotent; if it fails due to a network issue, it is safe to retry.
+    ///
+    /// - Parameter sfuUrl: the URL to use when accessing the SFU
+    /// - Parameter authCredentialPresentation: a serialized CallLinkAuthCredentialPresentation
+    /// - Parameter linkRootKey: the root key for the call link
+    /// - Parameter adminPasskey: the passkey specified when the link was created
+    /// - Parameter newName: the new name to use
+    public func updateCallLinkName(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, newName: String) -> Guarantee<SFUResult<CallLinkState>> {
+        AssertIsOnMainThread()
+        Logger.debug("updateCallLinkName")
+
+        let (requestId, seal) = self.callLinkRequests.add()
+        let delegateWrapper = SFUDelegateWrapper(self)
+        authCredentialPresentation.withRtcBytes { createCredentialPresentation in
+            linkRootKey.bytes.withRtcBytes { linkRootKey in
+                adminPasskey.withRtcBytes { adminPasskey in
+                    rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, newName, -1, -1, delegateWrapper.asRtc())
+                }
+            }
+        }
+        return seal
+    }
+
+    /// Asynchronous request to update a call link's restrictions.
+    ///
+    /// Possible failure codes include:
+    /// - 401: the room does not exist (and this is the wrong API to create a new room)
+    /// - 403: the admin passkey is incorrect
+    ///
+    /// This request is idempotent; if it fails due to a network issue, it is safe to retry.
+    ///
+    /// - Parameter sfuUrl: the URL to use when accessing the SFU
+    /// - Parameter authCredentialPresentation: a serialized CallLinkAuthCredentialPresentation
+    /// - Parameter linkRootKey: the root key for the call link
+    /// - Parameter adminPasskey: the passkey specified when the link was created
+    /// - Parameter restrictions: the new restrictions
+    public func updateCallLinkRestrictions(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, restrictions: CallLinkState.Restrictions) -> Guarantee<SFUResult<CallLinkState>> {
+        AssertIsOnMainThread()
+        Logger.debug("updateCallLinkRestrictions")
+
+        let (requestId, seal) = self.callLinkRequests.add()
+        let delegateWrapper = SFUDelegateWrapper(self)
+        authCredentialPresentation.withRtcBytes { createCredentialPresentation in
+            linkRootKey.bytes.withRtcBytes { linkRootKey in
+                adminPasskey.withRtcBytes { adminPasskey in
+                    let rawRestrictions: Int8
+                    switch restrictions {
+                    case .none:
+                        rawRestrictions = 0
+                    case .adminApproval:
+                        rawRestrictions = 1
+                    default:
+                        preconditionFailure("cannot update restrictions to 'unknown'")
+                    }
+                    rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, nil, rawRestrictions, -1, delegateWrapper.asRtc())
+                }
+            }
+        }
+        return seal
+    }
+
+    /// Asynchronous request to revoke or un-revoke a call link.
+    ///
+    /// Possible failure codes include:
+    /// - 401: the room does not exist (and this is the wrong API to create a new room)
+    /// - 403: the admin passkey is incorrect
+    ///
+    /// This request is idempotent; if it fails due to a network issue, it is safe to retry.
+    ///
+    /// - Parameter sfuUrl: the URL to use when accessing the SFU
+    /// - Parameter authCredentialPresentation: a serialized CallLinkAuthCredentialPresentation
+    /// - Parameter linkRootKey: the root key for the call link
+    /// - Parameter adminPasskey: the passkey specified when the link was created
+    /// - Parameter revoked: whether the link should now be revoked
+    public func updateCallLinkRevocation(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, revoked: Bool) -> Guarantee<SFUResult<CallLinkState>> {
+        AssertIsOnMainThread()
+        Logger.debug("updateCallLinkRevocation")
+
+        let (requestId, seal) = self.callLinkRequests.add()
+        let delegateWrapper = SFUDelegateWrapper(self)
+        authCredentialPresentation.withRtcBytes { createCredentialPresentation in
+            linkRootKey.bytes.withRtcBytes { linkRootKey in
+                adminPasskey.withRtcBytes { adminPasskey in
+                    rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, nil, -1, revoked ? 1 : 0, delegateWrapper.asRtc())
+                }
+            }
+        }
+        return seal
     }
 }
 
@@ -199,7 +381,7 @@ private class SFUDelegateWrapper {
 
                 _ = SFUDelegateWrapper.from(retained: retained)
             },
-            handle_peek_response: { (unretained: UnsafeRawPointer?, requestId: UInt32, response: rtc_sfu_PeekResponse) in
+            handle_peek_response: { (unretained: UnsafeRawPointer?, requestId: UInt32, response: rtc_sfu_Response_rtc_sfu_PeekInfo) in
                 guard let unretained = unretained else {
                     return
                 }
@@ -217,6 +399,45 @@ private class SFUDelegateWrapper {
                         return
                     }
                     delegate.handlePeekResponse(requestId: requestId, response: response)
+                }
+            }
+        )
+    }
+
+    func asRtc() -> rtc_sfu_CallLinkDelegate {
+        return rtc_sfu_CallLinkDelegate(
+            retained: self.asRetainedPtr(),
+            release: { (retained: UnsafeMutableRawPointer?) in
+                guard let retained = retained else {
+                    return
+                }
+
+                _ = SFUDelegateWrapper.from(retained: retained)
+            },
+            handle_response: { (unretained: UnsafeRawPointer?, requestId: UInt32, response: rtc_sfu_Response_rtc_calllinks_CallLinkState) in
+                guard let unretained = unretained else {
+                    return
+                }
+
+                let wrapper = SFUDelegateWrapper.from(unretained: unretained)
+                let result: SFUResult<CallLinkState>
+
+                if let errorStatusCode = response.error_status_code.asUInt16() {
+                    result = .failure(errorStatusCode)
+                } else {
+                    result = .success(CallLinkState.fromRtc(response.value))
+                }
+
+                Logger.debug("SFUDelegateWrapper.handleResponse")
+
+                DispatchQueue.main.async {
+                    Logger.debug("SFUDelegateWrapper.handleResponse - main.async")
+
+                    guard let delegate = wrapper.delegate else {
+                        // Response came back after SFUClient was deleted
+                        return
+                    }
+                    delegate.handleCallLinkResponse(requestId: requestId, response: result)
                 }
             }
         )

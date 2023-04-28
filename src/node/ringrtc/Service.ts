@@ -5,14 +5,14 @@
 
 /* eslint-disable max-classes-per-file */
 
-import * as os from 'os';
 import * as process from 'process';
 import { GumVideoCaptureOptions, VideoPixelFormatEnum } from './VideoSupport';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires, import/no-dynamic-require
-const Native = require(`../../build/${os.platform()}/libringrtc-${
-  process.arch
-}.node`);
+import {
+  CallLinkState,
+  CallLinkRestrictions,
+  CallLinkRootKey,
+} from './CallLinks';
+import Native from './Native';
 
 export const callIdFromEra: (era: string) => CallId = Native.callIdFromEra;
 
@@ -148,6 +148,9 @@ class NativeCallManager {
   Native.cm_setGroupMembers;
 (NativeCallManager.prototype as any).setMembershipProof =
   Native.cm_setMembershipProof;
+(NativeCallManager.prototype as any).readCallLink = Native.cm_readCallLink;
+(NativeCallManager.prototype as any).createCallLink = Native.cm_createCallLink;
+(NativeCallManager.prototype as any).updateCallLink = Native.cm_updateCallLink;
 (NativeCallManager.prototype as any).peekGroupCall = Native.cm_peekGroupCall;
 (NativeCallManager.prototype as any).getAudioInputs = Native.cm_getAudioInputs;
 (NativeCallManager.prototype as any).setAudioInput = Native.cm_setAudioInput;
@@ -269,11 +272,16 @@ class CallInfo {
   }
 }
 
+export type HttpResult<T> =
+  | { success: true; value: T }
+  | { success: false; errorStatusCode: number };
+
 export class RingRTCType {
   private readonly callManager: CallManager;
   private _call: Call | null;
   private _groupCallByClientId: Map<GroupCallClientId, GroupCall>;
   private _peekRequests: Requests<PeekInfo>;
+  private _callLinkRequests: Requests<HttpResult<CallLinkState>>;
 
   // A map to hold call information not maintained in RingRTC.
   private _callInfoByCallId: Map<string, CallInfo>;
@@ -350,7 +358,8 @@ export class RingRTCType {
     this.callManager = new NativeCallManager(this) as unknown as CallManager;
     this._call = null;
     this._groupCallByClientId = new Map();
-    this._peekRequests = new Requests<PeekInfo>();
+    this._peekRequests = new Requests();
+    this._callLinkRequests = new Requests();
     this._callInfoByCallId = new Map();
   }
 
@@ -796,6 +805,212 @@ export class RingRTCType {
     })().catch(e => this.logError(e.toString()));
   }
 
+  // Call Links
+
+  /**
+   * Asynchronous request to get information about a call link.
+   *
+   * @param sfuUrl - the URL to use when accessing the SFU
+   * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
+   * @param linkRootKey - the root key for the call link
+   *
+   * Expected failure codes include:
+   * - 404: the room does not exist (or expired so long ago that it has been removed from the server)
+   */
+  readCallLink(
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: CallLinkRootKey
+  ): Promise<HttpResult<CallLinkState>> {
+    const [requestId, promise] = this._callLinkRequests.add();
+    // Response comes back via handleCallLinkResponse
+    sillyDeadlockProtection(() => {
+      this.callManager.readCallLink(
+        requestId,
+        sfuUrl,
+        authCredentialPresentation,
+        linkRootKey.bytes
+      );
+    });
+    return promise;
+  }
+
+  /**
+   * Asynchronous request to create a new call link.
+   *
+   * This request is idempotent; if it fails due to a network issue, it is safe to retry.
+   *
+   * @example
+   * const linkKey = CallLinkRootKey.generate();
+   * const adminPasskey = CallLinkRootKey.generateAdminPasskey();
+   * const roomId = linkKey.deriveRoomId();
+   * const credential = requestCreateCredentialFromChatServer(roomId); // using libsignal
+   * const secretParams = CallLinkSecretParams.deriveFromRootKey(linkKey.bytes);
+   * const credentialPresentation = credential.present(roomId, secretParams).serialize();
+   * const serializedPublicParams = secretParams.getPublicParams().serialize();
+   * const result = await RingRTC.createCallLink(sfuUrl, credentialPresentation, linkKey, adminPasskey, serializedPublicParams);
+   * if (result.success) {
+   *   const state = result.value;
+   *   // In actuality you may not want to do this until the user clicks Done.
+   *   saveToDatabase(linkKey.bytes, adminPasskey, state);
+   *   syncToOtherDevices(linkKey.bytes, adminPasskey);
+   * } else {
+   *   switch (result.errorStatusCode) {
+   *   case 409:
+   *     // The room already exists (and isn't yours), i.e. you've hit a 1-in-a-billion conflict.
+   *     // Fall through to kicking the user out to try again later.
+   *   default:
+   *     // Unexpected error, kick the user out for now.
+   *   }
+   * }
+   *
+   * @param sfuUrl - the URL to use when accessing the SFU
+   * @param createCredentialPresentation - a serialized CreateCallLinkCredentialPresentation
+   * @param linkRootKey - the root key for the call link
+   * @param adminPasskey - the arbitrary passkey to use for the new room
+   * @param callLinkPublicParams - the serialized CallLinkPublicParams for the new room
+   */
+  createCallLink(
+    sfuUrl: string,
+    createCredentialPresentation: Buffer,
+    linkRootKey: CallLinkRootKey,
+    adminPasskey: Buffer,
+    callLinkPublicParams: Buffer
+  ): Promise<HttpResult<CallLinkState>> {
+    const [requestId, promise] = this._callLinkRequests.add();
+    // Response comes back via handleCallLinkResponse
+    sillyDeadlockProtection(() => {
+      this.callManager.createCallLink(
+        requestId,
+        sfuUrl,
+        createCredentialPresentation,
+        linkRootKey.bytes,
+        adminPasskey,
+        callLinkPublicParams
+      );
+    });
+    return promise;
+  }
+
+  /**
+   * Asynchronous request to update a call link's name.
+   *
+   * Possible failure codes include:
+   * - 401: the room does not exist (and this is the wrong API to create a new room)
+   * - 403: the admin passkey is incorrect
+   *
+   * This request is idempotent; if it fails due to a network issue, it is safe to retry.
+   *
+   * @param sfuUrl - the URL to use when accessing the SFU
+   * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
+   * @param linkRootKey - the root key for the call link
+   * @param adminPasskey - the passkey specified when the link was created
+   * @param newName - the new name to use
+   */
+  updateCallLinkName(
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: CallLinkRootKey,
+    adminPasskey: Buffer,
+    newName: string
+  ): Promise<HttpResult<CallLinkState>> {
+    const [requestId, promise] = this._callLinkRequests.add();
+    // Response comes back via handleCallLinkResponse
+    sillyDeadlockProtection(() => {
+      this.callManager.updateCallLink(
+        requestId,
+        sfuUrl,
+        authCredentialPresentation,
+        linkRootKey.bytes,
+        adminPasskey,
+        newName,
+        undefined,
+        undefined
+      );
+    });
+    return promise;
+  }
+
+  /**
+   * Asynchronous request to update a call link's restrictions.
+   *
+   * Possible failure codes include:
+   * - 401: the room does not exist (and this is the wrong API to create a new room)
+   * - 403: the admin passkey is incorrect
+   *
+   * This request is idempotent; if it fails due to a network issue, it is safe to retry.
+   *
+   * @param sfuUrl - the URL to use when accessing the SFU
+   * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
+   * @param linkRootKey - the root key for the call link
+   * @param adminPasskey - the passkey specified when the link was created
+   * @param restrictions - the new restrictions to use
+   */
+  updateCallLinkRestrictions(
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: CallLinkRootKey,
+    adminPasskey: Buffer,
+    restrictions: Exclude<CallLinkRestrictions, CallLinkRestrictions.Unknown>
+  ): Promise<HttpResult<CallLinkState>> {
+    const [requestId, promise] = this._callLinkRequests.add();
+    // Response comes back via handleCallLinkResponse
+    sillyDeadlockProtection(() => {
+      this.callManager.updateCallLink(
+        requestId,
+        sfuUrl,
+        authCredentialPresentation,
+        linkRootKey.bytes,
+        adminPasskey,
+        undefined,
+        restrictions,
+        undefined
+      );
+    });
+    return promise;
+  }
+
+  /**
+   * Asynchronous request to revoke or un-revoke a call link.
+   *
+   * Possible failure codes include:
+   * - 401: the room does not exist (and this is the wrong API to create a new room)
+   * - 403: the admin passkey is incorrect
+   *
+   * This request is idempotent; if it fails due to a network issue, it is safe to retry.
+   *
+   * @param sfuUrl - the URL to use when accessing the SFU
+   * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
+   * @param linkRootKey - the root key for the call link
+   * @param adminPasskey - the passkey specified when the link was created
+   * @param revoked - whether the link should now be revoked
+   */
+  updateCallLinkRevocation(
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: CallLinkRootKey,
+    adminPasskey: Buffer,
+    revoked: boolean
+  ): Promise<HttpResult<CallLinkState>> {
+    const [requestId, promise] = this._callLinkRequests.add();
+    // Response comes back via handleCallLinkResponse
+    sillyDeadlockProtection(() => {
+      this.callManager.updateCallLink(
+        requestId,
+        sfuUrl,
+        authCredentialPresentation,
+        linkRootKey.bytes,
+        adminPasskey,
+        undefined,
+        undefined,
+        revoked
+      );
+    });
+    return promise;
+  }
+
+  // HTTP callbacks
+
   receivedHttpResponse(requestId: number, status: number, body: Buffer): void {
     sillyDeadlockProtection(() => {
       try {
@@ -991,6 +1206,55 @@ export class RingRTCType {
     sillyDeadlockProtection(() => {
       if (!this._peekRequests.resolve(requestId, info)) {
         this.logWarn(`Invalid request ID for handlePeekResponse: ${requestId}`);
+      }
+    });
+  }
+
+  // Called by Rust
+  handleCallLinkResponse(
+    requestId: number,
+    statusCode: number,
+    state:
+      | {
+          name: string;
+          rawRestrictions: number;
+          revoked: boolean;
+          expiration: Date;
+        }
+      | undefined
+  ): void {
+    sillyDeadlockProtection(() => {
+      // Recreate the state so that we have the correct prototype, in case we add more methods to CallLinkState.
+      let result: HttpResult<CallLinkState>;
+      if (state) {
+        let restrictions: CallLinkRestrictions;
+        switch (state.rawRestrictions) {
+          case 0:
+            restrictions = CallLinkRestrictions.None;
+            break;
+          case 1:
+            restrictions = CallLinkRestrictions.AdminApproval;
+            break;
+          default:
+            restrictions = CallLinkRestrictions.Unknown;
+            break;
+        }
+        result = {
+          success: true,
+          value: new CallLinkState(
+            state.name,
+            restrictions,
+            state.revoked,
+            state.expiration
+          ),
+        };
+      } else {
+        result = { success: false, errorStatusCode: statusCode };
+      }
+      if (!this._callLinkRequests.resolve(requestId, result)) {
+        this.logWarn(
+          `Invalid request ID for handleCallLinkResponse: ${requestId}`
+        );
       }
     });
   }
@@ -2390,6 +2654,31 @@ export interface CallManager {
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined;
+  // Responses come back via handleCallLinkResponse
+  readCallLink(
+    requestId: number,
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: Buffer
+  ): void;
+  createCallLink(
+    requestId: number,
+    sfuUrl: string,
+    createCredentialPresentation: Buffer,
+    linkRootKey: Buffer,
+    adminPasskey: Buffer,
+    callLinkPublicParams: Buffer
+  ): void;
+  updateCallLink(
+    requestId: number,
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: Buffer,
+    adminPasskey: Buffer,
+    newName: string | undefined,
+    newRestrictions: number | undefined,
+    newRevoked: boolean | undefined
+  ): void;
   // Response comes back via handlePeekResponse
   peekGroupCall(
     requestId: number,

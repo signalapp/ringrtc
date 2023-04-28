@@ -357,8 +357,9 @@ pub fn join(
             ),
         },
         Box::new(move |http_response| {
-            let result = http::parse_json_response::<SerializedJoinResponse>(http_response.as_ref())
-                .map(|deserialized| JoinResponse::from(deserialized, &opaque_user_id_mappings));
+            let result =
+                http::parse_json_response::<SerializedJoinResponse>(http_response.as_ref())
+                    .map(|deserialized| JoinResponse::from(deserialized, &opaque_user_id_mappings));
             result_callback(result)
         }),
     );
@@ -467,7 +468,7 @@ pub mod ios {
         pub handle_peek_response: extern "C" fn(
             unretained: *const c_void,
             request_id: u32,
-            peek_response: rtc_sfu_PeekResponse,
+            peek_response: rtc_sfu_Response<rtc_sfu_PeekInfo<'_>>,
         ),
     }
 
@@ -488,9 +489,9 @@ pub mod ios {
             let joined_members = peek_info.unique_users();
             let rtc_joined_members: Vec<rtc_Bytes<'_>> =
                 joined_members.iter().map(rtc_Bytes::from).collect();
-            let response = rtc_sfu_PeekResponse {
+            let response = rtc_sfu_Response {
                 error_status_code,
-                peek_info: rtc_sfu_PeekInfo {
+                value: rtc_sfu_PeekInfo {
                     joined_members: rtc_UserIds::from(&rtc_joined_members),
                     creator: rtc_Bytes::from_or_default(peek_info.creator.as_ref()),
                     era_id: rtc_String::from_or_default(peek_info.era_id.as_ref()),
@@ -505,9 +506,9 @@ pub mod ios {
 
     #[repr(C)]
     #[derive(Debug)]
-    pub struct rtc_sfu_PeekResponse<'a> {
-        error_status_code: rtc_OptionalU16,
-        peek_info: rtc_sfu_PeekInfo<'a>,
+    pub struct rtc_sfu_Response<T> {
+        pub error_status_code: rtc_OptionalU16,
+        pub value: T,
     }
 
     #[repr(C)]

@@ -486,6 +486,10 @@ where
         })
     }
 
+    pub fn http_client(&self) -> &dyn http::Client {
+        &self.http_client
+    }
+
     /// Updates the current user's UUID.
     pub fn set_self_uuid(&mut self, uuid: UserId) -> Result<()> {
         info!("set_self_uuid():");

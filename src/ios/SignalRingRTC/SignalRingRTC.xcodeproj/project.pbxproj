@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		17EC850A291057C200319C82 /* RingValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17EC8509291057C200319C82 /* RingValidation.swift */; };
+		17FC1EE12A09D5E900D0A2A5 /* CallLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17FC1EE02A09D5E800D0A2A5 /* CallLinks.swift */; };
+		17FC1EE32A09D6CC00D0A2A5 /* CallLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17FC1EE22A09D6CC00D0A2A5 /* CallLinkTests.swift */; };
 		38205E6B231845CF00B4BAFD /* Pods_SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */; };
 		383347EE23AA952F00D53B63 /* CallManagerInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E623AA952F00D53B63 /* CallManagerInterface.swift */; };
 		383347EF23AA952F00D53B63 /* CallManagerUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E723AA952F00D53B63 /* CallManagerUtil.swift */; };
@@ -42,6 +44,8 @@
 /* Begin PBXFileReference section */
 		17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = CARGO_BUILD_TARGET.xcconfig; sourceTree = "<group>"; };
 		17EC8509291057C200319C82 /* RingValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingValidation.swift; sourceTree = "<group>"; };
+		17FC1EE02A09D5E800D0A2A5 /* CallLinks.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallLinks.swift; sourceTree = "<group>"; };
+		17FC1EE22A09D6CC00D0A2A5 /* CallLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallLinkTests.swift; sourceTree = "<group>"; };
 		2C724194C4821B07AE3B7C25 /* Pods_SignalRingRTCTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SignalRingRTCTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		356D59CC1462BF3E3314D693 /* Pods-SignalRingRTCTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTCTests.release.xcconfig"; path = "Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests.release.xcconfig"; sourceTree = "<group>"; };
 		38205E692318434100B4BAFD /* Pods_SignalRingRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Pods_SignalRingRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -123,6 +127,7 @@
 				D09D0C2A27CEDCE80098758E /* HTTP.swift */,
 				D09D0C2B27CEDCE80098758E /* SFU.swift */,
 				38C42F0123C530E900AE79AD /* CallContext.swift */,
+				17FC1EE02A09D5E800D0A2A5 /* CallLinks.swift */,
 				383347EB23AA952F00D53B63 /* CallManager.swift */,
 				383347E923AA952F00D53B63 /* CallManagerGlobal.swift */,
 				383347E623AA952F00D53B63 /* CallManagerInterface.swift */,
@@ -144,6 +149,7 @@
 			isa = PBXGroup;
 			children = (
 				388AC0D522FA8B2D00BEC609 /* SignalRingRTCTests.swift */,
+				17FC1EE22A09D6CC00D0A2A5 /* CallLinkTests.swift */,
 				388AC0D722FA8B2D00BEC609 /* Info.plist */,
 			);
 			path = SignalRingRTCTests;
@@ -357,6 +363,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				17FC1EE12A09D5E900D0A2A5 /* CallLinks.swift in Sources */,
 				17EC850A291057C200319C82 /* RingValidation.swift in Sources */,
 				387059A724EB276700916F99 /* VideoCaptureController.swift in Sources */,
 				D0A033A727DA6EF200B0BDC7 /* Logging.swift in Sources */,
@@ -379,6 +386,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				388AC0D622FA8B2D00BEC609 /* SignalRingRTCTests.swift in Sources */,
+				17FC1EE32A09D6CC00D0A2A5 /* CallLinkTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

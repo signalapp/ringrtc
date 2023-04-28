@@ -572,6 +572,98 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcClose(
     }
 }
 
+// Call Links
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReadCallLink(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    sfu_url: JString,
+    auth_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+    request_id: jlong,
+) {
+    match call_manager::read_call_link(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        sfu_url,
+        auth_credential_presentation,
+        root_key,
+        request_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallLink(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    sfu_url: JString,
+    create_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+    admin_passkey: jbyteArray,
+    call_link_public_params: jbyteArray,
+    request_id: jlong,
+) {
+    match call_manager::create_call_link(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        sfu_url,
+        create_credential_presentation,
+        root_key,
+        admin_passkey,
+        call_link_public_params,
+        request_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateCallLink(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    sfu_url: JString,
+    auth_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+    admin_passkey: jbyteArray,
+    new_name: JString,
+    new_restrictions: jint,
+    new_revoked: jint,
+    request_id: jlong,
+) {
+    match call_manager::update_call_link(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        sfu_url,
+        auth_credential_presentation,
+        root_key,
+        admin_passkey,
+        new_name,
+        new_restrictions,
+        new_revoked,
+        request_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
 // Group Calls
 
 #[no_mangle]

@@ -101,6 +101,15 @@ extension rtc_Bytes {
     }
 }
 
+extension ContiguousBytes {
+    func withRtcBytes<R>(_ body: (rtc_Bytes) throws -> R) rethrows -> R {
+        return try withUnsafeBytes { buffer in
+            let bytes = rtc_Bytes(ptr: buffer.baseAddress?.assumingMemoryBound(to: UInt8.self), count: buffer.count)
+            return try body(bytes)
+        }
+    }
+}
+
 extension rtc_String {
     static func empty() -> Self {
         return Self(ptr: nil, count: 0)

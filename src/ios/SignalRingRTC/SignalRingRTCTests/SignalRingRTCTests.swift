@@ -129,6 +129,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     var sentCallMessageToGroupMessage: Data?
     var sentCallMessageToGroupUrgency: CallMessageUrgency?
 
+    var sentHttpRequestExpectation = XCTestExpectation(description: "sentHttpRequest")
     var sentHttpRequestId: UInt32?
     var sentHttpRequestUrl: String?
     var sentHttpRequestMethod: HTTPMethod?
@@ -580,6 +581,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
 
         shouldSendHttpRequestInvoked = true
 
+        sentHttpRequestExpectation.fulfill()
         sentHttpRequestId = requestId
         sentHttpRequestUrl = request.url
         sentHttpRequestMethod = request.method

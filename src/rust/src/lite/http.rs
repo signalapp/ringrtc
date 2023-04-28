@@ -70,6 +70,12 @@ impl ResponseStatus {
     pub const INVALID_RESPONSE_BODY_JSON: Self = Self { code: 702 };
 }
 
+impl std::fmt::Display for ResponseStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.code.fmt(f)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 #[repr(u16)]
 pub enum ResponseStatusType {

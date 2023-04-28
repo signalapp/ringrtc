@@ -45,6 +45,9 @@ jobs:
     - name: Clippy (gctc)
       run: cargo clippy --bin gctc --features native,http -- -D warnings
       working-directory: src/rust
+    - name: Clippy (call_link_test_client)
+      run: cargo clippy --bin call_link_test_client --features sim,http,zkgroup,rand_chacha --config 'patch.crates-io.curve25519-dalek.git="https://github.com/signalapp/curve25519-dalek"' --config 'patch.crates-io.curve25519-dalek.branch="lizard2"' -- -D warnings
+      working-directory: src/rust
     - name: Install for node
       run: yarn install --frozen-lockfile
       working-directory: src/node

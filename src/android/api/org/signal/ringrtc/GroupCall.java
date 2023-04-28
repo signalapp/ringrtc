@@ -430,7 +430,7 @@ public final class GroupCall {
      * Provides a collection of GroupMemberInfo objects representing all
      * the possible members of a group.
      *
-     * @param members        a GroupMemberInfo object for each member in a group
+     * @param groupMembers a GroupMemberInfo object for each member in a group
      *
      * @throws CallException for native code failures
      *

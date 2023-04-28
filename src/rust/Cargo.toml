@@ -21,13 +21,23 @@ required-features = ["native", "simnet"]
 
 [[bin]]
 name = "gctc"
-path = "src/gctc.rs"
+path = "src/gctc/main.rs"
 required-features = ["native", "http"]
+
+[[bin]]
+name = "call_link_test_client"
+path = "src/call_link_test_client.rs"
+# This binary doesn't depend on WebRTC at all, so either `sim` or `native` would work.
+required-features = ["sim", "http", "zkgroup", "rand_chacha"]
+# In order to build successfully you will also need both of the following options:
+# --config 'patch.crates-io.curve25519-dalek.git="https://github.com/signalapp/curve25519-dalek"'
+# --config 'patch.crates-io.curve25519-dalek.branch="lizard2"'
 
 [dependencies]
 regex-aot         = { path = "regex-aot" }
 
 aes               = { version = "0.8"    }
+aes-gcm-siv       = { version = "0.11.1" }
 anyhow            = { version = "1.0"    }
 base64            = { version = "0.13"   }
 bytes             = { version = "1.0"    }
@@ -44,6 +54,7 @@ regex-automata    = { version = "0.1.10" }
 hkdf              = { version = "0.12"   }
 serde_json        = { version = "1.0"    }
 serde             = { version = "1.0", features = ["derive"] }
+serde_with        = { version = "2.3.2", features = ["base64"] }
 hex               = { version = "0.4", features = ["serde"] }
 sha2              = { version = "0.10"   }
 static_assertions = { version = "1.1.0"  }
@@ -54,7 +65,7 @@ tokio             = { version = "1.13.0", features = ["rt-multi-thread", "time"]
 x25519-dalek      = { version = "1.1"    }
 
 # Optional, needed by the "electron" feature
-neon = { version = "0.10.1", optional = true, default-features = false, features = ["napi-6", "channel-api"] }
+neon = { version = "0.10.1", optional = true, default-features = false, features = ["napi-6", "channel-api", "try-catch-api"] }
 
 # Optional, needed to check Android-specific code when not targeting Android
 jni = { version = "0.19.0", optional = true, default-features = false }
@@ -64,6 +75,11 @@ ureq = { version = "2.5", optional = true }
 rustls = { version = "0.20.7", optional = true, features = ["dangerous_configuration"] }
 webpki = { version = "0.22", optional = true }
 
+# Optional, needed for call-link-test-client
+bincode = { version = "1.2.1", optional = true }
+zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.23.1", optional = true }
+rand_chacha = { version = "0.2", optional = true }
+
 [features]
 default = []
 sim = []
@@ -71,6 +87,7 @@ electron = ["neon", "native"]
 native = []  # We have this so we can more easily disable things only native clients need
 simnet = []  # We have this so we can more easily disable things only simulated native client need
 http = ["ureq", "rustls", "webpki"]
+zkgroup = ["dep:zkgroup", "bincode"]
 check-all = ["electron", "jni"]
 
 [[test]]
