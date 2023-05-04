@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.26.4
+
+- Desktop: Stop duplicate MediaStreamTracks
+
 ## v2.26.3
 
 - Remove h264 video codec support
