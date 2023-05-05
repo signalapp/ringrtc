@@ -251,7 +251,12 @@ public class CallManager {
 
     Log.i(TAG, "createAudioDeviceModule(): useHardware: " + useHardware + " useAecM: " + useAecM);
 
-    return JavaAudioDeviceModule.builder(ContextUtils.getApplicationContext())
+    // ContextUtils.getApplicationContext() is deprecated;
+    // we're supposed to have a Context on hand instead.
+    @SuppressWarnings("deprecation")
+    Context context = ContextUtils.getApplicationContext();
+
+    return JavaAudioDeviceModule.builder(context)
       .setUseHardwareAcousticEchoCanceler(useHardware)
       .setUseHardwareNoiseSuppressor(useHardware)
       .setUseAecm(useAecM)
@@ -861,7 +866,7 @@ public class CallManager {
 
   static class Requests<T> {
     private long nextId = 1;
-    @NonNull private LongSparseArray<ResponseHandler<T>> handlerById = new LongSparseArray();
+    @NonNull private LongSparseArray<ResponseHandler<T>> handlerById = new LongSparseArray<>();
   
     long add(ResponseHandler<T> handler) {
       long id = this.nextId++;
@@ -981,7 +986,10 @@ public class CallManager {
     MediaConstraints                constraints   = new MediaConstraints();
     PeerConnection.RTCConfiguration configuration = new PeerConnection.RTCConfiguration(callContext.iceServers);
 
-    configuration.sdpSemantics  = PeerConnection.SdpSemantics.PLAN_B;
+    @SuppressWarnings("deprecation")
+    PeerConnection.SdpSemantics     sdpSemantics = PeerConnection.SdpSemantics.PLAN_B;
+
+    configuration.sdpSemantics  = sdpSemantics;
     configuration.bundlePolicy  = PeerConnection.BundlePolicy.MAXBUNDLE;
     configuration.rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE;
     configuration.tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED;

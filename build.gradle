@@ -9,3 +9,9 @@ buildscript {
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
+
+allprojects {
+    tasks.withType(JavaCompile) {
+        options.compilerArgs << "-Xlint" << "-Xlint:-serial"
+    }
+}
