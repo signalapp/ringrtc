@@ -953,7 +953,7 @@ where
     fn wait_for_terminate(&mut self) -> Result<()> {
         // Wait for terminate operation to complete
         info!("terminate(): waiting for terminate complete...");
-        let &(ref mutex, ref condvar) = &*self.terminate_condvar;
+        let (mutex, condvar) = &*self.terminate_condvar;
         if let Ok(mut terminate_complete) = mutex.lock() {
             while !*terminate_complete {
                 terminate_complete = condvar.wait(terminate_complete).map_err(|_| {
@@ -978,7 +978,7 @@ where
     /// `Note:` Called by the FSM on a worker thread after shutdown.
     pub fn terminate_complete(&mut self) -> Result<()> {
         info!("notify_terminate_complete(): notifying terminate complete...");
-        let &(ref mutex, ref condvar) = &*self.terminate_condvar;
+        let (mutex, condvar) = &*self.terminate_condvar;
         if let Ok(mut terminate_complete) = mutex.lock() {
             *terminate_complete = true;
             condvar.notify_one();
@@ -1117,7 +1117,7 @@ where
         self.inject_event(event)?;
 
         info!("call-synchronize(): waiting for synchronize complete...");
-        let &(ref mutex, ref condvar) = &*sync;
+        let (mutex, condvar) = &*sync;
         if let Ok(mut sync_complete) = mutex.lock() {
             while !*sync_complete {
                 sync_complete = condvar.wait(sync_complete).map_err(|_| {

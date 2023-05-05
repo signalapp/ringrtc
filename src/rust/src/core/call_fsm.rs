@@ -1044,7 +1044,7 @@ where
             CallStateMachine::<T>::sync_thread("notify", notify_runtime)?;
         }
 
-        let &(ref mutex, ref condvar) = &*sync;
+        let (mutex, condvar) = &*sync;
         if let Ok(mut sync_complete) = mutex.lock() {
             *sync_complete = true;
             condvar.notify_one();

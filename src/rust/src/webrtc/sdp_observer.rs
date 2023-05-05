@@ -374,7 +374,7 @@ impl CreateSessionDescriptionObserver {
     /// This call signals the condition variable.
     fn on_create_success(&self, session_description: webrtc::ptr::Unique<RffiSessionDescription>) {
         info!("on_create_success()");
-        let &(ref mtx, ref cvar) = &*self.condition;
+        let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             guard.1 = Ok(session_description);
             guard.0 = true;
@@ -392,7 +392,7 @@ impl CreateSessionDescriptionObserver {
             "on_create_failure(). error msg: {}, type: {}",
             err_message, err_type
         );
-        let &(ref mtx, ref cvar) = &*self.condition;
+        let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             guard.1 =
                 Err(RingRtcError::CreateSessionDescriptionObserver(err_message, err_type).into());
@@ -408,7 +408,7 @@ impl CreateSessionDescriptionObserver {
     /// This can only be called once to get a valid value.  After that, it will return a null
     /// SessionDescription.  This is because the SessionDescription can't be cloned.
     pub fn get_result(&self) -> Result<SessionDescription> {
-        let &(ref mtx, ref cvar) = &*self.condition;
+        let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             while !guard.0 {
                 guard = cvar.wait(guard).map_err(|_| {
@@ -560,7 +560,7 @@ impl SetSessionDescriptionObserver {
     /// This call signals the condition variable.
     fn on_set_success(&self) {
         info!("on_set_success()");
-        let &(ref mtx, ref cvar) = &*self.condition;
+        let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             guard.1 = Ok(());
             guard.0 = true;
@@ -578,7 +578,7 @@ impl SetSessionDescriptionObserver {
             "on_set_failure(). error msg: {}, type: {}",
             err_message, err_type
         );
-        let &(ref mtx, ref cvar) = &*self.condition;
+        let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             guard.1 =
                 Err(RingRtcError::SetSessionDescriptionObserver(err_message, err_type).into());
@@ -592,7 +592,7 @@ impl SetSessionDescriptionObserver {
     ///
     /// This call blocks on the condition variable.
     pub fn get_result(&self) -> Result<()> {
-        let &(ref mtx, ref cvar) = &*self.condition;
+        let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             while !guard.0 {
                 guard = cvar.wait(guard).map_err(|_| {
