@@ -894,6 +894,7 @@ struct State {
     // If set, will always overide the send_rates.  Intended for testing.
     send_rates_override: Option<SendRates>,
     max_receive_rate: Option<DataRate>,
+    bandwidth_mode: BandwidthMode,
     // Demux IDs where video is being forward from, mapped to the server allocated height.
     forwarding_videos: HashMap<DemuxId, u16>,
 
@@ -1071,6 +1072,7 @@ impl Client {
                     send_rates_override: None,
                     // If the client never calls set_bandwidth_mode, use the normal max receive rate.
                     max_receive_rate: Some(NORMAL_MAX_RECEIVE_RATE),
+                    bandwidth_mode: BandwidthMode::Normal,
                     forwarding_videos: HashMap::default(),
 
                     outgoing_ring_state: OutgoingRingState::Unknown,
@@ -1700,6 +1702,17 @@ impl Client {
                 BandwidthMode::Low => LOW_MAX_RECEIVE_RATE,
                 BandwidthMode::Normal => NORMAL_MAX_RECEIVE_RATE,
             });
+
+            state.bandwidth_mode = bandwidth_mode;
+            match state.join_state {
+                JoinState::NotJoined(_) | JoinState::Joining => {
+                    // The audio encoders will be configured with bandwidth_mode upon joining.
+                },
+                JoinState::Joined(_) => {
+                    state.peer_connection.configure_audio_encoders(&bandwidth_mode.audio_encoder_config());
+                },
+            };
+
             if !state.on_demand_video_request_sent_since_last_heartbeat {
                 Self::send_video_requests_to_sfu(state);
                 state.on_demand_video_request_sent_since_last_heartbeat = true;
@@ -2016,6 +2029,10 @@ impl Client {
                         // the eraId.
                         Self::request_remote_devices_as_soon_as_possible(state);
                         state.next_stats_time = Some(Instant::now() + STATS_INITIAL_OFFSET);
+
+                        state
+                            .peer_connection
+                            .configure_audio_encoders(&state.bandwidth_mode.audio_encoder_config());
                     }
                     JoinState::Joined(_) => {
                         warn!("The SFU completed joining more than once.");
