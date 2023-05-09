@@ -347,7 +347,7 @@ pub struct AudioEncoderConfig {
 impl Default for AudioEncoderConfig {
     fn default() -> Self {
         Self {
-            packet_size_ms: 20,
+            packet_size_ms: 60,
 
             bandwidth: AudioBandwidth::Auto,
 
