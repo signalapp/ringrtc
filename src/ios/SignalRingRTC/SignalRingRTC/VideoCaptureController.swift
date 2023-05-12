@@ -138,8 +138,9 @@ public class VideoCaptureController {
         // the camera capture is at least our output size, which should be available
         // on all devices the client supports.
         let screenSize = UIScreen.main.nativeBounds.size
-        let targetWidth = max(Int32(screenSize.width), VideoCaptureController.maxCaptureWidth)
-        let targetHeight = max(Int32(screenSize.height), VideoCaptureController.maxCaptureHeight)
+        // screenSize is given in portrait-up orientation, but capture dimensions are in landscape.
+        let targetWidth = max(Int32(screenSize.height), VideoCaptureController.maxCaptureWidth)
+        let targetHeight = max(Int32(screenSize.width), VideoCaptureController.maxCaptureHeight)
         let targetFrameRate = VideoCaptureController.maxCaptureFrameRate
 
         Logger.info("Capture Formats")
