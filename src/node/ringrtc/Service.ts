@@ -44,7 +44,10 @@ class NativeCallManager {
 
   private createCallEndpoint(config: Config) {
     const fieldTrials = Object.assign(
-      { 'RingRTC-AnyAddressPortsKillSwitch': 'Enabled' },
+      {
+        'RingRTC-AnyAddressPortsKillSwitch': 'Enabled',
+        'WebRTC-Audio-OpusSetSignalVoiceWithDtx': 'Enabled',
+      },
       config.field_trials
     );
 

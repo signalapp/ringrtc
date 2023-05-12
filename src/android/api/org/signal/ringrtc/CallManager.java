@@ -95,7 +95,13 @@ public class CallManager {
         .setNativeLibraryLoader(new NoOpLoader());
 
       BuildInfo buildInfo = ringrtcGetBuildInfo();
-      String fieldTrialsString = buildFieldTrialsString(fieldTrials);
+
+      Map<String, String> fieldTrialsWithDefaults = new HashMap<>();
+      fieldTrialsWithDefaults.put("WebRTC-Audio-OpusSetSignalVoiceWithDtx", "Enabled");
+      fieldTrialsWithDefaults.putAll(fieldTrials);
+
+      String fieldTrialsString = buildFieldTrialsString(fieldTrialsWithDefaults);
+
       Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build, field trials = " + fieldTrialsString + ")");
 
       if (buildInfo.debug) {
