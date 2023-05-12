@@ -11,6 +11,7 @@ use std::{
     iter::FromIterator,
     net::IpAddr,
     net::SocketAddr,
+    sync::Arc,
 };
 
 use hex::ToHex;
@@ -74,20 +75,18 @@ struct SerializedPeekDeviceInfo {
 }
 
 impl SerializedPeekInfo {
-    fn deobfuscate(self, opaque_user_id_mappings: &[OpaqueUserIdMapping]) -> PeekInfo {
+    fn deobfuscate(self, member_resolver: &dyn MemberResolver) -> PeekInfo {
         let device_count = self.devices.len() as u32;
         PeekInfo {
             devices: self
                 .devices
                 .into_iter()
-                .map(|device| device.deobfuscate(opaque_user_id_mappings))
+                .map(|device| device.deobfuscate(member_resolver))
                 .collect(),
-            creator: self.creator.as_ref().and_then(|opaque_user_id| {
-                SerializedPeekDeviceInfo::deobfuscate_user_id(
-                    opaque_user_id_mappings,
-                    opaque_user_id,
-                )
-            }),
+            creator: self
+                .creator
+                .as_ref()
+                .and_then(|opaque_user_id| member_resolver.resolve(opaque_user_id)),
             era_id: self.era_id,
             max_devices: self.max_devices,
             device_count,
@@ -96,24 +95,11 @@ impl SerializedPeekInfo {
 }
 
 impl SerializedPeekDeviceInfo {
-    fn deobfuscate(self, opaque_user_id_mappings: &[OpaqueUserIdMapping]) -> PeekDeviceInfo {
+    fn deobfuscate(self, member_resolver: &dyn MemberResolver) -> PeekDeviceInfo {
         PeekDeviceInfo {
             demux_id: self.demux_id,
-            user_id: Self::deobfuscate_user_id(opaque_user_id_mappings, &self.opaque_user_id),
+            user_id: member_resolver.resolve(&self.opaque_user_id),
         }
-    }
-
-    fn deobfuscate_user_id(
-        opaque_user_id_mappings: &[OpaqueUserIdMapping],
-        opaque_user_id: &str,
-    ) -> Option<UserId> {
-        opaque_user_id_mappings.iter().find_map(|mapping| {
-            if opaque_user_id == mapping.opaque_user_id {
-                Some(mapping.user_id.clone())
-            } else {
-                None
-            }
-        })
     }
 }
 
@@ -149,10 +135,7 @@ pub struct JoinResponse {
 }
 
 impl JoinResponse {
-    fn from(
-        deserialized: SerializedJoinResponse,
-        opaque_user_id_mappings: &[OpaqueUserIdMapping],
-    ) -> Self {
+    fn from(deserialized: SerializedJoinResponse, member_resolver: &dyn MemberResolver) -> Self {
         let server_addresses = deserialized
             .server_ips
             .iter()
@@ -165,10 +148,7 @@ impl JoinResponse {
             server_ice_ufrag: deserialized.server_ice_ufrag,
             server_ice_pwd: deserialized.server_ice_pwd,
             server_dhe_pub_key: deserialized.server_dhe_pub_key,
-            call_creator: SerializedPeekDeviceInfo::deobfuscate_user_id(
-                opaque_user_id_mappings,
-                &deserialized.call_creator,
-            ),
+            call_creator: member_resolver.resolve(&deserialized.call_creator),
             era_id: deserialized.era_id,
         }
     }
@@ -200,6 +180,10 @@ pub type UserId = Vec<u8>;
 // Currently that gap is 16.
 pub type DemuxId = u32;
 
+pub trait MemberResolver {
+    fn resolve(&self, opaque_user_id: &str) -> Option<UserId>;
+}
+
 /// Associates a group member's UserId with their GroupMemberId.
 /// This is passed from the client to RingRTC to be able to create OpaqueUserIdMappings.
 #[derive(Clone, Debug)]
@@ -207,6 +191,35 @@ pub struct GroupMember {
     pub user_id: UserId,
     pub member_id: GroupMemberId,
 }
+
+#[derive(Default)]
+pub struct MemberMap {
+    members: Vec<OpaqueUserIdMapping>,
+}
+
+impl MemberMap {
+    pub fn new(group_members: &[GroupMember]) -> Self {
+        Self {
+            members: group_members
+                .iter()
+                .map(OpaqueUserIdMapping::from)
+                .collect(),
+        }
+    }
+}
+
+impl MemberResolver for MemberMap {
+    fn resolve(&self, opaque_user_id: &str) -> Option<UserId> {
+        self.members.iter().find_map(|entry| {
+            if entry.opaque_user_id == opaque_user_id {
+                Some(entry.user_id.clone())
+            } else {
+                None
+            }
+        })
+    }
+}
+
 /// Associates a group member's OpaqueUserId with their UUID.
 /// This is kept by RingRTC to be able to turn an OpaqueUserId into a UserId.
 #[derive(Clone, Debug)]
@@ -255,15 +268,6 @@ pub fn auth_header_from_membership_proof(proof: &[u8]) -> Option<String> {
     ))
 }
 
-pub fn opaque_user_id_mappings_from_group_members(
-    group_members: &[GroupMember],
-) -> Vec<OpaqueUserIdMapping> {
-    group_members
-        .iter()
-        .map(OpaqueUserIdMapping::from)
-        .collect()
-}
-
 /// The platform-specific methods the application must provide in order to
 /// make SFU calls.
 pub trait Delegate {
@@ -285,7 +289,7 @@ pub fn peek(
     http_client: &dyn http::Client,
     sfu_url: &str,
     auth_header: String,
-    opaque_user_id_mappings: Vec<OpaqueUserIdMapping>,
+    member_resolver: Arc<dyn MemberResolver + Send + Sync>,
     result_callback: PeekResultCallback,
 ) {
     http_client.send_request(
@@ -303,7 +307,7 @@ pub fn peek(
                             "Got group call peek result with device count = {}",
                             deserialized.devices.len()
                         );
-                        Ok(deserialized.deobfuscate(&opaque_user_id_mappings))
+                        Ok(deserialized.deobfuscate(&*member_resolver))
                     }
                     Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
                         info!("Got group call peek result with device count = 0 (status code 404)");
@@ -333,7 +337,7 @@ pub fn join(
     client_ice_ufrag: &str,
     client_dhe_pub_key: &[u8],
     hkdf_extra_info: &[u8],
-    opaque_user_id_mappings: Vec<OpaqueUserIdMapping>,
+    member_resolver: Arc<dyn MemberResolver + Send + Sync>,
     result_callback: JoinResultCallback,
 ) {
     info!("sfu::Join(): ");
@@ -359,7 +363,7 @@ pub fn join(
         Box::new(move |http_response| {
             let result =
                 http::parse_json_response::<SerializedJoinResponse>(http_response.as_ref())
-                    .map(|deserialized| JoinResponse::from(deserialized, &opaque_user_id_mappings));
+                    .map(|deserialized| JoinResponse::from(deserialized, &*member_resolver));
             result_callback(result)
         }),
     );
@@ -367,6 +371,8 @@ pub fn join(
 
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
+    use std::sync::Arc;
+
     use crate::lite::{
         ffi::ios::{rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32, rtc_String, FromOrDefault},
         http, sfu,
@@ -392,13 +398,12 @@ pub mod ios {
                     sfu::auth_header_from_membership_proof(request.membership_proof.as_slice())
                 {
                     let group_members = request.group_members.to_vec();
-                    let opaque_user_id_mappings =
-                        sfu::opaque_user_id_mappings_from_group_members(&group_members);
+                    let opaque_user_id_mappings = sfu::MemberMap::new(&group_members);
                     super::peek(
                         http_client,
                         &sfu_url,
                         auth_header,
-                        opaque_user_id_mappings,
+                        Arc::new(opaque_user_id_mappings),
                         Box::new(move |peek_result| {
                             delegate.handle_peek_result(request_id, peek_result)
                         }),
@@ -538,5 +543,52 @@ pub mod ios {
                 phantom: std::marker::PhantomData,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_ids_to_user_ids_by_map() {
+        let user_map = MemberMap {
+            members: vec![
+                OpaqueUserIdMapping {
+                    user_id: vec![1u8; 4],
+                    opaque_user_id: "u1".to_string(),
+                },
+                OpaqueUserIdMapping {
+                    user_id: vec![2u8; 4],
+                    opaque_user_id: "u2".to_string(),
+                },
+            ],
+        };
+
+        let peek_response = SerializedPeekInfo {
+            era_id: Some("paleozoic".to_string()),
+            max_devices: Some(16),
+            devices: vec![
+                SerializedPeekDeviceInfo {
+                    opaque_user_id: "u1".to_string(),
+                    demux_id: 0x11111110,
+                },
+                SerializedPeekDeviceInfo {
+                    opaque_user_id: "u2".to_string(),
+                    demux_id: 0x22222220,
+                },
+            ],
+            creator: None,
+        };
+
+        let peek_info = peek_response.deobfuscate(&user_map);
+        assert_eq!(
+            peek_info
+                .devices
+                .iter()
+                .filter_map(|device| device.user_id.as_ref())
+                .collect::<Vec<_>>(),
+            vec![[1u8; 4].as_ref(), [2u8; 4].as_ref()]
+        );
     }
 }

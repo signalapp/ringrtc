@@ -34,8 +34,8 @@ use crate::{
     lite::{
         http, sfu,
         sfu::{
-            DemuxId, GroupMember, MembershipProof, OpaqueUserIdMapping, PeekDeviceInfo, PeekInfo,
-            PeekResult, PeekResultCallback, UserId,
+            DemuxId, GroupMember, MembershipProof, PeekDeviceInfo, PeekInfo, PeekResult,
+            PeekResultCallback, UserId,
         },
     },
     protobuf,
@@ -449,7 +449,7 @@ pub struct HttpSfuClient {
     hkdf_extra_info: Vec<u8>,
     http_client: Box<dyn http::Client + Send>,
     auth_header: Option<String>,
-    opaque_user_id_mappings: Vec<OpaqueUserIdMapping>,
+    member_resolver: Arc<dyn sfu::MemberResolver + Send + Sync>,
     deferred_join: Option<(String, [u8; 32], Client)>,
 }
 
@@ -464,7 +464,7 @@ impl HttpSfuClient {
             hkdf_extra_info,
             http_client,
             auth_header: None,
-            opaque_user_id_mappings: vec![],
+            member_resolver: Arc::new(sfu::MemberMap::default()),
             deferred_join: None,
         }
     }
@@ -484,7 +484,7 @@ impl HttpSfuClient {
             ice_ufrag,
             dhe_pub_key,
             &self.hkdf_extra_info,
-            self.opaque_user_id_mappings.clone(),
+            self.member_resolver.clone(),
             Box::new(move |join_response| {
                 let join_result: Result<Joined> = match join_response {
                     Ok(join_response) => Ok(Joined {
@@ -544,7 +544,7 @@ impl SfuClient for HttpSfuClient {
                 self.http_client.as_ref(),
                 &self.url,
                 auth_header,
-                self.opaque_user_id_mappings.clone(),
+                self.member_resolver.clone(),
                 result_callback,
             ),
             None => {
@@ -554,11 +554,8 @@ impl SfuClient for HttpSfuClient {
     }
 
     fn set_group_members(&mut self, members: Vec<GroupMember>) {
-        self.opaque_user_id_mappings = sfu::opaque_user_id_mappings_from_group_members(&members);
-        info!(
-            "SfuClient set_group_members: {} members",
-            self.opaque_user_id_mappings.len()
-        );
+        info!("SfuClient set_group_members: {} members", members.len());
+        self.member_resolver = Arc::new(sfu::MemberMap::new(&members));
     }
 }
 

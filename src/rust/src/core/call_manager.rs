@@ -2693,14 +2693,13 @@ where
         group_members: Vec<GroupMember>,
     ) {
         if let Some(auth_header) = sfu::auth_header_from_membership_proof(&membership_proof) {
-            let opaque_user_id_mappings =
-                sfu::opaque_user_id_mappings_from_group_members(&group_members);
+            let member_resolver = sfu::MemberMap::new(&group_members);
             let call_manager = self.clone();
             sfu::peek(
                 &self.http_client,
                 &sfu_url,
                 auth_header,
-                opaque_user_id_mappings,
+                Arc::new(member_resolver),
                 Box::new(move |peek_result| {
                     info!("handle_peek_response");
                     platform_handler!(call_manager, handle_peek_result, request_id, peek_result);
