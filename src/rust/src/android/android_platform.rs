@@ -36,6 +36,7 @@ const RINGRTC_PACKAGE: &str = jni_class_name!(org.signal.ringrtc);
 const CALL_MANAGER_CLASS: &str = "CallManager";
 const HTTP_HEADER_CLASS: &str = jni_class_name!(org.signal.ringrtc.HttpHeader);
 const HTTP_RESULT_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallManager::HttpResult);
+const PEEK_INFO_CLASS: &str = jni_class_name!(org.signal.ringrtc.PeekInfo);
 const REMOTE_DEVICE_STATE_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.GroupCall::RemoteDeviceState);
 const RECEIVED_AUDIO_LEVEL_CLASS: &str =
@@ -1297,62 +1298,14 @@ impl Platform for AndroidPlatform {
         let _ = env.with_local_frame(capacity, || {
             let jni_client_id = client_id as jlong;
 
-            let joined_member_list = match jni_new_linked_list(&env) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("{:?}", error);
-                    return Ok(JObject::null());
-                }
-            };
-
-            for joined_member in joined_members {
-                let jni_opaque_user_id = match env.byte_array_from_slice(joined_member) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        continue;
-                    }
-                };
-
-                let result = joined_member_list.add(jni_opaque_user_id);
-                if result.is_err() {
-                    error!("{:?}", result.err());
-                    continue;
-                }
-            }
-
-            let jni_creator = match peek_info.creator.as_ref() {
-                None => JObject::null(),
-                Some(creator) => match env.byte_array_from_slice(creator) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        return Ok(JObject::null());
-                    }
-                },
-            };
-
-            let jni_era_id = match peek_info.era_id.as_ref() {
-                None => JObject::null(),
-                Some(era_id) => match env.new_string(era_id) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        return Ok(JObject::null());
-                    }
-                },
-            };
-
-            let jni_max_devices =
-                match self.get_optional_u32_long_object(&env, peek_info.max_devices) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        error!("{:?}", error);
+            let jni_peek_info =
+                match self.make_peek_info_object(env, peek_info, &mut joined_members.iter()) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        error!("make_peek_info_object: {:?}", e);
                         return Ok(JObject::null());
                     }
                 };
-
-            let jni_device_count = peek_info.device_count as jlong;
 
             let result = jni_call_method(
                 &env,
@@ -1360,11 +1313,7 @@ impl Platform for AndroidPlatform {
                 "handlePeekChanged",
                 jni_args!((
                     jni_client_id => long,
-                    JObject::from(joined_member_list) => java.util.List,
-                    jni_creator => [byte],
-                    jni_era_id => java.lang.String,
-                    jni_max_devices => java.lang.Long,
-                    jni_device_count => long,
+                    jni_peek_info => org.signal.ringrtc.PeekInfo,
                 ) -> void),
             );
             if result.is_err() {
@@ -1405,6 +1354,7 @@ impl AndroidPlatform {
             jni_class_name!(org.signal.ringrtc.GroupCall::GroupCallEndReason),
             HTTP_HEADER_CLASS,
             HTTP_RESULT_CLASS,
+            PEEK_INFO_CLASS,
             REMOTE_DEVICE_STATE_CLASS,
             RECEIVED_AUDIO_LEVEL_CLASS,
             CALL_LINK_STATE_CLASS,
@@ -1721,6 +1671,61 @@ impl AndroidPlatform {
             }
         }
     }
+
+    fn make_peek_info_object<'a>(
+        &self,
+        env: JNIEnv<'a>,
+        peek_info: &PeekInfo,
+        joined_members: &mut dyn Iterator<Item = &UserId>,
+    ) -> Result<JObject<'a>> {
+        let joined_member_list = jni_new_linked_list(&env)?;
+        for joined_member in joined_members {
+            let jni_opaque_user_id = match env.byte_array_from_slice(joined_member.as_ref()) {
+                Ok(v) => JObject::from(v),
+                Err(error) => {
+                    error!("{:?}", error);
+                    continue;
+                }
+            };
+
+            let result = joined_member_list.add(jni_opaque_user_id);
+            if result.is_err() {
+                error!("{:?}", result.err());
+                continue;
+            }
+        }
+        let jni_creator = match peek_info.creator.as_ref() {
+            None => JObject::null(),
+            Some(creator) => match env.byte_array_from_slice(creator) {
+                Ok(v) => JObject::from(v),
+                Err(error) => {
+                    error!("{:?}", error);
+                    JObject::null()
+                }
+            },
+        };
+        let jni_era_id = match peek_info.era_id.as_ref() {
+            None => JObject::null(),
+            Some(era_id) => env.new_string(era_id)?.into(),
+        };
+        let jni_max_devices = self.get_optional_u32_long_object(&env, peek_info.max_devices)?;
+        let jni_device_count = peek_info.device_count as jlong;
+
+        let args = jni_args!((
+            joined_member_list => java.util.List,
+            jni_creator => [byte],
+            jni_era_id => java.lang.String,
+            jni_max_devices => java.lang.Long,
+            jni_device_count => long,
+        ) -> org.signal.ringrtc.PeekInfo);
+        let result = env.call_static_method(
+            self.class_cache.get_class(PEEK_INFO_CLASS)?,
+            "fromNative",
+            args.sig,
+            &args.args,
+        )?;
+        Ok(result.l()?)
+    }
 }
 
 impl http::Delegate for AndroidPlatform {
@@ -1753,62 +1758,17 @@ impl sfu::Delegate for AndroidPlatform {
         let _ = env.with_local_frame(capacity, || {
             let jni_request_id = request_id as jlong;
 
-            let joined_member_list = match jni_new_linked_list(&env) {
-                Ok(v) => v,
-                Err(error) => {
-                    error!("{:?}", error);
+            let jni_peek_info = match self.make_peek_info_object(
+                env,
+                &peek_info,
+                &mut joined_members.into_iter(),
+            ) {
+                Ok(value) => value,
+                Err(e) => {
+                    error!("make_peek_info_object: {:?}", e);
                     return Ok(JObject::null());
                 }
             };
-
-            for joined_member in joined_members {
-                let jni_opaque_user_id = match env.byte_array_from_slice(joined_member) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        continue;
-                    }
-                };
-
-                let result = joined_member_list.add(jni_opaque_user_id);
-                if result.is_err() {
-                    error!("{:?}", result.err());
-                    continue;
-                }
-            }
-
-            let jni_creator = match peek_info.creator.as_ref() {
-                None => JObject::null(),
-                Some(creator) => match env.byte_array_from_slice(creator) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        return Ok(JObject::null());
-                    }
-                },
-            };
-
-            let jni_era_id = match peek_info.era_id.as_ref() {
-                None => JObject::null(),
-                Some(era_id) => match env.new_string(era_id) {
-                    Ok(v) => JObject::from(v),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        return Ok(JObject::null());
-                    }
-                },
-            };
-
-            let jni_max_devices =
-                match self.get_optional_u32_long_object(&env, peek_info.max_devices) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        error!("{:?}", error);
-                        return Ok(JObject::null());
-                    }
-                };
-
-            let jni_device_count = peek_info.device_count as jlong;
 
             let result = jni_call_method(
                 &env,
@@ -1816,11 +1776,7 @@ impl sfu::Delegate for AndroidPlatform {
                 "handlePeekResponse",
                 jni_args!((
                     jni_request_id => long,
-                    JObject::from(joined_member_list) => java.util.List,
-                    jni_creator => [byte],
-                    jni_era_id => java.lang.String,
-                    jni_max_devices => java.lang.Long,
-                    jni_device_count => long,
+                    jni_peek_info => org.signal.ringrtc.PeekInfo,
                 ) -> void),
             );
             if result.is_err() {

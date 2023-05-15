@@ -1496,21 +1496,7 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void handlePeekResponse(long requestId, List<byte[]> joinedMembers, @Nullable byte[] creator, @Nullable String eraId, @Nullable Long maxDevices, long deviceCount) {
-    if (joinedMembers != null) {
-      Log.i(TAG, "handlePeekResponse(): joinedMembers.size = " + joinedMembers.size());
-    } else {
-      Log.i(TAG, "handlePeekResponse(): joinedMembers is null");
-    }
-
-    // Create the collection, converting each provided byte[] to a UUID.
-    Collection<UUID> joinedGroupMembers = new ArrayList<UUID>();
-    for (byte[] joinedMember : joinedMembers) {
-        joinedGroupMembers.add(Util.getUuidFromBytes(joinedMember));
-    }
-
-    PeekInfo info = new PeekInfo(joinedGroupMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCount);
-
+  private void handlePeekResponse(long requestId, PeekInfo info) {
     if (!this.peekRequests.resolve(requestId, info)) {
       Log.w(TAG, "Invalid requestId for handlePeekResponse: " + requestId);
     }
@@ -1631,27 +1617,12 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void handlePeekChanged(long clientId, List<byte[]> joinedMembers, @Nullable byte[] creator, @Nullable String eraId, @Nullable Long maxDevices, long deviceCount) {
-    if (joinedMembers != null) {
-      Log.i(TAG, "handlePeekChanged(): joinedMembers.size = " + joinedMembers.size());
-    } else {
-      Log.i(TAG, "handlePeekChanged(): joinedMembers is null");
-    }
-
+  private void handlePeekChanged(long clientId, PeekInfo info) {
     GroupCall groupCall = this.groupCallByClientId.get(clientId);
     if (groupCall == null) {
       Log.w(TAG, "groupCall not found by clientId: " + clientId);
       return;
     }
-
-    // Create the collection, converting each provided byte[] to a UUID.
-    Collection<UUID> joinedGroupMembers = new ArrayList<UUID>();
-    for (byte[] joinedMember : joinedMembers) {
-        joinedGroupMembers.add(Util.getUuidFromBytes(joinedMember));
-    }
-
-    PeekInfo info = new PeekInfo(joinedGroupMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCount);
-
     groupCall.handlePeekChanged(info);
   }
 
