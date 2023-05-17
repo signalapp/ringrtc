@@ -81,7 +81,9 @@ impl RingId {
         // Sad path: arbitrary strings get a truncated hash as their ring ID.
         // We have no current plans to change era IDs from being 16 hex digits,
         // but nothing enforces this today, and we may want to change them in the future.
-        let truncated_hash: [u8; 8] = Sha256::digest(era_id).as_slice()[..8].try_into().unwrap();
+        let truncated_hash: [u8; 8] = Sha256::digest(era_id.as_bytes()).as_slice()[..8]
+            .try_into()
+            .unwrap();
         Self(i64::from_le_bytes(truncated_hash))
     }
 }
