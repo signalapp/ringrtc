@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.27.0
+
+- Update to WebRTC 5615 (m112)
+
+- Implement Call Link Create/Read/Update APIs
+
+- Set audio packet time to 60ms
+
+- Apply audio encoder configuration in group calls
+
+- ios: Fix video capture size selection
+
+- Refactor HTTP JSON parsing so it's more reusable
+
+- Bump Rust toolchain to nightly-2023-03-17
+
+- Build improvements and dependency updates
+
 ## v2.26.4
 
 - Desktop: Stop duplicate MediaStreamTracks
