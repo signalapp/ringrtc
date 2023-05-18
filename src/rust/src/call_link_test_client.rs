@@ -102,7 +102,10 @@ help                       - show this message
 create <id>                - create a new link
 read <id>                  - fetch the current state of a link
 set-title <id> <new-title> - change the title of a link
+root-key <id>              - print the root key for a link
 exit                       - quit
+
+<id> can be any word you want; it is hashed to produce a root key.
 "
                 );
                 prompt("> ");
@@ -207,6 +210,11 @@ exit                       - quit
                     },
                     Box::new(show_result),
                 );
+            }
+            ["root-key", id] => {
+                let root_key = root_key_from_id(id);
+                println!("{}\n", root_key.to_formatted_string());
+                prompt("> ");
             }
             ["exit" | "quit"] => {
                 break;
