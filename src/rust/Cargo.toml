@@ -15,18 +15,15 @@ license = "AGPL-3.0-only"
 crate_type = ["cdylib", "staticlib", "lib"]
 
 [[bin]]
-name = "cli"
-path = "src/cli.rs"
+name = "direct"
 required-features = ["native", "simnet"]
 
 [[bin]]
-name = "gctc"
-path = "src/gctc/main.rs"
+name = "group_call"
 required-features = ["native", "http"]
 
 [[bin]]
-name = "call_link_test_client"
-path = "src/call_link_test_client.rs"
+name = "call_link"
 # This binary doesn't depend on WebRTC at all, so either `sim` or `native` would work.
 required-features = ["sim", "http", "zkgroup", "rand_chacha"]
 # In order to build successfully you will also need both of the following options:

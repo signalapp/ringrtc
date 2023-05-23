@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-#[path = "gctc/http_client.rs"]
-mod http_client;
+mod support {
+    pub mod http_client;
+}
+use support::http_client;
 
 use std::hash::{Hash, Hasher};
 use std::io::Write;

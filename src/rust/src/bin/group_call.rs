@@ -3,7 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-mod http_client;
+mod support {
+    pub mod http_client;
+}
+use support::http_client;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
