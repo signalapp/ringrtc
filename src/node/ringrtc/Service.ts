@@ -98,8 +98,7 @@ class NativeCallManager {
   Native.cm_signalingMessageSent;
 (NativeCallManager.prototype as any).signalingMessageSendFailed =
   Native.cm_signalingMessageSendFailed;
-(NativeCallManager.prototype as any).updateDataMode =
-  Native.cm_updateDataMode;
+(NativeCallManager.prototype as any).updateDataMode = Native.cm_updateDataMode;
 (NativeCallManager.prototype as any).receivedOffer = Native.cm_receivedOffer;
 (NativeCallManager.prototype as any).receivedAnswer = Native.cm_receivedAnswer;
 (NativeCallManager.prototype as any).receivedIceCandidates =
@@ -141,8 +140,7 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).setPresenting = Native.cm_setPresenting;
 (NativeCallManager.prototype as any).resendMediaKeys =
   Native.cm_resendMediaKeys;
-(NativeCallManager.prototype as any).setDataMode =
-  Native.cm_setDataMode;
+(NativeCallManager.prototype as any).setDataMode = Native.cm_setDataMode;
 (NativeCallManager.prototype as any).requestVideo = Native.cm_requestVideo;
 (NativeCallManager.prototype as any).setGroupMembers =
   Native.cm_setGroupMembers;
@@ -2632,10 +2630,7 @@ export interface CallManager {
   ): void;
   groupRing(clientId: GroupCallClientId, recipient: Buffer | undefined): void;
   resendMediaKeys(clientId: GroupCallClientId): void;
-  setDataMode(
-    clientId: GroupCallClientId,
-    dataMode: DataMode
-  ): void;
+  setDataMode(clientId: GroupCallClientId, dataMode: DataMode): void;
   requestVideo(
     clientId: GroupCallClientId,
     resolutions: Array<VideoRequest>,
