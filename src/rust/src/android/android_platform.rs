@@ -34,6 +34,7 @@ use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 const RINGRTC_PACKAGE: &str = jni_class_name!(org.signal.ringrtc);
+const CALL_LINK_STATE_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkState);
 const CALL_MANAGER_CLASS: &str = "CallManager";
 const HTTP_HEADER_CLASS: &str = jni_class_name!(org.signal.ringrtc.HttpHeader);
 const HTTP_RESULT_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallManager::HttpResult);
@@ -42,7 +43,6 @@ const REMOTE_DEVICE_STATE_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.GroupCall::RemoteDeviceState);
 const RECEIVED_AUDIO_LEVEL_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.GroupCall::ReceivedAudioLevel);
-const CALL_LINK_STATE_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkState);
 
 /// Android implementation for platform::Platform::AppIncomingMedia
 pub type AndroidMediaStream = JavaMediaStream;
@@ -1353,12 +1353,12 @@ impl AndroidPlatform {
             jni_class_name!(org.signal.ringrtc.GroupCall::ConnectionState),
             jni_class_name!(org.signal.ringrtc.GroupCall::JoinState),
             jni_class_name!(org.signal.ringrtc.GroupCall::GroupCallEndReason),
+            CALL_LINK_STATE_CLASS,
             HTTP_HEADER_CLASS,
             HTTP_RESULT_CLASS,
             PEEK_INFO_CLASS,
             REMOTE_DEVICE_STATE_CLASS,
             RECEIVED_AUDIO_LEVEL_CLASS,
-            CALL_LINK_STATE_CLASS,
             jni_class_name!(java.lang.Boolean),
             jni_class_name!(java.lang.Float),
             jni_class_name!(java.lang.Integer),
@@ -1741,10 +1741,6 @@ impl sfu::Delegate for AndroidPlatform {
     fn handle_peek_result(&self, request_id: u32, peek_result: PeekResult) {
         info!("handle_peek_response():");
 
-        // TODO: Pass failure error codes to app.
-        let peek_info = peek_result.unwrap_or_default();
-        let joined_members = peek_info.unique_users();
-
         let env = match self.java_env() {
             Ok(v) => v,
             Err(error) => {
@@ -1754,37 +1750,74 @@ impl sfu::Delegate for AndroidPlatform {
         };
         let jni_call_manager = self.jni_call_manager.as_obj();
 
-        // Set a frame capacity of min (5) + objects (5) + elements (N * 1 object per element).
-        let capacity = (10 + joined_members.len()) as i32;
-        let _ = env.with_local_frame(capacity, || {
-            let jni_request_id = request_id as jlong;
-
-            let jni_peek_info = match self.make_peek_info_object(
-                env,
-                &peek_info,
-                &mut joined_members.into_iter(),
-            ) {
-                Ok(value) => value,
-                Err(e) => {
-                    error!("make_peek_info_object: {:?}", e);
-                    return Ok(JObject::null());
-                }
-            };
-
-            let result = jni_call_method(
-                &env,
-                jni_call_manager,
-                "handlePeekResponse",
-                jni_args!((
-                    jni_request_id => long,
-                    jni_peek_info => org.signal.ringrtc.PeekInfo,
-                ) -> void),
-            );
-            if result.is_err() {
-                error!("jni_call_method: {:?}", result.err());
+        let http_result_class = match self.class_cache.get_class(HTTP_RESULT_CLASS) {
+            Ok(v) => v,
+            Err(error) => {
+                error!("http_result_class: {:?}", error);
+                return;
             }
+        };
 
-            Ok(JObject::null())
-        });
+        let result_object = match peek_result {
+            Ok(peek_info) => {
+                let joined_members = peek_info.unique_users();
+
+                // Set a frame capacity of min (5) + objects (5) + elements (N * 1 object per element).
+                let capacity = (10 + joined_members.len()) as i32;
+                match env.with_local_frame(capacity, || {
+                    let jni_peek_info = match self.make_peek_info_object(
+                        env,
+                        &peek_info,
+                        &mut joined_members.into_iter(),
+                    ) {
+                        Ok(value) => value,
+                        Err(e) => {
+                            error!("make_peek_info_object: {:?}", e);
+                            return Ok(JObject::null());
+                        }
+                    };
+
+                    let args = jni_args!((
+                        jni_peek_info => java.lang.Object,
+                    ) -> void);
+                    env.new_object(http_result_class, args.sig, &args.args)
+                }) {
+                    Ok(v) if !v.is_null() => v,
+                    Ok(_) => {
+                        // Already logged, so just bail out early.
+                        return;
+                    }
+                    Err(error) => {
+                        error!("new HttpResult(PeekInfo): {:?}", error);
+                        return;
+                    }
+                }
+            }
+            Err(status) => {
+                let args = jni_args!((
+                    status.code as jshort => short,
+                ) -> void);
+                match env.new_object(http_result_class, args.sig, &args.args) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("new HttpResult(short): {:?}", error);
+                        return;
+                    }
+                }
+            }
+        };
+
+        let result = jni_call_method(
+            &env,
+            jni_call_manager,
+            "handlePeekResponse",
+            jni_args!((
+                request_id as jlong => long,
+                result_object => org.signal.ringrtc.CallManager::HttpResult,
+            ) -> void),
+        );
+        if result.is_err() {
+            error!("jni_call_method: {:?}", result.err());
+        }
     }
 }

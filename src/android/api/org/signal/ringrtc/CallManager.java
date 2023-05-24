@@ -36,6 +36,7 @@ import org.webrtc.audio.JavaAudioDeviceModule;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -67,7 +68,7 @@ public class CallManager {
   private LongSparseArray<GroupCall>          groupCallByClientId;
 
   @NonNull
-  private Requests<PeekInfo>                  peekRequests;
+  private Requests<HttpResult<PeekInfo>>      peekRequests;
 
   @NonNull
   private Requests<HttpResult<CallLinkState>> callLinkRequests;
@@ -1156,7 +1157,13 @@ public class CallManager {
 
     Log.i(TAG, "peekGroupCall():");
 
-    long requestId = this.peekRequests.add(handler);
+    long requestId = this.peekRequests.add(result -> {
+      if (result.isSuccess()) {
+        handler.handleResponse(result.getValue());
+      } else {
+        handler.handleResponse(new PeekInfo(Collections.emptyList(), null, null, null, 0));
+      }
+    });
     ringrtcPeekGroupCall(nativeCallManager, requestId, sfuUrl, membershipProof, Util.serializeFromGroupMemberInfo(groupMembers));
   }
 
@@ -1495,7 +1502,7 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void handlePeekResponse(long requestId, PeekInfo info) {
+  private void handlePeekResponse(long requestId, HttpResult<PeekInfo> info) {
     if (!this.peekRequests.resolve(requestId, info)) {
       Log.w(TAG, "Invalid requestId for handlePeekResponse: " + requestId);
     }

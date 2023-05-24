@@ -278,7 +278,7 @@ export class RingRTCType {
   private readonly callManager: CallManager;
   private _call: Call | null;
   private _groupCallByClientId: Map<GroupCallClientId, GroupCall>;
-  private _peekRequests: Requests<PeekInfo>;
+  private _peekRequests: Requests<HttpResult<PeekInfo>>;
   private _callLinkRequests: Requests<HttpResult<CallLinkState>>;
 
   // A map to hold call information not maintained in RingRTC.
@@ -1072,7 +1072,13 @@ export class RingRTCType {
         groupMembers
       );
     });
-    return promise;
+    return promise.then(result => {
+      if (result.success) {
+        return result.value;
+      } else {
+        return { devices: [], deviceCount: 0 };
+      }
+    });
   }
 
   // Called by Rust
@@ -1200,9 +1206,19 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  handlePeekResponse(requestId: number, info: PeekInfo): void {
+  handlePeekResponse(
+    requestId: number,
+    statusCode: number,
+    info: PeekInfo | undefined
+  ): void {
     sillyDeadlockProtection(() => {
-      if (!this._peekRequests.resolve(requestId, info)) {
+      let result: HttpResult<PeekInfo>;
+      if (info) {
+        result = { success: true, value: info };
+      } else {
+        result = { success: false, errorStatusCode: statusCode };
+      }
+      if (!this._peekRequests.resolve(requestId, result)) {
         this.logWarn(`Invalid request ID for handlePeekResponse: ${requestId}`);
       }
     });
@@ -2776,7 +2792,11 @@ export interface CallManagerCallbacks {
     remoteDeviceStates: Array<RemoteDeviceState>
   ): void;
   handlePeekChanged(clientId: GroupCallClientId, info: PeekInfo): void;
-  handlePeekResponse(requestId: number, info: PeekInfo): void;
+  handlePeekResponse(
+    requestId: number,
+    statusCode: number,
+    info: PeekInfo | undefined
+  ): void;
   handleEnded(clientId: GroupCallClientId, reason: GroupCallEndReason): void;
 
   onLogMessage(

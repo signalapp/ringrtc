@@ -2297,50 +2297,56 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 request_id,
                 peek_result,
             }) => {
-                // TODO: Pass failure error codes to app.
-                let PeekInfo {
-                    devices,
-                    creator,
-                    era_id,
-                    max_devices,
-                    device_count,
-                } = peek_result.unwrap_or_default();
+                let (js_status, js_info) = match peek_result {
+                    Ok(PeekInfo {
+                        devices,
+                        creator,
+                        era_id,
+                        max_devices,
+                        device_count,
+                    }) => {
+                        let js_info = cx.empty_object();
+                        let js_devices = JsArray::new(&mut cx, devices.len() as u32);
+                        for (i, device) in devices.into_iter().enumerate() {
+                            let js_device = cx.empty_object();
+                            let js_demux_id = cx.number(device.demux_id);
+                            js_device.set(&mut cx, "demuxId", js_demux_id)?;
+                            if let Some(user_id) = device.user_id {
+                                let js_user_id = to_js_buffer(&mut cx, &user_id);
+                                js_device.set(&mut cx, "userId", js_user_id)?;
+                            }
+                            js_devices.set(&mut cx, i as u32, js_device)?;
+                        }
+                        let js_creator: neon::handle::Handle<JsValue> = match creator {
+                            Some(creator) => to_js_buffer(&mut cx, &creator).upcast(),
+                            None => cx.undefined().upcast(),
+                        };
+                        let era_id: neon::handle::Handle<JsValue> = match era_id {
+                            None => cx.undefined().upcast(),
+                            Some(id) => cx.string(id).upcast(),
+                        };
+                        let max_devices: neon::handle::Handle<JsValue> = match max_devices {
+                            None => cx.undefined().upcast(),
+                            Some(devices) => cx.number(devices).upcast(),
+                        };
+                        let device_count: neon::handle::Handle<JsValue> =
+                            cx.number(device_count).upcast();
+
+                        js_info.set(&mut cx, "devices", js_devices)?;
+                        js_info.set(&mut cx, "creator", js_creator)?;
+                        js_info.set(&mut cx, "eraId", era_id)?;
+                        js_info.set(&mut cx, "maxDevices", max_devices)?;
+                        js_info.set(&mut cx, "deviceCount", device_count)?;
+
+                        (cx.number(200), js_info.upcast())
+                    }
+                    Err(status) => (cx.number(status.code), cx.undefined().upcast()),
+                };
 
                 let method_name = "handlePeekResponse";
-                let js_info = cx.empty_object();
-                let js_devices = JsArray::new(&mut cx, devices.len() as u32);
-                for (i, device) in devices.into_iter().enumerate() {
-                    let js_device = cx.empty_object();
-                    let js_demux_id = cx.number(device.demux_id);
-                    js_device.set(&mut cx, "demuxId", js_demux_id)?;
-                    if let Some(user_id) = device.user_id {
-                        let js_user_id = to_js_buffer(&mut cx, &user_id);
-                        js_device.set(&mut cx, "userId", js_user_id)?;
-                    }
-                    js_devices.set(&mut cx, i as u32, js_device)?;
-                }
-                let js_creator: neon::handle::Handle<JsValue> = match creator {
-                    Some(creator) => to_js_buffer(&mut cx, &creator).upcast(),
-                    None => cx.undefined().upcast(),
-                };
-                let era_id: neon::handle::Handle<JsValue> = match era_id {
-                    None => cx.undefined().upcast(),
-                    Some(id) => cx.string(id).upcast(),
-                };
-                let max_devices: neon::handle::Handle<JsValue> = match max_devices {
-                    None => cx.undefined().upcast(),
-                    Some(devices) => cx.number(devices).upcast(),
-                };
-                let device_count: neon::handle::Handle<JsValue> = cx.number(device_count).upcast();
-
-                js_info.set(&mut cx, "devices", js_devices)?;
-                js_info.set(&mut cx, "creator", js_creator)?;
-                js_info.set(&mut cx, "eraId", era_id)?;
-                js_info.set(&mut cx, "maxDevices", max_devices)?;
-                js_info.set(&mut cx, "deviceCount", device_count)?;
 
                 let args: Vec<Handle<JsValue>> =
-                    vec![cx.number(request_id).upcast(), js_info.upcast()];
+                    vec![cx.number(request_id).upcast(), js_status.upcast(), js_info];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
