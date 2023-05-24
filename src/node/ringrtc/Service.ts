@@ -98,8 +98,8 @@ class NativeCallManager {
   Native.cm_signalingMessageSent;
 (NativeCallManager.prototype as any).signalingMessageSendFailed =
   Native.cm_signalingMessageSendFailed;
-(NativeCallManager.prototype as any).updateBandwidthMode =
-  Native.cm_updateBandwidthMode;
+(NativeCallManager.prototype as any).updateDataMode =
+  Native.cm_updateDataMode;
 (NativeCallManager.prototype as any).receivedOffer = Native.cm_receivedOffer;
 (NativeCallManager.prototype as any).receivedAnswer = Native.cm_receivedAnswer;
 (NativeCallManager.prototype as any).receivedIceCandidates =
@@ -141,8 +141,8 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).setPresenting = Native.cm_setPresenting;
 (NativeCallManager.prototype as any).resendMediaKeys =
   Native.cm_resendMediaKeys;
-(NativeCallManager.prototype as any).setBandwidthMode =
-  Native.cm_setBandwidthMode;
+(NativeCallManager.prototype as any).setDataMode =
+  Native.cm_setDataMode;
 (NativeCallManager.prototype as any).requestVideo = Native.cm_requestVideo;
 (NativeCallManager.prototype as any).setGroupMembers =
   Native.cm_setGroupMembers;
@@ -520,7 +520,7 @@ export class RingRTCType {
         settings.iceServer.password || '',
         settings.iceServer.urls,
         settings.hideIp,
-        settings.bandwidthMode,
+        settings.dataMode,
         settings.audioLevelsIntervalMillis || 0
       );
     });
@@ -1645,7 +1645,7 @@ export class RingRTCType {
 export interface CallSettings {
   iceServer: IceServer;
   hideIp: boolean;
-  bandwidthMode: BandwidthMode;
+  dataMode: DataMode;
   audioLevelsIntervalMillis?: number;
 }
 
@@ -1902,10 +1902,10 @@ export class Call {
     });
   }
 
-  updateBandwidthMode(bandwidthMode: BandwidthMode): void {
+  updateDataMode(dataMode: DataMode): void {
     sillyDeadlockProtection(() => {
       try {
-        this._callManager.updateBandwidthMode(bandwidthMode);
+        this._callManager.updateDataMode(dataMode);
       } catch {
         // We may not have an active connection any more.
         // In which case it doesn't matter
@@ -2215,8 +2215,8 @@ export class GroupCall {
   }
 
   // Called by UI
-  setBandwidthMode(bandwidthMode: BandwidthMode): void {
-    this._callManager.setBandwidthMode(this._clientId, bandwidthMode);
+  setDataMode(dataMode: DataMode): void {
+    this._callManager.setDataMode(this._clientId, dataMode);
   }
 
   // Called by UI
@@ -2507,7 +2507,7 @@ export enum HangupType {
   NeedPermission = 4,
 }
 
-export enum BandwidthMode {
+export enum DataMode {
   Low = 0,
   Normal = 1,
 }
@@ -2534,7 +2534,7 @@ export interface CallManager {
     iceServerPassword: string,
     iceServerUrls: Array<string>,
     hideIp: boolean,
-    bandwidthMode: BandwidthMode,
+    dataMode: DataMode,
     audioLevelsIntervalMillis: number
   ): void;
   accept(callId: CallId): void;
@@ -2550,7 +2550,7 @@ export interface CallManager {
   setOutgoingAudioEnabled(enabled: boolean): void;
   setOutgoingVideoEnabled(enabled: boolean): void;
   setOutgoingVideoIsScreenShare(enabled: boolean): void;
-  updateBandwidthMode(bandwidthMode: BandwidthMode): void;
+  updateDataMode(dataMode: DataMode): void;
   sendVideoFrame(
     width: number,
     height: number,
@@ -2632,9 +2632,9 @@ export interface CallManager {
   ): void;
   groupRing(clientId: GroupCallClientId, recipient: Buffer | undefined): void;
   resendMediaKeys(clientId: GroupCallClientId): void;
-  setBandwidthMode(
+  setDataMode(
     clientId: GroupCallClientId,
-    bandwidthMode: BandwidthMode
+    dataMode: DataMode
   ): void;
   requestVideo(
     clientId: GroupCallClientId,

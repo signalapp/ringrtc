@@ -9,9 +9,9 @@ use ringrtc::{
     common::{
         actor::{Actor, Stopper},
         units::DataRate,
-        CallId, CallMediaType, DeviceId, Result,
+        CallId, CallMediaType, DataMode, DeviceId, Result,
     },
-    core::{bandwidth_mode::BandwidthMode, call_manager::CallManager, group_call, signaling},
+    core::{call_manager::CallManager, group_call, signaling},
     lite::{http, sfu::UserId},
     native::{
         CallState, CallStateHandler, GroupUpdate, GroupUpdateHandler, NativeCallContext,
@@ -568,12 +568,7 @@ impl CallStateHandler for CallEndpoint {
             {
                 state
                     .call_manager
-                    .proceed(
-                        call_id,
-                        state.call_context.clone(),
-                        BandwidthMode::Low,
-                        None,
-                    )
+                    .proceed(call_id, state.call_context.clone(), DataMode::Low, None)
                     .expect("proceed with call");
             }
         });

@@ -113,11 +113,11 @@ public struct NetworkRoute {
     }
 }
 
-/// Modes of operation when working with different bandwidth environments.
+/// The data mode allows the client to limit the media bandwidth used.
 @available(iOSApplicationExtension, unavailable)
-public enum BandwidthMode: Int32 {
+public enum DataMode: Int32 {
     /// Intended for low bitrate video calls. Useful to reduce
-    /// bandwidth costs, especially on mobile networks.
+    /// bandwidth costs, especially on mobile data networks.
     case low = 0
     /// (Default) No specific constraints, but keep a relatively
     /// high bitrate to ensure good quality.
@@ -433,9 +433,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - iceServers: A list of RTC Ice Servers to be provided to WebRTC
     ///   - hideIp: A flag used to hide the IP of the user by using relay (TURN) servers only
     ///   - videoCaptureController: UI provided capturer interface
-    ///   - bandwidthMode: The desired bandwidth mode to start the session with
+    ///   - dataMode: The desired data mode to start the session with
     ///   - audioLevelsIntervalMillis: If non-zero, the desired interval between audio level events (in milliseconds)
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, bandwidthMode: BandwidthMode, audioLevelsIntervalMillis: UInt64?) throws {
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, dataMode: DataMode, audioLevelsIntervalMillis: UInt64?) throws {
         AssertIsOnMainThread()
         Logger.info("proceed(): callId: 0x\(String(callId, radix: 16)), hideIp: \(hideIp)")
         for iceServer in iceServers {
@@ -470,7 +470,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // creating the connection.
         let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController)
 
-        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), bandwidthMode.rawValue, audioLevelsIntervalMillis ?? 0)
+        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), dataMode.rawValue, audioLevelsIntervalMillis ?? 0)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "proceed() function failure")
         }
@@ -571,11 +571,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    public func udpateBandwidthMode(bandwidthMode: BandwidthMode) {
+    public func updateDataMode(dataMode: DataMode) {
         AssertIsOnMainThread()
-        Logger.debug("udpateBandwidthMode(\(bandwidthMode))")
+        Logger.debug("updateDataMode(\(dataMode))")
 
-        ringrtcUpdateBandwidthMode(ringRtcCallManager, bandwidthMode.rawValue)
+        ringrtcUpdateDataMode(ringRtcCallManager, dataMode.rawValue)
     }
 
     // MARK: - Signaling API

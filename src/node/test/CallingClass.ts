@@ -6,7 +6,7 @@
 /* eslint-disable no-console, @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 
 import {
-  BandwidthMode,
+  DataMode,
   Call,
   CallEndedReason,
   CallId,
@@ -195,7 +195,7 @@ export class CallingClass {
         urls: ['stun:turn3.voip.signal.org'],
       },
       hideIp: false,
-      bandwidthMode: BandwidthMode.Normal,
+      dataMode: DataMode.Normal,
     };
   }
 

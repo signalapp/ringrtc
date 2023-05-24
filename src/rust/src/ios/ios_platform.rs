@@ -10,8 +10,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DataMode, DeviceId, Result,
+};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
@@ -95,15 +96,15 @@ impl Platform for IosPlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {}, signaling_version: {:?}, bandwidth_mode: {}, audio_levels_interval: {:?}",
+            "create_connection(): call_id: {} remote_device_id: {}, signaling_version: {:?}, data_mode: {}, audio_levels_interval: {:?}",
             call.call_id(),
             remote_device_id,
             signaling_version,
-            bandwidth_mode,
+            data_mode,
             audio_levels_interval,
         );
 
@@ -111,7 +112,7 @@ impl Platform for IosPlatform {
             call.clone(),
             remote_device_id,
             connection_type,
-            bandwidth_mode,
+            data_mode,
             audio_levels_interval,
             None, // The app adds sinks to VideoTracks.
         )?;

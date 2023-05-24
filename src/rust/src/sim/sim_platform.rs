@@ -11,8 +11,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DataMode, DeviceId, Result,
+};
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
 use crate::core::connection::{Connection, ConnectionType};
@@ -136,7 +137,7 @@ impl Platform for SimPlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>> {
         info!(
@@ -152,7 +153,7 @@ impl Platform for SimPlatform {
             call.clone(),
             remote_device_id,
             connection_type,
-            bandwidth_mode,
+            data_mode,
             audio_levels_interval,
             None,
         )

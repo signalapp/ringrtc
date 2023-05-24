@@ -55,8 +55,9 @@ use futures::future::TryFutureExt;
 use futures::task::Poll;
 use futures::{Future, Stream};
 
-use crate::common::{units::DataRate, CallDirection, CallId, ConnectionState, Result, RingBench};
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{
+    units::DataRate, CallDirection, CallId, ConnectionState, DataMode, Result, RingBench,
+};
 use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
 use crate::core::platform::Platform;
 use crate::core::signaling;
@@ -99,10 +100,10 @@ pub enum ConnectionEvent {
     /// Source: app (user action)
     /// Action: Accumulate and send a sender status message via RTP data.
     UpdateSenderStatus(signaling::SenderStatus),
-    /// Set bandwidth mode
+    /// Set data mode
     /// Source: app (user setting)
     /// Action: Update and send bitrate via a receiver status message via RTP data.
-    UpdateBandwidthMode(BandwidthMode),
+    UpdateDataMode(DataMode),
     /// Local ICE candidates added or removed from PeerConnection
     /// Source: PeerConnection
     /// Action: Send ICE candidate (addition or removal) over signaling.
@@ -170,8 +171,8 @@ impl fmt::Display for ConnectionEvent {
             ConnectionEvent::UpdateSenderStatus(status) => {
                 format!("UpdateSenderStatus, status: {:?}", status)
             }
-            ConnectionEvent::UpdateBandwidthMode(mode) => {
-                format!("UpdateBandwidthMode, mode: {:?}", mode)
+            ConnectionEvent::UpdateDataMode(mode) => {
+                format!("UpdateDataMode, mode: {:?}", mode)
             }
             ConnectionEvent::LocalIceCandidates(_) => "LocalIceCandidates".to_string(),
             ConnectionEvent::IceConnected => "IceConnected".to_string(),
@@ -403,8 +404,8 @@ where
             ConnectionEvent::UpdateSenderStatus(status) => {
                 self.handle_update_sender_status(connection, state, status)
             }
-            ConnectionEvent::UpdateBandwidthMode(mode) => {
-                self.handle_update_bandwidth_mode(connection, state, mode)
+            ConnectionEvent::UpdateDataMode(mode) => {
+                self.handle_update_data_mode(connection, state, mode)
             }
             ConnectionEvent::LocalIceCandidates(candidates) => {
                 self.handle_local_ice_candidates(connection, state, candidates)
@@ -773,26 +774,26 @@ where
         Ok(())
     }
 
-    fn handle_update_bandwidth_mode(
+    fn handle_update_data_mode(
         &mut self,
         connection: Connection<T>,
         state: ConnectionState,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
     ) -> Result<()> {
         if state.connecting_or_connected() {
             let mut err_connection = connection.clone();
-            let update_bandwidth_mode_future = lazy(move |_| {
+            let update_data_mode_future = lazy(move |_| {
                 if connection.terminating()? {
                     return Ok(());
                 }
 
-                connection.update_bandwidth_mode(bandwidth_mode)
+                connection.update_data_mode(data_mode)
             })
             .unwrap_or_else(move |err| {
-                err_connection.inject_internal_error(err, "Updating bandwidth mode failed");
+                err_connection.inject_internal_error(err, "Updating data mode failed");
             });
 
-            self.worker_spawn(update_bandwidth_mode_future);
+            self.worker_spawn(update_data_mode_future);
         };
         Ok(())
     }

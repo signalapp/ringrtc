@@ -427,16 +427,17 @@ public class GroupCall {
         ringrtcResendMediaKeys(self.ringRtcCallManager, clientId)
     }
 
-    public func updateBandwidthMode(bandwidthMode: BandwidthMode) {
+    /// Sets a data mode, allowing the client to limit the media bandwidth used.
+    public func updateDataMode(dataMode: DataMode) {
         AssertIsOnMainThread()
-        Logger.debug("updateBandwidthMode")
+        Logger.debug("updateDataMode")
 
         guard let clientId = self.clientId else {
             Logger.warn("no clientId defined for groupCall")
             return
         }
 
-        ringrtcSetBandwidthMode(self.ringRtcCallManager, clientId, bandwidthMode.rawValue)
+        ringrtcSetDataMode(self.ringRtcCallManager, clientId, dataMode.rawValue)
     }
 
     /// Provides a collection of VideoRequest objects to the group call

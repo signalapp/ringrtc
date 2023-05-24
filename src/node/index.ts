@@ -8,7 +8,7 @@ import { RingRTCType } from './ringrtc/Service';
 export {
   AnswerMessage,
   AudioDevice,
-  BandwidthMode,
+  DataMode,
   BusyMessage,
   Call,
   CallEndedReason,

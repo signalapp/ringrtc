@@ -27,11 +27,9 @@ use crate::{
     common::{
         actor::{Actor, Stopper},
         units::DataRate,
-        Result,
+        DataMode, Result,
     },
-    core::{
-        bandwidth_mode::BandwidthMode, call_mutex::CallMutex, crypto as frame_crypto, signaling,
-    },
+    core::{call_mutex::CallMutex, crypto as frame_crypto, signaling},
     error::RingRtcError,
     lite::{
         http, sfu,
@@ -896,7 +894,7 @@ struct State {
     // If set, will always overide the send_rates.  Intended for testing.
     send_rates_override: Option<SendRates>,
     max_receive_rate: Option<DataRate>,
-    bandwidth_mode: BandwidthMode,
+    data_mode: DataMode,
     // Demux IDs where video is being forward from, mapped to the server allocated height.
     forwarding_videos: HashMap<DemuxId, u16>,
 
@@ -1072,9 +1070,9 @@ impl Client {
 
                     send_rates: SendRates::default(),
                     send_rates_override: None,
-                    // If the client never calls set_bandwidth_mode, use the normal max receive rate.
+                    // If the client never calls set_data_mode, use the normal max receive rate.
                     max_receive_rate: Some(NORMAL_MAX_RECEIVE_RATE),
-                    bandwidth_mode: BandwidthMode::Normal,
+                    data_mode: DataMode::Normal,
                     forwarding_videos: HashMap::default(),
 
                     outgoing_ring_state: OutgoingRingState::Unknown,
@@ -1688,31 +1686,32 @@ impl Client {
         });
     }
 
-    pub fn set_bandwidth_mode(&self, bandwidth_mode: BandwidthMode) {
+    pub fn set_data_mode(&self, data_mode: DataMode) {
         debug!(
-            "group_call::Client(outer)::set_bandwidth_mode(client_id: {}, bandwidth_mode: {:?})",
-            self.client_id, bandwidth_mode
+            "group_call::Client(outer)::set_data_mode(client_id: {}, data_mode: {:?})",
+            self.client_id, data_mode
         );
         self.actor.send(move |state| {
             debug!(
-                "group_call::Client(inner)::set_bandwidth_mode(client_id: {}), bandwidth_mode: {:?}",
-                state.client_id,
-                bandwidth_mode,
+                "group_call::Client(inner)::set_data_mode(client_id: {}), data_mode: {:?}",
+                state.client_id, data_mode,
             );
 
-            state.max_receive_rate = Some(match bandwidth_mode {
-                BandwidthMode::Low => LOW_MAX_RECEIVE_RATE,
-                BandwidthMode::Normal => NORMAL_MAX_RECEIVE_RATE,
+            state.max_receive_rate = Some(match data_mode {
+                DataMode::Low => LOW_MAX_RECEIVE_RATE,
+                DataMode::Normal => NORMAL_MAX_RECEIVE_RATE,
             });
 
-            state.bandwidth_mode = bandwidth_mode;
+            state.data_mode = data_mode;
             match state.join_state {
                 JoinState::NotJoined(_) | JoinState::Joining => {
-                    // The audio encoders will be configured with bandwidth_mode upon joining.
-                },
+                    // The audio encoders will be configured with data_mode upon joining.
+                }
                 JoinState::Joined(_) => {
-                    state.peer_connection.configure_audio_encoders(&bandwidth_mode.audio_encoder_config());
-                },
+                    state
+                        .peer_connection
+                        .configure_audio_encoders(&data_mode.audio_encoder_config());
+                }
             };
 
             if !state.on_demand_video_request_sent_since_last_heartbeat {
@@ -2034,7 +2033,7 @@ impl Client {
 
                         state
                             .peer_connection
-                            .configure_audio_encoders(&state.bandwidth_mode.audio_encoder_config());
+                            .configure_audio_encoders(&state.data_mode.audio_encoder_config());
                     }
                     JoinState::Joined(_) => {
                         warn!("The SFU completed joining more than once.");
@@ -5071,7 +5070,7 @@ mod tests {
         let elapsed = Instant::now() - before;
         assert!(elapsed > Duration::from_millis(1000));
 
-        client1.client.set_bandwidth_mode(BandwidthMode::Low);
+        client1.client.set_data_mode(DataMode::Low);
         let (header, payload) = receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("Get RTP packet to SFU");
@@ -5101,7 +5100,7 @@ mod tests {
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
 
-        client1.client.set_bandwidth_mode(BandwidthMode::Normal);
+        client1.client.set_data_mode(DataMode::Normal);
         let (header, payload) = receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("Get RTP packet to SFU");

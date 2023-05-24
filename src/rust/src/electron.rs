@@ -12,8 +12,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::common::{CallId, CallMediaType, DeviceId, Result};
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{CallId, CallMediaType, DataMode, DeviceId, Result};
 use crate::core::call_manager::CallManager;
 use crate::core::group_call;
 use crate::core::group_call::{GroupId, SignalingMessageUrgency};
@@ -653,7 +652,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     let ice_server_password = cx.argument::<JsString>(2)?.value(&mut cx);
     let js_ice_server_urls = cx.argument::<JsArray>(3)?;
     let hide_ip = cx.argument::<JsBoolean>(4)?.value(&mut cx);
-    let bandwidth_mode = cx.argument::<JsNumber>(5)?.value(&mut cx) as i32;
+    let data_mode = cx.argument::<JsNumber>(5)?.value(&mut cx) as i32;
     let audio_levels_interval_millis = cx.argument::<JsNumber>(6)?.value(&mut cx) as u64;
 
     let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len(&mut cx) as usize);
@@ -692,7 +691,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.proceed(
             call_id,
             call_context,
-            BandwidthMode::from_i32(bandwidth_mode),
+            DataMode::from_i32(data_mode),
             audio_levels_interval,
         )?;
         Ok(())
@@ -766,13 +765,13 @@ fn signalingMessageSendFailed(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
-fn updateBandwidthMode(mut cx: FunctionContext) -> JsResult<JsValue> {
-    debug!("JsCallManager.updateBandwidthMode()");
-    let bandwidth_mode = cx.argument::<JsNumber>(0)?.value(&mut cx) as i32;
+fn updateDataMode(mut cx: FunctionContext) -> JsResult<JsValue> {
+    debug!("JsCallManager.updateDataMode()");
+    let data_mode = cx.argument::<JsNumber>(0)?.value(&mut cx) as i32;
 
     with_call_endpoint(&mut cx, |endpoint| {
         let active_connection = endpoint.call_manager.active_connection()?;
-        active_connection.update_bandwidth_mode(BandwidthMode::from_i32(bandwidth_mode))?;
+        active_connection.update_data_mode(DataMode::from_i32(data_mode))?;
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
@@ -1374,14 +1373,14 @@ fn resendMediaKeys(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
-fn setBandwidthMode(mut cx: FunctionContext) -> JsResult<JsValue> {
+fn setDataMode(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
-    let bandwidth_mode = cx.argument::<JsNumber>(1)?.value(&mut cx) as i32;
+    let data_mode = cx.argument::<JsNumber>(1)?.value(&mut cx) as i32;
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .call_manager
-            .set_bandwidth_mode(client_id, BandwidthMode::from_i32(bandwidth_mode));
+            .set_data_mode(client_id, DataMode::from_i32(data_mode));
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
@@ -2510,7 +2509,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_hangup", hangup)?;
     cx.export_function("cm_signalingMessageSent", signalingMessageSent)?;
     cx.export_function("cm_signalingMessageSendFailed", signalingMessageSendFailed)?;
-    cx.export_function("cm_updateBandwidthMode", updateBandwidthMode)?;
+    cx.export_function("cm_updateDataMode", updateDataMode)?;
     cx.export_function("cm_receivedOffer", receivedOffer)?;
     cx.export_function("cm_receivedAnswer", receivedAnswer)?;
     cx.export_function("cm_receivedIceCandidates", receivedIceCandidates)?;
@@ -2543,7 +2542,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     )?;
     cx.export_function("cm_groupRing", groupRing)?;
     cx.export_function("cm_resendMediaKeys", resendMediaKeys)?;
-    cx.export_function("cm_setBandwidthMode", setBandwidthMode)?;
+    cx.export_function("cm_setDataMode", setDataMode)?;
     cx.export_function("cm_requestVideo", requestVideo)?;
     cx.export_function("cm_setGroupMembers", setGroupMembers)?;
     cx.export_function("cm_setMembershipProof", setMembershipProof)?;

@@ -688,6 +688,59 @@ pub enum CallMediaType {
     Video,
 }
 
+/// The data mode allows the client to limit the media bandwidth used.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum DataMode {
+    /// Intended for low bitrate video calls. Useful to reduce
+    /// bandwidth costs, especially on mobile data networks.
+    Low = 0,
+    /// (Default) No specific constraints, but keep a relatively
+    /// high bitrate to ensure good quality.
+    Normal,
+}
+
+impl fmt::Display for DataMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl DataMode {
+    pub fn from_i32(value: i32) -> Self {
+        match value {
+            0 => DataMode::Low,
+            1 => DataMode::Normal,
+            _ => {
+                // Log but otherwise assume normal if not valid.
+                warn!("Invalid DataMode: {}", value);
+                DataMode::Normal
+            }
+        }
+    }
+
+    /// Return the maximum bitrate (for all media) allowed for the mode.
+    pub fn max_bitrate(&self) -> units::DataRate {
+        match self {
+            DataMode::Low => units::DataRate::from_kbps(300),
+            DataMode::Normal => units::DataRate::from_kbps(2_000),
+        }
+    }
+
+    pub fn audio_encoder_config(&self) -> crate::webrtc::media::AudioEncoderConfig {
+        let (start_bitrate_bps, min_bitrate_bps, max_bitrate_bps) = match self {
+            DataMode::Low => (28_000, 16_000, 28_000),
+            DataMode::Normal => (32_000, 20_000, 32_000),
+        };
+        crate::webrtc::media::AudioEncoderConfig {
+            start_bitrate_bps,
+            min_bitrate_bps,
+            max_bitrate_bps,
+            ..Default::default()
+        }
+    }
+}
+
 impl fmt::Display for CallMediaType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)

@@ -16,9 +16,9 @@ use std::time::Duration;
 
 use prost::Message;
 use ringrtc::common::{
-    units::DataRate, ApplicationEvent, CallId, CallMediaType, CallState, ConnectionState, DeviceId,
+    units::DataRate, ApplicationEvent, CallId, CallMediaType, CallState, ConnectionState, DataMode,
+    DeviceId,
 };
-use ringrtc::core::bandwidth_mode::BandwidthMode;
 use ringrtc::core::{group_call, signaling};
 use ringrtc::protobuf;
 use ringrtc::sim::error::SimError;
@@ -76,7 +76,7 @@ fn start_outbound_and_proceed() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -134,7 +134,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -916,7 +916,7 @@ fn update_sender_status() {
 }
 
 #[test]
-fn update_bandwidth_mode_default() {
+fn update_data_mode_default() {
     test_init();
 
     let context = connected_and_accepted_outbound_call();
@@ -932,7 +932,7 @@ fn update_bandwidth_mode_default() {
     );
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Normal)
+        .update_data_mode(DataMode::Normal)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -957,7 +957,7 @@ fn update_bandwidth_mode_default() {
 }
 
 #[test]
-fn update_bandwidth_mode_low() {
+fn update_data_mode_low() {
     test_init();
 
     let context = connected_and_accepted_outbound_call();
@@ -965,7 +965,7 @@ fn update_bandwidth_mode_low() {
     let active_connection = context.active_connection();
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Low)
+        .update_data_mode(DataMode::Low)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -988,7 +988,7 @@ fn update_bandwidth_mode_low() {
     )
 }
 
-fn update_bandwidth_when_relayed(local: bool) {
+fn update_data_mode_when_relayed(local: bool) {
     test_init();
 
     let context = connected_and_accepted_outbound_call();
@@ -1024,7 +1024,7 @@ fn update_bandwidth_when_relayed(local: bool) {
     );
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Low)
+        .update_data_mode(DataMode::Low)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
@@ -1046,7 +1046,7 @@ fn update_bandwidth_when_relayed(local: bool) {
     );
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Normal)
+        .update_data_mode(DataMode::Normal)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
@@ -1099,13 +1099,13 @@ fn update_bandwidth_when_relayed(local: bool) {
 }
 
 #[test]
-fn update_bandwidth_when_relayed_local() {
-    update_bandwidth_when_relayed(true);
+fn update_data_mode_when_relayed_local() {
+    update_data_mode_when_relayed(true);
 }
 
 #[test]
-fn update_bandwidth_when_relayed_remote() {
-    update_bandwidth_when_relayed(false);
+fn update_data_mode_when_relayed_remote() {
+    update_data_mode_when_relayed(false);
 }
 
 #[test]
@@ -2001,7 +2001,7 @@ fn outbound_proceed_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -2375,7 +2375,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
     cm.proceed(
         outgoing_call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -2442,7 +2442,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
     cm.proceed(
         incoming_call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -2505,7 +2505,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_after_start() {
     cm.proceed(
         incoming_call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -2723,7 +2723,7 @@ fn start_outbound_receive_busy() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());

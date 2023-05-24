@@ -36,7 +36,6 @@ pub mod lite {
 
 /// Core, platform independent functionality.
 pub mod core {
-    pub mod bandwidth_mode;
     pub mod call;
     pub mod call_fsm;
     pub mod call_manager;

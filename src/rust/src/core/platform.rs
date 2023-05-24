@@ -9,8 +9,9 @@ use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
 
-use crate::common::{ApplicationEvent, CallDirection, CallId, CallMediaType, DeviceId, Result};
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{
+    ApplicationEvent, CallDirection, CallId, CallMediaType, DataMode, DeviceId, Result,
+};
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::{group_call, signaling};
@@ -48,7 +49,7 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
         remote_device: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>>;
 

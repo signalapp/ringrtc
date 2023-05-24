@@ -385,20 +385,19 @@ public final class GroupCall {
 
     /**
      *
-     * Allows the application to constrain bandwidth if so configured
-     * by the user.
+     * Sets a data mode, allowing the client to limit the media bandwidth used.
      *
-     * @param bandwidthMode  one of the BandwidthMode enumerated values
+     * @param dataMode  one of the DataMode enumerated values
      *
      * @throws CallException for native code failures
      *
      */
-    public void setBandwidthMode(CallManager.BandwidthMode bandwidthMode)
+    public void setDataMode(CallManager.DataMode dataMode)
         throws CallException
     {
-        Log.i(TAG, "setBandwidthMode():");
+        Log.i(TAG, "setDataMode():");
 
-        ringrtcSetBandwidthMode(nativeCallManager, this.clientId, bandwidthMode.ordinal());
+        ringrtcSetDataMode(nativeCallManager, this.clientId, dataMode.ordinal());
     }
 
     /**
@@ -1065,9 +1064,9 @@ public final class GroupCall {
         throws CallException;
 
     private native
-        void ringrtcSetBandwidthMode(long nativeCallManager,
+        void ringrtcSetDataMode(long nativeCallManager,
                                      long clientId,
-                                     int bandwidthMode)
+                                     int dataMode)
         throws CallException;
 
     private native

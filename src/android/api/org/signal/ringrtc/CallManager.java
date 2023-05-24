@@ -388,7 +388,7 @@ public class CallManager {
    * @param camera                 camera control to use for this Call
    * @param iceServers             list of ICE servers to use for this Call
    * @param hideIp                 if true hide caller's IP by using a TURN server
-   * @param bandwidthMode          desired bandwidth mode to start the session with
+   * @param dataMode               desired data mode to start the session with
    * @param audioLevelsIntervalMs  if greater than 0, enable audio levels with this interval (in milliseconds)
    * @param enableCamera           if true, enable the local camera video track when created
    *
@@ -404,7 +404,7 @@ public class CallManager {
                       @NonNull  CameraControl                  camera,
                       @NonNull  List<PeerConnection.IceServer> iceServers,
                                 boolean                        hideIp,
-                                BandwidthMode                  bandwidthMode,
+                                DataMode                       dataMode,
                       @Nullable Integer                        audioLevelsIntervalMs,
                                 boolean                        enableCamera)
     throws CallException
@@ -435,7 +435,7 @@ public class CallManager {
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
                    callContext,
-                   bandwidthMode.ordinal(),
+                   dataMode.ordinal(),
                    audioLevelsIntervalMillis);
   }
 
@@ -807,20 +807,19 @@ public class CallManager {
 
   /**
    *
-   * Allows the application to constrain bandwidth if so configured
-   * by the user.
+   * Sets a data mode, allowing the client to limit the media bandwidth used.
    *
-   * @param bandwidthMode  one of the BandwidthMode enumerated values
+   * @param dataMode  one of the DataMode enumerated values
    *
    * @throws CallException for native code failures
    *
    */
-  public void updateBandwidthMode(BandwidthMode bandwidthMode)
+  public void updateDataMode(DataMode dataMode)
     throws CallException
   {
     checkCallManagerExists();
 
-    ringrtcUpdateBandwidthMode(nativeCallManager, bandwidthMode.ordinal());
+    ringrtcUpdateDataMode(nativeCallManager, dataMode.ordinal());
   }
 
   /**
@@ -1873,13 +1872,13 @@ public class CallManager {
   }
 
   /**
-   * Modes of operation when working with different bandwidth environments.
+   * The data mode allows the client to limit the media bandwidth used.
    */
-  public enum BandwidthMode {
+  public enum DataMode {
 
     /**
      * Intended for low bitrate video calls. Useful to reduce
-     * bandwidth costs, especially on mobile networks.
+     * bandwidth costs, especially on mobile data networks.
      */
     LOW,
 
@@ -1890,7 +1889,7 @@ public class CallManager {
     NORMAL;
 
     @CalledByNative
-    static BandwidthMode fromNativeIndex(int nativeIndex) {
+    static DataMode fromNativeIndex(int nativeIndex) {
         return values()[nativeIndex];
     }
   }
@@ -2158,7 +2157,7 @@ public class CallManager {
     void ringrtcProceed(long        nativeCallManager,
                         long        callId,
                         CallContext callContext,
-                        int         bandwidthMode,
+                        int         dataMode,
                         int         audioLevelsIntervalMillis)
     throws CallException;
 
@@ -2260,7 +2259,7 @@ public class CallManager {
     throws CallException;
 
   private native
-    void ringrtcUpdateBandwidthMode(long nativeCallManager, int bandwidthMode)
+    void ringrtcUpdateDataMode(long nativeCallManager, int dataMode)
     throws CallException;
 
   private native

@@ -9,8 +9,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::{Arc, Condvar, Mutex};
 
-use crate::common::Result;
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{DataMode, Result};
 use crate::core::util::FutureResult;
 use crate::error::RingRtcError;
 use crate::protobuf;
@@ -192,7 +191,7 @@ impl SessionDescription {
     pub fn to_v4(
         &self,
         public_key: Vec<u8>,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
     ) -> Result<protobuf::signaling::ConnectionParametersV4> {
         let rffi_v4_ptr = webrtc::ptr::Unique::from(unsafe {
             sdp::Rust_sessionDescriptionToV4(self.rffi.borrow())
@@ -228,7 +227,7 @@ impl SessionDescription {
             ice_ufrag: Some(ice_ufrag),
             ice_pwd: Some(ice_pwd),
             receive_video_codecs,
-            max_bitrate_bps: Some(bandwidth_mode.max_bitrate().as_bps()),
+            max_bitrate_bps: Some(data_mode.max_bitrate().as_bps()),
         })
     }
 

@@ -17,8 +17,7 @@ use crate::android::android_platform::AndroidPlatform;
 use crate::android::call_manager;
 use crate::android::call_manager::AndroidCallManager;
 use crate::android::error;
-use crate::common::{CallMediaType, DeviceId};
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{CallMediaType, DataMode, DeviceId};
 use crate::core::connection::Connection;
 use crate::core::util::try_scoped;
 use crate::core::{group_call, signaling};
@@ -144,7 +143,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
     call_manager: jlong,
     call_id: jlong,
     jni_call_context: JObject,
-    bandwidth_mode: jint,
+    data_mode: jint,
     audio_levels_interval_millis: jint,
 ) {
     let audio_levels_interval = if audio_levels_interval_millis <= 0 {
@@ -158,7 +157,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
         call_manager as *mut AndroidCallManager,
         call_id,
         jni_call_context,
-        BandwidthMode::from_i32(bandwidth_mode),
+        DataMode::from_i32(data_mode),
         audio_levels_interval,
     ) {
         Ok(v) => v,
@@ -509,15 +508,15 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetVideoEnab
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateBandwidthMode(
+pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateDataMode(
     env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
-    bandwidth_mode: jint,
+    data_mode: jint,
 ) {
-    match call_manager::update_bandwidth_mode(
+    match call_manager::update_data_mode(
         call_manager as *mut AndroidCallManager,
-        BandwidthMode::from_i32(bandwidth_mode),
+        DataMode::from_i32(data_mode),
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -905,17 +904,17 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcResendMediaKey
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetBandwidthMode(
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetDataMode(
     env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
-    bandwidth_mode: jint,
+    data_mode: jint,
 ) {
-    match call_manager::set_bandwidth_mode(
+    match call_manager::set_data_mode(
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
-        BandwidthMode::from_i32(bandwidth_mode),
+        DataMode::from_i32(data_mode),
     ) {
         Ok(v) => v,
         Err(e) => {

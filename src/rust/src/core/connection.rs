@@ -25,10 +25,9 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::common::{
-    units::DataRate, CallDirection, CallId, CallMediaType, ConnectionState, DeviceId, Result,
-    RingBench,
+    units::DataRate, CallDirection, CallId, CallMediaType, ConnectionState, DataMode, DeviceId,
+    Result, RingBench,
 };
-use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
@@ -271,8 +270,8 @@ const RELAYED_MAX_SEND_RATE: DataRate = DataRate::from_mbps(1);
 /// and the network route (in particular, if it's relayed or not).
 #[derive(Debug)]
 pub struct BandwidthController {
-    /// The current bandwidth mode being used for the local endpoint.
-    pub local_mode: BandwidthMode,
+    /// The current data mode being used for the local endpoint.
+    pub local_mode: DataMode,
     /// The max rate sent from the remote endpoint.
     pub remote_max: Option<DataRate>,
     // The current network route
@@ -309,12 +308,10 @@ impl BandwidthController {
 
     // Since the remote side doesn't tell us what audio configuration to use, we have to infer it
     // from the bandwidth sent. This should be used carefully.
-    fn inferred_remote_mode(&self) -> BandwidthMode {
+    fn inferred_remote_mode(&self) -> DataMode {
         match self.remote_max {
-            Some(remote_max) if remote_max < BandwidthMode::Normal.max_bitrate() => {
-                BandwidthMode::Low
-            }
-            _ => BandwidthMode::Normal,
+            Some(remote_max) if remote_max < DataMode::Normal.max_bitrate() => DataMode::Low,
+            _ => DataMode::Normal,
         }
     }
 }
@@ -462,7 +459,7 @@ where
         call: Call<T>,
         remote_device: DeviceId,
         connection_type: ConnectionType,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
         audio_levels_interval: Option<Duration>,
         incoming_video_sink: Option<Box<dyn VideoSink>>,
     ) -> Result<Self> {
@@ -494,7 +491,7 @@ where
             webrtc: Arc::new(CallMutex::new(webrtc, "webrtc")),
             bandwidth_controller: Arc::new(CallMutex::new(
                 BandwidthController {
-                    local_mode: bandwidth_mode,
+                    local_mode: data_mode,
                     remote_max: None,
                     network_route: NetworkRoute {
                         local_adapter_type: NetworkAdapterType::Unknown,
@@ -554,7 +551,7 @@ where
     pub fn start_outgoing_parent(
         &mut self,
         call_media_type: CallMediaType,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
     ) -> Result<(StaticSecret, IceGatherer, signaling::Offer)> {
         let result = (|| {
             self.set_state(ConnectionState::Starting)?;
@@ -574,7 +571,7 @@ where
 
             // We have to do this before we pass ownership of offer_sdi into set_local_description.
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
-            let v4_offer = offer.to_v4(local_public_key.as_bytes().to_vec(), bandwidth_mode)?;
+            let v4_offer = offer.to_v4(local_public_key.as_bytes().to_vec(), data_mode)?;
 
             info!(
                 "Outgoing offer codecs: {:?}, max_bitrate: {:?}",
@@ -929,8 +926,8 @@ where
         Ok(())
     }
 
-    /// Return the current local bandwidth mode used for this connection.
-    pub fn local_bandwidth_mode(&self) -> Result<BandwidthMode> {
+    /// Return the current local data mode used for this connection.
+    pub fn local_data_mode(&self) -> Result<DataMode> {
         let bandwidth_controller = self.bandwidth_controller.lock()?;
         Ok(bandwidth_controller.local_mode)
     }
@@ -1046,9 +1043,9 @@ where
         Ok(())
     }
 
-    /// The local user is updating the bandwidth mode via the API. Update locally and
+    /// The local user is updating the data mode via the API. Update locally and
     /// send an updated bitrate to the remote.
-    pub fn update_bandwidth_mode(&self, local_mode: BandwidthMode) -> Result<()> {
+    pub fn update_data_mode(&self, local_mode: DataMode) -> Result<()> {
         let changed = self.update_bandwidth_controller(|bandwidth_controller| {
             if bandwidth_controller.local_mode == local_mode {
                 // Nothing changed
@@ -1056,7 +1053,7 @@ where
             }
             bandwidth_controller.local_mode = local_mode;
             info!(
-                "update_bandwidth_mode(): bandwidth_controller: {:?}",
+                "update_data_mode(): bandwidth_controller: {:?}",
                 bandwidth_controller
             );
             true
@@ -1308,7 +1305,7 @@ where
         Ok(changed)
     }
 
-    /// Based on the given bandwidth mode, configure the media encoders.
+    /// Based on the given data mode, configure the media encoders.
     /// Make sure we always take the locks in the order of (bandwidth_controller, webrtc).
     /// We require passing in &mut MutexGuard<T> instead of &mut T to remind you about this.
     fn apply_bandwidth_controller(
@@ -1895,13 +1892,13 @@ where
         self.inject_event(ConnectionEvent::UpdateSenderStatus(status))
     }
 
-    /// Inject a `UpdateBandwidthMode` event into the FSM.
+    /// Inject a `UpdateDataMode` event into the FSM.
     ///
     /// `Called By:` Local application.
     ///
-    /// * `mode` - The bandwidth mode that should be used
-    pub fn inject_update_bandwidth_mode(&mut self, bandwidth_mode: BandwidthMode) -> Result<()> {
-        self.inject_event(ConnectionEvent::UpdateBandwidthMode(bandwidth_mode))
+    /// * `mode` - The data mode that should be used
+    pub fn inject_update_data_mode(&mut self, data_mode: DataMode) -> Result<()> {
+        self.inject_event(ConnectionEvent::UpdateDataMode(data_mode))
     }
 
     /// Inject a `ReceivedIce` event into the FSM.
@@ -2172,18 +2169,15 @@ fn negotiate_srtp_keys(
 mod tests {
     use super::*;
 
-    fn expect(
-        max_send_rate_bps: u64,
-        audio_bandwidth_mode: BandwidthMode,
-    ) -> (DataRate, AudioEncoderConfig) {
+    fn expect(max_send_rate_bps: u64, audio_data_mode: DataMode) -> (DataRate, AudioEncoderConfig) {
         (
             DataRate::from_bps(max_send_rate_bps),
-            audio_bandwidth_mode.audio_encoder_config(),
+            audio_data_mode.audio_encoder_config(),
         )
     }
 
     fn compute(
-        local_mode: BandwidthMode,
+        local_mode: DataMode,
         remote_max_bps: u64,
         relayed: bool,
     ) -> (DataRate, AudioEncoderConfig) {
@@ -2206,7 +2200,7 @@ mod tests {
 
     #[test]
     fn bandwidth_controller() {
-        use BandwidthMode::*;
+        use DataMode::*;
 
         // Remote max can push down the audio and video, but only to a point.
         assert_eq!(expect(2_000_000, Normal), compute(Normal, 3_000_000, false));

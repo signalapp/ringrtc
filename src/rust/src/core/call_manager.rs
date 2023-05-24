@@ -21,9 +21,9 @@ use lazy_static::lazy_static;
 use prost::Message;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DeviceId, Result, RingBench,
+    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DataMode, DeviceId, Result,
+    RingBench,
 };
-use crate::core::bandwidth_mode::BandwidthMode;
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
@@ -547,7 +547,7 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         handle_active_call_api!(
@@ -555,7 +555,7 @@ where
             CallManager::handle_proceed,
             call_id,
             app_call_context,
-            bandwidth_mode,
+            data_mode,
             audio_levels_interval
         )
     }
@@ -1174,7 +1174,7 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         ringbench!(
@@ -1189,7 +1189,7 @@ where
             Ok(())
         } else {
             active_call.set_call_context(app_call_context)?;
-            active_call.inject_proceed(bandwidth_mode, audio_levels_interval)
+            active_call.inject_proceed(data_mode, audio_levels_interval)
         }
     }
 
@@ -2221,7 +2221,7 @@ where
         device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        bandwidth_mode: BandwidthMode,
+        data_mode: DataMode,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<T>> {
         let mut platform = self.platform.lock()?;
@@ -2230,7 +2230,7 @@ where
             device_id,
             connection_type,
             signaling_version,
-            bandwidth_mode,
+            data_mode,
             audio_levels_interval,
         )
     }
@@ -2880,13 +2880,9 @@ where
         group_call_api_handler!(self, client_id, resend_media_keys);
     }
 
-    pub fn set_bandwidth_mode(
-        &mut self,
-        client_id: group_call::ClientId,
-        bandwidth_mode: BandwidthMode,
-    ) {
-        info!("set_bandwidth_mode(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_bandwidth_mode, bandwidth_mode);
+    pub fn set_data_mode(&mut self, client_id: group_call::ClientId, data_mode: DataMode) {
+        info!("set_data_mode(): id: {}", client_id);
+        group_call_api_handler!(self, client_id, set_data_mode, data_mode);
     }
 
     pub fn request_video(

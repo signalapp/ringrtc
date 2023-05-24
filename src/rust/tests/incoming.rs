@@ -13,8 +13,9 @@ extern crate log;
 use std::time::Duration;
 
 use prost::Message;
-use ringrtc::common::{units::DataRate, ApplicationEvent, CallId, CallState, ConnectionState};
-use ringrtc::core::bandwidth_mode::BandwidthMode;
+use ringrtc::common::{
+    units::DataRate, ApplicationEvent, CallId, CallState, ConnectionState, DataMode,
+};
 use ringrtc::core::call_manager::MAX_MESSAGE_AGE;
 use ringrtc::core::group_call;
 use ringrtc::core::signaling;
@@ -70,7 +71,7 @@ fn start_inbound_call() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -460,7 +461,7 @@ fn inbound_call_drop_accepted() {
 }
 
 #[test]
-fn update_bandwidth_mode_default() {
+fn update_data_mode_default() {
     test_init();
 
     let context = connect_inbound_call();
@@ -476,7 +477,7 @@ fn update_bandwidth_mode_default() {
     );
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Normal)
+        .update_data_mode(DataMode::Normal)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -501,7 +502,7 @@ fn update_bandwidth_mode_default() {
 }
 
 #[test]
-fn update_bandwidth_mode_low() {
+fn update_data_mode_low() {
     test_init();
 
     let context = connect_inbound_call();
@@ -509,7 +510,7 @@ fn update_bandwidth_mode_low() {
     let active_connection = context.active_connection();
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Low)
+        .update_data_mode(DataMode::Low)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -533,7 +534,7 @@ fn update_bandwidth_mode_low() {
 }
 
 #[test]
-fn update_bandwidth_when_relayed() {
+fn update_data_mode_when_relayed() {
     test_init();
 
     let context = connect_inbound_call();
@@ -569,7 +570,7 @@ fn update_bandwidth_when_relayed() {
     );
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Low)
+        .update_data_mode(DataMode::Low)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
@@ -591,7 +592,7 @@ fn update_bandwidth_when_relayed() {
     );
 
     active_connection
-        .update_bandwidth_mode(BandwidthMode::Normal)
+        .update_data_mode(DataMode::Normal)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
@@ -677,7 +678,7 @@ fn start_inbound_call_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -859,7 +860,7 @@ fn offer_after_ice() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -924,7 +925,7 @@ fn offer_after_unrelated_ice() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -980,7 +981,7 @@ fn offer_after_hangup() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -1025,7 +1026,7 @@ fn offer_after_unrelated_hangup() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -1071,7 +1072,7 @@ fn offer_after_ice_and_hangup() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -1117,7 +1118,7 @@ fn offer_after_hangup_and_ice() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -1167,7 +1168,7 @@ fn offer_after_hangup_with_intervening_ice_for_other_call() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -1220,7 +1221,7 @@ fn offer_after_hangup_with_intervening_hangup_for_other_call() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());
@@ -1276,7 +1277,7 @@ fn offer_after_ice_with_previous_ice_for_other_call() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        BandwidthMode::Normal,
+        DataMode::Normal,
         None,
     )
     .expect(error_line!());

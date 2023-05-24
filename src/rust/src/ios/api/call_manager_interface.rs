@@ -15,8 +15,7 @@ use libc::size_t;
 use crate::ios::call_manager;
 use crate::ios::call_manager::IosCallManager;
 
-use crate::common::{CallMediaType, DeviceId};
-use crate::core::bandwidth_mode::BandwidthMode;
+use crate::common::{CallMediaType, DataMode, DeviceId};
 use crate::core::group_call;
 use crate::core::signaling;
 use crate::lite::{http, sfu, sfu::DemuxId};
@@ -561,7 +560,7 @@ pub extern "C" fn ringrtcProceed(
     callManager: *mut c_void,
     callId: u64,
     appCallContext: AppCallContext,
-    bandwidthMode: i32,
+    dataMode: i32,
     audioLevelsIntervalMillis: u64,
 ) -> *mut c_void {
     let audio_levels_interval = if audioLevelsIntervalMillis == 0 {
@@ -573,7 +572,7 @@ pub extern "C" fn ringrtcProceed(
         callManager as *mut IosCallManager,
         callId,
         appCallContext,
-        BandwidthMode::from_i32(bandwidthMode),
+        DataMode::from_i32(dataMode),
         audio_levels_interval,
     ) {
         Ok(_v) => {
@@ -903,13 +902,13 @@ pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) 
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcUpdateBandwidthMode(callManager: *mut c_void, bandwidthMode: i32) {
-    let result = call_manager::update_bandwidth_mode(
+pub extern "C" fn ringrtcUpdateDataMode(callManager: *mut c_void, dataMode: i32) {
+    let result = call_manager::update_data_mode(
         callManager as *mut IosCallManager,
-        BandwidthMode::from_i32(bandwidthMode),
+        DataMode::from_i32(dataMode),
     );
     if result.is_err() {
-        error!("ringrtcUpdateBandwidthMode(): {:?}", result.err());
+        error!("ringrtcUpdateDataMode(): {:?}", result.err());
     }
 }
 
@@ -1134,17 +1133,17 @@ pub extern "C" fn ringrtcResendMediaKeys(callManager: *mut c_void, clientId: gro
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcSetBandwidthMode(
+pub extern "C" fn ringrtcSetDataMode(
     callManager: *mut c_void,
     clientId: group_call::ClientId,
-    bandwidthMode: i32,
+    dataMode: i32,
 ) {
-    info!("ringrtcSetBandwidthMode():");
+    info!("ringrtcSetDataMode():");
 
-    let result = call_manager::set_bandwidth_mode(
+    let result = call_manager::set_data_mode(
         callManager as *mut IosCallManager,
         clientId,
-        BandwidthMode::from_i32(bandwidthMode),
+        DataMode::from_i32(dataMode),
     );
     if result.is_err() {
         error!("{:?}", result.err());
