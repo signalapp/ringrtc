@@ -33,6 +33,7 @@ use crate::core::signaling::ReceivedOffer;
 use crate::core::util::{uuid_to_string, TaskQueueRuntime};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
+use crate::lite::call_links::{self, CallLinkRootKey};
 use crate::lite::{
     http, sfu,
     sfu::{DemuxId, GroupMember, MembershipProof, PeekInfo, UserId},
@@ -2749,11 +2750,17 @@ where
                 .map(|ring| ring.ring_id)
         };
 
-        let sfu_client =
-            HttpSfuClient::new(Box::new(self.http_client.clone()), sfu_url, hkdf_extra_info);
+        let sfu_client = HttpSfuClient::new(
+            Box::new(self.http_client.clone()),
+            sfu_url,
+            None,
+            None,
+            hkdf_extra_info,
+        );
         let client = group_call::Client::start(
             group_id,
             client_id,
+            group_call::GroupCallKind::SignalGroup,
             Box::new(sfu_client),
             Box::new(self.clone()),
             self.busy.clone(),
@@ -2770,6 +2777,76 @@ where
         client_by_id.insert(client_id, client);
 
         info!("Group Client created with id: {}", client_id);
+
+        Ok(client_id)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_call_link_call_client(
+        &mut self,
+        sfu_url: String,
+        auth_presentation: &[u8],
+        root_key: CallLinkRootKey,
+        admin_passkey: Option<Vec<u8>>,
+        hkdf_extra_info: Vec<u8>,
+        audio_levels_interval: Option<Duration>,
+        peer_connection_factory: Option<PeerConnectionFactory>,
+        outgoing_audio_track: AudioTrack,
+        outgoing_video_track: VideoTrack,
+        incoming_video_sink: Option<Box<dyn VideoSink>>,
+    ) -> Result<group_call::ClientId> {
+        info!("create_call_link_call_client():");
+        let room_id: group_call::GroupId = root_key.derive_room_id();
+        debug!(
+            "  root_key: {} room_id: {} sfu_url: {}",
+            root_key.to_formatted_string(),
+            hex::encode(&room_id),
+            sfu_url
+        );
+
+        let client_id = {
+            let mut next_group_call_client_id = self.next_group_call_client_id.lock()?;
+            if *next_group_call_client_id == group_call::INVALID_CLIENT_ID {
+                *next_group_call_client_id = next_group_call_client_id.wrapping_add(1);
+            }
+            let client_id = *next_group_call_client_id;
+            *next_group_call_client_id = next_group_call_client_id.wrapping_add(1);
+            client_id
+        };
+
+        let mut sfu_client = HttpSfuClient::new(
+            Box::new(self.http_client.clone()),
+            sfu_url,
+            Some(&room_id),
+            admin_passkey,
+            hkdf_extra_info,
+        );
+        sfu_client.set_auth_header(call_links::auth_header_from_auth_credential(
+            auth_presentation,
+        ));
+        sfu_client.set_member_resolver(Arc::new(call_links::CallLinkMemberResolver::from(
+            &root_key,
+        )));
+        let client = group_call::Client::start(
+            room_id,
+            client_id,
+            group_call::GroupCallKind::CallLink,
+            Box::new(sfu_client),
+            Box::new(self.clone()),
+            self.busy.clone(),
+            self.self_uuid.clone(),
+            peer_connection_factory,
+            outgoing_audio_track,
+            Some(outgoing_video_track),
+            incoming_video_sink,
+            None,
+            audio_levels_interval,
+        )?;
+
+        let mut client_by_id = self.group_call_by_client_id.lock()?;
+        client_by_id.insert(client_id, client);
+
+        info!("Call Link Client created with id: {}", client_id);
 
         Ok(client_id)
     }

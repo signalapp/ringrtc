@@ -81,6 +81,7 @@ const typescriptRules = {
   ...rules,
 
   '@typescript-eslint/array-type': ['error', { default: 'generic' }],
+  '@typescript-eslint/unbound-method': ['error', { ignoreStatic: true }],
 
   // Overrides recommended by typescript-eslint
   //   https://github.com/typescript-eslint/typescript-eslint/releases/tag/v4.0.0

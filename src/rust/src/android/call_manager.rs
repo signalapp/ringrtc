@@ -870,6 +870,82 @@ pub fn create_group_call_client(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn create_call_link_call_client(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    sfu_url: JString,
+    auth_presentation: jbyteArray,
+    root_key: jbyteArray,
+    admin_passkey: jbyteArray,
+    hkdf_extra_info: jbyteArray,
+    audio_levels_interval_millis: jint,
+    native_pcf_borrowed_rc: jlong,
+    native_audio_track_borrowed_rc: jlong,
+    native_video_track_borrowed_rc: jlong,
+) -> Result<group_call::ClientId> {
+    info!("create_call_link_call_client():");
+
+    let sfu_url = env.get_string(sfu_url)?.into();
+    let auth_presentation = env.convert_byte_array(auth_presentation)?;
+    let root_key =
+        call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
+    let admin_passkey = if admin_passkey.is_null() {
+        None
+    } else {
+        Some(env.convert_byte_array(admin_passkey)?)
+    };
+    let hkdf_extra_info = env.convert_byte_array(hkdf_extra_info)?;
+
+    let peer_connection_factory = unsafe {
+        PeerConnectionFactory::from_native_factory(webrtc::Arc::from_borrowed(
+            webrtc::ptr::BorrowedRc::from_ptr(
+                native_pcf_borrowed_rc as *const pcf::RffiPeerConnectionFactoryInterface,
+            ),
+        ))
+    };
+
+    // This is safe because the track given to us should still be alive.
+    let outgoing_audio_track = media::AudioTrack::new(
+        unsafe {
+            webrtc::Arc::from_borrowed(webrtc::ptr::BorrowedRc::from_ptr(
+                native_audio_track_borrowed_rc as *const media::RffiAudioTrack,
+            ))
+        },
+        Some(peer_connection_factory.rffi().clone()),
+    );
+
+    // This is safe because the track given to us should still be alive.
+    let outgoing_video_track = media::VideoTrack::new(
+        unsafe {
+            webrtc::Arc::from_borrowed(webrtc::ptr::BorrowedRc::from_ptr(
+                native_video_track_borrowed_rc as *const media::RffiVideoTrack,
+            ))
+        },
+        Some(peer_connection_factory.rffi().clone()),
+    );
+
+    let audio_levels_interval = if audio_levels_interval_millis <= 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audio_levels_interval_millis as u64))
+    };
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.create_call_link_call_client(
+        sfu_url,
+        &auth_presentation,
+        root_key,
+        admin_passkey,
+        hkdf_extra_info,
+        audio_levels_interval,
+        Some(peer_connection_factory),
+        outgoing_audio_track,
+        outgoing_video_track,
+        None,
+    )
+}
+
 pub fn delete_group_call_client(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,

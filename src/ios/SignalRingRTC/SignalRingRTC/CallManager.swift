@@ -730,6 +730,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         return groupCall
     }
 
+    public func createCallLinkCall(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) -> GroupCall? {
+        AssertIsOnMainThread()
+        Logger.debug("createCallLinkCall")
+
+        guard let factory = self.factory else {
+            owsFailDebug("No factory found for GroupCall")
+            return nil
+        }
+
+        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, sfuUrl: sfuUrl, authCredentialPresentation: authCredentialPresentation, linkRootKey: linkRootKey, adminPasskey: adminPasskey, hkdfExtraInfo: hkdfExtraInfo, audioLevelsIntervalMillis: audioLevelsIntervalMillis, videoCaptureController: videoCaptureController)
+        return groupCall
+    }
+
     // MARK: - Event Observers
 
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType) {

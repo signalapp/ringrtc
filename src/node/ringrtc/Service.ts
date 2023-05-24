@@ -124,6 +124,8 @@ class NativeCallManager {
   Native.cm_receiveGroupCallVideoFrame;
 (NativeCallManager.prototype as any).createGroupCallClient =
   Native.cm_createGroupCallClient;
+(NativeCallManager.prototype as any).createCallLinkCallClient =
+  Native.cm_createCallLinkCallClient;
 (NativeCallManager.prototype as any).deleteGroupCallClient =
   Native.cm_deleteGroupCallClient;
 (NativeCallManager.prototype as any).connect = Native.cm_connect;
@@ -1041,6 +1043,31 @@ export class RingRTCType {
     const clientId = this.callManager.createGroupCallClient(
       groupId,
       sfuUrl,
+      hkdfExtraInfo,
+      audioLevelsIntervalMillis || 0
+    );
+    const groupCall = new GroupCall(this.callManager, observer, clientId);
+
+    this._groupCallByClientId.set(groupCall.clientId, groupCall);
+
+    return groupCall;
+  }
+
+  // Called by UX
+  getCallLinkCall(
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    rootKey: CallLinkRootKey,
+    adminPasskey: Buffer | undefined,
+    hkdfExtraInfo: Buffer,
+    audioLevelsIntervalMillis: number | undefined,
+    observer: GroupCallObserver
+  ): GroupCall | undefined {
+    const clientId = this.callManager.createCallLinkCallClient(
+      sfuUrl,
+      authCredentialPresentation,
+      rootKey.bytes,
+      adminPasskey,
       hkdfExtraInfo,
       audioLevelsIntervalMillis || 0
     );
@@ -2634,6 +2661,14 @@ export interface CallManager {
   createGroupCallClient(
     groupId: Buffer,
     sfuUrl: string,
+    hkdfExtraInfo: Buffer,
+    audioLevelsIntervalMillis: number
+  ): GroupCallClientId;
+  createCallLinkCallClient(
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: Buffer,
+    adminPasskey: Buffer | undefined,
     hkdfExtraInfo: Buffer,
     audioLevelsIntervalMillis: number
   ): GroupCallClientId;

@@ -188,10 +188,15 @@ public protocol GroupCallDelegate: AnyObject {
 
 @available(iOSApplicationExtension, unavailable)
 public class GroupCall {
+    private enum ConnectInfo {
+        case groupId(Data)
+        case callLink(authCredentialPresentation: [UInt8], rootKey: CallLinkRootKey, adminPasskey: Data?)
+    }
+
     let ringRtcCallManager: UnsafeMutableRawPointer
     let factory: RTCPeerConnectionFactory
     var groupCallByClientId: GroupCallByClientId
-    let groupId: Data
+    private let connectInfo: ConnectInfo
     let sfuUrl: String
     let hkdfExtraInfo: Data
     let audioLevelsIntervalMillis: UInt64?
@@ -200,7 +205,7 @@ public class GroupCall {
 
     // The clientId represents the id of the RingRTC object. For iOS, we
     // create the object in the context of the connect() API and recreate
-    // it if it is ever ended abd connect() is called again.
+    // it if it is ever ended and connect() is called again.
     var clientId: UInt32?
 
     public private(set) var localDeviceState: LocalDeviceState
@@ -217,7 +222,26 @@ public class GroupCall {
         self.ringRtcCallManager = ringRtcCallManager
         self.factory = factory
         self.groupCallByClientId = groupCallByClientId
-        self.groupId = groupId
+        self.connectInfo = .groupId(groupId)
+        self.sfuUrl = sfuUrl
+        self.hkdfExtraInfo = hkdfExtraInfo
+        self.audioLevelsIntervalMillis = audioLevelsIntervalMillis
+
+        self.localDeviceState = LocalDeviceState()
+        self.remoteDeviceStates = [:]
+
+        self.videoCaptureController = videoCaptureController
+
+        Logger.debug("object! GroupCall created... \(ObjectIdentifier(self))")
+    }
+
+    internal init(ringRtcCallManager: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, groupCallByClientId: GroupCallByClientId, sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) {
+        AssertIsOnMainThread()
+
+        self.ringRtcCallManager = ringRtcCallManager
+        self.factory = factory
+        self.groupCallByClientId = groupCallByClientId
+        self.connectInfo = .callLink(authCredentialPresentation: authCredentialPresentation, rootKey: linkRootKey, adminPasskey: adminPasskey)
         self.sfuUrl = sfuUrl
         self.hkdfExtraInfo = hkdfExtraInfo
         self.audioLevelsIntervalMillis = audioLevelsIntervalMillis
@@ -245,7 +269,6 @@ public class GroupCall {
         if self.clientId == nil {
             // There is no RingRTC instance yet or anymore, so create it.
 
-            let groupIdSlice = allocatedAppByteSliceFromData(maybe_data: self.groupId)
             let sfuUrlSlice = allocatedAppByteSliceFromString(maybe_string: self.sfuUrl)
             let hkdfExtraInfoSlice = allocatedAppByteSliceFromData(maybe_data: self.hkdfExtraInfo)
             let audioLevelsIntervalMillis = self.audioLevelsIntervalMillis ?? 0;
@@ -254,9 +277,6 @@ public class GroupCall {
             // to ensure that the pointers are still valid when used in the RingRTC
             // API function.
             defer {
-                if groupIdSlice.bytes != nil {
-                    groupIdSlice.bytes.deallocate()
-                }
                 if sfuUrlSlice.bytes != nil {
                     sfuUrlSlice.bytes.deallocate()
                 }
@@ -287,10 +307,30 @@ public class GroupCall {
 
             self.videoCaptureController.capturerDelegate = videoSource
 
-            // Note: getOwnedNativeAudioTrack/getOwnedNativeVideoTrack/getOwnedNativeFactory
-            // return owned RCs the first time they are called, and null after that.
-            // TODO: Consider renaming getOwnedNativeX to takeNative.
-            let clientId = ringrtcCreateGroupCallClient(self.ringRtcCallManager, groupIdSlice, sfuUrlSlice, hkdfExtraInfoSlice, audioLevelsIntervalMillis, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
+            let clientId: ClientId
+            switch self.connectInfo {
+            case .groupId(let groupId):
+                let groupIdSlice = allocatedAppByteSliceFromData(maybe_data: groupId)
+                defer { groupIdSlice.bytes?.deallocate() }
+                // Note: getOwnedNativeAudioTrack/getOwnedNativeVideoTrack/getOwnedNativeFactory
+                // return owned RCs the first time they are called, and null after that.
+                // TODO: Consider renaming getOwnedNativeX to takeNative.
+                clientId = ringrtcCreateGroupCallClient(self.ringRtcCallManager, groupIdSlice, sfuUrlSlice, hkdfExtraInfoSlice, audioLevelsIntervalMillis, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
+
+            case .callLink(let authCredentialPresentation, let rootKey, let adminPasskey):
+                let authCredentialPresentationSlice = allocatedAppByteSliceFromArray(maybe_bytes: authCredentialPresentation)
+                let rootKeySlice = allocatedAppByteSliceFromData(maybe_data: rootKey.bytes)
+                let adminPasskeySlice = allocatedAppByteSliceFromData(maybe_data: adminPasskey)
+                defer {
+                    authCredentialPresentationSlice.bytes?.deallocate()
+                    rootKeySlice.bytes?.deallocate()
+                    adminPasskeySlice.bytes?.deallocate()
+                }
+                // Note: getOwnedNativeAudioTrack/getOwnedNativeVideoTrack/getOwnedNativeFactory
+                // return owned RCs the first time they are called, and null after that.
+                // TODO: Consider renaming getOwnedNativeX to takeNative.
+                clientId = ringrtcCreateCallLinkCallClient(self.ringRtcCallManager, sfuUrlSlice, authCredentialPresentationSlice, rootKeySlice, adminPasskeySlice, hkdfExtraInfoSlice, audioLevelsIntervalMillis, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
+            }
             if clientId != 0 {
                 // Add this instance to the shared dictionary.
                 self.groupCallByClientId[clientId] = self

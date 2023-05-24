@@ -1209,6 +1209,64 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let sfu_url = cx.argument::<JsString>(0)?.value(&mut cx);
+
+    let auth_presentation = cx.argument::<JsBuffer>(1)?;
+    let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
+
+    let root_key_bytes = cx.argument::<JsBuffer>(2)?;
+    let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
+        .or_else(|e| cx.throw_type_error(e.to_string()))?;
+
+    let admin_passkey = cx.argument::<JsValue>(3)?;
+    let admin_passkey = if admin_passkey.is_a::<JsUndefined, _>(&mut cx) {
+        None
+    } else {
+        let admin_passkey = admin_passkey.downcast_or_throw::<JsBuffer, _>(&mut cx)?;
+        Some(admin_passkey.as_slice(&cx).to_vec())
+    };
+
+    let hkdf_extra_info = cx.argument::<JsBuffer>(4)?;
+    let hkdf_extra_info = hkdf_extra_info.as_slice(&cx).to_vec();
+
+    let audio_levels_interval_millis = cx.argument::<JsNumber>(5)?.value(&mut cx) as u64;
+    let audio_levels_interval = if audio_levels_interval_millis == 0 {
+        None
+    } else {
+        Some(Duration::from_millis(audio_levels_interval_millis))
+    };
+
+    let mut client_id = group_call::INVALID_CLIENT_ID;
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        let peer_connection_factory = endpoint.peer_connection_factory.clone();
+        let outgoing_audio_track = endpoint.outgoing_audio_track.clone();
+        let outgoing_video_track = endpoint.outgoing_video_track.clone();
+        let incoming_video_sink = endpoint.incoming_video_sink.clone();
+        let result = endpoint.call_manager.create_call_link_call_client(
+            sfu_url,
+            &auth_presentation,
+            root_key,
+            admin_passkey,
+            hkdf_extra_info,
+            audio_levels_interval,
+            Some(peer_connection_factory),
+            outgoing_audio_track,
+            outgoing_video_track,
+            Some(incoming_video_sink),
+        );
+        if let Ok(v) = result {
+            client_id = v;
+        }
+
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.number(client_id).upcast())
+}
+
+#[allow(non_snake_case)]
 fn deleteGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
 
@@ -2568,6 +2626,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_receiveVideoFrame", receiveVideoFrame)?;
     cx.export_function("cm_receiveGroupCallVideoFrame", receiveGroupCallVideoFrame)?;
     cx.export_function("cm_createGroupCallClient", createGroupCallClient)?;
+    cx.export_function("cm_createCallLinkCallClient", createCallLinkCallClient)?;
     cx.export_function("cm_deleteGroupCallClient", deleteGroupCallClient)?;
     cx.export_function("cm_connect", connect)?;
     cx.export_function("cm_join", join)?;

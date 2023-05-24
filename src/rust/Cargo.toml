@@ -48,7 +48,7 @@ regex-automata    = { version = "0.1.10" }
 hkdf              = { version = "0.11"   }
 serde_json        = { version = "1.0"    }
 serde             = { version = "1.0", features = ["derive"] }
-serde_with        = { version = "2.3.2", features = ["base64"] }
+serde_with        = { version = "2.3.2", features = ["base64", "hex"] }
 hex               = { version = "0.4", features = ["serde"] }
 sha2              = { version = "0.9.9"  }
 static_assertions = { version = "1.1.0"  }

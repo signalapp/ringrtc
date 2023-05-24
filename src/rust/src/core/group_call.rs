@@ -444,7 +444,9 @@ pub struct Joined {
 
 /// Communicates with the SFU using HTTP.
 pub struct HttpSfuClient {
-    url: String,
+    sfu_url: String,
+    room_id_for_url: Option<String>,
+    admin_passkey: Option<Vec<u8>>,
     // For use post-DHE
     hkdf_extra_info: Vec<u8>,
     http_client: Box<dyn http::Client + Send>,
@@ -457,16 +459,31 @@ impl HttpSfuClient {
     pub fn new(
         http_client: Box<dyn http::Client + Send>,
         url: String,
+        room_id_for_url: Option<&[u8]>,
+        admin_passkey: Option<Vec<u8>>,
         hkdf_extra_info: Vec<u8>,
     ) -> Self {
         Self {
-            url,
+            sfu_url: url,
+            room_id_for_url: room_id_for_url.map(hex::encode),
+            admin_passkey,
             hkdf_extra_info,
             http_client,
             auth_header: None,
             member_resolver: Arc::new(sfu::MemberMap::default()),
             deferred_join: None,
         }
+    }
+
+    pub fn set_auth_header(&mut self, auth_header: String) {
+        self.auth_header = Some(auth_header)
+    }
+
+    pub fn set_member_resolver(
+        &mut self,
+        member_resolver: Arc<dyn sfu::MemberResolver + Send + Sync>,
+    ) {
+        self.member_resolver = member_resolver;
     }
 
     fn join_with_header(
@@ -479,8 +496,10 @@ impl HttpSfuClient {
         let hkdf_extra_info = self.hkdf_extra_info.clone();
         sfu::join(
             self.http_client.as_ref(),
-            &self.url,
+            &self.sfu_url,
+            self.room_id_for_url.as_deref(),
             auth_header,
+            self.admin_passkey.as_deref(),
             ice_ufrag,
             dhe_pub_key,
             &self.hkdf_extra_info,
@@ -542,8 +561,8 @@ impl SfuClient for HttpSfuClient {
         match self.auth_header.clone() {
             Some(auth_header) => sfu::peek(
                 self.http_client.as_ref(),
-                &self.url,
-                None,
+                &self.sfu_url,
+                self.room_id_for_url.as_deref(),
                 auth_header,
                 self.member_resolver.clone(),
                 result_callback,
@@ -556,7 +575,7 @@ impl SfuClient for HttpSfuClient {
 
     fn set_group_members(&mut self, members: Vec<GroupMember>) {
         info!("SfuClient set_group_members: {} members", members.len());
-        self.member_resolver = Arc::new(sfu::MemberMap::new(&members));
+        self.set_member_resolver(Arc::new(sfu::MemberMap::new(&members)));
     }
 }
 
@@ -801,11 +820,18 @@ enum OutgoingRingState {
     NotPermittedToRing,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupCallKind {
+    SignalGroup,
+    CallLink,
+}
+
 /// The state inside the Actor
 struct State {
     // Things passed in that never change
     client_id: ClientId,
     group_id: GroupId,
+    kind: GroupCallKind,
     sfu_client: Box<dyn SfuClient>,
     observer: Box<dyn Observer>,
 
@@ -947,6 +973,7 @@ impl Client {
     pub fn start(
         group_id: GroupId,
         client_id: ClientId,
+        kind: GroupCallKind,
         sfu_client: Box<dyn SfuClient + Send>,
         observer: Box<dyn Observer + Send>,
         busy: Arc<CallMutex<bool>>,
@@ -1019,6 +1046,7 @@ impl Client {
                 Ok(State {
                     client_id,
                     group_id,
+                    kind,
                     sfu_client,
                     observer,
                     busy,
@@ -1031,8 +1059,12 @@ impl Client {
                     dhe_state: DheState::default(),
                     remote_devices: Default::default(),
 
-                    remote_devices_request_state:
-                        RemoteDevicesRequestState::WaitingForMembershipProof,
+                    remote_devices_request_state: match kind {
+                        GroupCallKind::SignalGroup => {
+                            RemoteDevicesRequestState::WaitingForMembershipProof
+                        }
+                        GroupCallKind::CallLink => RemoteDevicesRequestState::NeverRequested,
+                    },
                     last_peek_info: None,
 
                     known_members: HashSet::new(),
@@ -1088,6 +1120,7 @@ impl Client {
             state
                 .peer_connection_observer_impl
                 .initialize(client_clone_to_init_peer_connection_observer_impl);
+            Self::request_remote_devices_as_soon_as_possible(state);
         });
         Ok(client)
     }
@@ -1170,11 +1203,15 @@ impl Client {
             }
         }
 
-        if let Some(next_membership_proof_request_time) = state.next_membership_proof_request_time {
-            if now >= next_membership_proof_request_time {
-                state.observer.request_membership_proof(state.client_id);
-                state.next_membership_proof_request_time =
-                    Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+        if state.kind == GroupCallKind::SignalGroup {
+            if let Some(next_membership_proof_request_time) =
+                state.next_membership_proof_request_time
+            {
+                if now >= next_membership_proof_request_time {
+                    state.observer.request_membership_proof(state.client_id);
+                    state.next_membership_proof_request_time =
+                        Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+                }
             }
         }
 
@@ -1282,12 +1319,14 @@ impl Client {
                     state.next_audio_levels_time = Some(now);
 
                     // Request group membership refresh as we start polling the participant list.
-                    state.observer.request_membership_proof(state.client_id);
-                    state.next_membership_proof_request_time =
-                        Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+                    if state.kind == GroupCallKind::SignalGroup {
+                        state.observer.request_membership_proof(state.client_id);
+                        state.next_membership_proof_request_time =
+                            Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
 
-                    // Request the list of all group members
-                    state.observer.request_group_members(state.client_id);
+                        // Request the list of all group members
+                        state.observer.request_group_members(state.client_id);
+                    }
 
                     Self::tick(state);
                 }
@@ -1373,10 +1412,12 @@ impl Client {
                         Self::set_join_state_and_notify_observer(state, JoinState::Joining);
                         Self::accept_ring_if_needed(state, ring_id);
 
-                        // Request group membership refresh before joining.
-                        // The Join request will then proceed once SfuClient has the token.
-                        state.observer.request_membership_proof(state.client_id);
-                        state.next_membership_proof_request_time = Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+                        if state.kind == GroupCallKind::SignalGroup {
+                            // Request group membership refresh before joining.
+                            // The Join request will then proceed once SfuClient has the token.
+                            state.observer.request_membership_proof(state.client_id);
+                            state.next_membership_proof_request_time = Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+                        }
 
                         let client_secret = EphemeralSecret::new(OsRng);
                         let client_pub_key = PublicKey::from(&client_secret);
@@ -2570,7 +2611,9 @@ impl Client {
                 "Storing media receive key from {} because we don't know who they are yet.",
                 demux_id
             );
-            if state.pending_media_receive_keys.is_empty() {
+            if state.pending_media_receive_keys.is_empty()
+                && state.kind == GroupCallKind::SignalGroup
+            {
                 // Proactively ask for the group members again.
                 // Since pending_media_receive_keys is re-processed every time we get a device
                 // update, this will effectively be requested once per peek as long as there's an
@@ -4059,6 +4102,7 @@ mod tests {
             let client = Client::start(
                 b"fake group ID".to_vec(),
                 demux_id,
+                GroupCallKind::SignalGroup,
                 Box::new(sfu_client.clone()),
                 Box::new(observer.clone()),
                 fake_busy,

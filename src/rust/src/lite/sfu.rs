@@ -15,8 +15,8 @@ use std::{
 };
 
 use hex::ToHex;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use sha2::{Digest, Sha256};
 
 use crate::lite::http;
@@ -365,11 +365,30 @@ pub fn peek(
 pub type JoinResult = Result<JoinResponse, http::ResponseStatus>;
 pub type JoinResultCallback = Box<dyn FnOnce(JoinResult) + Send>;
 
+#[serde_as]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JoinRequest<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<serde_with::base64::Base64>")]
+    admin_passkey: Option<&'a [u8]>,
+
+    ice_ufrag: &'a str,
+
+    #[serde_as(as = "serde_with::hex::Hex")]
+    dhe_public_key: &'a [u8],
+
+    #[serde_as(as = "serde_with::hex::Hex")]
+    hkdf_extra_info: &'a [u8],
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn join(
     http_client: &dyn http::Client,
     sfu_url: &str,
+    room_id_for_url: Option<&str>,
     auth_header: String,
+    admin_passkey: Option<&[u8]>,
     client_ice_ufrag: &str,
     client_dhe_pub_key: &[u8],
     hkdf_extra_info: &[u8],
@@ -381,19 +400,19 @@ pub fn join(
     http_client.send_request(
         http::Request {
             method: http::Method::Put,
-            url: participants_url_from_sfu_url(sfu_url, None),
+            url: participants_url_from_sfu_url(sfu_url, room_id_for_url),
             headers: HashMap::from_iter([
                 ("Authorization".to_string(), auth_header),
                 ("Content-Type".to_string(), "application/json".to_string()),
             ]),
             body: Some(
-                json!({
-                    "iceUfrag" : client_ice_ufrag,
-                    "dhePublicKey": client_dhe_pub_key.encode_hex::<String>(),
-                    "hkdfExtraInfo": hkdf_extra_info.encode_hex::<String>(),
+                serde_json::to_vec(&JoinRequest {
+                    admin_passkey,
+                    ice_ufrag: client_ice_ufrag,
+                    dhe_public_key: client_dhe_pub_key,
+                    hkdf_extra_info,
                 })
-                .to_string()
-                .into_bytes(),
+                .expect("always valid"),
             ),
         },
         Box::new(move |http_response| {

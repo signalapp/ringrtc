@@ -185,6 +185,8 @@ fn main() {
     let sfu_client = Box::new(HttpSfuClient::new(
         Box::new(http_client),
         url.to_string(),
+        None,
+        None,
         hkdf_extra_info,
     ));
     let observer = Observer::default();
@@ -207,6 +209,7 @@ fn main() {
     let client = group_call::Client::start(
         group_id,
         1,
+        group_call::GroupCallKind::SignalGroup,
         sfu_client,
         Box::new(observer.clone()),
         busy,

@@ -1218,6 +1218,7 @@ public class CallManager {
    * @param observer               the observer that the group call object will use for callback notifications
    *
    */
+  @Nullable
   public GroupCall createGroupCall(@NonNull  byte[]                groupId,
                                    @NonNull  String                sfuUrl,
                                    @NonNull  byte[]                hkdfExtraInfo,
@@ -1237,6 +1238,56 @@ public class CallManager {
     }
 
     GroupCall groupCall = GroupCall.create(nativeCallManager, groupId, sfuUrl, hkdfExtraInfo, audioLevelsIntervalMs, this.groupFactory, observer);
+
+    if (groupCall != null) {
+      // Add the groupCall to the map.
+      this.groupCallByClientId.append(groupCall.clientId, groupCall);
+    }
+
+    return groupCall;
+  }
+
+  /**
+   *
+   * Creates and returns a GroupCall object for a call link call.
+   *
+   * If there is any error when allocating resources for the object,
+   * null is returned.
+   *
+   * @param sfuUrl                     the URL to use when accessing the SFU
+   * @param authCredentialPresentation a serialized CallLinkAuthCredentialPresentation
+   * @param linkRootKey                the root key for the call link
+   * @param adminPasskey               if present, the opaque passkey authorizing this user as an admin for the call link
+   * @param hkdfExtraInfo              additional entropy to use for the connection with the SFU (it's okay if this is empty)
+   * @param audioLevelsIntervalMs      if provided, the observer will receive audio level callbacks at this interval
+   * @param audioProcessingMethod      the method to use for audio processing
+   * @param observer                   the observer that the group call object will use for callback notifications
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  @Nullable
+  public GroupCall createCallLinkCall(@NonNull  String                sfuUrl,
+                                      @NonNull  byte[]                authCredentialPresentation,
+                                      @NonNull  CallLinkRootKey       linkRootKey,
+                                      @Nullable byte[]                adminPasskey,
+                                      @NonNull  byte[]                hkdfExtraInfo,
+                                      @Nullable Integer               audioLevelsIntervalMs,
+                                                AudioProcessingMethod audioProcessingMethod,
+                                      @NonNull  GroupCall.Observer    observer)
+  {
+    checkCallManagerExists();
+
+    if (this.groupFactory == null) {
+      // The first GroupCall object will create a factory that will be re-used.
+      this.groupFactory = this.createPeerConnectionFactory(null, audioProcessingMethod);
+      if (this.groupFactory == null) {
+        Log.e(TAG, "createPeerConnectionFactory failed");
+        return null;
+      }
+    }
+
+    GroupCall groupCall = GroupCall.create(nativeCallManager, sfuUrl, authCredentialPresentation, linkRootKey, adminPasskey, hkdfExtraInfo, audioLevelsIntervalMs, this.groupFactory, observer);
 
     if (groupCall != null) {
       // Add the groupCall to the map.

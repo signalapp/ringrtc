@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		17905A972A1D880400571FAB /* TestGroupCallDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17905A962A1D880400571FAB /* TestGroupCallDelegate.swift */; };
 		17EC850A291057C200319C82 /* RingValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17EC8509291057C200319C82 /* RingValidation.swift */; };
 		17FC1EE12A09D5E900D0A2A5 /* CallLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17FC1EE02A09D5E800D0A2A5 /* CallLinks.swift */; };
 		17FC1EE32A09D6CC00D0A2A5 /* CallLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17FC1EE22A09D6CC00D0A2A5 /* CallLinkTests.swift */; };
@@ -42,6 +43,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		17905A962A1D880400571FAB /* TestGroupCallDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestGroupCallDelegate.swift; sourceTree = "<group>"; };
 		17B9C6ED267BD9B900649B91 /* CARGO_BUILD_TARGET.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = CARGO_BUILD_TARGET.xcconfig; sourceTree = "<group>"; };
 		17EC8509291057C200319C82 /* RingValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingValidation.swift; sourceTree = "<group>"; };
 		17FC1EE02A09D5E800D0A2A5 /* CallLinks.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallLinks.swift; sourceTree = "<group>"; };
@@ -150,6 +152,7 @@
 			children = (
 				388AC0D522FA8B2D00BEC609 /* SignalRingRTCTests.swift */,
 				17FC1EE22A09D6CC00D0A2A5 /* CallLinkTests.swift */,
+				17905A962A1D880400571FAB /* TestGroupCallDelegate.swift */,
 				388AC0D722FA8B2D00BEC609 /* Info.plist */,
 			);
 			path = SignalRingRTCTests;
@@ -385,6 +388,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				17905A972A1D880400571FAB /* TestGroupCallDelegate.swift in Sources */,
 				388AC0D622FA8B2D00BEC609 /* SignalRingRTCTests.swift in Sources */,
 				17FC1EE32A09D6CC00D0A2A5 /* CallLinkTests.swift in Sources */,
 			);

@@ -11,6 +11,7 @@ import SignalCoreKit
 import Nimble
 
 typealias TestCallManager = CallManager<OpaqueCallData, TestDelegate>
+/// Never actually returns nil.
 func createCallManager(_ delegate: TestDelegate) -> TestCallManager? {
     let httpClient = HTTPClient(delegate: delegate)
     let call_manager = TestCallManager(httpClient: httpClient)
@@ -636,6 +637,18 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     }
 }
 
+extension XCTestCase {
+    // Helper function to delay, without blocking the main thread.
+    func delay(interval: TimeInterval) {
+        var timerFlag = false
+        Timer.scheduledTimer(withTimeInterval: interval, repeats: false, block: { (_) in
+            timerFlag = true
+        })
+        // Wait for the timer to expire, and give expectation timeout in excess of delay.
+        expect(timerFlag).toEventually(equal(true), timeout: .milliseconds(Int((interval + 1) * 1000)))
+    }
+}
+
 class SignalRingRTCTests: XCTestCase {
 
     override class func setUp() {
@@ -652,16 +665,6 @@ class SignalRingRTCTests: XCTestCase {
                 Logger.error("failed to allow more open files: " + String(cString: strerror(errno)))
             }
         }
-    }
-
-    // Helper function to delay, without blocking the main thread.
-    func delay(interval: TimeInterval) {
-        var timerFlag = false
-        Timer.scheduledTimer(withTimeInterval: interval, repeats: false, block: { (_) in
-            timerFlag = true
-        })
-        // Wait for the timer to expire, and give expectation timeout in excess of delay.
-        expect(timerFlag).toEventually(equal(true), timeout: .milliseconds(Int((interval + 1) * 1000)))
     }
 
     func testMinimalLifetime() {

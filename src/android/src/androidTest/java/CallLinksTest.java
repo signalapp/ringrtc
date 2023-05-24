@@ -7,6 +7,7 @@ import org.signal.ringrtc.CallException;
 import org.signal.ringrtc.CallLinkState;
 import org.signal.ringrtc.CallLinkRootKey;
 import org.signal.ringrtc.CallManager;
+import org.signal.ringrtc.GroupCall;
 import org.signal.ringrtc.PeekInfo;
 
 import org.junit.Rule;
@@ -281,5 +282,20 @@ public class CallLinksTest extends CallTestBase {
 
         callManager.receivedHttpResponse(requestId.getValue(), 404, "{\"reason\":\"invalid\"}".getBytes("UTF-8"));
         latch.await();
+    }
+
+    @Test
+    public void testConnectWithNoResponse() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        GroupCall.Observer callObserver = mock();
+        GroupCall call = callManager.createCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, new byte[] {}, null, CallManager.AudioProcessingMethod.Default, callObserver);
+        call.connect();
+
+        Thread.sleep(1000);
+
+        verify(callObserver, never()).requestMembershipProof(any());
+        verify(callObserver, never()).requestGroupMembers(any());
     }
 }

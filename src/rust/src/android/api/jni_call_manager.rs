@@ -752,6 +752,43 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateCallLinkCallClient(
+    env: JNIEnv,
+    _cls: JClass,
+    call_manager: jlong,
+    sfu_url: JString,
+    auth_presentation: jbyteArray,
+    call_link_bytes: jbyteArray,
+    admin_passkey: jbyteArray,
+    hkdf_extra_info: jbyteArray,
+    audio_levels_interval_millis: jint,
+    native_peer_connection_factory_borrowed_rc: jlong,
+    native_audio_track_borrowed_rc: jlong,
+    native_video_track_borrowed_rc: jlong,
+) -> jlong {
+    match call_manager::create_call_link_call_client(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        sfu_url,
+        auth_presentation,
+        call_link_bytes,
+        admin_passkey,
+        hkdf_extra_info,
+        audio_levels_interval_millis,
+        native_peer_connection_factory_borrowed_rc,
+        native_audio_track_borrowed_rc,
+        native_video_track_borrowed_rc,
+    ) {
+        Ok(v) => v as i64,
+        Err(e) => {
+            error::throw_error(&env, e);
+            group_call::INVALID_CLIENT_ID as i64
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDeleteGroupCallClient(
     env: JNIEnv,
     _object: JObject,

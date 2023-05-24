@@ -154,6 +154,53 @@ public final class GroupCall {
     }
 
     /**
+     * Creates a GroupCall object for a call link call.
+     *
+     * Will return null on failure. Should only be accessed via the CallManager.createCallLinkCall().
+     */
+    static GroupCall create(          long                  nativeCallManager,
+                            @NonNull  String                sfuUrl,
+                            @NonNull  byte[]                authCredentialPresentation,
+                            @NonNull  CallLinkRootKey       rootKey,
+                            @Nullable byte[]                adminPasskey,
+                            @NonNull  byte[]                hkdfExtraInfo,
+                            @Nullable Integer               audioLevelsIntervalMs,
+                            @NonNull  PeerConnectionFactory factory,
+                            @NonNull  Observer              observer) {
+        Log.i(TAG, "create():");
+
+        GroupCall call = new GroupCall(nativeCallManager, factory, observer);
+
+        int audioLevelsIntervalMillis = audioLevelsIntervalMs == null ? 0 : audioLevelsIntervalMs.intValue();
+        try {
+            call.clientId = ringrtcCreateCallLinkCallClient(
+                nativeCallManager,
+                sfuUrl,
+                authCredentialPresentation,
+                rootKey.getKeyBytes(),
+                adminPasskey,
+                hkdfExtraInfo,
+                audioLevelsIntervalMillis,
+                // Returns a borrowed RC.
+                factory.getNativePeerConnectionFactory(),
+                // Returns a borrowed RC.
+                call.outgoingAudioTrack.getNativeAudioTrack(),
+                // Returns a borrowed RC.
+                call.outgoingVideoTrack.getNativeVideoTrack());
+
+            if (call.clientId == 0) {
+                call.dispose();
+                return null;
+            }
+        } catch (CallException e) {
+            Log.w(TAG, "Unable to create call link call client", e);
+            throw new AssertionError("Unable to create call link call client");
+        }
+
+        return call;
+    }
+
+    /**
      * Releases native resources belonging to the object.
      */
     public void dispose()
@@ -1023,6 +1070,19 @@ public final class GroupCall {
                                           long nativePeerConnectionFactory,
                                           long nativeAudioTrack,
                                           long nativeVideoTrack)
+        throws CallException;
+
+    private static native
+        long ringrtcCreateCallLinkCallClient(long nativeCallManager,
+                                             String sfuUrl,
+                                             byte[] authCredentialPresentation,
+                                             byte[] rootKeyBytes,
+                                             byte[] adminPasskey,
+                                             byte[] hkdfExtraInfo,
+                                             int audioLevelsIntervalMillis,
+                                             long nativePeerConnectionFactory,
+                                             long nativeAudioTrack,
+                                             long nativeVideoTrack)
         throws CallException;
 
     private native

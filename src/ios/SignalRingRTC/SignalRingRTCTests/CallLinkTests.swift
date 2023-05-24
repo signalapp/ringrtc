@@ -318,4 +318,17 @@ final class CallLinkTests: XCTestCase {
         httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 404, body: #"{"reason":"invalid"}"#.data(using: .utf8)))
         waitForExpectations(timeout: 1.0)
     }
+
+    func testConnectWithNoResponse() throws {
+        let delegate = TestDelegate()
+        let callManager = createCallManager(delegate)!
+        let call = try XCTUnwrap(callManager.createCallLinkCall(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: nil, hkdfExtraInfo: Data(), audioLevelsIntervalMillis: nil, videoCaptureController: VideoCaptureController()))
+
+        let callDelegate = TestGroupCallDelegate()
+        call.delegate = callDelegate
+        XCTAssert(call.connect())
+        delay(interval: 1.0)
+        XCTAssertEqual(0, callDelegate.requestMembershipProofCount)
+        XCTAssertEqual(0, callDelegate.requestGroupMembersCount)
+    }
 }

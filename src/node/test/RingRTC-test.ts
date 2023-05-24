@@ -14,6 +14,8 @@ import {
   CallLinkRootKey,
   CallState,
   CallingMessage,
+  GroupCall,
+  GroupCallEndReason,
   HttpMethod,
   OfferType,
   PeekStatusCodes,
@@ -813,6 +815,37 @@ describe('RingRTC', () => {
       } else {
         assert.equal(state.errorStatusCode, PeekStatusCodes.INVALID_CALL_LINK);
       }
+    });
+
+    class NullGroupObserver {
+      /* eslint-disable @typescript-eslint/no-empty-function */
+      requestMembershipProof(_call: GroupCall) {}
+      requestGroupMembers(_call: GroupCall) {}
+      onLocalDeviceStateChanged(_call: GroupCall) {}
+      onRemoteDeviceStatesChanged(_call: GroupCall) {}
+      onAudioLevels(_call: GroupCall) {}
+      onPeekChanged(_call: GroupCall) {}
+      onEnded(_call: GroupCall, _reason: GroupCallEndReason) {}
+      /* eslint-enable @typescript-eslint/no-empty-function */
+    }
+
+    it('can create a call and try to connect', async () => {
+      CallingClass.initializeLoggingOnly();
+      const observer = sinon.spy(new NullGroupObserver());
+      const call = RingRTC.getCallLinkCall(
+        'sfu.example',
+        Buffer.of(1, 2, 3),
+        EXAMPLE_KEY,
+        undefined,
+        Buffer.of(),
+        undefined,
+        observer
+      );
+      assert.isObject(call);
+      call?.connect();
+      await sleep(1000);
+      observer.requestMembershipProof.should.not.have.been.called;
+      observer.requestGroupMembers.should.not.have.been.called;
     });
   });
 });

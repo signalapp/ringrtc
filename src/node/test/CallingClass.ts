@@ -113,12 +113,12 @@ export class CallingClass {
     log('handleAutoEndedIncomingCallRequest');
   }
 
-  private handleLogMessage(
+  static handleLogMessage(
     level: CallLogLevel,
     fileName: string,
     line: number,
     message: string
-  ) {
+  ): void {
     switch (level) {
       case CallLogLevel.Info:
         // FgGray
@@ -215,7 +215,7 @@ export class CallingClass {
     RingRTC.handleStartCall = this.handleStartCall.bind(this);
     RingRTC.handleAutoEndedIncomingCallRequest =
       this.handleAutoEndedIncomingCallRequest.bind(this);
-    RingRTC.handleLogMessage = this.handleLogMessage.bind(this);
+    RingRTC.handleLogMessage = CallingClass.handleLogMessage;
     RingRTC.handleSendHttpRequest = this.handleSendHttpRequest.bind(this);
     RingRTC.handleSendCallMessage = this.handleSendCallMessage.bind(this);
     RingRTC.handleSendCallMessageToGroup =
@@ -224,6 +224,10 @@ export class CallingClass {
       this.handleGroupCallRingUpdate.bind(this);
 
     RingRTC.setSelfUuid(Buffer.from(uuidToBytes(this._id)));
+  }
+
+  static initializeLoggingOnly(): void {
+    RingRTC.handleLogMessage = CallingClass.handleLogMessage;
   }
 
   async startOutgoingDirectCall(remoteUserId: string): Promise<void> {
