@@ -160,27 +160,17 @@ class NativeCallManager {
 type GroupId = Buffer;
 type GroupCallUserId = Buffer;
 
-export class PeekDeviceInfo {
+export interface PeekDeviceInfo {
   demuxId: number;
   userId?: GroupCallUserId;
-
-  constructor(demuxId: number, userId: GroupCallUserId | undefined) {
-    this.demuxId = demuxId;
-    this.userId = userId;
-  }
 }
 
-export class PeekInfo {
+export interface PeekInfo {
   devices: Array<PeekDeviceInfo>;
   creator?: GroupCallUserId;
   eraId?: string;
   maxDevices?: number;
   deviceCount: number;
-
-  constructor() {
-    this.devices = [];
-    this.deviceCount = 0;
-  }
 }
 
 // In sync with WebRTC's PeerConnection.AdapterType.

@@ -34,6 +34,7 @@ export {
   OfferMessage,
   OfferType,
   OpaqueMessage,
+  PeekDeviceInfo,
   PeekInfo,
   RemoteDeviceState,
   RingCancelReason,
