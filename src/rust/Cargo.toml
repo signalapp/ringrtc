@@ -25,10 +25,7 @@ required-features = ["native", "http"]
 [[bin]]
 name = "call_link"
 # This binary doesn't depend on WebRTC at all, so either `sim` or `native` would work.
-required-features = ["sim", "http", "zkgroup", "rand_chacha"]
-# In order to build successfully you will also need both of the following options:
-# --config 'patch.crates-io.curve25519-dalek.git="https://github.com/signalapp/curve25519-dalek"'
-# --config 'patch.crates-io.curve25519-dalek.branch="lizard2"'
+required-features = ["sim", "http", "rand_chacha"]
 
 [dependencies]
 regex-aot         = { path = "regex-aot" }
@@ -61,6 +58,12 @@ thiserror         = { version = "1.0.20" }
 tokio             = { version = "1.13.0", features = ["rt-multi-thread", "time"] }
 x25519-dalek      = { version = "1.1"    }
 
+# Used by call links. Be careful not to pull in more than strictly needed, for both code size and
+# maintenance reasons. In particular, anything involving credentials should be left to
+# libsignal-client.
+bincode = { version = "1.2.1" }
+zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.23.1" }
+
 # Optional, needed by the "electron" feature
 neon = { version = "0.10.1", optional = true, default-features = false, features = ["napi-6", "channel-api", "try-catch-api"] }
 
@@ -73,8 +76,6 @@ rustls = { version = "0.20.7", optional = true, features = ["dangerous_configura
 webpki = { version = "0.22", optional = true }
 
 # Optional, needed for call-link-test-client
-bincode = { version = "1.2.1", optional = true }
-zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.23.1", optional = true }
 rand_chacha = { version = "0.2", optional = true }
 
 [features]
@@ -84,7 +85,6 @@ electron = ["neon", "native"]
 native = []  # We have this so we can more easily disable things only native clients need
 simnet = []  # We have this so we can more easily disable things only simulated native client need
 http = ["ureq", "rustls", "webpki"]
-zkgroup = ["dep:zkgroup", "bincode"]
 check-all = ["electron", "jni"]
 
 [[test]]
@@ -106,3 +106,7 @@ prost-build = { version = "0.11" }
 [dev-dependencies]
 env_logger = { version = "0.10" }
 rand_chacha = { version = "0.2" }
+
+[patch.crates-io]
+# Use our fork of curve25519-dalek for zkgroup compatibility.
+curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', branch = 'lizard2' }

@@ -46,7 +46,7 @@ jobs:
       run: cargo clippy --bin group_call --features native,http -- -D warnings
       working-directory: src/rust
     - name: Clippy (call_link)
-      run: cargo clippy --bin call_link --features sim,http,zkgroup,rand_chacha --config 'patch.crates-io.curve25519-dalek.git="https://github.com/signalapp/curve25519-dalek"' --config 'patch.crates-io.curve25519-dalek.branch="lizard2"' -- -D warnings
+      run: cargo clippy --bin call_link --features sim,http,rand_chacha -- -D warnings
       working-directory: src/rust
     - name: Install for node
       run: yarn install --frozen-lockfile

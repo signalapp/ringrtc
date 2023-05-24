@@ -4,6 +4,7 @@
 //
 
 mod base16;
+mod member_resolver;
 mod root_key;
 
 use std::{
@@ -16,6 +17,7 @@ use serde_with::serde_as;
 
 use crate::lite::http;
 
+pub use member_resolver::CallLinkMemberResolver;
 pub use root_key::CallLinkRootKey;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]

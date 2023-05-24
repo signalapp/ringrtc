@@ -38,4 +38,12 @@ impl<T> CallMutex<T> {
             Err(_) => Err(RingRtcError::MutexPoisoned(self.label.clone()).into()),
         }
     }
+
+    pub fn lock_or_reset(&self, reset: impl FnOnce(&str) -> T) -> MutexGuard<'_, T> {
+        self.mutex.lock().unwrap_or_else(|mut poison_error| {
+            let new_value = reset(&self.label);
+            **poison_error.get_mut() = new_value;
+            poison_error.into_inner()
+        })
+    }
 }

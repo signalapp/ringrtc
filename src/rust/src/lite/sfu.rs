@@ -548,6 +548,8 @@ pub mod ios {
 
 #[cfg(test)]
 mod tests {
+    use crate::lite::call_links::{CallLinkMemberResolver, CallLinkRootKey};
+
     use super::*;
 
     #[test]
@@ -589,6 +591,52 @@ mod tests {
                 .filter_map(|device| device.user_id.as_ref())
                 .collect::<Vec<_>>(),
             vec![[1u8; 4].as_ref(), [2u8; 4].as_ref()]
+        );
+    }
+
+    #[allow(clippy::unusual_byte_groupings)]
+    #[test]
+    fn endpoint_ids_to_user_ids_by_zk_encryption() {
+        let uuid_1 = 0x_aaaaaaaa_7000_11eb_b32a_33b8a8a487a6_u128.to_be_bytes();
+        let uuid_2 = 0x_bbbbbbbb_7000_11eb_b32a_33b8a8a487a6_u128.to_be_bytes();
+
+        let root_key = CallLinkRootKey::try_from(
+            0x_0011_2233_4455_6677_8899_aabb_ccdd_eeff_u128
+                .to_be_bytes()
+                .as_slice(),
+        )
+        .unwrap();
+        let secret_params =
+            zkgroup::call_links::CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
+
+        fn encrypt(uuid: [u8; 16], params: &zkgroup::call_links::CallLinkSecretParams) -> String {
+            hex::encode(bincode::serialize(&params.encrypt_uuid(uuid)).unwrap())
+        }
+
+        let peek_response = SerializedPeekInfo {
+            era_id: Some("paleozoic".to_string()),
+            max_devices: Some(16),
+            devices: vec![
+                SerializedPeekDeviceInfo {
+                    opaque_user_id: encrypt(uuid_1, &secret_params),
+                    demux_id: 0x11111110,
+                },
+                SerializedPeekDeviceInfo {
+                    opaque_user_id: encrypt(uuid_2, &secret_params),
+                    demux_id: 0x22222220,
+                },
+            ],
+            creator: None,
+        };
+
+        let peek_info = peek_response.deobfuscate(&CallLinkMemberResolver::from(&root_key));
+        assert_eq!(
+            peek_info
+                .devices
+                .iter()
+                .filter_map(|device| device.user_id.as_ref())
+                .collect::<Vec<_>>(),
+            vec![uuid_1.as_slice(), uuid_2.as_slice()]
         );
     }
 }
