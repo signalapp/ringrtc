@@ -18,6 +18,7 @@ use crate::core::group_call;
 use crate::core::group_call::{GroupId, SignalingMessageUrgency};
 use crate::core::signaling;
 use crate::core::util::minmax;
+use crate::lite::sfu;
 use crate::lite::{
     call_links::{
         self, CallLinkRestrictions, CallLinkRootKey, CallLinkState, CallLinkUpdateRequest,
@@ -1527,6 +1528,39 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn peekCallLinkCall(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
+
+    let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
+
+    let auth_presentation = cx.argument::<JsBuffer>(2)?;
+    let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
+
+    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
+        .or_else(|e| cx.throw_type_error(e.to_string()))?;
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        let event_reporter = endpoint.event_reporter.clone();
+        sfu::peek(
+            endpoint.call_manager.http_client(),
+            &sfu_url,
+            Some(&hex::encode(root_key.derive_room_id())),
+            call_links::auth_header_from_auth_credential(&auth_presentation),
+            Arc::new(call_links::CallLinkMemberResolver::from(&root_key)),
+            Box::new(move |peek_result| {
+                // Ignore errors, that can only mean we're shutting down.
+                let _ = event_reporter.send(Event::GroupUpdate(GroupUpdate::PeekResult {
+                    request_id,
+                    peek_result,
+                }));
+            }),
+        );
+    });
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
@@ -2553,6 +2587,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_setGroupMembers", setGroupMembers)?;
     cx.export_function("cm_setMembershipProof", setMembershipProof)?;
     cx.export_function("cm_peekGroupCall", peekGroupCall)?;
+    cx.export_function("cm_peekCallLinkCall", peekCallLinkCall)?;
     cx.export_function("cm_readCallLink", readCallLink)?;
     cx.export_function("cm_createCallLink", createCallLink)?;
     cx.export_function("cm_updateCallLink", updateCallLink)?;

@@ -82,6 +82,10 @@ fn call_link_url_from_sfu_url(sfu_url: &str, room_id: &[u8]) -> String {
     )
 }
 
+pub fn auth_header_from_auth_credential(auth_presentation: &[u8]) -> String {
+    format!("Bearer auth.{}", base64::encode(auth_presentation))
+}
+
 pub fn read_call_link(
     http_client: &dyn http::Client,
     sfu_url: &str,
@@ -95,7 +99,7 @@ pub fn read_call_link(
             url: call_link_url_from_sfu_url(sfu_url, &root_key.derive_room_id()),
             headers: HashMap::from_iter([(
                 "Authorization".to_string(),
-                format!("Bearer auth.{}", base64::encode(auth_presentation)),
+                auth_header_from_auth_credential(auth_presentation),
             )]),
             body: None,
         },
@@ -187,7 +191,7 @@ pub fn update_call_link(
             headers: HashMap::from_iter([
                 (
                     "Authorization".to_string(),
-                    format!("Bearer auth.{}", base64::encode(auth_presentation)),
+                    auth_header_from_auth_credential(auth_presentation),
                 ),
                 ("Content-Type".to_string(), "application/json".to_string()),
             ]),

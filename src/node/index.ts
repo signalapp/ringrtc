@@ -36,6 +36,7 @@ export {
   OpaqueMessage,
   PeekDeviceInfo,
   PeekInfo,
+  PeekStatusCodes,
   RemoteDeviceState,
   RingCancelReason,
   RingRTCType,

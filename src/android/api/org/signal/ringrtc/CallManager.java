@@ -1169,6 +1169,42 @@ public class CallManager {
 
   /**
    *
+   * Asynchronous request for the active call state from the SFU for a particular
+   * call link. Does not require a group call object.
+   *
+   * Possible (synthetic) failure codes include:
+   * <ul>
+   *   <li>{@link PeekInfo#EXPIRED_CALL_LINK_STATUS}: the call link has expired or been revoked
+   *   <li>{@link PeekInfo#INVALID_CALL_LINK_STATUS}: the call link is invalid; it may have expired a long time ago
+   * </ul>
+   *
+   * Will produce an "empty" {@link PeekInfo} if the link is valid but no call is active.
+   *
+   * @param sfuUrl                     the URL to use when accessing the SFU
+   * @param authCredentialPresentation a serialized CallLinkAuthCredentialPresentation
+   * @param linkRootKey                the root key for the call link
+   * @param handler                    a handler function which is invoked once the data is available
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  public void peekCallLinkCall(
+    @NonNull String                                sfuUrl,
+    @NonNull byte[]                                authCredentialPresentation,
+    @NonNull CallLinkRootKey                       linkRootKey,
+    @NonNull ResponseHandler<HttpResult<PeekInfo>> handler)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    Log.i(TAG, "peekCallLink():");
+
+    long requestId = this.peekRequests.add(handler);
+    ringrtcPeekCallLinkCall(nativeCallManager, requestId, sfuUrl, authCredentialPresentation, linkRootKey.getKeyBytes());
+  }
+
+  /**
+   *
    * Creates and returns a GroupCall object.
    *
    * If there is any error when allocating resources for the object,
@@ -2317,5 +2353,13 @@ public class CallManager {
                                int    newRestrictions,
                                int    newRevoked,
                                long   requestId)
+    throws CallException;
+
+  private native
+    void ringrtcPeekCallLinkCall(long   nativeCallManager,
+                                 long   requestId,
+                                 String sfuUrl,
+                                 byte[] authCredentialPresentation,
+                                 byte[] rootKeyBytes)
     throws CallException;
 }

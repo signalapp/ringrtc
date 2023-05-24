@@ -16,6 +16,7 @@ import {
   CallingMessage,
   HttpMethod,
   OfferType,
+  PeekStatusCodes,
   RingRTC,
   callIdFromEra,
   callIdFromRingId,
@@ -704,6 +705,114 @@ describe('RingRTC', () => {
       const state = await callLinkResponse;
       // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
       assert.isTrue(state.success);
+    });
+
+    it('can peek with no active call', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Get);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.peekCallLinkCall(
+        'sfu.example',
+        Buffer.of(1, 2, 3),
+        EXAMPLE_KEY
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(requestId, 404, Buffer.from([]));
+      const state = await callLinkResponse;
+      if (state.success) {
+        assert.isUndefined(state.value.eraId);
+        assert.equal(state.value.deviceCount, 0);
+      } else {
+        assert.fail('should have succeeded');
+      }
+    });
+
+    it('can peek an expired link', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Get);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.peekCallLinkCall(
+        'sfu.example',
+        Buffer.of(1, 2, 3),
+        EXAMPLE_KEY
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(
+        requestId,
+        404,
+        Buffer.from('{"reason":"expired"}', 'utf-8')
+      );
+      const state = await callLinkResponse;
+      if (state.success) {
+        assert.fail('should have failed');
+      } else {
+        assert.equal(state.errorStatusCode, PeekStatusCodes.EXPIRED_CALL_LINK);
+      }
+    });
+
+    it('can peek an invalid link', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Get);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.peekCallLinkCall(
+        'sfu.example',
+        Buffer.of(1, 2, 3),
+        EXAMPLE_KEY
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(
+        requestId,
+        404,
+        Buffer.from('{"reason":"invalid"}', 'utf-8')
+      );
+      const state = await callLinkResponse;
+      if (state.success) {
+        assert.fail('should have failed');
+      } else {
+        assert.equal(state.errorStatusCode, PeekStatusCodes.INVALID_CALL_LINK);
+      }
     });
   });
 });

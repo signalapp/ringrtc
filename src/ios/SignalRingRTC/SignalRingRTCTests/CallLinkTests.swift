@@ -252,4 +252,70 @@ final class CallLinkTests: XCTestCase {
         httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 200, body: Self.EXAMPLE_STATE_JSON.data(using: .utf8)))
         waitForExpectations(timeout: 1.0)
     }
+
+    func testPeekNoActiveCall() throws {
+        let delegate = TestDelegate()
+        let httpClient = HTTPClient(delegate: delegate)
+        let sfu = SFUClient(httpClient: httpClient)
+
+        let callbackCompleted = expectation(description: "callbackCompleted")
+        sfu.peek(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY)
+            .done { result in
+                XCTAssertNil(result.errorStatusCode)
+                XCTAssertNil(result.peekInfo.eraId)
+                XCTAssertEqual(0, result.peekInfo.deviceCount)
+                callbackCompleted.fulfill()
+            }
+
+        wait(for: [delegate.sentHttpRequestExpectation], timeout: 1.0)
+        XCTAssert(try XCTUnwrap(delegate.sentHttpRequestUrl).starts(with: "sfu.example"))
+        XCTAssertEqual(delegate.sentHttpRequestMethod, .get)
+        let requestId = try XCTUnwrap(delegate.sentHttpRequestId)
+        httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 404, body: Data()))
+        waitForExpectations(timeout: 1.0)
+    }
+
+    func testPeekExpiredLink() throws {
+        let delegate = TestDelegate()
+        let httpClient = HTTPClient(delegate: delegate)
+        let sfu = SFUClient(httpClient: httpClient)
+
+        let callbackCompleted = expectation(description: "callbackCompleted")
+        sfu.peek(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY)
+            .done { result in
+                XCTAssertEqual(PeekInfo.expiredCallLinkStatus, result.errorStatusCode)
+                XCTAssertNil(result.peekInfo.eraId)
+                XCTAssertEqual(0, result.peekInfo.deviceCount)
+                callbackCompleted.fulfill()
+            }
+
+        wait(for: [delegate.sentHttpRequestExpectation], timeout: 1.0)
+        XCTAssert(try XCTUnwrap(delegate.sentHttpRequestUrl).starts(with: "sfu.example"))
+        XCTAssertEqual(delegate.sentHttpRequestMethod, .get)
+        let requestId = try XCTUnwrap(delegate.sentHttpRequestId)
+        httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 404, body: #"{"reason":"expired"}"#.data(using: .utf8)))
+        waitForExpectations(timeout: 1.0)
+    }
+
+    func testPeekInvalidLink() throws {
+        let delegate = TestDelegate()
+        let httpClient = HTTPClient(delegate: delegate)
+        let sfu = SFUClient(httpClient: httpClient)
+
+        let callbackCompleted = expectation(description: "callbackCompleted")
+        sfu.peek(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY)
+            .done { result in
+                XCTAssertEqual(PeekInfo.invalidCallLinkStatus, result.errorStatusCode)
+                XCTAssertNil(result.peekInfo.eraId)
+                XCTAssertEqual(0, result.peekInfo.deviceCount)
+                callbackCompleted.fulfill()
+            }
+
+        wait(for: [delegate.sentHttpRequestExpectation], timeout: 1.0)
+        XCTAssert(try XCTUnwrap(delegate.sentHttpRequestUrl).starts(with: "sfu.example"))
+        XCTAssertEqual(delegate.sentHttpRequestMethod, .get)
+        let requestId = try XCTUnwrap(delegate.sentHttpRequestId)
+        httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 404, body: #"{"reason":"invalid"}"#.data(using: .utf8)))
+        waitForExpectations(timeout: 1.0)
+    }
 }

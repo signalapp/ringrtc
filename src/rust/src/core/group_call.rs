@@ -543,6 +543,7 @@ impl SfuClient for HttpSfuClient {
             Some(auth_header) => sfu::peek(
                 self.http_client.as_ref(),
                 &self.url,
+                None,
                 auth_header,
                 self.member_resolver.clone(),
                 result_callback,

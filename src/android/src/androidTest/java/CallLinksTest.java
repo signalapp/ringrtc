@@ -7,6 +7,7 @@ import org.signal.ringrtc.CallException;
 import org.signal.ringrtc.CallLinkState;
 import org.signal.ringrtc.CallLinkRootKey;
 import org.signal.ringrtc.CallManager;
+import org.signal.ringrtc.PeekInfo;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -221,6 +222,64 @@ public class CallLinksTest extends CallTestBase {
         verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.PUT), any(), any());
 
         callManager.receivedHttpResponse(requestId.getValue(), 200, EXAMPLE_STATE_JSON.getBytes("UTF-8"));
+        latch.await();
+    }
+
+    @Test
+    public void testPeekNoActiveCall() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+            errors.checkThat(result.getStatus(), is((short)200));
+            errors.checkThat(result.getValue().getEraId(), is((String)null));
+            errors.checkThat(result.getValue().getDeviceCount(), is(0L));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.GET), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 404, new byte[] {});
+        latch.await();
+    }
+
+    @Test
+    public void testPeekExpiredLink() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+            errors.checkThat(result.getStatus(), is(PeekInfo.EXPIRED_CALL_LINK_STATUS));
+            errors.checkThat(result.getValue(), is((PeekInfo)null));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.GET), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 404, "{\"reason\":\"expired\"}".getBytes("UTF-8"));
+        latch.await();
+    }
+
+    @Test
+    public void testPeekInvalidLink() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+            errors.checkThat(result.getStatus(), is(PeekInfo.INVALID_CALL_LINK_STATUS));
+            errors.checkThat(result.getValue(), is((PeekInfo)null));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.GET), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 404, "{\"reason\":\"invalid\"}".getBytes("UTF-8"));
         latch.await();
     }
 }

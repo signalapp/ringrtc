@@ -8,6 +8,7 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::panic;
+use std::sync::Arc;
 use std::time::Duration;
 
 use jni::objects::{JClass, JObject, JString};
@@ -27,7 +28,10 @@ use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
-use crate::lite::call_links::{self, CallLinkRestrictions, CallLinkUpdateRequest};
+use crate::lite::call_links::{
+    self, CallLinkMemberResolver, CallLinkRestrictions, CallLinkUpdateRequest,
+};
+use crate::lite::sfu::{self, Delegate};
 use crate::lite::{http, sfu::GroupMember};
 use crate::webrtc;
 use crate::webrtc::media;
@@ -767,6 +771,37 @@ pub fn peek_group_call(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.peek_group_call(request_id, sfu_url, membership_proof, group_members);
+    Ok(())
+}
+
+pub fn peek_call_link_call(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    request_id: jlong,
+    sfu_url: JString,
+    auth_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+) -> Result<()> {
+    info!("peek_call_link_call():");
+
+    let request_id = request_id as u32;
+
+    let sfu_url = env.get_string(sfu_url)?;
+
+    let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
+    let root_key =
+        call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let platform = call_manager.platform()?.try_clone()?;
+    sfu::peek(
+        call_manager.http_client(),
+        &Cow::from(&sfu_url),
+        Some(hex::encode(root_key.derive_room_id())).as_deref(),
+        call_links::auth_header_from_auth_credential(&auth_credential_presentation),
+        Arc::new(CallLinkMemberResolver::from(&root_key)),
+        Box::new(move |result| platform.handle_peek_result(request_id, result)),
+    );
     Ok(())
 }
 

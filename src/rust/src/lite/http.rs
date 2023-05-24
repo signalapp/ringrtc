@@ -68,6 +68,8 @@ impl ResponseStatus {
     pub const REQUEST_FAILED: Self = Self { code: 602 };
     pub const INVALID_RESPONSE_BODY_UTF8: Self = Self { code: 701 };
     pub const INVALID_RESPONSE_BODY_JSON: Self = Self { code: 702 };
+    pub const CALL_LINK_EXPIRED: Self = Self { code: 703 };
+    pub const CALL_LINK_INVALID: Self = Self { code: 704 };
 }
 
 impl std::fmt::Display for ResponseStatus {

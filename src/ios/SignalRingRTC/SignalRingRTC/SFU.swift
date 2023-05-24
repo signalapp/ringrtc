@@ -104,6 +104,14 @@ public struct PeekResponse {
 
 // Same as rust sfu::PeekInfo (nicer version of rtc_sfu_PeekInfo)
 public struct PeekInfo {
+    /// In a peek response, indicates that a call link has expired or been revoked.
+    public static let expiredCallLinkStatus: UInt16 = 703
+
+    /// In a peek response, indicates that a call link is invalid.
+    ///
+    /// It may have expired a long time ago.
+    public static let invalidCallLinkStatus: UInt16 = 704
+
     public let joinedMembers: [UUID]
     public let creator: UUID?
     public let eraId: String?
@@ -161,6 +169,32 @@ public class SFUClient {
         let delegateWrapper = SFUDelegateWrapper(self)
         rtc_sfu_peek(self.httpClient.rtcClient, requestId, rtcRequest, delegateWrapper.asRtc())
         return seal
+    }
+
+    /// Asynchronous request for the active call state from the SFU for a particular
+    /// call link. Does not require a group call object.
+    ///
+    /// Possible (synthetic) failure codes include:
+    /// - `PeekInfo.expiredCallLinkStatus`: the call link has expired or been revoked
+    /// - `PeekInfo.invalidCallLinkStatus`: the call link is invalid; it may have expired a long time ago
+    ///
+    /// Will produce an "empty" `PeekInfo` if the link is valid but no call is active.
+    ///
+    /// - Parameter sfuUrl: The URL to use when accessing the SFU.
+    /// - Parameter authCredentialPresentation: A serialized `CallLinkAuthCredentialPresentation`
+    /// - Parameter linkRootKey: The root key for the call link
+    public func peek(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey) -> Guarantee<PeekResponse> {
+        AssertIsOnMainThread()
+        Logger.debug("peekCallLinkCall")
+
+        let (requestId, promise) = self.peekRequests.add()
+        let delegateWrapper = SFUDelegateWrapper(self)
+        authCredentialPresentation.withRtcBytes { authCredentialPresentation in
+            linkRootKey.bytes.withRtcBytes { linkRootKey in
+                rtc_sfu_peekCallLink(self.httpClient.rtcClient, requestId, sfuUrl, authCredentialPresentation, linkRootKey, delegateWrapper.asRtc())
+            }
+        }
+        return promise
     }
 
     func handlePeekResponse(requestId: UInt32, response: PeekResponse) {

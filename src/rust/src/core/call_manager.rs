@@ -2698,6 +2698,7 @@ where
             sfu::peek(
                 &self.http_client,
                 &sfu_url,
+                None,
                 auth_header,
                 Arc::new(member_resolver),
                 Box::new(move |peek_result| {

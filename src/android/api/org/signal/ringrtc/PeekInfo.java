@@ -18,6 +18,20 @@ import java.util.UUID;
  * Represents the currently joined users and other transient state in a group call.
  */
 public final class PeekInfo {
+  // These "synthetic" status codes match up with Rust's lite::http::ResponseStatus.
+
+  /**
+   * As a peek result, indicates that a call link has expired or been revoked.
+   */
+  public static final short EXPIRED_CALL_LINK_STATUS = 703;
+
+  /**
+   * As a peek result, indicates that a call link is invalid.
+   *
+   * It may have expired a long time ago.
+   */
+  public static final short INVALID_CALL_LINK_STATUS = 704;
+
   @NonNull
   private static final String TAG = PeekInfo.class.getSimpleName();
 

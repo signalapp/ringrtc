@@ -104,6 +104,11 @@ impl SerializedPeekDeviceInfo {
 }
 
 #[derive(Deserialize, Debug)]
+struct SerializedPeekFailure<'a> {
+    reason: &'a str,
+}
+
+#[derive(Deserialize, Debug)]
 struct SerializedJoinResponse {
     #[serde(rename = "demuxId")]
     client_demux_id: u32,
@@ -275,11 +280,32 @@ pub trait Delegate {
     fn handle_peek_result(&self, request_id: u32, peek_result: PeekResult);
 }
 
-fn participants_url_from_sfu_url(sfu_url: &str) -> String {
-    format!(
-        "{}/v2/conference/participants",
-        sfu_url.trim_end_matches('/')
-    )
+fn participants_url_from_sfu_url(sfu_url: &str, room_id_for_url: Option<&str>) -> String {
+    let sfu_url = sfu_url.trim_end_matches('/');
+    if let Some(room_id) = room_id_for_url {
+        format!("{sfu_url}/v2/conference/{room_id}/participants")
+    } else {
+        format!("{sfu_url}/v2/conference/participants")
+    }
+}
+
+fn classify_not_found(body: &[u8]) -> Option<http::ResponseStatus> {
+    let parsed: SerializedPeekFailure = match serde_json::from_slice(body) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            error!("invalid JSON returned from SFU on peek failure: {e}");
+            return None;
+        }
+    };
+    info!(
+        "Got group call peek result with status code 404 ({})",
+        parsed.reason
+    );
+    match parsed.reason {
+        "expired" => Some(http::ResponseStatus::CALL_LINK_EXPIRED),
+        "invalid" => Some(http::ResponseStatus::CALL_LINK_INVALID),
+        _ => None,
+    }
 }
 
 pub type PeekResult = Result<PeekInfo, http::ResponseStatus>;
@@ -288,6 +314,7 @@ pub type PeekResultCallback = Box<dyn FnOnce(PeekResult) + Send>;
 pub fn peek(
     http_client: &dyn http::Client,
     sfu_url: &str,
+    room_id_for_url: Option<&str>,
     auth_header: String,
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
     result_callback: PeekResultCallback,
@@ -295,32 +322,41 @@ pub fn peek(
     http_client.send_request(
         http::Request {
             method: http::Method::Get,
-            url: participants_url_from_sfu_url(sfu_url),
+            url: participants_url_from_sfu_url(sfu_url, room_id_for_url),
             headers: HashMap::from_iter([("Authorization".to_string(), auth_header)]),
             body: None,
         },
         Box::new(move |http_response| {
-            let result =
-                match http::parse_json_response::<SerializedPeekInfo>(http_response.as_ref()) {
-                    Ok(deserialized) => {
-                        info!(
-                            "Got group call peek result with device count = {}",
-                            deserialized.devices.len()
-                        );
-                        Ok(deserialized.deobfuscate(&*member_resolver))
-                    }
-                    Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
+            let result = match http::parse_json_response::<SerializedPeekInfo>(
+                http_response.as_ref(),
+            ) {
+                Ok(deserialized) => {
+                    info!(
+                        "Got group call peek result with device count = {}",
+                        deserialized.devices.len()
+                    );
+                    Ok(deserialized.deobfuscate(&*member_resolver))
+                }
+                Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
+                    if let Some(body) = http_response
+                        .as_ref()
+                        .map(|r| &r.body)
+                        .filter(|body| !body.is_empty())
+                    {
+                        Err(classify_not_found(body).unwrap_or(status))
+                    } else {
                         info!("Got group call peek result with device count = 0 (status code 404)");
                         Ok(PeekInfo::default())
                     }
-                    Err(status) => {
-                        info!(
-                            "Got group call peek result with status code = {}",
-                            status.code
-                        );
-                        Err(status)
-                    }
-                };
+                }
+                Err(status) => {
+                    info!(
+                        "Got group call peek result with status code = {}",
+                        status.code
+                    );
+                    Err(status)
+                }
+            };
             result_callback(result);
         }),
     )
@@ -345,7 +381,7 @@ pub fn join(
     http_client.send_request(
         http::Request {
             method: http::Method::Put,
-            url: participants_url_from_sfu_url(sfu_url),
+            url: participants_url_from_sfu_url(sfu_url, None),
             headers: HashMap::from_iter([
                 ("Authorization".to_string(), auth_header),
                 ("Content-Type".to_string(), "application/json".to_string()),
@@ -371,12 +407,16 @@ pub fn join(
 
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
-    use std::sync::Arc;
+    use std::{
+        ffi::{c_char, CStr},
+        sync::Arc,
+    };
 
     use crate::lite::{
+        call_links::{self, CallLinkMemberResolver, CallLinkRootKey},
         ffi::ios::{rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32, rtc_String, FromOrDefault},
-        http, sfu,
-        sfu::{Delegate, GroupMember, PeekInfo, PeekResult},
+        http,
+        sfu::{self, Delegate, GroupMember, PeekInfo, PeekResult},
     };
     use libc::{c_void, size_t};
 
@@ -402,6 +442,7 @@ pub mod ios {
                     super::peek(
                         http_client,
                         &sfu_url,
+                        None,
                         auth_header,
                         Arc::new(opaque_user_id_mappings),
                         Box::new(move |peek_result| {
@@ -416,6 +457,47 @@ pub mod ios {
             }
         } else {
             error!("null http_client passed into rtc_sfu_peek");
+        }
+    }
+
+    /// # Safety
+    ///
+    /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
+    /// - `sfu_url` must be a valid, non-null C string.
+    #[no_mangle]
+    pub unsafe extern "C" fn rtc_sfu_peekCallLink(
+        http_client: *const http::ios::Client,
+        request_id: u32,
+        sfu_url: *const c_char,
+        auth_credential_presentation: rtc_Bytes,
+        link_root_key: rtc_Bytes,
+        delegate: rtc_sfu_Delegate,
+    ) {
+        info!("rtc_sfu_peekCallLink():");
+
+        if let Some(http_client) = http_client.as_ref() {
+            if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
+                if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
+                    super::peek(
+                        http_client,
+                        sfu_url,
+                        Some(&hex::encode(link_root_key.derive_room_id())),
+                        call_links::auth_header_from_auth_credential(
+                            auth_credential_presentation.as_slice(),
+                        ),
+                        Arc::new(CallLinkMemberResolver::from(&link_root_key)),
+                        Box::new(move |peek_result| {
+                            delegate.handle_peek_result(request_id, peek_result)
+                        }),
+                    );
+                } else {
+                    error!("invalid link_root_key");
+                }
+            } else {
+                error!("invalid sfu_url");
+            }
+        } else {
+            error!("null http_client passed into rtc_sfu_peekCallLink");
         }
     }
 

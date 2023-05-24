@@ -150,6 +150,8 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).createCallLink = Native.cm_createCallLink;
 (NativeCallManager.prototype as any).updateCallLink = Native.cm_updateCallLink;
 (NativeCallManager.prototype as any).peekGroupCall = Native.cm_peekGroupCall;
+(NativeCallManager.prototype as any).peekCallLinkCall =
+  Native.cm_peekCallLinkCall;
 (NativeCallManager.prototype as any).getAudioInputs = Native.cm_getAudioInputs;
 (NativeCallManager.prototype as any).setAudioInput = Native.cm_setAudioInput;
 (NativeCallManager.prototype as any).getAudioOutputs =
@@ -171,6 +173,11 @@ export interface PeekInfo {
   eraId?: string;
   maxDevices?: number;
   deviceCount: number;
+}
+
+export enum PeekStatusCodes {
+  EXPIRED_CALL_LINK = 703,
+  INVALID_CALL_LINK = 704,
 }
 
 // In sync with WebRTC's PeerConnection.AdapterType.
@@ -1069,6 +1076,25 @@ export class RingRTCType {
         return { devices: [], deviceCount: 0 };
       }
     });
+  }
+
+  // Called by UX
+  peekCallLinkCall(
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    rootKey: CallLinkRootKey
+  ): Promise<HttpResult<PeekInfo>> {
+    const [requestId, promise] = this._peekRequests.add();
+    // Response comes back via handlePeekResponse
+    sillyDeadlockProtection(() => {
+      this.callManager.peekCallLinkCall(
+        requestId,
+        sfuUrl,
+        authCredentialPresentation,
+        rootKey.bytes
+      );
+    });
+    return promise;
   }
 
   // Called by Rust
@@ -2686,6 +2712,13 @@ export interface CallManager {
     sfu_url: string,
     membership_proof: Buffer,
     group_members: Array<GroupMemberInfo>
+  ): void;
+  // Response comes back via handlePeekResponse
+  peekCallLinkCall(
+    requestId: number,
+    sfuUrl: string,
+    authCredentialPresentation: Buffer,
+    linkRootKey: Buffer
   ): void;
 
   getAudioInputs(): Array<AudioDevice>;

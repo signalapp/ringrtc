@@ -693,9 +693,35 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekGroupCal
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCallClient(
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekCallLinkCall(
     env: JNIEnv,
     _object: JObject,
+    call_manager: jlong,
+    request_id: jlong,
+    sfu_url: JString,
+    auth_credential_presentation: jbyteArray,
+    root_key: jbyteArray,
+) {
+    match call_manager::peek_call_link_call(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        request_id,
+        sfu_url,
+        auth_credential_presentation,
+        root_key,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCallClient(
+    env: JNIEnv,
+    _cls: JClass,
     call_manager: jlong,
     group_id: jbyteArray,
     sfu_url: JString,
