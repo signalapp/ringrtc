@@ -62,27 +62,13 @@ public final class GroupCall {
     @Nullable private VideoTrack                         outgoingVideoTrack;
     @NonNull  private ArrayList<VideoTrack>              incomingVideoTracks;
 
-    /*
-     * Creates a GroupCall object. If successful, all supporting objects
-     * will be valid. Otherwise, clientId will be 0.
-     *
-     * Should only be accessed via the CallManager.createGroupCall().
-     *
-     * If clientId is 0, the caller should invoke dispose() and let the
-     * object itself get GC'd.
-     */
-    GroupCall(          long                  nativeCallManager,
-              @NonNull  byte[]                groupId,
-              @NonNull  String                sfuUrl,
-              @NonNull  byte[]                hkdfExtraInfo,
-              @Nullable Integer               audioLevelsIntervalMs,
-              @NonNull  PeerConnectionFactory factory,
-              @NonNull  Observer              observer) {
-        Log.i(TAG, "GroupCall():");
-
+    private GroupCall(          long                  nativeCallManager,
+                      @NonNull  PeerConnectionFactory factory,
+                      @NonNull  Observer              observer) {
         this.nativeCallManager = nativeCallManager;
         this.factory = factory;
         this.observer = observer;
+        this.clientId = 0;
 
         this.handleEndedCalled = false;
         this.disconnectCalled = false;
@@ -122,10 +108,27 @@ public final class GroupCall {
         this.outgoingVideoSource.adaptOutputFormat(640, 360, 30);
 
         this.incomingVideoTracks = new ArrayList<>();
+    }
+
+    /**
+     * Creates a GroupCall object.
+     *
+     * Will return null on failure. Should only be accessed via the CallManager.createGroupCall().
+     */
+    static GroupCall create(          long                  nativeCallManager,
+                            @NonNull  byte[]                groupId,
+                            @NonNull  String                sfuUrl,
+                            @NonNull  byte[]                hkdfExtraInfo,
+                            @Nullable Integer               audioLevelsIntervalMs,
+                            @NonNull  PeerConnectionFactory factory,
+                            @NonNull  Observer              observer) {
+        Log.i(TAG, "create():");
+
+        GroupCall call = new GroupCall(nativeCallManager, factory, observer);
 
         int audioLevelsIntervalMillis = audioLevelsIntervalMs == null ? 0 : audioLevelsIntervalMs.intValue();
         try {
-            this.clientId = ringrtcCreateGroupCallClient(
+            call.clientId = ringrtcCreateGroupCallClient(
                 nativeCallManager,
                 groupId,
                 sfuUrl,
@@ -134,13 +137,20 @@ public final class GroupCall {
                 // Returns a borrowed RC.
                 factory.getNativePeerConnectionFactory(),
                 // Returns a borrowed RC.
-                this.outgoingAudioTrack.getNativeAudioTrack(),
+                call.outgoingAudioTrack.getNativeAudioTrack(),
                 // Returns a borrowed RC.
-                this.outgoingVideoTrack.getNativeVideoTrack());
-        } catch  (CallException e) {
+                call.outgoingVideoTrack.getNativeVideoTrack());
+
+            if (call.clientId == 0) {
+                call.dispose();
+                return null;
+            }
+        } catch (CallException e) {
             Log.w(TAG, "Unable to create group call client", e);
             throw new AssertionError("Unable to create group call client");
         }
+
+        return call;
     }
 
     /**
@@ -1004,7 +1014,7 @@ public final class GroupCall {
 
     /* Native methods below here. */
 
-    private native
+    private static native
         long ringrtcCreateGroupCallClient(long nativeCallManager,
                                           byte[] groupId,
                                           String sfuUrl,

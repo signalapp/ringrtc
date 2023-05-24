@@ -1038,14 +1038,13 @@ export class RingRTCType {
     audioLevelsIntervalMillis: number | undefined,
     observer: GroupCallObserver
   ): GroupCall | undefined {
-    const groupCall = new GroupCall(
-      this.callManager,
+    const clientId = this.callManager.createGroupCallClient(
       groupId,
       sfuUrl,
       hkdfExtraInfo,
-      audioLevelsIntervalMillis,
-      observer
+      audioLevelsIntervalMillis || 0
     );
+    const groupCall = new GroupCall(this.callManager, observer, clientId);
 
     this._groupCallByClientId.set(groupCall.clientId, groupCall);
 
@@ -2144,28 +2143,18 @@ export class GroupCall {
   private _localDeviceState: LocalDeviceState;
   private _remoteDeviceStates: Array<RemoteDeviceState> | undefined;
 
-  private _peekInfo: PeekInfo | undefined; // uuid
+  private _peekInfo: PeekInfo | undefined;
 
   // Called by UI via RingRTC object
   constructor(
     callManager: CallManager,
-    groupId: Buffer,
-    sfuUrl: string,
-    hkdfExtraInfo: Buffer,
-    audioLevelsIntervalMillis: number | undefined,
-    observer: GroupCallObserver
+    observer: GroupCallObserver,
+    clientId: GroupCallClientId
   ) {
     this._callManager = callManager;
     this._observer = observer;
-
+    this._clientId = clientId;
     this._localDeviceState = new LocalDeviceState();
-
-    this._clientId = this._callManager.createGroupCallClient(
-      groupId,
-      sfuUrl,
-      hkdfExtraInfo,
-      audioLevelsIntervalMillis || 0
-    );
   }
 
   // Called by UI

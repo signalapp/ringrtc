@@ -1212,6 +1212,8 @@ public class CallManager {
    *
    * @param groupId                the unique identifier for the group
    * @param sfuUrl                 the URL to use when accessing the SFU
+   * @param hkdfExtraInfo          additional entropy to use for the connection with the SFU (it's okay if this is empty)
+   * @param audioLevelsIntervalMs  if provided, the observer will receive audio level callbacks at this interval
    * @param audioProcessingMethod  the method to use for audio processing
    * @param observer               the observer that the group call object will use for callback notifications
    *
@@ -1234,22 +1236,14 @@ public class CallManager {
       }
     }
 
-    GroupCall groupCall = new GroupCall(nativeCallManager, groupId, sfuUrl, hkdfExtraInfo, audioLevelsIntervalMs, this.groupFactory, observer);
+    GroupCall groupCall = GroupCall.create(nativeCallManager, groupId, sfuUrl, hkdfExtraInfo, audioLevelsIntervalMs, this.groupFactory, observer);
 
-    if (groupCall.clientId != 0) {
+    if (groupCall != null) {
       // Add the groupCall to the map.
       this.groupCallByClientId.append(groupCall.clientId, groupCall);
-
-      return groupCall;
-    } else {
-      try {
-        groupCall.dispose();
-      } catch (CallException e) {
-        Log.e(TAG, "Unable to properly dispose of GroupCall", e);
-      }
-
-      return null;
     }
+
+    return groupCall;
   }
 
   /****************************************************************************
