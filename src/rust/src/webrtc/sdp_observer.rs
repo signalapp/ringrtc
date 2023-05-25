@@ -205,10 +205,14 @@ impl SessionDescription {
         let ice_ufrag = from_cstr(rffi_v4.ice_ufrag.as_ptr());
         let ice_pwd = from_cstr(rffi_v4.ice_pwd.as_ptr());
         let receive_video_codecs: Vec<protobuf::signaling::VideoCodec> = unsafe {
-            std::slice::from_raw_parts(
-                rffi_v4.receive_video_codecs.as_ptr(),
-                rffi_v4.receive_video_codecs_size,
-            )
+            if rffi_v4.receive_video_codecs.is_null() {
+                &[]
+            } else {
+                std::slice::from_raw_parts(
+                    rffi_v4.receive_video_codecs.as_ptr(),
+                    rffi_v4.receive_video_codecs_size,
+                )
+            }
         }
         .iter()
         .map(|rffi_codec| {
