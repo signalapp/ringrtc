@@ -949,7 +949,7 @@ where
     ///
     /// Waits for the FSM shutdown condition variable to signal that
     /// shutdown is complete.
-    fn wait_for_terminate(&mut self) -> Result<()> {
+    pub fn wait_for_terminate(&mut self) -> Result<()> {
         // Wait for terminate operation to complete
         info!("terminate(): waiting for terminate complete...");
         let (mutex, condvar) = &*self.terminate_condvar;
@@ -980,7 +980,7 @@ where
         let (mutex, condvar) = &*self.terminate_condvar;
         if let Ok(mut terminate_complete) = mutex.lock() {
             *terminate_complete = true;
-            condvar.notify_one();
+            condvar.notify_all();
             Ok(())
         } else {
             Err(RingRtcError::MutexPoisoned("Call Terminate Condition Variable".to_string()).into())
@@ -1101,7 +1101,13 @@ where
     #[cfg(feature = "sim")]
     fn inject_synchronize(&mut self) -> Result<()> {
         match self.state()? {
-            CallState::Terminated | CallState::Terminating => {
+            CallState::Terminating => {
+                if self.fsm_sender.is_closed() {
+                    self.wait_for_terminate()?;
+                    return Ok(());
+                }
+            }
+            CallState::Terminated => {
                 info!(
                     "call-synchronize(): skipping synchronize while terminating or terminated..."
                 );
@@ -1148,6 +1154,19 @@ where
         self.inject_synchronize()?;
 
         // Synchronize all connections in this call
+        if let Some(parent_connection) = self
+            .forking
+            .lock()?
+            .as_mut()
+            .map(|f| &mut f.parent_connection)
+        {
+            info!(
+                "synchronize(): call_id: {} parent connection",
+                self.call_id(),
+            );
+            // blocks as connection FSM synchronizes
+            parent_connection.synchronize()?;
+        }
         if let Ok(mut connection_map) = self.connection_map.lock() {
             for (_, connection) in connection_map.iter_mut() {
                 info!(

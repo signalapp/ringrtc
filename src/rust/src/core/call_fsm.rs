@@ -392,7 +392,7 @@ where
                 return self.handle_send_hangup_via_rtp_data_to_all(call, state, hangup)
             }
             CallEvent::Terminate => return self.handle_terminate(call),
-            CallEvent::Synchronize(sync) => return self.handle_synchronize(sync),
+            CallEvent::Synchronize(sync) => return self.handle_synchronize(call, sync),
             _ => {}
         }
 
@@ -1035,9 +1035,15 @@ where
         Ok(())
     }
 
-    fn handle_synchronize(&mut self, sync: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
+    fn handle_synchronize(
+        &mut self,
+        mut call: Call<T>,
+        sync: Arc<(Mutex<bool>, Condvar)>,
+    ) -> Result<()> {
         if let Some(worker_runtime) = &mut self.worker_runtime {
             CallStateMachine::<T>::sync_thread("worker", worker_runtime)?;
+        } else {
+            call.wait_for_terminate()?;
         }
         if let Some(notify_runtime) = &mut self.notify_runtime {
             CallStateMachine::<T>::sync_thread("notify", notify_runtime)?;

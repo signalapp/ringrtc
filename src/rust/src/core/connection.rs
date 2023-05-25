@@ -1601,7 +1601,7 @@ where
         let (mutex, condvar) = &*self.terminate_condvar;
         if let Ok(mut terminate_complete) = mutex.lock() {
             *terminate_complete = true;
-            condvar.notify_one();
+            condvar.notify_all();
             Ok(())
         } else {
             Err(
@@ -1931,7 +1931,13 @@ where
     #[cfg(feature = "sim")]
     fn inject_synchronize(&mut self) -> Result<()> {
         match self.state()? {
-            ConnectionState::Terminated | ConnectionState::Terminating => {
+            ConnectionState::Terminating => {
+                if self.fsm_sender.is_closed() {
+                    self.wait_for_terminate()?;
+                    return Ok(());
+                }
+            }
+            ConnectionState::Terminated => {
                 info!(
                     "connection-synchronize(): skipping synchronize while terminating or closed..."
                 );
