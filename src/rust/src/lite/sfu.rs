@@ -714,30 +714,41 @@ mod tests {
             hex::encode(bincode::serialize(&params.encrypt_uuid(uuid)).unwrap())
         }
 
-        let peek_response = SerializedPeekInfo {
-            era_id: Some("paleozoic".to_string()),
-            max_devices: Some(16),
-            devices: vec![
-                SerializedPeekDeviceInfo {
-                    opaque_user_id: encrypt(uuid_1, &secret_params),
-                    demux_id: 0x11111110,
-                },
-                SerializedPeekDeviceInfo {
-                    opaque_user_id: encrypt(uuid_2, &secret_params),
-                    demux_id: 0x22222220,
-                },
-            ],
-            creator: None,
-        };
+        let resolver = CallLinkMemberResolver::from(&root_key);
 
-        let peek_info = peek_response.deobfuscate(&CallLinkMemberResolver::from(&root_key));
-        assert_eq!(
-            peek_info
-                .devices
-                .iter()
-                .filter_map(|device| device.user_id.as_ref())
-                .collect::<Vec<_>>(),
-            vec![uuid_1.as_slice(), uuid_2.as_slice()]
-        );
+        for i in 0..2 {
+            let peek_response = SerializedPeekInfo {
+                era_id: Some("paleozoic".to_string()),
+                max_devices: Some(16),
+                devices: vec![
+                    SerializedPeekDeviceInfo {
+                        opaque_user_id: encrypt(uuid_1, &secret_params),
+                        demux_id: 0x11111110,
+                    },
+                    SerializedPeekDeviceInfo {
+                        opaque_user_id: encrypt(uuid_2, &secret_params),
+                        demux_id: 0x22222220,
+                    },
+                ],
+                creator: None,
+            };
+
+            let peek_info = peek_response.deobfuscate(&resolver);
+            assert_eq!(
+                peek_info
+                    .devices
+                    .iter()
+                    .filter_map(|device| device.user_id.as_ref())
+                    .collect::<Vec<_>>(),
+                vec![uuid_1.as_slice(), uuid_2.as_slice()]
+            );
+            // The second time around the resolver should use its cache.
+            assert_eq!(
+                i * 2,
+                resolver
+                    .cache_hits
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            );
+        }
     }
 }

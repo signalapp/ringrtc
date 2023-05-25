@@ -17,6 +17,8 @@ use super::CallLinkRootKey;
 pub struct CallLinkMemberResolver {
     zkparams: zkgroup::call_links::CallLinkSecretParams,
     cache: CallMutex<VecDeque<OpaqueUserIdMapping>>,
+    #[cfg(test)]
+    pub cache_hits: std::sync::atomic::AtomicU64,
 }
 
 // The proper value for this is "however large the current call is", so that refreshes of the
@@ -35,6 +37,8 @@ impl<'a> From<&'a CallLinkRootKey> for CallLinkMemberResolver {
                 &value.bytes(),
             ),
             cache: CallMutex::new(VecDeque::new(), "CallLinkMemberResolver.cache"),
+            #[cfg(test)]
+            cache_hits: Default::default(),
         }
     }
 }
@@ -49,6 +53,9 @@ impl MemberResolver for CallLinkMemberResolver {
             .iter()
             .find(|mapping| mapping.opaque_user_id == opaque_user_id)
         {
+            #[cfg(test)]
+            self.cache_hits
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return Some(mapping.user_id.clone());
         }
 
