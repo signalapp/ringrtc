@@ -16,3 +16,4 @@ src/jar.list
 .classpath
 org.eclipse.buildship.core.prefs
 local.properties
+*.tar.gz
