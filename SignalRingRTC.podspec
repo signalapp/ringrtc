@@ -75,6 +75,12 @@ Pod::Spec.new do |s|
         if [[ ! -f "${SCRIPT_INPUT_FILE_0}" ]]; then
           # Local development, ignore
           exit
+        elif [[ ! -f "${SCRIPT_INPUT_FILE_1}" ]]; then
+          echo 'error: Cannot find prebuild directory' "${RINGRTC_PREBUILD_DIR}" >&2
+          echo 'note: If you are trying to use a local checkout of RingRTC, delete' "${SCRIPT_INPUT_FILE_0}" 'and try again' >&2
+          echo 'note: Otherwise, please run Pods/SignalRingRTC/bin/set-up-for-cocoapods' >&2
+          echo 'note: If you are in the Signal iOS repo, you can use `make dependencies`' >&2
+          exit 1
         elif ! diff -q "${SCRIPT_INPUT_FILE_0}" "${SCRIPT_INPUT_FILE_1}"; then
           # Why not run it now? Because Xcode may have already processed some of the files.
           echo 'error: Please run Pods/SignalRingRTC/bin/set-up-for-cocoapods' >&2

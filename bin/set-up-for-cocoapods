@@ -20,17 +20,17 @@ PROJECT_DIR=.
 CACHE_DIR=~/Library/Caches/org.signal.ringrtc
 PREBUILD_DIR=${CACHE_DIR}/prebuild-${RINGRTC_VERSION}
 
+if [ -f out/release/libringrtc/ringrtc.h ] && [ ! -L out/release/libringrtc/ringrtc.h ]; then
+    echo 'Existing RingRTC build detected; assuming local development' >&2
+    exit
+fi
+
 if [ -n "${RINGRTC_PREBUILD_CHECKSUM:-}" ]; then
     echo "${RINGRTC_PREBUILD_CHECKSUM}" > prebuild-checksum
 elif [ -f prebuild-checksum ]; then
     RINGRTC_PREBUILD_CHECKSUM=$(cat prebuild-checksum)
 else
     echo 'RINGRTC_PREBUILD_CHECKSUM not set; assuming local development' >&2
-    exit
-fi
-
-if [ -f out/release/libringrtc/ringrtc.h ] && [ ! -L out/release/libringrtc/ringrtc.h ]; then
-    echo 'Existing RingRTC build detected; assuming local development' >&2
     exit
 fi
 
