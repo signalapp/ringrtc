@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.28.0
+
+- Call Links: Implement Peek and Join support
+
+- Refactor: BandwidthMode to DataMode
+
+- Android: Fix exception check when throwing an error up to Java
+
+- Improvements to make tests more reliable
+
 ## v2.27.0
 
 - Update to WebRTC 5615 (m112)
