@@ -7,11 +7,12 @@
 
 use anyhow::Error;
 use jni::errors;
-use jni::objects::JObject;
+use jni::objects::JThrowable;
 use jni::JNIEnv;
 use thiserror::Error;
 
 use crate::android::jni_util::*;
+use crate::core::util::try_scoped;
 
 const CALL_EXCEPTION_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallException);
 
@@ -21,34 +22,23 @@ const CALL_EXCEPTION_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallExcept
 /// This is used to communicate synchronous errors to the client
 /// application.
 pub fn throw_error(env: &JNIEnv, error: Error) {
-    if env.exception_check().is_ok() {
-        if let Ok(exception) = env.exception_occurred() {
-            if env.exception_clear().is_ok() {
-                let java_exception = match env.call_method(
-                    JObject::from(exception),
-                    "toString",
-                    jni_signature!(() -> java.lang.String),
-                    &[],
-                ) {
-                    Ok(v) => {
-                        if let Ok(jstring) = v.l() {
-                            if let Ok(rstring) = env.get_string(jstring.into()) {
-                                rstring.into()
-                            } else {
-                                String::from("unknown -- unable to decode exception")
-                            }
-                        } else {
-                            String::from("unknown -- unable to decode exception")
-                        }
-                    }
-                    Err(_) => String::from("unknown -- unable to decode exception"),
-                };
-
-                let _ = env.throw_new(
+    if let Ok(exception) = env.exception_occurred() {
+        if env.exception_clear().is_ok() {
+            let _ = try_scoped(|| {
+                let message = env.new_string(error.to_string())?;
+                let call_exception: JThrowable = jni_new_object(
+                    env,
                     CALL_EXCEPTION_CLASS,
-                    format!("{} caused by java exception:\n{}", error, java_exception),
-                );
-            }
+                    jni_args!((
+                        message => java.lang.String,
+                        exception => java.lang.Throwable,
+                    ) -> void),
+                )?
+                .into();
+                Ok(env.throw(call_exception)?)
+            });
+        } else {
+            // Don't try to throw our own exception on top of another exception.
         }
     } else {
         let _ = env.throw_new(CALL_EXCEPTION_CLASS, format!("{}", error));
