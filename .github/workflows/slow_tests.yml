@@ -109,3 +109,25 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim --component rust-src
     - run: bin/fetch-artifact -p ios
     - run: bin/build-ios --release --ringrtc-only
+
+  report_failures:
+    name: Report Failures
+    runs-on: ubuntu-latest
+    needs: [android, android-emulator-tests, ios]
+    if: ${{ failure() && github.event_name == 'schedule' }}
+
+    permissions:
+      # createCommitComment is supposed to only need the default 'read' permissions...
+      # ...but maybe it's different for private repositories.
+      contents: write
+
+    steps:
+    - uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.repos.createCommitComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            commit_sha: context.sha,
+            body: 'Failed Slow Tests: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}>'
+          })
