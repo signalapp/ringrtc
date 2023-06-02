@@ -1300,7 +1300,7 @@ impl Platform for AndroidPlatform {
             let jni_client_id = client_id as jlong;
 
             let jni_peek_info =
-                match self.make_peek_info_object(env, peek_info, &mut joined_members.iter()) {
+                match self.make_peek_info_object(&env, peek_info, &mut joined_members.iter()) {
                     Ok(value) => value,
                     Err(e) => {
                         error!("make_peek_info_object: {:?}", e);
@@ -1375,11 +1375,8 @@ impl AndroidPlatform {
     }
 
     /// Return the Java JNIEnv.
-    fn java_env(&self) -> Result<JNIEnv> {
-        match self.jvm.get_env() {
-            Ok(v) => Ok(v),
-            Err(_e) => Ok(self.jvm.attach_current_thread_as_daemon()?),
-        }
+    fn java_env(&self) -> Result<ExceptionCheckingJNIEnv> {
+        Ok(self.jvm.attach_current_thread_as_daemon()?.into())
     }
 
     pub fn try_clone(&self) -> Result<Self> {
@@ -1675,11 +1672,11 @@ impl AndroidPlatform {
 
     fn make_peek_info_object<'a>(
         &self,
-        env: JNIEnv<'a>,
+        env: &JNIEnv<'a>,
         peek_info: &PeekInfo,
         joined_members: &mut dyn Iterator<Item = &UserId>,
     ) -> Result<JObject<'a>> {
-        let joined_member_list = jni_new_linked_list(&env)?;
+        let joined_member_list = jni_new_linked_list(env)?;
         for joined_member in joined_members {
             let jni_opaque_user_id = match env.byte_array_from_slice(joined_member.as_ref()) {
                 Ok(v) => JObject::from(v),
@@ -1709,7 +1706,7 @@ impl AndroidPlatform {
             None => JObject::null(),
             Some(era_id) => env.new_string(era_id)?.into(),
         };
-        let jni_max_devices = self.get_optional_u32_long_object(&env, peek_info.max_devices)?;
+        let jni_max_devices = self.get_optional_u32_long_object(env, peek_info.max_devices)?;
         let jni_device_count = peek_info.device_count as jlong;
 
         let args = jni_args!((
@@ -1766,7 +1763,7 @@ impl sfu::Delegate for AndroidPlatform {
                 let capacity = (10 + joined_members.len()) as i32;
                 match env.with_local_frame(capacity, || {
                     let jni_peek_info = match self.make_peek_info_object(
-                        env,
+                        &env,
                         &peek_info,
                         &mut joined_members.into_iter(),
                     ) {

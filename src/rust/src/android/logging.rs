@@ -28,11 +28,13 @@ const LOGGER_METHOD: &str = "log";
 const LOGGER_SIG: &str = jni_signature!((int, java.lang.String, java.lang.String) -> void);
 
 impl AndroidLogger {
+    // This is specifically *not* using ExceptionCheckingJNIEnv:
+    // - We may be logging in the middle of some other operation, which might be able to handle
+    //   uncaught exceptions.
+    // - ExceptionCheckingJNIEnv itself can log in failure cases, and we don't want an infinite
+    //   loop.
     fn get_java_env(&self) -> Result<JNIEnv> {
-        match self.jvm.get_env() {
-            Ok(v) => Ok(v),
-            Err(_e) => Ok(self.jvm.attach_current_thread_as_daemon()?),
-        }
+        Ok(self.jvm.attach_current_thread_as_daemon()?)
     }
 }
 
@@ -57,6 +59,19 @@ impl Log for AndroidLogger {
                 Ok(v) => v,
                 Err(_) => return,
             };
+
+            // Attempt to clear any exception before we log anything.
+            // We'll rethrow it after logging.
+            let exception = env
+                .exception_occurred()
+                .unwrap_or_else(|_| JObject::null().into());
+            if !exception.is_null() {
+                let exception_cleared = env.exception_clear();
+                if exception_cleared.is_err() {
+                    // If we can't clear the exception, skip the log.
+                    return;
+                }
+            }
 
             let path = record.module_path().unwrap_or("unknown");
 
@@ -85,6 +100,14 @@ impl Log for AndroidLogger {
                 );
                 Ok(JObject::null())
             });
+
+            // If we put an exception "on hold" earlier, try to throw it again now.
+            if !exception.is_null() {
+                // But check that there hasn't been *another* exception thrown.
+                if let Ok(false) = env.exception_check() {
+                    let _ = env.throw(exception);
+                }
+            }
         }
     }
 

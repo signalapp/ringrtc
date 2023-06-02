@@ -14,6 +14,7 @@ use jni::JNIEnv;
 
 use crate::android::error::AndroidError;
 use crate::common::Result;
+use crate::core::util::try_scoped;
 
 pub use crate::jni_class_name;
 pub use crate::jni_signature;
@@ -283,5 +284,71 @@ impl ClassCache {
         } else {
             Err(AndroidError::ClassCacheLookup(class_name.to_string()).into())
         }
+    }
+}
+
+/// A wrapper around [`JNIEnv`] that reports uncaught exceptions on destruction.
+///
+/// Normally JNI handles uncaught exceptions when a native thread is "detached" from the JVM, but
+/// RingRTC treats all its callback threads as "daemon" threads that are only detached when the
+/// native thread exits. This regains that functionality.
+///
+/// Because `ExceptionCheckingJNIEnv` implements `Deref`, it should be a drop-in replacement for
+/// most uses of JNIEnv as a value. References to JNIEnv should continue as references.
+pub struct ExceptionCheckingJNIEnv<'a>(JNIEnv<'a>);
+
+impl Drop for ExceptionCheckingJNIEnv<'_> {
+    fn drop(&mut self) {
+        match try_scoped(|| {
+            let exception = self.exception_occurred()?;
+            if exception.is_null() {
+                return Ok(());
+            }
+            self.exception_clear()?;
+            let thread = jni_call_static_method(
+                self,
+                jni_class_name!(java.lang.Thread),
+                "currentThread",
+                jni_args!(() -> java.lang.Thread),
+            )?;
+            let handler = jni_call_method(
+                self,
+                thread,
+                "getUncaughtExceptionHandler",
+                jni_args!(() -> java.lang.Thread::UncaughtExceptionHandler),
+            )?;
+            jni_call_method(
+                self,
+                handler,
+                "uncaughtException",
+                jni_args!((thread => java.lang.Thread, exception => java.lang.Throwable) -> void),
+            )?;
+            Ok(())
+        }) {
+            Ok(()) => {}
+            Err(e) => {
+                error!("unable to rethrow exception: {e}");
+            }
+        }
+    }
+}
+
+impl<'a> From<JNIEnv<'a>> for ExceptionCheckingJNIEnv<'a> {
+    fn from(env: JNIEnv<'a>) -> Self {
+        Self(env)
+    }
+}
+
+impl<'a> std::ops::Deref for ExceptionCheckingJNIEnv<'a> {
+    type Target = JNIEnv<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> std::ops::DerefMut for ExceptionCheckingJNIEnv<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
