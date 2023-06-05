@@ -74,12 +74,8 @@ impl CallLinkState {
 pub type ReadCallLinkResultCallback =
     Box<dyn FnOnce(Result<CallLinkState, http::ResponseStatus>) + Send>;
 
-fn call_link_url_from_sfu_url(sfu_url: &str, room_id: &[u8]) -> String {
-    format!(
-        "{}/v1/call-link/{}",
-        sfu_url.trim_end_matches('/'),
-        hex::encode(room_id)
-    )
+fn call_link_url_from_sfu_url(sfu_url: &str) -> String {
+    format!("{}/v1/call-link", sfu_url.trim_end_matches('/'))
 }
 
 pub fn auth_header_from_auth_credential(auth_presentation: &[u8]) -> String {
@@ -96,11 +92,17 @@ pub fn read_call_link(
     http_client.send_request(
         http::Request {
             method: http::Method::Get,
-            url: call_link_url_from_sfu_url(sfu_url, &root_key.derive_room_id()),
-            headers: HashMap::from_iter([(
-                "Authorization".to_string(),
-                auth_header_from_auth_credential(auth_presentation),
-            )]),
+            url: call_link_url_from_sfu_url(sfu_url),
+            headers: HashMap::from_iter([
+                (
+                    "Authorization".to_string(),
+                    auth_header_from_auth_credential(auth_presentation),
+                ),
+                (
+                    "X-Room-Id".to_string(),
+                    hex::encode(root_key.derive_room_id()),
+                ),
+            ]),
             body: None,
         },
         Box::new(move |http_response| {
@@ -152,11 +154,15 @@ pub fn create_call_link(
     http_client.send_request(
         http::Request {
             method: http::Method::Put,
-            url: call_link_url_from_sfu_url(sfu_url, &root_key.derive_room_id()),
+            url: call_link_url_from_sfu_url(sfu_url),
             headers: HashMap::from_iter([
                 (
                     "Authorization".to_string(),
                     format!("Bearer create.{}", base64::encode(auth_presentation)),
+                ),
+                (
+                    "X-Room-Id".to_string(),
+                    hex::encode(root_key.derive_room_id()),
                 ),
                 ("Content-Type".to_string(), "application/json".to_string()),
             ]),
@@ -187,11 +193,15 @@ pub fn update_call_link(
     http_client.send_request(
         http::Request {
             method: http::Method::Put,
-            url: call_link_url_from_sfu_url(sfu_url, &root_key.derive_room_id()),
+            url: call_link_url_from_sfu_url(sfu_url),
             headers: HashMap::from_iter([
                 (
                     "Authorization".to_string(),
                     auth_header_from_auth_credential(auth_presentation),
+                ),
+                (
+                    "X-Room-Id".to_string(),
+                    hex::encode(root_key.derive_room_id()),
                 ),
                 ("Content-Type".to_string(), "application/json".to_string()),
             ]),

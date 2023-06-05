@@ -290,13 +290,11 @@ pub trait Delegate {
     fn handle_peek_result(&self, request_id: u32, peek_result: PeekResult);
 }
 
-fn participants_url_from_sfu_url(sfu_url: &str, room_id_for_url: Option<&str>) -> String {
-    let sfu_url = sfu_url.trim_end_matches('/');
-    if let Some(room_id) = room_id_for_url {
-        format!("{sfu_url}/v2/conference/{room_id}/participants")
-    } else {
-        format!("{sfu_url}/v2/conference/participants")
-    }
+fn participants_url_from_sfu_url(sfu_url: &str) -> String {
+    format!(
+        "{}/v2/conference/participants",
+        sfu_url.trim_end_matches('/'),
+    )
 }
 
 fn classify_not_found(body: &[u8]) -> Option<http::ResponseStatus> {
@@ -324,7 +322,7 @@ pub type PeekResultCallback = Box<dyn FnOnce(PeekResult) + Send>;
 pub fn peek(
     http_client: &dyn http::Client,
     sfu_url: &str,
-    room_id_for_url: Option<&str>,
+    room_id_header: Option<String>,
     auth_header: String,
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
     result_callback: PeekResultCallback,
@@ -332,8 +330,13 @@ pub fn peek(
     http_client.send_request(
         http::Request {
             method: http::Method::Get,
-            url: participants_url_from_sfu_url(sfu_url, room_id_for_url),
-            headers: HashMap::from_iter([("Authorization".to_string(), auth_header)]),
+            url: participants_url_from_sfu_url(sfu_url),
+            headers: HashMap::from_iter(
+                room_id_header
+                    .into_iter()
+                    .map(|room_id| ("X-Room-Id".to_string(), room_id))
+                    .chain([("Authorization".to_string(), auth_header)]),
+            ),
             body: None,
         },
         Box::new(move |http_response| {
@@ -396,7 +399,7 @@ struct JoinRequest<'a> {
 pub fn join(
     http_client: &dyn http::Client,
     sfu_url: &str,
-    room_id_for_url: Option<&str>,
+    room_id_header: Option<String>,
     auth_header: String,
     admin_passkey: Option<&[u8]>,
     client_ice_ufrag: &str,
@@ -410,11 +413,16 @@ pub fn join(
     http_client.send_request(
         http::Request {
             method: http::Method::Put,
-            url: participants_url_from_sfu_url(sfu_url, room_id_for_url),
-            headers: HashMap::from_iter([
-                ("Authorization".to_string(), auth_header),
-                ("Content-Type".to_string(), "application/json".to_string()),
-            ]),
+            url: participants_url_from_sfu_url(sfu_url),
+            headers: HashMap::from_iter(
+                room_id_header
+                    .into_iter()
+                    .map(|room_id| ("X-Room-Id".to_string(), room_id))
+                    .chain([
+                        ("Authorization".to_string(), auth_header),
+                        ("Content-Type".to_string(), "application/json".to_string()),
+                    ]),
+            ),
             body: Some(
                 serde_json::to_vec(&JoinRequest {
                     admin_passkey,
@@ -510,7 +518,7 @@ pub mod ios {
                     super::peek(
                         http_client,
                         sfu_url,
-                        Some(&hex::encode(link_root_key.derive_room_id())),
+                        Some(hex::encode(link_root_key.derive_room_id())),
                         call_links::auth_header_from_auth_credential(
                             auth_credential_presentation.as_slice(),
                         ),

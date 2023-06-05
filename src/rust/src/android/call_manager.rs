@@ -797,7 +797,7 @@ pub fn peek_call_link_call(
     sfu::peek(
         call_manager.http_client(),
         &Cow::from(&sfu_url),
-        Some(hex::encode(root_key.derive_room_id())).as_deref(),
+        Some(hex::encode(root_key.derive_room_id())),
         call_links::auth_header_from_auth_credential(&auth_credential_presentation),
         Arc::new(CallLinkMemberResolver::from(&root_key)),
         Box::new(move |result| platform.handle_peek_result(request_id, result)),

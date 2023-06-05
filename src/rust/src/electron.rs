@@ -1604,7 +1604,7 @@ fn peekCallLinkCall(mut cx: FunctionContext) -> JsResult<JsValue> {
         sfu::peek(
             endpoint.call_manager.http_client(),
             &sfu_url,
-            Some(&hex::encode(root_key.derive_room_id())),
+            Some(hex::encode(root_key.derive_room_id())),
             call_links::auth_header_from_auth_credential(&auth_presentation),
             Arc::new(call_links::CallLinkMemberResolver::from(&root_key)),
             Box::new(move |peek_result| {

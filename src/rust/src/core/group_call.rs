@@ -446,7 +446,7 @@ pub struct Joined {
 /// Communicates with the SFU using HTTP.
 pub struct HttpSfuClient {
     sfu_url: String,
-    room_id_for_url: Option<String>,
+    room_id_header: Option<String>,
     admin_passkey: Option<Vec<u8>>,
     // For use post-DHE
     hkdf_extra_info: Vec<u8>,
@@ -460,13 +460,13 @@ impl HttpSfuClient {
     pub fn new(
         http_client: Box<dyn http::Client + Send>,
         url: String,
-        room_id_for_url: Option<&[u8]>,
+        room_id_for_header: Option<&[u8]>,
         admin_passkey: Option<Vec<u8>>,
         hkdf_extra_info: Vec<u8>,
     ) -> Self {
         Self {
             sfu_url: url,
-            room_id_for_url: room_id_for_url.map(hex::encode),
+            room_id_header: room_id_for_header.map(hex::encode),
             admin_passkey,
             hkdf_extra_info,
             http_client,
@@ -498,7 +498,7 @@ impl HttpSfuClient {
         sfu::join(
             self.http_client.as_ref(),
             &self.sfu_url,
-            self.room_id_for_url.as_deref(),
+            self.room_id_header.clone(),
             auth_header,
             self.admin_passkey.as_deref(),
             ice_ufrag,
@@ -564,7 +564,7 @@ impl SfuClient for HttpSfuClient {
             Some(auth_header) => sfu::peek(
                 self.http_client.as_ref(),
                 &self.sfu_url,
-                self.room_id_for_url.as_deref(),
+                self.room_id_header.clone(),
                 auth_header,
                 self.member_resolver.clone(),
                 result_callback,
