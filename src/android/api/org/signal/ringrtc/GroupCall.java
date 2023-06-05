@@ -33,8 +33,14 @@ import java.util.UUID;
  *
  */
 public final class GroupCall {
+    public enum Kind {
+        SIGNAL_GROUP,
+        CALL_LINK;
+    }
+
     @NonNull private static final String TAG = GroupCall.class.getSimpleName();
 
+    @NonNull  private Kind                               kind;
               private long                               nativeCallManager;
     @NonNull  private PeerConnectionFactory              factory;
 
@@ -62,9 +68,11 @@ public final class GroupCall {
     @Nullable private VideoTrack                         outgoingVideoTrack;
     @NonNull  private ArrayList<VideoTrack>              incomingVideoTracks;
 
-    private GroupCall(          long                  nativeCallManager,
+    private GroupCall(@NonNull  Kind                  kind,
+                                long                  nativeCallManager,
                       @NonNull  PeerConnectionFactory factory,
                       @NonNull  Observer              observer) {
+        this.kind = kind;
         this.nativeCallManager = nativeCallManager;
         this.factory = factory;
         this.observer = observer;
@@ -124,7 +132,7 @@ public final class GroupCall {
                             @NonNull  Observer              observer) {
         Log.i(TAG, "create():");
 
-        GroupCall call = new GroupCall(nativeCallManager, factory, observer);
+        GroupCall call = new GroupCall(Kind.SIGNAL_GROUP, nativeCallManager, factory, observer);
 
         int audioLevelsIntervalMillis = audioLevelsIntervalMs == null ? 0 : audioLevelsIntervalMs.intValue();
         try {
@@ -169,7 +177,7 @@ public final class GroupCall {
                             @NonNull  Observer              observer) {
         Log.i(TAG, "create():");
 
-        GroupCall call = new GroupCall(nativeCallManager, factory, observer);
+        GroupCall call = new GroupCall(Kind.CALL_LINK, nativeCallManager, factory, observer);
 
         int audioLevelsIntervalMillis = audioLevelsIntervalMs == null ? 0 : audioLevelsIntervalMs.intValue();
         try {
@@ -226,6 +234,11 @@ public final class GroupCall {
         for (VideoTrack incomingTrack : incomingVideoTracks) {
             incomingTrack.dispose();
         }
+    }
+
+    @NonNull
+    public Kind getKind() {
+        return kind;
     }
 
     /**

@@ -22,6 +22,7 @@ export {
   DeviceId,
   GroupCall,
   GroupCallEndReason,
+  GroupCallKind,
   GroupCallObserver,
   GroupMemberInfo,
   HangupMessage,

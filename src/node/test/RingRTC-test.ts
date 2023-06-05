@@ -16,6 +16,7 @@ import {
   CallingMessage,
   GroupCall,
   GroupCallEndReason,
+  GroupCallKind,
   HttpMethod,
   OfferType,
   PeekStatusCodes,
@@ -842,6 +843,7 @@ describe('RingRTC', () => {
         observer
       );
       assert.isObject(call);
+      assert.equal(call?.getKind(), GroupCallKind.CallLink);
       call?.connect();
       await sleep(1000);
       observer.requestMembershipProof.should.not.have.been.called;

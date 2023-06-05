@@ -188,6 +188,11 @@ public protocol GroupCallDelegate: AnyObject {
 
 @available(iOSApplicationExtension, unavailable)
 public class GroupCall {
+    public enum Kind {
+        case signalGroup
+        case callLink
+    }
+
     private enum ConnectInfo {
         case groupId(Data)
         case callLink(authCredentialPresentation: [UInt8], rootKey: CallLinkRootKey, adminPasskey: Data?)
@@ -259,6 +264,13 @@ public class GroupCall {
     }
 
     // MARK: - APIs
+
+    public var kind: Kind {
+        switch self.connectInfo {
+        case .groupId: return .signalGroup
+        case .callLink: return .callLink
+        }
+    }
 
     /// Connect to a group call, creating a client if one does not already exist.
     /// Return true if successful.

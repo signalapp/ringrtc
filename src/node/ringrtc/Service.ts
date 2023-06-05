@@ -1046,7 +1046,12 @@ export class RingRTCType {
       hkdfExtraInfo,
       audioLevelsIntervalMillis || 0
     );
-    const groupCall = new GroupCall(this.callManager, observer, clientId);
+    const groupCall = new GroupCall(
+      GroupCallKind.SignalGroup,
+      this.callManager,
+      observer,
+      clientId
+    );
 
     this._groupCallByClientId.set(groupCall.clientId, groupCall);
 
@@ -1071,7 +1076,12 @@ export class RingRTCType {
       hkdfExtraInfo,
       audioLevelsIntervalMillis || 0
     );
-    const groupCall = new GroupCall(this.callManager, observer, clientId);
+    const groupCall = new GroupCall(
+      GroupCallKind.CallLink,
+      this.callManager,
+      observer,
+      clientId
+    );
 
     this._groupCallByClientId.set(groupCall.clientId, groupCall);
 
@@ -2147,6 +2157,11 @@ export class VideoRequest {
   }
 }
 
+export enum GroupCallKind {
+  SignalGroup,
+  CallLink,
+}
+
 export interface GroupCallObserver {
   requestMembershipProof(groupCall: GroupCall): void;
   requestGroupMembers(groupCall: GroupCall): void;
@@ -2158,6 +2173,7 @@ export interface GroupCallObserver {
 }
 
 export class GroupCall {
+  private readonly _kind: GroupCallKind;
   private readonly _callManager: CallManager;
   private readonly _observer: GroupCallObserver;
 
@@ -2174,14 +2190,20 @@ export class GroupCall {
 
   // Called by UI via RingRTC object
   constructor(
+    kind: GroupCallKind,
     callManager: CallManager,
     observer: GroupCallObserver,
     clientId: GroupCallClientId
   ) {
+    this._kind = kind;
     this._callManager = callManager;
     this._observer = observer;
     this._clientId = clientId;
     this._localDeviceState = new LocalDeviceState();
+  }
+
+  getKind(): GroupCallKind {
+    return this._kind;
   }
 
   // Called by UI

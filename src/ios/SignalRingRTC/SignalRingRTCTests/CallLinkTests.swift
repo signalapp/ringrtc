@@ -323,6 +323,7 @@ final class CallLinkTests: XCTestCase {
         let delegate = TestDelegate()
         let callManager = createCallManager(delegate)!
         let call = try XCTUnwrap(callManager.createCallLinkCall(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: nil, hkdfExtraInfo: Data(), audioLevelsIntervalMillis: nil, videoCaptureController: VideoCaptureController()))
+        XCTAssertEqual(call.kind, .callLink)
 
         let callDelegate = TestGroupCallDelegate()
         call.delegate = callDelegate
