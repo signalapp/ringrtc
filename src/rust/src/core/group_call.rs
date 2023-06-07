@@ -396,6 +396,7 @@ impl DheState {
 #[derive(Clone, Debug)]
 pub struct SfuInfo {
     pub udp_addresses: Vec<SocketAddr>,
+    pub tcp_addresses: Vec<SocketAddr>,
     pub ice_ufrag: String,
     pub ice_pwd: String,
 }
@@ -508,7 +509,8 @@ impl HttpSfuClient {
                 let join_result: Result<Joined> = match join_response {
                     Ok(join_response) => Ok(Joined {
                         sfu_info: SfuInfo {
-                            udp_addresses: join_response.server_addresses,
+                            udp_addresses: join_response.server_udp_addresses,
+                            tcp_addresses: join_response.server_tcp_addresses,
                             ice_ufrag: join_response.server_ice_ufrag,
                             ice_pwd: join_response.server_ice_pwd,
                         },
@@ -2167,9 +2169,9 @@ impl Client {
         Self::set_peer_connection_descriptions(state, sfu_info, local_demux_id, &[], srtp_keys)?;
 
         for addr in &sfu_info.udp_addresses {
-            // We use the octects instead of to_string() to bypass the IP address logging filter.
+            // We use the octets instead of to_string() to bypass the IP address logging filter.
             info!(
-                "Connecting to group call SFU with ip={:?} port={}",
+                "Connecting to group call SFU via UDP with ip={:?} port={}",
                 match addr.ip() {
                     std::net::IpAddr::V4(v4) => v4.octets().to_vec(),
                     std::net::IpAddr::V6(v6) => v6.octets().to_vec(),
@@ -2180,6 +2182,23 @@ impl Client {
                 addr.ip(),
                 addr.port(),
                 false, /* tcp */
+            )?;
+        }
+
+        for addr in &sfu_info.tcp_addresses {
+            // We use the octets instead of to_string() to bypass the IP address logging filter.
+            info!(
+                "Connecting to group call SFU via TCP with ip={:?} port={}",
+                match addr.ip() {
+                    std::net::IpAddr::V4(v4) => v4.octets().to_vec(),
+                    std::net::IpAddr::V6(v6) => v6.octets().to_vec(),
+                },
+                addr.port()
+            );
+            state.peer_connection.add_ice_candidate_from_server(
+                addr.ip(),
+                addr.port(),
+                true, /* tcp */
             )?;
         }
 
@@ -3678,6 +3697,7 @@ mod tests {
             Self {
                 sfu_info: SfuInfo {
                     udp_addresses: Vec::new(),
+                    tcp_addresses: Vec::new(),
                     ice_ufrag: "fake ICE ufrag".to_string(),
                     ice_pwd: "fake ICE pwd".to_string(),
                 },

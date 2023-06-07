@@ -116,6 +116,8 @@ struct SerializedJoinResponse {
     server_ips: Vec<IpAddr>,
     #[serde(rename = "port")]
     server_port: u16,
+    #[serde(rename = "portTcp")]
+    server_port_tcp: u16,
     #[serde(rename = "iceUfrag")]
     server_ice_ufrag: String,
     #[serde(rename = "icePwd")]
@@ -131,7 +133,8 @@ struct SerializedJoinResponse {
 #[derive(Debug)]
 pub struct JoinResponse {
     pub client_demux_id: u32,
-    pub server_addresses: Vec<SocketAddr>,
+    pub server_udp_addresses: Vec<SocketAddr>,
+    pub server_tcp_addresses: Vec<SocketAddr>,
     pub server_ice_ufrag: String,
     pub server_ice_pwd: String,
     pub server_dhe_pub_key: [u8; 32],
@@ -141,15 +144,22 @@ pub struct JoinResponse {
 
 impl JoinResponse {
     fn from(deserialized: SerializedJoinResponse, member_resolver: &dyn MemberResolver) -> Self {
-        let server_addresses = deserialized
+        let server_udp_addresses = deserialized
             .server_ips
             .iter()
             .map(|ip| SocketAddr::new(*ip, deserialized.server_port))
             .collect();
 
+        let server_tcp_addresses = deserialized
+            .server_ips
+            .iter()
+            .map(|ip| SocketAddr::new(*ip, deserialized.server_port_tcp))
+            .collect();
+
         Self {
             client_demux_id: deserialized.client_demux_id,
-            server_addresses,
+            server_udp_addresses,
+            server_tcp_addresses,
             server_ice_ufrag: deserialized.server_ice_ufrag,
             server_ice_pwd: deserialized.server_ice_pwd,
             server_dhe_pub_key: deserialized.server_dhe_pub_key,
