@@ -115,7 +115,8 @@ impl StatsObserver {
                 packets_lost_pct,\
                 bitrate,\
                 jitter,\
-                audio_energy"
+                audio_energy,\
+                jitter_buffer_delay"
         );
         info!(
             "ringrtc_stats!,\
@@ -221,9 +222,11 @@ impl StatsObserver {
         let packets_lost = audio_receiver.packets_lost - prev_audio_receiver.packets_lost;
         let packets_received =
             audio_receiver.packets_received - prev_audio_receiver.packets_received;
+        let jitter_buffer_emitted_count = audio_receiver.jitter_buffer_emitted_count
+            - prev_audio_receiver.jitter_buffer_emitted_count;
 
         info!(
-            "ringrtc_stats!,audio,recv,{ssrc},{packets_per_second:.1},{packets_lost_pct:.1}%,{bitrate:.1}bps,{jitter:.0}ms,{audio_energy:.3}",
+            "ringrtc_stats!,audio,recv,{ssrc},{packets_per_second:.1},{packets_lost_pct:.1}%,{bitrate:.1}bps,{jitter:.0}ms,{audio_energy:.3},{jitter_buffer_delay:.0}ms",
             ssrc = audio_receiver.ssrc,
             packets_per_second = (audio_receiver.packets_received - prev_audio_receiver.packets_received) as f32
                 / seconds_elapsed,
@@ -232,6 +235,13 @@ impl StatsObserver {
                 / seconds_elapsed,
             jitter = audio_receiver.jitter * 1000.0,
             audio_energy = audio_receiver.total_audio_energy - prev_audio_receiver.total_audio_energy,
+            jitter_buffer_delay = if jitter_buffer_emitted_count > 0 {
+                (audio_receiver.jitter_buffer_delay - prev_audio_receiver.jitter_buffer_delay)
+                    / (jitter_buffer_emitted_count as f64)
+                    * 1000.0
+            } else {
+                0.0
+            },
         );
     }
 
@@ -498,6 +508,8 @@ pub struct AudioReceiverStatistics {
     pub bytes_received: u64,
     pub jitter: f64,
     pub total_audio_energy: f64,
+    pub jitter_buffer_delay: f64,
+    pub jitter_buffer_emitted_count: u64,
 }
 
 #[repr(C)]
