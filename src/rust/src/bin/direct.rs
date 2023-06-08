@@ -73,6 +73,7 @@ fn main() {
         hide_ip,
         &ice_server,
         &signaling_server,
+        50,
         &router,
         &stopper,
     )
@@ -100,6 +101,7 @@ fn main() {
         hide_ip,
         &ice_server,
         &signaling_server,
+        50,
         &router,
         &stopper,
     )
@@ -130,6 +132,7 @@ fn main() {
                 hide_ip,
                 &ice_server,
                 &signaling_server,
+                50,
                 &router,
                 &stopper,
             )
@@ -220,6 +223,7 @@ impl CallEndpoint {
         hide_ip: bool,
         ice_server: &IceServer,
         signaling_server: &SignalingServer,
+        audio_jitter_buffer_max_packets: isize,
         router: &Router,
         stopper: &Stopper,
     ) -> Result<Self> {
@@ -294,6 +298,7 @@ impl CallEndpoint {
                 let call_context = NativeCallContext::new(
                     hide_ip,
                     ice_server,
+                    audio_jitter_buffer_max_packets,
                     outgoing_audio_track,
                     outgoing_video_track,
                     incoming_video_sink,

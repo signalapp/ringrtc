@@ -109,14 +109,14 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
         # TODO: Figure out why and fix this
         rm -f target/debug/deps/libringrtc.rlib
 
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin cli --features=native,simnet
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin direct --features=native,simnet
         echo "Can run with src/rust/target/debug/cli"
     else
         # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
         # TODO: Figure out why and fix this
         rm -f target/release/deps/libringrtc.rlib
 
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin cli --features=native,simnet --release
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin direct --features=native,simnet --release
         echo "Can run with src/rust/target/release/cli"
     fi
 )

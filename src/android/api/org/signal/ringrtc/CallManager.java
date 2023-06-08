@@ -1335,6 +1335,8 @@ public class CallManager {
       configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;
     }
 
+    configuration.audioJitterBufferMaxPackets = 50;
+
     PeerConnectionFactory factory       = callContext.factory;
     CameraControl         cameraControl = callContext.cameraControl;
     try {

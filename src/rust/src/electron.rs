@@ -681,6 +681,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         let call_context = NativeCallContext::new(
             hide_ip,
             ice_server,
+            50,
             endpoint.outgoing_audio_track.clone(),
             endpoint.outgoing_video_track.clone(),
             endpoint.incoming_video_sink.clone(),

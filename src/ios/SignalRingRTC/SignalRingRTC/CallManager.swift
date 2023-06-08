@@ -921,6 +921,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             configuration.iceTransportPolicy = .relay
         }
 
+        configuration.audioJitterBufferMaxPackets = 50
+
         // Create the default media constraints.
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 

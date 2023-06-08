@@ -109,14 +109,14 @@ export MACOSX_DEPLOYMENT_TARGET="10.10"
         # TODO: Figure out why and fix this
         rm -f target/debug/deps/libringrtc.rlib
 
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin gctc --features=native,http
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin group_call --features=native,http
         echo "Can run with src/rust/target/debug/gctc"
     else
         # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
         # TODO: Figure out why and fix this
         rm -f target/release/deps/libringrtc.rlib
 
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin gctc --features=native,http --release
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --bin group_call --features=native,http --release
         echo "Can run with src/rust/target/release/gctc"
     fi
 )
