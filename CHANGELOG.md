@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.28.1
+
+- Group Calls: Add support for TCP connections
+
+- Call Links: Switch to X-Room-Id header
+
+- Adjust max audio jitter buffer size to support increased packet time
+
+- Test and logging improvements
+
 ## v2.28.0
 
 - Call Links: Implement Peek and Join support
