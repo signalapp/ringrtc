@@ -83,9 +83,15 @@ message SfuToDevice {
     optional uint32 allocated_send_rate_kbps = 3;
   }
 
+  message Removed {}
+
+  reserved 1;
   optional VideoRequest video_request               = 2;
+  reserved 3;
   optional Speaker speaker                          = 4;
+  reserved 5;
   optional DeviceJoinedOrLeft device_joined_or_left = 6;
   optional CurrentDevices current_devices           = 7;
   optional Stats stats                              = 8;
+  optional Removed removed                          = 9;
 }

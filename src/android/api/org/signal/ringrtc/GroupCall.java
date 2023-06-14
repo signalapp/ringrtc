@@ -773,6 +773,12 @@ public final class GroupCall {
         /** The server disconnected due to policy or some other controlled reason. */
         SERVER_EXPLICITLY_DISCONNECTED,
 
+        /** An admin denied your request to join the call. */
+        DENIED_REQUEST_TO_JOIN_CALL,
+
+        /** An admin removed you from the call. */
+        REMOVED_FROM_CALL,
+
         // Things that can go wrong
 
         /** Another direct call or group call is currently in progress and using media resources. */

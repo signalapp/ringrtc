@@ -407,6 +407,8 @@ pub enum EndReason {
     // Normal events
     DeviceExplicitlyDisconnected = 0,
     ServerExplicitlyDisconnected,
+    DeniedRequestToJoinCall,
+    RemovedFromCall,
 
     // Things that can go wrong
     CallManagerIsBusy,
@@ -845,6 +847,7 @@ struct State {
     connection_state: ConnectionState,
     join_state: JoinState,
     remote_devices: RemoteDevices,
+    has_ever_been_participating_client: bool,
 
     // State that changes infrequently and is not sent to the observer.
     dhe_state: DheState,
@@ -1062,6 +1065,7 @@ impl Client {
                     join_state: JoinState::NotJoined(ring_id),
                     dhe_state: DheState::default(),
                     remote_devices: Default::default(),
+                    has_ever_been_participating_client: false,
 
                     remote_devices_request_state: match kind {
                         GroupCallKind::SignalGroup => {
@@ -1512,6 +1516,7 @@ impl Client {
                 state.next_stats_time = None;
                 state.next_audio_levels_time = None;
                 state.next_membership_proof_request_time = None;
+                state.has_ever_been_participating_client = false;
             }
         }
     }
@@ -2297,6 +2302,7 @@ impl Client {
                 .filter_map(|device| {
                     if device.demux_id == local_demux_id {
                         // Don't add a remote device to represent the local device.
+                        state.has_ever_been_participating_client = true;
                         return None;
                     }
                     if let PeekDeviceInfo {
@@ -3041,7 +3047,7 @@ impl Client {
 
     fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
         use protobuf::group_call::{
-            sfu_to_device::{CurrentDevices, DeviceJoinedOrLeft, Speaker},
+            sfu_to_device::{CurrentDevices, DeviceJoinedOrLeft, Removed, Speaker},
             DeviceToDevice, SfuToDevice,
         };
 
@@ -3054,6 +3060,7 @@ impl Client {
                     current_devices,
                     stats,
                     video_request: _,
+                    removed,
                 }) = SfuToDevice::decode(payload)
                 {
                     if let Some(Speaker {
@@ -3088,6 +3095,9 @@ impl Client {
                             stats.ideal_send_rate_kbps.unwrap_or(0),
                             stats.allocated_send_rate_kbps.unwrap_or(0)
                         );
+                    }
+                    if let Some(Removed {}) = removed {
+                        self.handle_removed_received();
                     }
                 }
                 debug!("Received RTP data from SFU: {:?}.", payload);
@@ -3133,6 +3143,16 @@ impl Client {
                 header.pt
             );
         }
+    }
+
+    fn handle_removed_received(&self) {
+        self.actor.send(move |state| {
+            if state.has_ever_been_participating_client {
+                Self::end(state, EndReason::RemovedFromCall);
+            } else {
+                Self::end(state, EndReason::DeniedRequestToJoinCall);
+            }
+        });
     }
 
     fn handle_speaker_received(&self, timestamp: rtp::Timestamp, demux_id: DemuxId) {
@@ -5686,6 +5706,34 @@ mod tests {
         assert!(!is_higher_resolution_pending(&client1));
 
         client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn removal_before_approval() {
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+
+        client1.client.handle_removed_received();
+        assert_eq!(
+            Some(EndReason::DeniedRequestToJoinCall),
+            client1.observer.ended.wait(Duration::from_secs(5))
+        );
+    }
+
+    #[test]
+    fn removal_after_approval() {
+        let client1 = TestClient::new(vec![1], 1);
+        let client2 = TestClient::new(vec![2], 2);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[&client2, &client1]);
+
+        client1.client.handle_removed_received();
+        assert_eq!(
+            Some(EndReason::RemovedFromCall),
+            client1.observer.ended.wait(Duration::from_secs(5))
+        );
     }
 
     #[test]

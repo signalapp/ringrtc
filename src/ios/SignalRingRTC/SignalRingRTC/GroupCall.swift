@@ -29,21 +29,23 @@ public enum JoinState: Int32 {
 public enum GroupCallEndReason: Int32 {
     // Normal events
     case deviceExplicitlyDisconnected = 0
-    case serverExplicitlyDisconnected = 1
+    case serverExplicitlyDisconnected
+    case deniedRequestToJoinCall
+    case removedFromCall
 
     // Things that can go wrong
-    case callManagerIsBusy = 2
-    case sfuClientFailedToJoin = 3
-    case failedToCreatePeerConnectionFactory = 4
-    case failedToNegotiateSrtpKeys = 5
-    case failedToCreatePeerConnection = 6
-    case failedToStartPeerConnection = 7
-    case failedToUpdatePeerConnection = 8
-    case failedToSetMaxSendBitrate = 9
-    case iceFailedWhileConnecting = 10
-    case iceFailedAfterConnected = 11
-    case serverChangedDemuxId = 12
-    case hasMaxDevices = 13
+    case callManagerIsBusy
+    case sfuClientFailedToJoin
+    case failedToCreatePeerConnectionFactory
+    case failedToNegotiateSrtpKeys
+    case failedToCreatePeerConnection
+    case failedToStartPeerConnection
+    case failedToUpdatePeerConnection
+    case failedToSetMaxSendBitrate
+    case iceFailedWhileConnecting
+    case iceFailedAfterConnected
+    case serverChangedDemuxId
+    case hasMaxDevices
 }
 
 /// The local device state for a group call.

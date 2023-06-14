@@ -2027,21 +2027,23 @@ export enum JoinState {
 export enum GroupCallEndReason {
   // Normal events
   DeviceExplicitlyDisconnected = 0,
-  ServerExplicitlyDisconnected = 1,
+  ServerExplicitlyDisconnected,
+  DeniedRequestToJoinCall,
+  RemovedFromCall,
 
   // Things that can go wrong
-  CallManagerIsBusy = 2,
-  SfuClientFailedToJoin = 3,
-  FailedToCreatePeerConnectionFactory = 4,
-  FailedToNegotiateSrtpKeys = 5,
-  FailedToCreatePeerConnection = 6,
-  FailedToStartPeerConnection = 7,
-  FailedToUpdatePeerConnection = 8,
-  FailedToSetMaxSendBitrate = 9,
-  IceFailedWhileConnecting = 10,
-  IceFailedAfterConnected = 11,
-  ServerChangedDemuxId = 12,
-  HasMaxDevices = 13,
+  CallManagerIsBusy,
+  SfuClientFailedToJoin,
+  FailedToCreatePeerConnectionFactory,
+  FailedToNegotiateSrtpKeys,
+  FailedToCreatePeerConnection,
+  FailedToStartPeerConnection,
+  FailedToUpdatePeerConnection,
+  FailedToSetMaxSendBitrate,
+  IceFailedWhileConnecting,
+  IceFailedAfterConnected,
+  ServerChangedDemuxId,
+  HasMaxDevices,
 }
 
 export enum CallMessageUrgency {
