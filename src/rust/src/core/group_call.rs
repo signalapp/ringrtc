@@ -14,7 +14,6 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use bytes::BytesMut;
 use hkdf::Hkdf;
 use num_enum::TryFromPrimitive;
 use prost::Message;
@@ -1844,7 +1843,7 @@ impl Client {
                         })
                 })
                 .collect();
-            match encode_proto(DeviceToSfu {
+            let msg = DeviceToSfu {
                 video_request: Some(VideoRequestMessage {
                     // TODO: Update the server to handle this as expected or remove this altogether.
                     // The client needs the server to sort by resolution and then cap the number after that sort.
@@ -1869,15 +1868,10 @@ impl Client {
                     active_speaker_height: state.active_speaker_height.map(|height| height.into()),
                 }),
                 ..Default::default()
-            }) {
-                Err(e) => {
-                    warn!("Failed to encode video request: {:?}", e);
-                }
-                Ok(msg) => {
-                    if let Err(e) = Self::send_data_to_sfu(state, &msg) {
-                        warn!("Failed to send video request: {:?}", e);
-                    }
-                }
+            };
+
+            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+                warn!("Failed to send video request: {:?}", e);
             }
         }
     }
@@ -2889,40 +2883,34 @@ impl Client {
     }
 
     fn send_heartbeat(state: &mut State) -> Result<()> {
-        let heartbeat_msg = encode_proto({
-            protobuf::group_call::DeviceToDevice {
-                heartbeat: {
-                    Some(protobuf::group_call::device_to_device::Heartbeat {
-                        audio_muted: state.outgoing_heartbeat_state.audio_muted,
-                        video_muted: state.outgoing_heartbeat_state.video_muted,
-                        presenting: state.outgoing_heartbeat_state.presenting,
-                        sharing_screen: state.outgoing_heartbeat_state.sharing_screen,
-                    })
-                },
-                ..Default::default()
-            }
-        })?;
-        Self::broadcast_data_through_sfu(state, &heartbeat_msg)
+        let heartbeat_msg = protobuf::group_call::DeviceToDevice {
+            heartbeat: {
+                Some(protobuf::group_call::device_to_device::Heartbeat {
+                    audio_muted: state.outgoing_heartbeat_state.audio_muted,
+                    video_muted: state.outgoing_heartbeat_state.video_muted,
+                    presenting: state.outgoing_heartbeat_state.presenting,
+                    sharing_screen: state.outgoing_heartbeat_state.sharing_screen,
+                })
+            },
+            ..Default::default()
+        };
+        Self::broadcast_data_through_sfu(state, &heartbeat_msg.encode_to_vec())
     }
 
     fn send_leave_to_sfu(state: &mut State) {
         use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
-        match encode_proto(DeviceToSfu {
+        let msg = DeviceToSfu {
             leave: Some(LeaveMessage {}),
             ..Default::default()
-        }) {
-            Err(e) => {
-                warn!("Failed to encode LeaveMessage: {:?}", e);
-            }
-            Ok(msg) => {
-                if let Err(e) = Self::send_data_to_sfu(state, &msg) {
-                    warn!("Failed to send LeaveMessage: {:?}", e);
-                }
-                // Send it *again* to increase reliability just a little.
-                if let Err(e) = Self::send_data_to_sfu(state, &msg) {
-                    warn!("Failed to send extra redundancy LeaveMessage: {:?}", e);
-                }
-            }
+        }
+        .encode_to_vec();
+
+        if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+            warn!("Failed to send LeaveMessage: {:?}", e);
+        }
+        // Send it *again* to increase reliability just a little.
+        if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+            warn!("Failed to send extra redundancy LeaveMessage: {:?}", e);
         }
     }
 
@@ -2938,14 +2926,10 @@ impl Client {
             leaving: Some(Leaving::default()),
             ..DeviceToDevice::default()
         };
-        if let Ok(encoded_msg) = encode_proto(msg) {
-            if Self::broadcast_data_through_sfu(state, &encoded_msg).is_err() {
-                warn!("Could not send leaving message through the SFU");
-            } else {
-                debug!("Send leaving message over RTP through SFU.");
-            }
+        if Self::broadcast_data_through_sfu(state, &msg.encode_to_vec()).is_err() {
+            warn!("Could not send leaving message through the SFU");
         } else {
-            warn!("Could not encode leaving message")
+            debug!("Send leaving message over RTP through SFU.");
         }
 
         let msg = protobuf::signaling::CallMessage {
@@ -3318,12 +3302,6 @@ impl Client {
 
         barrier.wait();
     }
-}
-
-fn encode_proto(msg: impl prost::Message) -> Result<BytesMut> {
-    let mut bytes = BytesMut::with_capacity(msg.encoded_len());
-    msg.encode(&mut bytes)?;
-    Ok(bytes)
 }
 
 // We need to wrap a Call to implement PeerConnectionObserverTrait
