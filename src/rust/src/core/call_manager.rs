@@ -2875,24 +2875,38 @@ where
     }
 }
 
-macro_rules! group_call_api_handler {
-    (
-        $s:ident,
-        $i:ident,
-        $f:tt
-        $(, $a:expr)*
-        $(,)?
-    ) => {{
-        let group_call_map = $s.group_call_by_client_id.lock();
+/// Example: `forward_group_call_api(group_ring => ring(recipient: Option<UserId>));`
+macro_rules! forward_group_call_api {
+    ($name:ident => $api:ident($($arg:ident: $arg_ty:ty),* $(,)?)) => {
+        pub fn $name(&mut self, client_id: group_call::ClientId, $($arg: $arg_ty),*) {
+            info!("{}(): id: {}", stringify!($name), client_id);
+            self.with_group_call(client_id, |group_call| group_call.$api($($arg),*));
+        }
+    };
+    ($api:ident($($arg:ident: $arg_ty:ty),* $(,)?)) => {
+        forward_group_call_api!($api => $api($($arg: $arg_ty),*));
+    }
+}
+
+impl<T> CallManager<T>
+where
+    T: Platform,
+{
+    fn with_group_call(
+        &mut self,
+        client_id: group_call::ClientId,
+        use_group_call: impl FnOnce(&mut group_call::Client),
+    ) {
+        let group_call_map = self.group_call_by_client_id.lock();
         match group_call_map {
             Ok(mut group_call_map) => {
-                let group_call = group_call_map.get_mut(&$i);
+                let group_call = group_call_map.get_mut(&client_id);
                 match group_call {
                     Some(group_call) => {
-                        group_call.$f($($a),*);
+                        use_group_call(group_call);
                     }
                     None => {
-                        warn!("Group Client not found for id: {}", $i);
+                        warn!("Group Client not found for id: {}", client_id);
                     }
                 }
             }
@@ -2900,97 +2914,25 @@ macro_rules! group_call_api_handler {
                 error!("{}", error);
             }
         }
-    }};
-}
-
-impl<T> CallManager<T>
-where
-    T: Platform,
-{
-    pub fn connect(&mut self, client_id: group_call::ClientId) {
-        info!("connect(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, connect);
     }
 
-    pub fn join(&mut self, client_id: group_call::ClientId) {
-        info!("join(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, join);
-    }
-
-    pub fn leave(&mut self, client_id: group_call::ClientId) {
-        info!("leave(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, leave);
-    }
-
-    pub fn disconnect(&mut self, client_id: group_call::ClientId) {
-        info!("disconnect(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, disconnect);
-    }
-
-    pub fn group_ring(&mut self, client_id: group_call::ClientId, recipient: Option<UserId>) {
-        info!("group_ring(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, ring, recipient);
-    }
-
-    pub fn set_outgoing_audio_muted(&mut self, client_id: group_call::ClientId, muted: bool) {
-        info!("set_outgoing_audio_muted(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_outgoing_audio_muted, muted);
-    }
-
-    pub fn set_outgoing_video_muted(&mut self, client_id: group_call::ClientId, muted: bool) {
-        info!("set_outgoing_video_muted(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_outgoing_video_muted, muted);
-    }
-
-    pub fn set_presenting(&mut self, client_id: group_call::ClientId, presenting: bool) {
-        info!("set_presenting(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_presenting, presenting);
-    }
-
-    pub fn set_sharing_screen(&mut self, client_id: group_call::ClientId, sharing_screen: bool) {
-        info!("set_sharing_screen(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_sharing_screen, sharing_screen);
-    }
-
-    pub fn resend_media_keys(&mut self, client_id: group_call::ClientId) {
-        info!("resend_media_keys(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, resend_media_keys);
-    }
-
-    pub fn set_data_mode(&mut self, client_id: group_call::ClientId, data_mode: DataMode) {
-        info!("set_data_mode(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_data_mode, data_mode);
-    }
-
-    pub fn request_video(
-        &mut self,
-        client_id: group_call::ClientId,
+    forward_group_call_api!(connect());
+    forward_group_call_api!(join());
+    forward_group_call_api!(leave());
+    forward_group_call_api!(disconnect());
+    forward_group_call_api!(group_ring => ring(recipient: Option<UserId>));
+    forward_group_call_api!(set_outgoing_audio_muted(muted: bool));
+    forward_group_call_api!(set_outgoing_video_muted(muted: bool));
+    forward_group_call_api!(set_presenting(presenting: bool));
+    forward_group_call_api!(set_sharing_screen(sharing_screen: bool));
+    forward_group_call_api!(resend_media_keys());
+    forward_group_call_api!(set_data_mode(data_mode: DataMode));
+    forward_group_call_api!(request_video(
         rendered_resolutions: Vec<group_call::VideoRequest>,
         active_speaker_height: u16,
-    ) {
-        info!("request_video(): id: {}", client_id);
-        group_call_api_handler!(
-            self,
-            client_id,
-            request_video,
-            rendered_resolutions,
-            active_speaker_height,
-        );
-    }
-
-    pub fn set_group_members(
-        &mut self,
-        client_id: group_call::ClientId,
-        members: Vec<GroupMember>,
-    ) {
-        info!("set_group_members(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_group_members, members);
-    }
-
-    pub fn set_membership_proof(&mut self, client_id: group_call::ClientId, proof: Vec<u8>) {
-        info!("set_membership_proof(): id: {}", client_id);
-        group_call_api_handler!(self, client_id, set_membership_proof, proof);
-    }
+    ));
+    forward_group_call_api!(set_group_members(members: Vec<GroupMember>));
+    forward_group_call_api!(set_membership_proof(proof: Vec<u8>));
 }
 
 #[cfg(test)]
