@@ -144,6 +144,8 @@ class NativeCallManager {
   Native.cm_resendMediaKeys;
 (NativeCallManager.prototype as any).setDataMode = Native.cm_setDataMode;
 (NativeCallManager.prototype as any).requestVideo = Native.cm_requestVideo;
+(NativeCallManager.prototype as any).removeClient = Native.cm_removeClient;
+(NativeCallManager.prototype as any).blockClient = Native.cm_blockClient;
 (NativeCallManager.prototype as any).setGroupMembers =
   Native.cm_setGroupMembers;
 (NativeCallManager.prototype as any).setMembershipProof =
@@ -2302,6 +2304,16 @@ export class GroupCall {
   }
 
   // Called by UI
+  removeClient(otherClientDemuxId: number): void {
+    this._callManager.removeClient(this._clientId, otherClientDemuxId);
+  }
+
+  // Called by UI
+  blockClient(otherClientDemuxId: number): void {
+    this._callManager.blockClient(this._clientId, otherClientDemuxId);
+  }
+
+  // Called by UI
   setGroupMembers(members: Array<GroupMemberInfo>): void {
     this._callManager.setGroupMembers(this._clientId, members);
   }
@@ -2716,6 +2728,8 @@ export interface CallManager {
     resolutions: Array<VideoRequest>,
     activeSpeakerHeight: number
   ): void;
+  removeClient(clientId: GroupCallClientId, otherClientDemuxId: number): void;
+  blockClient(clientId: GroupCallClientId, otherClientDemuxId: number): void;
   setGroupMembers(
     clientId: GroupCallClientId,
     members: Array<GroupMemberInfo>

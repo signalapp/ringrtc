@@ -1493,6 +1493,36 @@ fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn removeClient(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let other_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .call_manager
+            .remove_client(client_id, other_demux_id);
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn blockClient(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let other_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .call_manager
+            .block_client(client_id, other_demux_id);
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let js_members = cx.argument::<JsArray>(1)?;
@@ -2644,6 +2674,8 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_resendMediaKeys", resendMediaKeys)?;
     cx.export_function("cm_setDataMode", setDataMode)?;
     cx.export_function("cm_requestVideo", requestVideo)?;
+    cx.export_function("cm_removeClient", removeClient)?;
+    cx.export_function("cm_blockClient", blockClient)?;
     cx.export_function("cm_setGroupMembers", setGroupMembers)?;
     cx.export_function("cm_setMembershipProof", setMembershipProof)?;
     cx.export_function("cm_peekGroupCall", peekGroupCall)?;

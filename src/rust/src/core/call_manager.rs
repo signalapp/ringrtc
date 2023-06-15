@@ -2931,6 +2931,8 @@ where
         rendered_resolutions: Vec<group_call::VideoRequest>,
         active_speaker_height: u16,
     ));
+    forward_group_call_api!(remove_client(other_client_id: DemuxId));
+    forward_group_call_api!(block_client(other_client_id: DemuxId));
     forward_group_call_api!(set_group_members(members: Vec<GroupMember>));
     forward_group_call_api!(set_membership_proof(proof: Vec<u8>));
 }

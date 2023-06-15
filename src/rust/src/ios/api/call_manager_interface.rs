@@ -1270,6 +1270,44 @@ pub extern "C" fn ringrtcRequestVideo(
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub extern "C" fn ringrtcRemoveClient(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    otherClientDemuxId: DemuxId,
+) {
+    info!("ringrtcRemoveClient():");
+
+    let result = call_manager::remove_client(
+        callManager as *mut IosCallManager,
+        clientId,
+        otherClientDemuxId,
+    );
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcBlockClient(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    otherClientDemuxId: DemuxId,
+) {
+    info!("ringrtcBlockClient():");
+
+    let result = call_manager::block_client(
+        callManager as *mut IosCallManager,
+        clientId,
+        otherClientDemuxId,
+    );
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetGroupMembers(
     callManager: *mut c_void,
     clientId: group_call::ClientId,

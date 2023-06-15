@@ -1138,6 +1138,30 @@ pub fn request_video(
     Ok(())
 }
 
+pub fn remove_client(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    other_client_demux_id: jlong,
+) -> Result<()> {
+    info!("remove_client(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.remove_client(client_id, other_client_demux_id as u32);
+    Ok(())
+}
+
+pub fn block_client(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    other_client_demux_id: jlong,
+) -> Result<()> {
+    info!("block_client(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.block_client(client_id, other_client_demux_id as u32);
+    Ok(())
+}
+
 pub fn set_group_members(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,

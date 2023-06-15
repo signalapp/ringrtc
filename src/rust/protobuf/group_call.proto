@@ -50,8 +50,23 @@ message DeviceToSfu {
  
   message LeaveMessage {}
 
+  // A generic message type for any action that only needs a "target". Protobuf's encoding doesn't
+  // include message types, so actions can start out using GenericAdminAction and switch to a
+  // dedicated message type as needed.
+  message GenericAdminAction {
+    optional fixed32 target_demux_id = 1;
+  }
+
   optional VideoRequestMessage video_request = 1;
   optional LeaveMessage leave = 2;
+
+  // Grouped to save space in-memory.
+  oneof admin_action {
+    GenericAdminAction approve = 3;
+    GenericAdminAction deny = 4;
+    GenericAdminAction remove = 5;
+    GenericAdminAction block = 6;
+  }
 }
 
 message SfuToDevice {

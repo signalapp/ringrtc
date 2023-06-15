@@ -531,6 +531,30 @@ public class GroupCall {
         ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray, activeSpeakerHeight)
     }
 
+    public func removeClient(demuxId otherClientDemuxId: UInt32) {
+        AssertIsOnMainThread()
+        Logger.debug("removeClient")
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        ringrtcRemoveClient(self.ringRtcCallManager, clientId, otherClientDemuxId)
+    }
+
+    public func blockClient(demuxId otherClientDemuxId: UInt32) {
+        AssertIsOnMainThread()
+        Logger.debug("blockClient")
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        ringrtcBlockClient(self.ringRtcCallManager, clientId, otherClientDemuxId)
+    }
+
     public func updateGroupMembers(members: [GroupMember]) {
         AssertIsOnMainThread()
         Logger.debug("updateGroupMembers")

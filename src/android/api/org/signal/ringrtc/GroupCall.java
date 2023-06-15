@@ -496,6 +496,44 @@ public final class GroupCall {
 
     /**
      *
+     * Removes another client from the call.
+     *
+     * Should only be called if the current client is an admin for the call.
+     *
+     * @param otherClientDemuxId  the demux ID of the client to remove, retrieved from RemoteDeviceState
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void removeClient(long otherClientDemuxId)
+        throws CallException
+    {
+        Log.i(TAG, "removeClient():");
+
+        ringrtcRemoveClient(nativeCallManager, this.clientId, otherClientDemuxId);
+    }
+
+    /**
+     *
+     * Blocks another client for the duration of the call.
+     *
+     * Should only be called if the current client is an admin for the call.
+     *
+     * @param otherClientDemuxId  the demux ID of the client to remove, retrieved from RemoteDeviceState
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void blockClient(long otherClientDemuxId)
+        throws CallException
+    {
+        Log.i(TAG, "blockClient():");
+
+        ringrtcBlockClient(nativeCallManager, this.clientId, otherClientDemuxId);
+    }
+
+    /**
+     *
      * Provides a collection of GroupMemberInfo objects representing all
      * the possible members of a group.
      *
@@ -1163,6 +1201,18 @@ public final class GroupCall {
                                  long clientId,
                                  List<VideoRequest> renderedResolutions,
                                  int activeSpeakerHeight)
+        throws CallException;
+
+    private native
+        void ringrtcRemoveClient(long nativeCallManager,
+                                 long clientId,
+                                 long otherClientDemuxId)
+        throws CallException;
+
+    private native
+        void ringrtcBlockClient(long nativeCallManager,
+                                long clientId,
+                                long otherClientDemuxId)
         throws CallException;
 
     private native

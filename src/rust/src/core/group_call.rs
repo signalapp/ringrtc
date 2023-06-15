@@ -1876,6 +1876,68 @@ impl Client {
         }
     }
 
+    pub fn remove_client(&self, other_client: DemuxId) {
+        use protobuf::group_call::{
+            device_to_sfu::{AdminAction, GenericAdminAction},
+            DeviceToSfu,
+        };
+        debug!(
+            "group_call::Client(outer)::remove_client(client_id: {})",
+            self.client_id
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::remove_client(client_id: {})",
+                state.client_id
+            );
+
+            // We could check that other_client is a valid demux ID according to our current peek
+            // info, but that's a racy check anyway. Just let the calling server do it.
+            let msg = DeviceToSfu {
+                admin_action: Some(AdminAction::Remove(GenericAdminAction {
+                    target_demux_id: Some(other_client),
+                })),
+                ..Default::default()
+            };
+
+            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+                warn!("Failed to send removal: {:?}", e);
+            }
+        });
+    }
+
+    // Blocks are performed on a particular client, but end up affecting all of the user's devices.
+    // Still, we define it as a demux-ID-based operation for more flexibility later.
+    pub fn block_client(&self, other_client: DemuxId) {
+        use protobuf::group_call::{
+            device_to_sfu::{AdminAction, GenericAdminAction},
+            DeviceToSfu,
+        };
+        debug!(
+            "group_call::Client(outer)::block_client(client_id: {})",
+            self.client_id
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::block_client(client_id: {})",
+                state.client_id
+            );
+
+            // We could check that other_client is a valid demux ID according to our current peek
+            // info, but that's a racy check anyway. Just let the calling server do it.
+            let msg = DeviceToSfu {
+                admin_action: Some(AdminAction::Block(GenericAdminAction {
+                    target_demux_id: Some(other_client),
+                })),
+                ..Default::default()
+            };
+
+            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+                warn!("Failed to send block: {:?}", e);
+            }
+        });
+    }
+
     pub fn set_group_members(&self, group_members: Vec<GroupMember>) {
         debug!(
             "group_call::Client(outer)::set_group_members(client_id: {})",
@@ -5226,6 +5288,66 @@ mod tests {
         assert_eq!(
             DeviceToSfu {
                 leave: Some(LeaveMessage {}),
+                ..Default::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
+    }
+
+    #[test]
+    fn device_to_sfu_remove() {
+        use protobuf::group_call::{
+            device_to_sfu::{AdminAction, GenericAdminAction},
+            DeviceToSfu,
+        };
+
+        let mut client1 = TestClient::new(vec![1], 1);
+
+        let (sender, receiver) = mpsc::channel();
+        client1.sfu_rtp_packet_sender = Some(sender);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[]);
+        client1.client.remove_client(32);
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                admin_action: Some(AdminAction::Remove(GenericAdminAction {
+                    target_demux_id: Some(32)
+                })),
+                ..Default::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
+    }
+
+    #[test]
+    fn device_to_sfu_block() {
+        use protobuf::group_call::{
+            device_to_sfu::{AdminAction, GenericAdminAction},
+            DeviceToSfu,
+        };
+
+        let mut client1 = TestClient::new(vec![1], 1);
+
+        let (sender, receiver) = mpsc::channel();
+        client1.sfu_rtp_packet_sender = Some(sender);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[]);
+        client1.client.block_client(32);
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                admin_action: Some(AdminAction::Block(GenericAdminAction {
+                    target_demux_id: Some(32)
+                })),
                 ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()

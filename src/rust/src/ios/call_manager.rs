@@ -22,7 +22,7 @@ use crate::error::RingRtcError;
 use crate::lite::call_links::CallLinkRootKey;
 use crate::lite::{
     http,
-    sfu::{GroupMember, UserId},
+    sfu::{DemuxId, GroupMember, UserId},
 };
 use crate::protobuf;
 use crate::webrtc;
@@ -634,6 +634,30 @@ pub fn request_video(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.request_video(client_id, rendered_resolutions, active_speaker_height);
+    Ok(())
+}
+
+pub fn remove_client(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    other_client_demux_id: DemuxId,
+) -> Result<()> {
+    info!("remove_client(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.remove_client(client_id, other_client_demux_id);
+    Ok(())
+}
+
+pub fn block_client(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    other_client_demux_id: DemuxId,
+) -> Result<()> {
+    info!("block_client(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.block_client(client_id, other_client_demux_id);
     Ok(())
 }
 

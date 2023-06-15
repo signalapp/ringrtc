@@ -1012,6 +1012,48 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRequestVideo(
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRemoveClient(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    other_client_demux_id: jlong,
+) {
+    match call_manager::remove_client(
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        other_client_demux_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcBlockClient(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    other_client_demux_id: jlong,
+) {
+    match call_manager::block_client(
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        other_client_demux_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetGroupMembers(
     env: JNIEnv,
     _object: JObject,
