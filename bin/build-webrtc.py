@@ -12,6 +12,7 @@ This script builds webrtc artifacts for the specified target
 try:
     import argparse
     import logging
+    import platform
     import subprocess
     import os
 
@@ -55,10 +56,15 @@ def verify_build_host_platform(target_platform):
         description = subprocess.check_output(['lsb_release', '--short', '--description']).decode('UTF-8').rstrip()
         if description != expected_description:
             raise Exception(f"Invalid Host OS. Expected: {expected_description} Actual: {description}")
-    elif target_platform == 'ios':
-        raise Exception("Implement me")
-    elif target_platform == 'mac':
-        raise Exception("Implement me")
+    elif target_platform == 'ios' or target_platform == 'mac':
+        expected_system = 'Darwin'
+        if platform.system() != expected_system:
+            raise Exception(f"Invalid Host OS. Expected: {expected_system} Actual: {platform.system()}")
+        expected_major_version = '12'
+        version = subprocess.check_output(['sw_vers', '-productVersion']).decode('UTF-8').rstrip()
+        major_version = version.split('.')[0]
+        if int(major_version) < int(expected_major_version):
+            raise Exception(f"Invalid Host OS version. Expected: {expected_major_version} Actual: {major_version}")
     elif target_platform == 'windows':
         raise Exception("Implement me")
 
@@ -92,24 +98,24 @@ Build type      : {}
 
     verify_build_host_platform(args.target)
 
+    # Install Chromium depot tools
+    run_cmd(args.dry_run, ['mkdir', '-p', 'out'])
+    # TODO: ignore failures when depot_tools is already cloned
+    run_cmd(args.dry_run, ['git',
+                           'clone',
+                           '--depth',
+                           '1',
+                           'https://chromium.googlesource.com/chromium/tools/depot_tools.git',
+                           'out/depot_tools'])
+
+    # Add depot tools to PATH environment variable
+    cwd = os.getcwd()
+    env = os.environ.copy()
+    env["PATH"] = f"{cwd}/out/depot_tools:{env['PATH']}"
+
     if args.target == 'android' or args.target == 'linux':
         # Install build dependencies
         run_cmd(args.dry_run, ['sudo', 'apt', 'install', 'make', 'pkg-config'])
-
-        # Install Chromium depot tools
-        run_cmd(args.dry_run, ['mkdir', '-p', 'out'])
-        # TODO: ignore failures when depot_tools is already cloned
-        run_cmd(args.dry_run, ['git',
-                               'clone',
-                               '--depth',
-                               '1',
-                               'https://chromium.googlesource.com/chromium/tools/depot_tools.git',
-                               'out/depot_tools'])
-
-        # Add depot tools to PATH environment variable
-        cwd = os.getcwd()
-        env = os.environ.copy()
-        env["PATH"] = f"{cwd}/out/depot_tools:{env['PATH']}"
 
         if args.target == 'android':
             # Prepare workspace
@@ -141,10 +147,54 @@ Build type      : {}
                         ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
                         env=env)
 
-    elif args.target == 'ios':
-        raise Exception("Implement me")
-    elif args.target == 'mac':
-        raise Exception("Implement me")
+    elif args.target == 'ios' or args.target == 'mac':
+        # Get grealpath
+        run_cmd(args.dry_run, ['brew', 'install', 'coreutils'])
+
+        # Set up Xcode (https://github.com/RobotsAndPencils/xcodes)
+        run_cmd(args.dry_run, ['brew', 'install', 'robotsandpencils/made/xcodes'])
+
+        # This step requires Apple credentials provided as environment variables XCODES_USERNAME and XCODES_PASSWORD
+        run_cmd(args.dry_run, ['xcodes', 'install', '14.0.1'])
+        run_cmd(args.dry_run, ['sudo', 'xcodes', 'select', '14.0.1'])
+
+        # Clear saved credentials
+        run_cmd(args.dry_run, ['xcodes', 'signout'])
+
+        # Accept the license
+        run_cmd(args.dry_run, ['sudo', 'xcodebuild', '-license', 'accept'])
+
+        # Install components
+        run_cmd(args.dry_run, ['sudo', 'xcodebuild', '-runFirstLaunch'])
+
+        if args.target == 'ios':
+            # Prepare workspace
+            run_cmd(args.dry_run, ['bin/prepare-workspace', 'ios'], env=env)
+
+            # Ensure this library path exists so that the build succeeds
+            run_cmd(args.dry_run, ['sudo', 'mkdir', '-p', '/usr/local/lib'])
+
+            for build_type in build_types:
+                run_cmd(args.dry_run,
+                        ['bin/build-ios', '--webrtc-only', '--archive-webrtc', '--' + build_type],
+                        env=env)
+
+        elif args.target == 'mac':
+            # Prepare workspace
+            run_cmd(args.dry_run, ['bin/prepare-workspace', 'mac'], env=env)
+
+            for build_type in build_types:
+                run_cmd(args.dry_run,
+                        ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
+                        env=env)
+
+            env['TARGET_ARCH'] = "arm64"
+            env['OUTPUT_DIR'] = "out_arm"
+            for build_type in build_types:
+                run_cmd(args.dry_run,
+                        ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
+                        env=env)
+
     elif args.target == 'windows':
         raise Exception("Implement me")
 
