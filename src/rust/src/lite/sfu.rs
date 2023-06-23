@@ -24,7 +24,7 @@ use crate::lite::http;
 /// The state that can be observed by "peeking".
 #[derive(Clone, Debug, Default)]
 pub struct PeekInfo {
-    /// Currently joined devices, excluding the local device and unknown users
+    /// All currently participating devices
     pub devices: Vec<PeekDeviceInfo>,
     /// The user who created the call
     pub creator: Option<UserId>,
@@ -32,8 +32,6 @@ pub struct PeekInfo {
     pub era_id: Option<String>,
     /// The maximum number of devices that can join this group call.
     pub max_devices: Option<u32>,
-    /// The number of devices currently joined (including the local device and unknown users).
-    pub device_count: u32,
 }
 
 impl PeekInfo {
@@ -43,7 +41,13 @@ impl PeekInfo {
             .filter_map(|device| device.user_id.as_ref())
             .collect()
     }
+
+    /// The number of devices currently joined (including the local device and unknown users).
+    pub fn device_count(&self) -> usize {
+        self.devices.len()
+    }
 }
+
 /// The per-device state observed by "peeking".
 #[derive(Clone, Debug)]
 pub struct PeekDeviceInfo {
@@ -76,7 +80,6 @@ struct SerializedPeekDeviceInfo {
 
 impl SerializedPeekInfo {
     fn deobfuscate(self, member_resolver: &dyn MemberResolver) -> PeekInfo {
-        let device_count = self.devices.len() as u32;
         PeekInfo {
             devices: self
                 .devices
@@ -89,7 +92,6 @@ impl SerializedPeekInfo {
                 .and_then(|opaque_user_id| member_resolver.resolve(opaque_user_id)),
             era_id: self.era_id,
             max_devices: self.max_devices,
-            device_count,
         }
     }
 }
@@ -620,7 +622,7 @@ pub mod ios {
                     creator: rtc_Bytes::from_or_default(peek_info.creator.as_ref()),
                     era_id: rtc_String::from_or_default(peek_info.era_id.as_ref()),
                     max_devices: rtc_OptionalU32::from_or_default(peek_info.max_devices),
-                    device_count: peek_info.device_count,
+                    device_count: peek_info.device_count() as u32,
                 },
             };
             let unretained = self.retained;

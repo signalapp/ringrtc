@@ -1708,7 +1708,7 @@ impl AndroidPlatform {
             Some(era_id) => env.new_string(era_id)?.into(),
         };
         let jni_max_devices = self.get_optional_u32_long_object(env, peek_info.max_devices)?;
-        let jni_device_count = peek_info.device_count as jlong;
+        let jni_device_count = peek_info.device_count() as jlong;
 
         let args = jni_args!((
             joined_member_list => java.util.List,

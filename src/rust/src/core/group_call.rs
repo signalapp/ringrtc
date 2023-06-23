@@ -1407,9 +1407,9 @@ impl Client {
                     warn!("Can't join when already joining.");
                 }
                 JoinState::NotJoined(ring_id) => {
-                    if let Some(PeekInfo{device_count, max_devices: Some(max_devices), ..}) = &state.last_peek_info {
-                        if device_count >= max_devices {
-                            info!("Ending group call client because there are {}/{} devices in the call.", device_count, max_devices);
+                    if let Some(peek_info) = &state.last_peek_info {
+                        if peek_info.device_count() >= peek_info.max_devices.unwrap_or(u32::MAX) as usize {
+                            info!("Ending group call client because there are {}/{} devices in the call.", peek_info.device_count(), peek_info.max_devices.unwrap());
                             Self::end(state, EndReason::HasMaxDevices);
                             return;
                         }
@@ -3838,7 +3838,7 @@ mod tests {
         creator: Option<UserId>,
         era_id: Option<String>,
         max_devices: Option<u32>,
-        device_count: u32,
+        device_count: usize,
     }
 
     #[derive(Clone)]
@@ -4058,7 +4058,7 @@ mod tests {
             owned_state.creator = peek_info.creator.clone();
             owned_state.era_id = peek_info.era_id.clone();
             owned_state.max_devices = peek_info.max_devices;
-            owned_state.device_count = peek_info.device_count;
+            owned_state.device_count = peek_info.device_count();
             self.peek_changed.set();
         }
 
@@ -4845,7 +4845,6 @@ mod tests {
             creator: None,
             era_id: None,
             max_devices: None,
-            device_count: 3,
         };
         client.client.set_peek_result(Ok(peek_info));
         client.wait_for_client_to_process();
@@ -4876,7 +4875,6 @@ mod tests {
             creator: None,
             era_id: None,
             max_devices: None,
-            device_count: 1,
         }));
 
         assert!(client
@@ -4926,7 +4924,6 @@ mod tests {
                 creator: None,
                 era_id: None,
                 devices: vec![],
-                device_count: 0,
                 max_devices: None,
             },
             &HashSet::default(),
@@ -4940,7 +4937,6 @@ mod tests {
                 creator: None,
                 era_id: None,
                 devices: vec![],
-                device_count: 3,
                 max_devices: None,
             },
             &([joiner1.user_id.clone(), joiner2.user_id.clone()]
@@ -5443,7 +5439,6 @@ mod tests {
                 demux_id: 2,
                 user_id: None,
             }],
-            device_count: 1,
             max_devices: Some(1),
             creator: None,
             era_id: None,
@@ -5460,7 +5455,6 @@ mod tests {
                 demux_id: 2,
                 user_id: None,
             }],
-            device_count: 1,
             max_devices: Some(2),
             creator: None,
             era_id: None,
@@ -5478,7 +5472,6 @@ mod tests {
                 demux_id: 2,
                 user_id: None,
             }],
-            device_count: 1,
             max_devices: Some(2),
             creator: None,
             era_id: None,
@@ -5847,7 +5840,6 @@ mod tests {
             .collect();
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![],
-            device_count: 0,
             max_devices: None,
             creator: None,
             era_id: None,
@@ -5864,7 +5856,6 @@ mod tests {
 
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..1].to_vec(),
-            device_count: 1,
             max_devices: None,
             creator: None,
             era_id: None,
@@ -5881,7 +5872,6 @@ mod tests {
 
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..2].to_vec(),
-            device_count: 1,
             max_devices: None,
             creator: None,
             era_id: None,
@@ -5898,7 +5888,6 @@ mod tests {
 
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..5].to_vec(),
-            device_count: 5,
             max_devices: None,
             creator: None,
             era_id: None,
@@ -5915,7 +5904,6 @@ mod tests {
 
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..20].to_vec(),
-            device_count: 20,
             max_devices: None,
             creator: None,
             era_id: None,
@@ -5954,7 +5942,6 @@ mod tests {
 
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..0].to_vec(),
-            device_count: 0,
             max_devices: None,
             creator: None,
             era_id: None,
@@ -5982,7 +5969,6 @@ mod tests {
 
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..20].to_vec(),
-            device_count: 20,
             max_devices: None,
             creator: None,
             era_id: None,

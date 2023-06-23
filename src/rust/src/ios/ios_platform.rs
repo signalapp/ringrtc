@@ -672,7 +672,7 @@ impl Platform for IosPlatform {
         let app_era_id = app_slice_from_str(peek_info.era_id.as_ref());
 
         let app_max_devices = app_option_from_u32(peek_info.max_devices);
-        let device_count = peek_info.devices.len() as u32;
+        let device_count = peek_info.device_count() as u32;
 
         (self.app_interface.handlePeekChanged)(
             self.app_interface.object,
