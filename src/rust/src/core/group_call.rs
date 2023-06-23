@@ -33,8 +33,7 @@ use crate::{
     lite::{
         http, sfu,
         sfu::{
-            DemuxId, GroupMember, MembershipProof, PeekDeviceInfo, PeekInfo, PeekResult,
-            PeekResultCallback, UserId,
+            DemuxId, GroupMember, MembershipProof, PeekInfo, PeekResult, PeekResultCallback, UserId,
         },
     },
     protobuf,
@@ -2343,13 +2342,13 @@ impl Client {
             // We remember these before changing state.remote_devices so we can calculate changes after.
             let old_demux_ids: HashSet<DemuxId> = state.remote_devices.demux_id_set();
 
-            // Then we update state.remote_devices by first building a map of id_pair => RemoteDeviceState
+            // Then we update state.remote_devices by first building a map of demux_id => RemoteDeviceState
             // from the old values and then building a new Vec using either the old value (if there is one)
             // or creating a new one.
-            let mut old_remote_devices_by_id_pair: HashMap<(DemuxId, UserId), RemoteDeviceState> =
+            let mut old_remote_devices_by_demux_id: HashMap<DemuxId, RemoteDeviceState> =
                 std::mem::take(&mut state.remote_devices)
                     .into_iter()
-                    .map(|rd| ((rd.demux_id, rd.user_id.clone()), rd))
+                    .map(|rd| (rd.demux_id, rd))
                     .collect();
             let added_time = SystemTime::now();
             state.remote_devices = peek_info
@@ -2361,23 +2360,18 @@ impl Client {
                         state.has_ever_been_participating_client = true;
                         return None;
                     }
-                    if let PeekDeviceInfo {
-                        demux_id,
-                        user_id: Some(user_id),
-                    } = device
-                    {
-                        // Keep the old one, with its state, if there is one.
-                        Some(
-                            match old_remote_devices_by_id_pair.remove(&(demux_id, user_id.clone()))
-                            {
-                                Some(existing_remote_device) => existing_remote_device,
-                                None => RemoteDeviceState::new(demux_id, user_id, added_time),
-                            },
-                        )
-                    } else {
-                        // Ignore devices of users that aren't in the group
-                        None
-                    }
+                    device.user_id.map(|user_id| {
+                        // Keep the old one, with its state, if there is one and the user ID
+                        // matches.
+                        if let Some(existing_remote_device) =
+                            old_remote_devices_by_demux_id.remove(&device.demux_id)
+                        {
+                            if existing_remote_device.user_id == user_id {
+                                return existing_remote_device;
+                            }
+                        }
+                        RemoteDeviceState::new(device.demux_id, user_id, added_time)
+                    })
                 })
                 .collect();
 
@@ -3740,7 +3734,7 @@ mod tests {
         mpsc, Arc, Condvar, Mutex,
     };
 
-    use crate::webrtc::sim::media::FAKE_AUDIO_TRACK;
+    use crate::{lite::sfu::PeekDeviceInfo, webrtc::sim::media::FAKE_AUDIO_TRACK};
 
     use super::*;
     use std::sync::atomic::Ordering;
