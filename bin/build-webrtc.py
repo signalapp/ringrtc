@@ -25,8 +25,10 @@ TARGET_PLATFORMS = ['android', 'ios', 'linux', 'mac', 'windows']
 def parse_args():
     parser = argparse.ArgumentParser(
         description='Build webrtc')
-    # TODO: Support --clean option
-    parser.add_argument('-d', '--debug',
+    parser.add_argument('--clean',
+                        action='store_true',
+                        help='Remove all the build products. Default is false')
+    parser.add_argument('--debug',
                         action='store_true',
                         help='Build a debug version. Default is both')
     parser.add_argument('--dry-run',
@@ -35,7 +37,7 @@ def parse_args():
     parser.add_argument('--target',
                         required=True,
                         help='build target: ' + ', '.join(TARGET_PLATFORMS))
-    parser.add_argument('-r', '--release',
+    parser.add_argument('--release',
                         action='store_true',
                         help='Build a release version. Default is both')
     parser.add_argument('-v', '--verbose',
@@ -98,15 +100,19 @@ Build type      : {}
 
     verify_build_host_platform(args.target)
 
+    if args.clean is True:
+        run_cmd(args.dry_run, ['make', 'distclean'])
+        run_cmd(args.dry_run, ['rm', '-rf', 'out_arm'])
+
     # Install Chromium depot tools
-    run_cmd(args.dry_run, ['mkdir', '-p', 'out'])
-    # TODO: ignore failures when depot_tools is already cloned
-    run_cmd(args.dry_run, ['git',
-                           'clone',
-                           '--depth',
-                           '1',
-                           'https://chromium.googlesource.com/chromium/tools/depot_tools.git',
-                           'out/depot_tools'])
+    if not os.path.isdir('out/depot_tools'):
+        run_cmd(args.dry_run, ['mkdir', '-p', 'out'])
+        run_cmd(args.dry_run, ['git',
+                               'clone',
+                               '--depth',
+                               '1',
+                               'https://chromium.googlesource.com/chromium/tools/depot_tools.git',
+                               'out/depot_tools'])
 
     # Add depot tools to PATH environment variable
     cwd = os.getcwd()
