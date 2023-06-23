@@ -2334,7 +2334,6 @@ impl Client {
                 .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
         }
 
-        let peek_info_to_remember = peek_info.clone();
         if let (JoinState::Joined(local_demux_id), DheState::Negotiated { srtp_keys }) =
             (&state.join_state, &state.dhe_state)
         {
@@ -2353,24 +2352,24 @@ impl Client {
             let added_time = SystemTime::now();
             state.remote_devices = peek_info
                 .devices
-                .into_iter()
+                .iter()
                 .filter_map(|device| {
                     if device.demux_id == local_demux_id {
                         // Don't add a remote device to represent the local device.
                         state.has_ever_been_participating_client = true;
                         return None;
                     }
-                    device.user_id.map(|user_id| {
+                    device.user_id.as_ref().map(|user_id| {
                         // Keep the old one, with its state, if there is one and the user ID
                         // matches.
                         if let Some(existing_remote_device) =
                             old_remote_devices_by_demux_id.remove(&device.demux_id)
                         {
-                            if existing_remote_device.user_id == user_id {
+                            if &existing_remote_device.user_id == user_id {
                                 return existing_remote_device;
                             }
                         }
-                        RemoteDeviceState::new(device.demux_id, user_id, added_time)
+                        RemoteDeviceState::new(device.demux_id, user_id.clone(), added_time)
                     })
                 })
                 .collect();
@@ -2410,11 +2409,9 @@ impl Client {
             }
 
             if new_user_ids != old_user_ids {
-                state.observer.handle_peek_changed(
-                    state.client_id,
-                    &peek_info_to_remember,
-                    &new_user_ids,
-                )
+                state
+                    .observer
+                    .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
             }
             // If someone was added, we must advance the send media key
             // and send it to everyone that was added.
@@ -2476,7 +2473,7 @@ impl Client {
                 state.outgoing_ring_state = OutgoingRingState::NotPermittedToRing;
             }
         }
-        state.last_peek_info = Some(peek_info_to_remember);
+        state.last_peek_info = Some(peek_info);
 
         // Do this later so that we can use new_user_ids above without running into
         // referencing issues
