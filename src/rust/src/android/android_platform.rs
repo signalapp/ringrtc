@@ -589,7 +589,7 @@ impl Platform for AndroidPlatform {
             let call_id_jlong = u64::from(call_id) as jlong;
             let receiver_device_id = receiver_device_id as jint;
 
-            let ice_candidate_list = match jni_new_linked_list(&env) {
+            let ice_candidate_list = match jni_new_arraylist(&env, send.ice.candidates.len()) {
                 Ok(v) => v,
                 Err(error) => {
                     error!("ice_candidate_list: {:?}", error);
@@ -1021,7 +1021,7 @@ impl Platform for AndroidPlatform {
                         }
                     };
 
-                let received_levels_list = match jni_new_linked_list(&env) {
+                let received_levels_list = match jni_new_arraylist(&env, received_levels.len()) {
                     Ok(v) => v,
                     Err(error) => {
                         error!("{:?}", error);
@@ -1123,7 +1123,8 @@ impl Platform for AndroidPlatform {
                     }
                 };
 
-            let remote_device_state_list = match jni_new_linked_list(&env) {
+            let remote_device_state_list = match jni_new_arraylist(&env, remote_device_states.len())
+            {
                 Ok(v) => v,
                 Err(error) => {
                     error!("{:?}", error);
@@ -1518,7 +1519,7 @@ impl AndroidPlatform {
                     return Ok(JObject::null());
                 }
             };
-            let jni_headers = match jni_new_linked_list(&env) {
+            let jni_headers = match jni_new_arraylist(&env, headers.len()) {
                 Ok(v) => v,
                 Err(error) => {
                     error!("jni_headers: {:?}", error);
@@ -1674,9 +1675,9 @@ impl AndroidPlatform {
         &self,
         env: &JNIEnv<'a>,
         peek_info: &PeekInfo,
-        joined_members: &mut dyn Iterator<Item = &UserId>,
+        joined_members: &mut dyn ExactSizeIterator<Item = &UserId>,
     ) -> Result<JObject<'a>> {
-        let joined_member_list = jni_new_linked_list(env)?;
+        let joined_member_list = jni_new_arraylist(env, joined_members.len())?;
         for joined_member in joined_members {
             let jni_opaque_user_id = match env.byte_array_from_slice(joined_member.as_ref()) {
                 Ok(v) => JObject::from(v),

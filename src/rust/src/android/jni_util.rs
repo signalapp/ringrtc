@@ -202,13 +202,12 @@ pub fn jni_get_field<'a>(
     }
 }
 
-/// Creates a new java.util.LinkedList object
-pub fn jni_new_linked_list<'a>(env: &'a JNIEnv) -> Result<JList<'a, 'a>> {
-    // create empty java linked list object
+/// Creates a new java.util.ArrayList object
+pub fn jni_new_arraylist<'a>(env: &'a JNIEnv, initial_capacity: usize) -> Result<JList<'a, 'a>> {
     let list = jni_new_object(
         env,
-        jni_class_name!(java.util.LinkedList),
-        jni_args!(() -> void),
+        jni_class_name!(java.util.ArrayList),
+        jni_args!((initial_capacity.try_into().expect("too big for Java") => int) -> void),
     )?;
     Ok(env.get_list(list)?)
 }
