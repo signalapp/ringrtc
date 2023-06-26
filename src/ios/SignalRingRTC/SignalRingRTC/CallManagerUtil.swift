@@ -30,13 +30,13 @@ extension AppByteSlice {
         }
         return Data(asUnsafeBufferPointer())
     }
-}
 
-extension Data {
-    var uuid: UUID {
-        get {
-            return UUID(uuid: withUnsafeBytes { $0.load(as: uuid_t.self) } )
+    func toUUID() -> UUID? {
+        guard let ptr = UnsafeRawPointer(self.bytes),
+              self.len >= MemoryLayout<uuid_t>.size else {
+            return nil
         }
+        return UUID(uuid: ptr.loadUnaligned(as: uuid_t.self))
     }
 }
 

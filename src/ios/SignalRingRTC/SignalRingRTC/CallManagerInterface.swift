@@ -565,7 +565,7 @@ func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recip
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
-    guard let recipient = recipientUuid.asData() else {
+    guard let recipient = recipientUuid.toUUID() else {
         return
     }
 
@@ -578,7 +578,7 @@ func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recip
         return
     }
 
-    obj.sendCallMessage(recipientUuid: recipient.uuid, message: message, urgency: urgency)
+    obj.sendCallMessage(recipientUuid: recipient, message: message, urgency: urgency)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -862,14 +862,14 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
     for index in 0..<remoteDeviceStates.count {
         let remoteDeviceState = remoteDeviceStates.states[index]
 
-        guard let userId = remoteDeviceState.user_id.asData() else {
+        guard let userId = remoteDeviceState.user_id.toUUID() else {
             Logger.debug("missing userId for demuxId: 0x\(String(remoteDeviceState.demuxId, radix: 16))")
             continue
         }
 
         let deviceState = RemoteDeviceState(
             demuxId: remoteDeviceState.demuxId,
-            userId: userId.uuid,
+            userId: userId,
             mediaKeysReceived: remoteDeviceState.mediaKeysReceived,
             addedTime: remoteDeviceState.addedTime,
             speakerTime: remoteDeviceState.speakerTime,
@@ -926,7 +926,7 @@ func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, g
         return
     }
 
-    guard let sender = sender.asData() else {
+    guard let sender = sender.toUUID() else {
         owsFailDebug("sender was unexpectedly empty")
         return
     }
@@ -936,7 +936,7 @@ func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, g
         return
     }
 
-    obj.groupCallRingUpdate(groupId: groupId, ringId: ringId, sender: sender.uuid, update: update)
+    obj.groupCallRingUpdate(groupId: groupId, ringId: ringId, sender: sender, update: update)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -950,12 +950,12 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
     var finalJoinedMembers: [UUID] = []
 
     for index in 0..<joinedMembers.count {
-        guard let userId = joinedMembers.uuids[index].asData() else {
+        guard let userId = joinedMembers.uuids[index].toUUID() else {
             Logger.debug("missing userId")
             continue
         }
 
-        finalJoinedMembers.append(userId.uuid)
+        finalJoinedMembers.append(userId)
     }
 
     var finalMaxDevices: UInt32?
@@ -963,7 +963,7 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
         finalMaxDevices = maxDevices.value
     }
 
-    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.asData()?.uuid, eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount)
+    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.toUUID(), eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount)
 
     obj.handlePeekChanged(clientId: clientId, peekInfo: peekInfo)
 }
