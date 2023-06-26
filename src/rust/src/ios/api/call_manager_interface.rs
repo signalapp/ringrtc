@@ -473,6 +473,7 @@ pub struct AppInterface {
         eraId: AppByteSlice,
         maxDevices: AppOptionalUInt32,
         deviceCount: u32,
+        pendingUsers: AppUuidArray,
     ),
     ///
     pub handleEnded:

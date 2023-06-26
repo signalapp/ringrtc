@@ -1679,7 +1679,7 @@ impl AndroidPlatform {
     ) -> Result<JObject<'a>> {
         let joined_member_list = jni_new_arraylist(env, joined_members.len())?;
         for joined_member in joined_members {
-            let jni_opaque_user_id = match env.byte_array_from_slice(joined_member.as_ref()) {
+            let jni_opaque_user_id = match env.byte_array_from_slice(joined_member) {
                 Ok(v) => JObject::from(v),
                 Err(error) => {
                     error!("{:?}", error);
@@ -1710,12 +1710,31 @@ impl AndroidPlatform {
         let jni_max_devices = self.get_optional_u32_long_object(env, peek_info.max_devices)?;
         let jni_device_count = peek_info.device_count() as jlong;
 
+        let pending_users = peek_info.unique_pending_users();
+        let pending_user_list = jni_new_arraylist(env, pending_users.len())?;
+        for pending_user in pending_users {
+            let jni_opaque_user_id = match env.byte_array_from_slice(pending_user) {
+                Ok(v) => JObject::from(v),
+                Err(error) => {
+                    error!("{:?}", error);
+                    continue;
+                }
+            };
+
+            let result = pending_user_list.add(jni_opaque_user_id);
+            if result.is_err() {
+                error!("{:?}", result.err());
+                continue;
+            }
+        }
+
         let args = jni_args!((
             joined_member_list => java.util.List,
             jni_creator => [byte],
             jni_era_id => java.lang.String,
             jni_max_devices => java.lang.Long,
             jni_device_count => long,
+            pending_user_list => java.util.List,
         ) -> org.signal.ringrtc.PeekInfo);
         let result = env.call_static_method(
             self.class_cache.get_class(PEEK_INFO_CLASS)?,

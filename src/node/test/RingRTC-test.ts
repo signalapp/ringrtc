@@ -7,7 +7,7 @@
 
 import { assert, expect, use } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import {
   CallEndedReason,
   CallLinkRestrictions,
@@ -17,6 +17,7 @@ import {
   GroupCall,
   GroupCallEndReason,
   GroupCallKind,
+  GroupMemberInfo,
   HttpMethod,
   OfferType,
   PeekStatusCodes,
@@ -48,6 +49,10 @@ function generateOfferCallingMessage(callId: Long): CallingMessage {
       type: OfferType.AudioCall,
     },
   };
+}
+
+function sha256Hex(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
 }
 
 describe('RingRTC', () => {
@@ -356,6 +361,81 @@ describe('RingRTC', () => {
     testConversion(Long.MAX_VALUE.toString());
     testConversion((-Long.MAX_VALUE).toString());
     testConversion(Long.MIN_VALUE.toString());
+  });
+
+  it('can peek with pending clients', async () => {
+    const requestIdPromise = new Promise<number>((resolve, reject) => {
+      RingRTC.handleSendHttpRequest = (
+        requestId,
+        url,
+        method,
+        _headers,
+        _body
+      ) => {
+        try {
+          assert.isTrue(url.startsWith('sfu.example'));
+          assert.equal(method, HttpMethod.Get);
+          resolve(requestId);
+        } catch (e) {
+          reject(e);
+        }
+      };
+    });
+    const peekResponse = RingRTC.peekGroupCall(
+      'sfu.example',
+      Buffer.of(1, 2, 3),
+      [
+        new GroupMemberInfo(
+          Buffer.of(0x11, 0x11, 0x11, 0x11),
+          Buffer.from('11', 'utf-8')
+        ),
+        new GroupMemberInfo(
+          Buffer.of(0x22, 0x22, 0x22, 0x22),
+          Buffer.from('22', 'utf-8')
+        ),
+        new GroupMemberInfo(
+          Buffer.of(0x33, 0x33, 0x33, 0x33),
+          Buffer.from('33', 'utf-8')
+        ),
+      ]
+    );
+    const requestId = await requestIdPromise;
+    RingRTC.receivedHttpResponse(
+      requestId,
+      200,
+      Buffer.from(
+        `{
+        "conferenceId":"mesozoic",
+        "maxDevices":20,
+        "creator":"${sha256Hex('11')}",
+        "participants":[
+          {"opaqueUserId":"${sha256Hex('11')}","demuxId":${32 * 1}},
+          {"opaqueUserId":"${sha256Hex('22')}","demuxId":${32 * 2}},
+          {"opaqueUserId":"${sha256Hex('44')}","demuxId":${32 * 3}}
+        ],
+        "pendingClients":[
+          {"opaqueUserId":"${sha256Hex('33')}","demuxId":${32 * 4}},
+          {"opaqueUserId":"${sha256Hex('33')}","demuxId":${32 * 5}},
+          {"opaqueUserId":"${sha256Hex('44')}","demuxId":${32 * 6}},
+          {"demuxId":${32 * 7}}
+        ]
+      }`,
+        'utf-8'
+      )
+    );
+    const peekInfo = await peekResponse;
+    assert.equal(peekInfo.eraId, 'mesozoic');
+    assert.equal(peekInfo.deviceCount, 7);
+    assert.equal(peekInfo.maxDevices, 20);
+    assert.isTrue(peekInfo.creator?.equals(Buffer.of(0x11, 0x11, 0x11, 0x11)));
+    assert.deepEqual(peekInfo.devices, [
+      { demuxId: 32 * 1, userId: Buffer.of(0x11, 0x11, 0x11, 0x11) },
+      { demuxId: 32 * 2, userId: Buffer.of(0x22, 0x22, 0x22, 0x22) },
+      { demuxId: 32 * 3 },
+    ]);
+    assert.deepEqual(peekInfo.pendingUsers, [
+      Buffer.of(0x33, 0x33, 0x33, 0x33),
+    ]);
   });
 
   describe('CallLinkRootKey', () => {

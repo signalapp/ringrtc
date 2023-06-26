@@ -177,6 +177,7 @@ export interface PeekInfo {
   eraId?: string;
   maxDevices?: number;
   deviceCount: number;
+  pendingUsers: Array<GroupCallUserId>;
 }
 
 export enum PeekStatusCodes {
@@ -1111,7 +1112,7 @@ export class RingRTCType {
       if (result.success) {
         return result.value;
       } else {
-        return { devices: [], deviceCount: 0 };
+        return { devices: [], deviceCount: 0, pendingUsers: [] };
       }
     });
   }

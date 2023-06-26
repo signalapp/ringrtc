@@ -6,6 +6,7 @@
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
+    hash::{Hash, Hasher},
     iter::FromIterator,
     mem::size_of,
     net::SocketAddr,
@@ -858,6 +859,7 @@ struct State {
     // Derived from remote_devices but stored so we can fire
     // Observer::handle_peek_changed only when it changes
     joined_members: HashSet<UserId>,
+    pending_users_signature: u64,
 
     // Things we send to other clients via heartbeats
     // These are unset until the app sets them.
@@ -1076,6 +1078,7 @@ impl Client {
                     known_members: HashSet::new(),
 
                     joined_members: HashSet::new(),
+                    pending_users_signature: 0,
 
                     outgoing_heartbeat_state: Default::default(),
 
@@ -2321,14 +2324,36 @@ impl Client {
             .filter_map(|device| device.user_id.clone())
             .collect();
 
-        let old_era_id = match &state.last_peek_info {
-            Some(PeekInfo {
-                era_id: Some(era_id),
-                ..
-            }) => Some(era_id.clone()),
-            _ => None,
-        };
-        if is_first_peek_info || old_user_ids != new_user_ids || old_era_id != peek_info.era_id {
+        // When would this combined hash falsely claim that the set of pending users hasn't changed?
+        // If the combined hash of the user IDs that have been added and removed since the last peek
+        // comes out to the exact bit-pattern needed to match the change in `pending_devices.len()`.
+        // For example, if one person left and one person joined the pending list, their user IDs
+        // would have to have hashes of `x` and `-x`, so that combined they equal 0. This is
+        // extremely unlikely.
+        let new_pending_users_signature = peek_info
+            .unique_pending_users()
+            .into_iter()
+            .map(|user_id| {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                user_id.hash(&mut hasher);
+                hasher.finish()
+            })
+            .fold(peek_info.pending_devices.len() as u64, |a, b| {
+                // Note that this is an order-independent fold, so that two differently-ordered
+                // HashSets produce the same signature.
+                a.wrapping_add(b)
+            });
+
+        let old_era_id = state
+            .last_peek_info
+            .as_ref()
+            .and_then(|peek_info| peek_info.era_id.as_ref());
+
+        if is_first_peek_info
+            || old_user_ids != new_user_ids
+            || old_era_id != peek_info.era_id.as_ref()
+            || state.pending_users_signature != new_pending_users_signature
+        {
             state
                 .observer
                 .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
@@ -2473,6 +2498,7 @@ impl Client {
         // Do this later so that we can use new_user_ids above without running into
         // referencing issues
         state.joined_members = new_user_ids;
+        state.pending_users_signature = new_pending_users_signature;
 
         if should_request_again {
             // Something occurred while we were waiting for this update.
@@ -4244,6 +4270,22 @@ mod tests {
             self.wait_for_client_to_process();
         }
 
+        fn set_pending_clients_and_wait_until_applied(&self, clients: &[&TestClient]) {
+            let remote_devices = clients
+                .iter()
+                .map(|client| PeekDeviceInfo {
+                    demux_id: client.demux_id,
+                    user_id: Some(client.user_id.clone()),
+                })
+                .collect();
+            let peek_info = PeekInfo {
+                pending_devices: remote_devices,
+                ..self.default_peek_info.clone()
+            };
+            self.client.set_peek_result(Ok(peek_info));
+            self.wait_for_client_to_process();
+        }
+
         fn wait_for_client_to_process(&self) {
             let event = Event::default();
             let cloned = event.clone();
@@ -4842,6 +4884,7 @@ mod tests {
                     user_id: None,
                 },
             ],
+            pending_devices: vec![],
             creator: None,
             era_id: None,
             max_devices: None,
@@ -4872,6 +4915,7 @@ mod tests {
                 demux_id: 1,
                 user_id: Some(b"1".to_vec()),
             }],
+            pending_devices: vec![],
             creator: None,
             era_id: None,
             max_devices: None,
@@ -4921,6 +4965,7 @@ mod tests {
         peeker.observer.handle_peek_changed(
             0,
             &PeekInfo {
+                pending_devices: vec![],
                 creator: None,
                 era_id: None,
                 devices: vec![],
@@ -4934,6 +4979,7 @@ mod tests {
         peeker.observer.handle_peek_changed(
             0,
             &PeekInfo {
+                pending_devices: vec![],
                 creator: None,
                 era_id: None,
                 devices: vec![],
@@ -4965,6 +5011,43 @@ mod tests {
 
         peeker.set_remotes_and_wait_until_applied(&[]);
         assert_eq!(0, peeker.observer.joined_members().len());
+
+        peeker.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
+    fn pending_clients() {
+        let peeker = TestClient::new(vec![42], 42);
+        peeker.connect_join_and_wait_until_joined();
+
+        assert_eq!(0, peeker.observer.joined_members().len());
+
+        let joiner1 = TestClient::new(vec![1], 1);
+        let joiner2 = TestClient::new(vec![2], 2);
+
+        peeker.set_pending_clients_and_wait_until_applied(&[&joiner1]);
+        assert!(peeker
+            .observer
+            .peek_changed
+            .wait(Duration::from_millis(200)));
+
+        peeker.set_pending_clients_and_wait_until_applied(&[&joiner1, &joiner2]);
+        assert!(peeker
+            .observer
+            .peek_changed
+            .wait(Duration::from_millis(200)));
+
+        peeker.set_pending_clients_and_wait_until_applied(&[&joiner2, &joiner1]);
+        assert!(!peeker
+            .observer
+            .peek_changed
+            .wait(Duration::from_millis(200)));
+
+        peeker.set_pending_clients_and_wait_until_applied(&[&joiner1]);
+        assert!(peeker
+            .observer
+            .peek_changed
+            .wait(Duration::from_millis(200)));
 
         peeker.disconnect_and_wait_until_ended();
     }
@@ -5440,6 +5523,7 @@ mod tests {
                 user_id: None,
             }],
             max_devices: Some(1),
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5456,6 +5540,7 @@ mod tests {
                 user_id: None,
             }],
             max_devices: Some(2),
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5473,6 +5558,7 @@ mod tests {
                 user_id: None,
             }],
             max_devices: Some(2),
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5841,6 +5927,7 @@ mod tests {
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: vec![],
             max_devices: None,
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5857,6 +5944,7 @@ mod tests {
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..1].to_vec(),
             max_devices: None,
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5873,6 +5961,7 @@ mod tests {
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..2].to_vec(),
             max_devices: None,
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5889,6 +5978,7 @@ mod tests {
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..5].to_vec(),
             max_devices: None,
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5905,6 +5995,7 @@ mod tests {
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..20].to_vec(),
             max_devices: None,
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5943,6 +6034,7 @@ mod tests {
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..0].to_vec(),
             max_devices: None,
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));
@@ -5970,6 +6062,7 @@ mod tests {
         client1.client.set_peek_result(Ok(PeekInfo {
             devices: devices[..20].to_vec(),
             max_devices: None,
+            pending_devices: vec![],
             creator: None,
             era_id: None,
         }));

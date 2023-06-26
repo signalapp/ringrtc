@@ -519,6 +519,7 @@ fn to_js_peek_info<'a>(
 ) -> JsResult<'a, JsObject> {
     let PeekInfo {
         devices,
+        pending_devices: _pending_devices,
         creator,
         era_id,
         max_devices,
@@ -536,20 +537,26 @@ fn to_js_peek_info<'a>(
         js_devices.set(cx, i as u32, js_device)?;
     }
 
-    let js_creator: neon::handle::Handle<JsValue> = match creator {
+    let js_creator: Handle<JsValue> = match creator {
         Some(creator) => to_js_buffer(cx, creator).upcast(),
         None => cx.undefined().upcast(),
     };
-    let era_id: neon::handle::Handle<JsValue> = match era_id {
+    let era_id: Handle<JsValue> = match era_id {
         None => cx.undefined().upcast(),
         Some(id) => cx.string(id).upcast(),
     };
-    let max_devices: neon::handle::Handle<JsValue> = match max_devices {
+    let max_devices: Handle<JsValue> = match max_devices {
         None => cx.undefined().upcast(),
         Some(max_devices) => cx.number(*max_devices).upcast(),
     };
-    let device_count: neon::handle::Handle<JsValue> =
-        cx.number(peek_info.device_count() as u32).upcast();
+    let device_count: Handle<JsValue> = cx.number(peek_info.device_count() as u32).upcast();
+
+    let pending_users = peek_info.unique_pending_users();
+    let js_pending_users = JsArray::new(cx, pending_users.len() as u32);
+    for (i, user_id) in pending_users.iter().enumerate() {
+        let js_user_id = to_js_buffer(cx, user_id);
+        js_pending_users.set(cx, i as u32, js_user_id)?;
+    }
 
     let js_info = cx.empty_object();
     js_info.set(cx, "devices", js_devices)?;
@@ -557,6 +564,7 @@ fn to_js_peek_info<'a>(
     js_info.set(cx, "eraId", era_id)?;
     js_info.set(cx, "maxDevices", max_devices)?;
     js_info.set(cx, "deviceCount", device_count)?;
+    js_info.set(cx, "pendingUsers", js_pending_users)?;
     Ok(js_info)
 }
 

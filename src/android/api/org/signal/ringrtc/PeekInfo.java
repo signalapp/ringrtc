@@ -9,7 +9,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,51 +35,60 @@ public final class PeekInfo {
   private static final String TAG = PeekInfo.class.getSimpleName();
 
   @NonNull
-  private final Collection<UUID> joinedMembers;
+  private final List<UUID> joinedMembers;
   @Nullable
-  private final UUID             creator;
+  private final UUID       creator;
   @Nullable
-  private final String           eraId;
+  private final String     eraId;
   @Nullable
-  private final Long             maxDevices;
+  private final Long       maxDevices;
 
-  private final long             deviceCount;
+  private final long       deviceCount;
+  @NonNull
+  private final List<UUID> pendingUsers;
 
   public PeekInfo(
-    @NonNull  Collection<UUID> joinedMembers,
-    @Nullable UUID             creator,
-    @Nullable String           eraId,
-    @Nullable Long             maxDevices,
-              long             deviceCount
+    @NonNull  List<UUID> joinedMembers,
+    @Nullable UUID       creator,
+    @Nullable String     eraId,
+    @Nullable Long       maxDevices,
+              long       deviceCount,
+    @NonNull  List<UUID> pendingUsers
   ) {
     this.joinedMembers = joinedMembers;
     this.creator = creator;
     this.eraId = eraId;
     this.maxDevices = maxDevices;
     this.deviceCount = deviceCount;
+    this.pendingUsers = pendingUsers;
   }
 
   @CalledByNative
   private static PeekInfo fromNative(
-    @NonNull  List<byte[]> joinedMembers,
+    @NonNull  List<byte[]> rawJoinedMembers,
     @Nullable byte[]       creator,
     @Nullable String       eraId,
     @Nullable Long         maxDevices,
-              long         deviceCount
+              long         deviceCount,
+    @NonNull  List<byte[]> rawPendingUsers
   ) {
-    Log.i(TAG, "fromNative(): joinedMembers.size = " + joinedMembers.size());
+    Log.i(TAG, "fromNative(): joinedMembers.size = " + rawJoinedMembers.size());
 
-    // Create the collection, converting each provided byte[] to a UUID.
-    Collection<UUID> joinedGroupMembers = new ArrayList<UUID>(joinedMembers.size());
-    for (byte[] joinedMember : joinedMembers) {
-        joinedGroupMembers.add(Util.getUuidFromBytes(joinedMember));
+    // Create the collections, converting each provided byte[] to a UUID.
+    List<UUID> joinedMembers = new ArrayList<UUID>(rawJoinedMembers.size());
+    for (byte[] joinedMember : rawJoinedMembers) {
+        joinedMembers.add(Util.getUuidFromBytes(joinedMember));
+    }
+    List<UUID> pendingUsers = new ArrayList<UUID>(rawPendingUsers.size());
+    for (byte[] pendingUser : rawPendingUsers) {
+        pendingUsers.add(Util.getUuidFromBytes(pendingUser));
     }
 
-    return new PeekInfo(joinedGroupMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCount);
+    return new PeekInfo(joinedMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCount, pendingUsers);
   }
 
   @NonNull
-  public Collection<UUID> getJoinedMembers() {
+  public List<UUID> getJoinedMembers() {
     return joinedMembers;
   }
 
@@ -101,5 +109,10 @@ public final class PeekInfo {
 
   public long getDeviceCount() {
     return deviceCount;
+  }
+
+  @NonNull
+  public List<UUID> getPendingUsers() {
+    return pendingUsers;
   }
 }

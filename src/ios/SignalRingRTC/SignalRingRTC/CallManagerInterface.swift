@@ -940,7 +940,7 @@ func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, g
 }
 
 @available(iOSApplicationExtension, unavailable)
-func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32) {
+func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32, pendingUsers: AppUuidArray) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -948,7 +948,6 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     var finalJoinedMembers: [UUID] = []
-
     for index in 0..<joinedMembers.count {
         guard let userId = joinedMembers.uuids[index].toUUID() else {
             Logger.debug("missing userId")
@@ -958,12 +957,23 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
         finalJoinedMembers.append(userId)
     }
 
+    var finalPendingUsers: [UUID] = []
+    for index in 0..<pendingUsers.count {
+        guard let userId = pendingUsers.uuids[index].toUUID() else {
+            Logger.debug("missing userId")
+            continue
+        }
+
+        finalPendingUsers.append(userId)
+    }
+
+
     var finalMaxDevices: UInt32?
     if maxDevices.valid {
         finalMaxDevices = maxDevices.value
     }
 
-    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.toUUID(), eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount)
+    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.toUUID(), eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount, pendingUsers: finalPendingUsers)
 
     obj.handlePeekChanged(clientId: clientId, peekInfo: peekInfo)
 }

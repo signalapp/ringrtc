@@ -8,6 +8,7 @@ import XCTest
 import WebRTC
 import SignalCoreKit
 
+import CryptoKit
 import Nimble
 
 typealias TestCallManager = CallManager<OpaqueCallData, TestDelegate>
@@ -3206,6 +3207,71 @@ class SignalRingRTCTests: XCTestCase {
         let fromUnusualEra = callIdFromEra("mesozoic")
         XCTAssertNotEqual(fromHex, fromUnusualEra)
         XCTAssertNotEqual(0, fromUnusualEra)
+    }
+
+    func sha256Hex(_ input: String) -> String {
+        // Move to a local variable in case withUTF8 needs to change the representation.
+        var mutableInput = input
+        return mutableInput.withUTF8 { input in
+            var hash = SHA256()
+            hash.update(bufferPointer: UnsafeRawBufferPointer(input))
+            let digest = hash.finalize().withUnsafeBytes { Data($0) }
+            return digest.hexadecimalString
+        }
+    }
+
+    func testPeekWithPendingClients() throws {
+        let delegate = TestDelegate()
+        let httpClient = HTTPClient(delegate: delegate)
+        let sfu = SFUClient(httpClient: httpClient)
+
+        let user1 = UUID(uuidString: "11111111-7000-11eb-b32a-33b8a8a487a6")!
+        let user2 = UUID(uuidString: "22222222-7000-11eb-b32a-33b8a8a487a6")!
+        let user3 = UUID(uuidString: "33333333-7000-11eb-b32a-33b8a8a487a6")!
+
+        let groupMembers = [
+            GroupMember(userId: user1, userIdCipherText: "11".data(using: .utf8)!),
+            GroupMember(userId: user2, userIdCipherText: "22".data(using: .utf8)!),
+            GroupMember(userId: user3, userIdCipherText: "33".data(using: .utf8)!),
+        ]
+
+        let callbackCompleted = expectation(description: "callbackCompleted")
+        sfu.peek(request: PeekRequest(sfuURL: "sfu.example", membershipProof: Data([1, 2, 3]), groupMembers: groupMembers))
+            .done { result in
+                XCTAssertNil(result.errorStatusCode)
+                let peekInfo = result.peekInfo
+                XCTAssertEqual(peekInfo.eraId, "mesozoic")
+                XCTAssertEqual(peekInfo.deviceCount, 7)
+                XCTAssertEqual(peekInfo.maxDevices, 20)
+                XCTAssertEqual(peekInfo.creator, user1)
+                XCTAssertEqual(Set(peekInfo.joinedMembers), [user1, user2]);
+                XCTAssertEqual(peekInfo.pendingUsers, [user3]);
+                callbackCompleted.fulfill()
+            }
+
+        wait(for: [delegate.sentHttpRequestExpectation], timeout: 1.0)
+        XCTAssert(try XCTUnwrap(delegate.sentHttpRequestUrl).starts(with: "sfu.example"))
+        XCTAssertEqual(delegate.sentHttpRequestMethod, .get)
+        let requestId = try XCTUnwrap(delegate.sentHttpRequestId)
+        httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 200, body: """
+{
+  "conferenceId":"mesozoic",
+  "maxDevices":20,
+  "creator":"\(sha256Hex("11"))",
+  "participants":[
+    {"opaqueUserId":"\(sha256Hex("11"))","demuxId":\(32 * 1)},
+    {"opaqueUserId":"\(sha256Hex("22"))","demuxId":\(32 * 2)},
+    {"opaqueUserId":"\(sha256Hex("44"))","demuxId":\(32 * 3)}
+  ],
+  "pendingClients":[
+    {"opaqueUserId":"\(sha256Hex("33"))","demuxId":\(32 * 4)},
+    {"opaqueUserId":"\(sha256Hex("33"))","demuxId":\(32 * 5)},
+    {"opaqueUserId":"\(sha256Hex("44"))","demuxId":\(32 * 6)},
+    {"demuxId":\(32 * 7)}
+  ]
+}
+""".data(using: .utf8)))
+        waitForExpectations(timeout: 1.0)
     }
 
     // MARK: - Constants

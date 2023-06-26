@@ -668,6 +668,18 @@ impl Platform for IosPlatform {
             count: app_joined_members.len(),
         };
 
+        let mut app_pending_users: Vec<AppByteSlice> = Vec::new();
+
+        for member in peek_info.unique_pending_users() {
+            let app_pending_user = app_slice_from_bytes(Some(member));
+            app_pending_users.push(app_pending_user);
+        }
+
+        let app_pending_users_array = AppUuidArray {
+            uuids: app_pending_users.as_ptr(),
+            count: app_pending_users.len(),
+        };
+
         let app_creator = app_slice_from_bytes(peek_info.creator.as_ref());
         let app_era_id = app_slice_from_str(peek_info.era_id.as_ref());
 
@@ -682,6 +694,7 @@ impl Platform for IosPlatform {
             app_era_id,
             app_max_devices,
             device_count,
+            app_pending_users_array,
         );
     }
 
