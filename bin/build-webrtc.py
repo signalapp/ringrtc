@@ -68,7 +68,9 @@ def verify_build_host_platform(target_platform):
         if int(major_version) < int(expected_major_version):
             raise Exception(f"Invalid Host OS version. Expected: {expected_major_version} Actual: {major_version}")
     elif target_platform == 'windows':
-        raise Exception("Implement me")
+        expected_system = 'Windows'
+        if platform.system() != expected_system:
+            raise Exception(f"Invalid Host OS. Expected: {expected_system} Actual: {platform.system()}")
 
 
 def main() -> None:
@@ -202,7 +204,23 @@ Build type      : {}
                         env=env)
 
     elif args.target == 'windows':
-        raise Exception("Implement me")
+        # Prepare workspace
+        run_cmd(args.dry_run, ['bash', 'bin/prepare-workspace', 'windows'], env=env)
+
+        for build_type in build_types:
+            run_cmd(args.dry_run,
+                    ['bash', 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
+                    env=env)
+
+        # Prepare workspace for arm
+        env['OUTPUT_DIR'] = "out_arm"
+        run_cmd(args.dry_run, ['bash', 'bin/prepare-workspace', 'windows'], env=env)
+
+        env['TARGET_ARCH'] = "arm64"
+        for build_type in build_types:
+            run_cmd(args.dry_run,
+                    ['bash', 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
+                    env=env)
 
 
 if __name__ == '__main__':
