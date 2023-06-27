@@ -2408,11 +2408,6 @@ impl Client {
                 );
             }
 
-            if new_user_ids != old_user_ids {
-                state
-                    .observer
-                    .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
-            }
             // If someone was added, we must advance the send media key
             // and send it to everyone that was added.
             let added_demux_ids: HashSet<DemuxId> =
