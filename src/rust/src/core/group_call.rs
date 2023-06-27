@@ -3813,7 +3813,7 @@ mod tests {
                 }
                 val = wait_val
             }
-            Some(val.clone().unwrap())
+            Some(val.take().unwrap())
         }
     }
 
