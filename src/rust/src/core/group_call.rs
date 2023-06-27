@@ -5146,7 +5146,7 @@ mod tests {
                         },
                     ],
                     max_kbps: Some(NORMAL_MAX_RECEIVE_RATE.as_kbps() as u32),
-                    active_speaker_height: None,
+                    active_speaker_height: Some(0),
                 }),
                 ..Default::default()
             },
@@ -5237,7 +5237,7 @@ mod tests {
                             height: Some(0),
                         },
                     ],
-                    max_kbps: Some(20_000_000),
+                    max_kbps: Some(NORMAL_MAX_RECEIVE_RATE.as_kbps() as u32),
                     active_speaker_height: Some(1080),
                 }),
                 ..Default::default()
