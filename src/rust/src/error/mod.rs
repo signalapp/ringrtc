@@ -91,7 +91,7 @@ pub enum RingRtcError {
     // RTP Data error codes
     #[error("RTP data protocol error: {0}")]
     RtpDataProtocol(String),
-    #[error("Unable to send RTP data")]
+    #[error("Unable to send RTP data (if the SFU is running locally, remember to turn off RingRTC-AnyAddressPortsKillSwitch)")]
     SendRtp,
     #[error("Unable to receive RTP data")]
     ReceiveRtp,
