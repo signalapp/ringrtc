@@ -1878,6 +1878,82 @@ impl Client {
         }
     }
 
+    fn approve_or_deny_user(state: &mut State, user_id: UserId, approved: bool) {
+        use protobuf::group_call::{
+            device_to_sfu::{AdminAction, GenericAdminAction},
+            DeviceToSfu,
+        };
+
+        // Approval is implemented by demux ID (because we don't put user IDs in RTP messages).
+        // So we have to find a corresponding demux ID in the pending users list.
+        let Some(peek_info) = state.last_peek_info.as_ref() else {
+            error!("Cannot approve users without peek info");
+            return;
+        };
+
+        let action_to_log = if approved { "approval" } else { "denial" };
+
+        if let Some(demux_id) = peek_info
+            .pending_devices
+            .iter()
+            .find(|device| device.user_id.as_ref() == Some(&user_id))
+            .map(|device| device.demux_id)
+        {
+            let action = if approved {
+                AdminAction::Approve
+            } else {
+                AdminAction::Deny
+            };
+            let msg = DeviceToSfu {
+                admin_action: Some((action)(GenericAdminAction {
+                    target_demux_id: Some(demux_id),
+                })),
+                ..Default::default()
+            };
+
+            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+                warn!("Failed to send {}: {:?}", action_to_log, e);
+            }
+        } else if let Some(demux_id) = peek_info
+            .devices
+            .iter()
+            .find(|device| device.user_id.as_ref() == Some(&user_id))
+            .map(|device| device.demux_id)
+        {
+            info!("User has already been added to call with demux ID {demux_id}");
+        } else {
+            warn!("Failed to find user for {action_to_log} (they may have left or been denied by another admin)");
+        }
+    }
+
+    pub fn approve_user(&self, user_id: UserId) {
+        debug!(
+            "group_call::Client(outer)::approve_user(client_id: {})",
+            self.client_id
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::approve_user(client_id: {})",
+                state.client_id
+            );
+            Self::approve_or_deny_user(state, user_id, true);
+        });
+    }
+
+    pub fn deny_user(&self, user_id: UserId) {
+        debug!(
+            "group_call::Client(outer)::deny_user(client_id: {})",
+            self.client_id
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::deny_user(client_id: {})",
+                state.client_id
+            );
+            Self::approve_or_deny_user(state, user_id, false);
+        });
+    }
+
     pub fn remove_client(&self, other_client: DemuxId) {
         use protobuf::group_call::{
             device_to_sfu::{AdminAction, GenericAdminAction},
@@ -4226,22 +4302,7 @@ mod tests {
             assert!(self.observer.joined.wait(Duration::from_secs(5)));
         }
 
-        fn set_remotes_and_wait_until_applied(&self, clients: &[&TestClient]) {
-            let remote_devices = clients
-                .iter()
-                .map(|client| PeekDeviceInfo {
-                    demux_id: client.demux_id,
-                    user_id: Some(client.user_id.clone()),
-                })
-                .collect();
-            // Need to clone to pass over to the actor and set in observer.
-            let clients: Vec<TestClient> = clients.iter().copied().cloned().collect();
-            self.observer.set_recipients(clients.clone());
-            let peek_info = PeekInfo {
-                devices: remote_devices,
-                ..self.default_peek_info.clone()
-            };
-            self.client.set_peek_result(Ok(peek_info));
+        fn set_up_rtp_with_remotes(&self, clients: Vec<TestClient>) {
             let local_demux_id = self.demux_id;
             let sfu_rtp_packet_sender = self.sfu_rtp_packet_sender.clone();
             self.client.actor.send(move |state| {
@@ -4267,6 +4328,25 @@ mod tests {
                         }
                     }));
             });
+        }
+
+        fn set_remotes_and_wait_until_applied(&self, clients: &[&TestClient]) {
+            let remote_devices = clients
+                .iter()
+                .map(|client| PeekDeviceInfo {
+                    demux_id: client.demux_id,
+                    user_id: Some(client.user_id.clone()),
+                })
+                .collect();
+            // Need to clone to pass over to the actor and set in observer.
+            let clients: Vec<TestClient> = clients.iter().copied().cloned().collect();
+            self.observer.set_recipients(clients.clone());
+            let peek_info = PeekInfo {
+                devices: remote_devices,
+                ..self.default_peek_info.clone()
+            };
+            self.client.set_peek_result(Ok(peek_info));
+            self.set_up_rtp_with_remotes(clients);
             self.wait_for_client_to_process();
         }
 
@@ -4283,6 +4363,7 @@ mod tests {
                 ..self.default_peek_info.clone()
             };
             self.client.set_peek_result(Ok(peek_info));
+            self.set_up_rtp_with_remotes(vec![]);
             self.wait_for_client_to_process();
         }
 
@@ -5411,6 +5492,93 @@ mod tests {
         assert_eq!(
             DeviceToSfu {
                 admin_action: Some(AdminAction::Block(GenericAdminAction {
+                    target_demux_id: Some(32)
+                })),
+                ..Default::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
+    }
+
+    #[test]
+    fn device_to_sfu_approve() {
+        use protobuf::group_call::{
+            device_to_sfu::{AdminAction, GenericAdminAction},
+            DeviceToSfu,
+        };
+
+        let mut client1 = TestClient::new(vec![1], 1);
+
+        let remote1 = TestClient::new(vec![11], 16);
+        let remote2a = TestClient::new(vec![22], 32);
+        let remote2b = TestClient::new(vec![22], 48);
+
+        let (sender, receiver) = mpsc::channel();
+        client1.sfu_rtp_packet_sender = Some(sender);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_pending_clients_and_wait_until_applied(&[&remote1, &remote2a, &remote2b]);
+        client1.client.approve_user(vec![22]);
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                admin_action: Some(AdminAction::Approve(GenericAdminAction {
+                    target_demux_id: Some(32)
+                })),
+                ..Default::default()
+            },
+            DeviceToSfu::decode(&payload[..]).unwrap()
+        );
+    }
+
+    #[test]
+    fn approve_not_found() {
+        let mut client1 = TestClient::new(vec![1], 1);
+
+        let remote1 = TestClient::new(vec![11], 16);
+        let remote2a = TestClient::new(vec![22], 32);
+        let remote2b = TestClient::new(vec![22], 48);
+
+        let (sender, receiver) = mpsc::channel();
+        client1.sfu_rtp_packet_sender = Some(sender);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_pending_clients_and_wait_until_applied(&[&remote1, &remote2a, &remote2b]);
+        client1.client.approve_user(vec![33]);
+
+        receiver
+            .recv_timeout(Duration::from_millis(200))
+            .expect_err("No packets to send");
+    }
+
+    #[test]
+    fn device_to_sfu_deny() {
+        use protobuf::group_call::{
+            device_to_sfu::{AdminAction, GenericAdminAction},
+            DeviceToSfu,
+        };
+
+        let mut client1 = TestClient::new(vec![1], 1);
+
+        let remote1 = TestClient::new(vec![11], 16);
+        let remote2a = TestClient::new(vec![22], 32);
+        let remote2b = TestClient::new(vec![22], 48);
+
+        let (sender, receiver) = mpsc::channel();
+        client1.sfu_rtp_packet_sender = Some(sender);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_pending_clients_and_wait_until_applied(&[&remote1, &remote2a, &remote2b]);
+        client1.client.deny_user(vec![22]);
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        assert_eq!(1, header.ssrc);
+        assert_eq!(
+            DeviceToSfu {
+                admin_action: Some(AdminAction::Deny(GenericAdminAction {
                     target_demux_id: Some(32)
                 })),
                 ..Default::default()

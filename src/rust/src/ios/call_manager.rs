@@ -637,6 +637,30 @@ pub fn request_video(
     Ok(())
 }
 
+pub fn approve_user(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    other_user_id: UserId,
+) -> Result<()> {
+    info!("approve_user(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.approve_user(client_id, other_user_id);
+    Ok(())
+}
+
+pub fn deny_user(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    other_user_id: UserId,
+) -> Result<()> {
+    info!("deny_user(): id: {}", client_id);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.deny_user(client_id, other_user_id);
+    Ok(())
+}
+
 pub fn remove_client(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,

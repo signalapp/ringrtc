@@ -496,6 +496,44 @@ public final class GroupCall {
 
     /**
      *
+     * Approves a user to join the call.
+     *
+     * Should only be called if the current client is an admin for the call.
+     *
+     * @param userId  the ID of the user requesting to join the call, retrieved from PeekInfo
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void approveUser(@NonNull UUID userId)
+        throws CallException
+    {
+        Log.i(TAG, "approveUser():");
+
+        ringrtcApproveUser(nativeCallManager, this.clientId, Util.getBytesFromUuid(userId));
+    }
+
+    /**
+     *
+     * Denies a user permission to join the call.
+     *
+     * Should only be called if the current client is an admin for the call.
+     *
+     * @param userId  the ID of the user requesting to join the call, retrieved from PeekInfo
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void denyUser(@NonNull UUID userId)
+        throws CallException
+    {
+        Log.i(TAG, "denyUser():");
+
+        ringrtcDenyUser(nativeCallManager, this.clientId, Util.getBytesFromUuid(userId));
+    }
+
+    /**
+     *
      * Removes another client from the call.
      *
      * Should only be called if the current client is an admin for the call.
@@ -1201,6 +1239,18 @@ public final class GroupCall {
                                  long clientId,
                                  List<VideoRequest> renderedResolutions,
                                  int activeSpeakerHeight)
+        throws CallException;
+
+    private native
+        void ringrtcApproveUser(long nativeCallManager,
+                                long clientId,
+                                byte[] otherUserId)
+        throws CallException;
+
+    private native
+        void ringrtcDenyUser(long nativeCallManager,
+                             long clientId,
+                             byte[] otherUserId)
         throws CallException;
 
     private native

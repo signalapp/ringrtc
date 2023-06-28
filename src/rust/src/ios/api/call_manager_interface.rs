@@ -1271,6 +1271,46 @@ pub extern "C" fn ringrtcRequestVideo(
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub extern "C" fn ringrtcApproveUser(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    otherUserId: AppByteSlice,
+) {
+    info!("ringrtcApproveUser():");
+
+    let Some(user_id) = byte_vec_from_app_slice(&otherUserId) else {
+        error!("Invalid userId");
+        return;
+    };
+
+    let result = call_manager::approve_user(callManager as *mut IosCallManager, clientId, user_id);
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcDenyUser(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    otherUserId: AppByteSlice,
+) {
+    info!("ringrtcDenyUser():");
+
+    let Some(user_id) = byte_vec_from_app_slice(&otherUserId) else {
+        error!("Invalid userId");
+        return;
+    };
+
+    let result = call_manager::deny_user(callManager as *mut IosCallManager, clientId, user_id);
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub extern "C" fn ringrtcRemoveClient(
     callManager: *mut c_void,
     clientId: group_call::ClientId,

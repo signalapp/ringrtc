@@ -1138,6 +1138,36 @@ pub fn request_video(
     Ok(())
 }
 
+pub fn approve_user(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    other_user_id: jbyteArray,
+) -> Result<()> {
+    info!("approve_user(): id: {}", client_id);
+
+    let other_user_id = env.convert_byte_array(other_user_id)?;
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.approve_user(client_id, other_user_id);
+    Ok(())
+}
+
+pub fn deny_user(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    other_user_id: jbyteArray,
+) -> Result<()> {
+    info!("deny_user(): id: {}", client_id);
+
+    let other_user_id = env.convert_byte_array(other_user_id)?;
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.deny_user(client_id, other_user_id);
+    Ok(())
+}
+
 pub fn remove_client(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,

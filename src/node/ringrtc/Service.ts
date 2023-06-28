@@ -144,6 +144,8 @@ class NativeCallManager {
   Native.cm_resendMediaKeys;
 (NativeCallManager.prototype as any).setDataMode = Native.cm_setDataMode;
 (NativeCallManager.prototype as any).requestVideo = Native.cm_requestVideo;
+(NativeCallManager.prototype as any).approveUser = Native.cm_approveUser;
+(NativeCallManager.prototype as any).denyUser = Native.cm_denyUser;
 (NativeCallManager.prototype as any).removeClient = Native.cm_removeClient;
 (NativeCallManager.prototype as any).blockClient = Native.cm_blockClient;
 (NativeCallManager.prototype as any).setGroupMembers =
@@ -2305,6 +2307,16 @@ export class GroupCall {
   }
 
   // Called by UI
+  approveUser(otherUserId: Buffer): void {
+    this._callManager.approveUser(this._clientId, otherUserId);
+  }
+
+  // Called by UI
+  denyUser(otherUserId: Buffer): void {
+    this._callManager.denyUser(this._clientId, otherUserId);
+  }
+
+  // Called by UI
   removeClient(otherClientDemuxId: number): void {
     this._callManager.removeClient(this._clientId, otherClientDemuxId);
   }
@@ -2729,6 +2741,8 @@ export interface CallManager {
     resolutions: Array<VideoRequest>,
     activeSpeakerHeight: number
   ): void;
+  approveUser(clientId: GroupCallClientId, otherUserId: Buffer): void;
+  denyUser(clientId: GroupCallClientId, otherUserId: Buffer): void;
   removeClient(clientId: GroupCallClientId, otherClientDemuxId: number): void;
   blockClient(clientId: GroupCallClientId, otherClientDemuxId: number): void;
   setGroupMembers(
