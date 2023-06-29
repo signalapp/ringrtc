@@ -395,7 +395,7 @@ impl CallEndpoint {
                         let observer = js_object.as_ref().to_inner(cx);
                         let method_name = "processEvents";
                         let method = observer.get::<JsFunction, _, _>(cx, method_name)?;
-                        method.call(cx, observer, Vec::<Handle<JsValue>>::new())?;
+                        method.call(cx, observer, [])?;
                         Ok(())
                     }) {
                         Ok(_) => {}
@@ -2006,17 +2006,18 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
     let this = cx.this();
     let observer = this.get::<JsObject, _, _>(&mut cx, "observer")?;
 
-    let log_entries = std::mem::take(&mut *LOG_MESSAGES.lock().expect("lock log messages"));
-    for log_entry in log_entries {
-        let method_name = "onLogMessage";
-        let args: Vec<Handle<JsValue>> = vec![
-            cx.number(log_entry.level).upcast(),
-            cx.string(log_entry.file).upcast(),
-            cx.number(log_entry.line).upcast(),
-            cx.string(log_entry.message).upcast(),
-        ];
-        let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
-        method.call(&mut cx, observer, args)?;
+    {
+        let log_entries = std::mem::take(&mut *LOG_MESSAGES.lock().expect("lock log messages"));
+        let method = observer.get::<JsFunction, _, _>(&mut cx, "onLogMessage")?;
+        for log_entry in log_entries {
+            let args = [
+                cx.number(log_entry.level).upcast(),
+                cx.string(log_entry.file).upcast(),
+                cx.number(log_entry.line).upcast(),
+                cx.string(log_entry.message).upcast(),
+            ];
+            method.call(&mut cx, observer, args)?;
+        }
     }
 
     let events: Vec<Event> = with_call_endpoint(&mut cx, |endpoint| {
@@ -2096,7 +2097,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     ),
                 };
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
-                let args = vec![
+                let args = [
                     cx.string(peer_id).upcast(),
                     cx.number(maybe_device_id.unwrap_or(0) as f64).upcast(),
                     create_id_arg(&mut cx, call_id.as_u64()),
@@ -2110,7 +2111,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
             Event::CallState(peer_id, call_id, CallState::Incoming(call_media_type)) => {
                 let method_name = "onStartIncomingCall";
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.string(peer_id).upcast(),
                     create_id_arg(&mut cx, call_id.as_u64()),
                     cx.boolean(call_media_type == CallMediaType::Video).upcast(),
@@ -2121,7 +2122,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
             Event::CallState(peer_id, call_id, CallState::Outgoing(_call_media_type)) => {
                 let method_name = "onStartOutgoingCall";
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.string(peer_id).upcast(),
                     create_id_arg(&mut cx, call_id.as_u64()),
                 ];
@@ -2155,7 +2156,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     EndReason::ReceivedOfferExpired { age } => age,
                     _ => Duration::ZERO,
                 };
-                let args = vec![
+                let args = [
                     cx.string(peer_id).upcast(),
                     create_id_arg(&mut cx, call_id.as_u64()),
                     cx.string(reason_string).upcast(),
@@ -2189,7 +2190,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     CallState::Outgoing(_) => "outgoing",
                     CallState::Ended(_) => "ended",
                 };
-                let args = vec![
+                let args = [
                     cx.string(peer_id).upcast(),
                     cx.string(state_string).upcast(),
                 ];
@@ -2216,16 +2217,14 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 }
 
                 let method_name = "onRemoteVideoEnabled";
-                let args: Vec<Handle<JsValue>> =
-                    vec![cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
+                let args = [cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
             Event::RemoteSharingScreenChange(peer_id, enabled) => {
                 let method_name = "onRemoteSharingScreen";
-                let args: Vec<Handle<JsValue>> =
-                    vec![cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
+                let args = [cx.string(peer_id).upcast(), cx.boolean(enabled).upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2236,7 +2235,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 received_level,
             } => {
                 let method_name = "onAudioLevels";
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.string(peer_id).upcast(),
                     cx.number(captured_level).upcast(),
                     cx.number(received_level).upcast(),
@@ -2273,7 +2272,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         js_body.upcast()
                     }
                 };
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.number(request_id).upcast(),
                     cx.string(url).upcast(),
                     cx.number(http_method).upcast(),
@@ -2293,7 +2292,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let recipient_uuid = to_js_buffer(&mut cx, &recipient_uuid);
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
-                let args: Vec<Handle<JsValue>> = vec![recipient_uuid, message, urgency];
+                let args = [recipient_uuid, message, urgency];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2307,7 +2306,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let group_id = to_js_buffer(&mut cx, &group_id);
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
-                let args: Vec<Handle<JsValue>> = vec![group_id, message, urgency];
+                let args = [group_id, message, urgency];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2316,7 +2315,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             Event::GroupUpdate(GroupUpdate::RequestMembershipProof(client_id)) => {
                 let method_name = "requestMembershipProof";
 
-                let args: Vec<Handle<JsValue>> = vec![cx.number(client_id).upcast()];
+                let args = [cx.number(client_id).upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2324,7 +2323,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             Event::GroupUpdate(GroupUpdate::RequestGroupMembers(client_id)) => {
                 let method_name = "requestGroupMembers";
 
-                let args: Vec<Handle<JsValue>> = vec![cx.number(client_id).upcast()];
+                let args = [cx.number(client_id).upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2335,7 +2334,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             )) => {
                 let method_name = "handleConnectionStateChanged";
 
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.number(client_id).upcast(),
                     cx.number(connection_state as i32).upcast(),
                 ];
@@ -2357,7 +2356,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             Event::GroupUpdate(GroupUpdate::JoinStateChanged(client_id, join_state)) => {
                 let method_name = "handleJoinStateChanged";
 
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.number(client_id).upcast(),
                     cx.number(join_state.ordinal()).upcast(),
                     match join_state {
@@ -2485,7 +2484,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_remote_device_states.set(&mut cx, i as u32, js_remote_device_state)?;
                 }
 
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.number(client_id).upcast(),
                     js_remote_device_states.upcast(),
                 ];
@@ -2500,8 +2499,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method_name = "handlePeekChanged";
                 let js_info = to_js_peek_info(&mut cx, peek_info)?;
 
-                let args: Vec<Handle<JsValue>> =
-                    vec![cx.number(client_id).upcast(), js_info.upcast()];
+                let args = [cx.number(client_id).upcast(), js_info.upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2520,15 +2518,14 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
                 let method_name = "handlePeekResponse";
 
-                let args: Vec<Handle<JsValue>> =
-                    vec![cx.number(request_id).upcast(), js_status.upcast(), js_info];
+                let args = [cx.number(request_id).upcast(), js_status.upcast(), js_info];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
 
             Event::GroupUpdate(GroupUpdate::Ended(client_id, reason)) => {
                 let method_name = "handleEnded";
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.number(client_id).upcast(),
                     cx.number(reason as i32).upcast(),
                 ];
@@ -2575,7 +2572,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 }
 
                 let method_name = "handleAudioLevels";
-                let args: Vec<Handle<JsValue>> = vec![
+                let args = [
                     cx.number(client_id).upcast(),
                     cx.number(captured_level).upcast(),
                     js_received_levels.upcast(),
