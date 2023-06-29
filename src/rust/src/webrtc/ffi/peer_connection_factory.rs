@@ -9,7 +9,9 @@ use crate::webrtc::ffi::peer_connection::RffiPeerConnection;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
 #[cfg(feature = "simnet")]
 use crate::webrtc::injectable_network::RffiInjectableNetwork;
-use crate::webrtc::peer_connection_factory::{RffiIceServer, RffiPeerConnectionKind};
+use crate::webrtc::peer_connection_factory::{
+    RffiAudioConfig, RffiIceServer, RffiPeerConnectionKind,
+};
 #[cfg(feature = "native")]
 use std::os::raw::c_char;
 
@@ -43,7 +45,7 @@ impl webrtc::RefCounted for RffiAudioDeviceModule {}
 
 extern "C" {
     pub fn Rust_createPeerConnectionFactory(
-        use_new_audio_device_module: bool,
+        audio_config: RffiAudioConfig,
         use_injectable_network: bool,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner>;
     pub fn Rust_createPeerConnectionFactoryWrapper(

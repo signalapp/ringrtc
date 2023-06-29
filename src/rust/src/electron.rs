@@ -36,7 +36,7 @@ use crate::webrtc::media::{
 };
 use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_factory::{
-    self as pcf, AudioDevice, IceServer, PeerConnectionFactory,
+    self as pcf, AudioDevice, IceServer, PeerConnectionFactory, RffiAudioDeviceModuleType,
 };
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 use neon::types::buffer::TypedArray;
@@ -338,10 +338,17 @@ impl CallEndpoint {
     ) -> Result<Self> {
         // Relevant for both group calls and 1:1 calls
         let (events_sender, events_receiver) = channel::<Event>();
-        let peer_connection_factory = PeerConnectionFactory::new(pcf::Config {
-            use_new_audio_device_module,
-            ..Default::default()
-        })?;
+        let peer_connection_factory = PeerConnectionFactory::new(
+            pcf::AudioConfig {
+                audio_device_module_type: if use_new_audio_device_module {
+                    RffiAudioDeviceModuleType::New
+                } else {
+                    RffiAudioDeviceModuleType::Default
+                },
+                ..Default::default()
+            },
+            false,
+        )?;
         let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
         outgoing_audio_track.set_enabled(false);
         let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;

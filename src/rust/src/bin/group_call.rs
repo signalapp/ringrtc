@@ -190,11 +190,8 @@ fn main() {
         hkdf_extra_info,
     ));
     let observer = Observer::default();
-    let config = peer_connection_factory::Config {
-        use_injectable_network: false,
-        ..Default::default()
-    };
-    let peer_connection_factory = PeerConnectionFactory::new(config).unwrap();
+    let peer_connection_factory =
+        PeerConnectionFactory::new(peer_connection_factory::AudioConfig::default(), false).unwrap();
     let outgoing_audio_track = peer_connection_factory
         .create_outgoing_audio_track()
         .unwrap();

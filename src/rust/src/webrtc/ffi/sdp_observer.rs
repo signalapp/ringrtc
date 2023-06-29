@@ -78,6 +78,7 @@ extern "C" {
 
     pub fn Rust_sessionDescriptionToV4(
         v4: webrtc::ptr::Borrowed<RffiSessionDescription>,
+        enable_vp9: bool,
     ) -> webrtc::ptr::Owned<RffiConnectionParametersV4>;
 
     pub fn Rust_deleteV4(session_description: webrtc::ptr::Owned<RffiConnectionParametersV4>);
@@ -85,6 +86,8 @@ extern "C" {
     pub fn Rust_sessionDescriptionFromV4(
         offer: bool,
         v4: webrtc::ptr::Borrowed<RffiConnectionParametersV4>,
+        enable_tcc_audio: bool,
+        enable_vp9: bool,
     ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
     pub fn Rust_localDescriptionForGroupCall(

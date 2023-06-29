@@ -125,52 +125,108 @@ impl AudioDevice {
     }
 }
 
-/// Rust wrapper around WebRTC C++ PeerConnectionFactory object.
-#[derive(Clone, Debug)]
-#[allow(dead_code)] // use_new_audio_device_module is currently used only for Windows builds.
-pub struct PeerConnectionFactory {
-    rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
-    use_new_audio_device_module: bool,
-    playout_device_count: Option<u16>,
-    recording_device_count: Option<u16>,
+/// Stays in sync with RffiAudioDeviceModuleType in peer_connection_factory.h.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RffiAudioDeviceModuleType {
+    /// Use the default ADM provided by WebRTC for the platform.
+    #[default]
+    Default,
+    /// Use the `new` ADM where provided, such as ADM2 for Windows.
+    New,
+    /// Use a file-based ADM for testing and simulation.
+    File,
 }
 
-#[derive(Default)]
-pub struct Config {
-    pub use_new_audio_device_module: bool,
-    pub use_injectable_network: bool,
+/// Stays in sync with RffiAudioConfig in peer_connection_factory.h.
+#[repr(C)]
+pub struct RffiAudioConfig {
+    pub audio_device_module_type: RffiAudioDeviceModuleType,
+    pub input_file: webrtc::ptr::Borrowed<c_char>,
+    pub output_file: webrtc::ptr::Borrowed<c_char>,
+    pub high_pass_filter_enabled: bool,
+    pub aec_enabled: bool,
+    pub ns_enabled: bool,
+    pub agc_enabled: bool,
+}
+
+pub struct AudioConfig {
+    pub audio_device_module_type: RffiAudioDeviceModuleType,
+    pub input_file: CString,
+    pub output_file: CString,
+    pub high_pass_filter_enabled: bool,
+    pub aec_enabled: bool,
+    pub ns_enabled: bool,
+    pub agc_enabled: bool,
+}
+
+impl Default for AudioConfig {
+    fn default() -> Self {
+        Self {
+            audio_device_module_type: Default::default(),
+            input_file: Default::default(),
+            output_file: Default::default(),
+            high_pass_filter_enabled: true,
+            aec_enabled: true,
+            ns_enabled: true,
+            agc_enabled: true,
+        }
+    }
+}
+
+impl AudioConfig {
+    fn rffi(&self) -> RffiAudioConfig {
+        RffiAudioConfig {
+            audio_device_module_type: self.audio_device_module_type,
+            input_file: webrtc::ptr::Borrowed::from_ptr(self.input_file.as_ptr()),
+            output_file: webrtc::ptr::Borrowed::from_ptr(self.output_file.as_ptr()),
+            high_pass_filter_enabled: self.high_pass_filter_enabled,
+            aec_enabled: self.aec_enabled,
+            ns_enabled: self.ns_enabled,
+            agc_enabled: self.agc_enabled,
+        }
+    }
+}
+
+/// Rust wrapper around WebRTC C++ PeerConnectionFactory object.
+#[derive(Clone, Debug)]
+#[allow(dead_code)] // audio_device_module_type is currently used only for Windows builds.
+pub struct PeerConnectionFactory {
+    rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
+    audio_device_module_type: RffiAudioDeviceModuleType,
+    playout_device_count: Option<u16>,
+    recording_device_count: Option<u16>,
 }
 
 impl PeerConnectionFactory {
     /// Create a new Rust PeerConnectionFactory object from a WebRTC C++
     /// PeerConnectionFactory object.
-    pub fn new(config: Config) -> Result<Self> {
+    pub fn new(audio_config: AudioConfig, use_injectable_network: bool) -> Result<Self> {
         debug!("PeerConnectionFactory::new()");
 
-        let (rffi, use_new_audio_device_module) = {
-            let use_new_audio_device_module = config.use_new_audio_device_module;
+        let (rffi, audio_device_module_type) = {
             let rffi = unsafe {
                 webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(
-                    config.use_new_audio_device_module,
-                    config.use_injectable_network,
+                    audio_config.rffi(),
+                    use_injectable_network,
                 ))
             };
 
             #[cfg(target_os = "windows")]
-            if use_new_audio_device_module {
+            if audio_config.audio_device_module_type == RffiAudioDeviceModuleType::New {
                 info!("PeerConnectionFactory::new(): Using the new ADM for Windows");
             } else {
                 info!("PeerConnectionFactory::new(): Using the default ADM for Windows");
             }
 
-            (rffi, use_new_audio_device_module)
+            (rffi, audio_config.audio_device_module_type)
         };
         if rffi.is_null() {
             return Err(RingRtcError::CreatePeerConnectionFactory.into());
         }
         Ok(Self {
             rffi,
-            use_new_audio_device_module,
+            audio_device_module_type,
             playout_device_count: None,
             recording_device_count: None,
         })
@@ -193,7 +249,7 @@ impl PeerConnectionFactory {
         ));
         Self {
             rffi,
-            use_new_audio_device_module: false,
+            audio_device_module_type: RffiAudioDeviceModuleType::Default,
             playout_device_count: None,
             recording_device_count: None,
         }
@@ -339,7 +395,7 @@ impl PeerConnectionFactory {
         let mut devices = Vec::<AudioDevice>::new();
 
         #[cfg(target_os = "windows")]
-        let device_count = if self.use_new_audio_device_module {
+        let device_count = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
             // For the new ADM, if there is at least one real device, add slots
             // for the "default" and "default communications" device. When setting,
             // the new ADM already has them, but doesn't include them in the count.
@@ -383,7 +439,7 @@ impl PeerConnectionFactory {
         }
 
         #[cfg(target_os = "windows")]
-        if self.use_new_audio_device_module && devices.len() > 1 {
+        if self.audio_device_module_type == RffiAudioDeviceModuleType::New && devices.len() > 1 {
             // For the new ADM, swap the first two devices, so that the
             // "default communications" device is first and the "default"
             // device is second. The UI treats the first index as the
@@ -414,7 +470,7 @@ impl PeerConnectionFactory {
     #[cfg(feature = "native")]
     pub fn set_audio_playout_device(&mut self, index: u16) -> Result<()> {
         #[cfg(target_os = "windows")]
-        let index = if self.use_new_audio_device_module {
+        let index = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
             // For the new ADM, swap the first two devices back to ordinal if
             // either are selected.
             match index {
@@ -490,7 +546,7 @@ impl PeerConnectionFactory {
         let mut devices = Vec::<AudioDevice>::new();
 
         #[cfg(target_os = "windows")]
-        let device_count = if self.use_new_audio_device_module {
+        let device_count = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
             // For the new ADM, if there is at least one real device, add slots
             // for the "default" and "default communications" device. When setting,
             // the new ADM already has them, but doesn't include them in the count.
@@ -534,7 +590,7 @@ impl PeerConnectionFactory {
         }
 
         #[cfg(target_os = "windows")]
-        if self.use_new_audio_device_module && devices.len() > 1 {
+        if self.audio_device_module_type == RffiAudioDeviceModuleType::New && devices.len() > 1 {
             // For the new ADM, swap the first two devices, so that the
             // "default communications" device is first and the "default"
             // device is second. The UI treats the first index as the
@@ -565,7 +621,7 @@ impl PeerConnectionFactory {
     #[cfg(feature = "native")]
     pub fn set_audio_recording_device(&mut self, index: u16) -> Result<()> {
         #[cfg(target_os = "windows")]
-        let index = if self.use_new_audio_device_module {
+        let index = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
             // For the new ADM, swap the first two devices back to ordinal if
             // either are selected.
             match index {

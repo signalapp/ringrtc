@@ -194,7 +194,7 @@ impl SessionDescription {
         data_mode: DataMode,
     ) -> Result<protobuf::signaling::ConnectionParametersV4> {
         let rffi_v4_ptr = webrtc::ptr::Unique::from(unsafe {
-            sdp::Rust_sessionDescriptionToV4(self.rffi.borrow())
+            sdp::Rust_sessionDescriptionToV4(self.rffi.borrow(), true)
         });
         let rffi_v4 = rffi_v4_ptr.as_ref();
         if rffi_v4.is_none() {
@@ -271,7 +271,12 @@ impl SessionDescription {
             receive_video_codecs_size: rffi_video_codecs.len(),
         };
         let rffi = webrtc::ptr::Unique::from(unsafe {
-            sdp::Rust_sessionDescriptionFromV4(offer, webrtc::ptr::Borrowed::from_ptr(&rffi_v4))
+            sdp::Rust_sessionDescriptionFromV4(
+                offer,
+                webrtc::ptr::Borrowed::from_ptr(&rffi_v4),
+                false,
+                true,
+            )
         });
         if rffi.is_null() {
             return Err(RingRtcError::MungeSdp.into());

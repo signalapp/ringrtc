@@ -102,6 +102,14 @@ pub unsafe fn Rust_convertVideoFrameBufferToRgba(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_getVideoFrameBufferAsI420(
+    _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
+) -> webrtc::ptr::Borrowed<u8> {
+    info!("Rust_getVideoFrameBufferAsI420()");
+    webrtc::ptr::Borrowed::null()
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_copyAndRotateVideoFrameBuffer(
     _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     _rotation: VideoRotation,

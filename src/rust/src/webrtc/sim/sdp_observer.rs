@@ -112,6 +112,7 @@ pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_sessionDescriptionToV4(
     _session_description: webrtc::ptr::Borrowed<RffiSessionDescription>,
+    _enable_vp9: bool,
 ) -> webrtc::ptr::Owned<RffiConnectionParametersV4> {
     info!("Rust_sessionDescriptionToV4(): ");
     webrtc::ptr::Owned::from_ptr(Box::leak(Box::new(RffiConnectionParametersV4 {
@@ -131,6 +132,8 @@ pub unsafe fn Rust_deleteV4(_v4: webrtc::ptr::Owned<RffiConnectionParametersV4>)
 pub unsafe fn Rust_sessionDescriptionFromV4(
     offer: bool,
     _v4: webrtc::ptr::Borrowed<RffiConnectionParametersV4>,
+    _enable_tcc_audio: bool,
+    _enable_vp9: bool,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_sessionDescriptionFromV4(): ");
     if offer {

@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::slice;
+
 use crate::webrtc;
 
 pub use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
@@ -207,6 +209,23 @@ impl VideoFrame {
                 self.rffi_buffer.as_borrowed(),
                 rgba_buffer.as_mut_ptr(),
             )
+        }
+    }
+
+    /// Directly access the raw I420 data.
+    ///
+    /// Mostly used for testing.
+    pub fn as_i420(&self) -> Option<&[u8]> {
+        unsafe {
+            let ptr =
+                media::Rust_getVideoFrameBufferAsI420(self.rffi_buffer.as_borrowed()).as_ptr();
+            if ptr.is_null() {
+                return None;
+            }
+            Some(slice::from_raw_parts(
+                ptr,
+                self.width() as usize * self.height() as usize * 3 / 2,
+            ))
         }
     }
 }

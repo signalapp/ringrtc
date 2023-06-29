@@ -4,7 +4,9 @@
 //
 
 use crate::webrtc;
-use crate::webrtc::peer_connection_factory::{RffiIceServer, RffiPeerConnectionKind};
+use crate::webrtc::peer_connection_factory::{
+    RffiAudioConfig, RffiIceServer, RffiPeerConnectionKind,
+};
 use crate::webrtc::sim::media::{
     RffiAudioTrack, RffiVideoSource, RffiVideoTrack, FAKE_AUDIO_TRACK, FAKE_VIDEO_SOURCE,
     FAKE_VIDEO_TRACK,
@@ -27,7 +29,7 @@ pub type RffiAudioDeviceModule = u32;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createPeerConnectionFactory(
-    _use_new_audio_device_module: bool,
+    _audio_config: RffiAudioConfig,
     _use_injectable_network: bool,
 ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner> {
     info!("Rust_createPeerConnectionFactory()");

@@ -93,6 +93,9 @@ extern "C" {
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
         rgba_out: *mut u8,
     );
+    pub fn Rust_getVideoFrameBufferAsI420(
+        buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
+    ) -> webrtc::ptr::Borrowed<u8>;
     pub fn Rust_copyAndRotateVideoFrameBuffer(
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
         rotation: VideoRotation,

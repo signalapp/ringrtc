@@ -1007,7 +1007,7 @@ impl Client {
                 debug!("group_call::Client(inner)::new(client_id: {})", client_id);
 
                 let peer_connection_factory = match peer_connection_factory {
-                    None => match PeerConnectionFactory::new(pcf::Config::default()) {
+                    None => match PeerConnectionFactory::new(pcf::AudioConfig::default(), false) {
                         Ok(v) => v,
                         Err(err) => {
                             observer.handle_ended(
