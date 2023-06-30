@@ -169,7 +169,7 @@ fn main() {
     // Let it connect and ring before accepting the call.
     thread::sleep(Duration::from_secs(5));
     callee.accept_incoming_call(call_id);
-    caller.send_generated_video(640, 480, Duration::from_millis(33));
+    caller.send_generated_video(960, 720, Duration::from_millis(33));
 
     // Let this go for a while before hanging up
     thread::sleep(Duration::from_secs(5));

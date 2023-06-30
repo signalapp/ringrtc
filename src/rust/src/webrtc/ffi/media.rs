@@ -74,6 +74,12 @@ extern "C" {
         source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     );
+    pub fn Rust_adaptOutputVideoFormat(
+        source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
+        width: u16,
+        height: u16,
+        fps: u8,
+    );
     pub fn Rust_copyVideoFrameBufferFromI420(
         width: u32,
         height: u32,

@@ -182,12 +182,15 @@ export class GumVideoCapturer {
         deviceId: options.preferredDeviceId ?? this.preferredDeviceId,
         width: {
           max: options.maxWidth,
+          ideal: options.maxWidth,
         },
         height: {
           max: options.maxHeight,
+          ideal: options.maxHeight,
         },
         frameRate: {
           max: options.maxFramerate,
+          ideal: options.maxFramerate,
         },
       },
     };
@@ -345,13 +348,20 @@ export class GumVideoCapturer {
               );
               break;
             }
+
+            const visibleRect = frame.visibleRect;
+            if (!visibleRect) {
+              continue;
+            }
+
             await frame.copyTo(buffer);
             if (sender !== this.sender) {
               break;
             }
+
             sender.sendVideoFrame(
-              frame.codedWidth,
-              frame.codedHeight,
+              visibleRect.width,
+              visibleRect.height,
               format,
               buffer
             );

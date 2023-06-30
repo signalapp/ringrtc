@@ -752,6 +752,9 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         // This should be cleared at with "call concluded", but just in case
         // we'll clear here as well.
         endpoint.incoming_video_sink.clear();
+        endpoint
+            .outgoing_video_source
+            .adapt_output_format(960, 720, 30);
         endpoint.call_manager.proceed(
             call_id,
             call_context,
@@ -1247,6 +1250,10 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     };
 
     with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .outgoing_video_source
+            .adapt_output_format(640, 480, 30);
+
         let peer_connection_factory = endpoint.peer_connection_factory.clone();
         let outgoing_audio_track = endpoint.outgoing_audio_track.clone();
         let outgoing_video_track = endpoint.outgoing_video_track.clone();

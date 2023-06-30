@@ -250,6 +250,12 @@ impl VideoSource {
             media::Rust_pushVideoFrame(self.rffi.as_borrowed(), frame.rffi_buffer.as_borrowed());
         }
     }
+
+    pub fn adapt_output_format(&self, width: u16, height: u16, fps: u8) {
+        unsafe {
+            media::Rust_adaptOutputVideoFormat(self.rffi.as_borrowed(), width, height, fps);
+        }
+    }
 }
 
 /// Rust wrapper around WebRTC C++ VideoTrackInterface object.
