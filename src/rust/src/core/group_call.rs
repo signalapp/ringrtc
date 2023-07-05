@@ -1689,7 +1689,7 @@ impl Client {
                     err
                 );
             }
-            let send_rates = Self::compute_send_rates(state.joined_members.len(), sharing_screen);
+            let send_rates = Self::compute_send_rates(state.remote_devices.len(), sharing_screen);
             Self::set_send_rates_inner(state, send_rates);
         });
     }
