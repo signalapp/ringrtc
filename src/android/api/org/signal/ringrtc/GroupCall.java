@@ -824,10 +824,13 @@ public final class GroupCall {
         /** join() has not yet been called or leave() has been called or join() was called but failed. */
         NOT_JOINED,
 
-        /** join() has been called but a response from the SFU is pending. */
+        /** join() has been called, and RingRTC is waiting for a response from the SFU. */
         JOINING,
 
-        /** join() has been called and a response from the SFU has been received and a demuxId has been assigned.. */
+        /** join() has been called, and RingRTC is waiting to be let into the call. */
+        PENDING,
+
+        /** This device has been let into the call. */
         JOINED;
 
         @CalledByNative

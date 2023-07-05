@@ -1074,11 +1074,7 @@ impl Platform for AndroidPlatform {
     ) {
         info!("handle_join_state_changed():");
 
-        let join_state = match join_state {
-            group_call::JoinState::NotJoined(_) => 0,
-            group_call::JoinState::Joining => 1,
-            group_call::JoinState::Joined(_) => 2,
-        };
+        let join_state = join_state.ordinal();
 
         handle_state_change_via_jni!(
             self,

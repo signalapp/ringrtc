@@ -11,17 +11,18 @@ import SignalCoreKit
 @available(iOSApplicationExtension, unavailable)
 public enum ConnectionState: Int32 {
     case notConnected = 0
-    case connecting = 1
-    case connected = 2
-    case reconnecting = 3
+    case connecting
+    case connected
+    case reconnecting
 }
 
 /// Represents whether or not a user is joined to a group call and can exchange media.
 @available(iOSApplicationExtension, unavailable)
 public enum JoinState: Int32 {
     case notJoined = 0
-    case joining = 1
-    case joined = 2
+    case joining
+    case pending
+    case joined
 }
 
 /// If not ended purposely by the user, gives the reason why a group call ended.

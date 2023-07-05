@@ -2016,16 +2016,17 @@ export type GroupCallClientId = number;
 // Represents the connection state to a media server for a group call.
 export enum ConnectionState {
   NotConnected = 0,
-  Connecting = 1,
-  Connected = 2,
-  Reconnecting = 3,
+  Connecting,
+  Connected,
+  Reconnecting,
 }
 
 // Represents whether or not a user is joined to a group call and can exchange media.
 export enum JoinState {
   NotJoined = 0,
-  Joining = 1,
-  Joined = 2,
+  Joining,
+  Pending,
+  Joined,
 }
 
 // If not ended purposely by the user, gives the reason why a group call ended.

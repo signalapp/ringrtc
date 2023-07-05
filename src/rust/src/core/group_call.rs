@@ -331,8 +331,25 @@ pub enum JoinState {
     Joining,
 
     /// Join() has been called, a response from the SFU has been received,
-    /// and a DemuxId has been assigned.
+    /// and a DemuxId has been assigned...
+    /// but we haven't appeared in the list of active participants.
+    Pending(DemuxId),
+
+    /// Join() has been called, a response from the SFU has been received,
+    /// a DemuxId has been assigned, and we've appeared in the list of active participants.
     Joined(DemuxId),
+}
+
+impl JoinState {
+    pub fn ordinal(&self) -> i32 {
+        // Must be kept in sync with the Java, Swift, and TypeScript enums.
+        match self {
+            JoinState::NotJoined(_) => 0,
+            JoinState::Joining => 1,
+            JoinState::Pending(_) => 2,
+            JoinState::Joined(_) => 3,
+        }
+    }
 }
 
 // This really should go in JoinState and/or ConnectionState,
@@ -848,7 +865,6 @@ struct State {
     connection_state: ConnectionState,
     join_state: JoinState,
     remote_devices: RemoteDevices,
-    has_ever_been_participating_client: bool,
 
     // State that changes infrequently and is not sent to the observer.
     dhe_state: DheState,
@@ -1067,7 +1083,6 @@ impl Client {
                     join_state: JoinState::NotJoined(ring_id),
                     dhe_state: DheState::default(),
                     remote_devices: Default::default(),
-                    has_ever_been_participating_client: false,
 
                     remote_devices_request_state: match kind {
                         GroupCallKind::SignalGroup => {
@@ -1147,11 +1162,10 @@ impl Client {
                     ring_id, existing_ring_id
                 );
             }
-            JoinState::NotJoined(saved_ring_id) => {
-                debug_assert!(saved_ring_id.is_none());
+            JoinState::NotJoined(saved_ring_id @ None) => {
                 *saved_ring_id = Some(ring_id);
             }
-            JoinState::Joining | JoinState::Joined(_) => {
+            JoinState::Joining | JoinState::Pending(_) | JoinState::Joined(_) => {
                 warn!(
                     "ignoring ring {} for a call we have already joined or are currently joining",
                     ring_id
@@ -1405,11 +1419,8 @@ impl Client {
                 state.client_id
             );
             match state.join_state {
-                JoinState::Joined(_) => {
-                    warn!("Can't join when already joined.");
-                }
-                JoinState::Joining => {
-                    warn!("Can't join when already joining.");
+                JoinState::Joining | JoinState::Pending(_) | JoinState::Joined(_) => {
+                    warn!("Already attempted to join.");
                 }
                 JoinState::NotJoined(ring_id) => {
                     if let Some(peek_info) = &state.last_peek_info {
@@ -1504,24 +1515,26 @@ impl Client {
         match state.join_state {
             JoinState::NotJoined(_) => {
                 warn!("Can't leave when not joined.");
+                return;
             }
-            JoinState::Joining | JoinState::Joined(_) => {
+            JoinState::Joining => {
                 state.peer_connection.set_outgoing_media_enabled(false);
                 state.peer_connection.set_incoming_media_enabled(false);
-                Self::release_busy(state);
-
-                if let JoinState::Joined(local_demux_id) = state.join_state {
-                    Self::send_leaving_through_sfu_and_over_signaling(state, local_demux_id);
-                    Self::send_leave_to_sfu(state);
-                }
-                Self::set_join_state_and_notify_observer(state, JoinState::NotJoined(None));
-                state.next_heartbeat_time = None;
-                state.next_stats_time = None;
-                state.next_audio_levels_time = None;
-                state.next_membership_proof_request_time = None;
-                state.has_ever_been_participating_client = false;
+            }
+            JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) => {
+                state.peer_connection.set_outgoing_media_enabled(false);
+                state.peer_connection.set_incoming_media_enabled(false);
+                Self::send_leaving_through_sfu_and_over_signaling(state, local_demux_id);
+                Self::send_leave_to_sfu(state);
             }
         }
+
+        Self::release_busy(state);
+        Self::set_join_state_and_notify_observer(state, JoinState::NotJoined(None));
+        state.next_heartbeat_time = None;
+        state.next_stats_time = None;
+        state.next_audio_levels_time = None;
+        state.next_membership_proof_request_time = None;
     }
 
     pub fn disconnect(&self) {
@@ -1705,33 +1718,37 @@ impl Client {
                 state.client_id
             );
 
-            if let JoinState::Joined(local_demux_id) = state.join_state {
-                let user_ids: HashSet<UserId> = state
-                    .remote_devices
-                    .iter()
-                    .map(|rd| rd.user_id.clone())
-                    .collect();
+            match state.join_state {
+                JoinState::NotJoined(_) | JoinState::Joining => {
+                    // Wait until we've at least completed our join request to send media keys.
+                }
+                JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) => {
+                    let user_ids: HashSet<UserId> = state
+                        .remote_devices
+                        .iter()
+                        .map(|rd| rd.user_id.clone())
+                        .collect();
 
-                let (ratchet_counter, secret) = {
-                    let frame_crypto_context = state
-                        .frame_crypto_context
-                        .lock()
-                        .expect("Get lock for frame encryption context to advance media send key");
-                    frame_crypto_context.send_state()
-                };
+                    let (ratchet_counter, secret) = {
+                        let frame_crypto_context = state.frame_crypto_context.lock().expect(
+                            "Get lock for frame encryption context to advance media send key",
+                        );
+                        frame_crypto_context.send_state()
+                    };
 
-                info!(
-                    "Resending media keys to everyone (number of users: {})",
-                    user_ids.len()
-                );
-                for user_id in user_ids {
-                    Self::send_media_send_key_to_user_over_signaling(
-                        state,
-                        user_id,
-                        local_demux_id,
-                        ratchet_counter,
-                        secret,
+                    info!(
+                        "Resending media keys to everyone (number of users: {})",
+                        user_ids.len()
                     );
+                    for user_id in user_ids {
+                        Self::send_media_send_key_to_user_over_signaling(
+                            state,
+                            user_id,
+                            local_demux_id,
+                            ratchet_counter,
+                            secret,
+                        );
+                    }
                 }
             }
         });
@@ -1759,7 +1776,7 @@ impl Client {
 
             state.data_mode = data_mode;
             match state.join_state {
-                JoinState::NotJoined(_) | JoinState::Joining => {
+                JoinState::NotJoined(_) | JoinState::Joining | JoinState::Pending(_) => {
                     // The audio encoders will be configured with data_mode upon joining.
                 }
                 JoinState::Joined(_) => {
@@ -2072,14 +2089,16 @@ impl Client {
             state.client_id
         );
 
-        let joining_or_joined = match state.join_state {
-            JoinState::Joined(_) | JoinState::Joining => true,
-            JoinState::NotJoined(_) => false,
+        match state.join_state {
+            JoinState::NotJoined(_) => {
+                // Nothing to do.
+            }
+            JoinState::Joining | JoinState::Pending(_) | JoinState::Joined(_) => {
+                // This will send an update after changing the join state.
+                Self::leave_inner(state);
+            }
         };
-        if joining_or_joined {
-            // This will send an update after changing the join state.
-            Self::leave_inner(state);
-        }
+
         match state.connection_state {
             ConnectionState::NotConnected => {
                 warn!("Can't disconnect when not connected.");
@@ -2163,10 +2182,15 @@ impl Client {
                         warn!("The SFU completed joining before join() was requested.");
                     }
                     JoinState::Joining => {
-                        // The call to set_peek_result_inner needs the join state to be joined.
-                        // But make sure to fire observer.handle_join_state_changed after
-                        // set_peek_result_inner so that state.remote_devices are filled in.
-                        state.join_state = JoinState::Joined(local_demux_id);
+                        // We just now appeared in the participants list (unless we're pending
+                        // approval) and possibly even updated the eraId. Request this before doing
+                        // anything else because it'll take a while for the app to get back to us.
+                        Self::request_remote_devices_as_soon_as_possible(state);
+
+                        // The call to set_peek_result_inner needs the demux ID to be set in the
+                        // join state. But make sure to fire observer.handle_join_state_changed
+                        // after set_peek_result_inner so that state.remote_devices are filled in.
+                        state.join_state = JoinState::Pending(local_demux_id);
                         if let Some(peek_info) = &state.last_peek_info {
                             // TODO: Do the same processing without making it look like we just
                             // got an update from the server even though the update actually came
@@ -2185,9 +2209,15 @@ impl Client {
                                 );
                             }
                         }
-                        state
-                            .observer
-                            .handle_join_state_changed(state.client_id, state.join_state);
+                        // Just in case, check if the cached peek info happened to have the local
+                        // device in it already (possible if the peek raced with the join request).
+                        // In that case, set_peek_info_inner will have notified the observer about
+                        // the join state change already.
+                        if matches!(state.join_state, JoinState::Pending(_)) {
+                            state
+                                .observer
+                                .handle_join_state_changed(state.client_id, state.join_state);
+                        }
 
                         if creator.is_some() {
                             // Check if we're permitted to ring
@@ -2214,16 +2244,9 @@ impl Client {
                             }
                         }
 
-                        // We just now appeared in the participants list, and possibly even updated
-                        // the eraId.
-                        Self::request_remote_devices_as_soon_as_possible(state);
                         state.next_stats_time = Some(Instant::now() + STATS_INITIAL_OFFSET);
-
-                        state
-                            .peer_connection
-                            .configure_audio_encoders(&AudioEncoderConfig::default());
                     }
-                    JoinState::Joined(_) => {
+                    JoinState::Pending(_) | JoinState::Joined(_) => {
                         warn!("The SFU completed joining more than once.");
                     }
                 };
@@ -2402,7 +2425,8 @@ impl Client {
         let new_user_ids: HashSet<UserId> = peek_info
             .devices
             .iter()
-            // Note: this ignores users that aren't in the group
+            // Note: this ignores users that aren't in the group, but does include ourselves.
+            // This is relevant because we may have multiple devices in the call.
             .filter_map(|device| device.user_id.clone())
             .collect();
 
@@ -2441,8 +2465,10 @@ impl Client {
                 .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
         }
 
-        if let (JoinState::Joined(local_demux_id), DheState::Negotiated { srtp_keys }) =
-            (&state.join_state, &state.dhe_state)
+        if let (
+            JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id),
+            DheState::Negotiated { srtp_keys },
+        ) = (&state.join_state, &state.dhe_state)
         {
             let local_demux_id = *local_demux_id;
             // We remember these before changing state.remote_devices so we can calculate changes after.
@@ -2457,13 +2483,14 @@ impl Client {
                     .map(|rd| (rd.demux_id, rd))
                     .collect();
             let added_time = SystemTime::now();
+            let mut local_device_is_participant = false;
             state.remote_devices = peek_info
                 .devices
                 .iter()
                 .filter_map(|device| {
                     if device.demux_id == local_demux_id {
+                        local_device_is_participant = true;
                         // Don't add a remote device to represent the local device.
-                        state.has_ever_been_participating_client = true;
                         return None;
                     }
                     device.user_id.as_ref().map(|user_id| {
@@ -2514,6 +2541,16 @@ impl Client {
                     RemoteDevicesChangedReason::DemuxIdsChanged,
                 );
             }
+            // Make sure not to notify for the updated join state until the remote devices have been
+            // updated.
+            let newly_joined =
+                local_device_is_participant && matches!(state.join_state, JoinState::Pending(_));
+            if newly_joined {
+                Self::set_join_state_and_notify_observer(state, JoinState::Joined(local_demux_id));
+                state
+                    .peer_connection
+                    .configure_audio_encoders(&AudioEncoderConfig::default());
+            }
 
             // If someone was added, we must advance the send media key
             // and send it to everyone that was added.
@@ -2554,7 +2591,9 @@ impl Client {
                     secret,
                 );
             }
-            if new_demux_ids.len() != old_demux_ids.len() {
+            if newly_joined
+                || (local_device_is_participant && new_demux_ids.len() != old_demux_ids.len())
+            {
                 let send_rates = Self::compute_send_rates(
                     new_demux_ids.len(),
                     state
@@ -2664,7 +2703,9 @@ impl Client {
                 let ratchet_counter: frame_crypto::RatchetCounter = 0;
                 let secret = frame_crypto::random_secret(&mut rand::rngs::OsRng);
 
-                if let JoinState::Joined(local_demux_id) = state.join_state {
+                if let JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) =
+                    state.join_state
+                {
                     let user_ids: HashSet<UserId> = state
                         .remote_devices
                         .iter()
@@ -2734,7 +2775,9 @@ impl Client {
                 .expect("Get lock for frame encryption context to advance media send key");
             frame_crypto_context.advance_send_ratchet()
         };
-        if let JoinState::Joined(local_demux_id) = state.join_state {
+        if let JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) =
+            state.join_state
+        {
             info!(
                 "Sending newly advanced key to users with added devices (number of users: {})",
                 users_with_added_devices.len()
@@ -2843,7 +2886,9 @@ impl Client {
             "Sending pending media key to users with added devices (number of users: {}).",
             users_with_added_devices.len()
         );
-        if let JoinState::Joined(local_demux_id) = state.join_state {
+        if let JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) =
+            state.join_state
+        {
             if let KeyRotationState::Pending { secret, .. } = state.media_send_key_rotation_state {
                 for user_id in users_with_added_devices.iter() {
                     Self::send_media_send_key_to_user_over_signaling(
@@ -3167,7 +3212,7 @@ impl Client {
             "group_call::Client(inner)::send_data_to_sfu(client_id: {}, message: {:?})",
             state.client_id, message,
         );
-        if let JoinState::Joined(_) = state.join_state {
+        if let JoinState::Pending(_) | JoinState::Joined(_) = state.join_state {
             let seqnum = state.rtp_data_to_sfu_next_seqnum;
             state.rtp_data_to_sfu_next_seqnum = state.rtp_data_to_sfu_next_seqnum.wrapping_add(1);
 
@@ -3287,7 +3332,7 @@ impl Client {
 
     fn handle_removed_received(&self) {
         self.actor.send(move |state| {
-            if state.has_ever_been_participating_client {
+            if matches!(state.join_state, JoinState::Joined(_)) {
                 Self::end(state, EndReason::RemovedFromCall);
             } else {
                 Self::end(state, EndReason::DeniedRequestToJoinCall);
@@ -4292,19 +4337,27 @@ mod tests {
             )
             .expect("Start Client");
             Self {
-                user_id,
+                user_id: user_id.clone(),
                 demux_id,
                 sfu_client,
                 observer,
                 client,
                 sfu_rtp_packet_sender: None,
-                default_peek_info: PeekInfo::default(),
+                default_peek_info: PeekInfo {
+                    devices: vec![PeekDeviceInfo {
+                        demux_id,
+                        user_id: Some(user_id),
+                    }],
+                    ..Default::default()
+                },
             }
         }
 
         fn connect_join_and_wait_until_joined(&self) {
             self.client.connect();
             self.client.join();
+            self.client
+                .set_peek_result(Ok(self.default_peek_info.clone()));
             assert!(self.observer.joined.wait(Duration::from_secs(5)));
         }
 
@@ -4455,7 +4508,6 @@ mod tests {
 
     fn set_group_and_wait_until_applied(clients: &[&TestClient]) {
         for client in clients {
-            // We're going to be lazy and not remove ourselves.  It shouldn't matter.
             client.set_remotes_and_wait_until_applied(clients);
         }
         for client in clients {
@@ -4796,7 +4848,8 @@ mod tests {
 
         // Client3 is pretending to have demux ID 1 when sending media keys
         let mut client3 = TestClient::with_sfu_client(vec![3], 3, FakeSfuClient::new(1, None));
-        client3.connect_join_and_wait_until_joined();
+        client3.client.connect();
+        client3.client.join();
 
         set_group_and_wait_until_applied(&[&client1, &client2, &client3]);
 
@@ -5107,7 +5160,10 @@ mod tests {
         let peeker = TestClient::new(vec![42], 42);
         peeker.connect_join_and_wait_until_joined();
 
-        assert_eq!(0, peeker.observer.joined_members().len());
+        assert_eq!(
+            vec![peeker.user_id.clone()],
+            peeker.observer.joined_members()
+        );
 
         let joiner1 = TestClient::new(vec![1], 1);
         let joiner2 = TestClient::new(vec![2], 2);
@@ -5603,9 +5659,13 @@ mod tests {
         client1.client.connect();
         client1.wait_for_client_to_process();
 
-        client1.set_remotes_and_wait_until_applied(&[&client2, &client3]);
+        client1.set_remotes_and_wait_until_applied(&[&client1, &client2, &client3]);
         assert_eq!(
-            hash_set(vec![client2.user_id, client3.user_id]),
+            hash_set(vec![
+                client1.user_id.clone(),
+                client2.user_id,
+                client3.user_id
+            ]),
             hash_set(client1.observer.joined_members())
         );
 
@@ -5771,7 +5831,15 @@ mod tests {
         let client3 = TestClient::new(vec![3], 3);
         let client4 = TestClient::new(vec![4], 4);
         client1.connect_join_and_wait_until_joined();
-        client1.set_remotes_and_wait_until_applied(&[&client3, &client4]);
+        client1.wait_for_client_to_process();
+        assert_eq!(
+            1,
+            client1
+                .observer
+                .handle_remote_devices_changed_invocation_count()
+        );
+
+        client1.set_remotes_and_wait_until_applied(&[&client1, &client3, &client4]);
         assert_eq!(vec![3, 4], client1.speakers());
         assert_eq!(
             1,
@@ -6051,7 +6119,8 @@ mod tests {
     fn removal_before_approval() {
         let client1 = TestClient::new(vec![1], 1);
         let client2 = TestClient::new(vec![2], 2);
-        client1.connect_join_and_wait_until_joined();
+        client1.client.connect();
+        client1.client.join();
         client1.set_remotes_and_wait_until_applied(&[&client2]);
 
         client1.client.handle_removed_received();
@@ -6065,7 +6134,8 @@ mod tests {
     fn removal_after_approval() {
         let client1 = TestClient::new(vec![1], 1);
         let client2 = TestClient::new(vec![2], 2);
-        client1.connect_join_and_wait_until_joined();
+        client1.client.connect();
+        client1.client.join();
         client1.set_remotes_and_wait_until_applied(&[&client2, &client1]);
 
         client1.client.handle_removed_received();
@@ -6078,7 +6148,7 @@ mod tests {
     #[test]
     fn send_rates() {
         init_logging();
-        let client1 = TestClient::new(vec![1], 1);
+        let client1 = TestClient::new(b"1".to_vec(), 1);
         client1.connect_join_and_wait_until_joined();
         assert_eq!(
             Some(SendRates {
@@ -6206,7 +6276,7 @@ mod tests {
         );
 
         client1.client.set_peek_result(Ok(PeekInfo {
-            devices: devices[..0].to_vec(),
+            devices: devices[..1].to_vec(),
             max_devices: None,
             pending_devices: vec![],
             creator: None,

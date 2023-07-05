@@ -2359,14 +2359,10 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
                 let args: Vec<Handle<JsValue>> = vec![
                     cx.number(client_id).upcast(),
-                    cx.number(match join_state {
-                        group_call::JoinState::NotJoined(_) => 0,
-                        group_call::JoinState::Joining => 1,
-                        group_call::JoinState::Joined(_) => 2,
-                    })
-                    .upcast(),
+                    cx.number(join_state.ordinal()).upcast(),
                     match join_state {
-                        group_call::JoinState::Joined(demux_id) => cx.number(demux_id).upcast(),
+                        group_call::JoinState::Pending(demux_id)
+                        | group_call::JoinState::Joined(demux_id) => cx.number(demux_id).upcast(),
                         _ => cx.null().upcast(),
                     },
                 ];

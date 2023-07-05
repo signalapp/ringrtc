@@ -587,11 +587,7 @@ impl Platform for IosPlatform {
         (self.app_interface.handleJoinStateChanged)(
             self.app_interface.object,
             client_id,
-            match join_state {
-                group_call::JoinState::NotJoined(_) => 0,
-                group_call::JoinState::Joining => 1,
-                group_call::JoinState::Joined(_) => 2,
-            },
+            join_state.ordinal(),
         );
     }
 
