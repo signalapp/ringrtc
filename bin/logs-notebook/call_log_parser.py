@@ -54,9 +54,7 @@ class Call():
         ].plot(subplots=True, figsize=(10,10), grid=True)
 
     def describe_audio_send(self) -> None:
-        self.audio_send[
-            ['audio_energy', 'bitrate', 'remote_packets_lost_pct', 'remote_jitter', 'remote_round_trip_time', 'remote_mos']
-        ].plot(subplots=True, figsize=(10,10), grid=True)
+        self.audio_send[[x for x in list(self.audio_send.columns.values) if "ssrc" != x]].plot(subplots=True, figsize=(10,10), grid=True)
 
     def describe_audio_recv(self, ssrc: Optional[int] = None) -> None:
         if self.type == GROUP_CALL_TYPE:
@@ -66,9 +64,7 @@ class Call():
         if ssrc is not None:
             df = self.audio_recv[self.audio_recv.ssrc == ssrc]
 
-        df[
-            ['audio_energy', 'bitrate', 'packets_lost_pct', 'jitter', 'mos']
-        ].plot(subplots=True, figsize=(10,10), grid=True)
+        df[[x for x in list(df.columns.values) if "ssrc" != x]].plot(subplots=True, figsize=(10,10), grid=True)
 
     def describe_video_send(self, layer: Optional[int] = None) -> None:
         if layer is None and self.type == GROUP_CALL_TYPE:
@@ -84,7 +80,7 @@ class Call():
         ssrc = base_ssrc + (layer * 2)
 
         ax = self.video_send[self.video_send.ssrc == ssrc][
-            ['height', 'framerate', 'bitrate', 'key_frames_encoded', 'remote_packets_lost_pct', 'remote_jitter', 'remote_round_trip_time', 'retransmitted_bitrate', 'nack_count', 'pli_count']
+            [x for x in list(self.video_send.columns.values) if "ssrc" != x]
         ].plot(subplots=True, figsize=(10,15), grid=True, title=title)[0]
 
         if title is not None:
@@ -103,7 +99,7 @@ class Call():
             df = self.video_recv[self.video_recv.ssrc == ssrc]
 
         df[
-            ['height', 'framerate', 'bitrate', 'key_frames_decoded', 'packets_lost_pct']
+            [x for x in list(df.columns.values) if "ssrc" != x]
         ].plot(subplots=True, figsize=(10,10), grid=True)
 
     def describe_sfu_recv(self) -> None:
@@ -310,6 +306,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
             ('packets_lost_pct', '%'),
             ('remote_packets_lost_pct', '%'),
             ('jitter', 'ms'),
+            ('jitter_buffer_delay', 'ms'),
             ('remote_jitter', 'ms'),
             ('current_round_trip_time', 'ms'),
             ('remote_round_trip_time', 'ms'),
