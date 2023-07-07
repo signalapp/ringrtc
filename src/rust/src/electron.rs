@@ -12,7 +12,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::common::{CallId, CallMediaType, DataMode, DeviceId, Result};
+use crate::common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result};
 use crate::core::call_manager::CallManager;
 use crate::core::group_call;
 use crate::core::group_call::{GroupId, SignalingMessageUrgency};
@@ -339,7 +339,7 @@ impl CallEndpoint {
         // Relevant for both group calls and 1:1 calls
         let (events_sender, events_receiver) = channel::<Event>();
         let peer_connection_factory = PeerConnectionFactory::new(
-            pcf::AudioConfig {
+            &pcf::AudioConfig {
                 audio_device_module_type: if use_new_audio_device_module {
                     RffiAudioDeviceModuleType::New
                 } else {
@@ -743,7 +743,6 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         let call_context = NativeCallContext::new(
             hide_ip,
             ice_server,
-            50,
             endpoint.outgoing_audio_track.clone(),
             endpoint.outgoing_video_track.clone(),
             endpoint.incoming_video_sink.clone(),
@@ -758,7 +757,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint.call_manager.proceed(
             call_id,
             call_context,
-            DataMode::from_i32(data_mode),
+            CallConfig::default().with_data_mode(DataMode::from_i32(data_mode)),
             audio_levels_interval,
         )?;
         Ok(())

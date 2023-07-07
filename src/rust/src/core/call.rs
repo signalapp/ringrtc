@@ -16,7 +16,7 @@ use futures::future::TryFutureExt;
 use x25519_dalek::StaticSecret;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DataMode, DeviceId, Result,
+    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DeviceId, Result,
 };
 use crate::core::call_fsm::{CallEvent, CallStateMachine};
 use crate::core::call_manager::CallManager;
@@ -557,7 +557,7 @@ where
     /// - handle the previously stored pending Offer and ICE Candidates
     pub fn proceed(
         &mut self,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         info!("proceed():");
@@ -577,7 +577,7 @@ where
                         remote_device_id,
                         ConnectionType::Incoming,
                         pending_call.received.offer.latest_version(),
-                        data_mode,
+                        call_config,
                         audio_levels_interval,
                     )?;
                     let answer = connection
@@ -610,11 +610,11 @@ where
                     0,
                     ConnectionType::OutgoingParent,
                     signaling::Version::V4,
-                    data_mode,
+                    call_config,
                     audio_levels_interval,
                 )?;
                 let (local_secret, ice_gatherer, offer) =
-                    parent_connection.start_outgoing_parent(self.media_type, data_mode)?;
+                    parent_connection.start_outgoing_parent(self.media_type)?;
 
                 // Keep around so that it's not closed until all the connections are closed.
                 *(self.forking.lock()?) = Some(ForkingState {
@@ -650,14 +650,14 @@ where
             if let Some(forking) = maybe_forking.as_mut() {
                 info!("received_answer from device {}; forking enabled, so inject into connection_map", sender_device_id);
                 let call_manager = self.call_manager()?;
-                let data_mode = forking.parent_connection.local_data_mode()?;
+                let call_config = forking.parent_connection.call_config();
                 let audio_levels_interval = forking.parent_connection.audio_levels_interval();
                 let mut child_connection = call_manager.create_connection(
                     self,
                     sender_device_id,
                     ConnectionType::OutgoingChild,
                     received.answer.latest_version(),
-                    data_mode,
+                    call_config.clone(),
                     audio_levels_interval,
                 )?;
                 child_connection.start_outgoing_child(
@@ -1010,11 +1010,11 @@ where
     /// Inject a call Proceed event into the FSM.
     pub fn inject_proceed(
         &mut self,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         let event = CallEvent::Proceed {
-            data_mode,
+            call_config,
             audio_levels_interval,
         };
         self.inject_event(event)

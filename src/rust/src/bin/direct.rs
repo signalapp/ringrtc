@@ -5,6 +5,7 @@
 
 use log::{debug, info};
 
+use ringrtc::common::CallConfig;
 use ringrtc::{
     common::{
         actor::{Actor, Stopper},
@@ -67,13 +68,19 @@ fn main() {
         queue_size: DataRate::from_kbps(256) * Duration::from_secs(500),
     };
 
+    let call_config = CallConfig {
+        audio_jitter_buffer_max_packets: 50,
+        data_mode: DataMode::Low,
+        ..Default::default()
+    };
+
     let caller = CallEndpoint::start(
         "caller",
         1 as DeviceId,
+        call_config.clone(),
         hide_ip,
         &ice_server,
         &signaling_server,
-        50,
         &router,
         &stopper,
     )
@@ -98,10 +105,10 @@ fn main() {
     let callee = CallEndpoint::start(
         "callee",
         1 as DeviceId,
+        call_config.clone(),
         hide_ip,
         &ice_server,
         &signaling_server,
-        50,
         &router,
         &stopper,
     )
@@ -129,10 +136,10 @@ fn main() {
             let callee = CallEndpoint::start(
                 "callee",
                 device_id as DeviceId,
+                call_config.clone(),
                 hide_ip,
                 &ice_server,
                 &signaling_server,
-                50,
                 &router,
                 &stopper,
             )
@@ -198,6 +205,7 @@ struct CallEndpoint {
 struct CallEndpointState {
     peer_id: PeerId,
     device_id: DeviceId,
+    call_config: CallConfig,
 
     // How we send and receive signaling
     signaling_server: SignalingServer,
@@ -221,10 +229,10 @@ impl CallEndpoint {
     pub fn start(
         peer_id: &str,
         device_id: DeviceId,
+        call_config: CallConfig,
         hide_ip: bool,
         ice_server: &IceServer,
         signaling_server: &SignalingServer,
-        audio_jitter_buffer_max_packets: isize,
         router: &Router,
         stopper: &Stopper,
     ) -> Result<Self> {
@@ -246,7 +254,7 @@ impl CallEndpoint {
                 // Option<CallManager> thing that we have to set later.
                 let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
-                let mut pcf = PeerConnectionFactory::new(pcf::AudioConfig::default(), true)?; // Set up packet flow
+                let mut pcf = PeerConnectionFactory::new(&pcf::AudioConfig::default(), true)?; // Set up packet flow
                 info!(
                     "Audio playout devices: {:?}",
                     pcf.get_audio_playout_devices()
@@ -296,7 +304,6 @@ impl CallEndpoint {
                 let call_context = NativeCallContext::new(
                     hide_ip,
                     ice_server,
-                    audio_jitter_buffer_max_packets,
                     outgoing_audio_track,
                     outgoing_video_track,
                     incoming_video_sink,
@@ -305,6 +312,7 @@ impl CallEndpoint {
                 Ok(CallEndpointState {
                     peer_id,
                     device_id,
+                    call_config,
 
                     signaling_server,
                     network,
@@ -571,7 +579,12 @@ impl CallStateHandler for CallEndpoint {
             {
                 state
                     .call_manager
-                    .proceed(call_id, state.call_context.clone(), DataMode::Low, None)
+                    .proceed(
+                        call_id,
+                        state.call_context.clone(),
+                        state.call_config.clone(),
+                        None,
+                    )
                     .expect("proceed with call");
             }
         });

@@ -40,7 +40,9 @@ use crate::{
     protobuf,
     webrtc::{
         self,
-        media::{AudioTrack, VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack},
+        media::{
+            AudioEncoderConfig, AudioTrack, VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack,
+        },
         peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, SendRates},
         peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
         peer_connection_observer::{
@@ -1007,7 +1009,7 @@ impl Client {
                 debug!("group_call::Client(inner)::new(client_id: {})", client_id);
 
                 let peer_connection_factory = match peer_connection_factory {
-                    None => match PeerConnectionFactory::new(pcf::AudioConfig::default(), false) {
+                    None => match PeerConnectionFactory::new(&pcf::AudioConfig::default(), false) {
                         Ok(v) => v,
                         Err(err) => {
                             observer.handle_ended(
@@ -1749,6 +1751,10 @@ impl Client {
             state.max_receive_rate = Some(match data_mode {
                 DataMode::Low => LOW_MAX_RECEIVE_RATE,
                 DataMode::Normal => NORMAL_MAX_RECEIVE_RATE,
+                DataMode::Custom {
+                    max_group_call_receive_rate,
+                    ..
+                } => max_group_call_receive_rate,
             });
 
             state.data_mode = data_mode;
@@ -1759,7 +1765,7 @@ impl Client {
                 JoinState::Joined(_) => {
                     state
                         .peer_connection
-                        .configure_audio_encoders(&data_mode.audio_encoder_config());
+                        .configure_audio_encoders(&AudioEncoderConfig::default());
                 }
             };
 
@@ -2215,7 +2221,7 @@ impl Client {
 
                         state
                             .peer_connection
-                            .configure_audio_encoders(&state.data_mode.audio_encoder_config());
+                            .configure_audio_encoders(&AudioEncoderConfig::default());
                     }
                     JoinState::Joined(_) => {
                         warn!("The SFU completed joining more than once.");

@@ -15,7 +15,7 @@ use libc::size_t;
 use crate::ios::call_manager;
 use crate::ios::call_manager::IosCallManager;
 
-use crate::common::{CallMediaType, DataMode, DeviceId};
+use crate::common::{CallConfig, CallMediaType, DataMode, DeviceId};
 use crate::core::group_call;
 use crate::core::signaling;
 use crate::lite::call_links::CallLinkRootKey;
@@ -574,7 +574,7 @@ pub extern "C" fn ringrtcProceed(
         callManager as *mut IosCallManager,
         callId,
         appCallContext,
-        DataMode::from_i32(dataMode),
+        CallConfig::default().with_data_mode(DataMode::from_i32(dataMode)),
         audio_levels_interval,
     ) {
         Ok(_v) => {

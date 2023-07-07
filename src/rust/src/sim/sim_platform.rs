@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, DataMode, DeviceId, Result,
+    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
 };
 use crate::core::call::Call;
 use crate::core::call_manager::CallManager;
@@ -137,7 +137,7 @@ impl Platform for SimPlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>> {
         info!(
@@ -153,7 +153,7 @@ impl Platform for SimPlatform {
             call.clone(),
             remote_device_id,
             connection_type,
-            data_mode,
+            call_config,
             audio_levels_interval,
             None,
         )

@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use prost::Message;
 use ringrtc::common::{
-    units::DataRate, ApplicationEvent, CallId, CallState, ConnectionState, DataMode,
+    units::DataRate, ApplicationEvent, CallConfig, CallId, CallState, ConnectionState, DataMode,
 };
 use ringrtc::core::call_manager::MAX_MESSAGE_AGE;
 use ringrtc::core::group_call;
@@ -71,7 +71,7 @@ fn start_inbound_call() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -678,7 +678,7 @@ fn start_inbound_call_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -860,7 +860,7 @@ fn offer_after_ice() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -925,7 +925,7 @@ fn offer_after_unrelated_ice() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -981,7 +981,7 @@ fn offer_after_hangup() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -1026,7 +1026,7 @@ fn offer_after_unrelated_hangup() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -1072,7 +1072,7 @@ fn offer_after_ice_and_hangup() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -1118,7 +1118,7 @@ fn offer_after_hangup_and_ice() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -1168,7 +1168,7 @@ fn offer_after_hangup_with_intervening_ice_for_other_call() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -1221,7 +1221,7 @@ fn offer_after_hangup_with_intervening_hangup_for_other_call() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -1277,7 +1277,7 @@ fn offer_after_ice_with_previous_ice_for_other_call() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());

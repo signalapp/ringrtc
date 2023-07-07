@@ -14,7 +14,7 @@ use anyhow::anyhow;
 use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppObject};
 use crate::ios::ios_platform::IosPlatform;
 
-use crate::common::{CallId, CallMediaType, DataMode, DeviceId, Result};
+use crate::common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result};
 use crate::core::call_manager::CallManager;
 use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
 use crate::core::{call_manager, group_call, signaling};
@@ -74,7 +74,7 @@ pub fn proceed(
     call_manager: *mut IosCallManager,
     call_id: u64,
     app_call_context: AppCallContext,
-    data_mode: DataMode,
+    call_config: CallConfig,
     audio_levels_interval: Option<Duration>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
@@ -85,7 +85,7 @@ pub fn proceed(
     call_manager.proceed(
         call_id,
         Arc::new(app_call_context),
-        data_mode,
+        call_config,
         audio_levels_interval,
     )
 }

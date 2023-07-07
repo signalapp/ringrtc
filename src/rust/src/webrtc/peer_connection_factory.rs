@@ -5,6 +5,7 @@
 
 //! WebRTC Peer Connection
 
+use anyhow::anyhow;
 #[cfg(feature = "native")]
 use std::ffi::CStr;
 use std::ffi::CString;
@@ -53,7 +54,7 @@ pub enum RffiPeerConnectionKind {
     GroupCall,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct IceServer {
     username: CString,
     password: CString,
@@ -150,10 +151,16 @@ pub struct RffiAudioConfig {
     pub agc_enabled: bool,
 }
 
-pub struct AudioConfig {
-    pub audio_device_module_type: RffiAudioDeviceModuleType,
+#[derive(Clone, Debug)]
+pub struct FileBasedAdmConfig {
     pub input_file: CString,
     pub output_file: CString,
+}
+
+#[derive(Clone, Debug)]
+pub struct AudioConfig {
+    pub audio_device_module_type: RffiAudioDeviceModuleType,
+    pub file_based_adm_config: Option<FileBasedAdmConfig>,
     pub high_pass_filter_enabled: bool,
     pub aec_enabled: bool,
     pub ns_enabled: bool,
@@ -164,8 +171,7 @@ impl Default for AudioConfig {
     fn default() -> Self {
         Self {
             audio_device_module_type: Default::default(),
-            input_file: Default::default(),
-            output_file: Default::default(),
+            file_based_adm_config: None,
             high_pass_filter_enabled: true,
             aec_enabled: true,
             ns_enabled: true,
@@ -175,16 +181,30 @@ impl Default for AudioConfig {
 }
 
 impl AudioConfig {
-    fn rffi(&self) -> RffiAudioConfig {
-        RffiAudioConfig {
+    fn rffi(&self) -> Result<RffiAudioConfig> {
+        let (input_file, output_file) =
+            if self.audio_device_module_type == RffiAudioDeviceModuleType::File {
+                if let Some(file_based_adm_config) = &self.file_based_adm_config {
+                    (
+                        file_based_adm_config.input_file.as_ptr(),
+                        file_based_adm_config.output_file.as_ptr(),
+                    )
+                } else {
+                    return Err(anyhow!("no files specified for the file-based ADM!"));
+                }
+            } else {
+                (std::ptr::null(), std::ptr::null())
+            };
+
+        Ok(RffiAudioConfig {
             audio_device_module_type: self.audio_device_module_type,
-            input_file: webrtc::ptr::Borrowed::from_ptr(self.input_file.as_ptr()),
-            output_file: webrtc::ptr::Borrowed::from_ptr(self.output_file.as_ptr()),
+            input_file: webrtc::ptr::Borrowed::from_ptr(input_file),
+            output_file: webrtc::ptr::Borrowed::from_ptr(output_file),
             high_pass_filter_enabled: self.high_pass_filter_enabled,
             aec_enabled: self.aec_enabled,
             ns_enabled: self.ns_enabled,
             agc_enabled: self.agc_enabled,
-        }
+        })
     }
 }
 
@@ -201,13 +221,13 @@ pub struct PeerConnectionFactory {
 impl PeerConnectionFactory {
     /// Create a new Rust PeerConnectionFactory object from a WebRTC C++
     /// PeerConnectionFactory object.
-    pub fn new(audio_config: AudioConfig, use_injectable_network: bool) -> Result<Self> {
+    pub fn new(audio_config: &AudioConfig, use_injectable_network: bool) -> Result<Self> {
         debug!("PeerConnectionFactory::new()");
 
         let (rffi, audio_device_module_type) = {
             let rffi = unsafe {
                 webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(
-                    audio_config.rffi(),
+                    audio_config.rffi()?,
                     use_injectable_network,
                 ))
             };

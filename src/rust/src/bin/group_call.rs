@@ -191,7 +191,8 @@ fn main() {
     ));
     let observer = Observer::default();
     let peer_connection_factory =
-        PeerConnectionFactory::new(peer_connection_factory::AudioConfig::default(), false).unwrap();
+        PeerConnectionFactory::new(&peer_connection_factory::AudioConfig::default(), false)
+            .unwrap();
     let outgoing_audio_track = peer_connection_factory
         .create_outgoing_audio_track()
         .unwrap();

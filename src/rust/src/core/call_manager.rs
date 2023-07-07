@@ -21,8 +21,8 @@ use lazy_static::lazy_static;
 use prost::Message;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, CallState, DataMode, DeviceId, Result,
-    RingBench,
+    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DataMode,
+    DeviceId, Result, RingBench,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
@@ -548,7 +548,7 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         handle_active_call_api!(
@@ -556,7 +556,7 @@ where
             CallManager::handle_proceed,
             call_id,
             app_call_context,
-            data_mode,
+            call_config,
             audio_levels_interval
         )
     }
@@ -1175,7 +1175,7 @@ where
         &mut self,
         call_id: CallId,
         app_call_context: <T as Platform>::AppCallContext,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         ringbench!(
@@ -1190,7 +1190,7 @@ where
             Ok(())
         } else {
             active_call.set_call_context(app_call_context)?;
-            active_call.inject_proceed(data_mode, audio_levels_interval)
+            active_call.inject_proceed(call_config, audio_levels_interval)
         }
     }
 
@@ -2222,7 +2222,7 @@ where
         device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<T>> {
         let mut platform = self.platform.lock()?;
@@ -2231,7 +2231,7 @@ where
             device_id,
             connection_type,
             signaling_version,
-            data_mode,
+            call_config,
             audio_levels_interval,
         )
     }

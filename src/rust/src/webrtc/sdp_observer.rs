@@ -9,7 +9,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::{Arc, Condvar, Mutex};
 
-use crate::common::{DataMode, Result};
+use crate::common::{CallConfig, DataMode, Result};
 use crate::core::util::FutureResult;
 use crate::error::RingRtcError;
 use crate::protobuf;
@@ -191,10 +191,11 @@ impl SessionDescription {
     pub fn to_v4(
         &self,
         public_key: Vec<u8>,
+        call_config: &CallConfig,
         data_mode: DataMode,
     ) -> Result<protobuf::signaling::ConnectionParametersV4> {
         let rffi_v4_ptr = webrtc::ptr::Unique::from(unsafe {
-            sdp::Rust_sessionDescriptionToV4(self.rffi.borrow(), true)
+            sdp::Rust_sessionDescriptionToV4(self.rffi.borrow(), call_config.enable_vp9)
         });
         let rffi_v4 = rffi_v4_ptr.as_ref();
         if rffi_v4.is_none() {
@@ -235,15 +236,25 @@ impl SessionDescription {
         })
     }
 
-    pub fn offer_from_v4(v4: &protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
-        Self::from_v4(true, v4)
+    pub fn offer_from_v4(
+        v4: &protobuf::signaling::ConnectionParametersV4,
+        call_config: &CallConfig,
+    ) -> Result<Self> {
+        Self::from_v4(true, v4, call_config)
     }
 
-    pub fn answer_from_v4(v4: &protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
-        Self::from_v4(false, v4)
+    pub fn answer_from_v4(
+        v4: &protobuf::signaling::ConnectionParametersV4,
+        call_config: &CallConfig,
+    ) -> Result<Self> {
+        Self::from_v4(false, v4, call_config)
     }
 
-    fn from_v4(offer: bool, v4: &protobuf::signaling::ConnectionParametersV4) -> Result<Self> {
+    fn from_v4(
+        offer: bool,
+        v4: &protobuf::signaling::ConnectionParametersV4,
+        call_config: &CallConfig,
+    ) -> Result<Self> {
         let rffi_ice_ufrag = to_cstring(&v4.ice_ufrag)?;
         let rffi_ice_pwd = to_cstring(&v4.ice_pwd)?;
         let mut rffi_video_codecs: Vec<RffiVideoCodec> = Vec::new();
@@ -274,8 +285,8 @@ impl SessionDescription {
             sdp::Rust_sessionDescriptionFromV4(
                 offer,
                 webrtc::ptr::Borrowed::from_ptr(&rffi_v4),
-                false,
-                true,
+                call_config.enable_tcc_audio,
+                call_config.enable_vp9,
             )
         });
         if rffi.is_null() {

@@ -38,6 +38,13 @@ fn main() {
 
     build_protos();
 
+    if cfg!(feature = "call_sim") {
+        tonic_build::configure()
+            .build_server(false)
+            .compile(&["protobuf/call_sim.proto"], &["protobuf"])
+            .expect("call_sim protobufs are valid")
+    }
+
     if cfg!(feature = "native") {
         if let Ok(out_dir) = out_dir {
             println!(

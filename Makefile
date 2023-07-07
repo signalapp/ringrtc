@@ -29,11 +29,12 @@ NODEJS_ARCH := x64
 
 help:
 	$(Q) echo "The following build targets are supported:"
-	$(Q) echo "  ios      -- download WebRTC and build for the iOS platform"
-	$(Q) echo "  android  -- download WebRTC and build for the Android platform"
-	$(Q) echo "  electron -- build an Electron library"
-	$(Q) echo "  cli      -- build the test cli (1:1 calls)"
-	$(Q) echo "  gctc     -- build the test cli (group calls)"
+	$(Q) echo "  ios          -- download WebRTC and build for the iOS platform"
+	$(Q) echo "  android      -- download WebRTC and build for the Android platform"
+	$(Q) echo "  electron     -- build an Electron library"
+	$(Q) echo "  cli          -- build the test cli (1:1 calls)"
+	$(Q) echo "  gctc         -- build the test cli (group calls)"
+	$(Q) echo "  call_sim-cli -- build the call simulator cli for testing"
 	$(Q) echo
 	$(Q) echo "For the electon/cli/gctc builds, you can specify an optional platform"
 	$(Q) echo "which will download WebRTC. For example:"
@@ -112,13 +113,27 @@ gctc:
 		./bin/build-gctc -d ; \
 	fi
 
+call_sim-cli:
+	$(Q) if [ "$(PLATFORM)" != "" ] ; then \
+		echo "call_sim-cli: Preparing workspace for $(PLATFORM)" ; \
+		./bin/prepare-workspace $(PLATFORM) ; \
+	fi
+	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
+		echo "call_sim-cli: Debug build" ; \
+		./bin/build-call_sim-cli -d ; \
+	else \
+		echo "call_sim-cli: Release build" ; \
+		./bin/build-call_sim-cli -r ; \
+	fi
+
 PHONY += clean
 clean:
 	$(Q) ./bin/build-aar --clean
+	$(Q) ./bin/build-ios --clean
+	$(Q) ./bin/build-electron --clean
 	$(Q) ./bin/build-cli --clean
 	$(Q) ./bin/build-gctc --clean
-	$(Q) ./bin/build-electron --clean
-	$(Q) ./bin/build-ios --clean
+	$(Q) ./bin/build-call_sim-cli --clean
 	$(Q) rm -rf ./src/webrtc/src/out
 
 PHONY += distclean

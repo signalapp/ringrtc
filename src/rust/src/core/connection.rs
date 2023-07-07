@@ -25,8 +25,8 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::common::{
-    units::DataRate, CallDirection, CallId, CallMediaType, ConnectionState, DataMode, DeviceId,
-    Result, RingBench,
+    units::DataRate, CallConfig, CallDirection, CallId, CallMediaType, ConnectionState, DataMode,
+    DeviceId, Result, RingBench,
 };
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
@@ -39,9 +39,7 @@ use crate::protobuf;
 
 use crate::webrtc;
 use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::{
-    AudioEncoderConfig, MediaStream, VideoFrame, VideoFrameMetadata, VideoSink,
-};
+use crate::webrtc::media::{MediaStream, VideoFrame, VideoFrameMetadata, VideoSink};
 use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, SendRates};
 use crate::webrtc::peer_connection_observer::{
     IceConnectionState, NetworkAdapterType, NetworkRoute, PeerConnectionObserverTrait,
@@ -56,14 +54,6 @@ use crate::webrtc::stats_observer::{create_stats_observer, StatsObserver};
 /// Used to generate stats, to retransmit RTP messages, and to get audio levels.
 const TICK_INTERVAL_MILLIS: u64 = 200;
 const TICK_INTERVAL: Duration = Duration::from_millis(TICK_INTERVAL_MILLIS);
-
-/// How often to get and log stats
-const POLL_STATS_INTERVAL: Duration = Duration::from_secs(10);
-const POLL_STATS_INTERVAL_TICKS: u64 =
-    POLL_STATS_INTERVAL.as_millis() as u64 / TICK_INTERVAL_MILLIS;
-const POLL_STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
-const POLL_STATS_INITIAL_OFFSET_TICKS: u64 =
-    POLL_STATS_INITIAL_OFFSET.as_millis() as u64 / TICK_INTERVAL_MILLIS;
 
 /// How often to retransmit RTP messages.
 const SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS: u64 = 1000;
@@ -287,13 +277,6 @@ impl BandwidthController {
             .max(MIN_SEND_RATE)
     }
 
-    pub fn audio_encoder_config(&self) -> AudioEncoderConfig {
-        // Min of local and inferred remote
-        self.local_mode
-            .min(self.inferred_remote_mode())
-            .audio_encoder_config()
-    }
-
     fn local_max(&self) -> DataRate {
         self.local_mode.max_bitrate()
     }
@@ -305,19 +288,42 @@ impl BandwidthController {
             None
         }
     }
+}
 
-    // Since the remote side doesn't tell us what audio configuration to use, we have to infer it
-    // from the bandwidth sent. This should be used carefully.
-    fn inferred_remote_mode(&self) -> DataMode {
-        match self.remote_max {
-            Some(remote_max) if remote_max < DataMode::Normal.max_bitrate() => DataMode::Low,
-            _ => DataMode::Normal,
+/// Configuration of the polling stats. The initial offset is disabled if 0 seconds.
+#[derive(Clone, Copy, Debug)]
+pub struct PollStatsConfig {
+    poll_stats_interval: Duration,
+    poll_stats_initial_offset: Duration,
+    poll_stats_interval_ticks: u64,
+    poll_stats_initial_offset_ticks: u64,
+}
+
+impl PollStatsConfig {
+    pub fn new(interval_secs: u16, initial_offset_secs: u16) -> Self {
+        let interval_secs = Duration::from_secs(interval_secs as u64);
+        let initial_offset_secs = Duration::from_secs(initial_offset_secs as u64);
+
+        Self {
+            poll_stats_interval: interval_secs,
+            poll_stats_initial_offset: initial_offset_secs,
+            poll_stats_interval_ticks: interval_secs.as_millis() as u64 / TICK_INTERVAL_MILLIS,
+            poll_stats_initial_offset_ticks: initial_offset_secs.as_millis() as u64
+                / TICK_INTERVAL_MILLIS,
+        }
+    }
+
+    /// If the initial offset is disabled, then the interval should be used.
+    pub fn get_initial_offset(&self) -> Duration {
+        if self.poll_stats_initial_offset.is_zero() {
+            self.poll_stats_interval
+        } else {
+            self.poll_stats_initial_offset
         }
     }
 }
 
-/// Represents the connection between a local client and one remote
-/// peer.
+/// Represents the connection between a local client and one remote peer.
 ///
 /// This object is thread-safe.
 pub struct Connection<T>
@@ -345,8 +351,12 @@ where
     webrtc: Arc<CallMutex<WebRtcData<T>>>,
     /// State that decides what bandwidth to use for sending.
     bandwidth_controller: Arc<CallMutex<BandwidthController>>,
+    /// The media configuration for the call (includes bandwidth and audio encoding settings).
+    call_config: CallConfig,
     /// The interval for audio level polling
     audio_levels_interval: Option<Duration>,
+    /// Polling stats configuration.
+    poll_stats_config: PollStatsConfig,
     /// Local ICE candidates waiting to be sent over signaling.
     buffered_local_ice_candidates: Arc<CallMutex<Vec<signaling::IceCandidate>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
@@ -437,7 +447,9 @@ where
             context: Arc::clone(&self.context),
             webrtc: Arc::clone(&self.webrtc),
             bandwidth_controller: Arc::clone(&self.bandwidth_controller),
+            call_config: self.call_config.clone(),
             audio_levels_interval: self.audio_levels_interval,
+            poll_stats_config: self.poll_stats_config,
             buffered_local_ice_candidates: Arc::clone(&self.buffered_local_ice_candidates),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
             connection_type: self.connection_type,
@@ -459,7 +471,7 @@ where
         call: Call<T>,
         remote_device: DeviceId,
         connection_type: ConnectionType,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
         incoming_video_sink: Option<Box<dyn VideoSink>>,
     ) -> Result<Self> {
@@ -479,6 +491,11 @@ where
             stats_observer: None,
         };
 
+        let poll_stats_config = PollStatsConfig::new(
+            call_config.stats_interval_secs,
+            call_config.stats_initial_offset_secs,
+        );
+
         let connection = Self {
             fsm_sender,
             fsm_receiver: Some(fsm_receiver),
@@ -491,7 +508,7 @@ where
             webrtc: Arc::new(CallMutex::new(webrtc, "webrtc")),
             bandwidth_controller: Arc::new(CallMutex::new(
                 BandwidthController {
-                    local_mode: data_mode,
+                    local_mode: call_config.data_mode,
                     remote_max: None,
                     network_route: NetworkRoute {
                         local_adapter_type: NetworkAdapterType::Unknown,
@@ -503,7 +520,9 @@ where
                 },
                 "webrtc",
             )),
+            call_config,
             audio_levels_interval,
+            poll_stats_config,
             buffered_local_ice_candidates: Arc::new(CallMutex::new(
                 Vec::new(),
                 "buffered_local_ice_candidates",
@@ -551,7 +570,6 @@ where
     pub fn start_outgoing_parent(
         &mut self,
         call_media_type: CallMediaType,
-        data_mode: DataMode,
     ) -> Result<(StaticSecret, IceGatherer, signaling::Offer)> {
         let result = (|| {
             self.set_state(ConnectionState::Starting)?;
@@ -571,7 +589,11 @@ where
 
             // We have to do this before we pass ownership of offer_sdi into set_local_description.
             let (local_secret, local_public_key) = generate_local_secret_and_public_key()?;
-            let v4_offer = offer.to_v4(local_public_key.as_bytes().to_vec(), data_mode)?;
+            let v4_offer = offer.to_v4(
+                local_public_key.as_bytes().to_vec(),
+                &self.call_config,
+                self.call_config.data_mode,
+            )?;
 
             info!(
                 "Outgoing offer codecs: {:?}, max_bitrate: {:?}",
@@ -622,7 +644,8 @@ where
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
-            let stats_observer = create_stats_observer(self.call_id(), POLL_STATS_INTERVAL);
+            let stats_observer =
+                create_stats_observer(self.call_id(), self.poll_stats_config.get_initial_offset());
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;
@@ -640,8 +663,8 @@ where
                     bandwidth_controller.remote_max =
                         v4_answer.max_bitrate_bps.map(DataRate::from_bps);
 
-                    let offer = SessionDescription::offer_from_v4(&v4_offer)?;
-                    let answer = SessionDescription::answer_from_v4(&v4_answer)?;
+                    let offer = SessionDescription::offer_from_v4(&v4_offer, &self.call_config)?;
+                    let answer = SessionDescription::answer_from_v4(&v4_answer, &self.call_config)?;
 
                     info!(
                     "Incoming answer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
@@ -690,6 +713,7 @@ where
             // handle_rtp_received.
             peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
             peer_connection.set_incoming_media_enabled(true);
+            peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
 
             self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
 
@@ -723,7 +747,8 @@ where
             let mut webrtc = self.webrtc.lock()?;
 
             // Create a stats observer object.
-            let stats_observer = create_stats_observer(self.call_id(), POLL_STATS_INTERVAL);
+            let stats_observer =
+                create_stats_observer(self.call_id(), self.poll_stats_config.get_initial_offset());
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;
@@ -742,7 +767,7 @@ where
                     v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps, bandwidth_controller
                 );
 
-                let offer = SessionDescription::offer_from_v4(v4_offer)?;
+                let offer = SessionDescription::offer_from_v4(v4_offer, &self.call_config)?;
 
                 (offer, v4_offer.public_key.clone())
             } else {
@@ -786,6 +811,7 @@ where
             let answer_to_send = if v4_offer.is_some() {
                 let v4_answer = answer.to_v4(
                     local_public_key.as_bytes().to_vec(),
+                    &self.call_config,
                     bandwidth_controller.local_mode,
                 )?;
 
@@ -795,7 +821,7 @@ where
                 );
 
                 // We have to change the local answer to match what we send back
-                answer = SessionDescription::answer_from_v4(&v4_answer)?;
+                answer = SessionDescription::answer_from_v4(&v4_answer, &self.call_config)?;
                 // And we have to make sure to do this again since answer_from_v4 doesn't do it.
                 if let Some(answer_key) = &answer_key {
                     answer.disable_dtls_and_set_srtp_key(answer_key)?;
@@ -827,6 +853,8 @@ where
             // sure we don't grab the webrtc_data lock in
             // handle_rtp_received.
             peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
+
+            peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
 
             self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
 
@@ -926,10 +954,9 @@ where
         Ok(())
     }
 
-    /// Return the current local data mode used for this connection.
-    pub fn local_data_mode(&self) -> Result<DataMode> {
-        let bandwidth_controller = self.bandwidth_controller.lock()?;
-        Ok(bandwidth_controller.local_mode)
+    /// Return the call configuration used for this connection.
+    pub fn call_config(&self) -> &CallConfig {
+        &self.call_config
     }
 
     /// Needed for ICE forking (we must copy this value from the parent connection
@@ -1120,7 +1147,9 @@ where
             self.send_latest_rtp_data_message(&mut webrtc)?;
         }
 
-        if ticks_elapsed % POLL_STATS_INTERVAL_TICKS == POLL_STATS_INITIAL_OFFSET_TICKS {
+        if ticks_elapsed % self.poll_stats_config.poll_stats_interval_ticks
+            == self.poll_stats_config.poll_stats_initial_offset_ticks
+        {
             if let Some(observer) = webrtc.stats_observer.as_ref() {
                 let _ = webrtc.peer_connection()?.get_stats(observer);
             } else {
@@ -1305,7 +1334,7 @@ where
         Ok(changed)
     }
 
-    /// Based on the given data mode, configure the media encoders.
+    /// Based on the given data mode, configure the bitrate limits for sending.
     /// Make sure we always take the locks in the order of (bandwidth_controller, webrtc).
     /// We require passing in &mut MutexGuard<T> instead of &mut T to remind you about this.
     fn apply_bandwidth_controller(
@@ -1314,15 +1343,16 @@ where
         webrtc: &mut MutexGuard<WebRtcData<T>>,
     ) -> Result<()> {
         let max_send_rate = bandwidth_controller.max_send_rate();
-        let audio_encoder_config = bandwidth_controller.audio_encoder_config();
-        info!("apply_bandwidth_controller(): bandwidth_controller: {:?}; max_send_rate: {:?}; audio_encoder_config: {:?}", bandwidth_controller, max_send_rate, audio_encoder_config);
+        info!(
+            "apply_bandwidth_controller(): bandwidth_controller: {:?}; max_send_rate: {:?}",
+            bandwidth_controller, max_send_rate
+        );
 
         let peer_connection = webrtc.peer_connection()?;
         peer_connection.set_send_rates(SendRates {
             max: Some(max_send_rate),
             ..SendRates::default()
         })?;
-        peer_connection.configure_audio_encoders(&audio_encoder_config);
         Ok(())
     }
 
@@ -2175,18 +2205,11 @@ fn negotiate_srtp_keys(
 mod tests {
     use super::*;
 
-    fn expect(max_send_rate_bps: u64, audio_data_mode: DataMode) -> (DataRate, AudioEncoderConfig) {
-        (
-            DataRate::from_bps(max_send_rate_bps),
-            audio_data_mode.audio_encoder_config(),
-        )
+    fn expect(max_send_rate_bps: u64) -> DataRate {
+        DataRate::from_bps(max_send_rate_bps)
     }
 
-    fn compute(
-        local_mode: DataMode,
-        remote_max_bps: u64,
-        relayed: bool,
-    ) -> (DataRate, AudioEncoderConfig) {
+    fn compute(local_mode: DataMode, remote_max_bps: u64, relayed: bool) -> DataRate {
         let controller = BandwidthController {
             local_mode,
             remote_max: Some(DataRate::from_bps(remote_max_bps)),
@@ -2198,10 +2221,8 @@ mod tests {
                 remote_relayed: false,
             },
         };
-        (
-            controller.max_send_rate(),
-            controller.audio_encoder_config(),
-        )
+
+        controller.max_send_rate()
     }
 
     #[test]
@@ -2209,29 +2230,29 @@ mod tests {
         use DataMode::*;
 
         // Remote max can push down the audio and video, but only to a point.
-        assert_eq!(expect(2_000_000, Normal), compute(Normal, 3_000_000, false));
-        assert_eq!(expect(2_000_000, Normal), compute(Normal, 2_000_000, false));
-        assert_eq!(expect(1_999_999, Low), compute(Normal, 1_999_999, false));
-        assert_eq!(expect(1_000_000, Low), compute(Normal, 1_000_000, false));
-        assert_eq!(expect(300_000, Low), compute(Normal, 300_000, false));
+        assert_eq!(expect(2_000_000), compute(Normal, 3_000_000, false));
+        assert_eq!(expect(2_000_000), compute(Normal, 2_000_000, false));
+        assert_eq!(expect(1_999_999), compute(Normal, 1_999_999, false));
+        assert_eq!(expect(1_000_000), compute(Normal, 1_000_000, false));
+        assert_eq!(expect(300_000), compute(Normal, 300_000, false));
 
         // Local mode can also push it down
-        assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, false));
-        assert_eq!(expect(300_000, Low), compute(Low, 2_000_000, false));
-        assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, false));
-        assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, false));
-        assert_eq!(expect(300_000, Low), compute(Low, 300_000, false));
+        assert_eq!(expect(300_000), compute(Low, 3_000_000, false));
+        assert_eq!(expect(300_000), compute(Low, 2_000_000, false));
+        assert_eq!(expect(300_000), compute(Low, 1_999_999, false));
+        assert_eq!(expect(300_000), compute(Low, 1_000_000, false));
+        assert_eq!(expect(300_000), compute(Low, 300_000, false));
 
         // Being relayed can also push it down, but it doesn't affect the audio.
-        assert_eq!(expect(1_000_000, Normal), compute(Normal, 3_000_000, true));
-        assert_eq!(expect(1_000_000, Normal), compute(Normal, 2_000_000, true));
-        assert_eq!(expect(1_000_000, Low), compute(Normal, 1_999_999, true));
-        assert_eq!(expect(1_000_000, Low), compute(Normal, 1_000_000, true));
-        assert_eq!(expect(300_000, Low), compute(Normal, 300_000, true));
-        assert_eq!(expect(300_000, Low), compute(Low, 3_000_000, true));
-        assert_eq!(expect(300_000, Low), compute(Low, 2_000_000, true));
-        assert_eq!(expect(300_000, Low), compute(Low, 1_999_999, true));
-        assert_eq!(expect(300_000, Low), compute(Low, 1_000_000, true));
-        assert_eq!(expect(300_000, Low), compute(Low, 300_000, true));
+        assert_eq!(expect(1_000_000), compute(Normal, 3_000_000, true));
+        assert_eq!(expect(1_000_000), compute(Normal, 2_000_000, true));
+        assert_eq!(expect(1_000_000), compute(Normal, 1_999_999, true));
+        assert_eq!(expect(1_000_000), compute(Normal, 1_000_000, true));
+        assert_eq!(expect(300_000), compute(Normal, 300_000, true));
+        assert_eq!(expect(300_000), compute(Low, 3_000_000, true));
+        assert_eq!(expect(300_000), compute(Low, 2_000_000, true));
+        assert_eq!(expect(300_000), compute(Low, 1_999_999, true));
+        assert_eq!(expect(300_000), compute(Low, 1_000_000, true));
+        assert_eq!(expect(300_000), compute(Low, 300_000, true));
     }
 }

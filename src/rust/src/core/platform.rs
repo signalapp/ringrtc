@@ -10,7 +10,7 @@ use std::fmt;
 use std::time::Duration;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, DataMode, DeviceId, Result,
+    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
 };
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
@@ -49,7 +49,7 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
         remote_device: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>>;
 

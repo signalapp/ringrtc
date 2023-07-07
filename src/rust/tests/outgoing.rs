@@ -16,8 +16,8 @@ use std::time::Duration;
 
 use prost::Message;
 use ringrtc::common::{
-    units::DataRate, ApplicationEvent, CallId, CallMediaType, CallState, ConnectionState, DataMode,
-    DeviceId,
+    units::DataRate, ApplicationEvent, CallConfig, CallId, CallMediaType, CallState,
+    ConnectionState, DataMode, DeviceId,
 };
 use ringrtc::core::{group_call, signaling};
 use ringrtc::protobuf;
@@ -76,7 +76,7 @@ fn start_outbound_and_proceed() -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -134,7 +134,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -2001,7 +2001,7 @@ fn outbound_proceed_with_error() {
     cm.proceed(
         active_call.call_id(),
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -2375,7 +2375,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
     cm.proceed(
         outgoing_call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -2442,7 +2442,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
     cm.proceed(
         incoming_call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -2505,7 +2505,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_after_start() {
     cm.proceed(
         incoming_call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());
@@ -2723,7 +2723,7 @@ fn start_outbound_receive_busy() {
     cm.proceed(
         call_id,
         format!("CONTEXT-{}", context.prng.gen::<u16>()),
-        DataMode::Normal,
+        CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
     .expect(error_line!());

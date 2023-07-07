@@ -1,0 +1,28 @@
+#
+# Copyright 2023 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+[package]
+name = "signaling_server"
+version = "0.1.0"
+authors = ["Calling Team <callingteam@signal.org>"]
+edition = "2021"
+license = "AGPL-3.0-only"
+
+[dependencies]
+async-stream = "0.2"
+env_logger = "0.9.1"
+futures-core = "0.3"
+futures-util = "0.3"
+log = "0.4.17"
+prost = "0.11"
+rand = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tokio-stream = "0.1"
+tonic = "0.8"
+
+[build-dependencies]
+tonic-build = "0.8"

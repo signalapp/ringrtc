@@ -1,0 +1,32 @@
+#
+# Copyright 2023 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+[package]
+name = "call_sim"
+version = "0.1.0"
+authors = ["Calling Team <callingteam@signal.org>"]
+edition = "2021"
+license = "AGPL-3.0-only"
+
+[dependencies]
+anyhow = "1.0"
+bollard = "0.13"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+futures-core = "0.3"
+futures-util = "0.3"
+hound = "3.5"
+itertools = "0.10"
+plotly = { version = "0.8.3", features = ["kaleido"] }
+prost = "0.11"
+regex = "1"
+relative-path = "1.7.2"
+serde_json = "1.0.91"
+tokio = { version = "1", features = ["full"] }
+tonic = "0.8"
+tower = "0.4"
+
+[build-dependencies]
+tonic-build = "0.8"

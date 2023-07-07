@@ -50,7 +50,7 @@ pub struct StatsObserver {
     call_id: CallId,
     rffi: webrtc::Arc<RffiStatsObserver>,
     stats: Stats,
-    stats_interval: Duration,
+    stats_initial_offset: Duration,
     stats_received_count: u32,
     system_stats: sysinfo::System,
 }
@@ -290,7 +290,7 @@ impl StatsObserver {
     }
 
     /// Create a new StatsObserver.
-    fn new(call_id: CallId, stats_interval: Duration) -> Self {
+    fn new(call_id: CallId, stats_initial_offset: Duration) -> Self {
         Self::print_headers();
 
         let mut system_stats = sysinfo::System::new();
@@ -303,7 +303,7 @@ impl StatsObserver {
             call_id,
             rffi: webrtc::Arc::null(),
             stats: Default::default(),
-            stats_interval,
+            stats_initial_offset,
             stats_received_count: 0,
             system_stats,
         }
@@ -314,7 +314,7 @@ impl StatsObserver {
         let seconds_elapsed = if self.stats.timestamp_us > 0 {
             (media_statistics.timestamp_us - self.stats.timestamp_us) as f32 / 1_000_000.0
         } else {
-            self.stats_interval.as_secs() as f32
+            self.stats_initial_offset.as_secs() as f32
         };
 
         self.print_connection(media_statistics);
@@ -589,8 +589,11 @@ const STATS_OBSERVER_CBS_PTR: *const StatsObserverCallbacks = &STATS_OBSERVER_CB
 /// Creates a new WebRTC C++ StatsObserver object,
 /// registering the collector callbacks to this module, and wraps the
 /// result in a Rust StatsObserver object.
-pub fn create_stats_observer(call_id: CallId, stats_interval: Duration) -> Box<StatsObserver> {
-    let stats_observer = Box::new(StatsObserver::new(call_id, stats_interval));
+pub fn create_stats_observer(
+    call_id: CallId,
+    stats_initial_offset: Duration,
+) -> Box<StatsObserver> {
+    let stats_observer = Box::new(StatsObserver::new(call_id, stats_initial_offset));
     let stats_observer_ptr = Box::into_raw(stats_observer);
     let rffi_stats_observer = webrtc::Arc::from_owned(unsafe {
         stats::Rust_createStatsObserver(

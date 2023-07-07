@@ -57,7 +57,7 @@ use futures::{Future, Stream};
 use crate::error::RingRtcError;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallState, ConnectionState, DataMode, DeviceId, Result,
+    ApplicationEvent, CallConfig, CallDirection, CallState, ConnectionState, DeviceId, Result,
 };
 use crate::core::call::{Call, EventStream};
 use crate::core::connection::ConnectionObserverEvent;
@@ -81,7 +81,7 @@ pub enum CallEvent {
     // Flow events from client application
     /// OK to proceed with call setup including user options.
     Proceed {
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     },
 
@@ -117,12 +117,12 @@ impl fmt::Display for CallEvent {
                 format!("SendHangupViaRtpDataToAll, hangup: {}", hangup)
             }
             CallEvent::Proceed {
-                data_mode,
+                call_config,
                 audio_levels_interval,
             } => {
                 format!(
-                    "Proceed, data_mode: {}, audio_levels_interval: {:?}",
-                    data_mode, audio_levels_interval
+                    "Proceed, call_config: {:?}, audio_levels_interval: {:?}",
+                    call_config, audio_levels_interval
                 )
             }
             CallEvent::ReceivedAnswer(received) => {
@@ -405,9 +405,9 @@ where
         match event {
             CallEvent::StartCall => self.handle_start_call(call, state),
             CallEvent::Proceed {
-                data_mode,
+                call_config,
                 audio_levels_interval,
-            } => self.handle_proceed(call, state, data_mode, audio_levels_interval),
+            } => self.handle_proceed(call, state, call_config, audio_levels_interval),
             CallEvent::AcceptCall => self.handle_accept_call(call, state),
             CallEvent::ReceivedAnswer(received) => {
                 self.handle_received_answer(call, state, received)
@@ -498,7 +498,7 @@ where
         &mut self,
         call: Call<T>,
         state: CallState,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<()> {
         info!("handle_proceed():");
@@ -506,7 +506,7 @@ where
         if state == CallState::WaitingToProceed {
             call.set_state(CallState::ConnectingBeforeAccepted)?;
             self.schedule_work_until_terminating(call, "Proceed failed", move |mut call| {
-                call.proceed(data_mode, audio_levels_interval)
+                call.proceed(call_config, audio_levels_interval)
             });
         } else {
             self.unexpected_state(state, "Proceed");

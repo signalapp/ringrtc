@@ -11,6 +11,8 @@ pub mod units;
 
 use std::fmt;
 
+use crate::webrtc::{media::AudioEncoderConfig, peer_connection_factory::AudioConfig};
+
 /// Common Result type, using `anyhow::Error` for Error.
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
@@ -688,6 +690,22 @@ pub enum CallMediaType {
     Video,
 }
 
+impl fmt::Display for CallMediaType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl CallMediaType {
+    pub fn from_i32(value: i32) -> Self {
+        match value {
+            0 => CallMediaType::Audio,
+            1 => CallMediaType::Video,
+            _ => panic!("Unknown value: {}", value),
+        }
+    }
+}
+
 /// The data mode allows the client to limit the media bandwidth used.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -698,6 +716,11 @@ pub enum DataMode {
     /// (Default) No specific constraints, but keep a relatively
     /// high bitrate to ensure good quality.
     Normal,
+    /// Customizable configuration for testing.
+    Custom {
+        max_bitrate: units::DataRate,
+        max_group_call_receive_rate: units::DataRate,
+    },
 }
 
 impl fmt::Display for DataMode {
@@ -724,36 +747,46 @@ impl DataMode {
         match self {
             DataMode::Low => units::DataRate::from_kbps(300),
             DataMode::Normal => units::DataRate::from_kbps(2_000),
-        }
-    }
-
-    pub fn audio_encoder_config(&self) -> crate::webrtc::media::AudioEncoderConfig {
-        let (start_bitrate_bps, min_bitrate_bps, max_bitrate_bps) = match self {
-            DataMode::Low => (28_000, 16_000, 28_000),
-            DataMode::Normal => (32_000, 20_000, 32_000),
-        };
-        crate::webrtc::media::AudioEncoderConfig {
-            start_bitrate_bps,
-            min_bitrate_bps,
-            max_bitrate_bps,
-            ..Default::default()
+            &DataMode::Custom { max_bitrate, .. } => max_bitrate,
         }
     }
 }
 
-impl fmt::Display for CallMediaType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+/// Low-level media configuration.
+#[derive(Clone, Debug)]
+pub struct CallConfig {
+    /// The DataMode at the time of call initialization.
+    pub data_mode: DataMode,
+    pub stats_interval_secs: u16,
+    pub stats_initial_offset_secs: u16,
+
+    pub audio_config: AudioConfig,
+    pub audio_encoder_config: AudioEncoderConfig,
+    pub enable_tcc_audio: bool,
+    pub audio_jitter_buffer_max_packets: isize,
+
+    pub enable_vp9: bool,
+}
+
+impl Default for CallConfig {
+    fn default() -> Self {
+        Self {
+            data_mode: DataMode::Normal,
+            stats_interval_secs: 10,
+            stats_initial_offset_secs: 2,
+            audio_config: Default::default(),
+            audio_encoder_config: Default::default(),
+            enable_tcc_audio: false,
+            audio_jitter_buffer_max_packets: 50,
+            enable_vp9: true,
+        }
     }
 }
 
-impl CallMediaType {
-    pub fn from_i32(value: i32) -> Self {
-        match value {
-            0 => CallMediaType::Audio,
-            1 => CallMediaType::Video,
-            _ => panic!("Unknown value: {}", value),
-        }
+impl CallConfig {
+    pub fn with_data_mode(mut self, data_mode: DataMode) -> Self {
+        self.data_mode = data_mode;
+        self
     }
 }
 

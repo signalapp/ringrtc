@@ -17,7 +17,7 @@ use crate::android::android_platform::AndroidPlatform;
 use crate::android::call_manager;
 use crate::android::call_manager::AndroidCallManager;
 use crate::android::error;
-use crate::common::{CallMediaType, DataMode, DeviceId};
+use crate::common::{CallConfig, CallMediaType, DataMode, DeviceId};
 use crate::core::connection::Connection;
 use crate::core::util::try_scoped;
 use crate::core::{group_call, signaling};
@@ -157,7 +157,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
         call_manager as *mut AndroidCallManager,
         call_id,
         jni_call_context,
-        DataMode::from_i32(data_mode),
+        CallConfig::default().with_data_mode(DataMode::from_i32(data_mode)),
         audio_levels_interval,
     ) {
         Ok(v) => v,

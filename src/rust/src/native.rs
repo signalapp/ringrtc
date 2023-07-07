@@ -8,7 +8,7 @@ use std::fmt;
 use std::time::Duration;
 
 use crate::common::{
-    ApplicationEvent, CallDirection, CallId, CallMediaType, DataMode, DeviceId, Result,
+    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
 };
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
@@ -36,7 +36,6 @@ use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserv
 pub struct NativeCallContext {
     hide_ip: bool,
     ice_server: IceServer,
-    audio_jitter_buffer_max_packets: isize,
     outgoing_audio_track: AudioTrack,
     outgoing_video_track: VideoTrack,
     incoming_video_sink: Box<dyn VideoSink>,
@@ -46,7 +45,6 @@ impl NativeCallContext {
     pub fn new(
         hide_ip: bool,
         ice_server: IceServer,
-        audio_jitter_buffer_max_packets: isize,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
         incoming_video_sink: Box<dyn VideoSink>,
@@ -54,7 +52,6 @@ impl NativeCallContext {
         Self {
             hide_ip,
             ice_server,
-            audio_jitter_buffer_max_packets,
             outgoing_audio_track,
             outgoing_video_track,
             incoming_video_sink,
@@ -401,7 +398,7 @@ impl Platform for NativePlatform {
         remote_device_id: DeviceId,
         connection_type: ConnectionType,
         signaling_version: signaling::Version,
-        data_mode: DataMode,
+        call_config: CallConfig,
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>> {
         info!(
@@ -415,7 +412,7 @@ impl Platform for NativePlatform {
             call.clone(),
             remote_device_id,
             connection_type,
-            data_mode,
+            call_config,
             audio_levels_interval,
             Some(context.incoming_video_sink),
         )?;
@@ -435,7 +432,7 @@ impl Platform for NativePlatform {
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,
             kind,
-            context.audio_jitter_buffer_max_packets,
+            connection.call_config().audio_jitter_buffer_max_packets,
             &context.ice_server,
             context.outgoing_audio_track.clone(),
             Some(context.outgoing_video_track.clone()),

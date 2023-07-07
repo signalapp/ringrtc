@@ -27,6 +27,10 @@ name = "call_link"
 # This binary doesn't depend on WebRTC at all, so either `sim` or `native` would work.
 required-features = ["sim", "http", "rand_chacha"]
 
+[[bin]]
+name = "call_sim-cli"
+required-features = ["call_sim"]
+
 [dependencies]
 regex-aot         = { path = "regex-aot" }
 
@@ -78,6 +82,13 @@ webpki = { version = "0.22", optional = true }
 # Optional, needed for call-link-test-client
 rand_chacha = { version = "0.2", optional = true }
 
+# Optional, needed by the "call_sim" feature
+chrono = {version = "0.4", optional = true }
+clap = { version = "4", optional = true, features = ["derive"] }
+fern = { version = "0.6", optional = true }
+tonic = { version = "0.8", optional = true }
+tower = { version = "0.4", optional = true }
+
 [features]
 default = []
 sim = []
@@ -86,6 +97,7 @@ native = []  # We have this so we can more easily disable things only native cli
 simnet = []  # We have this so we can more easily disable things only simulated native client need
 http = ["ureq", "rustls", "webpki"]
 check-all = ["electron", "jni"]
+call_sim = ["native", "chrono", "clap", "fern", "tonic", "tower"]
 
 [[test]]
 name = "incoming"
@@ -102,6 +114,7 @@ jni = { version = "0.19.0", default-features = false }
 
 [build-dependencies]
 prost-build = { version = "0.11" }
+tonic-build = { version = "0.8" }
 
 [dev-dependencies]
 env_logger = { version = "0.10" }

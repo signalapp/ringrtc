@@ -22,7 +22,7 @@ use crate::android::jni_util::*;
 use crate::android::logging::init_logging;
 use crate::android::webrtc_peer_connection_factory::*;
 
-use crate::common::{CallId, CallMediaType, DataMode, DeviceId, Result};
+use crate::common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result};
 use crate::core::call_manager::CallManager;
 use crate::core::connection::Connection;
 use crate::core::util::{ptr_as_box, ptr_as_mut};
@@ -187,7 +187,7 @@ pub fn proceed(
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     jni_call_context: JObject,
-    data_mode: DataMode,
+    call_config: CallConfig,
     audio_levels_interval: Option<Duration>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
@@ -202,7 +202,7 @@ pub fn proceed(
     call_manager.proceed(
         call_id,
         android_call_context,
-        data_mode,
+        call_config,
         audio_levels_interval,
     )
 }

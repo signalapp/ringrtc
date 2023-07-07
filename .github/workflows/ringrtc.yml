@@ -29,7 +29,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     - uses: actions/checkout@v3
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
-    - run: shellcheck **/*.sh bin/build-aar bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-artifact bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check bin/set-up-for-cocoapods src/rust/scripts/run-tests
+    - run: shellcheck **/*.sh bin/build-aar bin/build-call_sim-cli bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-artifact bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check bin/set-up-for-cocoapods src/rust/scripts/run-tests
     - name: Clippy
       run: cargo clippy --tests --features sim -- -D warnings
       working-directory: src/rust
@@ -48,6 +48,15 @@ jobs:
     - name: Clippy (call_link)
       run: cargo clippy --bin call_link --features sim,http,rand_chacha -- -D warnings
       working-directory: src/rust
+    - name: Clippy (call_sim-cli)
+      run: cargo clippy --bin call_sim-cli --features call_sim -- -D warnings
+      working-directory: src/rust
+    - name: Clippy (call_sim)
+      run: cargo clippy -- -D warnings
+      working-directory: call_sim
+    - name: Clippy (signaling_server)
+      run: cargo clippy -- -D warnings
+      working-directory: call_sim/docker/signaling_server
     - name: Install for node
       run: yarn install --frozen-lockfile
       working-directory: src/node
