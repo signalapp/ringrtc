@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.29.0
+
+- Call Links: Add Admin Actions support
+
+- Desktop: Adapt video resolutions in 1:1 calls
+
+- Add a Call Simulator for testing
+
+- Reference signalapp/webrtc@5615c
+  - Add configuration options to support simulation
+  - Support adapting video frames 
+
+- Reference signalapp/webrtc@5615d
+  - Configure audio jitter buffer max delay
+
+- Improvements to build scripts for automating WebRTC builds
+
+- Test and logging improvements
+
 ## v2.28.1
 
 - Group Calls: Add support for TCP connections
