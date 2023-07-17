@@ -45,6 +45,15 @@ use neon::prelude::*;
 
 const ENABLE_LOGGING: bool = true;
 
+// Limits on (non-screenshare) video that gets sent. If the captured video exceeds these limits, it
+// will be adapted to fit within the limits.
+const MAX_VIDEO_WIDTH: u16 = 960;
+const MAX_VIDEO_HEIGHT: u16 = 720;
+const MAX_VIDEO_FPS: u8 = 30;
+
+const GROUP_CALL_MAX_VIDEO_WIDTH: u16 = 640;
+const GROUP_CALL_MAX_VIDEO_HEIGHT: u16 = 480;
+
 /// A structure for packing the contents of log messages.
 pub struct LogMessage {
     level: i8,
@@ -751,9 +760,11 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         // This should be cleared at with "call concluded", but just in case
         // we'll clear here as well.
         endpoint.incoming_video_sink.clear();
-        endpoint
-            .outgoing_video_source
-            .adapt_output_format(960, 720, 30);
+        endpoint.outgoing_video_source.adapt_output_format(
+            MAX_VIDEO_WIDTH,
+            MAX_VIDEO_HEIGHT,
+            MAX_VIDEO_FPS,
+        );
         endpoint.call_manager.proceed(
             call_id,
             call_context,
@@ -1123,6 +1134,17 @@ fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
         endpoint
             .outgoing_video_track
             .set_content_hint(is_screenshare);
+
+        let (width, height, fps) = if is_screenshare {
+            // Remove limit
+            (0, 0, 0)
+        } else {
+            (MAX_VIDEO_WIDTH, MAX_VIDEO_HEIGHT, MAX_VIDEO_FPS)
+        };
+        endpoint
+            .outgoing_video_source
+            .adapt_output_format(width, height, fps);
+
         let mut active_connection = endpoint.call_manager.active_connection()?;
         active_connection.update_sender_status(signaling::SenderStatus {
             sharing_screen: Some(is_screenshare),
@@ -1249,9 +1271,11 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     };
 
     with_call_endpoint(&mut cx, |endpoint| {
-        endpoint
-            .outgoing_video_source
-            .adapt_output_format(640, 480, 30);
+        endpoint.outgoing_video_source.adapt_output_format(
+            GROUP_CALL_MAX_VIDEO_WIDTH,
+            GROUP_CALL_MAX_VIDEO_HEIGHT,
+            MAX_VIDEO_FPS,
+        );
 
         let peer_connection_factory = endpoint.peer_connection_factory.clone();
         let outgoing_audio_track = endpoint.outgoing_audio_track.clone();
@@ -1458,6 +1482,21 @@ fn setOutgoingGroupCallVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<J
         endpoint
             .outgoing_video_track
             .set_content_hint(is_screenshare);
+
+        let (width, height, fps) = if is_screenshare {
+            // Remove limit
+            (0, 0, 0)
+        } else {
+            (
+                GROUP_CALL_MAX_VIDEO_WIDTH,
+                GROUP_CALL_MAX_VIDEO_HEIGHT,
+                MAX_VIDEO_FPS,
+            )
+        };
+        endpoint
+            .outgoing_video_source
+            .adapt_output_format(width, height, fps);
+
         endpoint
             .call_manager
             .set_sharing_screen(client_id, is_screenshare);
