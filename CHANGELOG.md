@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.29.1
+
+- Electron: Disable output format limits when screensharing
+
 ## v2.29.0
 
 - Call Links: Add Admin Actions support
