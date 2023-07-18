@@ -12,7 +12,7 @@ import zipfile
 from emos import compute_emos
 from io import BytesIO, StringIO
 from pandas.api.types import is_numeric_dtype
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 pd.set_option('display.precision', 1)
 # Disable scientific notation (doesn't go well with SSRCs)
@@ -21,7 +21,7 @@ pd.set_option('display.float_format', lambda x: '%.1f' % x)
 GROUP_CALL_TYPE = 'Group'
 
 class Call():
-    def __init__(self, logs: list[str], **kwargs: pd.DataFrame):
+    def __init__(self, id: str, logs: list[str], **kwargs: pd.DataFrame):
         self.connection = kwargs['connection']
         self.audio_send = kwargs['audio_send']
         self.audio_recv = kwargs['audio_recv']
@@ -33,7 +33,7 @@ class Call():
         self.start = kwargs['start']
         self.end = kwargs['end']
         self.type = kwargs['type']
-        self.id = kwargs['id']
+        self.id = id
 
     def ssrc(self) -> None:
         """
@@ -181,7 +181,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
         return id[0] if len(id) > 0 else 'Unknown'
 
     raw_calls = []
-    raw_call = {}
+    raw_call: dict[str, Any] = {}
 
     def append(key: str, value: str) -> None:
         if raw_call:
@@ -380,6 +380,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
             audio_recv['mos'] = pd.DataFrame({'mos' : []})
 
         return Call(
+            raw_call['id'],
             connection=connection,
             audio_send=audio_send,
             audio_recv=audio_recv,
@@ -390,17 +391,57 @@ def _parse_calls(logs: list[str]) -> list[Call]:
             logs=raw_call['logs'],
             start=raw_call['start'],
             end=raw_call['end'],
-            type=raw_call['type'],
-            id=raw_call['id']
+            type=raw_call['type']
         )
 
     return [create_call(raw_call) for raw_call in raw_calls]
 
 
-def load_calls(url: str) -> list[Call]:
+def _match_call_ids(results: list[list[Call]]) -> list[list[Call]]:
+    """
+    Returns calls which appear in all input logs
+    """
+
+    def stable_id(id: str) -> str:
+        """
+        Takes an ID found in logs and returns an ID that will be consistent
+        across client platforms
+        """
+        if id.startswith('0x[ REDACTED_HEX'):
+            # e.g. `0x[ REDACTED_HEX:...abc ]`
+            return id[-5:-2]
+
+        # e.g. `0x123456789abcdefabc`
+        return id[-3:]
+
+    def contains_id(id: str, calls: list[Call]) -> bool:
+        return any(stable_id(call.id) == id for call in calls)
+
+    def matches_all(id: str, results: list[list[Call]]) -> bool:
+        return all(contains_id(id, calls) for calls in results)
+
+    ids = [stable_id(call.id) for call in results[0]]
+    matching_ids = [id for id in ids if matches_all(id, results[1:])]
+
+    for i in range(len(results)):
+        results[i] = [call for call in results[i] if stable_id(call.id) in matching_ids]
+
+    return results
+
+
+def _load_calls_from_url(url: str) -> list[Call]:
     response = requests.get(url)
     logs = _extract_logs(url, response)
     return _parse_calls(logs)
+
+
+def load_calls(*urls: str) -> Union[list[Call], list[list[Call]]]:
+    if len(urls) == 1:
+        return _load_calls_from_url(urls[0])
+
+    results = [_load_calls_from_url(url) for url in urls]
+
+    return _match_call_ids(results)
 
 def load_calls_from_file(path_to_file: str) -> list[Call]:
     with open(path_to_file, "r") as file:
