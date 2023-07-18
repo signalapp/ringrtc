@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::{fmt, time::Duration};
+use std::{fmt, path::Path, time::Duration};
 
 /// ChartDimension is used for summary reports, to help automate the summary charting and
 /// display of most tracked `dimensions` that are available.
@@ -361,6 +361,32 @@ pub struct VideoConfig {
     pub input_name: Option<String>,
     /// Flag to use the VP9 video codec, otherwise VP8 will be used (the default).
     pub enable_vp9: bool,
+}
+
+impl VideoConfig {
+    pub fn dimensions(&self) -> Option<(u16, u16)> {
+        // FIXME: Duplicated from the CLI.
+        let basename = &self
+            .input_name
+            .as_ref()
+            .map(Path::new)?
+            .file_stem()
+            .expect("not a valid file path");
+        let basename = basename.to_str().expect("filenames must be UTF-8");
+        let (_, dimensions) = basename
+            .rsplit_once('@')
+            .expect("cannot infer video dimensions from filename");
+        let (width_str, height_str) = dimensions
+            .split_once('x')
+            .expect("cannot infer video dimensions from filename");
+        let video_width: u16 = width_str
+            .parse()
+            .expect("cannot parse video width from filename");
+        let video_height: u16 = height_str
+            .parse()
+            .expect("cannot parse video height from filename");
+        Some((video_width, video_height))
+    }
 }
 
 /// A NetworkConfig item to be applied at a particular time offset.

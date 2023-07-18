@@ -120,6 +120,16 @@ pub unsafe fn Rust_getVideoFrameBufferAsI420(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_scaleVideoFrameBuffer(
+    _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
+    _width: isize,
+    _height: isize,
+) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
+    info!("Rust_scaleVideoFrameBuffer()");
+    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_copyAndRotateVideoFrameBuffer(
     _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     _rotation: VideoRotation,

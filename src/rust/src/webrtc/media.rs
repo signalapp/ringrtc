@@ -228,6 +228,26 @@ impl VideoFrame {
             ))
         }
     }
+
+    /// Scales the frame to the given dimensions.
+    ///
+    /// Both scaling up and down are supported.
+    pub fn scale(&self, width: u32, height: u32) -> Self {
+        Self {
+            metadata: VideoFrameMetadata {
+                width,
+                height,
+                rotation: self.metadata.rotation,
+            },
+            rffi_buffer: webrtc::Arc::from_owned(unsafe {
+                media::Rust_scaleVideoFrameBuffer(
+                    self.rffi_buffer.as_borrowed(),
+                    width.try_into().unwrap(),
+                    height.try_into().unwrap(),
+                )
+            }),
+        }
+    }
 }
 
 /// Rust wrapper around WebRTC C++ VideoTrackSourceInterface object.

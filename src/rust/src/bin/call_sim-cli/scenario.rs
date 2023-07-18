@@ -35,6 +35,8 @@ pub struct ScenarioConfig {
     pub video_width: u32,
     pub video_height: u32,
     pub video_input: Option<PathBuf>,
+    pub output_video_width: u32,
+    pub output_video_height: u32,
     pub video_output: Option<PathBuf>,
     pub ice_server: IceServer,
     pub force_relay: bool,
@@ -81,6 +83,8 @@ impl ManagedScenario {
         let video_sink = scenario_config.video_output.as_ref().map(|path| {
             Box::new(video::WriterVideoSink::new(
                 File::create(path).expect("open video output"),
+                scenario_config.output_video_width,
+                scenario_config.output_video_height,
             )) as Box<dyn VideoSink>
         });
 

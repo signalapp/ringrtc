@@ -102,6 +102,11 @@ extern "C" {
     pub fn Rust_getVideoFrameBufferAsI420(
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     ) -> webrtc::ptr::Borrowed<u8>;
+    pub fn Rust_scaleVideoFrameBuffer(
+        buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
+        width: isize,
+        height: isize,
+    ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>;
     pub fn Rust_copyAndRotateVideoFrameBuffer(
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
         rotation: VideoRotation,

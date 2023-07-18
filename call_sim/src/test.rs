@@ -18,7 +18,7 @@ use relative_path::RelativePath;
 use std::{
     collections::HashMap,
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     thread,
     time::{Duration, Instant},
 };
@@ -110,27 +110,6 @@ impl Video {
 
     fn mp4(&self) -> String {
         format!("{}.mp4", self.name)
-    }
-
-    fn dimensions(&self) -> (u16, u16) {
-        // FIXME: Duplicated from the CLI.
-        let basename = Path::new(&self.name)
-            .file_stem()
-            .expect("not a valid file path");
-        let basename = basename.to_str().expect("filenames must be UTF-8");
-        let (_, dimensions) = basename
-            .rsplit_once('@')
-            .expect("cannot infer video dimensions from filename");
-        let (width_str, height_str) = dimensions
-            .split_once('x')
-            .expect("cannot infer video dimensions from filename");
-        let video_width: u16 = width_str
-            .parse()
-            .expect("cannot parse video width from filename");
-        let video_height: u16 = height_str
-            .parse()
-            .expect("cannot parse video height from filename");
-        (video_width, video_height)
     }
 }
 
@@ -271,6 +250,7 @@ impl Test {
                 test_case.client_a.video.map(|v| v.raw()).as_deref(),
                 test_case.client_a.output_yuv.as_deref(),
                 &test_case_config.client_a_config,
+                &test_case_config.client_b_config,
             )
             .await?;
 
@@ -281,6 +261,7 @@ impl Test {
                 test_case.client_b.video.map(|v| v.raw()).as_deref(),
                 test_case.client_b.output_yuv.as_deref(),
                 &test_case_config.client_b_config,
+                &test_case_config.client_a_config,
             )
             .await?;
 
@@ -546,7 +527,10 @@ impl Test {
             .await?;
         }
 
-        if let Some(client_a_video) = test_case.client_a.video {
+        if let (Some(client_a_video), Some(dimensions)) = (
+            test_case.client_a.video,
+            test_case_config.client_a_config.video.dimensions(),
+        ) {
             convert_yuv_to_mp4(
                 &test_case.test_path,
                 test_case
@@ -559,7 +543,7 @@ impl Test {
                     .output_mp4
                     .as_deref()
                     .expect("missing output"),
-                client_a_video.dimensions(),
+                dimensions,
             )
             .await?;
 
@@ -572,12 +556,12 @@ impl Test {
                     .expect("missing output"),
                 &self.set_path,
                 &client_a_video.raw(),
-                client_a_video.dimensions(),
+                dimensions,
             )
             .await?;
         }
 
-        if let Some(client_b_video) = test_case.client_b.video {
+        if let Some(dimensions) = test_case_config.client_b_config.video.dimensions() {
             convert_yuv_to_mp4(
                 &test_case.test_path,
                 test_case
@@ -590,7 +574,7 @@ impl Test {
                     .output_mp4
                     .as_deref()
                     .expect("missing output"),
-                client_b_video.dimensions(),
+                dimensions,
             )
             .await?;
         }

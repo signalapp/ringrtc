@@ -648,6 +648,7 @@ pub async fn start_cli(
     input_video_file: Option<&str>,
     output_video_file: Option<&str>,
     call_config: &CallConfig,
+    remote_call_config: &CallConfig,
 ) -> Result<()> {
     println!("Starting cli for `{}`", name);
 
@@ -736,6 +737,11 @@ pub async fn start_cli(
     }
     if let Some(output_video_file) = output_video_file {
         args.push(format!("--output-video-file=/report/{}", output_video_file));
+    }
+
+    if let Some((width, height)) = remote_call_config.video.dimensions() {
+        args.push(format!("--output-video-width={}", width));
+        args.push(format!("--output-video-height={}", height));
     }
 
     args.extend(call_config.extra_cli_args.iter().cloned());

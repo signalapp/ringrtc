@@ -110,13 +110,17 @@ impl VideoSink for LoggingVideoSink {
 pub struct WriterVideoSink<T> {
     shared_state: Arc<(T, AtomicU64)>,
     epoch: Instant,
+    width: u32,
+    height: u32,
 }
 
 impl<T> WriterVideoSink<T> {
-    pub fn new(output: T) -> Self {
+    pub fn new(output: T, width: u32, height: u32) -> Self {
         Self {
             shared_state: Arc::new((output, AtomicU64::new(0))),
             epoch: Instant::now(),
+            width,
+            height,
         }
     }
 }
@@ -126,6 +130,8 @@ impl<T> Clone for WriterVideoSink<T> {
         Self {
             shared_state: self.shared_state.clone(),
             epoch: self.epoch,
+            width: self.width,
+            height: self.height,
         }
     }
 }
@@ -150,7 +156,15 @@ where
             );
         };
 
-        let frame_data = frame.as_i420().expect("I420 data not available");
+        // `frame` can vary in size based on network conditions, so scale it to a known size to
+        // simplify further processing.
+        let input_frame = if self.width > 0 && self.height > 0 {
+            frame.scale(self.width, self.height)
+        } else {
+            frame
+        };
+
+        let frame_data = input_frame.as_i420().expect("I420 data not available");
         let elapsed = self.epoch.elapsed();
 
         let mut next_frame_elapsed =

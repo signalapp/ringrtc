@@ -68,6 +68,12 @@ struct Args {
     #[arg(long, default_value_t = 0)]
     input_video_height: u32,
 
+    #[arg(long, default_value_t = 0)]
+    output_video_width: u32,
+
+    #[arg(long, default_value_t = 0)]
+    output_video_height: u32,
+
     #[arg(long)]
     output_video_file: Option<String>,
 
@@ -238,6 +244,8 @@ fn main() -> Result<()> {
             video_width: args.input_video_width,
             video_height: args.input_video_height,
             video_input: args.input_video_file.map(Into::into),
+            output_video_width: args.output_video_width,
+            output_video_height: args.output_video_height,
             video_output: args.output_video_file.map(Into::into),
             ice_server,
             force_relay: args.force_relay,
