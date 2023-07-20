@@ -14,7 +14,7 @@ jobs:
   check-up-to-date:
     name: Already up to date?
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'schedule' && github.repository_owner == 'signalapp' && endsWith(github.repository, '-private') }}
     outputs:
       has-changes: ${{ steps.check.outputs.has-changes }}
     steps:
@@ -26,7 +26,7 @@ jobs:
     name: Build for Android
     runs-on: ubuntu-latest
     needs: [check-up-to-date]
-    if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || needs.check-up-to-date.result == 'skipped') }}
+    if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
 
     steps:
     - name: Install protoc
@@ -108,7 +108,7 @@ jobs:
     name: Build for all iOS targets
     runs-on: macos-latest
     needs: [check-up-to-date]
-    if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || needs.check-up-to-date.result == 'skipped') }}
+    if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
 
     steps:
     - uses: actions/checkout@v3
