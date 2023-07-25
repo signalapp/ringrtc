@@ -28,6 +28,16 @@ the log).
 `describe` takes a list of `Call`s  and summarizes information about them into
 a [pandas `DataFrame`](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html).
 
+`load_calls` can also load multiple logs at once, and the results will include
+only the calls that appear in all given logs:
+
+```python
+(caller, callee) = call_log_parser.load_calls(
+    "https://debuglogs.org/platform/version/hash",
+    "https://debuglogs.org/platform/version/hash2",
+)
+```
+
 A single `Call` has the following attributes:
 
 - `connection`
