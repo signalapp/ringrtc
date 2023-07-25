@@ -157,7 +157,7 @@ fn redact_ice_password(text: Cow<'_, str>) -> Cow<'_, str> {
 // - IPv4-mapped IPv6 addresses (section 2.1 of rfc2765)
 // - IPv4-translated addresses (section 2.1 of rfc2765)
 //
-// To make the above easier to understand, the following "pseudo" code replicates the RE:
+// To make the below easier to understand, the following "pseudo" code replicates the RE:
 //
 // IPV4SEG  = (25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])
 // IPV4ADDR = (IPV4SEG\.){3,3}IPV4SEG
@@ -179,20 +179,26 @@ fn redact_ice_password(text: Cow<'_, str>) -> Cow<'_, str> {
 
 #[cfg(any(not(debug_assertions), test))]
 fn redact_ipv6(text: Cow<'_, str>) -> Cow<'_, str> {
-    let re = regex_aot::regex!("\
-        [Ff][Ee]80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|\
-        (::)?([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|\
-        ([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|\
-        ([0-9a-fA-F]{1,4}:){1,1}(:[0-9a-fA-F]{1,4}){1,6}|\
-        ([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|\
-        ([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|\
-        ([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|\
-        ([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|\
-        ([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|\
+    // Differences from the above description:
+    // - IPV4SEG is simplified to [0-9]{1,3}
+    // - IPV4ADDR allows a final "x" segment
+    // - Any IPV6SEG after "::" may be "x", or any segment in a "full" non-zero-compressed address
+    let re = regex_aot::regex!(
+        "\
+        [Ff][Ee]80:(:(x|[0-9a-fA-F]{0,4})){0,4}%[0-9a-zA-Z]{1,}|\
+        (::)?([0-9a-fA-F]{1,4}:){1,4}:([0-9]{1,3}\\.){3,3}(x|[0-9]{1,3})|\
+        ((x|[0-9a-fA-F]{1,4}):){7,7}(x|[0-9a-fA-F]{1,4})|\
+        ([0-9a-fA-F]{1,4}:){1,1}(:(x|[0-9a-fA-F]{1,4})){1,6}|\
+        ([0-9a-fA-F]{1,4}:){1,2}(:(x|[0-9a-fA-F]{1,4})){1,5}|\
+        ([0-9a-fA-F]{1,4}:){1,3}(:(x|[0-9a-fA-F]{1,4})){1,4}|\
+        ([0-9a-fA-F]{1,4}:){1,4}(:(x|[0-9a-fA-F]{1,4})){1,3}|\
+        ([0-9a-fA-F]{1,4}:){1,5}(:(x|[0-9a-fA-F]{1,4})){1,2}|\
+        ([0-9a-fA-F]{1,4}:){1,6}:(x|[0-9a-fA-F]{1,4})|\
         ([0-9a-fA-F]{1,4}:){1,7}:|\
-        ::([fF]{4}(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|\
-        :((:[0-9a-fA-F]{1,4}){1,7}|:)\
-    ");
+        ::([fF]{4}(:0{1,4}){0,1}:){0,1}([0-9]{1,3}\\.){3,3}(x|[0-9]{1,3})|\
+        :((:(x|[0-9a-fA-F]{1,4})){1,7}|:)\
+        "
+    );
     replace_all(text, re, "[REDACTED ipv6]")
 }
 
@@ -223,7 +229,7 @@ fn replace_all<'a>(
 
 #[cfg(any(not(debug_assertions), test))]
 fn redact_ipv4(text: Cow<'_, str>) -> Cow<'_, str> {
-    let re = regex_aot::regex!("(((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))\\.){3,3}((25[0-5])|(2[0-4][0-9])|([0-1][0-9]{2,2})|([0-9]{1,2}))");
+    let re = regex_aot::regex!("([0-9]{1,3}\\.){3,3}(x|[0-9]{1,3})");
     replace_all(text, re, "[REDACTED ipv4]")
 }
 
@@ -410,6 +416,12 @@ mod tests {
             "::ffff:255.255.255.255",
             "2001:db8:3:4::192.0.2.33",
             "64:ff9b::192.0.2.33",
+            "aaaa:bbbb:cccc:x:x:x:x:x",
+            "1:2::x:x:x:x:x",
+            "1::x:x",
+            "::x",
+            "::196.168.50.x",
+            "::ffff:196.168.50.x",
         ];
 
         let prefix = ["", "text", "text ", "<", "@"];
@@ -459,6 +471,7 @@ mod tests {
             "002.8.122.2",
             "2.168.122.9",
             "92.168.122.250",
+            "192.168.50.x",
         ];
 
         let prefix = ["", "text", "text ", "<", "@"];
