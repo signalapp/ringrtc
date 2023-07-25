@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.30.0
+
+- Add JoinState.PENDING, for call link calls with admin approval
+
+- Group Calls: Compute send rates based on devices, not users
+
+- CI: Only run the slow tests on the private repo
+
+- Call Sim: Use a fixed resolution for output video
+
+- Log notebook improvements
+
 ## v2.29.1
 
 - Electron: Disable output format limits when screensharing
