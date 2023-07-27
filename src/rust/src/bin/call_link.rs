@@ -8,13 +8,14 @@ mod support {
 }
 use support::http_client;
 
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::time::{Duration, SystemTime};
 
 use rand::SeedableRng;
 use ringrtc::lite::call_links::{CallLinkRootKey, CallLinkState, CallLinkUpdateRequest};
-use ringrtc::lite::http;
+use ringrtc::lite::http::{self, Client};
 use zkgroup::call_links::CallLinkSecretParams;
 
 struct Log;
@@ -61,6 +62,30 @@ fn start_of_today_in_epoch_seconds() -> zkgroup::Timestamp {
     now.as_secs() - remainder
 }
 
+fn issue_and_present_auth_credential(
+    server_zkparams: &zkgroup::generic_server_params::GenericServerSecretParams,
+    public_zkparams: &zkgroup::generic_server_params::GenericServerPublicParams,
+    root_key: &CallLinkRootKey,
+) -> zkgroup::call_links::CallLinkAuthCredentialPresentation {
+    let timestamp = start_of_today_in_epoch_seconds();
+    let auth_credential = zkgroup::call_links::CallLinkAuthCredentialResponse::issue_credential(
+        USER_ID,
+        timestamp,
+        server_zkparams,
+        rand::random(),
+    )
+    .receive(USER_ID, timestamp, public_zkparams)
+    .unwrap();
+    let call_link_zkparams = CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
+    auth_credential.present(
+        USER_ID,
+        timestamp,
+        public_zkparams,
+        &call_link_zkparams,
+        rand::random(),
+    )
+}
+
 fn show_result(result: Result<CallLinkState, http::ResponseStatus>) {
     match result {
         Ok(state) => println!("{state:#?}"),
@@ -71,9 +96,9 @@ fn show_result(result: Result<CallLinkState, http::ResponseStatus>) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let url = args
+    let url: &'static str = args
         .get(1)
-        .map(String::as_str)
+        .map(|s| &*Box::leak(s.clone().into_boxed_str()))
         .unwrap_or("http://localhost:8090");
     let zkparams_base64 = args.get(2).map(String::as_str).unwrap_or(DEFAULT_ZKPARAMS);
     let server_zkparams: zkgroup::generic_server_params::GenericServerSecretParams =
@@ -104,6 +129,7 @@ help                       - show this message
 create <id>                - create a new link
 read <id>                  - fetch the current state of a link
 set-title <id> <new-title> - change the title of a link
+reset-expiration <id>      - reset a link's expiration (if the server has this enabled)
 root-key <id>              - print the root key for a link
 exit                       - quit
 
@@ -151,24 +177,10 @@ exit                       - quit
             }
             ["read", id] => {
                 let root_key = root_key_from_id(id);
-                let timestamp = start_of_today_in_epoch_seconds();
-                let auth_credential =
-                    zkgroup::call_links::CallLinkAuthCredentialResponse::issue_credential(
-                        USER_ID,
-                        timestamp,
-                        &server_zkparams,
-                        rand::random(),
-                    )
-                    .receive(USER_ID, timestamp, &public_zkparams)
-                    .unwrap();
-                let call_link_zkparams =
-                    CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
-                let auth_credential_presentation = auth_credential.present(
-                    USER_ID,
-                    timestamp,
+                let auth_credential_presentation = issue_and_present_auth_credential(
+                    &server_zkparams,
                     &public_zkparams,
-                    &call_link_zkparams,
-                    rand::random(),
+                    &root_key,
                 );
                 ringrtc::lite::call_links::read_call_link(
                     &http_client,
@@ -181,24 +193,10 @@ exit                       - quit
             ["set-title", id, new_title] => {
                 let root_key = root_key_from_id(id);
                 let encrypted_name = root_key.encrypt(new_title.as_bytes(), rand::thread_rng());
-                let timestamp = start_of_today_in_epoch_seconds();
-                let auth_credential =
-                    zkgroup::call_links::CallLinkAuthCredentialResponse::issue_credential(
-                        USER_ID,
-                        timestamp,
-                        &server_zkparams,
-                        rand::random(),
-                    )
-                    .receive(USER_ID, timestamp, &public_zkparams)
-                    .unwrap();
-                let call_link_zkparams =
-                    CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
-                let auth_credential_presentation = auth_credential.present(
-                    USER_ID,
-                    timestamp,
+                let auth_credential_presentation = issue_and_present_auth_credential(
+                    &server_zkparams,
                     &public_zkparams,
-                    &call_link_zkparams,
-                    rand::random(),
+                    &root_key,
                 );
                 ringrtc::lite::call_links::update_call_link(
                     &http_client,
@@ -212,6 +210,58 @@ exit                       - quit
                     },
                     Box::new(show_result),
                 );
+            }
+            ["reset-expiration", id] => {
+                let root_key = root_key_from_id(id);
+                let auth_credential_presentation = issue_and_present_auth_credential(
+                    &server_zkparams,
+                    &public_zkparams,
+                    &root_key,
+                );
+                // This is a testing-only API, so RingRTC doesn't implement it for us.
+                // Manually construct the request here.
+                let http_client_inner = http_client.clone();
+                http_client.send_request(
+                    http::Request {
+                        method: http::Method::Post,
+                        url: format!("{url}/v1/call-link/reset-expiration"),
+                        headers: HashMap::from_iter([
+                            (
+                                "Authorization".to_string(),
+                                ringrtc::lite::call_links::auth_header_from_auth_credential(
+                                    &bincode::serialize(&auth_credential_presentation).unwrap(),
+                                ),
+                            ),
+                            (
+                                "X-Room-Id".to_string(),
+                                hex::encode(root_key.derive_room_id()),
+                            ),
+                        ]),
+                        body: None,
+                    },
+                    Box::new(move |response| match response {
+                        Some(response) if response.status.is_success() => {
+                            // Do a regular read to show the update.
+                            // zkgroup sin: we're reusing a presentation.
+                            // But this is a testing client only.
+                            ringrtc::lite::call_links::read_call_link(
+                                &http_client_inner,
+                                url,
+                                root_key,
+                                &bincode::serialize(&auth_credential_presentation).unwrap(),
+                                Box::new(show_result),
+                            )
+                        }
+                        Some(response) => {
+                            println!("failed: {}", response.status);
+                            prompt("\n> ");
+                        }
+                        None => {
+                            println!("request failed");
+                            prompt("\n> ");
+                        }
+                    }),
+                )
             }
             ["root-key", id] => {
                 let root_key = root_key_from_id(id);
