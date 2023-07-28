@@ -33,6 +33,11 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     - uses: actions/checkout@v3
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+    - name: set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: 17
     - run: bin/fetch-artifact -p android
     - run: bin/build-aar --release --ringrtc-only
     - name: Upload libraries
@@ -55,8 +60,6 @@ jobs:
         arch: [x86, x86_64]
 
     steps:
-      - run: 'echo "JAVA_HOME=$JAVA_HOME_11_X64" >> "$GITHUB_ENV"'
-
       # For hardware acceleration; see https://github.blog/changelog/2023-02-23-hardware-accelerated-android-virtualization-on-actions-windows-and-linux-larger-hosted-runners/
       - name: Enable KVM group perms
         run: |
@@ -72,6 +75,12 @@ jobs:
         with:
           name: libs
           path: out/release/libs
+
+      - name: set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
 
       # From reactivecircus/android-emulator-runner
       - name: AVD cache

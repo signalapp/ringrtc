@@ -1,5 +1,5 @@
 plugins {
-    id 'com.android.library' version '7.0.0'
+    id 'com.android.library' version '8.0.2'
     id 'maven-publish'
     id 'signing'
 }
@@ -26,7 +26,9 @@ ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDir") ? [releas
 ext.webrtc_jar           = project.hasProperty("webrtcJar") ? webrtcJar : "libs/libwebrtc.jar"
 
 android {
-    compileSdk 30
+    namespace 'org.signal.ringrtc'
+
+    compileSdk 33
 
     defaultConfig {
         minSdk 21
@@ -56,11 +58,16 @@ android {
         // Libraries are already stripped if necessary when linked.
         doNotStrip "**/*.so"
     }
+
+    publishing {
+      singleVariant("debug")
+      singleVariant("release")
+    }
 }
 
 dependencies {
     api files(webrtc_jar)
-    api 'androidx.annotation:annotation:1.2.0'
+    api 'androidx.annotation:annotation:1.4.0'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.6'
     androidTestImplementation "androidx.test:runner:1.4.0"
     androidTestImplementation "androidx.test:core:1.4.0"
