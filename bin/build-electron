@@ -94,7 +94,7 @@ case "$TARGET_ARCH" in
         ;;
 esac
 
-export MACOSX_DEPLOYMENT_TARGET="10.10"
+export MACOSX_DEPLOYMENT_TARGET="10.13"
 
 # Build WebRTC.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]

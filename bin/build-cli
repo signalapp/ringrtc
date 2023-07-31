@@ -82,7 +82,7 @@ then
     exit 1
 fi
 
-export MACOSX_DEPLOYMENT_TARGET="10.10"
+export MACOSX_DEPLOYMENT_TARGET="10.13"
 
 # Build WebRTC.
 (
