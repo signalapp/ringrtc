@@ -914,7 +914,7 @@ impl Platform for NativePlatform {
             client_id,
             peek_info.era_id,
             peek_info.max_devices,
-            peek_info.device_count()
+            peek_info.device_count_including_pending_devices()
         );
 
         let result = self.send_group_update(GroupUpdate::PeekChanged {

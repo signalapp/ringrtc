@@ -1424,8 +1424,8 @@ impl Client {
                 }
                 JoinState::NotJoined(ring_id) => {
                     if let Some(peek_info) = &state.last_peek_info {
-                        if peek_info.device_count() >= peek_info.max_devices.unwrap_or(u32::MAX) as usize {
-                            info!("Ending group call client because there are {}/{} devices in the call.", peek_info.device_count(), peek_info.max_devices.unwrap());
+                        if peek_info.device_count_including_pending_devices() >= peek_info.max_devices.unwrap_or(u32::MAX) as usize {
+                            info!("Ending group call client because there are {}/{} devices in the call.", peek_info.device_count_including_pending_devices(), peek_info.max_devices.unwrap());
                             Self::end(state, EndReason::HasMaxDevices);
                             return;
                         }
@@ -4211,7 +4211,7 @@ mod tests {
             owned_state.creator = peek_info.creator.clone();
             owned_state.era_id = peek_info.era_id.clone();
             owned_state.max_devices = peek_info.max_devices;
-            owned_state.device_count = peek_info.device_count();
+            owned_state.device_count = peek_info.device_count_including_pending_devices();
             self.peek_changed.set();
         }
 

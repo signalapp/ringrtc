@@ -235,7 +235,8 @@ public class CallLinksTest extends CallTestBase {
         callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
             errors.checkThat(result.getStatus(), is((short)200));
             errors.checkThat(result.getValue().getEraId(), is((String)null));
-            errors.checkThat(result.getValue().getDeviceCount(), is(0L));
+            errors.checkThat(result.getValue().getDeviceCountIncludingPendingDevices(), is(0L));
+            errors.checkThat(result.getValue().getDeviceCountExcludingPendingDevices(), is(0L));
             latch.countDown();
         });
 

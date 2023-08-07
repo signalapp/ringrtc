@@ -39,7 +39,8 @@ public class CallManagerTest extends CallTestBase {
         CountDownLatch latch = new CountDownLatch(1);
         callManager.peekGroupCall("sfu.example", new byte[] { 1, 2, 3 }, new ArrayList<>(), result -> {
             errors.checkThat(result.getEraId(), is((String)null));
-            errors.checkThat(result.getDeviceCount(), is(0L));
+            errors.checkThat(result.getDeviceCountIncludingPendingDevices(), is(0L));
+            errors.checkThat(result.getDeviceCountExcludingPendingDevices(), is(0L));
             latch.countDown();
         });
 
@@ -91,7 +92,8 @@ public class CallManagerTest extends CallTestBase {
         CountDownLatch latch = new CountDownLatch(1);
         callManager.peekGroupCall("sfu.example", new byte[] { 1, 2, 3 }, Arrays.asList(members), result -> {
             errors.checkThat(result.getEraId(), is("mesozoic"));
-            errors.checkThat(result.getDeviceCount(), is(7L));
+            errors.checkThat(result.getDeviceCountIncludingPendingDevices(), is(7L));
+            errors.checkThat(result.getDeviceCountExcludingPendingDevices(), is(3L));
             errors.checkThat(result.getMaxDevices(), is(20L));
             errors.checkThat(result.getCreator(), is(user1));
             errors.checkThat(

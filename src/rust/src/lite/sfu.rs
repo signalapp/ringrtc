@@ -53,7 +53,7 @@ impl PeekInfo {
 
     /// The number of devices currently joined (including the local device, any pending devices, and
     /// unknown users).
-    pub fn device_count(&self) -> usize {
+    pub fn device_count_including_pending_devices(&self) -> usize {
         self.devices.len() + self.pending_devices.len()
     }
 }
@@ -645,7 +645,10 @@ pub mod ios {
                     creator: rtc_Bytes::from_or_default(peek_info.creator.as_ref()),
                     era_id: rtc_String::from_or_default(peek_info.era_id.as_ref()),
                     max_devices: rtc_OptionalU32::from_or_default(peek_info.max_devices),
-                    device_count: peek_info.device_count() as u32,
+                    device_count_including_pending_devices: peek_info
+                        .device_count_including_pending_devices()
+                        as u32,
+                    device_count_excluding_pending_devices: peek_info.devices.len() as u32,
                     pending_users: rtc_UserIds::from(&rtc_pending_users),
                 },
             };
@@ -667,7 +670,8 @@ pub mod ios {
         creator: rtc_Bytes<'a>,
         era_id: rtc_String<'a>,
         max_devices: rtc_OptionalU32,
-        device_count: u32,
+        device_count_including_pending_devices: u32,
+        device_count_excluding_pending_devices: u32,
         joined_members: rtc_UserIds<'a>,
         pending_users: rtc_UserIds<'a>,
     }

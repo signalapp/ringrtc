@@ -43,7 +43,9 @@ public final class PeekInfo {
   @Nullable
   private final Long       maxDevices;
 
-  private final long       deviceCount;
+  private final long       deviceCountIncludingPendingDevices;
+
+  private final long       deviceCountExcludingPendingDevices;
   @NonNull
   private final List<UUID> pendingUsers;
 
@@ -52,14 +54,16 @@ public final class PeekInfo {
     @Nullable UUID       creator,
     @Nullable String     eraId,
     @Nullable Long       maxDevices,
-              long       deviceCount,
+              long       deviceCountIncludingPendingDevices,
+              long       deviceCountExcludingPendingDevices,
     @NonNull  List<UUID> pendingUsers
   ) {
     this.joinedMembers = joinedMembers;
     this.creator = creator;
     this.eraId = eraId;
     this.maxDevices = maxDevices;
-    this.deviceCount = deviceCount;
+    this.deviceCountIncludingPendingDevices = deviceCountIncludingPendingDevices;
+    this.deviceCountExcludingPendingDevices = deviceCountExcludingPendingDevices;
     this.pendingUsers = pendingUsers;
   }
 
@@ -69,7 +73,8 @@ public final class PeekInfo {
     @Nullable byte[]       creator,
     @Nullable String       eraId,
     @Nullable Long         maxDevices,
-              long         deviceCount,
+              long         deviceCountIncludingPendingDevices,
+              long         deviceCountExcludingPendingDevices,
     @NonNull  List<byte[]> rawPendingUsers
   ) {
     Log.i(TAG, "fromNative(): joinedMembers.size = " + rawJoinedMembers.size());
@@ -84,7 +89,7 @@ public final class PeekInfo {
         pendingUsers.add(Util.getUuidFromBytes(pendingUser));
     }
 
-    return new PeekInfo(joinedMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCount, pendingUsers);
+    return new PeekInfo(joinedMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCountIncludingPendingDevices, deviceCountExcludingPendingDevices, pendingUsers);
   }
 
   @NonNull
@@ -107,8 +112,18 @@ public final class PeekInfo {
     return maxDevices;
   }
 
+  /** @deprecated Use {@link #getDeviceCountIncludingPendingDevices()} or {@link #getDeviceCountExcludingPendingDevices()} as appropriate */
+  @Deprecated
   public long getDeviceCount() {
-    return deviceCount;
+    return deviceCountIncludingPendingDevices;
+  }
+
+  public long getDeviceCountIncludingPendingDevices() {
+    return deviceCountIncludingPendingDevices;
+  }
+
+  public long getDeviceCountExcludingPendingDevices() {
+    return deviceCountExcludingPendingDevices;
   }
 
   @NonNull

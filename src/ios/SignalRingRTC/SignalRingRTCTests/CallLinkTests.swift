@@ -263,7 +263,8 @@ final class CallLinkTests: XCTestCase {
             .done { result in
                 XCTAssertNil(result.errorStatusCode)
                 XCTAssertNil(result.peekInfo.eraId)
-                XCTAssertEqual(0, result.peekInfo.deviceCount)
+                XCTAssertEqual(0, result.peekInfo.deviceCountIncludingPendingDevices)
+                XCTAssertEqual(0, result.peekInfo.deviceCountExcludingPendingDevices)
                 callbackCompleted.fulfill()
             }
 
@@ -285,7 +286,8 @@ final class CallLinkTests: XCTestCase {
             .done { result in
                 XCTAssertEqual(PeekInfo.expiredCallLinkStatus, result.errorStatusCode)
                 XCTAssertNil(result.peekInfo.eraId)
-                XCTAssertEqual(0, result.peekInfo.deviceCount)
+                XCTAssertEqual(0, result.peekInfo.deviceCountIncludingPendingDevices)
+                XCTAssertEqual(0, result.peekInfo.deviceCountExcludingPendingDevices)
                 callbackCompleted.fulfill()
             }
 
@@ -307,7 +309,8 @@ final class CallLinkTests: XCTestCase {
             .done { result in
                 XCTAssertEqual(PeekInfo.invalidCallLinkStatus, result.errorStatusCode)
                 XCTAssertNil(result.peekInfo.eraId)
-                XCTAssertEqual(0, result.peekInfo.deviceCount)
+                XCTAssertEqual(0, result.peekInfo.deviceCountIncludingPendingDevices)
+                XCTAssertEqual(0, result.peekInfo.deviceCountExcludingPendingDevices)
                 callbackCompleted.fulfill()
             }
 

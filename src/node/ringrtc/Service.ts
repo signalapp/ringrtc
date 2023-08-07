@@ -178,6 +178,7 @@ export interface PeekInfo {
   creator?: GroupCallUserId;
   eraId?: string;
   maxDevices?: number;
+  /** Includes pending devices. If you want only full participants, use `devices.length`. */
   deviceCount: number;
   pendingUsers: Array<GroupCallUserId>;
 }

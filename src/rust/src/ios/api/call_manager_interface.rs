@@ -472,7 +472,8 @@ pub struct AppInterface {
         creator: AppByteSlice,
         eraId: AppByteSlice,
         maxDevices: AppOptionalUInt32,
-        deviceCount: u32,
+        deviceCountIncludingPendingDevices: u32,
+        deviceCountExcludingPendingDevices: u32,
         pendingUsers: AppUuidArray,
     ),
     ///

@@ -78,7 +78,7 @@ impl group_call::Observer for Observer {
             "Peek info changed to creator: {:?}, era: {:?} devices: {:?}/{:?} {:?}",
             peek_info.creator,
             peek_info.era_id,
-            peek_info.device_count(),
+            peek_info.device_count_including_pending_devices(),
             peek_info.max_devices,
             peek_info.devices,
         );

@@ -1704,7 +1704,9 @@ impl AndroidPlatform {
             Some(era_id) => env.new_string(era_id)?.into(),
         };
         let jni_max_devices = self.get_optional_u32_long_object(env, peek_info.max_devices)?;
-        let jni_device_count = peek_info.device_count() as jlong;
+        let jni_device_count_including_pending =
+            peek_info.device_count_including_pending_devices() as jlong;
+        let jni_device_count_excluding_pending = peek_info.devices.len() as jlong;
 
         let pending_users = peek_info.unique_pending_users();
         let pending_user_list = jni_new_arraylist(env, pending_users.len())?;
@@ -1729,7 +1731,8 @@ impl AndroidPlatform {
             jni_creator => [byte],
             jni_era_id => java.lang.String,
             jni_max_devices => java.lang.Long,
-            jni_device_count => long,
+            jni_device_count_including_pending => long,
+            jni_device_count_excluding_pending => long,
             pending_user_list => java.util.List,
         ) -> org.signal.ringrtc.PeekInfo);
         let result = env.call_static_method(

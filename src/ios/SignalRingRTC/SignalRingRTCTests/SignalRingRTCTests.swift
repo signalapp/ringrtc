@@ -3241,7 +3241,8 @@ class SignalRingRTCTests: XCTestCase {
                 XCTAssertNil(result.errorStatusCode)
                 let peekInfo = result.peekInfo
                 XCTAssertEqual(peekInfo.eraId, "mesozoic")
-                XCTAssertEqual(peekInfo.deviceCount, 7)
+                XCTAssertEqual(peekInfo.deviceCountIncludingPendingDevices, 7)
+                XCTAssertEqual(peekInfo.deviceCountExcludingPendingDevices, 3)
                 XCTAssertEqual(peekInfo.maxDevices, 20)
                 XCTAssertEqual(peekInfo.creator, user1)
                 XCTAssertEqual(Set(peekInfo.joinedMembers), [user1, user2]);

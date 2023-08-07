@@ -940,7 +940,7 @@ func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, g
 }
 
 @available(iOSApplicationExtension, unavailable)
-func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCount: UInt32, pendingUsers: AppUuidArray) {
+func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCountIncludingPendingDevices: UInt32, deviceCountExcludingPendingDevices: UInt32, pendingUsers: AppUuidArray) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
@@ -973,7 +973,7 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
         finalMaxDevices = maxDevices.value
     }
 
-    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.toUUID(), eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCount: deviceCount, pendingUsers: finalPendingUsers)
+    let peekInfo = PeekInfo(joinedMembers: finalJoinedMembers, creator: creator.toUUID(), eraId: eraId.asString(), maxDevices: finalMaxDevices, deviceCountIncludingPendingDevices: deviceCountIncludingPendingDevices, deviceCountExcludingPendingDevices: deviceCountExcludingPendingDevices, pendingUsers: finalPendingUsers)
 
     obj.handlePeekChanged(clientId: clientId, peekInfo: peekInfo)
 }

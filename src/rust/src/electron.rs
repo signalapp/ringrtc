@@ -565,7 +565,9 @@ fn to_js_peek_info<'a>(
         None => cx.undefined().upcast(),
         Some(max_devices) => cx.number(*max_devices).upcast(),
     };
-    let device_count: Handle<JsValue> = cx.number(peek_info.device_count() as u32).upcast();
+    let device_count: Handle<JsValue> = cx
+        .number(peek_info.device_count_including_pending_devices() as u32)
+        .upcast();
 
     let pending_users = peek_info.unique_pending_users();
     let js_pending_users = JsArray::new(cx, pending_users.len() as u32);

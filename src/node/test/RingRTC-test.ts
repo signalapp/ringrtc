@@ -819,6 +819,7 @@ describe('RingRTC', () => {
       if (state.success) {
         assert.isUndefined(state.value.eraId);
         assert.equal(state.value.deviceCount, 0);
+        assert.isEmpty(state.value.devices);
       } else {
         assert.fail('should have succeeded');
       }

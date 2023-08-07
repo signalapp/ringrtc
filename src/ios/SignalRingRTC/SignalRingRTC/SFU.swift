@@ -116,7 +116,8 @@ public struct PeekInfo {
     public let creator: UUID?
     public let eraId: String?
     public let maxDevices: UInt32?
-    public let deviceCount: UInt32
+    public let deviceCountIncludingPendingDevices: UInt32
+    public let deviceCountExcludingPendingDevices: UInt32
     public let pendingUsers: [UUID]
 
     static func fromRtc(_ rtcPeekInfo: rtc_sfu_PeekInfo) -> Self {
@@ -125,10 +126,14 @@ public struct PeekInfo {
             creator: rtcPeekInfo.creator.toUUID(),
             eraId: rtcPeekInfo.era_id.toString(),
             maxDevices: rtcPeekInfo.max_devices.asUInt32(),
-            deviceCount: rtcPeekInfo.device_count,
+            deviceCountIncludingPendingDevices: rtcPeekInfo.device_count_including_pending_devices,
+            deviceCountExcludingPendingDevices: rtcPeekInfo.device_count_excluding_pending_devices,
             pendingUsers: rtcPeekInfo.pending_users.toUUIDs()
         )
     }
+
+    @available(*, deprecated, message: "use 'deviceCountIncludingPendingDevices' or 'deviceCountExcludingPendingDevices' as appropriate")
+    public var deviceCount: UInt32 { deviceCountIncludingPendingDevices }
 }
 
 extension rtc_UserIds {
