@@ -22,7 +22,7 @@ Pod::Spec.new do |s|
   s.social_media_url = 'https://twitter.com/signalapp'
 
   # Newer versions of Xcode don't correctly handle command-line testing on older simulators.
-  s.platform      = :ios, ENV.include?('RINGRTC_POD_TESTING') ? '14' : '12.2'
+  s.platform      = :ios, ENV.include?('RINGRTC_POD_TESTING') ? '14' : '13'
   s.requires_arc  = true
   s.swift_version = '5'
 
