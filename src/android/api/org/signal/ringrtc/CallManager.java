@@ -1063,6 +1063,7 @@ public class CallManager {
    * <ul>
    *   <li>401: the room does not exist (and this is the wrong API to create a new room)
    *   <li>403: the admin passkey is incorrect
+   *   <li>409: the room is currently in use, so restrictions cannot be changed at the moment
    * </ul>
    *
    * This request is idempotent; if it fails due to a network issue, it is safe to retry.

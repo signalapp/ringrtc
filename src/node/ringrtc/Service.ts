@@ -940,6 +940,7 @@ export class RingRTCType {
    * Possible failure codes include:
    * - 401: the room does not exist (and this is the wrong API to create a new room)
    * - 403: the admin passkey is incorrect
+   * - 409: the room is currently in use, so restrictions cannot be changed at the moment
    *
    * This request is idempotent; if it fails due to a network issue, it is safe to retry.
    *
