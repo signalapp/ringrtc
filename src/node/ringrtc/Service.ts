@@ -178,8 +178,10 @@ export interface PeekInfo {
   creator?: GroupCallUserId;
   eraId?: string;
   maxDevices?: number;
-  /** Includes pending devices. If you want only full participants, use `devices.length`. */
+  /** @deprecated Use {@link #deviceCountIncludingPendingDevices} and {@link #deviceCountExcludingPendingDevices} as appropriate */
   deviceCount: number;
+  deviceCountIncludingPendingDevices: number;
+  deviceCountExcludingPendingDevices: number;
   pendingUsers: Array<GroupCallUserId>;
 }
 
@@ -1116,7 +1118,13 @@ export class RingRTCType {
       if (result.success) {
         return result.value;
       } else {
-        return { devices: [], deviceCount: 0, pendingUsers: [] };
+        return {
+          devices: [],
+          deviceCount: 0,
+          deviceCountIncludingPendingDevices: 0,
+          deviceCountExcludingPendingDevices: 0,
+          pendingUsers: [],
+        };
       }
     });
   }

@@ -425,7 +425,8 @@ describe('RingRTC', () => {
     );
     const peekInfo = await peekResponse;
     assert.equal(peekInfo.eraId, 'mesozoic');
-    assert.equal(peekInfo.deviceCount, 7);
+    assert.equal(peekInfo.deviceCountIncludingPendingDevices, 7);
+    assert.equal(peekInfo.deviceCountExcludingPendingDevices, 3);
     assert.equal(peekInfo.maxDevices, 20);
     assert.isTrue(peekInfo.creator?.equals(Buffer.of(0x11, 0x11, 0x11, 0x11)));
     assert.deepEqual(peekInfo.devices, [
@@ -818,8 +819,8 @@ describe('RingRTC', () => {
       const state = await callLinkResponse;
       if (state.success) {
         assert.isUndefined(state.value.eraId);
-        assert.equal(state.value.deviceCount, 0);
-        assert.isEmpty(state.value.devices);
+        assert.equal(state.value.deviceCountIncludingPendingDevices, 0);
+        assert.equal(state.value.deviceCountExcludingPendingDevices, 0);
       } else {
         assert.fail('should have succeeded');
       }

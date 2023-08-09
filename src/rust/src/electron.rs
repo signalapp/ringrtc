@@ -565,9 +565,11 @@ fn to_js_peek_info<'a>(
         None => cx.undefined().upcast(),
         Some(max_devices) => cx.number(*max_devices).upcast(),
     };
-    let device_count: Handle<JsValue> = cx
+    let device_count_including_pending_devices: Handle<JsValue> = cx
         .number(peek_info.device_count_including_pending_devices() as u32)
         .upcast();
+    let device_count_excluding_pending_devices: Handle<JsValue> =
+        cx.number(peek_info.devices.len() as u32).upcast();
 
     let pending_users = peek_info.unique_pending_users();
     let js_pending_users = JsArray::new(cx, pending_users.len() as u32);
@@ -581,7 +583,18 @@ fn to_js_peek_info<'a>(
     js_info.set(cx, "creator", js_creator)?;
     js_info.set(cx, "eraId", era_id)?;
     js_info.set(cx, "maxDevices", max_devices)?;
-    js_info.set(cx, "deviceCount", device_count)?;
+    js_info.set(
+        cx,
+        "deviceCountIncludingPendingDevices",
+        device_count_including_pending_devices,
+    )?;
+    js_info.set(
+        cx,
+        "deviceCountExcludingPendingDevices",
+        device_count_excluding_pending_devices,
+    )?;
+    // For backwards compatibility.
+    js_info.set(cx, "deviceCount", device_count_including_pending_devices)?;
     js_info.set(cx, "pendingUsers", js_pending_users)?;
     Ok(js_info)
 }
