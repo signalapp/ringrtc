@@ -6,6 +6,26 @@ buildscript {
     }
 }
 
+plugins {
+    id "io.github.gradle-nexus.publish-plugin" version "1.3.0"
+}
+
+def versionProperties = new Properties()
+file("config/version.properties").withInputStream { versionProperties.load(it) }
+
+if (!project.hasProperty("ringrtcVersion")) {
+    ext.ringrtcVersion =
+        "${versionProperties.getProperty("ringrtc.version.major")}." +
+        "${versionProperties.getProperty("ringrtc.version.minor")}." +
+        "${versionProperties.getProperty("ringrtc.version.revision")}"
+}
+ext.isReleaseVersion = ringrtcVersion.indexOf("-") == -1;
+
+ext.webrtc_version = "${versionProperties.getProperty("webrtc.version")}"
+
+group = "org.signal"
+version = ringrtcVersion
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
@@ -13,5 +33,16 @@ task clean(type: Delete) {
 allprojects {
     tasks.withType(JavaCompile) {
         options.compilerArgs << "-Xlint" << "-Xlint:-serial"
+    }
+}
+
+nexusPublishing {
+    repositories {
+        sonatype {
+            if (project.hasProperty("signalSonatypeUsername") && project.hasProperty("signalSonatypePassword")) {
+                username = signalSonatypeUsername
+                password = signalSonatypePassword
+            }
+        }
     }
 }

@@ -121,8 +121,6 @@ def ParseArgs():
                         help='Install to local maven repo')
     parser.add_argument('--install-dir',
                         help='Install to local directory')
-    parser.add_argument('--upload-sonatype-repo',
-                        help='Upload to remote sonatype repo')
     parser.add_argument('--upload-sonatype-user',
                         help='Upload to remote sonatype repo as user')
     parser.add_argument('--upload-sonatype-password',
@@ -395,7 +393,7 @@ def CreateLibs(dry_run, project_dir, webrtc_src_dir, build_dir, archs, output,
                                          os.path.basename(lib)))
 
 def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
-                 gradle_dir, sonatype_repo, sonatype_user, sonatype_password,
+                 gradle_dir, sonatype_user, sonatype_password, publish_to_maven,
                  signing_keyid, signing_password, signing_secret_keyring,
                  use_webrtc_ndk, build_projects,
                  install_local, install_dir, project_dir, webrtc_src_dir, build_dir,
@@ -425,13 +423,13 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
         '-PbuildDir={}'.format(gradle_build_dir),
     ]
 
-    if sonatype_repo is not None:
-        sonatype_args = [
-            '-PsonatypeRepo={}'.format(sonatype_repo),
-            '-PsignalSonatypeUsername={}'.format(sonatype_user),
-            '-PsignalSonatypePassword={}'.format(sonatype_password),
-        ]
-        gradle_exec.extend(sonatype_args)
+    if sonatype_user is not None:
+        gradle_exec.append(
+            '-PsignalSonatypeUsername={}'.format(sonatype_user))
+
+    if sonatype_password is not None:
+        gradle_exec.append(
+            '-PsignalSonatypePassword={}'.format(sonatype_password))
 
     if signing_keyid is not None:
         gradle_exec.append(
@@ -480,8 +478,8 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
 
         gradle_exec.append('publishToMavenLocal')
 
-    if sonatype_repo is not None:
-        gradle_exec.append('publishMavenJavaPublicationToMavenRepository')
+    if publish_to_maven:
+        gradle_exec.extend(['publishToSonatype', 'closeSonatypeStagingRepository'])
 
     gradle_exec.extend(extra_gradle_args)
 
@@ -545,7 +543,6 @@ def main():
 
     if args.clean is True:
         for arch in DEFAULT_ARCHS:
-            rm_dir = GetArchBuildRoot(build_dir, arch)
             clean_dir(GetArchBuildRoot(build_dir, arch), args.dry_run)
         clean_dir(GetGradleBuildDir(build_dir), args.dry_run)
         for dir in ('debug', 'release', 'javadoc', 'rustdoc', 'rust-lint'):
@@ -558,24 +555,27 @@ def main():
         # especially when most people install SDKs and NDKs through Android Studio.
         RunSdkmanagerLicenses(args.webrtc_src_dir, args.dry_run)
 
-    if args.upload_sonatype_repo is not None:
+    if args.upload_sonatype_user is not None or args.upload_sonatype_password is not None:
         if args.debug_build is True:
             print('ERROR: Only the release build can be uploaded')
             return 1
 
         if args.upload_sonatype_user is None or args.upload_sonatype_password is None:
-            print('ERROR: If --upload-sonatype-repo argument set, then both --upload-sonatype-user and --upload-sonatype-password must also be set.')
+            print('ERROR: If uploading to Maven, then both --upload-sonatype-user and --upload-sonatype-password must be set.')
             return 1
 
         if args.signing_keyid is None or \
            args.signing_password is None or \
            args.signing_secret_keyring is None:
-            print('ERROR: If --upload-sonatype-repo argument set, then all of --signing-keyid, --signing-password, and --signing-secret-keyring must also be set.')
+            print('ERROR: If uploading to Maven, then all of --signing-keyid, --signing-password, and --signing-secret-keyring must be set.')
             return 1
+
+    publish_to_maven = args.upload_sonatype_user is not None or \
+            args.upload_sonatype_password is not None
 
     PerformBuild(args.dry_run, args.extra_gradle_args, args.publish_version, args.webrtc_version,
                  args.gradle_dir,
-                 args.upload_sonatype_repo, args.upload_sonatype_user, args.upload_sonatype_password,
+                 args.upload_sonatype_user, args.upload_sonatype_password, publish_to_maven,
                  args.signing_keyid, args.signing_password, args.signing_secret_keyring,
                  args.use_webrtc_ndk, build_projects,
                  args.install_local, args.install_dir,

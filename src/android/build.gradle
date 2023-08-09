@@ -10,17 +10,6 @@ repositories {
     mavenLocal()
 }
 
-def versionProperties = new Properties()
-file("../../config/version.properties").withInputStream { versionProperties.load(it) }
-
-if (!project.hasProperty("ringrtcVersion")) {
-    ext.ringrtcVersion =
-        "${versionProperties.getProperty("ringrtc.version.major")}." +
-        "${versionProperties.getProperty("ringrtc.version.minor")}." +
-        "${versionProperties.getProperty("ringrtc.version.revision")}"
-}
-ext.isReleaseVersion = ringrtcVersion.indexOf("-") == -1;
-
 ext.debug_jni_lib_dirs   = project.hasProperty("debugRingrtcLibDir") ? [debugRingrtcLibDir] : ["jniLibs"]
 ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDir") ? [releaseRingrtcLibDir] : ["jniLibs"]
 ext.webrtc_jar           = project.hasProperty("webrtcJar") ? webrtcJar : "libs/libwebrtc.jar"
@@ -60,7 +49,6 @@ android {
     }
 
     publishing {
-      singleVariant("debug")
       singleVariant("release")
     }
 }
@@ -87,21 +75,9 @@ task javadoc(type: Javadoc) {
     }
 }
 
-ext.releaseRepoUrl       = project.hasProperty("sonatypeRepo") ? sonatypeRepo
-    : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
-ext.releaseRepoUsername  = project.hasProperty("signalSonatypeUsername") ? signalSonatypeUsername : ""
-ext.releaseRepoPassword  = project.hasProperty("signalSonatypePassword") ? signalSonatypePassword : ""
-
 afterEvaluate {
     publishing {
         publications {
-            debug(MavenPublication) {
-                from components.debug
-
-                groupId = 'org.signal'
-                artifactId = archivesBaseName
-                version = "${ringrtcVersion}-DEBUG"
-            }
             mavenJava(MavenPublication) {
                 from components.release
 
@@ -138,30 +114,19 @@ afterEvaluate {
                 }
             }
         }
-        repositories {
-            maven {
-                url = releaseRepoUrl
-                credentials {
-                    username = releaseRepoUsername
-                    password = releaseRepoPassword
-                }
-            }
-        }
     }
 
     signing {
-        required { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publishMavenJavaPublicationToMavenRepository") }
+        required { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publishToSonatype") }
         sign publishing.publications.mavenJava
     }
 }
-
-ext.webrtc_version = "${versionProperties.getProperty("webrtc.version")}"
 
 task version {
     group 'Info'
     description = 'Prints the versions as read from the version config file.'
     doLast {
-        println "RingRTC version: " + version
+        println "RingRTC version: " + ringrtcVersion
         println "WebRTC version : " + project.webrtc_version
     }
 }
