@@ -14,7 +14,9 @@ use std::io::Write;
 use std::time::{Duration, SystemTime};
 
 use rand::SeedableRng;
-use ringrtc::lite::call_links::{CallLinkRootKey, CallLinkState, CallLinkUpdateRequest};
+use ringrtc::lite::call_links::{
+    CallLinkRestrictions, CallLinkRootKey, CallLinkState, CallLinkUpdateRequest,
+};
 use ringrtc::lite::http::{self, Client};
 use zkgroup::call_links::CallLinkSecretParams;
 
@@ -125,15 +127,17 @@ fn main() {
                     "
 Available commands are:
 
-help                       - show this message
-create <id>                - create a new link
-read <id>                  - fetch the current state of a link
-set-title <id> <new-title> - change the title of a link
-reset-expiration <id>      - reset a link's expiration (if the server has this enabled)
-root-key <id>              - print the root key for a link
-exit                       - quit
+help                         - show this message
+create <id>                  - create a new link
+read <id>                    - fetch the current state of a link
+set-title <id> <new-title>   - change the title of a link
+admin-approval <id> (on|off) - turn on/off admin approval for a link
+reset-expiration <id>        - reset a link's expiration (if the server has this enabled)
+root-key <id>                - print the root key for a link
+exit                         - quit
 
 <id> can be any word you want; it is hashed to produce a root key.
+The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
 "
                 );
                 prompt("> ");
@@ -206,6 +210,31 @@ exit                       - quit
                     &CallLinkUpdateRequest {
                         admin_passkey: ADMIN_PASSKEY,
                         encrypted_name: Some(&encrypted_name),
+                        ..CallLinkUpdateRequest::default()
+                    },
+                    Box::new(show_result),
+                );
+            }
+            ["admin-approval", id, on_or_off @ ("on" | "off")] => {
+                let root_key = root_key_from_id(id);
+                let auth_credential_presentation = issue_and_present_auth_credential(
+                    &server_zkparams,
+                    &public_zkparams,
+                    &root_key,
+                );
+                let restrictions = if *on_or_off == "on" {
+                    CallLinkRestrictions::AdminApproval
+                } else {
+                    CallLinkRestrictions::None
+                };
+                ringrtc::lite::call_links::update_call_link(
+                    &http_client,
+                    url,
+                    root_key,
+                    &bincode::serialize(&auth_credential_presentation).unwrap(),
+                    &CallLinkUpdateRequest {
+                        admin_passkey: ADMIN_PASSKEY,
+                        restrictions: Some(restrictions),
                         ..CallLinkUpdateRequest::default()
                     },
                     Box::new(show_result),
