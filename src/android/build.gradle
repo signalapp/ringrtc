@@ -118,6 +118,14 @@ afterEvaluate {
 
     signing {
         required { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publishToSonatype") }
+
+        def signingKeyId = findProperty("signingKeyId")
+        def signingKey = findProperty("signingKey")
+        def signingPassword = findProperty("signingPassword")
+        if (signingKeyId != null && signingKey != null && signingPassword != null) {
+            useInMemoryPgpKeys(signingKeyId.trim(), signingKey.trim(), signingPassword.trim())
+        }
+
         sign publishing.publications.mavenJava
     }
 }

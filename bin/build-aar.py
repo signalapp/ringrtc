@@ -502,6 +502,17 @@ def clean_dir(directory, dry_run):
     if dry_run is False:
         shutil.rmtree(directory, ignore_errors=True)
 
+def has_valid_signing_args(args):
+    cli_args = args.signing_keyid is not None and \
+            args.signing_password is not None and \
+            args.signing_secret_keyring is not None
+
+    env_vars = 'ORG_GRADLE_PROJECT_signingKeyId' in os.environ and \
+            'ORG_GRADLE_PROJECT_signingPassword' in os.environ and \
+            'ORG_GRADLE_PROJECT_signingKey' in os.environ
+
+    return cli_args or env_vars
+
 def main():
 
     args = ParseArgs()
@@ -543,23 +554,23 @@ def main():
             clean_dir(os.path.join(build_dir, dir), args.dry_run)
         return 0
 
-    if args.upload_sonatype_user is not None or args.upload_sonatype_password is not None:
+    upload_sonatype_user = args.upload_sonatype_user or os.environ.get('ORG_GRADLE_PROJECT_signalSonatypeUsername')
+    upload_sonatype_password = args.upload_sonatype_password or os.environ.get('ORG_GRADLE_PROJECT_signalSonatypePassword')
+    if upload_sonatype_user is not None or upload_sonatype_password is not None:
         if args.debug_build is True:
             print('ERROR: Only the release build can be uploaded')
             return 1
 
-        if args.upload_sonatype_user is None or args.upload_sonatype_password is None:
-            print('ERROR: If uploading to Maven, then both --upload-sonatype-user and --upload-sonatype-password must be set.')
+        if upload_sonatype_user is None or upload_sonatype_password is None:
+            print("ERROR: Can't set only one of sonatype username and password.")
             return 1
 
-        if args.signing_keyid is None or \
-           args.signing_password is None or \
-           args.signing_secret_keyring is None:
-            print('ERROR: If uploading to Maven, then all of --signing-keyid, --signing-password, and --signing-secret-keyring must be set.')
+        if not has_valid_signing_args(args):
+            print('ERROR: If uploading to Maven, then all of --signing-keyid, --signing-password, and --signing-secret-keyring must be set, or the following environment variables must be set: ORG_GRADLE_PROJECT_signingKeyId, ORG_GRADLE_PROJECT_signingPassword, and ORG_GRADLE_PROJECT_signingKey.')
             return 1
 
-    publish_to_maven = args.upload_sonatype_user is not None or \
-            args.upload_sonatype_password is not None
+    publish_to_maven = upload_sonatype_user is not None or \
+            upload_sonatype_password is not None
 
     PerformBuild(args.dry_run, args.extra_gradle_args, args.publish_version, args.webrtc_version,
                  args.gradle_dir,
