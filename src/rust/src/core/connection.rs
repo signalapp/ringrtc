@@ -696,22 +696,22 @@ where
             peer_connection.set_local_description(observer.as_ref(), offer);
             observer.get_result()?;
 
+            // Setup RTP data support before we set remote description to make sure we can handle
+            // the "accepted" message before we get ICE Connected. Warning: we're holding the
+            // lock to webrtc_data while we block on the WebRTC network thread, so we need to
+            // make sure we don't grab the webrtc_data lock in handle_rtp_received.
+            peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
+
             let observer = create_ssd_observer();
             peer_connection.set_remote_description(observer.as_ref(), answer);
+
             // on_add_stream and on_ice_connected can all happen while
             // SetRemoteDescription is happening. But none of those will be processed
             // until start_fsm() is called below.
             observer.get_result()?;
 
-            // Don't enable until the call is accepted.
+            // Don't enable outgoing media until the call is accepted.
             peer_connection.set_outgoing_media_enabled(false);
-            // But do start incoming RTP right away so that we can receive the
-            // "accepted" message.
-            // Warning: we're holding the lock to webrtc_data while we
-            // block on the WebRTC network thread, so we need to make
-            // sure we don't grab the webrtc_data lock in
-            // handle_rtp_received.
-            peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
             peer_connection.set_incoming_media_enabled(true);
             peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
 
@@ -831,7 +831,7 @@ where
                 return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
             };
 
-            // Don't enable incoming RTP until accepted.
+            // Don't enable incoming media until the call is accepted.
             // This should be done before we set local description to make sure
             // we don't get ICE connected really fast and allow any packets through.
             peer_connection.set_incoming_media_enabled(false);
@@ -843,15 +843,12 @@ where
             // But it won't be processed until start_fsm() is called below.
             observer.get_result()?;
 
-            // Don't enable until call is accepted.
+            // Don't enable outgoing media until the call is accepted.
             peer_connection.set_outgoing_media_enabled(false);
 
-            // No RTP will be processed/received until
-            // peer_connection.set_incoming_media_enabled(true).
-            // Warning: we're holding the lock to webrtc_data while we
-            // block on the WebRTC network thread, so we need to make
-            // sure we don't grab the webrtc_data lock in
-            // handle_rtp_received.
+            // Setup RTP data support. Warning: we're holding the lock to webrtc_data while
+            // we block on the WebRTC network thread, so we need to make sure we don't grab
+            // the webrtc_data lock in handle_rtp_received.
             peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
 
             peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
