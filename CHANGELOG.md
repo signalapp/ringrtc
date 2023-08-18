@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.31.1
+
+- Update tag for build automation
+
 ## v2.31.0
 
 - Group Calls: Separate PeekInfo device counts on in/excluding pending devices
