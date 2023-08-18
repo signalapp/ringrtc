@@ -168,6 +168,7 @@ jobs:
         path: 'out'
         destination: build-artifacts.signal.org/libraries
         glob: 'ringrtc-ios-build-v*.tar.bz2'
+        parent: false
 
     - name: Upload Desktop x64 Debug Info
       uses: actions/upload-artifact@v3
@@ -238,6 +239,7 @@ jobs:
           path: 'src/node'
           destination: build-artifacts.signal.org/libraries
           glob: 'ringrtc-desktop-build-v*.tar.gz'
+          parent: false
 
       # Put the SHA-256 of the archive into prebuildChecksum in package.json
       - run: sed -i "/prebuildChecksum/ s/\"\"/\"${ARTIFACT_CHECKSUM}\"/" package.json
