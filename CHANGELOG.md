@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.31.0
+
+- Group Calls: Separate PeekInfo device counts on in/excluding pending devices
+
+- Desktop: Migrate to deviceCountIncluding/ExcludingPendingDevices as well
+
+- Update to WebRTC m116
+
+- Desktop: Use stack arrays for JS arguments rather than vectors
+
+- Build improvements; Support more build automation
+
+- Log improvements
+
 ## v2.30.0
 
 - Add JoinState.PENDING, for call link calls with admin approval
