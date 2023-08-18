@@ -229,6 +229,11 @@ jobs:
           printf 'sha256=%s\n' "$(echo $shaAndFilename | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
         working-directory: src/node/
 
+      - uses: actions/setup-node@v3
+        with:
+          node-version-file: 'src/node/.nvmrc'
+          registry-url: 'https://registry.npmjs.org/'
+
       - uses: google-github-actions/auth@v1
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
@@ -260,7 +265,7 @@ jobs:
       - run: xvfb-run --auto-servernum yarn test
         working-directory: src/node/
 
-      - run: npm publish --access public
+      - run: npm publish --tag "$(jq --raw-output .version package.json)" --access public
         working-directory: src/node/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
