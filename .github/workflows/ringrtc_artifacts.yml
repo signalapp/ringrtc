@@ -265,7 +265,7 @@ jobs:
       - run: xvfb-run --auto-servernum yarn test
         working-directory: src/node/
 
-      - run: npm publish --tag "$(jq --raw-output .version package.json)" --access public
+      - run: npm publish --access public
         working-directory: src/node/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
