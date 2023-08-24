@@ -286,6 +286,7 @@ impl SessionDescription {
                 offer,
                 webrtc::ptr::Borrowed::from_ptr(&rffi_v4),
                 call_config.enable_tcc_audio,
+                call_config.enable_red_audio,
                 call_config.enable_vp9,
             )
         });

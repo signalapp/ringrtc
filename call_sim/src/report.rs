@@ -6,7 +6,7 @@
 use anyhow::{anyhow, Result};
 use plotly::{
     color::NamedColor,
-    common::{Font, Line, Marker, Mode, Title},
+    common::{Font, Line, LineShape, Marker, Mode, Title},
     layout::{Axis, AxisType, BarMode, Margin},
     Bar, ImageFormat, Layout, Plot, Scatter,
 };
@@ -22,7 +22,7 @@ use crate::test::{GroupRun, Sound, TestCase, TestResults};
 
 type ChartPoint = (f32, f32);
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StatsConfig {
     pub title: String,
     pub chart_name: String,
@@ -34,6 +34,26 @@ pub struct StatsConfig {
     pub y_min: Option<f32>,
     /// By default, charts will use the StatsData.overall_max + 10% for y_max.
     pub y_max: Option<f32>,
+    /// Line presentation, the default is `Linear`, which connects each point to the
+    /// next. Some charts look better with the `Hv` type, which maintains its value until
+    /// the next point along the x-axis.
+    pub line_shape: LineShape,
+}
+
+impl Default for StatsConfig {
+    fn default() -> Self {
+        Self {
+            title: "".to_string(),
+            chart_name: "".to_string(),
+            x_label: "".to_string(),
+            y_label: "".to_string(),
+            x_min: Option::None,
+            x_max: Option::None,
+            y_min: Option::None,
+            y_max: Option::None,
+            line_shape: LineShape::Linear,
+        }
+    }
 }
 
 /// Our current standard value for ignoring the first "5 seconds" of garbage data.
@@ -68,6 +88,9 @@ pub struct StatsData {
     pub min: f32,
     pub max: f32,
     pub ave: f32,
+
+    /// Track the max inserted index in case data is aperiodic.
+    pub max_index: f32,
 }
 
 impl Default for StatsData {
@@ -83,6 +106,7 @@ impl Default for StatsData {
             min: f32::MAX,
             max: 0.0,
             ave: 0.0,
+            max_index: 0.0,
         }
     }
 }
@@ -107,10 +131,9 @@ impl StatsData {
         self.period = period;
     }
 
-    // Push data to the next periodic index and update statistics.
-    pub fn push(&mut self, value: f32) {
-        self.points
-            .push((((self.points.len() + 1) as f32) * self.period, value));
+    /// Push data to an arbitrary index and update statistics.
+    pub fn push_with_index(&mut self, index: f32, value: f32) {
+        self.points.push((index, value));
 
         if self.points.len() > self.filter_min && self.points.len() <= self.filter_max {
             self.sum += value as f64;
@@ -122,6 +145,12 @@ impl StatsData {
         // To ensure good ranges for charting, we need to keep the overall min/max.
         self.overall_min = self.overall_min.min(value);
         self.overall_max = self.overall_max.max(value);
+        self.max_index = self.max_index.max(index);
+    }
+
+    /// Push data to the next periodic index and update statistics.
+    pub fn push(&mut self, value: f32) {
+        self.push_with_index(((self.points.len() + 1) as f32) * self.period, value);
     }
 }
 
@@ -139,7 +168,7 @@ pub enum AnalysisReportMos {
     /// There is a single mos value available.
     Single(f32),
     /// There is a stats collection of mos values available.
-    Series(Stats),
+    Series(Box<Stats>),
 }
 
 impl AnalysisReportMos {
@@ -375,6 +404,12 @@ pub struct VideoReceiveStatsTransfer {
     pub key_frames_decoded: StatsData,
 }
 
+#[derive(Debug, Default)]
+pub struct AudioAdaptationTransfer {
+    pub bitrate: StatsData,
+    pub packet_length: StatsData,
+}
+
 #[derive(Debug)]
 pub struct ConnectionStats {
     pub timestamp_us: Vec<u64>,
@@ -433,6 +468,12 @@ pub struct VideoReceiveStats {
     pub key_frames_decoded_stats: Stats,
 }
 
+#[derive(Debug, Default)]
+pub struct AudioAdaptation {
+    pub bitrate_stats: Stats,
+    pub packet_length_stats: Stats,
+}
+
 #[derive(Debug)]
 pub struct ClientLogReport {
     pub connection_stats: ConnectionStats,
@@ -440,6 +481,7 @@ pub struct ClientLogReport {
     pub video_send_stats: VideoSendStats,
     pub audio_receive_stats: AudioReceiveStats,
     pub video_receive_stats: VideoReceiveStats,
+    pub audio_adaptation: AudioAdaptation,
 }
 
 impl ClientLogReport {
@@ -451,6 +493,7 @@ impl ClientLogReport {
         VideoSendStatsTransfer,
         AudioReceiveStatsTransfer,
         VideoReceiveStatsTransfer,
+        AudioAdaptationTransfer,
     )> {
         // Look through the file and pull out RingRTC logs, particularly the `stats!` details.
         let file = File::open(file_name).await?;
@@ -481,11 +524,20 @@ impl ClientLogReport {
             r".*ringrtc_stats!,video,recv,(?P<ssrc>\d+),(?P<packets_per_second>[-+]?[0-9]*\.?[0-9]+),(?P<packet_loss>[-+]?[0-9]*\.?[0-9]+)%,(?P<bitrate>[0-9]+)bps,(?P<framerate>[0-9]*\.?[0-9]+)fps,(?P<key_frames_decoded>\d+),(?P<decode_time_per_frame>[0-9]*\.?[0-9]+)ms,(?P<resolution>\d+x\d+)",
         )?;
 
+        // Example: ringrtc_adapt!,audio,240,18000,60
+        let re_adaptation_line = Regex::new(
+            r".*ringrtc_adapt!,audio,(?P<time>\d+),(?P<bitrate>\d+),(?P<packet_length>\d+)",
+        )?;
+
         let mut connection_stats = ConnectionStatsTransfer::default();
         let mut audio_send_stats = AudioSendStatsTransfer::default();
         let mut video_send_stats = VideoSendStatsTransfer::default();
         let mut audio_receive_stats = AudioReceiveStatsTransfer::default();
         let mut video_receive_stats = VideoReceiveStatsTransfer::default();
+        let mut audio_adaptation_stats = AudioAdaptationTransfer {
+            bitrate: StatsData::new_skip_n(0),
+            packet_length: StatsData::new_skip_n(0),
+        };
 
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await? {
@@ -567,6 +619,7 @@ impl ClientLogReport {
                 video_send_stats
                     .remote_round_trip_time
                     .push(f32::from_str(&cap["remote_round_trip_time"])?);
+                continue;
             }
 
             if let Some(cap) = re_audio_receive_line.captures(&line) {
@@ -609,6 +662,17 @@ impl ClientLogReport {
                     .push(f32::from_str(&cap["key_frames_decoded"])?);
                 continue;
             }
+
+            if let Some(cap) = re_adaptation_line.captures(&line) {
+                let time_index = f32::from_str(&cap["time"])?;
+                audio_adaptation_stats
+                    .bitrate
+                    .push_with_index(time_index, f32::from_str(&cap["bitrate"])? / 1000.0);
+                audio_adaptation_stats
+                    .packet_length
+                    .push_with_index(time_index, f32::from_str(&cap["packet_length"])?);
+                continue;
+            }
         }
 
         Ok((
@@ -617,6 +681,7 @@ impl ClientLogReport {
             video_send_stats,
             audio_receive_stats,
             video_receive_stats,
+            audio_adaptation_stats,
         ))
     }
 
@@ -627,6 +692,7 @@ impl ClientLogReport {
             video_send_stats,
             audio_receive_stats,
             video_receive_stats,
+            audio_adaptation,
         ) = ClientLogReport::parse(file_name).await?;
 
         // We assume that all entries in the stats vectors are in sync.
@@ -1060,12 +1126,44 @@ impl ClientLogReport {
             key_frames_decoded_stats,
         };
 
+        let bitrate_stats = Stats {
+            config: StatsConfig {
+                title: "Adaptation Bitrate Changes".to_string(),
+                chart_name: format!("{}.audio.adaptation.bitrate.svg", client_name),
+                x_label: "Test Seconds".to_string(),
+                y_label: "Kbps".to_string(),
+                x_max: Some(audio_adaptation.bitrate.max_index + 5.0),
+                line_shape: LineShape::Hv,
+                ..Default::default()
+            },
+            data: audio_adaptation.bitrate,
+        };
+
+        let packet_length_stats = Stats {
+            config: StatsConfig {
+                title: "Adaptation Packet Length Changes".to_string(),
+                chart_name: format!("{}.audio.adaptation.packet_length.svg", client_name),
+                x_label: "Test Seconds".to_string(),
+                y_label: "milliseconds".to_string(),
+                x_max: Some(audio_adaptation.packet_length.max_index + 5.0),
+                line_shape: LineShape::Hv,
+                ..Default::default()
+            },
+            data: audio_adaptation.packet_length,
+        };
+
+        let audio_adaptation = AudioAdaptation {
+            bitrate_stats,
+            packet_length_stats,
+        };
+
         Ok(Self {
             connection_stats,
             audio_send_stats,
             video_send_stats,
             audio_receive_stats,
             video_receive_stats,
+            audio_adaptation,
         })
     }
 }
@@ -1216,7 +1314,12 @@ impl Report {
         let trace = Scatter::new(x_trace, y_trace)
             .mode(Mode::LinesMarkers)
             .marker(Marker::new().size(marker_size))
-            .line(Line::new().color(NamedColor::SteelBlue).width(2.0));
+            .line(
+                Line::new()
+                    .color(NamedColor::SteelBlue)
+                    .width(2.0)
+                    .shape(stats.config.line_shape.clone()),
+            );
 
         let x_min = stats.config.x_min.unwrap_or(0.0);
         let x_max = stats.config.x_max.unwrap_or({
@@ -1272,6 +1375,7 @@ impl Report {
         let audio_receive_stats = &self.client_log_report.audio_receive_stats;
         let video_send_stats = &self.client_log_report.video_send_stats;
         let video_receive_stats = &self.client_log_report.video_receive_stats;
+        let audio_adaptation = &self.client_log_report.audio_adaptation;
 
         let mut line_chart_stats = vec![
             &self.docker_stats_report.cpu_usage,
@@ -1293,6 +1397,8 @@ impl Report {
             &audio_receive_stats.jitter_stats,
             &audio_receive_stats.audio_energy_stats,
             &audio_receive_stats.jitter_buffer_delay_stats,
+            &audio_adaptation.bitrate_stats,
+            &audio_adaptation.packet_length_stats,
         ];
 
         if show_video_charts {
@@ -1409,6 +1515,28 @@ impl Report {
             )
             .as_bytes(),
         );
+
+        if test_case_config.client_b_config.audio.adaptation > 0 {
+            let audio_adaptation = &self.client_log_report.audio_adaptation;
+            let audio_adaptation = Self::build_stats_rows(
+                &html,
+                &[
+                    &audio_adaptation.bitrate_stats,
+                    &audio_adaptation.packet_length_stats,
+                ],
+            );
+            buf.extend_from_slice(
+                html.accordion_section(
+                    "audioAdaptation",
+                    vec![HtmlAccordionItem {
+                        label: "Audio Adaptation".to_string(),
+                        body: audio_adaptation,
+                        collapsed: true,
+                    }],
+                )
+                .as_bytes(),
+            );
+        }
 
         let connection_stats = &self.client_log_report.connection_stats;
         let connection_stats = Self::build_stats_rows(

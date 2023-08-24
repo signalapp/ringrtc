@@ -133,6 +133,7 @@ pub unsafe fn Rust_sessionDescriptionFromV4(
     offer: bool,
     _v4: webrtc::ptr::Borrowed<RffiConnectionParametersV4>,
     _enable_tcc_audio: bool,
+    _enable_red_audio: bool,
     _enable_vp9: bool,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_sessionDescriptionFromV4(): ");

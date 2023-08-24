@@ -81,25 +81,37 @@ struct Args {
     #[arg(long, default_value = "2000", value_parser = clap::value_parser!(u16).range(30..))]
     allowed_bitrate_kbps: u16,
 
-    /// The target bitrate to encode audio at. When tcc is enabled, this is the initial bitrate.
-    #[arg(long, default_value = "40000", value_parser = clap::value_parser!(u16).range(500..))]
-    default_bitrate_bps: u16,
+    /// The initial bitrate for encoding audio.
+    #[arg(long, default_value = "32000", value_parser = clap::value_parser!(i32).range(500..))]
+    initial_bitrate_bps: i32,
 
-    /// The minimum bitrate to encode audio at. This is only used when tcc is enabled.
-    #[arg(long, default_value = "20000", value_parser = clap::value_parser!(u16).range(500..))]
-    min_bitrate_bps: u16,
+    /// The minimum bitrate for encoding audio.
+    #[arg(long, default_value = "16000", value_parser = clap::value_parser!(i32).range(500..))]
+    min_bitrate_bps: i32,
 
-    /// The maximum bitrate to encode audio at. This is only used when tcc is enabled.
-    #[arg(long, default_value = "40000", value_parser = clap::value_parser!(u16).range(500..))]
-    max_bitrate_bps: u16,
+    /// The maximum bitrate for encoding audio.
+    #[arg(long, default_value = "32000", value_parser = clap::value_parser!(i32).range(500..))]
+    max_bitrate_bps: i32,
+
+    /// The encoding bandwidth for audio.
+    #[arg(long, default_value_t = AudioBandwidth::Auto, value_enum)]
+    bandwidth: AudioBandwidth,
 
     /// The encoding complexity for audio.
-    #[arg(long, default_value = "9", value_parser = clap::value_parser!(u16).range(0..=10))]
-    complexity: u16,
+    #[arg(long, default_value = "9", value_parser = clap::value_parser!(i32).range(0..=10))]
+    complexity: i32,
 
-    /// The length of an audio frame size (ptime).
+    /// The size of an audio frame (ptime).
     #[arg(long, default_value = "20", value_parser = clap::builder::PossibleValuesParser::new(["20", "40", "60", "80", "100", "120"]))]
-    packet_size_ms: String,
+    initial_packet_size_ms: String,
+
+    /// The minimum size of an audio frame (ptime).
+    #[arg(long, default_value = "20", value_parser = clap::builder::PossibleValuesParser::new(["20", "40", "60", "80", "100", "120"]))]
+    min_packet_size_ms: String,
+
+    /// The maximum size of an audio frame (ptime).
+    #[arg(long, default_value = "20", value_parser = clap::builder::PossibleValuesParser::new(["20", "40", "60", "80", "100", "120"]))]
+    max_packet_size_ms: String,
 
     /// Whether to use CBR for encoding audio. False means VBR.
     #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
@@ -113,10 +125,18 @@ struct Args {
     #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
     fec: bool,
 
+    /// Whether to use adaptation when encoding audio. Set to 0 to disable (default).
+    #[arg(long, default_value_t = 0)]
+    adaptation: i32,
+
     /// Whether to enable transport-cc feedback for audio. This will allow the bitrate to vary
     /// between `min_bitrate_bps` and `max_bitrate_bps` when using CBR.
     #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
     tcc: bool,
+
+    /// Whether to enable redundant packets for audio.
+    #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
+    red: bool,
 
     /// Whether to enable the VP9 codec for video.
     #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
@@ -159,7 +179,10 @@ struct Args {
     force_relay: bool,
 
     #[arg(long, default_value = "200")]
-    audio_jitter_buffer_max_packets: u16,
+    audio_jitter_buffer_max_packets: i32,
+
+    #[arg(long, default_value = "5000")]
+    audio_rtcp_report_interval_ms: i32,
 }
 
 fn main() -> Result<()> {
@@ -221,18 +244,26 @@ fn main() -> Result<()> {
             agc_enabled: args.agc,
         },
         audio_encoder_config: AudioEncoderConfig {
-            packet_size_ms: args.packet_size_ms.parse().expect("validated by clap"),
-            bandwidth: AudioBandwidth::Auto,
-            start_bitrate_bps: args.default_bitrate_bps,
+            initial_packet_size_ms: args
+                .initial_packet_size_ms
+                .parse()
+                .expect("validated by clap"),
+            min_packet_size_ms: args.min_packet_size_ms.parse().expect("validated by clap"),
+            max_packet_size_ms: args.max_packet_size_ms.parse().expect("validated by clap"),
+            initial_bitrate_bps: args.initial_bitrate_bps,
             min_bitrate_bps: args.min_bitrate_bps,
             max_bitrate_bps: args.max_bitrate_bps,
+            bandwidth: args.bandwidth,
             complexity: args.complexity,
+            adaptation: args.adaptation,
             enable_cbr: args.cbr,
             enable_dtx: args.dtx,
             enable_fec: args.fec,
         },
         enable_tcc_audio: args.tcc,
+        enable_red_audio: args.red,
         audio_jitter_buffer_max_packets: args.audio_jitter_buffer_max_packets as isize,
+        audio_rtcp_report_interval_ms: args.audio_rtcp_report_interval_ms as isize,
         enable_vp9: args.vp9,
     };
 

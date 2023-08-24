@@ -1045,12 +1045,14 @@ impl Client {
                 let local_ice_ufrag = random_alphanumeric(4);
                 let local_ice_pwd = random_alphanumeric(22);
                 let audio_jitter_buffer_max_packets = 50;
+                let audio_rtcp_report_interval_ms = 5000;
                 let ice_server = IceServer::none();
                 let peer_connection = peer_connection_factory
                     .create_peer_connection(
                         peer_connection_observer,
                         pcf::RffiPeerConnectionKind::GroupCall,
                         audio_jitter_buffer_max_packets,
+                        audio_rtcp_report_interval_ms,
                         &ice_server,
                         outgoing_audio_track,
                         outgoing_video_track,

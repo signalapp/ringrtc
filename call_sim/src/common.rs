@@ -255,6 +255,32 @@ impl Default for CallConfig {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(i32)]
+pub enum AudioBandwidth {
+    // Constants in libopus.
+    Auto = -1000,
+    Full = 1105,
+    SuperWide = 1104,
+    Wide = 1103,
+    Medium = 1102,
+    Narrow = 1101,
+}
+
+impl fmt::Display for AudioBandwidth {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AudioBandwidth::Auto => write!(f, "auto"),
+            AudioBandwidth::Full => write!(f, "full"),
+            AudioBandwidth::SuperWide => write!(f, "super-wide"),
+            AudioBandwidth::Wide => write!(f, "wide"),
+            AudioBandwidth::Medium => write!(f, "medium"),
+            AudioBandwidth::Narrow => write!(f, "narrow"),
+        }
+    }
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioAnalysisType {
     /// Uses the wideband speech mode of visqol. Setting this option yields 16kHz/mono
@@ -284,24 +310,34 @@ pub enum AudioAnalysisMode {
 pub struct AudioConfig {
     /// The name (without path or extension) of the audio file to use as source material.
     pub input_name: String,
-    /// The desired packet size, the amount of time in each packet.
-    pub packet_size_ms: u32,
-    /// The initial encoding bitrate to use (or only bitrate to use if there is no adaptation).
-    pub start_bitrate_bps: u16,
-    /// The minimum encoding bitrate to use if there is adaptation.
-    pub min_bitrate_bps: u16,
-    /// The maximum encoding bitrate to use if there is adaptation.
-    pub max_bitrate_bps: u16,
+    /// The initial desired packet size, the amount of time in each packet.
+    pub initial_packet_size_ms: i32,
+    /// The minimum packet size. Used only in adaptive scenarios.
+    pub min_packet_size_ms: i32,
+    /// The maximum packet size. Used only in adaptive scenarios.
+    pub max_packet_size_ms: i32,
+    /// The initial audio encoding bitrate.
+    pub initial_bitrate_bps: i32,
+    /// The minimum audio encoding bitrate. Used only in adaptive scenarios.
+    pub min_bitrate_bps: i32,
+    /// The maximum encoding bitrate. Used only in adaptive scenarios.
+    pub max_bitrate_bps: i32,
+    /// The Opus bandwidth value to use (Auto is the default).
+    pub bandwidth: AudioBandwidth,
     /// The Opus complexity value to use.
-    pub complexity: u8,
+    pub complexity: i32,
+    /// The adaptation method to use. 0 means no adaptation (the default).
+    pub adaptation: i32,
     /// Flag to enable the Opus constant bitrate mode.
     pub enable_cbr: bool,
     /// Flag to enable the Opus DTX.
     pub enable_dtx: bool,
     /// Flag to enable the Opus in-band FEC.
     pub enable_fec: bool,
-    /// Flag to enable the to enable transport-wide congestion control for audio.
-    pub enable_tcc_audio: bool,
+    /// Flag to enable transport-wide congestion control for audio.
+    pub enable_tcc: bool,
+    /// Flag to enabled redundant packets to be sent for audio.
+    pub enable_red: bool,
     /// Flag to enable WebRTC's high pass filter.
     pub enable_high_pass_filter: bool,
     /// Flag to enable WebRTC's acoustic echo cancellation.
@@ -311,7 +347,9 @@ pub struct AudioConfig {
     /// Flag to enable WebRTC's automatic gain control.
     pub enable_agc: bool,
     /// The maximum number of packets the jitter buffer can hold.
-    pub jitter_buffer_max_packets: u16,
+    pub jitter_buffer_max_packets: i32,
+    /// How often RTCP reports should be sent. Subject to jitter applied by WebRTC.
+    pub rtcp_report_interval_ms: i32,
     /// The type of audio analysis to be performed (usually speech).
     pub analysis_type: AudioAnalysisType,
     /// The mechanism to use when analyzing audio.
@@ -332,15 +370,20 @@ impl Default for AudioConfig {
     fn default() -> Self {
         Self {
             input_name: "silence".to_string(),
-            packet_size_ms: 20,
-            start_bitrate_bps: 32000,
-            min_bitrate_bps: 20000,
+            initial_packet_size_ms: 20,
+            min_packet_size_ms: 20,
+            max_packet_size_ms: 20,
+            initial_bitrate_bps: 32000,
+            min_bitrate_bps: 16000,
             max_bitrate_bps: 32000,
+            bandwidth: AudioBandwidth::Auto,
             complexity: 9,
+            adaptation: 0,
             enable_cbr: true,
             enable_dtx: true,
             enable_fec: true,
-            enable_tcc_audio: false,
+            enable_tcc: false,
+            enable_red: false,
             enable_high_pass_filter: true,
             // Default tests now disable AEC in order to prevent random timing delays
             // from causing double-talk and thus attenuating valid audio.
@@ -348,6 +391,7 @@ impl Default for AudioConfig {
             enable_ns: true,
             enable_agc: true,
             jitter_buffer_max_packets: 200,
+            rtcp_report_interval_ms: 5000,
             analysis_type: AudioAnalysisType::Speech,
             analysis_mode: AudioAnalysisMode::Normal,
             generate_spectrogram: true,

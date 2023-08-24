@@ -305,11 +305,11 @@ async fn run_ptime_analysis(test: &mut Test) -> Result<()> {
     test.preprocess_sounds(vec!["speaker_a", "speaker_b"])
         .await?;
 
-    let test_cases = [20, 40, 60, 120].map(|packet_size_ms| TestCaseConfig {
-        test_case_name: format!("ptime_{packet_size_ms}"),
+    let test_cases = [20, 40, 60, 120].map(|initial_packet_size_ms| TestCaseConfig {
+        test_case_name: format!("ptime_{initial_packet_size_ms}"),
         client_a_config: CallConfig {
             audio: AudioConfig {
-                packet_size_ms,
+                initial_packet_size_ms,
                 ..Default::default()
             },
             ..Default::default()
@@ -317,7 +317,7 @@ async fn run_ptime_analysis(test: &mut Test) -> Result<()> {
         .with_audio_input_name("normal_phrasing"),
         client_b_config: CallConfig {
             audio: AudioConfig {
-                packet_size_ms,
+                initial_packet_size_ms,
                 ..Default::default()
             },
             ..Default::default()
@@ -489,13 +489,13 @@ async fn run_video_compare_vp8_vs_vp9(test: &mut Test) -> Result<()> {
 // Uses a 12 second reference audio file so that the resulting 240 second session recording
 // can be chopped evenly and MOS calculated for each 12-second audio segment.
 async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
-    let test_cases = [20, 60, 120].map(|packet_size_ms| TestCaseConfig {
-        test_case_name: format!("ptime_{packet_size_ms}"),
+    let test_cases = [20, 60, 120].map(|initial_packet_size_ms| TestCaseConfig {
+        test_case_name: format!("ptime_{initial_packet_size_ms}"),
         length_seconds: 240,
         client_a_config: CallConfig {
             audio: AudioConfig {
                 input_name: "normal_12s".to_string(),
-                packet_size_ms,
+                initial_packet_size_ms,
                 analysis_mode: AudioAnalysisMode::Chopped,
                 generate_spectrogram: false,
                 ..Default::default()
@@ -505,7 +505,7 @@ async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
         client_b_config: CallConfig {
             audio: AudioConfig {
                 input_name: "normal_12s".to_string(),
-                packet_size_ms,
+                initial_packet_size_ms,
                 analysis_mode: AudioAnalysisMode::Chopped,
                 generate_spectrogram: false,
                 ..Default::default()

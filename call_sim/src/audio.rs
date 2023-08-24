@@ -130,7 +130,7 @@ pub async fn chop_audio_and_analyze(
         data,
     };
 
-    test_results.mos = AnalysisReportMos::Series(stats);
+    test_results.mos = AnalysisReportMos::Series(Box::new(stats));
 
     Ok(())
 }

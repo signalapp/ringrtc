@@ -62,6 +62,7 @@ extern "C" {
         observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
         kind: RffiPeerConnectionKind,
         audio_jitter_buffer_max_packets: isize,
+        audio_rtcp_report_interval_ms: isize,
         ice_server: RffiIceServer,
         outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
         outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,

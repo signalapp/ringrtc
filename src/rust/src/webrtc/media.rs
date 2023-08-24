@@ -350,56 +350,63 @@ impl Clone for Box<dyn VideoSink> {
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct RffiAudioEncoderConfig {
-    packet_size_ms: u32,
+    initial_packet_size_ms: i32,
+    min_packet_size_ms: i32,
+    max_packet_size_ms: i32,
 
-    bandwidth: i32,
-    start_bitrate_bps: i32,
+    initial_bitrate_bps: i32,
     min_bitrate_bps: i32,
     max_bitrate_bps: i32,
+
+    bandwidth: i32,
     complexity: i32,
-    enable_vbr: i32,
-    enable_dtx: i32,
-    enable_fec: i32,
+    adaptation: i32,
+
+    enable_cbr: bool,
+    enable_dtx: bool,
+    enable_fec: bool,
 }
 
 // A nice form of RffiAudioEncoderConfig
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AudioEncoderConfig {
     // AKA ptime or frame size
-    // Valid sizes: 10, 20, 40, 60, 120
-    // Default is 20ms
-    pub packet_size_ms: u32,
+    // Valid sizes: 10, 20, 40, 60, 80, 100, 120
+    pub initial_packet_size_ms: i32,
+    pub min_packet_size_ms: i32,
+    pub max_packet_size_ms: i32,
+
+    // Valid range: 6000-510000
+    pub initial_bitrate_bps: i32,
+    pub min_bitrate_bps: i32,
+    pub max_bitrate_bps: i32,
 
     // Default is Auto
     pub bandwidth: AudioBandwidth,
-
-    // Valid range: 6000-510000
-    // Default is to start at 32000 and move between 16000 and 32000.
-    pub start_bitrate_bps: u16,
-    pub min_bitrate_bps: u16,
-    pub max_bitrate_bps: u16,
     // Valid range: 0-10 (10 most complex)
-    // Default is 9.
-    pub complexity: u16,
-    // Default is true.
+    pub complexity: i32,
+    pub adaptation: i32,
+
     pub enable_cbr: bool,
-    // Default is true.
     pub enable_dtx: bool,
-    // Default is true.
     pub enable_fec: bool,
 }
 
 impl Default for AudioEncoderConfig {
     fn default() -> Self {
         Self {
-            packet_size_ms: 60,
+            initial_packet_size_ms: 60,
+            min_packet_size_ms: 60,
+            max_packet_size_ms: 60,
+
+            initial_bitrate_bps: 32000,
+            min_bitrate_bps: 32000,
+            max_bitrate_bps: 32000,
 
             bandwidth: AudioBandwidth::Auto,
-
-            start_bitrate_bps: 32000,
-            min_bitrate_bps: 16000,
-            max_bitrate_bps: 32000,
             complexity: 9,
+            adaptation: 0,
+
             enable_cbr: true,
             enable_dtx: true,
             enable_fec: true,
@@ -410,21 +417,24 @@ impl Default for AudioEncoderConfig {
 impl From<&AudioEncoderConfig> for RffiAudioEncoderConfig {
     fn from(config: &AudioEncoderConfig) -> Self {
         Self {
-            packet_size_ms: config.packet_size_ms,
-
+            initial_packet_size_ms: config.initial_packet_size_ms,
+            min_packet_size_ms: config.min_packet_size_ms,
+            max_packet_size_ms: config.max_packet_size_ms,
+            initial_bitrate_bps: config.initial_bitrate_bps,
+            min_bitrate_bps: config.min_bitrate_bps,
+            max_bitrate_bps: config.max_bitrate_bps,
             bandwidth: config.bandwidth as i32,
-            start_bitrate_bps: config.start_bitrate_bps as i32,
-            min_bitrate_bps: config.min_bitrate_bps as i32,
-            max_bitrate_bps: config.max_bitrate_bps as i32,
-            complexity: config.complexity as i32,
-            enable_vbr: i32::from(!config.enable_cbr),
-            enable_dtx: i32::from(config.enable_dtx),
-            enable_fec: i32::from(config.enable_fec),
+            complexity: config.complexity,
+            adaptation: config.adaptation,
+            enable_cbr: config.enable_cbr,
+            enable_dtx: config.enable_dtx,
+            enable_fec: config.enable_fec,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "call_sim", derive(clap::ValueEnum))]
 #[repr(i32)]
 pub enum AudioBandwidth {
     // Constants in libopus

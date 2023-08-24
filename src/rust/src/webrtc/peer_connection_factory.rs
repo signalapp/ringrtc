@@ -290,6 +290,7 @@ impl PeerConnectionFactory {
         pc_observer: PeerConnectionObserver<T>,
         kind: RffiPeerConnectionKind,
         audio_jitter_buffer_max_packets: isize,
+        audio_rtcp_report_interval_ms: isize,
         ice_servers: &IceServer,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
@@ -313,6 +314,7 @@ impl PeerConnectionFactory {
                 pc_observer_rffi.borrow(),
                 kind,
                 audio_jitter_buffer_max_packets,
+                audio_rtcp_report_interval_ms,
                 ice_servers.rffi(),
                 outgoing_audio_track.rffi().as_borrowed(),
                 outgoing_video_track

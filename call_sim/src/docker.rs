@@ -682,25 +682,42 @@ pub async fn start_cli(
     args.push("--allowed-bitrate-kbps".to_string());
     args.push(format!("{}", call_config.allowed_bitrate_kbps));
 
-    args.push("--packet-size-ms".to_string());
-    args.push(format!("{}", call_config.audio.packet_size_ms));
+    args.push(format!(
+        "--initial-packet-size-ms={}",
+        call_config.audio.initial_packet_size_ms
+    ));
+    args.push(format!(
+        "--min-packet-size-ms={}",
+        call_config.audio.min_packet_size_ms
+    ));
+    args.push(format!(
+        "--max-packet-size-ms={}",
+        call_config.audio.max_packet_size_ms
+    ));
 
-    args.push("--default-bitrate-bps".to_string());
-    args.push(format!("{}", call_config.audio.start_bitrate_bps));
+    args.push(format!(
+        "--initial-bitrate-bps={}",
+        call_config.audio.initial_bitrate_bps
+    ));
+    args.push(format!(
+        "--min-bitrate-bps={}",
+        call_config.audio.min_bitrate_bps
+    ));
+    args.push(format!(
+        "--max-bitrate-bps={}",
+        call_config.audio.max_bitrate_bps
+    ));
 
-    args.push("--min-bitrate-bps".to_string());
-    args.push(format!("{}", call_config.audio.min_bitrate_bps));
-
-    args.push("--max-bitrate-bps".to_string());
-    args.push(format!("{}", call_config.audio.max_bitrate_bps));
-
-    args.push("--complexity".to_string());
-    args.push(format!("{}", call_config.audio.complexity));
+    args.push(format!("--bandwidth={}", call_config.audio.bandwidth));
+    args.push(format!("--complexity={}", call_config.audio.complexity));
+    args.push(format!("--adaptation={}", call_config.audio.adaptation));
 
     args.push(format!("--cbr={}", call_config.audio.enable_cbr));
     args.push(format!("--dtx={}", call_config.audio.enable_dtx));
     args.push(format!("--fec={}", call_config.audio.enable_fec));
-    args.push(format!("--tcc={}", call_config.audio.enable_tcc_audio));
+
+    args.push(format!("--tcc={}", call_config.audio.enable_tcc));
+    args.push(format!("--red={}", call_config.audio.enable_red));
 
     args.push(format!("--vp9={}", call_config.video.enable_vp9));
 
@@ -730,6 +747,11 @@ pub async fn start_cli(
     args.push(format!(
         "--audio-jitter-buffer-max-packets={}",
         call_config.audio.jitter_buffer_max_packets
+    ));
+
+    args.push(format!(
+        "--audio-rtcp-report-interval-ms={}",
+        call_config.audio.rtcp_report_interval_ms
     ));
 
     if let Some(input_video_file) = input_video_file {
