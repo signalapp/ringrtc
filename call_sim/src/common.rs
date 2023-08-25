@@ -9,7 +9,8 @@ use std::{fmt, path::Path, time::Duration};
 /// display of most tracked `dimensions` that are available.
 #[allow(dead_code)]
 pub enum ChartDimension {
-    Mos,
+    MosSpeech,
+    MosAudio,
 
     ContainerCpuUsage,
     ContainerMemUsage,
@@ -58,7 +59,8 @@ pub enum ChartDimension {
 impl ChartDimension {
     pub fn get_title_and_y_label(&self) -> (&'static str, &'static str) {
         match self {
-            ChartDimension::Mos => ("MOS", "MOS"),
+            ChartDimension::MosSpeech => ("MOS Speech", "MOS"),
+            ChartDimension::MosAudio => ("MOS Audio", "MOS"),
             ChartDimension::ContainerCpuUsage => ("CPU Usage", "%"),
             ChartDimension::ContainerMemUsage => ("Memory Usage", "MiB"),
             ChartDimension::ContainerTxBitrate => ("TX Bitrate", "kbps"),
@@ -115,7 +117,8 @@ impl ChartDimension {
 
     pub fn get_name(&self) -> &'static str {
         match self {
-            ChartDimension::Mos => "mos",
+            ChartDimension::MosSpeech => "mos_speech",
+            ChartDimension::MosAudio => "mos_audio",
             ChartDimension::ContainerCpuUsage => "container_cpu_usage",
             ChartDimension::ContainerMemUsage => "container_mem_usage",
             ChartDimension::ContainerTxBitrate => "container_tx_bitrate",
@@ -179,6 +182,8 @@ pub struct TestCaseConfig {
     /// A flag to control recording of packet capture. Enabling this results in a `tcpdump.pcap`
     /// file among the generated artifacts for the test.
     pub tcp_dump: bool,
+    /// The number of times to run the test case.
+    pub iterations: u16,
 }
 
 impl Default for TestCaseConfig {
@@ -189,6 +194,7 @@ impl Default for TestCaseConfig {
             client_a_config: Default::default(),
             client_b_config: Default::default(),
             tcp_dump: false,
+            iterations: 1,
         }
     }
 }
@@ -282,16 +288,6 @@ impl fmt::Display for AudioBandwidth {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
-pub enum AudioAnalysisType {
-    /// Uses the wideband speech mode of visqol. Setting this option yields 16kHz/mono
-    /// copies of all wav artifacts.
-    Speech,
-    /// Uses the audio mode of the analysis tool.
-    Audio,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq)]
 pub enum AudioAnalysisMode {
     /// Skip audio analysis. Shows up as None in reports.
     None,
@@ -350,9 +346,11 @@ pub struct AudioConfig {
     pub jitter_buffer_max_packets: i32,
     /// How often RTCP reports should be sent. Subject to jitter applied by WebRTC.
     pub rtcp_report_interval_ms: i32,
-    /// The type of audio analysis to be performed (usually speech).
-    pub analysis_type: AudioAnalysisType,
-    /// The mechanism to use when analyzing audio.
+    /// Whether or not speech (wideband) analysis should be performed.
+    pub speech_analysis: bool,
+    /// Whether or not audio (fullband) analysis should be performed.
+    pub audio_analysis: bool,
+    /// The mechanism to use when analyzing speech/audio.
     pub analysis_mode: AudioAnalysisMode,
     /// Sometimes spectrogram generation takes too long, so we might want to disable it.
     pub generate_spectrogram: bool,
@@ -392,7 +390,8 @@ impl Default for AudioConfig {
             enable_agc: true,
             jitter_buffer_max_packets: 200,
             rtcp_report_interval_ms: 5000,
-            analysis_type: AudioAnalysisType::Speech,
+            speech_analysis: true,
+            audio_analysis: false,
             analysis_mode: AudioAnalysisMode::Normal,
             generate_spectrogram: true,
         }

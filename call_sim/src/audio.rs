@@ -114,13 +114,28 @@ pub async fn chop_audio_and_analyze(
         }
     }
 
-    let stats = Stats {
-        config: StatsConfig {
-            title: format!(
-                "MOS Over Time ({}sec)",
+    let (title, chart_name) = if speech {
+        (
+            format!(
+                "MOS Speech Over Time ({}sec)",
                 chopped_audio_result.reference_time_secs
             ),
-            chart_name: format!("{}.artifacts.mos.svg", client_name),
+            format!("{}.artifacts.mos_s.svg", client_name),
+        )
+    } else {
+        (
+            format!(
+                "MOS Audio Over Time ({}sec)",
+                chopped_audio_result.reference_time_secs
+            ),
+            format!("{}.artifacts.mos_a.svg", client_name),
+        )
+    };
+
+    let stats = Stats {
+        config: StatsConfig {
+            title,
+            chart_name,
             x_label: "Test Seconds".to_string(),
             y_label: "MOS".to_string(),
             x_max: Some(chopped_audio_result.degraded_time_secs as f32 + 5.0),
@@ -130,7 +145,11 @@ pub async fn chop_audio_and_analyze(
         data,
     };
 
-    test_results.mos = AnalysisReportMos::Series(Box::new(stats));
+    if speech {
+        test_results.mos_s = AnalysisReportMos::Series(Box::new(stats));
+    } else {
+        test_results.mos_a = AnalysisReportMos::Series(Box::new(stats));
+    }
 
     Ok(())
 }
@@ -160,7 +179,11 @@ pub async fn get_audio_and_analyze(
     ))
     .await?
     {
-        test_results.mos = AnalysisReportMos::Single(mos);
+        if speech {
+            test_results.mos_s = AnalysisReportMos::Single(mos);
+        } else {
+            test_results.mos_a = AnalysisReportMos::Single(mos);
+        }
     }
 
     Ok(())

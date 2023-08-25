@@ -27,8 +27,7 @@ use tower::timeout::Timeout;
 
 use crate::audio::{chop_audio_and_analyze, get_audio_and_analyze};
 use crate::common::{
-    AudioAnalysisMode, AudioAnalysisType, GroupConfig, NetworkConfigWithOffset, NetworkProfile,
-    TestCaseConfig,
+    AudioAnalysisMode, GroupConfig, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig,
 };
 use crate::docker::{
     analyze_audio, analyze_video, clean_network, clean_up, convert_mp4_to_yuv, convert_raw_to_wav,
@@ -56,7 +55,10 @@ pub struct Client<'a> {
 /// record and pass some things along as we create them.
 #[derive(Default)]
 pub struct TestResults {
-    pub mos: AnalysisReportMos,
+    /// MOS analysis using the speech model (wideband).
+    pub mos_s: AnalysisReportMos,
+    /// MOS analysis using the audio model (fullband).
+    pub mos_a: AnalysisReportMos,
 }
 
 pub struct TestCase<'a> {
@@ -198,8 +200,6 @@ impl Test {
         test_case_config: &TestCaseConfig,
         network_configs: &[NetworkConfigWithOffset],
     ) -> Result<()> {
-        println!("\nPreparing for test: {}", test_case.report_name);
-
         create_network().await?;
         start_signaling_server().await?;
 
@@ -274,7 +274,7 @@ impl Test {
                         // We wait for both clients to indicate that they are ready and already
                         // registered with the relay server.
                         if !done && event.ready_count == 2 {
-                            println!("\nRunning test: {}", test_case.report_name);
+                            println!("\nRunning test...");
 
                             let mut network_configs = network_configs.iter();
                             let mut timed_config_next = network_configs.next();
@@ -454,7 +454,7 @@ impl Test {
         )
         .await?;
 
-        if test_case_config.client_a_config.audio.analysis_type == AudioAnalysisType::Speech {
+        if test_case_config.client_a_config.audio.speech_analysis {
             convert_wav_to_16khz_mono(
                 &test_case.test_path,
                 &test_case.client_a.output_wav,
@@ -471,50 +471,72 @@ impl Test {
         )
         .await?;
 
-        let analyze_client_b_as_speech =
-            test_case_config.client_b_config.audio.analysis_type == AudioAnalysisType::Speech;
-
-        let client_b_output_wav = if analyze_client_b_as_speech {
+        if test_case_config.client_b_config.audio.speech_analysis {
             convert_wav_to_16khz_mono(
                 &test_case.test_path,
                 &test_case.client_b.output_wav,
                 &test_case.client_b.output_wav_speech,
             )
             .await?;
-
-            test_case.client_b.output_wav_speech.to_string()
-        } else {
-            test_case.client_b.output_wav.to_string()
-        };
+        }
 
         match test_case_config.client_b_config.audio.analysis_mode {
             AudioAnalysisMode::None => {
                 // Do nothing, no analysis is requested.
             }
             AudioAnalysisMode::Normal => {
-                get_audio_and_analyze(
-                    &test_case.test_path,
-                    &client_b_output_wav,
-                    &self.set_path,
-                    &test_case.client_a.sound.wav(analyze_client_b_as_speech),
-                    test_case.client_b.sound.analysis_extension(),
-                    analyze_client_b_as_speech,
-                    &mut test_results,
-                )
-                .await?;
+                if test_case_config.client_b_config.audio.speech_analysis {
+                    get_audio_and_analyze(
+                        &test_case.test_path,
+                        &test_case.client_b.output_wav_speech,
+                        &self.set_path,
+                        &test_case.client_a.sound.wav(true),
+                        test_case.client_b.sound.analysis_extension(),
+                        true,
+                        &mut test_results,
+                    )
+                    .await?;
+                }
+                if test_case_config.client_b_config.audio.audio_analysis {
+                    get_audio_and_analyze(
+                        &test_case.test_path,
+                        &test_case.client_b.output_wav,
+                        &self.set_path,
+                        &test_case.client_a.sound.wav(false),
+                        test_case.client_b.sound.analysis_extension(),
+                        false,
+                        &mut test_results,
+                    )
+                    .await?;
+                }
             }
             AudioAnalysisMode::Chopped => {
-                chop_audio_and_analyze(
-                    &test_case.test_path,
-                    &client_b_output_wav,
-                    &self.set_path,
-                    &test_case.client_a.sound.wav(analyze_client_b_as_speech),
-                    test_case.client_b.sound.analysis_extension(),
-                    test_case.client_b.name,
-                    analyze_client_b_as_speech,
-                    &mut test_results,
-                )
-                .await?;
+                if test_case_config.client_b_config.audio.speech_analysis {
+                    chop_audio_and_analyze(
+                        &test_case.test_path,
+                        &test_case.client_b.output_wav_speech,
+                        &self.set_path,
+                        &test_case.client_a.sound.wav(true),
+                        test_case.client_b.sound.analysis_extension(),
+                        test_case.client_b.name,
+                        true,
+                        &mut test_results,
+                    )
+                    .await?;
+                }
+                if test_case_config.client_b_config.audio.audio_analysis {
+                    chop_audio_and_analyze(
+                        &test_case.test_path,
+                        &test_case.client_b.output_wav,
+                        &self.set_path,
+                        &test_case.client_a.sound.wav(false),
+                        test_case.client_b.sound.analysis_extension(),
+                        test_case.client_b.name,
+                        false,
+                        &mut test_results,
+                    )
+                    .await?;
+                }
             }
         }
 
@@ -839,58 +861,67 @@ impl Test {
             }
 
             for network_profile in &profiles {
-                let report_name = format!(
-                    "{}-{}-{}",
-                    test.test_case_name,
-                    a_to_b_sound,
-                    network_profile.get_name()
-                );
+                for i in 1..=test.iterations {
+                    let report_name = format!(
+                        "{}-{}-{}",
+                        test.test_case_name,
+                        a_to_b_sound,
+                        network_profile.get_name()
+                    );
 
-                let test_case_path = format!(
-                    "{}/{}/{}",
-                    self.set_path, group_config.group_name, report_name
-                );
-                fs::create_dir_all(test_case_path.clone())?;
+                    let test_case_path = if test.iterations > 1 {
+                        println!("\nRunning test case: {}, iteration: {}", report_name, i);
+                        format!(
+                            "{}/{}/{}_{}",
+                            self.set_path, group_config.group_name, report_name, i
+                        )
+                    } else {
+                        println!("\nRunning test case: {}", report_name);
+                        format!(
+                            "{}/{}/{}",
+                            self.set_path, group_config.group_name, report_name
+                        )
+                    };
+                    fs::create_dir_all(test_case_path.clone())?;
 
-                println!("\nRunning test case: {}", report_name);
+                    let test_case = TestCase {
+                        report_name,
+                        test_path: test_case_path,
+                        test_case_name: test.test_case_name.to_string(),
+                        network_profile: network_profile.clone(),
+                        client_a: &Client {
+                            name: "client_a",
+                            // The sound should have been processed.
+                            sound: &self.sounds[a_to_b_sound],
+                            video: a_to_b_video.map(|v| &self.videos[v]),
+                            output_raw: "client_a_output.raw".to_string(),
+                            output_wav: "client_a_output.wav".to_string(),
+                            output_wav_speech: "client_a_output.16kHz.mono.wav".to_string(),
+                            // Note that we check if *B* is sending video to decide if *A* should output video.
+                            output_yuv: b_to_a_video.map(|_| "client_a_output.yuv".to_string()),
+                            output_mp4: b_to_a_video.map(|_| "client_a_output.mp4".to_string()),
+                        },
+                        client_b: &Client {
+                            name: "client_b",
+                            sound: &self.sounds[b_to_a_sound],
+                            video: b_to_a_video.map(|v| &self.videos[v]),
+                            output_raw: "client_b_output.raw".to_string(),
+                            output_wav: "client_b_output.wav".to_string(),
+                            output_wav_speech: "client_b_output.16kHz.mono.wav".to_string(),
+                            output_yuv: a_to_b_video.map(|_| "client_b_output.yuv".to_string()),
+                            output_mp4: a_to_b_video.map(|_| "client_b_output.mp4".to_string()),
+                        },
+                    };
 
-                let test_case = TestCase {
-                    report_name,
-                    test_path: test_case_path,
-                    test_case_name: test.test_case_name.to_string(),
-                    network_profile: network_profile.clone(),
-                    client_a: &Client {
-                        name: "client_a",
-                        // The sound should have been processed.
-                        sound: &self.sounds[a_to_b_sound],
-                        video: a_to_b_video.map(|v| &self.videos[v]),
-                        output_raw: "client_a_output.raw".to_string(),
-                        output_wav: "client_a_output.wav".to_string(),
-                        output_wav_speech: "client_a_output.16kHz.mono.wav".to_string(),
-                        // Note that we check if *B* is sending video to decide if *A* should output video.
-                        output_yuv: b_to_a_video.map(|_| "client_a_output.yuv".to_string()),
-                        output_mp4: b_to_a_video.map(|_| "client_a_output.mp4".to_string()),
-                    },
-                    client_b: &Client {
-                        name: "client_b",
-                        sound: &self.sounds[b_to_a_sound],
-                        video: b_to_a_video.map(|v| &self.videos[v]),
-                        output_raw: "client_b_output.raw".to_string(),
-                        output_wav: "client_b_output.wav".to_string(),
-                        output_wav_speech: "client_b_output.16kHz.mono.wav".to_string(),
-                        output_yuv: a_to_b_video.map(|_| "client_b_output.yuv".to_string()),
-                        output_mp4: a_to_b_video.map(|_| "client_b_output.mp4".to_string()),
-                    },
-                };
-
-                reports.push(
-                    self.run_test_case_and_get_report(
-                        &test_case,
-                        &test,
-                        &network_profile.get_config(),
-                    )
-                    .await,
-                );
+                    reports.push(
+                        self.run_test_case_and_get_report(
+                            &test_case,
+                            &test,
+                            &network_profile.get_config(),
+                        )
+                        .await,
+                    );
+                }
             }
         }
 
