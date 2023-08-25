@@ -1,42 +1,19 @@
-name: RingRTC Artifacts
+name: Build RingRTC Desktop Artifacts
+run-name: Build RingRTC Desktop Artifacts (${{ github.ref_name }})
 
 on:
-  workflow_dispatch: {} # no parameters
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "When true, don't upload to GCS or publish to npm"
+        default: false
+        required: false
+        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_android:
-    name: Build Android
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
-
-    - name: Install protoc
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-    - name: set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: 17
-
-    - run: ./bin/fetch-artifact --platform android --release
-    - run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/25.2.9519653" ./bin/build-aar --ringrtc-only --release
-      env:
-        ORG_GRADLE_PROJECT_signalSonatypeUsername: ${{ secrets.SONATYPE_USER }}
-        ORG_GRADLE_PROJECT_signalSonatypePassword: ${{ secrets.SONATYPE_PASSWORD }}
-        # The last 8 characters of the key ID
-        ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.SIGNING_KEYID }}
-        ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
-        # ASCII-armored PGP secret key
-        ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
-
   build_linux:
     name: Build Linux
 
@@ -48,12 +25,14 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-unknown-linux-gnu
 
     - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler gcc-aarch64-linux-gnu
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
+
+    - uses: actions/setup-node@v3
+      with:
+        node-version-file: 'src/node/.nvmrc'
 
     - run: ./bin/fetch-artifact --platform linux-x64 --release
     - run: ./bin/build-electron --ringrtc-only --release
-
-    - run: sudo ln -s /usr/aarch64-linux-gnu/lib/libstdc++.so.6 /usr/aarch64-linux-gnu/lib/libstdc++.so
 
     - run: ./bin/fetch-artifact --platform linux-arm64 --release -o out-arm
     - run: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-electron --ringrtc-only --release
@@ -66,6 +45,7 @@ jobs:
         retention-days: 2
 
     - name: Upload Desktop x64 Debug Info
+      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v3
       with:
         name: ringrtc-desktop-linux-debuginfo
@@ -73,6 +53,7 @@ jobs:
         retention-days: 120
 
     - name: Upload Desktop arm64 Debug Info
+      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v3
       with:
         name: ringrtc-desktop-linux-debuginfo
@@ -93,6 +74,10 @@ jobs:
       run: choco install protoc
       shell: cmd
 
+    - uses: actions/setup-node@v3
+      with:
+        node-version-file: 'src/node/.nvmrc'
+
     - run: sh ./bin/fetch-artifact --platform windows-x64 --release
     - run: sh ./bin/build-electron --ringrtc-only --release
 
@@ -109,6 +94,7 @@ jobs:
         retention-days: 2
 
     - name: Upload Desktop x64 Debug Info
+      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v3
       with:
         name: ringrtc-desktop-win32-debuginfo
@@ -116,20 +102,15 @@ jobs:
         retention-days: 120
 
     - name: Upload Desktop arm64 Debug Info
+      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v3
       with:
         name: ringrtc-desktop-win32-debuginfo
         path: out-arm/release/libringrtc-*-win32-arm64-debuginfo.tar.bz2
         retention-days: 120
 
-  build_ios_mac:
-    name: Build iOS and macOS
-
-    permissions:
-      # Needed to clone the repo
-      contents: 'read'
-      # Needed for google-github-actions/auth.
-      id-token: 'write'
+  build_mac:
+    name: Build macOS
 
     runs-on: macos-latest
 
@@ -138,7 +119,11 @@ jobs:
 
     - run: brew install protobuf coreutils # for grealpath
 
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin --component rust-src
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-apple-darwin
+
+    - uses: actions/setup-node@v3
+      with:
+        node-version-file: 'src/node/.nvmrc'
 
     - run: ./bin/fetch-artifact --platform mac-x64 --release
     - run: ./bin/build-electron --ringrtc-only --release
@@ -153,24 +138,8 @@ jobs:
         path: src/node/build/
         retention-days: 2
 
-    - run: ./bin/fetch-artifact --platform ios --release
-    - run: ./bin/build-ios --ringrtc-only --archive-ringrtc --release
-    - name: Output Artifact Checksum
-      run: 'sha256sum out/ringrtc-ios-build-v*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY'
-
-    - uses: google-github-actions/auth@v1
-      with:
-        workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
-        service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
-
-    - uses: google-github-actions/upload-cloud-storage@v1
-      with:
-        path: 'out'
-        destination: build-artifacts.signal.org/libraries
-        glob: 'ringrtc-ios-build-v*.tar.bz2'
-        parent: false
-
     - name: Upload Desktop x64 Debug Info
+      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v3
       with:
         name: ringrtc-desktop-darwin-debuginfo
@@ -178,6 +147,7 @@ jobs:
         retention-days: 120
 
     - name: Upload Desktop arm64 Debug Info
+      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v3
       with:
         name: ringrtc-desktop-darwin-debuginfo
@@ -195,7 +165,7 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    needs: [build_windows, build_ios_mac, build_linux]
+    needs: [build_windows, build_mac, build_linux]
 
     steps:
       - uses: actions/checkout@v3
@@ -240,11 +210,13 @@ jobs:
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
       - uses: google-github-actions/upload-cloud-storage@v1
+        if: ${{ !inputs.dry_run }}
         with:
           path: 'src/node'
           destination: build-artifacts.signal.org/libraries
           glob: 'ringrtc-desktop-build-v*.tar.gz'
           parent: false
+          process_gcloudignore: false
 
       # Put the SHA-256 of the archive into prebuildChecksum in package.json
       - run: sed -i "/prebuildChecksum/ s/\"\"/\"${ARTIFACT_CHECKSUM}\"/" package.json
@@ -254,9 +226,17 @@ jobs:
 
       # Test download by deleting `build/` and running yarn install and yarn test again.
       - run: rm -rf build/
+        # Skip this for dry runs because the install step won't be able to
+        # download the prebuild.
+        if: ${{ !inputs.dry_run }}
         working-directory: src/node/
 
       - run: yarn install
+        if: ${{ !inputs.dry_run }}
+        working-directory: src/node/
+
+      - run: yarn install --ignore-scripts
+        if: ${{ inputs.dry_run }}
         working-directory: src/node/
 
       - run: yarn build
@@ -266,6 +246,7 @@ jobs:
         working-directory: src/node/
 
       - run: npm publish --access public
+        if: ${{ !inputs.dry_run }}
         working-directory: src/node/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

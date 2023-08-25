@@ -1,0 +1,52 @@
+name: Build RingRTC iOS Artifacts
+run-name: Build RingRTC iOS Artifacts (${{ github.ref_name }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "When true, don't upload to GCS"
+        default: false
+        required: false
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_ios:
+    name: Build iOS
+
+    permissions:
+      # Needed to clone the repo
+      contents: 'read'
+      # Needed for google-github-actions/auth.
+      id-token: 'write'
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - run: brew install protobuf coreutils # for grealpath
+
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim --component rust-src
+
+    - run: ./bin/fetch-artifact --platform ios --release
+    - run: ./bin/build-ios --ringrtc-only --archive-ringrtc --release
+    - name: Output Artifact Checksum
+      run: 'sha256sum out/ringrtc-ios-build-v*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY'
+
+    - uses: google-github-actions/auth@v1
+      with:
+        workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+        service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+
+    - uses: google-github-actions/upload-cloud-storage@v1
+      if: ${{ !inputs.dry_run }}
+      with:
+        path: 'out'
+        destination: build-artifacts.signal.org/libraries
+        glob: 'ringrtc-ios-build-v*.tar.bz2'
+        parent: false
+        process_gcloudignore: false
