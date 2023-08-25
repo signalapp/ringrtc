@@ -315,6 +315,17 @@ def GetAndroidApiLevel(arch):
     else:
         return 21
 
+def CollectWebrtcLicenses(dry_run, project_dir, webrtc_src_dir, build_dir, debug_build, archs):
+    assert len(NINJA_TARGETS) == 1, 'need to make this a loop'
+    md_gen_args = [
+        'vpython3',
+        os.path.join('tools_webrtc', 'libs', 'generate_licenses.py'),
+        '--target',
+        NINJA_TARGETS[0],
+        build_dir,
+    ] + [GetArchBuildDir(build_dir, arch, debug_build) for arch in archs]
+    RunCmd(dry_run, md_gen_args, cwd=webrtc_src_dir)
+
 def ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version):
     build_mode = 'debug' if debug_build else 'release'
     archive_name = f'webrtc-{webrtc_version}-android-{build_mode}.tar.bz2'
@@ -338,6 +349,9 @@ def ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version):
                 logging.debug('  Adding lib: {} (unstripped) ...'.format(lib))
                 add(os.path.join(output_arch_rel_path, 'lib.unstripped', lib))
 
+        logging.debug('  Adding acknowledgments file')
+        add('LICENSE.md')
+
 def CreateLibs(dry_run, project_dir, webrtc_src_dir, build_dir, archs, output,
                debug_build, unstripped,
                extra_gn_args, extra_gn_flags, extra_ninja_flags,
@@ -349,6 +363,9 @@ def CreateLibs(dry_run, project_dir, webrtc_src_dir, build_dir, archs, output,
                   debug_build,
                   extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
                   jobs, build_projects, publish_to_maven)
+
+    if Project.WEBRTC in build_projects:
+        CollectWebrtcLicenses(dry_run, project_dir, webrtc_src_dir, build_dir, debug_build, archs)
 
     if Project.WEBRTC_ARCHIVE in build_projects:
         ArchiveWebrtc(dry_run, build_dir, debug_build, archs, webrtc_version)

@@ -103,13 +103,17 @@ then
 
     WEBRTC_ARGS="target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_include_ilbc=false"
 
-    if [ "${BUILD_TYPE}" = "debug" ]
+    if [ "${BUILD_TYPE}" = "release" ]
     then
-        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}" && ninja -C "${OUTPUT_DIR}"/debug)
-    else
-        # Build with debug line tables, but not full debug info.
-        (cd src/webrtc/src && gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1" && ninja -C "${OUTPUT_DIR}"/release)
+        WEBRTC_ARGS="${WEBRTC_ARGS} is_debug=false symbol_level=1"
     fi
+
+    (
+        cd src/webrtc/src
+        gn gen -C "${OUTPUT_DIR}/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
+        ninja -C "${OUTPUT_DIR}/${BUILD_TYPE}" webrtc
+        tools_webrtc/libs/generate_licenses.py --target :webrtc "${OUTPUT_DIR}/${BUILD_TYPE}" "${OUTPUT_DIR}/${BUILD_TYPE}"
+    )
 
     if [ -n "${ARCHIVE_WEBRTC}" ]
     then
@@ -117,7 +121,7 @@ then
         if [ ! -e "${OUTPUT_DIR}/${STATIC_LIB_PATH}" ]; then
             STATIC_LIB_PATH="${BUILD_TYPE}"/obj/libwebrtc.a
         fi
-        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-${BUILD_TYPE}.tar.bz2 -C "${OUTPUT_DIR}" "${STATIC_LIB_PATH}"
+        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-${BUILD_TYPE}.tar.bz2 -C "${OUTPUT_DIR}" "${STATIC_LIB_PATH}" "${BUILD_TYPE}/LICENSE.md"
     fi
 fi
 
