@@ -1,0 +1,153 @@
+accepted = [
+    # These are in priority order, if a project is multi-licensed
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "AGPL-3.0",
+    "ISC",
+    "Unicode-DFS-2016",
+]
+
+ignore-dev-dependencies = true
+
+# Don't use an online service to verify licenses.
+no-clearly-defined = true
+
+# cargo-about will scan each crate for the exact text of a project's license.
+# This can take a long time, so we limit it to only checking the top level of each crate.
+# If the license isn't there, cargo-about will fall back to a generic version.
+# At the time this was introduced, this produced identical output to max-depth = 2
+# in a fraction of the time.
+max-depth = 1
+
+# List every target we ship, just in case some dependencies are platform-gated.
+targets = [
+    "aarch64-apple-darwin",
+    "aarch64-pc-windows-msvc",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+
+    "aarch64-apple-ios",
+
+    "aarch64-linux-android",
+    "armv7-linux-androideabi",
+    "i686-linux-android",
+    "x86_64-linux-android",
+]
+
+
+# curve25519-dalek was derived from a Go project
+[curve25519-dalek.clarify]
+license = "BSD-3-Clause"
+
+[[curve25519-dalek.clarify.files]]
+# The Rust implementation
+path = "LICENSE"
+license = "BSD-3-Clause"
+start = "Copyright"
+end = "SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+checksum = "db7e563b03fa70fa9998fbcae9b432057b7430740a58672c9a8df17af6e078d7"
+
+[[curve25519-dalek.clarify.files]]
+# The Go implementation used as a reference
+path = "LICENSE"
+license = "BSD-3-Clause"
+start = "Copyright (c) 2012 The Go Authors. All rights reserved."
+end = "SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+checksum = "b790bcf9428074d098a455163df68ec35589ae22536051f3555a592c1e4dd772"
+
+
+# The libsignal/zkgroup crates are embedded in a larger repo.
+[poksho.clarify]
+license = "AGPL-3.0-only"
+
+[[poksho.clarify.git]]
+path = "LICENSE"
+checksum = "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+
+[signal-crypto.clarify]
+license = "AGPL-3.0-only"
+
+[[signal-crypto.clarify.git]]
+path = "LICENSE"
+checksum = "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+
+[zkcredential.clarify]
+license = "AGPL-3.0-only"
+
+[[zkcredential.clarify.git]]
+path = "LICENSE"
+checksum = "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+
+[zkgroup.clarify]
+license = "AGPL-3.0-only"
+
+[[zkgroup.clarify.git]]
+path = "LICENSE"
+checksum = "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+
+
+# The prost-* crates are embedded in a larger repo.
+[prost-build.clarify]
+license = "Apache-2.0"
+override_git_commit = "v0.9.0"
+
+[[prost-build.clarify.git]]
+path = "LICENSE"
+checksum = "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+
+[prost-derive.clarify]
+license = "Apache-2.0"
+override_git_commit = "v0.9.0"
+
+[[prost-derive.clarify.git]]
+path = "LICENSE"
+checksum = "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+
+[prost-types.clarify]
+license = "Apache-2.0"
+override_git_commit = "v0.9.0"
+
+[[prost-types.clarify.git]]
+path = "LICENSE"
+checksum = "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+
+
+# Not sure what's up with the windows-* crates.
+[windows-sys.clarify]
+license = "MIT"
+
+[[windows-sys.clarify.files]]
+path = "license-mit"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows-targets.clarify]
+license = "MIT"
+
+[[windows-targets.clarify.files]]
+path = "license-mit"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows_aarch64_msvc.clarify]
+license = "MIT"
+
+[[windows_aarch64_msvc.clarify.files]]
+path = "license-mit"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows_x86_64_gnu.clarify]
+license = "MIT"
+
+[[windows_x86_64_gnu.clarify.files]]
+path = "license-mit"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows_x86_64_msvc.clarify]
+license = "MIT"
+
+[[windows_x86_64_msvc.clarify.files]]
+path = "license-mit"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"

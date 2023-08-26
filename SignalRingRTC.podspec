@@ -33,12 +33,16 @@ Pod::Spec.new do |s|
   s.module_map = 'src/ios/SignalRingRTC/SignalRingRTC/SignalRingRTC.modulemap'
 
   s.preserve_paths = [
-    'out/release/libringrtc', # a symlink controlled by bin/set-up-for-cocoapods
+    'acknowledgments/acknowledgments.plist',
     'bin/set-up-for-cocoapods',
     'bin/fetch-artifact.py', # env.sh has extra dependencies, so we go directly to the Python script
     'config/version.sh',
     'config/version.properties',
     'prebuild-checksum',
+
+    # controlled by bin/set-up-for-cocoapods
+    'out/release/libringrtc',
+    'out/release/acknowledgments-webrtc-ios.plist',
   ]
 
   s.dependency 'SignalCoreKit'

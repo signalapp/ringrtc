@@ -25,11 +25,19 @@ jobs:
     name: Lints
     runs-on: ubuntu-latest
     steps:
+    - name: Cargo Cache
+      uses: Swatinem/rust-cache@e207df5d269b42b69c8bc5101da26f7d31feddb4 # v2.6.2
+      with:
+        cache-targets: "false"
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     - uses: actions/checkout@v3
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
+    - name: Install extra Rust tools
+      run: cargo +stable install --version 0.5.6 --locked cargo-about
     - run: shellcheck **/*.sh bin/build-aar bin/build-call_sim-cli bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-artifact bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check bin/set-up-for-cocoapods src/rust/scripts/run-tests
+    - name: Check acknowledgments
+      run: ./bin/regenerate_acknowledgments.sh && git diff --name-status --exit-code acknowledgments
     - name: Clippy
       run: cargo clippy --tests --features sim -- -D warnings
       working-directory: src/rust
