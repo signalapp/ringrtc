@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.32.2
+## v2.31.2
 
 - Update webrtc to 5845c
   - Update the hardcoded PulseAudio device name to "Signal Calling"
