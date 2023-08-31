@@ -18,14 +18,14 @@ from typing import BinaryIO
 UNVERIFIED_DOWNLOAD_NAME = "unverified.tmp"
 
 PREBUILD_CHECKSUMS = {
-    'android': 'bd30afe04b98ba34d685a3375197e57883f4650c83f97a73cd7430a2fe3711ad',
-    'ios': 'd5b6803ca959ac3c9e3167718bfbb98eb742ad881c14fd84416d96fcce2bb9a0',
-    'linux-arm64': 'c032d4aec6ed7b6f4ebc6414bcffcbdbb7174fc00178ea2b64b88e595e1139e3',
-    'linux-x64': '83e4a4a83b467e6dc4425a2f92775762bd43c753ce7dc4852e8982aff68ef0dc',
-    'mac-arm64': '6f3cacc3923bfbe762c1e866876383ca7a22d13df790f4e2fb39d8ce554b1b63',
-    'mac-x64': 'b1b7013801058b2796b26159cbc364dc07161fd425aad6b6a71645c4da7db609',
-    'windows-arm64': '7c9a0902bfe1c151fd145fc4edbcfe27c9fc8ec61fa02f1ceebcd15aadc2a99d',
-    'windows-x64': '8a6832f83e7f97118b035a2c8bdb2865505ac8ae82dbae74e1248e6bc5b936ad',
+    'android': '5c39f1084dff122afdd8578c7137dff05b33fd8fd4f140cfbe66c87242207ad4',
+    'ios': 'dab63cc6731e5ea224415f75c5c3e3a08ae2c19be0795e1fa00f18494fe3b5c2',
+    'linux-arm64': '98c10d65548e2d21e82d62012dd362f972bad50e8323e7014ae9e4024a60ea75',
+    'linux-x64': 'cdefb83b31faeebe66884b29c991e03b401c55dfc0db4623aa0a54e00519cbb8',
+    'mac-arm64': '60e4369b6757ea47909484522d77c5b0adb1d8fe65c01adbcf2dd5c3dc013020',
+    'mac-x64': '6e5ef9a1e7d4404ff6b2fa6609411a272573360e4c76222e635f9262d5b48aba',
+    'windows-arm64': 'f89bf4806d6ad213ab74d7c7414d975e528077a013edc37776e2193bf8e7edfc',
+    'windows-x64': 'c0302fb70dae2c12f73001c20601c05091e207f2972ffdcd337c2f8296ec0db7',
 }
 
 
