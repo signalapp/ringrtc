@@ -8,7 +8,7 @@
 # Be sure of the following pre-requisites in your environment (macOS & Xcode):
 #
 # $ xcode-select --install
-# $ rustup target add aarch64-apple-ios x86_64-apple-ios
+# $ rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
 # $ rustup component add rust-src
 # $ cargo install cbindgen
 #
@@ -131,7 +131,7 @@ then
   if [[ -n "${HOST_SIM_ONLY}" ]]; then
     ARCHS=$(webrtc_arch_for_host_sim)
   else
-    ARCHS=("simulator:x64" "simulator:arm64" "device:arm64" "catalyst:x64" "catalyst:arm64")
+    ARCHS=("simulator:x64" "simulator:arm64" "device:arm64")
   fi
   EXTRA_GN_ARGS="rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_enable_sctp=false rtc_libvpx_build_vp9=false rtc_include_ilbc=false"
 
@@ -171,17 +171,6 @@ then
   fi
 fi
 
-cargo_flags() {
-  case $1 in
-    x86_64-apple-ios-macabi | \
-    aarch64-apple-ios-macabi )
-      echo -Zbuild-std
-      ;;
-    * )
-      ;;
-  esac
-}
-
 # The RingRTC part of the build resulting in a library built from Rust.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
 then
@@ -199,7 +188,7 @@ then
         ;;
     esac
   else
-    TARGETS="x86_64-apple-ios-macabi aarch64-apple-ios-macabi x86_64-apple-ios aarch64-apple-ios-sim aarch64-apple-ios"
+    TARGETS="aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim"
   fi
 
   if [[ "${BUILD_TYPE}" == "debug" ]]; then
@@ -211,9 +200,8 @@ then
   for TARGET in ${TARGETS}; do
     (
       cd "${RINGRTC_SRC_DIR}"/rust
-      # shellcheck disable=SC2046 # word splitting for cargo_flags
       CARGO_TARGET_DIR="${OUTPUT_DIR}"/build \
-        cargo rustc --target "${TARGET}" ${IS_RELEASE:+--release} $(cargo_flags "${TARGET}") --crate-type staticlib
+        cargo rustc --target "${TARGET}" ${IS_RELEASE:+--release} --crate-type staticlib
       mkdir -p "${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc/${TARGET}"
       cp "${OUTPUT_DIR}/build/${TARGET}/${BUILD_TYPE}/libringrtc.a" "${OUTPUT_DIR}/${BUILD_TYPE}/libringrtc/${TARGET}/"
     )
