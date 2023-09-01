@@ -244,6 +244,9 @@ jobs:
 
       # Put the SHA-256 of the archive into prebuildChecksum in package.json
       - run: sed -i "/prebuildChecksum/ s/\"\"/\"${ARTIFACT_CHECKSUM}\"/" package.json
+        # Skip this for dry runs because the install step won't be able to
+        # download the prebuild.
+        if: ${{ !inputs.dry_run }}
         working-directory: src/node/
         env:
           ARTIFACT_CHECKSUM: ${{ steps.artifact-checksum.outputs.sha256 }}
@@ -256,11 +259,6 @@ jobs:
         working-directory: src/node/
 
       - run: yarn install
-        if: ${{ !inputs.dry_run }}
-        working-directory: src/node/
-
-      - run: yarn install --ignore-scripts
-        if: ${{ inputs.dry_run }}
         working-directory: src/node/
 
       - run: yarn build
@@ -274,3 +272,15 @@ jobs:
         working-directory: src/node/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - run: yarn pack
+        if: ${{ inputs.dry_run }}
+        working-directory: src/node/
+
+      - name: Upload Package Archive
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: npm-package
+          path: src/node/signalapp-ringrtc-v*.tgz
+          retention-days: 7
