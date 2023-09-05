@@ -37,7 +37,7 @@ regex-aot         = { path = "regex-aot" }
 aes               = { version = "0.7.5"  }
 aes-gcm-siv       = { version = "0.10.3" }
 anyhow            = { version = "1.0"    }
-base64            = { version = "0.13"   }
+base64            = { version = "0.21.3" }
 bytes             = { version = "1.0"    }
 ctr               = { version = "0.8"    }
 futures           = { version = "0.3"    }
@@ -45,7 +45,7 @@ hmac              = { version = "0.11"   }
 lazy_static       = { version = "1.4"    }
 libc              = { version = "0.2"    }
 log               = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
-num_enum          = { version = "0.5"    }
+num_enum          = { version = "0.7.0" }
 prost             = { version = "0.11"   }
 rand              = { version = "0.7", features = [] }
 regex-automata    = { version = "0.1.10" }
@@ -56,11 +56,11 @@ serde_with        = { version = "2.3.2", features = ["base64", "hex"] }
 hex               = { version = "0.4", features = ["serde"] }
 sha2              = { version = "0.9.9"  }
 static_assertions = { version = "1.1.0"  }
-subtle            = { version = "2.3.0"  }
-sysinfo           = { version = "0.28.0", default-features = false }
-thiserror         = { version = "1.0.20" }
-tokio             = { version = "1.13.0", features = ["rt-multi-thread", "time"] }
-x25519-dalek      = { version = "1.1"    }
+subtle            = { version = "2.4.1"  }
+sysinfo           = { version = "0.29.9", default-features = false }
+thiserror         = { version = "1.0.47" }
+tokio             = { version = "1.32.0", features = ["rt-multi-thread", "time"] }
+x25519-dalek      = { version = "1.2"    }
 
 # Used by call links. Be careful not to pull in more than strictly needed, for both code size and
 # maintenance reasons. In particular, anything involving credentials should be left to
@@ -75,8 +75,8 @@ neon = { version = "0.10.1", optional = true, default-features = false, features
 jni = { version = "0.19.0", optional = true, default-features = false }
 
 # Optional, needed by the "http" feature
-ureq = { version = "2.5", optional = true }
-rustls = { version = "0.20.7", optional = true, features = ["dangerous_configuration"] }
+ureq = { version = "2.7.1", optional = true }
+rustls = { version = "0.21.6", optional = true, features = ["dangerous_configuration"] }
 webpki = { version = "0.22", optional = true }
 
 # Optional, needed for call-link-test-client
@@ -84,9 +84,9 @@ rand_chacha = { version = "0.2", optional = true }
 
 # Optional, needed by the "call_sim" feature
 chrono = {version = "0.4", optional = true }
-clap = { version = "4", optional = true, features = ["derive"] }
+clap = { version = "4.4.2", optional = true, features = ["derive"] }
 fern = { version = "0.6", optional = true }
-tonic = { version = "0.8", optional = true }
+tonic = { version = "0.9.2", optional = true }
 tower = { version = "0.4", optional = true }
 
 [features]
@@ -114,7 +114,7 @@ jni = { version = "0.19.0", default-features = false }
 
 [build-dependencies]
 prost-build = { version = "0.11" }
-tonic-build = { version = "0.8" }
+tonic-build = { version = "0.9.2" }
 
 [dev-dependencies]
 env_logger = { version = "0.10" }

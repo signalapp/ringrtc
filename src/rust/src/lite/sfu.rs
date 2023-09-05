@@ -14,6 +14,8 @@ use std::{
     sync::Arc,
 };
 
+use base64::engine::general_purpose::STANDARD as base64;
+use base64::Engine;
 use hex::ToHex;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -300,7 +302,7 @@ pub fn auth_header_from_membership_proof(proof: &[u8]) -> Option<String> {
     let uuid = uuid?;
     Some(format!(
         "Basic {}",
-        base64::encode(format!("{}:{}", uuid, token))
+        base64.encode(format!("{}:{}", uuid, token))
     ))
 }
 

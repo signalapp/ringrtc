@@ -13,6 +13,8 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::time::{Duration, SystemTime};
 
+use base64::engine::general_purpose::STANDARD as base64;
+use base64::Engine;
 use rand::SeedableRng;
 use ringrtc::lite::call_links::{
     CallLinkRestrictions, CallLinkRootKey, CallLinkState, CallLinkUpdateRequest,
@@ -161,7 +163,9 @@ fn main() {
     let zkparams_base64 = args.get(2).map(String::as_str).unwrap_or(DEFAULT_ZKPARAMS);
     let server_zkparams: zkgroup::generic_server_params::GenericServerSecretParams =
         bincode::deserialize(
-            &base64::decode(zkparams_base64).expect("zkparams should be valid base64"),
+            &base64
+                .decode(zkparams_base64)
+                .expect("zkparams should be valid base64"),
         )
         .expect("zkparams should be a valid GenericServerSecretParams (not public!)");
     let public_zkparams = server_zkparams.get_public_params();

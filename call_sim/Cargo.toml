@@ -12,9 +12,10 @@ license = "AGPL-3.0-only"
 
 [dependencies]
 anyhow = "1.0"
-bollard = "0.13"
+bollard = "0.14.0"
 chrono = "0.4"
-clap = { version = "4", features = ["derive"] }
+# Stay on 4.3 to avoid pulling in anstream 0.5.0 which uses unstable library feature is_terminal
+clap = { version = "=4.3.24", features = ["derive"] }
 futures-core = "0.3"
 futures-util = "0.3"
 hound = "3.5"
@@ -25,8 +26,8 @@ regex = "1"
 relative-path = "1.7.2"
 serde_json = "1.0.91"
 tokio = { version = "1", features = ["full"] }
-tonic = "0.8"
+tonic = "0.9.2"
 tower = "0.4"
 
 [build-dependencies]
-tonic-build = "0.8"
+tonic-build = "0.9.2"

@@ -12,6 +12,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use base64::engine::general_purpose::STANDARD as base64;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
@@ -52,7 +54,8 @@ impl CallLinkState {
         let name = if deserialized.encrypted_name.is_empty() {
             "".to_string()
         } else {
-            base64::decode(deserialized.encrypted_name)
+            base64
+                .decode(deserialized.encrypted_name)
                 .ok()
                 .and_then(|encrypted_bytes| root_key.decrypt(&encrypted_bytes).ok())
                 .and_then(|name_bytes| String::from_utf8(name_bytes).ok())
@@ -79,7 +82,7 @@ fn call_link_url_from_sfu_url(sfu_url: &str) -> String {
 }
 
 pub fn auth_header_from_auth_credential(auth_presentation: &[u8]) -> String {
-    format!("Bearer auth.{}", base64::encode(auth_presentation))
+    format!("Bearer auth.{}", base64.encode(auth_presentation))
 }
 
 pub fn read_call_link(
@@ -158,7 +161,7 @@ pub fn create_call_link(
             headers: HashMap::from_iter([
                 (
                     "Authorization".to_string(),
-                    format!("Bearer create.{}", base64::encode(auth_presentation)),
+                    format!("Bearer create.{}", base64.encode(auth_presentation)),
                 ),
                 (
                     "X-Room-Id".to_string(),
