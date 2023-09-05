@@ -366,12 +366,24 @@ pub use crate::webrtc::ffi::sdp_observer::RffiCreateSessionDescriptionObserver;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::sdp_observer::RffiCreateSessionDescriptionObserver;
 
+/// A struct to wrap the unique pointer to RffiSessionDescription as it is created which
+/// indicates that it is safe to send between threads.
+#[derive(Debug)]
+struct UniqueSessionDescription(webrtc::ptr::Unique<RffiSessionDescription>);
+
+/// # Safety
+///
+/// The underlying RffiSessionDescription is safe to send because it is owned here and
+/// WebRTC only borrows it during Offer/Answer creation time to convey the asynchronous
+/// result, and does not hold on to it.
+unsafe impl Send for UniqueSessionDescription {}
+
 /// Observer object for creating a session description.
 #[derive(Debug)]
 pub struct CreateSessionDescriptionObserver {
     /// condition variable used to signal the completion of the create
     /// session description operation.
-    condition: FutureResult<Result<webrtc::ptr::Unique<RffiSessionDescription>>>,
+    condition: FutureResult<Result<UniqueSessionDescription>>,
     /// Pointer to C++ webrtc::rffi::RffiCreateSessionDescriptionObserver object
     rffi: webrtc::Arc<RffiCreateSessionDescriptionObserver>,
 }
@@ -381,7 +393,10 @@ impl CreateSessionDescriptionObserver {
     fn new() -> Self {
         Self {
             condition: Arc::new((
-                Mutex::new((false, Ok(webrtc::ptr::Unique::null()))),
+                Mutex::new((
+                    false,
+                    Ok(UniqueSessionDescription(webrtc::ptr::Unique::null())),
+                )),
                 Condvar::new(),
             )),
             rffi: webrtc::Arc::null(),
@@ -396,7 +411,7 @@ impl CreateSessionDescriptionObserver {
         info!("on_create_success()");
         let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
-            guard.1 = Ok(session_description);
+            guard.1 = Ok(UniqueSessionDescription(session_description));
             guard.0 = true;
             // We notify the condvar that the value has changed.
             cvar.notify_one();
@@ -439,7 +454,7 @@ impl CreateSessionDescriptionObserver {
             }
             // TODO: implement guard.1.clone() here ....
             match &mut guard.1 {
-                Ok(v) => Ok(SessionDescription::new(v.take())),
+                Ok(v) => Ok(SessionDescription::new(v.0.take())),
                 Err(e) => Err(
                     RingRtcError::CreateSessionDescriptionObserverResult(format!("{}", e)).into(),
                 ),

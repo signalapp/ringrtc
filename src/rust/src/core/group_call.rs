@@ -6078,7 +6078,7 @@ mod tests {
         };
         let set_client_decoded_height = |client: &TestClient, height: u32| {
             let mut remote_devices = client.observer.remote_devices.lock().unwrap();
-            let mut device = remote_devices.get_mut(0).unwrap();
+            let device = remote_devices.get_mut(0).unwrap();
             device.client_decoded_height = Some(height);
             device.recalculate_higher_resolution_pending();
         };

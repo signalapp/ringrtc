@@ -134,7 +134,7 @@ impl<T> Copy for Borrowed<T> {}
 
 impl<T> Clone for Borrowed<T> {
     fn clone(&self) -> Self {
-        Self::from_ptr(self.as_ptr())
+        *self
     }
 }
 
@@ -241,7 +241,7 @@ impl<T: RefCounted> Copy for BorrowedRc<T> {}
 
 impl<T: RefCounted> Clone for BorrowedRc<T> {
     fn clone(&self) -> Self {
-        Self::from_ptr(self.as_ptr())
+        *self
     }
 }
 

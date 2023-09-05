@@ -320,7 +320,7 @@ impl StatsObserver {
         self.print_connection(media_statistics);
         self.print_system();
 
-        let mut stats = &mut self.stats;
+        let stats = &mut self.stats;
 
         if media_statistics.audio_sender_statistics_size > 0 {
             let audio_senders = unsafe {
