@@ -57,7 +57,9 @@ hex               = { version = "0.4", features = ["serde"] }
 sha2              = { version = "0.9.9"  }
 static_assertions = { version = "1.1.0"  }
 subtle            = { version = "2.4.1"  }
-sysinfo           = { version = "0.29.9", default-features = false }
+# Stay on an older version to avoid the use of getgrgid_r, which was added in
+# Android API level 24.
+sysinfo           = { version = "=0.29.0", default-features = false }
 thiserror         = { version = "1.0.47" }
 tokio             = { version = "1.32.0", features = ["rt-multi-thread", "time"] }
 x25519-dalek      = { version = "1.2"    }
