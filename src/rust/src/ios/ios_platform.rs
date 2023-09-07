@@ -236,6 +236,20 @@ impl Platform for IosPlatform {
         Ok(())
     }
 
+    fn on_low_bandwidth_for_video(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        recovered: bool,
+    ) -> Result<()> {
+        info!("on_low_bandwidth_for_video(): {}", recovered);
+        (self.app_interface.onLowBandwidthForVideo)(
+            self.app_interface.object,
+            remote_peer.ptr,
+            recovered,
+        );
+        Ok(())
+    }
+
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
@@ -576,6 +590,15 @@ impl Platform for IosPlatform {
             client_id,
             captured_level,
             app_received_levels_array,
+        );
+    }
+
+    fn handle_low_bandwidth_for_video(&self, client_id: group_call::ClientId, recovered: bool) {
+        info!("handle_low_bandwidth_for_video():");
+        (self.app_interface.handleLowBandwidthForVideo)(
+            self.app_interface.object,
+            client_id,
+            recovered,
         );
     }
 

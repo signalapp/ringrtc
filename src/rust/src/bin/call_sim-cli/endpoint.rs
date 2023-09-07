@@ -402,6 +402,14 @@ impl CallStateHandler for CallEndpoint {
         Ok(())
     }
 
+    fn handle_low_bandwidth_for_video(&self, remote_peer_id: &str, recovered: bool) -> Result<()> {
+        info!(
+            "Not enough bandwidth to send video reliably {} => {}: recovered: {}",
+            self.peer_id, remote_peer_id, recovered
+        );
+        Ok(())
+    }
+
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         info!(
             "Video State for {} => {}: {}",

@@ -139,5 +139,9 @@ extern "C" {
         received_size_out: webrtc::ptr::Borrowed<usize>,
     );
 
+    pub fn Rust_getLastBandwidthEstimateBps(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    ) -> u32;
+
     pub fn Rust_closePeerConnection(peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>);
 }

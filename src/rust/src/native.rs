@@ -129,6 +129,7 @@ pub trait CallStateHandler {
         captured_level: AudioLevel,
         received_level: AudioLevel,
     ) -> Result<()>;
+    fn handle_low_bandwidth_for_video(&self, remote_peer_id: &str, recovered: bool) -> Result<()>;
 }
 
 // These are the different states a call can be in.
@@ -250,6 +251,10 @@ pub enum GroupUpdate {
     },
     NetworkRouteChanged(group_call::ClientId, NetworkRoute),
     AudioLevels(group_call::ClientId, AudioLevel, Vec<ReceivedAudioLevel>),
+    LowBandwidthForVideo {
+        group_id: group_call::ClientId,
+        recovered: bool,
+    },
 }
 
 impl fmt::Display for GroupUpdate {
@@ -269,6 +274,9 @@ impl fmt::Display for GroupUpdate {
             }
             GroupUpdate::AudioLevels(_, captured_level, received_levels) => {
                 format!("AudioLevels({:?}, {:?})", captured_level, received_levels)
+            }
+            GroupUpdate::LowBandwidthForVideo { recovered, .. } => {
+                format!("LowBandwidthForVideo({})", recovered)
             }
         };
         write!(f, "({})", display)
@@ -333,6 +341,11 @@ impl NativePlatform {
     ) -> Result<()> {
         self.state_handler
             .handle_audio_levels(peer_id, captured_level, received_level)
+    }
+
+    fn send_low_bandwidth_for_video(&self, peer_id: &str, recovered: bool) -> Result<()> {
+        self.state_handler
+            .handle_low_bandwidth_for_video(peer_id, recovered)
     }
 
     fn send_group_update(&self, update: GroupUpdate) -> Result<()> {
@@ -633,6 +646,19 @@ impl Platform for NativePlatform {
         Ok(())
     }
 
+    fn on_low_bandwidth_for_video(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        recovered: bool,
+    ) -> Result<()> {
+        info!(
+            "NativePlatform::on_low_bandwidth_for_video(): recovered: {}",
+            recovered
+        );
+
+        self.send_low_bandwidth_for_video(remote_peer, recovered)
+    }
+
     fn on_offer_expired(
         &self,
         remote_peer: &Self::AppRemotePeer,
@@ -851,6 +877,20 @@ impl Platform for NativePlatform {
             captured_level,
             received_levels,
         ));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_low_bandwidth_for_video(&self, client_id: group_call::ClientId, recovered: bool) {
+        trace!(
+            "NativePlatform::handle_low_bandwidth_for_video(): id: {}",
+            client_id
+        );
+        let result = self.send_group_update(GroupUpdate::LowBandwidthForVideo {
+            group_id: client_id,
+            recovered,
+        });
         if result.is_err() {
             error!("{:?}", result.err());
         }

@@ -907,6 +907,7 @@ describe('RingRTC', () => {
       onLocalDeviceStateChanged(_call: GroupCall) {}
       onRemoteDeviceStatesChanged(_call: GroupCall) {}
       onAudioLevels(_call: GroupCall) {}
+      onLowBandwidthForVideo(_call: GroupCall, _recovered: boolean) {}
       onPeekChanged(_call: GroupCall) {}
       onEnded(_call: GroupCall, _reason: GroupCallEndReason) {}
       /* eslint-enable @typescript-eslint/no-empty-function */

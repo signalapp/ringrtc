@@ -163,6 +163,10 @@ pub enum Event {
         captured_level: AudioLevel,
         received_level: AudioLevel,
     },
+    LowBandwidthForVideo {
+        peer_id: PeerId,
+        recovered: bool,
+    },
 }
 
 /// Wraps a [`std::sync::mpsc::Sender`] with a callback to report new events.
@@ -290,6 +294,14 @@ impl CallStateHandler for EventReporter {
             peer_id: remote_peer_id.to_string(),
             captured_level,
             received_level,
+        })?;
+        Ok(())
+    }
+
+    fn handle_low_bandwidth_for_video(&self, remote_peer_id: &str, recovered: bool) -> Result<()> {
+        self.send(Event::LowBandwidthForVideo {
+            peer_id: remote_peer_id.to_string(),
+            recovered,
         })?;
         Ok(())
     }
@@ -2260,6 +2272,14 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 method.call(&mut cx, observer, args)?;
             }
 
+            Event::LowBandwidthForVideo { peer_id, recovered } => {
+                let method_name = "onLowBandwidthForVideo";
+                let args = [cx.string(peer_id).upcast(), cx.boolean(recovered).upcast()];
+
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
+
             Event::SendHttpRequest {
                 request_id,
                 request:
@@ -2591,6 +2611,20 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.number(client_id).upcast(),
                     cx.number(captured_level).upcast(),
                     js_received_levels.upcast(),
+                ];
+
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
+
+            Event::GroupUpdate(GroupUpdate::LowBandwidthForVideo {
+                group_id: client_id,
+                recovered,
+            }) => {
+                let method_name = "handleLowBandwidthForVideo";
+                let args = [
+                    cx.number(client_id).upcast(),
+                    cx.boolean(recovered).upcast(),
                 ];
 
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;

@@ -345,6 +345,14 @@ pub fn Rust_getAudioLevels(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_getLastBandwidthEstimateBps(
+    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+) -> u32 {
+    info!("Rust_getLastBandwidthEstimateBps");
+    0
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_closePeerConnection(
     _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
 ) {

@@ -1483,6 +1483,11 @@ public class CallManager {
     observer.onAudioLevels(remote, capturedLevel, receivedLevel);
   }
 
+  @CalledByNative
+  private void onLowBandwidthForVideo(Remote remote, boolean recovered) {
+    observer.onLowBandwidthForVideo(remote, recovered);
+  }
+
   // A faster version of PeerConnection.AdapterType.fromNativeIndex.
   // It also won't return null.
   @NonNull
@@ -1661,6 +1666,17 @@ public class CallManager {
     }
 
     groupCall.handleAudioLevels(capturedLevel, receivedLevels);
+  }
+
+  @CalledByNative
+  private void handleLowBandwidthForVideo(long clientId, boolean recovered) {
+    GroupCall groupCall = this.groupCallByClientId.get(clientId);
+    if (groupCall == null) {
+      Log.w(TAG, "groupCall not found by clientId: " + clientId);
+      return;
+    }
+
+    groupCall.handleLowBandwidthForVideo(recovered);
   }
 
   @CalledByNative
@@ -2065,7 +2081,7 @@ public class CallManager {
      *
      * Notification that the network route changed
      *
-     * @param remote        remote peer of the incoming busy call
+     * @param remote        remote peer of the call
      * @param networkRoute  the current network route
      */
     void onNetworkRouteChanged(Remote remote, NetworkRoute networkRoute);
@@ -2074,11 +2090,25 @@ public class CallManager {
      *
      * Notification of audio levels
      *
-     * @param remote        remote peer of the incoming busy call
+     * @param remote        remote peer of the call
      * @param capturedLevel the audio level captured locally.  Range of 0-32767, where 0 is silence.
      * @param receivedLevel the audio level received from the remote peer.  Range of 0-32767, where 0 is silence.
      */
     void onAudioLevels(Remote remote, int capturedLevel, int receivedLevel);
+
+    /**
+     *
+     * Notification of low upload bandwidth for sending video.
+     *
+     * When this is first called, recovered will be false. The second call (if
+     * any) will have recovered set to true and will be called when the upload
+     * bandwidth is high enough to send video.
+     *
+     * @param remote     remote peer of the call
+     * @param recovered  whether there is enough bandwidth to send video
+     *                   reliably
+     */
+    void onLowBandwidthForVideo(Remote remote, boolean recovered);
 
     /**
      *

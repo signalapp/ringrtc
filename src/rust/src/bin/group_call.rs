@@ -131,6 +131,10 @@ impl group_call::Observer for Observer {
     ) {
         // ignore
     }
+
+    fn handle_low_bandwidth_for_video(&self, _client_id: ClientId, _recovered: bool) {
+        // ignore
+    }
 }
 
 impl VideoSink for Observer {

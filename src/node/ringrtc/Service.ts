@@ -668,6 +668,17 @@ export class RingRTCType {
     }
   }
 
+  onLowBandwidthForVideo(remoteUserId: UserId, recovered: boolean): void {
+    const call = this._call;
+    if (!call || call.remoteUserId !== remoteUserId) {
+      return;
+    }
+
+    if (call.handleLowBandwidthForVideo) {
+      call.handleLowBandwidthForVideo(recovered);
+    }
+  }
+
   renderVideoFrame(width: number, height: number, buffer: Buffer): void {
     const call = this._call;
     if (!call) {
@@ -1242,6 +1253,16 @@ export class RingRTCType {
   }
 
   // Called by Rust
+  handleLowBandwidthForVideo(clientId: GroupCallClientId, recovered: boolean): void {
+    sillyDeadlockProtection(() => {
+      const groupCall = this._groupCallByClientId.get(clientId);
+      if (groupCall) {
+        groupCall.handleLowBandwidthForVideo(recovered);
+      }
+    });
+  }
+
+  // Called by Rust
   handleRemoteDevicesChanged(
     clientId: GroupCallClientId,
     remoteDeviceStates: Array<RemoteDeviceState>
@@ -1789,6 +1810,17 @@ export class Call {
   handleNetworkRouteChanged?: () => void;
   handleAudioLevels?: () => void;
 
+  /**
+   * Notification of low upload bandwidth for sending video.
+   *
+   * When this is first called, recovered will be false. The second call (if
+   * any) will have recovered set to true and will be called when the upload
+   * bandwidth is high enough to send video.
+   *
+   * @param recovered - whether there is enough bandwidth to send video reliably
+   */
+  handleLowBandwidthForVideo?: (recovered: boolean) => void;
+
   // This callback should be set by the VideoCapturer,
   // But could also be set by the UX.
   renderVideoFrame?: (width: number, height: number, buffer: Buffer) => void;
@@ -2186,6 +2218,7 @@ export interface GroupCallObserver {
   onLocalDeviceStateChanged(groupCall: GroupCall): void;
   onRemoteDeviceStatesChanged(groupCall: GroupCall): void;
   onAudioLevels(groupCall: GroupCall): void;
+  onLowBandwidthForVideo(groupCall: GroupCall, recovered: boolean): void;
   onPeekChanged(groupCall: GroupCall): void;
   onEnded(groupCall: GroupCall, reason: GroupCallEndReason): void;
 }
@@ -2403,6 +2436,10 @@ export class GroupCall {
     }
 
     this._observer.onAudioLevels(this);
+  }
+
+  handleLowBandwidthForVideo(recovered: boolean): void {
+    this._observer.onLowBandwidthForVideo(this, recovered);
   }
 
   // Called by Rust via RingRTC object

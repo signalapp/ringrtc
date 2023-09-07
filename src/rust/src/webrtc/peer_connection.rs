@@ -345,6 +345,12 @@ impl PeerConnection {
         (captured_level, received_levels)
     }
 
+    pub fn get_last_bandwidth_estimate(&self) -> DataRate {
+        let bps = unsafe { pc::Rust_getLastBandwidthEstimateBps(self.rffi.as_borrowed()) };
+
+        DataRate::from_bps(bps.into())
+    }
+
     pub fn close(&self) {
         unsafe { pc::Rust_closePeerConnection(self.rffi.as_borrowed()) };
     }

@@ -484,6 +484,16 @@ where
         call_manager.notify_audio_levels(&remote_peer, captured_level, received_level)
     }
 
+    /// Notify application of low upload bandwidth for sending video
+    ///
+    /// This is a pass through to the CallManager.
+    pub fn notify_low_bandwidth_for_video(&self, recovered: bool) -> Result<()> {
+        let call_manager = self.call_manager()?;
+        let remote_peer = self.remote_peer()?;
+
+        call_manager.notify_low_bandwidth_for_video(&remote_peer, recovered)
+    }
+
     /// Notify call manager of an internal error.
     ///
     pub fn internal_error(&self, error: anyhow::Error) -> Result<()> {

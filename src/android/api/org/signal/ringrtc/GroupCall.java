@@ -698,6 +698,16 @@ public final class GroupCall {
 
     /**
      *
+     * Callback from RingRTC when video is enabled and the estimated upload
+     * bandwidth is too low to send video reliably.
+     *
+     */
+    void handleLowBandwidthForVideo(boolean recovered) {
+        this.observer.onLowBandwidthForVideo(this, recovered);
+    }
+
+    /**
+     *
      * Callback from RingRTC when the remote device states have changed.
      * Called via the CallManager.
      *
@@ -1140,6 +1150,19 @@ public final class GroupCall {
          * Notification of audio levels.
          */
         void onAudioLevels(GroupCall groupCall);
+
+        /**
+         * Notification that the estimated upload bandwidth is too low to send
+         * video reliably.
+         *
+         * When this is first called, recovered will be false. The second call (if
+         * any) will have recovered set to true and will be called when the upload
+         * bandwidth is high enough to send video.
+         *
+         * @param recovered  whether there is enough bandwidth to send video
+         *                   reliably
+         */
+        void onLowBandwidthForVideo(GroupCall groupCall, boolean recovered);
 
         /**
          * Notification that the remote device states have changed.

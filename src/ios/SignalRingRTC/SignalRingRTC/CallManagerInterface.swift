@@ -13,6 +13,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
     func onNetworkRouteChangedFor(remote: UnsafeRawPointer, networkRoute: NetworkRoute)
     func onAudioLevelsFor(remote: UnsafeRawPointer, capturedLevel: UInt16, receivedLevel: UInt16)
+    func onLowBandwidthForVideoFor(remote: UnsafeRawPointer, recovered: Bool)
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType)
     func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data)
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [Data])
@@ -34,6 +35,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState)
     func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute)
     func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel])
+    func handleLowBandwidthForVideo(clientId: UInt32, recovered: Bool)
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
@@ -66,6 +68,7 @@ class CallManagerInterface {
             onEvent: callManagerInterfaceOnCallEvent,
             onNetworkRouteChanged: callManagerInterfaceOnNetworkRouteChanged,
             onAudioLevels: callManagerInterfaceOnAudioLevels,
+            onLowBandwidthForVideo: callManagerInterfaceOnLowBandwidthForVideo,
             onSendOffer: callManagerInterfaceOnSendOffer,
             onSendAnswer: callManagerInterfaceOnSendAnswer,
             onSendIceCandidates: callManagerInterfaceOnSendIceCandidates,
@@ -88,6 +91,7 @@ class CallManagerInterface {
             handleConnectionStateChanged: callManagerInterfaceHandleConnectionStateChanged,
             handleNetworkRouteChanged: callManagerInterfaceHandleNetworkRouteChanged,
             handleAudioLevels: callManagerInterfaceHandleAudioLevels,
+            handleLowBandwidthForVideo: callManagerInterfaceHandleLowBandwidthForVideo,
             handleJoinStateChanged: callManagerInterfaceHandleJoinStateChanged,
             handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
@@ -138,6 +142,14 @@ class CallManagerInterface {
         }
 
         delegate.onAudioLevelsFor(remote: remote, capturedLevel: capturedLevel, receivedLevel: receivedLevel)
+    }
+
+    func onLowBandwidthForVideoFor(remote: UnsafeRawPointer, recovered: Bool) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.onLowBandwidthForVideoFor(remote: remote, recovered: recovered)
     }
 
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
@@ -278,6 +290,14 @@ class CallManagerInterface {
         delegate.handleAudioLevels(clientId: clientId, capturedLevel: capturedLevel, receivedLevels: receivedLevels)
     }
 
+    func handleLowBandwidthForVideo(clientId: UInt32, recovered: Bool) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleLowBandwidthForVideo(clientId: clientId, recovered: recovered)
+    }
+
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
@@ -401,6 +421,22 @@ func callManagerInterfaceOnAudioLevels(object: UnsafeMutableRawPointer?, remote:
     }
 
     obj.onAudioLevelsFor(remote: remote, capturedLevel: capturedLevel, receivedLevel: receivedLevel)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceOnLowBandwidthForVideo(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, recovered: Bool) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let remote = remote else {
+        owsFailDebug("remote was unexpectedly nil")
+        return
+    }
+
+    obj.onLowBandwidthForVideoFor(remote: remote, recovered: recovered)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -828,6 +864,17 @@ func callManagerInterfaceHandleAudioLevels(object: UnsafeMutableRawPointer?, cli
     }
 
     obj.handleAudioLevels(clientId: clientId, capturedLevel: capturedLevel, receivedLevels: finalReceivedLevels)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceHandleLowBandwidthForVideo(object: UnsafeMutableRawPointer?, clientId: UInt32, recovered: Bool) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    obj.handleLowBandwidthForVideo(clientId: clientId, recovered: recovered)
 }
 
 @available(iOSApplicationExtension, unavailable)

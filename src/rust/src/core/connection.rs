@@ -60,6 +60,21 @@ const SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS: u64 = 1000;
 const SEND_RTP_DATA_MESSAGE_INTERVAL_TICKS: u64 =
     SEND_RTP_DATA_MESSAGE_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
 
+/// How often to check the latest bandwidth estimate from WebRTC
+const CHECK_BWE_INTERVAL_MILLIS: u64 = 1000;
+const CHECK_BWE_INTERVAL_TICKS: u64 = CHECK_BWE_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
+
+const DELAYED_BWE_CHECK_INTERVAL_MILLIS: u64 = 10000;
+const DELAYED_BWE_CHECK_INTERVAL_TICKS: u64 =
+    DELAYED_BWE_CHECK_INTERVAL_MILLIS / TICK_INTERVAL_MILLIS;
+
+const BWE_THRESHOLD_FOR_LOW_NOTIFICATION: DataRate = DataRate::from_kbps(60);
+const BWE_THRESHOLD_FOR_RECOVERED_NOTIFICATION: DataRate = DataRate::from_kbps(70);
+
+const DELAY_FOR_RECOVERED_BWE_CALLBACK_MILLIS: u64 = 6000;
+const DELAY_FOR_RECOVERED_BWE_CALLBACK_TICKS: u64 =
+    DELAY_FOR_RECOVERED_BWE_CALLBACK_MILLIS / TICK_INTERVAL_MILLIS;
+
 pub const RTP_DATA_PAYLOAD_TYPE: rtp::PayloadType = 101;
 pub const OLD_RTP_DATA_SSRC_FOR_OUTGOING: rtp::Ssrc = 1001;
 pub const OLD_RTP_DATA_SSRC_FOR_INCOMING: rtp::Ssrc = 2001;
@@ -86,6 +101,10 @@ pub enum ConnectionObserverEvent {
     AudioLevels {
         captured_level: AudioLevel,
         received_level: AudioLevel,
+    },
+
+    LowBandwidthForVideo {
+        recovered: bool,
     },
 }
 
@@ -323,6 +342,29 @@ impl PollStatsConfig {
     }
 }
 
+/// State which determines when `ConnectionObserverEvent::LowBandwidthForVideo` is sent.
+///
+/// The initial state is `CheckIfLow`. Possible state transitions:
+///
+///   CheckIfLow -> CheckIfRecovered  (after callback is made for low bandwidth)
+///   CheckIfRecovered -> Done        (after callback is made for bandwidth recovered)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BweCallbackState {
+    /// Poll the BWE to see if it drops below `BWE_THRESHOLD_FOR_LOW_NOTIFICATION`.
+    CheckIfLow {
+        /// The BWE shouldn't be checked until after this number of ticks have elapsed. This is used
+        /// to delay checks when WebRTC needs time to adjust the bandwidth estimate.
+        delayed_check_tick: u64,
+    },
+    /// Poll the BWE to see if it exceeds `BWE_THRESHOLD_FOR_RECOVERED_NOTIFICATION`.
+    CheckIfRecovered {
+        /// The tick at which the last callback was made.
+        last_callback_tick: u64,
+    },
+    /// No more callbacks will be made.
+    Done,
+}
+
 /// Represents the connection between a local client and one remote peer.
 ///
 /// This object is thread-safe.
@@ -372,6 +414,8 @@ where
     // If set, all of the video frames will go here.
     // This is separate from the observer so it can bypass a thread hop.
     incoming_video_sink: Option<Box<dyn VideoSink>>,
+    /// Tracks when to send `ConnectionObserverEvent::LowBandwidthForVideo`.
+    bwe_callback_state: BweCallbackState,
 }
 
 impl<T> fmt::Display for Connection<T>
@@ -457,6 +501,7 @@ where
             accumulated_rtp_data_message: Arc::clone(&self.accumulated_rtp_data_message),
             last_received_rtp_data_timestamp: Arc::clone(&self.last_received_rtp_data_timestamp),
             incoming_video_sink: self.incoming_video_sink.clone(),
+            bwe_callback_state: self.bwe_callback_state,
         }
     }
 }
@@ -539,6 +584,9 @@ where
                 "last_received_rtp_data_timestamp",
             )),
             incoming_video_sink,
+            bwe_callback_state: BweCallbackState::CheckIfLow {
+                delayed_check_tick: 0,
+            },
         };
 
         connection.init_connection_ptr()?;
@@ -1157,7 +1205,6 @@ where
         if let Some(audio_levels_interval) = self.audio_levels_interval {
             let audio_levels_interval_ticks =
                 (audio_levels_interval.as_millis() as u64) / TICK_INTERVAL_MILLIS;
-            #[allow(clippy::modulo_one)]
             if ticks_elapsed % audio_levels_interval_ticks == 0 {
                 let (captured_level, received_levels) =
                     webrtc.peer_connection()?.get_audio_levels();
@@ -1172,6 +1219,68 @@ where
                 if let Err(err) = self.notify_observer(event) {
                     warn!("tick(): failed to notify of audio levels: {:?}", err);
                 }
+            }
+        }
+
+        if ticks_elapsed % CHECK_BWE_INTERVAL_TICKS == 0 {
+            match self.bwe_callback_state {
+                BweCallbackState::CheckIfLow { delayed_check_tick } => {
+                    let is_video_enabled = self
+                        .accumulated_rtp_data_message
+                        .lock()?
+                        .sender_status
+                        .as_ref()
+                        .map(|status| status.video_enabled())
+                        .unwrap_or(false);
+
+                    if is_video_enabled {
+                        if self
+                            .state()
+                            .map(|state| state == ConnectionState::ConnectedAndAccepted)
+                            .unwrap_or(false)
+                        {
+                            if ticks_elapsed > delayed_check_tick {
+                                let bwe = webrtc.peer_connection()?.get_last_bandwidth_estimate();
+
+                                if bwe < BWE_THRESHOLD_FOR_LOW_NOTIFICATION {
+                                    let event = ConnectionObserverEvent::LowBandwidthForVideo {
+                                        recovered: false,
+                                    };
+                                    if let Err(err) = self.notify_observer(event) {
+                                        warn!(
+                                            "tick(): failed to notify of low bandwidth: {:?}",
+                                            err
+                                        );
+                                    }
+                                    self.bwe_callback_state = BweCallbackState::CheckIfRecovered {
+                                        last_callback_tick: ticks_elapsed,
+                                    };
+                                }
+                            }
+                        } else {
+                            self.bwe_callback_state = BweCallbackState::CheckIfLow {
+                                delayed_check_tick: ticks_elapsed
+                                    + DELAYED_BWE_CHECK_INTERVAL_TICKS,
+                            }
+                        }
+                    }
+                }
+                BweCallbackState::CheckIfRecovered { last_callback_tick } => {
+                    if ticks_elapsed >= last_callback_tick + DELAY_FOR_RECOVERED_BWE_CALLBACK_TICKS
+                    {
+                        let bwe = webrtc.peer_connection()?.get_last_bandwidth_estimate();
+
+                        if bwe > BWE_THRESHOLD_FOR_RECOVERED_NOTIFICATION {
+                            let event =
+                                ConnectionObserverEvent::LowBandwidthForVideo { recovered: true };
+                            if let Err(err) = self.notify_observer(event) {
+                                warn!("tick(): failed to notify of recovered bandwidth: {:?}", err);
+                            }
+                            self.bwe_callback_state = BweCallbackState::Done;
+                        }
+                    }
+                }
+                BweCallbackState::Done => {}
             }
         }
 

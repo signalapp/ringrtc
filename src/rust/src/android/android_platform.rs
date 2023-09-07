@@ -456,6 +456,27 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
+    fn on_low_bandwidth_for_video(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        recovered: bool,
+    ) -> Result<()> {
+        info!("on_low_bandwidth_for_video(): recovered: {}", recovered);
+
+        let env = self.java_env()?;
+
+        jni_call_method(
+            &env,
+            self.jni_call_manager.as_obj(),
+            "onLowBandwidthForVideo",
+            jni_args!((
+                    remote_peer.as_obj() => org.signal.ringrtc.Remote,
+                    recovered => boolean,
+            ) -> void),
+        )?;
+        Ok(())
+    }
+
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
@@ -1059,6 +1080,31 @@ impl Platform for AndroidPlatform {
                         client_id as jlong => long,
                         captured_level as jint => int,
                         JObject::from(received_levels_list) => java.util.List,
+                    ) -> void),
+                );
+
+                Ok(JObject::null())
+            });
+        }
+    }
+
+    fn handle_low_bandwidth_for_video(&self, client_id: group_call::ClientId, recovered: bool) {
+        info!(
+            "handle_low_bandwidth_for_video(): client_id: {}, recovered: {}",
+            client_id, recovered
+        );
+
+        if let Ok(env) = self.java_env() {
+            // Set a frame capacity of min (5).
+            let capacity = 5;
+            let _ = env.with_local_frame(capacity, || {
+                let _ = jni_call_method(
+                    &env,
+                    self.jni_call_manager.as_obj(),
+                    "handleLowBandwidthForVideo",
+                    jni_args!((
+                        client_id as jlong => long,
+                        recovered => boolean,
                     ) -> void),
                 );
 

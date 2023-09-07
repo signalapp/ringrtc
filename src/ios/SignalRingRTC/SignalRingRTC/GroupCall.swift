@@ -177,6 +177,16 @@ public protocol GroupCallDelegate: AnyObject {
     func groupCall(onAudioLevels groupCall: GroupCall)
 
     /**
+     * Indication that the application should notify the user that estimated upload
+     * bandwidth is too low to send video reliably.
+     *
+     * When this is first called, recovered will be false. The second call (if
+     * any) will have recovered set to true and will be called when the upload
+     * bandwidth is high enough to send video reliably.
+     */
+    func groupCall(onLowBandwidthForVideo groupCall: GroupCall, recovered: Bool)
+
+    /**
      * Indication that the application can retrieve an updated PeekInfo which
      * includes a list of users that are actively in the group call.
      */
@@ -691,6 +701,12 @@ public class GroupCall {
         }
 
         self.delegate?.groupCall(onAudioLevels: self)
+    }
+
+    func handleLowBandwidthForVideo(recovered: Bool) {
+        AssertIsOnMainThread()
+
+        self.delegate?.groupCall(onLowBandwidthForVideo: self, recovered: recovered)
     }
 
     func handleJoinStateChanged(joinState: JoinState) {

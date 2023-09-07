@@ -481,6 +481,21 @@ where
         self.notify_spawn(notify_app_future);
     }
 
+    fn notify_low_bandwidth_for_video(&mut self, call: Call<T>, recovered: bool) {
+        let mut err_call = call.clone();
+        let notify_app_future = async move {
+            if call.terminating()? {
+                return Ok(());
+            }
+            call.notify_low_bandwidth_for_video(recovered)
+        }
+        .unwrap_or_else(move |err| {
+            err_call.inject_internal_error(err, "Notify Low Bandwidth Future failed");
+        });
+
+        self.notify_spawn(notify_app_future);
+    }
+
     fn handle_start_call(&mut self, call: Call<T>, state: CallState) -> Result<()> {
         info!("handle_start_call():");
 
@@ -988,6 +1003,10 @@ where
                 received_level,
             } => {
                 self.notify_audio_levels(call, captured_level, received_level);
+                Ok(())
+            }
+            ConnectionObserverEvent::LowBandwidthForVideo { recovered } => {
+                self.notify_low_bandwidth_for_video(call, recovered);
                 Ok(())
             }
         }

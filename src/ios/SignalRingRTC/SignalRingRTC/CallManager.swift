@@ -214,6 +214,17 @@ public protocol CallManagerDelegate: AnyObject {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onAudioLevelsFor call: CallManagerDelegateCallType, capturedLevel: UInt16, receivedLevel: UInt16)
 
     /**
+     * onLowBandwidthForVideoFor will be invoked when the estimated upload
+     * bandwidth is too low to send video reliably.
+     * Invoked on the main thread, asynchronously.
+     *
+     * When this is first called, recovered will be false. The second call (if
+     * any) will have recovered set to true and will be called when the upload
+     * bandwidth is high enough to send video reliably.
+     */
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onLowBandwidthForVideoFor call: CallManagerDelegateCallType, recovered: Bool)
+
+    /**
      * An Offer message should be sent to the given remote.
      * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
@@ -794,6 +805,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         delegate.callManager(self, onAudioLevelsFor: callReference, capturedLevel: capturedLevel, receivedLevel: receivedLevel)
     }
 
+    func onLowBandwidthForVideoFor(remote: UnsafeRawPointer, recovered: Bool) {
+        Logger.debug("onLowBandwidthForVideo")
+
+        DispatchQueue.main.async {
+            Logger.debug("onLowBandwidthForVideo - main.async")
+
+            guard let delegate = self.delegate else { return }
+
+            let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
+            delegate.callManager(self, onLowBandwidthForVideoFor: callReference, recovered: recovered)
+        }
+    }
+
     // MARK: - Signaling Observers
 
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
@@ -1057,6 +1081,20 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
            }
         
            groupCall.handleAudioLevels(capturedLevel: capturedLevel, receivedLevels: receivedLevels)
+        }
+    }
+
+    func handleLowBandwidthForVideo(clientId: UInt32, recovered: Bool) {
+        Logger.debug("handleLowBandwidthForVideo")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleLowBandwidthForVideo - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleLowBandwidthForVideo(recovered: recovered)
         }
     }
 

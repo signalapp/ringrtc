@@ -339,6 +339,9 @@ pub struct AppInterface {
         receivedLevel: u16,
     ),
     ///
+    pub onLowBandwidthForVideo:
+        extern "C" fn(object: *mut c_void, remote: *const c_void, recovered: bool),
+    ///
     pub onSendOffer: extern "C" fn(
         object: *mut c_void,
         callId: u64,
@@ -448,6 +451,8 @@ pub struct AppInterface {
         capturedLevel: u16,
         receivedAudioLevels: AppReceivedAudioLevelArray,
     ),
+    pub handleLowBandwidthForVideo:
+        extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, recovered: bool),
     ///
     pub handleJoinStateChanged:
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, joinState: i32),

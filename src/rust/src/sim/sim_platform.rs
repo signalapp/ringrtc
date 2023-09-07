@@ -223,6 +223,15 @@ impl Platform for SimPlatform {
         Ok(())
     }
 
+    fn on_low_bandwidth_for_video(
+        &self,
+        _remote_peer: &Self::AppRemotePeer,
+        recovered: bool,
+    ) -> Result<()> {
+        info!("on_low_bandwidth_for_video(): {}", recovered);
+        Ok(())
+    }
+
     fn on_send_offer(
         &self,
         remote_peer: &Self::AppRemotePeer,
@@ -527,6 +536,10 @@ impl Platform for SimPlatform {
             captured_level,
             received_levels
         );
+    }
+
+    fn handle_low_bandwidth_for_video(&self, _client_id: group_call::ClientId, recovered: bool) {
+        info!("handle_low_bandwidth_for_video(): {}", recovered);
     }
 
     fn handle_join_state_changed(

@@ -256,6 +256,8 @@ pub trait Observer {
         received_levels: Vec<ReceivedAudioLevel>,
     );
 
+    fn handle_low_bandwidth_for_video(&self, client_id: ClientId, recovered: bool);
+
     // This will be the last callback.
     // The observer can assume the Call is completely shut down and can be deleted.
     fn handle_ended(&self, client_id: ClientId, reason: EndReason);
@@ -735,6 +737,11 @@ const LOW_MAX_RECEIVE_RATE: DataRate = DataRate::from_kbps(500);
 
 const NORMAL_MAX_RECEIVE_RATE: DataRate = DataRate::from_mbps(20);
 
+const BWE_THRESHOLD_FOR_LOW_NOTIFICATION: DataRate = DataRate::from_kbps(70);
+const BWE_THRESHOLD_FOR_RECOVERED_NOTIFICATION: DataRate = DataRate::from_kbps(80);
+
+const DELAY_FOR_RECOVERED_BWE_CALLBACK: Duration = Duration::from_secs(6);
+
 // The time between when a sender generates a new media send key
 // and applies it.  It needs to be big enough that there is
 // a high probability that receivers will receive the
@@ -848,6 +855,29 @@ pub enum GroupCallKind {
     CallLink,
 }
 
+/// The next time to check WebRTC's bandwidth estimate (BWE).
+///
+/// The initial state is Disabled. Possible state transitions:
+///
+///   Disabled -> At       (when video is enabled)
+///   At -> Disabled       (when video is disabled)
+///   At -> RecoveredAt    (after callback is made for low bandwidth)
+///   RecoveredAt -> None  (after callback is made for bandwidth recovered)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BweCheckState {
+    /// Check again after the `Instant` has passed.
+    At(Instant),
+    /// Check to see whether the BWE has recovered after `check_at` has passed.
+    RecoveredAt {
+        next_bwe_time: Instant,
+        last_callback: Instant,
+    },
+    /// Don't check now, but there might be another check later in the call.
+    Disabled,
+    /// Don't check again for the remainder of the call.
+    None,
+}
+
 /// The state inside the Actor
 struct State {
     // Things passed in that never change
@@ -899,11 +929,13 @@ struct State {
     next_stats_time: Option<Instant>,
     stats_observer: Box<StatsObserver>,
 
-    audio_levels_interval: Option<Duration>,
     // Things for getting audio levels from the PeerConnection
+    audio_levels_interval: Option<Duration>,
     next_audio_levels_time: Option<Instant>,
 
     next_membership_proof_request_time: Option<Instant>,
+
+    bwe_check_state: BweCheckState,
 
     // We have to put this inside the actor state also because
     // we change the keys from within the actor.
@@ -990,6 +1022,12 @@ const STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
 
 // How often to request an updated membership proof (24 hours).
 const MEMBERSHIP_PROOF_REQUEST_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+// How often to check the latest bandwidth estimate from WebRTC
+const BWE_INTERVAL: Duration = Duration::from_secs(1);
+/// How much to delay the check for the bandwidth estimate to allow for the estimator to update
+/// when connecting.
+const DELAYED_BWE_CHECK: Duration = Duration::from_secs(10);
 
 impl Client {
     #[allow(clippy::too_many_arguments)]
@@ -1117,6 +1155,8 @@ impl Client {
 
                     next_membership_proof_request_time: None,
 
+                    bwe_check_state: BweCheckState::Disabled,
+
                     frame_crypto_context,
                     pending_media_receive_keys: Vec::new(),
                     media_send_key_rotation_state: KeyRotationState::Applied,
@@ -1240,6 +1280,50 @@ impl Client {
                         Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
                 }
             }
+        }
+
+        match state.bwe_check_state {
+            BweCheckState::At(next_bwe_time) => {
+                if state.connection_state == ConnectionState::Connected {
+                    if now >= next_bwe_time {
+                        let bwe = state.peer_connection.get_last_bandwidth_estimate();
+                        if bwe < BWE_THRESHOLD_FOR_LOW_NOTIFICATION {
+                            state
+                                .observer
+                                .handle_low_bandwidth_for_video(state.client_id, false);
+                            state.bwe_check_state = BweCheckState::RecoveredAt {
+                                next_bwe_time: now + BWE_INTERVAL,
+                                last_callback: now,
+                            };
+                        } else {
+                            state.bwe_check_state = BweCheckState::At(now + BWE_INTERVAL);
+                        }
+                    }
+                } else {
+                    state.bwe_check_state = BweCheckState::At(now + DELAYED_BWE_CHECK);
+                }
+            }
+            BweCheckState::RecoveredAt {
+                next_bwe_time,
+                last_callback,
+            } => {
+                if now >= next_bwe_time && now >= last_callback + DELAY_FOR_RECOVERED_BWE_CALLBACK {
+                    let bwe = state.peer_connection.get_last_bandwidth_estimate();
+                    if bwe > BWE_THRESHOLD_FOR_RECOVERED_NOTIFICATION {
+                        state
+                            .observer
+                            .handle_low_bandwidth_for_video(state.client_id, true);
+                        state.bwe_check_state = BweCheckState::None;
+                    } else {
+                        state.bwe_check_state = BweCheckState::RecoveredAt {
+                            next_bwe_time: now + BWE_INTERVAL,
+                            last_callback,
+                        };
+                    }
+                }
+            }
+            BweCheckState::Disabled => {}
+            BweCheckState::None => {}
         }
 
         state.actor.send_delayed(TICK_INTERVAL, Self::tick);
@@ -1805,11 +1889,17 @@ impl Client {
                 state.peer_connection.set_audio_recording_enabled(false);
                 state.peer_connection.set_audio_playout_enabled(false);
                 state.peer_connection.set_outgoing_media_enabled(false);
+                if let BweCheckState::At(_) = state.bwe_check_state {
+                    state.bwe_check_state = BweCheckState::Disabled;
+                }
             } else {
                 info!("Enable audio and outgoing media because there are other devices.");
                 state.peer_connection.set_audio_recording_enabled(true);
                 state.peer_connection.set_audio_playout_enabled(true);
                 state.peer_connection.set_outgoing_media_enabled(true);
+                if state.bwe_check_state == BweCheckState::Disabled {
+                    state.bwe_check_state = BweCheckState::At(Instant::now() + BWE_INTERVAL);
+                }
             }
             if let Err(e) = state.peer_connection.set_send_rates(send_rates.clone()) {
                 warn!("Could not set send rates to {:?}: {}", send_rates, e);
@@ -4198,6 +4288,8 @@ mod tests {
             self.handle_audio_levels_invocation_count
                 .fetch_add(1, Ordering::Relaxed);
         }
+
+        fn handle_low_bandwidth_for_video(&self, _client_id: ClientId, _recovered: bool) {}
 
         fn handle_peek_changed(
             &self,

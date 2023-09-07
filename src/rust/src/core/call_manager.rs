@@ -2215,6 +2215,16 @@ where
         platform.on_audio_levels(remote_peer, captured_level, received_level)
     }
 
+    /// Notify application of low upload bandwidth for sending video
+    pub(super) fn notify_low_bandwidth_for_video(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        recovered: bool,
+    ) -> Result<()> {
+        let platform = self.platform.lock()?;
+        platform.on_low_bandwidth_for_video(remote_peer, recovered)
+    }
+
     /// Create a new connection to a remote device
     pub(super) fn create_connection(
         &self,
@@ -2620,6 +2630,11 @@ where
             captured_level,
             received_levels
         );
+    }
+
+    fn handle_low_bandwidth_for_video(&self, client_id: group_call::ClientId, recovered: bool) {
+        info!("handle_low_bandwidth_for_video(): {}", recovered);
+        platform_handler!(self, handle_low_bandwidth_for_video, client_id, recovered);
     }
 
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
