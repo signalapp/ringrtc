@@ -9,6 +9,15 @@ on:
         default: false
         required: false
         type: boolean
+      runner:
+        description: "Linux runner:"
+        default: 'ubuntu-latest-4-cores'
+        required: true
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'ubuntu-latest-4-cores'
+          - 'ubuntu-latest-8-cores'
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,7 +27,7 @@ jobs:
   build_android:
     name: Build Android
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
     - uses: actions/checkout@v3

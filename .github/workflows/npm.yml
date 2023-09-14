@@ -9,6 +9,30 @@ on:
         default: false
         required: false
         type: boolean
+      runner_linux:
+        description: "Linux runner:"
+        default: 'ubuntu-20.04'
+        required: true
+        type: choice
+        options:
+          - 'ubuntu-20.04'
+          - 'ubuntu-20.04-4-cores'
+      runner_windows:
+        description: "Windows runner:"
+        default: 'windows-latest'
+        required: true
+        type: choice
+        options:
+          - 'windows-latest'
+          - 'windows-latest-8-cores'
+      runner_mac:
+        description: "Mac runner:"
+        default: 'macos-latest'
+        required: true
+        type: choice
+        options:
+          - 'macos-latest'
+          - 'macos-latest-xl'
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,7 +41,7 @@ jobs:
   build_linux:
     name: Build Linux
 
-    runs-on: ubuntu-20.04
+    runs-on: ${{ inputs.runner_linux }}
 
     steps:
     - uses: actions/checkout@v3
@@ -63,7 +87,7 @@ jobs:
   build_windows:
     name: Build Windows
 
-    runs-on: windows-latest
+    runs-on: ${{ inputs.runner_windows }}
 
     steps:
     - uses: actions/checkout@v3
@@ -112,7 +136,7 @@ jobs:
   build_mac:
     name: Build macOS
 
-    runs-on: macos-latest
+    runs-on: ${{ inputs.runner_mac }}
 
     steps:
     - uses: actions/checkout@v3
