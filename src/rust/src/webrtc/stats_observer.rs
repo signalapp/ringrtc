@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(not(target_os = "android"))]
 use sysinfo::{CpuExt, SystemExt};
 
 use crate::{common::CallId, webrtc};
@@ -52,6 +53,7 @@ pub struct StatsObserver {
     stats: Stats,
     stats_initial_offset: Duration,
     stats_received_count: u32,
+    #[cfg(not(target_os = "android"))]
     system_stats: sysinfo::System,
 }
 
@@ -149,13 +151,16 @@ impl StatsObserver {
     }
 
     fn print_system(&mut self) {
-        // Be careful adding new stats;
-        // some have a fair amount of persistent state that raises memory usage.
-        self.system_stats.refresh_cpu();
-        info!(
-            "ringrtc_stats!,system,{cpu_pct:.0}%",
-            cpu_pct = self.system_stats.global_cpu_info().cpu_usage(),
-        )
+        #[cfg(not(target_os = "android"))]
+        {
+            // Be careful adding new stats;
+            // some have a fair amount of persistent state that raises memory usage.
+            self.system_stats.refresh_cpu();
+            info!(
+                "ringrtc_stats!,system,{cpu_pct:.0}%",
+                cpu_pct = self.system_stats.global_cpu_info().cpu_usage(),
+            )
+        }
     }
 
     fn print_audio_sender(
@@ -293,11 +298,15 @@ impl StatsObserver {
     fn new(call_id: CallId, stats_initial_offset: Duration) -> Self {
         Self::print_headers();
 
-        let mut system_stats = sysinfo::System::new();
-        // Do an initial refresh for meaningful results on the first log.
-        // Be careful adding new stats;
-        // some have a fair amount of persistent state that raises memory usage.
-        system_stats.refresh_cpu();
+        #[cfg(not(target_os = "android"))]
+        let system_stats = {
+            let mut stats = sysinfo::System::new();
+            // Do an initial refresh for meaningful results on the first log.
+            // Be careful adding new stats;
+            // some have a fair amount of persistent state that raises memory usage.
+            stats.refresh_cpu();
+            stats
+        };
 
         Self {
             call_id,
@@ -305,6 +314,7 @@ impl StatsObserver {
             stats: Default::default(),
             stats_initial_offset,
             stats_received_count: 0,
+            #[cfg(not(target_os = "android"))]
             system_stats,
         }
     }
