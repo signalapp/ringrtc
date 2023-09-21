@@ -9,6 +9,7 @@
     "dist/*.d.ts",
     "dist/ringrtc/*.js",
     "dist/ringrtc/*.d.ts",
+    "dist/acknowledgments.md",
     "scripts/fetch-prebuild.js"
   ],
   "scripts": {

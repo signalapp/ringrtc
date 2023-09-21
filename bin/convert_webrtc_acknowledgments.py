@@ -73,8 +73,10 @@ def parse(input: TextIO, filename: str) -> Dict[str, str]:
 
 
 def print_as_markdown(deps: Iterable[Tuple[str, str]]) -> None:
+    # We're approximating the format in Signal-Desktop/ACKNOWLEDGMENTS.plist
     for name, license in deps:
-        print('#', name)
+        print('##', name)
+        print()
         print('```')
         # The license already has a trailing newline.
         print(license, end='')

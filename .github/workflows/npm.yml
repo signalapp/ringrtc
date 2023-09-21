@@ -84,6 +84,14 @@ jobs:
         path: out-arm/release/libringrtc-*-linux-arm64-debuginfo.tar.bz2
         retention-days: 120
 
+    - name: Upload WebRTC Acknowledgments
+      uses: actions/upload-artifact@v3
+      with:
+        name: webrtc-acknowledgments-linux
+        path: |
+          out/release/LICENSE.md
+          out-arm/release/LICENSE.md
+
   build_windows:
     name: Build Windows
 
@@ -133,6 +141,14 @@ jobs:
         path: out-arm/release/libringrtc-*-win32-arm64-debuginfo.tar.bz2
         retention-days: 120
 
+    - name: Upload WebRTC Acknowledgments
+      uses: actions/upload-artifact@v3
+      with:
+        name: webrtc-acknowledgments-windows
+        path: |
+          out/release/LICENSE.md
+          out-arm/release/LICENSE.md
+
   build_mac:
     name: Build macOS
 
@@ -177,6 +193,15 @@ jobs:
         name: ringrtc-desktop-darwin-debuginfo
         path: out-arm/release/libringrtc-*-darwin-arm64-debuginfo.tar.bz2
         retention-days: 120
+
+    - name: Upload WebRTC Acknowledgments
+      uses: actions/upload-artifact@v3
+      with:
+        name: webrtc-acknowledgments-mac
+        path: |
+          out/release/LICENSE.md
+          out-arm/release/LICENSE.md
+
 
   aggregate_desktop:
     name: Aggregate Desktop
@@ -267,6 +292,29 @@ jobs:
       - run: xvfb-run --auto-servernum yarn test
         working-directory: src/node/
 
+      # Collect RingRTC and WebRTC acknowledgments into one file.
+      - name: Download Windows Acknowledgments
+        uses: actions/download-artifact@v3
+        with:
+          name: webrtc-acknowledgments-windows
+          path: acknowledgments/webrtc-windows/
+
+      - name: Download macOS Acknowledgments
+        uses: actions/download-artifact@v3
+        with:
+          name: webrtc-acknowledgments-mac
+          path: acknowledgments/webrtc-mac/
+
+      - name: Download Linux Acknowledgments
+        uses: actions/download-artifact@v3
+        with:
+          name: webrtc-acknowledgments-linux
+          path: acknowledgments/webrtc-linux/
+
+      - run: cp acknowledgments/acknowledgments.md src/node/dist
+      - run: bin/convert_webrtc_acknowledgments.py --format md acknowledgments/webrtc-*/*/*/LICENSE.md >> src/node/dist/acknowledgments.md
+
+      # Finally, publish to NPM. Or upload a pack, for a dry run.
       - run: npm publish --access public
         if: ${{ !inputs.dry_run }}
         working-directory: src/node/
