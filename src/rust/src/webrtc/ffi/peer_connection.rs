@@ -124,6 +124,7 @@ extern "C" {
     pub fn Rust_receiveRtp(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         pt: rtp::PayloadType,
+        enable_incoming: bool,
     ) -> bool;
 
     pub fn Rust_configureAudioEncoders(

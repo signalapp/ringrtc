@@ -53,7 +53,7 @@ impl RffiPeerConnection {
             state: Arc::new(Mutex::new(RffiPeerConnectionState {
                 local_description_set: false,
                 remote_description_set: false,
-                outgoing_audio_enabled: true,
+                outgoing_audio_enabled: false,
                 rtp_packet_sink: None,
                 removed_ice_candidates: vec![],
                 max_bitrate_bps: None,
@@ -312,6 +312,7 @@ pub unsafe fn Rust_sendRtp(
 pub unsafe fn Rust_receiveRtp(
     _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
     _pt: rtp::PayloadType,
+    _enable_incoming: bool,
 ) -> bool {
     info!("Rust_receiveRtp:");
     true

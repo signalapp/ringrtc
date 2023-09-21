@@ -677,6 +677,7 @@ where
     // 1. Using the ICE gatherer from the outgoing parent.
     // 2. Combining the offer from the parent and the answer from the remote peer
     //    to configure PeerConnection correctly.
+    // 3. Make sure no media flows except for incoming RTP until a remote accepts.
     pub fn start_outgoing_child(
         &mut self,
         local_secret: &StaticSecret,
@@ -699,10 +700,6 @@ where
             let peer_connection = webrtc.peer_connection()?;
 
             peer_connection.use_shared_ice_gatherer(ice_gatherer)?;
-
-            // Don't enable audio flow until the call is accepted.
-            peer_connection.set_audio_recording_enabled(false);
-            peer_connection.set_audio_playout_enabled(false);
 
             let (mut offer, mut answer, remote_public_key) =
                 if let (Some(v4_offer), Some(v4_answer)) = (offer.to_v4(), received.answer.to_v4())
@@ -744,23 +741,20 @@ where
             peer_connection.set_local_description(observer.as_ref(), offer);
             observer.get_result()?;
 
-            // Setup RTP data support before we set remote description to make sure we can handle
-            // the "accepted" message before we get ICE Connected. Warning: we're holding the
-            // lock to webrtc_data while we block on the WebRTC network thread, so we need to
-            // make sure we don't grab the webrtc_data lock in handle_rtp_received.
-            peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
+            // Setup RTP data support.
+            // Do this before set_remote_description() is called and enable incoming traffic
+            // to make sure we can handle the `accepted` message before we get ICE connected.
+            // Warning: We are holding the lock to webrtc_data while we block on the WebRTC
+            // network thread, so make sure we don't grab the lock in handle_rtp_received.
+            peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE, true)?;
 
             let observer = create_ssd_observer();
             peer_connection.set_remote_description(observer.as_ref(), answer);
 
-            // on_add_stream and on_ice_connected can all happen while
-            // SetRemoteDescription is happening. But none of those will be processed
-            // until start_fsm() is called below.
+            // on_add_stream and on_ice_connected can all happen while SetRemoteDescription
+            // is happening. But none of those will be processed until start_fsm() is called below.
             observer.get_result()?;
 
-            // Don't enable outgoing media until the call is accepted.
-            peer_connection.set_outgoing_media_enabled(false);
-            peer_connection.set_incoming_media_enabled(true);
             peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
 
             self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
@@ -782,6 +776,7 @@ where
     // 1. Creating an answer to send back to the caller
     // 2. Configuring the PeerConnection with the offer and the answer,
     //    and any remote ICE candidates that came that have arrived.
+    // 3. Make sure no media can flow until the user has explicitly accepted.
     pub fn start_incoming(
         &mut self,
         received: signaling::ReceivedOffer,
@@ -800,10 +795,6 @@ where
             webrtc.stats_observer = Some(stats_observer);
 
             let peer_connection = webrtc.peer_connection()?;
-
-            // Don't enable audio flow until the call is accepted.
-            peer_connection.set_audio_recording_enabled(false);
-            peer_connection.set_audio_playout_enabled(false);
 
             let v4_offer = received.offer.to_v4();
             let (mut offer, remote_public_key) = if let Some(v4_offer) = v4_offer.as_ref() {
@@ -844,9 +835,8 @@ where
 
             let observer = create_ssd_observer();
             peer_connection.set_remote_description(observer.as_ref(), offer);
-            // on_add_stream can happen while SetRemoteDescription
-            // is happening.  But they won't be processed until start_fsm() is called
-            // below.
+            // on_add_stream can happen while SetRemoteDescription is happening.
+            // But they won't be processed until start_fsm() is called below.
             observer.get_result()?;
 
             let observer = create_csd_observer();
@@ -879,10 +869,10 @@ where
                 return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
             };
 
-            // Don't enable incoming media until the call is accepted.
-            // This should be done before we set local description to make sure
-            // we don't get ICE connected really fast and allow any packets through.
-            peer_connection.set_incoming_media_enabled(false);
+            // Setup RTP data support.
+            // Warning: We are holding the lock to webrtc_data while we block on the WebRTC
+            // network thread, so make sure we don't grab the lock in handle_rtp_received.
+            peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE, false)?;
 
             let observer = create_ssd_observer();
             peer_connection.set_local_description(observer.as_ref(), answer);
@@ -890,14 +880,6 @@ where
             // on_ice_connected can happen while SetLocalDescription is happening.
             // But it won't be processed until start_fsm() is called below.
             observer.get_result()?;
-
-            // Don't enable outgoing media until the call is accepted.
-            peer_connection.set_outgoing_media_enabled(false);
-
-            // Setup RTP data support. Warning: we're holding the lock to webrtc_data while
-            // we block on the WebRTC network thread, so we need to make sure we don't grab
-            // the webrtc_data lock in handle_rtp_received.
-            peer_connection.receive_rtp(RTP_DATA_PAYLOAD_TYPE)?;
 
             peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
 
@@ -1296,14 +1278,6 @@ where
         )
     }
 
-    pub fn set_outgoing_media_enabled(&self, enabled: bool) -> Result<()> {
-        let webrtc = self.webrtc.lock()?;
-        webrtc
-            .peer_connection()?
-            .set_outgoing_media_enabled(enabled);
-        Ok(())
-    }
-
     /// Buffer local ICE candidates, and maybe send them immediately
     pub fn buffer_local_ice_candidates(
         &self,
@@ -1591,25 +1565,25 @@ where
         self.set_incoming_media(incoming_media)
     }
 
-    /// Connect incoming media (stored by handle_incoming_media) to the application connection,
-    /// and enabled audio playout, and enable outgoing and incoming RTP.
-    /// Make sure that if you call this, you also notify the app that media is flowing.
+    /// Connect incoming media (stored by webrtc.incoming_media) to the call, and enable
+    /// audio playout, incoming and outgoing RTP, and finally audio recording. The client
+    /// should be notified that media is flowing.
     pub fn enable_media(&self) -> Result<()> {
         info!("enable_media(): id: {}", self.connection_id);
 
         let webrtc = self.webrtc.lock()?;
         let pc = webrtc.peer_connection()?;
-        pc.set_audio_recording_enabled(true);
         pc.set_audio_playout_enabled(true);
-        pc.set_outgoing_media_enabled(true);
         pc.set_incoming_media_enabled(true);
+        pc.set_outgoing_media_enabled(true);
+        pc.set_audio_recording_enabled(true);
 
         let incoming_media = match webrtc.incoming_media.as_ref() {
             Some(v) => v,
             None => {
                 return Err(RingRtcError::OptionValueNotSet(
-                    String::from("connect_incoming_media()"),
-                    String::from("incoming_media"),
+                    String::from("enable_media()"),
+                    String::from("webrtc.incoming_media"),
                 )
                 .into())
             }

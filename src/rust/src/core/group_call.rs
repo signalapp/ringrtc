@@ -1887,16 +1887,16 @@ impl Client {
             if send_rates.max == Some(ALL_ALONE_MAX_SEND_RATE) {
                 info!("Disable audio and outgoing media because there are no other devices.");
                 state.peer_connection.set_audio_recording_enabled(false);
-                state.peer_connection.set_audio_playout_enabled(false);
                 state.peer_connection.set_outgoing_media_enabled(false);
+                state.peer_connection.set_audio_playout_enabled(false);
                 if let BweCheckState::At(_) = state.bwe_check_state {
                     state.bwe_check_state = BweCheckState::Disabled;
                 }
             } else {
                 info!("Enable audio and outgoing media because there are other devices.");
-                state.peer_connection.set_audio_recording_enabled(true);
                 state.peer_connection.set_audio_playout_enabled(true);
                 state.peer_connection.set_outgoing_media_enabled(true);
+                state.peer_connection.set_audio_recording_enabled(true);
                 if state.bwe_check_state == BweCheckState::Disabled {
                     state.bwe_check_state = BweCheckState::At(Instant::now() + BWE_INTERVAL);
                 }
@@ -2466,7 +2466,7 @@ impl Client {
 
         if state
             .peer_connection
-            .receive_rtp(RTP_DATA_PAYLOAD_TYPE)
+            .receive_rtp(RTP_DATA_PAYLOAD_TYPE, true)
             .is_err()
         {
             warn!("Could not tell PeerConnection to receive RTP");
