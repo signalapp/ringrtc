@@ -108,6 +108,14 @@ impl Platform for IosPlatform {
             audio_levels_interval,
         );
 
+        let audio_jitter_buffer_max_packets: i32 = call_config
+            .audio_jitter_buffer_max_packets
+            .try_into()
+            .expect("isize fits in an i32");
+        let audio_jitter_buffer_max_target_delay_ms: i32 = call_config
+            .audio_jitter_buffer_max_target_delay_ms
+            .try_into()
+            .expect("isize fits in an i32");
         let connection = Connection::new(
             call.clone(),
             remote_device_id,
@@ -134,6 +142,8 @@ impl Platform for IosPlatform {
             pc_observer.into_rffi().into_owned().as_ptr() as *mut std::ffi::c_void,
             remote_device_id,
             call.call_context()?.object,
+            audio_jitter_buffer_max_packets,
+            audio_jitter_buffer_max_target_delay_ms,
         );
 
         if app_connection_interface.object.is_null() || app_connection_interface.pc.is_null() {

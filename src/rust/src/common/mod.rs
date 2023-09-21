@@ -765,6 +765,7 @@ pub struct CallConfig {
     pub enable_tcc_audio: bool,
     pub enable_red_audio: bool,
     pub audio_jitter_buffer_max_packets: isize,
+    pub audio_jitter_buffer_max_target_delay_ms: isize,
     pub audio_rtcp_report_interval_ms: isize,
 
     pub enable_vp9: bool,
@@ -781,6 +782,7 @@ impl Default for CallConfig {
             enable_tcc_audio: false,
             enable_red_audio: false,
             audio_jitter_buffer_max_packets: 50,
+            audio_jitter_buffer_max_target_delay_ms: 500,
             audio_rtcp_report_interval_ms: 5000,
             enable_vp9: true,
         }

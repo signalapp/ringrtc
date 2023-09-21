@@ -446,6 +446,9 @@ impl Platform for NativePlatform {
             pc_observer,
             kind,
             connection.call_config().audio_jitter_buffer_max_packets,
+            connection
+                .call_config()
+                .audio_jitter_buffer_max_target_delay_ms,
             connection.call_config().audio_rtcp_report_interval_ms,
             &context.ice_server,
             context.outgoing_audio_track.clone(),

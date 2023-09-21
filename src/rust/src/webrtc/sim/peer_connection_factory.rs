@@ -49,6 +49,7 @@ pub unsafe fn Rust_createPeerConnection(
     _observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
     _kind: RffiPeerConnectionKind,
     _audio_jitter_buffer_max_packets: isize,
+    _audio_jitter_buffer_max_target_delay_ms: isize,
     _audio_rtcp_report_interval_ms: isize,
     _ice_server: RffiIceServer,
     _outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,

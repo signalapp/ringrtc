@@ -21,7 +21,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
     func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
     func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency)
-    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
+    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
     func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool
     func onCallConcluded(remote: UnsafeRawPointer)
@@ -208,12 +208,12 @@ class CallManagerInterface {
         delegate.sendCallMessageToGroup(groupId: groupId, message: message, urgency: urgency)
     }
 
-    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
+    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
         guard let delegate = self.callManagerObserverDelegate else {
             return nil
         }
 
-        return delegate.onCreateConnection(pcObserverOwned: pcObserverOwned, deviceId: deviceId, appCallContext: appCallContext)
+        return delegate.onCreateConnection(pcObserverOwned: pcObserverOwned, deviceId: deviceId, appCallContext: appCallContext, audioJitterBufferMaxPackets: audioJitterBufferMaxPackets, audioJitterBufferMaxTargetDelayMs: audioJitterBufferMaxTargetDelayMs)
     }
 
     func onConnectedMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream) {
@@ -642,7 +642,7 @@ func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?
 }
 
 @available(iOSApplicationExtension, unavailable)
-func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?) -> AppConnectionInterface {
+func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> AppConnectionInterface {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
 
@@ -671,7 +671,7 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
 
     let appCallContext: CallContext = Unmanaged.fromOpaque(callContext).takeUnretainedValue()
 
-    if let connectionDetails = obj.onCreateConnection(pcObserverOwned: pcObserverOwned, deviceId: deviceId, appCallContext: appCallContext) {
+    if let connectionDetails = obj.onCreateConnection(pcObserverOwned: pcObserverOwned, deviceId: deviceId, appCallContext: appCallContext, audioJitterBufferMaxPackets: audioJitterBufferMaxPackets, audioJitterBufferMaxTargetDelayMs: audioJitterBufferMaxTargetDelayMs) {
         return connectionDetails.connection.getWrapper(pc: connectionDetails.pc)
     } else {
         // Swift was problematic to pass back some nullable structure, so we

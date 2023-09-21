@@ -274,7 +274,7 @@ impl Platform for AndroidPlatform {
         audio_levels_interval: Option<Duration>,
     ) -> Result<Connection<Self>> {
         info!(
-            "create_connection(): call_id: {} remote_device_id: {} signaling_version: {:?}, data_mode: {:?}, audio_levels_interval: {:?}",
+            "create_connection(): call_id: {} remote_device_id: {} signaling_version: {:?}, call_config: {:?}, audio_levels_interval: {:?}",
             call.call_id(),
             remote_device_id,
             signaling_version,
@@ -284,6 +284,15 @@ impl Platform for AndroidPlatform {
 
         let env = self.java_env()?;
         let jni_call_manager = self.jni_call_manager.as_obj();
+
+        let audio_jitter_buffer_max_packets: i32 = call_config
+            .audio_jitter_buffer_max_packets
+            .try_into()
+            .expect("isize fits in an i32");
+        let audio_jitter_buffer_max_target_delay_ms: i32 = call_config
+            .audio_jitter_buffer_max_target_delay_ms
+            .try_into()
+            .expect("isize fits in an i32");
 
         let connection = Connection::new(
             call.clone(),
@@ -311,6 +320,8 @@ impl Platform for AndroidPlatform {
                 call_id_jlong => long,
                 jni_remote_device_id => int,
                 jni_call_context.as_obj() => org.signal.ringrtc.CallManager::CallContext,
+                audio_jitter_buffer_max_packets => int,
+                audio_jitter_buffer_max_target_delay_ms => int,
             ) -> org.signal.ringrtc.Connection),
         )?;
 

@@ -1314,7 +1314,9 @@ public class CallManager {
   private Connection createConnection(long        nativeConnectionBorrowed,
                                       long        nativeCallId,
                                       int         remoteDeviceId,
-                                      CallContext callContext) {
+                                      CallContext callContext,
+                                      int         audioJitterBufferMaxPackets,
+                                      int         audioJitterBufferMaxTargetDelayMs) {
 
     CallId callId = new CallId(nativeCallId);
 
@@ -1336,7 +1338,8 @@ public class CallManager {
       configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;
     }
 
-    configuration.audioJitterBufferMaxPackets = 50;
+    configuration.audioJitterBufferMaxPackets       = audioJitterBufferMaxPackets;
+    configuration.audioJitterBufferMaxTargetDelayMs = audioJitterBufferMaxTargetDelayMs;
 
     PeerConnectionFactory factory       = callContext.factory;
     CameraControl         cameraControl = callContext.cameraControl;

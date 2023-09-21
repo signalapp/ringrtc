@@ -921,7 +921,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Utility Observers
 
-    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
+    func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> (connection: Connection, pc: UnsafeMutableRawPointer?) {
         Logger.debug("onCreateConnection")
 
         // We create default configuration settings here as per
@@ -945,7 +945,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             configuration.iceTransportPolicy = .relay
         }
 
-        configuration.audioJitterBufferMaxPackets = 50
+        configuration.audioJitterBufferMaxPackets = audioJitterBufferMaxPackets
+        configuration.audioJitterBufferMaxTargetDelayMs = audioJitterBufferMaxTargetDelayMs
 
         // Create the default media constraints.
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)

@@ -406,6 +406,8 @@ pub struct AppInterface {
         observer: *mut c_void,
         deviceId: u32,
         context: *mut c_void,
+        audioJitterBufferMaxPackets: i32,
+        audioJitterBufferMaxTargetDelayMs: i32,
     ) -> AppConnectionInterface,
     /// Request that the application create an application Media Stream object
     /// associated with the given application Connection object.

@@ -263,6 +263,7 @@ fn main() -> Result<()> {
         enable_tcc_audio: args.tcc,
         enable_red_audio: args.red,
         audio_jitter_buffer_max_packets: args.audio_jitter_buffer_max_packets as isize,
+        audio_jitter_buffer_max_target_delay_ms: 500,
         audio_rtcp_report_interval_ms: args.audio_rtcp_report_interval_ms as isize,
         enable_vp9: args.vp9,
     };
