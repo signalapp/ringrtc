@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.32.0
+
+- Add callback for low upload bandwidth in a video call
+
+- Increase max video receive resolution for desktop
+
+- Update webrtc to 5845e
+  - Disable audio and media flow by default
+
+- Update webrtc to 5845f
+  - Allow configuration of audio jitter buffer max target delay
+
+- iOS: Stop building for Catalyst
+
+- Call links: Add `reset-approvals` to test client
+
+- Update Rust to 1.72.1
+
+- Build improvements and dependency updates
+
 ## v2.31.2
 
 - Update webrtc to 5845c
