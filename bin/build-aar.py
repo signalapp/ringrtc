@@ -490,7 +490,7 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
         gradle_exec.append('publishToMavenLocal')
 
     if publish_to_maven:
-        gradle_exec.extend(['publishToSonatype', 'closeSonatypeStagingRepository'])
+        gradle_exec.extend(['publishToSonatype', 'closeAndReleaseSonatypeStagingRepository'])
 
     gradle_exec.extend(extra_gradle_args)
 
