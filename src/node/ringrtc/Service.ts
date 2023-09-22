@@ -1253,7 +1253,10 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  handleLowBandwidthForVideo(clientId: GroupCallClientId, recovered: boolean): void {
+  handleLowBandwidthForVideo(
+    clientId: GroupCallClientId,
+    recovered: boolean
+  ): void {
     sillyDeadlockProtection(() => {
       const groupCall = this._groupCallByClientId.get(clientId);
       if (groupCall) {
