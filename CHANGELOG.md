@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.32.1
+
+- Desktop: Downgrade dependency for client
+
 ## v2.32.0
 
 - Add callback for low upload bandwidth in a video call

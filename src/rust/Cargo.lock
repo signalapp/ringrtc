@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.32.0"
+version = "2.32.1"
 dependencies = [
  "aes",
  "aes-gcm-siv",
