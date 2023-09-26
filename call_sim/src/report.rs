@@ -15,6 +15,7 @@ use std::{collections::HashMap, fmt::Write, str::FromStr};
 use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    task::JoinSet,
 };
 
 use crate::common::{ChartDimension, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig};
@@ -22,7 +23,7 @@ use crate::test::{GroupRun, Sound, TestCase, TestResults};
 
 type ChartPoint = (f32, f32);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StatsConfig {
     pub title: String,
     pub chart_name: String,
@@ -59,7 +60,7 @@ impl Default for StatsConfig {
 /// Our current standard value for ignoring the first "5 seconds" of garbage data.
 const STATS_SKIP_N: usize = 5;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StatsData {
     /// Internal counter for maintaining the average.
     sum: f64,
@@ -154,7 +155,7 @@ impl StatsData {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Stats {
     pub config: StatsConfig,
     pub data: StatsData,
@@ -1437,9 +1438,15 @@ impl Report {
             line_chart_stats.push(stats);
         }
 
-        for stats in line_chart_stats {
-            Report::create_line_chart(test_path, stats);
+        let mut set = JoinSet::new();
+        for stats in line_chart_stats.into_iter() {
+            let path = test_path.to_string();
+            let stats = stats.clone();
+            set.spawn_blocking(move || {
+                Report::create_line_chart(&path, &stats);
+            });
         }
+        while (set.join_next().await).is_some() {}
     }
 
     pub async fn create_test_case_report(
