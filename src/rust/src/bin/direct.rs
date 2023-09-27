@@ -246,84 +246,88 @@ impl CallEndpoint {
         Ok(Self::from_actor(
             peer_id.clone(),
             device_id,
-            Actor::start(stopper.clone(), move |actor| {
-                // Constructing this is a funny way of getting a clone of the CallEndpoint
-                // on the actor's thread so we can have it in the actor's state so we can
-                // pass it to the NativePlatform/CallManager.
-                // This is a little weird, but it seems nicer than doing some kind of
-                // Option<CallManager> thing that we have to set later.
-                let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
+            Actor::start(
+                format!("endpoint-{peer_id}"),
+                stopper.clone(),
+                move |actor| {
+                    // Constructing this is a funny way of getting a clone of the CallEndpoint
+                    // on the actor's thread so we can have it in the actor's state so we can
+                    // pass it to the NativePlatform/CallManager.
+                    // This is a little weird, but it seems nicer than doing some kind of
+                    // Option<CallManager> thing that we have to set later.
+                    let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
-                let mut pcf = PeerConnectionFactory::new(&pcf::AudioConfig::default(), true)?; // Set up packet flow
-                info!(
-                    "Audio playout devices: {:?}",
-                    pcf.get_audio_playout_devices()
-                );
-                info!(
-                    "Audio recording devices: {:?}",
-                    pcf.get_audio_recording_devices()
-                );
+                    let mut pcf = PeerConnectionFactory::new(&pcf::AudioConfig::default(), true)?; // Set up packet flow
+                    info!(
+                        "Audio playout devices: {:?}",
+                        pcf.get_audio_playout_devices()
+                    );
+                    info!(
+                        "Audio recording devices: {:?}",
+                        pcf.get_audio_recording_devices()
+                    );
 
-                let network = pcf.injectable_network().expect("get Injectable Network");
-                let router_as_sender = router.clone();
-                network.set_sender(Box::new(move |packet: injectable_network::Packet| {
-                    router_as_sender.send_packet(router::Packet {
-                        source: packet.source,
-                        dest: packet.dest,
-                        data: packet.data,
+                    let network = pcf.injectable_network().expect("get Injectable Network");
+                    let router_as_sender = router.clone();
+                    network.set_sender(Box::new(move |packet: injectable_network::Packet| {
+                        router_as_sender.send_packet(router::Packet {
+                            source: packet.source,
+                            dest: packet.dest,
+                            data: packet.data,
+                        });
+                    }));
+
+                    // Set up signaling/state
+                    signaling_server.add_endpoint(&endpoint);
+                    let signaling_sender = Box::new(endpoint.clone());
+                    let should_assume_messages_sent = true; // cli doesn't support async sending yet.
+                    let state_handler = Box::new(endpoint.clone());
+                    let incoming_video_sink = Box::new(LoggingVideoSink {
+                        peer_id: peer_id.clone(),
                     });
-                }));
 
-                // Set up signaling/state
-                signaling_server.add_endpoint(&endpoint);
-                let signaling_sender = Box::new(endpoint.clone());
-                let should_assume_messages_sent = true; // cli doesn't support async sending yet.
-                let state_handler = Box::new(endpoint.clone());
-                let incoming_video_sink = Box::new(LoggingVideoSink {
-                    peer_id: peer_id.clone(),
-                });
+                    // Fill in fake group call things
+                    let http_client = http::DelegatingClient::new(endpoint.clone());
+                    let group_handler = Box::new(endpoint);
 
-                // Fill in fake group call things
-                let http_client = http::DelegatingClient::new(endpoint.clone());
-                let group_handler = Box::new(endpoint);
+                    let platform = NativePlatform::new(
+                        pcf.clone(),
+                        signaling_sender,
+                        should_assume_messages_sent,
+                        state_handler,
+                        group_handler,
+                    );
+                    let call_manager = CallManager::new(platform, http_client)?;
 
-                let platform = NativePlatform::new(
-                    pcf.clone(),
-                    signaling_sender,
-                    should_assume_messages_sent,
-                    state_handler,
-                    group_handler,
-                );
-                let call_manager = CallManager::new(platform, http_client)?;
+                    // And a CallContext.  We'll use the same context for each call.
+                    let outgoing_audio_track = pcf.create_outgoing_audio_track()?;
+                    let outgoing_video_source = pcf.create_outgoing_video_source()?;
+                    let outgoing_video_track =
+                        pcf.create_outgoing_video_track(&outgoing_video_source)?;
+                    let call_context = NativeCallContext::new(
+                        hide_ip,
+                        ice_server,
+                        outgoing_audio_track,
+                        outgoing_video_track,
+                        incoming_video_sink,
+                    );
 
-                // And a CallContext.  We'll use the same context for each call.
-                let outgoing_audio_track = pcf.create_outgoing_audio_track()?;
-                let outgoing_video_source = pcf.create_outgoing_video_source()?;
-                let outgoing_video_track =
-                    pcf.create_outgoing_video_track(&outgoing_video_source)?;
-                let call_context = NativeCallContext::new(
-                    hide_ip,
-                    ice_server,
-                    outgoing_audio_track,
-                    outgoing_video_track,
-                    incoming_video_sink,
-                );
+                    Ok(CallEndpointState {
+                        peer_id,
+                        device_id,
+                        call_config,
 
-                Ok(CallEndpointState {
-                    peer_id,
-                    device_id,
-                    call_config,
+                        signaling_server,
+                        network,
+                        router,
+                        call_manager,
+                        call_context,
 
-                    signaling_server,
-                    network,
-                    router,
-                    call_manager,
-                    call_context,
-
-                    actor,
-                    outgoing_video_source,
-                })
-            })?,
+                        actor,
+                        outgoing_video_source,
+                    })
+                },
+            )?,
         ))
     }
 
@@ -687,7 +691,7 @@ struct SignalingServerState {
 impl SignalingServer {
     fn start(stopper: &Stopper) -> Result<Self> {
         Ok(Self {
-            actor: Actor::start(stopper.clone(), move |_actor| {
+            actor: Actor::start("SignalingServer", stopper.clone(), move |_actor| {
                 Ok(SignalingServerState {
                     endpoints_by_peer_id: HashMap::new(),
                 })

@@ -6,12 +6,10 @@
 //! Foreign Function Interface utility helpers and types.
 
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::mem;
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Condvar, Mutex};
-use std::thread;
-
-use futures::future::Future;
-use tokio::runtime;
 
 use crate::common::Result;
 use crate::error::RingRtcError;
@@ -282,51 +280,37 @@ pub fn try_scoped<T>(call: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result
     call()
 }
 
-/// A specially configured tokio::Runtime for processing sequential tasks
-/// in the context of a Call or Connection.
-/// Pre-configured with the right parameters for single-threaded operation,
-/// and can be dropped safely on a different runtime thread.
-#[derive(Debug)]
-pub struct TaskQueueRuntime {
-    rt: Option<runtime::Runtime>,
+/// A wrapper around [`std::sync::mpsc::Receiver`] that drains already-sent events on closing.
+///
+/// Note that in the current implementation there is a **race** between the "drain" and "close"
+/// steps due to how the std channel is implemented. This is acceptable *only* because we don't
+/// depend on explicit error handling for events sent after a channel is closed.
+pub enum EventStream<T> {
+    Active(Receiver<T>),
+    Ended(VecDeque<T>),
 }
 
-impl Drop for TaskQueueRuntime {
-    fn drop(&mut self) {
-        // Dropping a runtime blocks until all spawned futures complete.
-        // tokio disallows dropping a runtime from a runtime thread and
-        // panics when it's done, as it will cause a deadlock if a runtime
-        // is dropped from its own thread.
-        //   We're dropping runtimes from other runtimes, so to bypass the
-        // check, this function spawns a temporary thread whose only
-        // purpose is to drop the runtime.
-        let rt = self.rt.take();
-        let drop_thread = thread::spawn(move || {
-            core::mem::drop(rt);
-        });
-        let _ = drop_thread.join();
+impl<T> EventStream<T> {
+    pub fn recv(&mut self) -> Option<T> {
+        match self {
+            Self::Active(receiver) => receiver.recv().ok(),
+            Self::Ended(remaining) => remaining.pop_front(),
+        }
+    }
+
+    pub fn close(&mut self) {
+        match self {
+            Self::Active(receiver) => *self = Self::Ended(receiver.try_iter().collect()),
+            Self::Ended(_remaining) => {
+                warn!("close() called twice on EventStream")
+            }
+        }
     }
 }
 
-impl TaskQueueRuntime {
-    pub fn new(name: &str) -> Result<Self> {
-        let rt = Some(
-            runtime::Builder::new_multi_thread()
-                .worker_threads(1)
-                .max_blocking_threads(1)
-                .enable_all()
-                .thread_name(name)
-                .build()?,
-        );
-        Ok(TaskQueueRuntime { rt })
-    }
-
-    pub fn spawn<F>(&self, future: F)
-    where
-        F: Future + Send + 'static,
-        F::Output: Send + 'static,
-    {
-        self.rt.as_ref().unwrap().spawn(future);
+impl<T> From<Receiver<T>> for EventStream<T> {
+    fn from(receiver: Receiver<T>) -> Self {
+        Self::Active(receiver)
     }
 }
 

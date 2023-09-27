@@ -9,17 +9,18 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::stringify;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
+#[cfg(feature = "sim")]
+use std::sync::{Condvar, Mutex};
+
 use bytes::{Bytes, BytesMut};
-use futures::future::lazy;
-use futures::future::TryFutureExt;
-use futures::Future;
 use lazy_static::lazy_static;
 use prost::Message;
 
+use crate::common::actor::{Actor, Stopper};
 use crate::common::{
     ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DataMode,
     DeviceId, Result, RingBench,
@@ -30,7 +31,7 @@ use crate::core::connection::{Connection, ConnectionType};
 use crate::core::group_call::{HttpSfuClient, Observer};
 use crate::core::platform::Platform;
 use crate::core::signaling::ReceivedOffer;
-use crate::core::util::{uuid_to_string, TaskQueueRuntime};
+use crate::core::util::{try_scoped, uuid_to_string};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::lite::call_links::{self, CallLinkRootKey};
@@ -58,10 +59,10 @@ lazy_static! {
             .unwrap_or(TIME_OUT_PERIOD);
 }
 
-/// Spawns a task on the worker runtime thread to handle an API
+/// Spawns a task on the worker thread to handle an API
 /// request with error handling.
 ///
-/// If the future fails:
+/// If the task fails:
 /// - log the failure
 /// - conclude the call with EndedInternalFailure
 ///
@@ -73,12 +74,12 @@ macro_rules! handle_active_call_api {
     ) => {{
         info!("API:{}():", stringify!($f));
         let mut call_manager = $s.clone();
-        let mut cm_error = $s.clone();
-        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).unwrap_or_else(move |err| {
-            error!("Future {} failed: {}", stringify!($f), err);
-            let _ = cm_error.internal_api_error( err);
-        });
-        $s.worker_spawn(future)
+        $s.worker_spawn(move || {
+            if let Err(err) = $f(&mut call_manager $( , $a)*) {
+                error!("{} failed: {}", stringify!($f), err);
+                let _ = call_manager.internal_api_error(err);
+            }
+        })
     }};
 }
 
@@ -100,10 +101,10 @@ macro_rules! check_active_call {
     };
 }
 
-/// Spawns a task on the worker runtime thread to handle an API
+/// Spawns a task on the worker thread to handle an API
 /// request with no error handling.
 ///
-/// If the future fails:
+/// If the task fails:
 /// - log the failure
 ///
 macro_rules! handle_api {
@@ -114,10 +115,11 @@ macro_rules! handle_api {
     ) => {{
         let mut call_manager = $s.clone();
         info!("API:{}():", stringify!($f));
-        let future = lazy(move |_| $f(&mut call_manager $( , $a)*)).unwrap_or_else(move |err| {
-            error!("Future {} failed: {}", stringify!($f), err);
-        });
-        $s.worker_spawn(future)
+        $s.worker_spawn(move || {
+            if let Err(err) = $f(&mut call_manager $( , $a)*) {
+                error!("{} failed: {}", stringify!($f), err);
+            }
+        })
     }};
 }
 
@@ -365,8 +367,8 @@ where
     outstanding_group_rings: Arc<CallMutex<HashMap<group_call::GroupId, OutstandingGroupRing>>>,
     /// Busy indication if in either a direct or group call.
     busy: Arc<CallMutex<bool>>,
-    /// Tokio runtime for back ground task execution.
-    worker_runtime: Arc<CallMutex<Option<TaskQueueRuntime>>>,
+    /// Dedicated actor for background task execution.
+    worker: Actor<()>,
     /// Signaling message queue.
     message_queue: Arc<CallMutex<SignalingMessageQueue<T>>>,
     /// How to make HTTP requests to the SFU for group calls.
@@ -433,7 +435,7 @@ where
             next_group_call_client_id: Arc::clone(&self.next_group_call_client_id),
             outstanding_group_rings: Arc::clone(&self.outstanding_group_rings),
             busy: Arc::clone(&self.busy),
-            worker_runtime: Arc::clone(&self.worker_runtime),
+            worker: self.worker.clone(),
             message_queue: Arc::clone(&self.message_queue),
             http_client: self.http_client.clone(),
         }
@@ -456,6 +458,8 @@ where
             option_env!("CARGO_PKG_VERSION").unwrap_or("unknown")
         );
 
+        let worker_stopper = Stopper::new();
+
         Ok(Self {
             platform: Arc::new(CallMutex::new(platform, "platform")),
             self_uuid: Arc::new(CallMutex::new(None, "self_uuid")),
@@ -475,10 +479,7 @@ where
                 "outstanding_group_rings",
             )),
             busy: Arc::new(CallMutex::new(false, "busy")),
-            worker_runtime: Arc::new(CallMutex::new(
-                Some(TaskQueueRuntime::new("call-manager-worker")?),
-                "worker_runtime",
-            )),
+            worker: Actor::start("call-manager-worker", worker_stopper, |_| Ok(()))?,
             message_queue: Arc::new(CallMutex::new(
                 SignalingMessageQueue::new()?,
                 "message_queue",
@@ -521,16 +522,15 @@ where
         info!("API:create_outgoing_call({}):", call_id);
 
         let mut call_manager = self.clone();
-        let mut cm_error = self.clone();
-        let remote_peer_error = remote_peer.clone();
-        let future = lazy(move |_| {
-            call_manager.handle_call(remote_peer, call_id, call_media_type, local_device_id)
+        self.worker_spawn(move || {
+            let remote_peer_error = remote_peer.clone();
+            if let Err(err) =
+                call_manager.handle_call(remote_peer, call_id, call_media_type, local_device_id)
+            {
+                error!("Handle call failed: {}", err);
+                call_manager.internal_create_api_error(&remote_peer_error, call_id, err);
+            }
         })
-        .unwrap_or_else(move |err| {
-            error!("Handle call failed: {}", err);
-            cm_error.internal_create_api_error(&remote_peer_error, call_id, err);
-        });
-        self.worker_spawn(future)
     }
 
     /// Accept an incoming call.
@@ -645,15 +645,13 @@ where
         info!("API:received_offer():");
 
         let mut call_manager = self.clone();
-        let mut cm_error = self.clone();
-        let remote_peer_error = remote_peer.clone();
-        let future =
-            lazy(move |_| call_manager.handle_received_offer(remote_peer, call_id, received))
-                .unwrap_or_else(move |err| {
-                    error!("Handle received offer failed: {}", err);
-                    cm_error.internal_create_api_error(&remote_peer_error, call_id, err);
-                });
-        self.worker_spawn(future)
+        self.worker_spawn(move || {
+            let remote_peer_error = remote_peer.clone();
+            if let Err(err) = call_manager.handle_received_offer(remote_peer, call_id, received) {
+                error!("Handle received offer failed: {}", err);
+                call_manager.internal_create_api_error(&remote_peer_error, call_id, err);
+            }
+        })
     }
 
     /// Received answer from application.
@@ -739,14 +737,12 @@ where
     pub fn close(&mut self) -> Result<()> {
         info!("close():");
 
-        if self.worker_runtime.lock()?.is_some() {
+        if !self.worker.stopper().has_been_stopped() {
             // Clear out any outstanding calls
             let _ = self.reset();
 
-            self.sync_runtime()?;
+            self.worker.stopper().stop_all_and_join();
 
-            // close the runtime
-            let _ = self.close_runtime();
             info!("close(): complete");
         } else {
             info!("close(): already closed.");
@@ -815,7 +811,7 @@ where
     pub fn synchronize(&mut self) -> Result<()> {
         info!("synchronize():");
 
-        self.sync_runtime()?;
+        self.sync_worker_thread()?;
 
         // sync several times, as simulated error injection can put more
         // events on the FSMs.
@@ -833,7 +829,7 @@ where
                 call.synchronize();
             }
 
-            self.sync_runtime()?;
+            self.sync_worker_thread()?;
         }
 
         info!("synchronize(): complete");
@@ -849,45 +845,38 @@ where
         Arc::strong_count(&self.platform)
     }
 
-    /// Spawn a future on the worker runtime if enabled.
-    fn worker_spawn<F>(&mut self, future: F) -> Result<()>
+    /// Spawn a task on the worker thread, unless we are shutting down.
+    fn worker_spawn<F>(&mut self, f: F) -> Result<()>
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        let mut worker_runtime = self.worker_runtime.lock()?;
-        if let Some(worker_runtime) = &mut *worker_runtime {
-            worker_runtime.spawn(future);
+        if !self.worker.stopper().has_been_stopped() {
+            self.worker.send(move |_| f());
         } else {
-            warn!("worker_spawn(): worker_runtime unavailable");
+            warn!("worker_spawn(): worker unavailable");
         }
         Ok(())
     }
 
-    fn runtime_start_sync(&mut self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
-        let future = lazy(move |_| {
+    #[cfg(feature = "sim")]
+    fn worker_start_sync(&mut self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
+        self.worker_spawn(move || {
             // signal the condvar
-            info!("sync_runtime(): syncing runtime");
+            info!("sync_worker_thread(): syncing");
             let (mutex, condvar) = &*sync_condvar;
             if let Ok(mut terminate_complete) = mutex.lock() {
                 *terminate_complete = true;
                 condvar.notify_one();
-                Ok(())
             } else {
-                Err(RingRtcError::MutexPoisoned(
-                    "Call Manager Close Condition Variable".to_string(),
-                )
-                .into())
+                // Not much else to do here.
+                error!("Close call manager mutex poisoned");
             }
         })
-        .unwrap_or_else(move |err: anyhow::Error| {
-            error!("Close call manager future failed: {}", err);
-            // Not much else to do here.
-        });
-        self.worker_spawn(future)
     }
 
-    fn wait_runtime_sync(&self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
-        info!("wait_runtime_sync(): waiting for runtime sync...");
+    #[cfg(feature = "sim")]
+    fn wait_worker_sync(&self, sync_condvar: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
+        info!("wait_worker_sync(): waiting for sync...");
 
         let (mutex, condvar) = &*sync_condvar;
         if let Ok(mut terminate_complete) = mutex.lock() {
@@ -903,37 +892,20 @@ where
             .into());
         }
 
-        info!("wait_runtime_sync(): runtime synchronized.");
+        info!("wait_worker_sync(): synchronized.");
 
         Ok(())
     }
 
     #[allow(clippy::mutex_atomic)]
-    fn sync_runtime(&mut self) -> Result<()> {
-        // cycle a condvar through the runtime
+    #[cfg(feature = "sim")]
+    fn sync_worker_thread(&mut self) -> Result<()> {
+        // cycle a condvar through the worker thread
         let condvar = Arc::new((Mutex::new(false), Condvar::new()));
-        self.runtime_start_sync(condvar.clone())?;
+        self.worker_start_sync(condvar.clone())?;
 
-        // This blocks while the runtime synchronizes.
-        self.wait_runtime_sync(condvar)
-    }
-
-    fn close_runtime(&mut self) -> Result<()> {
-        info!("stopping worker runtime");
-
-        let result: Option<TaskQueueRuntime> = {
-            let mut worker_runtime = self.worker_runtime.lock()?;
-            worker_runtime.take()
-        };
-
-        if result.is_some() {
-            // Dropping the runtime causes it to shut down.
-        } else {
-            error!("close_runtime(): worker_runtime is unavailable");
-        }
-
-        info!("stopping worker runtime: complete");
-        Ok(())
+        // This blocks while the thread synchronizes.
+        self.wait_worker_sync(condvar)
     }
 
     /// Clears the active call_id
@@ -1028,29 +1000,28 @@ where
         }
 
         let mut call_manager = self.clone();
-        let cm_error = self.clone();
-        let call_error = call.clone();
-        let future = lazy(move |_| {
-            if let Some(hangup) = hangup {
-                // If we want to send a hangup message, be sure that
-                // the call actually should send one.
-                if call.should_send_hangup() {
-                    call.send_hangup_via_signaling_to_all(hangup)?;
+        self.worker_spawn(move || {
+            let err = try_scoped(|| {
+                if let Some(hangup) = hangup {
+                    // If we want to send a hangup message, be sure that
+                    // the call actually should send one.
+                    if call.should_send_hangup() {
+                        call.send_hangup_via_signaling_to_all(hangup)?;
+                    }
+                }
+                call_manager.terminate_and_drop_call(call_id)
+            });
+            if let Err(err) = err {
+                error!("Conclude call failed: {}", err);
+                if let Ok(remote_peer) = call.remote_peer() {
+                    let _ = call_manager.notify_application(
+                        &remote_peer,
+                        call_id,
+                        ApplicationEvent::EndedInternalFailure,
+                    );
                 }
             }
-            call_manager.terminate_and_drop_call(call_id)
         })
-        .unwrap_or_else(move |err| {
-            error!("Conclude call future failed: {}", err);
-            if let Ok(remote_peer) = call_error.remote_peer() {
-                let _ = cm_error.notify_application(
-                    &remote_peer,
-                    call_id,
-                    ApplicationEvent::EndedInternalFailure,
-                );
-            }
-        });
-        self.worker_spawn(future)
     }
 
     /// Terminates the active call.
@@ -1797,22 +1768,22 @@ where
         }
 
         let mut self_for_timeout = self.clone();
-        self.worker_spawn(
-            async move {
-                tokio::time::sleep(*INCOMING_GROUP_CALL_RING_TIME).await;
-                self_for_timeout.remove_outstanding_group_ring(&group_id, ring_id)?;
-                self_for_timeout.platform.lock()?.group_call_ring_update(
-                    group_id,
-                    ring_id,
-                    sender_uuid,
-                    group_call::RingUpdate::ExpiredRequest,
-                );
-                Ok(())
-            }
-            .unwrap_or_else(|err: anyhow::Error| {
-                error!("error handling group ring timeout: {}", err);
-            }),
-        )?;
+        self.worker
+            .send_delayed(*INCOMING_GROUP_CALL_RING_TIME, move |_| {
+                let result = try_scoped(|| {
+                    self_for_timeout.remove_outstanding_group_ring(&group_id, ring_id)?;
+                    self_for_timeout.platform.lock()?.group_call_ring_update(
+                        group_id,
+                        ring_id,
+                        sender_uuid,
+                        group_call::RingUpdate::ExpiredRequest,
+                    );
+                    Ok(())
+                });
+                if let Err(err) = result {
+                    error!("error handling group ring timeout: {}", err)
+                }
+            });
 
         Ok(())
     }
@@ -1977,7 +1948,7 @@ where
         false
     }
 
-    /// Internal failure during API future that creates a call.
+    /// Internal failure during API task that creates a call.
     ///
     /// The APIs call() and received_offer() use this error handler as
     /// it is unknown exactly where the API failed, before or after
@@ -1991,14 +1962,14 @@ where
         info!("internal_create_api_error(): error: {}", error);
         if let Ok(active_call) = self.active_call() {
             if self.remote_peer_equals_active(&active_call, remote_peer) {
-                // The future managed to create the active call and then
+                // The task managed to create the active call and then
                 // hit problems.  Error out with active call clean up.
                 let _ = self.internal_api_error(error);
                 return;
             }
         }
 
-        // The future hit problems before creating or accessing
+        // The task hit problems before creating or accessing
         // an active call. Simply notify the application with no
         // call clean up.
         let _ =
@@ -2006,10 +1977,9 @@ where
         let _ = self.notify_call_concluded(remote_peer, call_id);
     }
 
-    /// Internal error occurred on an API future.
+    /// Internal error occurred on an API task.
     ///
-    /// This shuts down the specified call if active and notifies the
-    /// application.
+    /// This shuts down the active call and notifies the application.
     fn internal_api_error(&mut self, error: anyhow::Error) -> Result<()> {
         info!("internal_api_error(): error: {}", error);
         if let Ok(call) = self.active_call() {

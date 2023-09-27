@@ -38,24 +38,19 @@
 //! - ReceivedAnswer
 //! - ReceivedIce
 //!
-//! ## From Internal runtime
+//! ## Internally-generated events
 //!
 //! - CallTimeout
 //! - InternalError
 
 use std::fmt;
-use std::pin::Pin;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use futures::future::lazy;
-use futures::future::TryFutureExt;
-use futures::task::Poll;
-use futures::{Future, Stream};
-
 use crate::error::RingRtcError;
 
+use crate::common::actor::{Actor, Stopper};
 use crate::common::{
     ApplicationEvent, CallConfig, CallDirection, CallState, ConnectionState, DeviceId, Result,
 };
@@ -63,7 +58,7 @@ use crate::core::call::{Call, EventStream};
 use crate::core::connection::ConnectionObserverEvent;
 use crate::core::platform::Platform;
 use crate::core::signaling;
-use crate::core::util::TaskQueueRuntime;
+use crate::core::util::try_scoped;
 use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
@@ -171,9 +166,9 @@ impl fmt::Debug for CallEvent {
 ///
 /// The CallStateMachine object consumes incoming CallEvents and
 /// either handles them immediately or dispatches them to other
-/// runtimes for further processing.
+/// threads for further processing.
 ///
-/// The FSM itself is executing on a runtime managed by a Call object.
+/// The FSM itself is executing on a thread managed by a Call object.
 ///
 /// For "quick" reactions to incoming events, the FSM handles them
 /// immediately on its own thread.
@@ -183,17 +178,16 @@ impl fmt::Debug for CallEvent {
 ///
 /// For notification events targeted for the client application, the
 /// FSM dispatches the work to a "notify" thread.
-#[derive(Debug)]
 pub struct CallStateMachine<T>
 where
     T: Platform,
 {
     /// Receiving end of EventPump.
     event_stream: EventStream<T>,
-    /// Runtime for processing long running requests.
-    worker_runtime: Option<TaskQueueRuntime>,
-    /// Runtime for processing client application notification events.
-    notify_runtime: Option<TaskQueueRuntime>,
+    /// Thread for processing long running requests.
+    worker_thread: Actor<()>,
+    /// Thread for processing client application notification events.
+    notify_thread: Actor<()>,
 }
 
 impl<T> fmt::Display for CallStateMachine<T>
@@ -214,135 +208,112 @@ where
     }
 }
 
-impl<T> Future for CallStateMachine<T>
-where
-    T: Platform,
-{
-    type Output = Result<()>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut futures::task::Context) -> Poll<Self::Output> {
-        loop {
-            let pin_stream = Pin::new(&mut self.event_stream);
-            match ready!(pin_stream.poll_next(cx)) {
-                Some((call, event)) => {
-                    let state = call.state()?;
-                    if !event.is_frequent() {
-                        info!("state: {}, event: {}", state, event);
-                    }
-                    if let Err(e) = self.handle_event(call, state, event) {
-                        error!("Handling event failed: {:?}", e);
-                    }
-                }
-                None => {
-                    debug!("No more events!");
-                    break;
-                }
-            }
-        }
-
-        // The event stream is closed and we are done
-        Poll::Ready(Ok(()))
-    }
-}
-
 impl<T> CallStateMachine<T>
 where
     T: Platform,
 {
     /// Creates a new CallStateMachine object.
     pub fn new(event_stream: EventStream<T>) -> Result<CallStateMachine<T>> {
-        let mut fsm = CallStateMachine {
+        Ok(CallStateMachine {
             event_stream,
-            worker_runtime: Some(TaskQueueRuntime::new("call-worker")?),
-            notify_runtime: Some(TaskQueueRuntime::new("call-notify")?),
-        };
-
-        if let Some(worker_runtime) = &mut fsm.worker_runtime {
-            CallStateMachine::<T>::sync_thread("worker", worker_runtime)?;
-        }
-        if let Some(notify_runtime) = &mut fsm.notify_runtime {
-            CallStateMachine::<T>::sync_thread("notify", notify_runtime)?;
-        }
-
-        Ok(fsm)
+            worker_thread: Actor::start("call-worker", Stopper::new(), |_| Ok(()))?,
+            notify_thread: Actor::start("call-notify", Stopper::new(), |_| Ok(()))?,
+        })
     }
 
-    /// Synchronize a runtime with the main FSM thread.
-    fn sync_thread(label: &'static str, runtime: &mut TaskQueueRuntime) -> Result<()> {
+    pub fn run(&mut self) {
+        while let Some((call, event)) = self.event_stream.recv() {
+            let state = match call.state() {
+                Ok(state) => state,
+                Err(e) => {
+                    error!("Handling event failed: {}", e);
+                    return;
+                }
+            };
+            if !event.is_frequent() {
+                info!("state: {}, event: {}", state, event);
+            }
+            if let Err(e) = self.handle_event(call, state, event) {
+                error!("Handling event failed: {}", e);
+            }
+        }
+    }
+
+    /// Synchronize a thread with the main FSM thread.
+    fn sync_thread(label: &'static str, actor: &Actor<()>) -> Result<()> {
         let (tx, rx) = mpsc::channel();
-        let future = lazy(move |_| {
+        actor.send(move |_| {
             info!("syncing {} thread: {:?}", label, thread::current().id());
             let _ = tx.send(true);
         });
-        runtime.spawn(future);
         let _ = rx.recv_timeout(Duration::from_secs(2))?;
         Ok(())
     }
 
-    /// Spawn a future on the worker runtime if enabled.
-    fn worker_spawn<F>(&mut self, future: F)
+    /// Spawn a task on the worker thread if it is still running.
+    fn worker_spawn<F>(&mut self, f: F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        if let Some(worker_runtime) = &mut self.worker_runtime {
-            worker_runtime.spawn(future);
+        if !self.worker_thread.stopper().has_been_stopped() {
+            self.worker_thread.send(|_| f());
         }
     }
 
     fn schedule_work_until_terminating(
         &mut self,
-        call: Call<T>,
+        mut call: Call<T>,
         error_msg: &'static str,
-        do_work: impl (FnOnce(Call<T>) -> Result<()>) + Send + 'static,
+        do_work: impl (FnOnce(&mut Call<T>) -> Result<()>) + Send + 'static,
     ) {
-        let mut err_call = call.clone();
-        self.worker_spawn(
-            lazy(move |_| {
+        self.worker_spawn(move || {
+            let result = try_scoped(|| {
                 if call.terminating()? {
                     Ok(())
                 } else {
-                    do_work(call)
+                    do_work(&mut call)
                 }
-            })
-            .unwrap_or_else(move |err| {
-                err_call.inject_internal_error(err, error_msg);
-            }),
-        );
+            });
+            if let Err(err) = result {
+                call.inject_internal_error(err, error_msg);
+            }
+        });
     }
 
     fn schedule_work_even_when_terminating(
         &mut self,
-        call: Call<T>,
+        mut call: Call<T>,
         error_msg: &'static str,
-        do_work: impl (FnOnce(Call<T>) -> Result<()>) + Send + 'static,
+        do_work: impl (FnOnce(&mut Call<T>) -> Result<()>) + Send + 'static,
     ) {
-        let mut err_call = call.clone();
-        self.worker_spawn(lazy(move |_| do_work(call)).unwrap_or_else(move |err| {
-            err_call.inject_internal_error(err, error_msg);
-        }));
+        self.worker_spawn(move || {
+            if let Err(err) = do_work(&mut call) {
+                call.inject_internal_error(err, error_msg);
+            }
+        });
     }
 
-    /// Spawn a future on the notify runtime if enabled.
-    fn notify_spawn<F>(&mut self, future: F)
+    /// Spawn a task on the notify thread if it is still running.
+    fn notify_spawn<F>(&mut self, f: F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        if let Some(notify_runtime) = &mut self.notify_runtime {
-            notify_runtime.spawn(future);
+        if !self.notify_thread.stopper().has_been_stopped() {
+            self.notify_thread.send(|_| f());
         }
     }
 
-    /// Shutdown the worker runtime.
+    /// Shutdown the worker thread.
     fn drain_worker_thread(&mut self) {
         debug!("draining worker thread");
-        self.worker_runtime.take();
+        self.worker_thread.stopper().stop_all_and_join();
         debug!("draining worker thread: complete");
     }
 
-    /// Shutdown the notify runtime.
+    /// Shutdown the notify thread.
     fn drain_notify_thread(&mut self) {
         debug!("draining notify thread");
-        self.notify_runtime.take();
+        self.notify_thread.stopper().stop_all_and_join();
         debug!("draining notify thread: complete");
     }
 
@@ -361,7 +332,7 @@ where
         self.schedule_work_until_terminating(
             call,
             "terminate_and_send_hangups_to_all_except_accepted failed",
-            move |mut call| {
+            move |call| {
                 call.send_hangup_via_signaling_to_all(hangup)?;
                 // This blocks.
                 call.terminate_connections_except_accepted(accepted_remote_device_id)?;
@@ -431,69 +402,69 @@ where
         }
     }
 
-    fn notify_application(&mut self, call: Call<T>, event: ApplicationEvent) {
-        let mut err_call = call.clone();
-        let notify_app_future = async move {
-            if call.terminating()? {
-                return Ok(());
+    fn notify_application(&mut self, mut call: Call<T>, event: ApplicationEvent) {
+        self.notify_spawn(move || {
+            let result = try_scoped(|| {
+                if call.terminating()? {
+                    Ok(())
+                } else {
+                    call.notify_application(event)
+                }
+            });
+            if let Err(err) = result {
+                call.inject_internal_error(err, "Notify Application failed");
             }
-            call.notify_application(event)
-        }
-        .unwrap_or_else(move |err| {
-            err_call.inject_internal_error(err, "Notify Application Future failed");
         });
-
-        self.notify_spawn(notify_app_future);
     }
 
-    fn notify_network_route_changed(&mut self, call: Call<T>, network_route: NetworkRoute) {
-        let mut err_call = call.clone();
-        let notify_app_future = async move {
-            if call.terminating()? {
-                return Ok(());
+    fn notify_network_route_changed(&mut self, mut call: Call<T>, network_route: NetworkRoute) {
+        self.notify_spawn(move || {
+            let result = try_scoped(|| {
+                if call.terminating()? {
+                    Ok(())
+                } else {
+                    call.notify_network_route_changed(network_route)
+                }
+            });
+            if let Err(err) = result {
+                call.inject_internal_error(err, "Notify Network Route Changed failed");
             }
-            call.notify_network_route_changed(network_route)
-        }
-        .unwrap_or_else(move |err| {
-            err_call.inject_internal_error(err, "Notify Network Route Changed Future failed");
         });
-
-        self.notify_spawn(notify_app_future);
     }
 
     fn notify_audio_levels(
         &mut self,
-        call: Call<T>,
+        mut call: Call<T>,
         captured_level: AudioLevel,
         received_level: AudioLevel,
     ) {
-        let mut err_call = call.clone();
-        let notify_app_future = async move {
-            if call.terminating()? {
-                return Ok(());
+        self.notify_spawn(move || {
+            let result = try_scoped(|| {
+                if call.terminating()? {
+                    Ok(())
+                } else {
+                    call.notify_audio_levels(captured_level, received_level)
+                }
+            });
+            if let Err(err) = result {
+                call.inject_internal_error(err, "Notify Audio Levels failed");
             }
-            call.notify_audio_levels(captured_level, received_level)
-        }
-        .unwrap_or_else(move |err| {
-            err_call.inject_internal_error(err, "Notify Audio Levels Future failed");
         });
-
-        self.notify_spawn(notify_app_future);
     }
 
-    fn notify_low_bandwidth_for_video(&mut self, call: Call<T>, recovered: bool) {
-        let mut err_call = call.clone();
-        let notify_app_future = async move {
-            if call.terminating()? {
-                return Ok(());
+    fn notify_low_bandwidth_for_video(&mut self, mut call: Call<T>, recovered: bool) {
+        self.notify_spawn(move || {
+            let result = try_scoped(|| {
+                if call.terminating()? {
+                    Ok(())
+                } else {
+                    call.notify_low_bandwidth_for_video(recovered)
+                }
+            });
+            if let Err(err) = result {
+                call.inject_internal_error(err, "Notify Low Bandwidth failed");
             }
-            call.notify_low_bandwidth_for_video(recovered)
-        }
-        .unwrap_or_else(move |err| {
-            err_call.inject_internal_error(err, "Notify Low Bandwidth Future failed");
         });
-
-        self.notify_spawn(notify_app_future);
     }
 
     fn handle_start_call(&mut self, call: Call<T>, state: CallState) -> Result<()> {
@@ -520,7 +491,7 @@ where
 
         if state == CallState::WaitingToProceed {
             call.set_state(CallState::ConnectingBeforeAccepted)?;
-            self.schedule_work_until_terminating(call, "Proceed failed", move |mut call| {
+            self.schedule_work_until_terminating(call, "Proceed failed", move |call| {
                 call.proceed(call_config, audio_levels_interval)
             });
         } else {
@@ -842,7 +813,7 @@ where
                         }
                     }
                     (_, _, ConnectionState::IceFailed) => {
-                        self.schedule_work_until_terminating(call, "Processing connection_failed request failed", move |mut call| {
+                        self.schedule_work_until_terminating(call, "Processing connection_failed request failed", move |call| {
                             call.handle_ice_failed(remote_device_id)
                         });
                     }
@@ -1014,13 +985,11 @@ where
 
     fn handle_internal_error(&mut self, call: Call<T>, error: anyhow::Error) -> Result<()> {
         info!("handle_internal_error():");
-
-        let internal_error_future =
-            lazy(move |_| call.internal_error(error)).unwrap_or_else(move |err: anyhow::Error| {
-                error!("Processing internal error future failed: {}", err);
-            });
-
-        self.worker_spawn(internal_error_future);
+        self.worker_spawn(move || {
+            if let Err(err) = call.internal_error(error) {
+                error!("Processing internal error failed: {}", err);
+            }
+        });
         Ok(())
     }
 
@@ -1059,13 +1028,13 @@ where
         mut call: Call<T>,
         sync: Arc<(Mutex<bool>, Condvar)>,
     ) -> Result<()> {
-        if let Some(worker_runtime) = &mut self.worker_runtime {
-            CallStateMachine::<T>::sync_thread("worker", worker_runtime)?;
+        if !self.worker_thread.stopper().has_been_stopped() {
+            CallStateMachine::<T>::sync_thread("worker", &self.worker_thread)?;
         } else {
             call.wait_for_terminate()?;
         }
-        if let Some(notify_runtime) = &mut self.notify_runtime {
-            CallStateMachine::<T>::sync_thread("notify", notify_runtime)?;
+        if !self.notify_thread.stopper().has_been_stopped() {
+            CallStateMachine::<T>::sync_thread("notify", &self.notify_thread)?;
         }
 
         let (mutex, condvar) = &*sync;

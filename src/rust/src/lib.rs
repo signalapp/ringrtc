@@ -12,9 +12,6 @@
 //!
 
 #[macro_use]
-extern crate futures;
-
-#[macro_use]
 extern crate log;
 
 #[macro_use]

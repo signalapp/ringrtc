@@ -77,7 +77,7 @@ impl RelayServer {
         };
 
         Ok(Self {
-            actor: Actor::start(stopper.clone(), move |_actor| {
+            actor: Actor::start("RelayServer", stopper.clone(), move |_actor| {
                 Ok(RelayServerState {
                     client,
                     rt,

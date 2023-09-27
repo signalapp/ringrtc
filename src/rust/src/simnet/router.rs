@@ -99,7 +99,7 @@ struct RouterState {
 impl Router {
     pub fn start(stopper: &Stopper) -> Result<Self> {
         Ok(Self {
-            actor: Actor::start(stopper.clone(), move |_| {
+            actor: Actor::start("simnet-router", stopper.clone(), move |_| {
                 Ok(RouterState {
                     send_link_by_ip: HashMap::new(),
                     receive_link_by_ip: HashMap::new(),
@@ -201,7 +201,7 @@ impl Link {
         );
         let leaky_bucket = LeakyBucket::start(config.clone(), receiver, stopper.clone())?;
         Ok(Self {
-            actor: Actor::start(stopper, move |actor| {
+            actor: Actor::start("simnet-Link", stopper, move |actor| {
                 Ok(LinkState {
                     actor,
                     config,
@@ -264,7 +264,7 @@ impl LeakyBucket {
         let queued_size_clone = queued_size.clone();
         Ok(Self {
             config,
-            actor: Actor::start(stopper, move |_| {
+            actor: Actor::start("simnet-LeakyBucket", stopper, move |_| {
                 Ok(LeakyBucketState {
                     queued_size: queued_size_clone,
                     receiver,

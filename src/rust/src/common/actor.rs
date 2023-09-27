@@ -26,6 +26,7 @@ pub struct Actor<State> {
 
 impl<State: 'static> Actor<State> {
     pub fn start(
+        name: impl Into<String>,
         stopper: Stopper,
         gen_state: impl FnOnce(Actor<State>) -> Result<State> + Send + 'static,
     ) -> Result<Self> {
@@ -43,7 +44,7 @@ impl<State: 'static> Actor<State> {
         let actor_to_register = actor.clone();
         let actor_to_return = actor.clone();
         // Moves in actor and stopped
-        let join_handle = thread::spawn(move || {
+        let join_handle = thread::Builder::new().name(name.into()).spawn(move || {
             let mut state = match gen_state(actor) {
                 Ok(state) => state,
                 Err(e) => {
@@ -92,7 +93,7 @@ impl<State: 'static> Actor<State> {
                     (received_task.run)(&mut state);
                 }
             }
-        });
+        })?;
         stopper_to_register.register_actor(
             Box::new(actor_to_register),
             stopped_to_register,
@@ -213,6 +214,7 @@ trait Stop: Send {
 #[derive(Clone, Default)]
 pub struct Stopper {
     actors: Arc<Mutex<Vec<StoppableActorHandle>>>,
+    has_been_stopped: Arc<AtomicBool>,
 }
 
 struct StoppableActorHandle {
@@ -225,6 +227,7 @@ impl Stopper {
     pub fn new() -> Self {
         Self {
             actors: Arc::new(Mutex::new(Vec::new())),
+            has_been_stopped: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -251,6 +254,7 @@ impl Stopper {
     // Stop all the Actors associated with this Stopper, but don't
     // join (wait for them to end)
     pub fn stop_all_without_joining(&self) -> Vec<thread::JoinHandle<()>> {
+        self.has_been_stopped.store(true, atomic::Ordering::Relaxed);
         let mut actors = self
             .actors
             .lock()
@@ -278,5 +282,9 @@ impl Stopper {
         for join_handle in join_handles {
             join_handle.join().expect("Failed to join thread.");
         }
+    }
+
+    pub fn has_been_stopped(&self) -> bool {
+        self.has_been_stopped.load(atomic::Ordering::Relaxed)
     }
 }

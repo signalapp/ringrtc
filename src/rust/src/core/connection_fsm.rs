@@ -45,23 +45,18 @@
 //! - ObserverErrors
 
 use std::fmt;
-use std::pin::Pin;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use futures::future::lazy;
-use futures::future::TryFutureExt;
-use futures::task::Poll;
-use futures::{Future, Stream};
-
+use crate::common::actor::{Actor, Stopper};
 use crate::common::{
     units::DataRate, CallDirection, CallId, ConnectionState, DataMode, Result, RingBench,
 };
 use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
 use crate::core::platform::Platform;
 use crate::core::signaling;
-use crate::core::util::TaskQueueRuntime;
+use crate::core::util::try_scoped;
 use crate::error::RingRtcError;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
@@ -203,7 +198,7 @@ impl fmt::Debug for ConnectionEvent {
 ///
 /// The ConnectionStateMachine object consumes incoming ConnectionEvents and
 /// either handles them immediately or dispatches them to other
-/// runtimes for further processing.
+/// threads for further processing.
 ///
 /// For "quick" reactions to incoming events, the FSM handles them
 /// immediately on its own thread.
@@ -213,17 +208,16 @@ impl fmt::Debug for ConnectionEvent {
 ///
 /// For notification events targeted for the observer, the FSM
 /// dispatches the work to a "notify" thread.
-#[derive(Debug)]
 pub struct ConnectionStateMachine<T>
 where
     T: Platform,
 {
     /// Receiving end of EventPump.
     event_stream: EventStream<T>,
-    /// Runtime for processing long running requests.
-    worker_runtime: Option<TaskQueueRuntime>,
-    /// Runtime for processing observer notification events.
-    notify_runtime: Option<TaskQueueRuntime>,
+    /// Thread for processing long running requests.
+    worker_thread: Actor<()>,
+    /// Thread for processing observer notification events.
+    notify_thread: Actor<()>,
     /// The sequence number and last received remote sender status.
     /// We process remote sender status messages larger than the seqnum
     /// and fire events when the status changes.
@@ -243,119 +237,96 @@ where
     }
 }
 
-impl<T> Future for ConnectionStateMachine<T>
-where
-    T: Platform,
-{
-    type Output = Result<()>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut futures::task::Context) -> Poll<Self::Output> {
-        loop {
-            let pin_stream = Pin::new(&mut self.event_stream);
-            match ready!(pin_stream.poll_next(cx)) {
-                Some((cc, event)) => {
-                    let state = cc.state()?;
-                    match (state, &event) {
-                        (
-                            ConnectionState::ConnectedAndAccepted,
-                            ConnectionEvent::ReceivedSenderStatusViaRtpData(_, _, _),
-                        )
-                        | (
-                            ConnectionState::ConnectedAndAccepted,
-                            ConnectionEvent::ReceivedReceiverStatusViaRtpData(_, _, _),
-                        )
-                        | (
-                            ConnectionState::ConnectedAndAccepted,
-                            ConnectionEvent::ReceivedAcceptedViaRtpData(_),
-                        ) => {
-                            // Don't log periodic, ignored events at high verbosity
-                            debug!("state: {}, event: {}", state, event)
-                        }
-                        _ => info!("state: {}, event: {}", state, event),
-                    };
-                    if let Err(e) = self.handle_event(cc, state, event) {
-                        error!("Handling event failed: {:?}", e);
-                    }
-                }
-                None => {
-                    debug!("No more events!");
-                    break;
-                }
-            }
-        }
-
-        // The event stream is closed and we are done
-        Poll::Ready(Ok(()))
-    }
-}
-
 impl<T> ConnectionStateMachine<T>
 where
     T: Platform,
 {
     /// Creates a new ConnectionStateMachine object.
     pub fn new(event_stream: EventStream<T>) -> Result<ConnectionStateMachine<T>> {
-        let mut fsm = ConnectionStateMachine {
+        Ok(ConnectionStateMachine {
             event_stream,
-            worker_runtime: Some(TaskQueueRuntime::new("connection-fsm-worker")?),
-            notify_runtime: Some(TaskQueueRuntime::new("connection-fsm-notify")?),
+            worker_thread: Actor::start("connection-fsm-worker", Stopper::new(), |_| Ok(()))?,
+            notify_thread: Actor::start("connection-fsm-notify", Stopper::new(), |_| Ok(()))?,
             last_remote_sender_status: None,
             last_remote_receiver_status: None,
-        };
-
-        if let Some(worker_runtime) = &mut fsm.worker_runtime {
-            ConnectionStateMachine::<T>::sync_thread("worker", worker_runtime)?;
-        }
-        if let Some(notify_runtime) = &mut fsm.notify_runtime {
-            ConnectionStateMachine::<T>::sync_thread("notify", notify_runtime)?;
-        }
-
-        Ok(fsm)
+        })
     }
 
-    /// Synchronize a runtime with the main FSM thread.
-    fn sync_thread(label: &'static str, runtime: &mut TaskQueueRuntime) -> Result<()> {
+    pub fn run(&mut self) {
+        while let Some((cc, event)) = self.event_stream.recv() {
+            let state = match cc.state() {
+                Ok(state) => state,
+                Err(e) => {
+                    error!("Handling event failed: {}", e);
+                    return;
+                }
+            };
+            match (state, &event) {
+                (
+                    ConnectionState::ConnectedAndAccepted,
+                    ConnectionEvent::ReceivedSenderStatusViaRtpData(_, _, _),
+                )
+                | (
+                    ConnectionState::ConnectedAndAccepted,
+                    ConnectionEvent::ReceivedReceiverStatusViaRtpData(_, _, _),
+                )
+                | (
+                    ConnectionState::ConnectedAndAccepted,
+                    ConnectionEvent::ReceivedAcceptedViaRtpData(_),
+                ) => {
+                    // Don't log periodic, ignored events at high verbosity
+                    debug!("state: {}, event: {}", state, event)
+                }
+                _ => info!("state: {}, event: {}", state, event),
+            };
+            if let Err(e) = self.handle_event(cc, state, event) {
+                error!("Handling event failed: {}", e);
+            }
+        }
+    }
+
+    /// Synchronize a thread with the main FSM thread.
+    fn sync_thread(label: &'static str, actor: &Actor<()>) -> Result<()> {
         let (tx, rx) = mpsc::channel();
-        let future = lazy(move |_| {
+        actor.send(move |_| {
             info!("syncing {} thread: {:?}", label, thread::current().id());
             let _ = tx.send(true);
         });
-        runtime.spawn(future);
         let _ = rx.recv_timeout(Duration::from_secs(2))?;
         Ok(())
     }
 
-    /// Spawn a future on the worker runtime if enabled.
-    fn worker_spawn<F>(&mut self, future: F)
+    /// Spawn a task on the worker thread if it is still running.
+    fn worker_spawn<F>(&mut self, f: F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        if let Some(worker_runtime) = &mut self.worker_runtime {
-            worker_runtime.spawn(future);
+        if !self.worker_thread.stopper().has_been_stopped() {
+            self.worker_thread.send(move |_| f());
         }
     }
 
-    /// Spawn a future on the notify runtime if enabled.
-    fn notify_spawn<F>(&mut self, future: F)
+    /// Spawn a task on the notify thread if it is still running.
+    fn notify_spawn<F>(&mut self, f: F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        if let Some(notify_runtime) = &mut self.notify_runtime {
-            notify_runtime.spawn(future);
+        if !self.notify_thread.stopper().has_been_stopped() {
+            self.notify_thread.send(move |_| f());
         }
     }
 
-    /// Shutdown the worker runtime.
+    /// Shutdown the worker thread.
     fn drain_worker_thread(&mut self) {
         debug!("draining worker thread");
-        self.worker_runtime.take();
+        self.worker_thread.stopper().stop_all_and_join();
         debug!("draining worker thread: complete");
     }
 
-    /// Shutdown the notify runtime.
+    /// Shutdown the notify thread.
     fn drain_notify_thread(&mut self) {
         debug!("draining notify thread");
-        self.notify_runtime.take();
+        self.notify_thread.stopper().stop_all_and_join();
         debug!("draining notify thread: complete");
     }
 
@@ -426,19 +397,18 @@ where
         }
     }
 
-    fn notify_observer(&mut self, connection: Connection<T>, event: ConnectionObserverEvent) {
-        let mut err_connection = connection.clone();
-        let notify_observer_future = lazy(move |_| {
-            if connection.terminating()? {
-                return Ok(());
+    fn notify_observer(&mut self, mut connection: Connection<T>, event: ConnectionObserverEvent) {
+        self.notify_spawn(move || {
+            let result = try_scoped(|| {
+                if connection.terminating()? {
+                    return Ok(());
+                }
+                connection.notify_observer(event)
+            });
+            if let Err(err) = result {
+                connection.inject_internal_error(err, "Notify Observer failed");
             }
-            connection.notify_observer(event)
-        })
-        .unwrap_or_else(move |err| {
-            err_connection.inject_internal_error(err, "Notify Observer Future failed");
         });
-
-        self.notify_spawn(notify_observer_future);
     }
 
     fn handle_connected_and_accepted_for_the_first_time(
@@ -478,19 +448,18 @@ where
         connection.notify_observer(ConnectionObserverEvent::RemoteSenderStatusChanged(status))
     }
 
-    fn send_accepted_via_rtp_data(&mut self, connection: Connection<T>) {
-        let mut err_connection = connection.clone();
-        let connected_future = lazy(move |_| {
-            if connection.terminating()? {
-                return Ok(());
+    fn send_accepted_via_rtp_data(&mut self, mut connection: Connection<T>) {
+        self.worker_spawn(move || {
+            let result = try_scoped(|| {
+                if connection.terminating()? {
+                    return Ok(());
+                }
+                connection.send_accepted_via_rtp_data()
+            });
+            if let Err(err) = result {
+                connection.inject_internal_error(err, "Sending Accepted failed");
             }
-            connection.send_accepted_via_rtp_data()?;
-            Ok(())
-        })
-        .unwrap_or_else(move |err| {
-            err_connection.inject_internal_error(err, "Sending Connected failed");
         });
-        self.worker_spawn(connected_future);
     }
 
     fn handle_received_hangup(
@@ -730,18 +699,16 @@ where
 
     fn handle_send_hangup_via_rtp_data(
         &mut self,
-        connection: Connection<T>,
+        mut connection: Connection<T>,
         state: ConnectionState,
         hangup: signaling::Hangup,
     ) -> Result<()> {
         if state.can_send_hangup_via_rtp() {
-            let mut err_connection = connection.clone();
-            let hangup_future = lazy(move |_| connection.send_hangup_via_rtp_data(hangup))
-                .unwrap_or_else(move |err| {
-                    err_connection.inject_internal_error(err, "Sending Hangup failed");
-                });
-
-            self.worker_spawn(hangup_future);
+            self.worker_spawn(move || {
+                if let Err(err) = connection.send_hangup_via_rtp_data(hangup) {
+                    connection.inject_internal_error(err, "Sending Hangup failed");
+                }
+            });
         } else {
             self.unexpected_state(state, "SendHangupViaRtpData");
         }
@@ -750,24 +717,23 @@ where
 
     fn handle_update_sender_status(
         &mut self,
-        connection: Connection<T>,
+        mut connection: Connection<T>,
         state: ConnectionState,
         sender_status: signaling::SenderStatus,
     ) -> Result<()> {
         if state.connected_or_reconnecting() {
             // notify the peer via an RTP data message.
-            let mut err_connection = connection.clone();
-            let send_sender_status_future = lazy(move |_| {
-                if connection.terminating()? {
-                    return Ok(());
+            self.worker_spawn(move || {
+                let result = try_scoped(|| {
+                    if connection.terminating()? {
+                        return Ok(());
+                    }
+                    connection.update_sender_status_from_fsm(sender_status)
+                });
+                if let Err(err) = result {
+                    connection.inject_internal_error(err, "Sending local sender status failed");
                 }
-                connection.update_sender_status_from_fsm(sender_status)
-            })
-            .unwrap_or_else(move |err| {
-                err_connection.inject_internal_error(err, "Sending local sender status failed");
             });
-
-            self.worker_spawn(send_sender_status_future);
         } else {
             self.unexpected_state(state, "UpdateSenderStatus");
         };
@@ -776,31 +742,29 @@ where
 
     fn handle_update_data_mode(
         &mut self,
-        connection: Connection<T>,
+        mut connection: Connection<T>,
         state: ConnectionState,
         data_mode: DataMode,
     ) -> Result<()> {
         if state.connecting_or_connected() {
-            let mut err_connection = connection.clone();
-            let update_data_mode_future = lazy(move |_| {
-                if connection.terminating()? {
-                    return Ok(());
+            self.worker_spawn(move || {
+                let result = try_scoped(|| {
+                    if connection.terminating()? {
+                        return Ok(());
+                    }
+                    connection.update_data_mode(data_mode)
+                });
+                if let Err(err) = result {
+                    connection.inject_internal_error(err, "Updating data mode failed");
                 }
-
-                connection.update_data_mode(data_mode)
-            })
-            .unwrap_or_else(move |err| {
-                err_connection.inject_internal_error(err, "Updating data mode failed");
             });
-
-            self.worker_spawn(update_data_mode_future);
         };
         Ok(())
     }
 
     fn handle_local_ice_candidates(
         &mut self,
-        connection: Connection<T>,
+        mut connection: Connection<T>,
         state: ConnectionState,
         candidates: Vec<signaling::IceCandidate>,
     ) -> Result<()> {
@@ -813,18 +777,17 @@ where
         if state.can_send_ice_candidates() {
             // send signal message to the other side with the ICE
             // candidate.
-            let mut err_connection = connection.clone();
-            let ice_future = lazy(move |_| {
-                if connection.terminating()? {
-                    return Ok(());
+            self.worker_spawn(move || {
+                let result = try_scoped(|| {
+                    if connection.terminating()? {
+                        return Ok(());
+                    }
+                    connection.buffer_local_ice_candidates(candidates)
+                });
+                if let Err(err) = result {
+                    connection.inject_internal_error(err, "ICE buffering failed");
                 }
-                connection.buffer_local_ice_candidates(candidates)
-            })
-            .unwrap_or_else(move |err| {
-                err_connection.inject_internal_error(err, "IceFuture failed");
             });
-
-            self.worker_spawn(ice_future);
         } else {
             self.unexpected_state(state, "LocalIceCandidate");
         }
@@ -946,18 +909,18 @@ where
         connection: Connection<T>,
         error: anyhow::Error,
     ) -> Result<()> {
-        let notify_error_future = lazy(move |_| {
-            if connection.terminating()? {
-                return Ok(());
+        self.notify_spawn(move || {
+            let result = try_scoped(|| {
+                if connection.terminating()? {
+                    return Ok(());
+                }
+                connection.internal_error(error)
+            });
+            if let Err(err) = result {
+                error!("Notify Error failed: {}", err);
+                // Nothing else we can do here.
             }
-            connection.internal_error(error)
-        })
-        .unwrap_or_else(|err| {
-            error!("Notify Error Future failed: {}", err);
-            // Nothing else we can do here.
         });
-
-        self.notify_spawn(notify_error_future);
         Ok(())
     }
 
@@ -968,18 +931,17 @@ where
         stream: MediaStream,
     ) -> Result<()> {
         if state.connecting_or_connected() {
-            let mut err_connection = connection.clone();
-            let add_stream_future = lazy(move |_| {
-                if connection.terminating()? {
-                    return Ok(());
+            self.worker_spawn(move || {
+                let result = try_scoped(|| {
+                    if connection.terminating()? {
+                        return Ok(());
+                    }
+                    connection.handle_received_incoming_media(stream)
+                });
+                if let Err(err) = result {
+                    connection.inject_internal_error(err, "Adding media stream failed");
                 }
-                connection.handle_received_incoming_media(stream)
-            })
-            .unwrap_or_else(move |err| {
-                err_connection.inject_internal_error(err, "Add Media Stream Future failed");
             });
-
-            self.worker_spawn(add_stream_future);
         } else {
             self.unexpected_state(state, "ReceivedIncomingMedia");
         }
@@ -987,12 +949,8 @@ where
     }
 
     fn handle_synchronize(&mut self, sync: Arc<(Mutex<bool>, Condvar)>) -> Result<()> {
-        if let Some(worker_runtime) = &mut self.worker_runtime {
-            ConnectionStateMachine::<T>::sync_thread("worker", worker_runtime)?;
-        }
-        if let Some(notify_runtime) = &mut self.notify_runtime {
-            ConnectionStateMachine::<T>::sync_thread("notify", notify_runtime)?;
-        }
+        ConnectionStateMachine::<T>::sync_thread("worker", &self.worker_thread)?;
+        ConnectionStateMachine::<T>::sync_thread("notify", &self.notify_thread)?;
 
         let (mutex, condvar) = &*sync;
         if let Ok(mut sync_complete) = mutex.lock() {

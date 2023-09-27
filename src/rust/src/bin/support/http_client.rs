@@ -18,7 +18,7 @@ pub struct HttpClient {
 impl HttpClient {
     pub fn start() -> Self {
         Self {
-            actor: Actor::start(Stopper::new(), |_| Ok(())).unwrap(),
+            actor: Actor::start("HttpClient", Stopper::new(), |_| Ok(())).unwrap(),
         }
     }
 }

@@ -1059,7 +1059,7 @@ impl Client {
         let client = Self {
             client_id,
             group_id: group_id.clone(),
-            actor: Actor::start(stopper, move |actor| {
+            actor: Actor::start("group-call-client", stopper, move |actor| {
                 debug!("group_call::Client(inner)::new(client_id: {})", client_id);
 
                 let peer_connection_factory = match peer_connection_factory {

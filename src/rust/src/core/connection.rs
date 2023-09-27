@@ -7,15 +7,12 @@
 
 use std::fmt;
 use std::net::SocketAddr;
+use std::sync::mpsc::{Receiver, SyncSender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
 use bytes::{BufMut, BytesMut};
-
-use futures::channel::mpsc::{Receiver, Sender};
-use futures::channel::oneshot;
-use futures::future::{self, TryFutureExt};
 
 use prost::Message;
 
@@ -24,6 +21,7 @@ use rand::rngs::OsRng;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
+use crate::common::actor::{Actor, Stopper};
 use crate::common::{
     units::DataRate, CallConfig, CallDirection, CallId, CallMediaType, ConnectionState, DataMode,
     DeviceId, Result, RingBench,
@@ -33,7 +31,7 @@ use crate::core::call_mutex::CallMutex;
 use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
 use crate::core::platform::Platform;
 use crate::core::signaling;
-use crate::core::util::{ptr_as_box, redact_string, TaskQueueRuntime};
+use crate::core::util::{ptr_as_box, redact_string};
 use crate::error::RingRtcError;
 use crate::protobuf;
 
@@ -189,25 +187,7 @@ where
     }
 }
 
-/// Encapsulates the FSM and runtime upon which a Connection runs.
-struct Context {
-    /// Runtime upon which the ConnectionStateMachine runs.
-    pub worker_runtime: TaskQueueRuntime,
-}
-
-impl Context {
-    fn new() -> Result<Self> {
-        Ok(Self {
-            worker_runtime: TaskQueueRuntime::new("connection-fsm-worker")?,
-        })
-    }
-}
-
-/// A mpsc::Receiver for receiving ConnectionEvents in the
-/// [ConnectionStateMachine](../call_fsm/struct.CallStateMachine.html)
-///
-/// The event stream is the tuple (Connection, ConnectionEvent).
-pub type EventStream<T> = Receiver<(Connection<T>, ConnectionEvent)>;
+pub type EventStream<T> = crate::core::util::EventStream<(Connection<T>, ConnectionEvent)>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConnectionType {
@@ -251,22 +231,9 @@ impl ConnectionId {
     }
 }
 
-/// Encapsulates the tick timer and runtime.
-struct TickContext {
-    /// Tokio runtime for background task execution of periodic ticks.
-    runtime: Option<TaskQueueRuntime>,
-    /// Sender for the "cancel" event.
-    cancel_sender: Option<oneshot::Sender<()>>,
-}
-
-impl TickContext {
-    /// Create a new TickContext.
-    pub fn new() -> Self {
-        Self {
-            runtime: None,
-            cancel_sender: None,
-        }
-    }
+struct TickState {
+    ticks_elapsed: u64,
+    actor: Actor<TickState>,
 }
 
 // Don't send below this, even if the remote side requests lower.
@@ -375,7 +342,7 @@ where
     /// The parent Call object of this connection.
     call: Arc<CallMutex<Call<T>>>,
     /// Injects events into the [ConnectionStateMachine](../call_fsm/struct.CallStateMachine.html).
-    fsm_sender: Sender<(Connection<T>, ConnectionEvent)>,
+    fsm_sender: SyncSender<(Connection<T>, ConnectionEvent)>,
     /// Kept around between new() and start() so we can delay the starting of the FSM
     /// but queue events that happen while starting.
     fsm_receiver: Option<Receiver<(Connection<T>, ConnectionEvent)>>,
@@ -387,8 +354,6 @@ where
     direction: CallDirection,
     /// The current state of the call connection
     state: Arc<CallMutex<ConnectionState>>,
-    /// Execution context for the call connection FSM
-    context: Arc<CallMutex<Context>>,
     /// Ancillary WebRTC data.
     webrtc: Arc<CallMutex<WebRtcData<T>>>,
     /// State that decides what bandwidth to use for sending.
@@ -406,7 +371,7 @@ where
     /// This is write-once configuration and will not change.
     connection_type: ConnectionType,
     /// Execution context for the connection periodic timer tick
-    tick_context: Arc<CallMutex<TickContext>>,
+    tick_context: Actor<TickState>,
     /// The accumulated state of sending messages over RTP data
     accumulated_rtp_data_message: Arc<CallMutex<protobuf::rtp_data::Message>>,
     /// We use this to drop out-of-order messages.
@@ -488,7 +453,6 @@ where
             connection_id: self.connection_id,
             direction: self.direction,
             state: Arc::clone(&self.state),
-            context: Arc::clone(&self.context),
             webrtc: Arc::clone(&self.webrtc),
             bandwidth_controller: Arc::clone(&self.bandwidth_controller),
             call_config: self.call_config.clone(),
@@ -497,7 +461,7 @@ where
             buffered_local_ice_candidates: Arc::clone(&self.buffered_local_ice_candidates),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
             connection_type: self.connection_type,
-            tick_context: Arc::clone(&self.tick_context),
+            tick_context: self.tick_context.clone(),
             accumulated_rtp_data_message: Arc::clone(&self.accumulated_rtp_data_message),
             last_received_rtp_data_timestamp: Arc::clone(&self.last_received_rtp_data_timestamp),
             incoming_video_sink: self.incoming_video_sink.clone(),
@@ -520,9 +484,8 @@ where
         audio_levels_interval: Option<Duration>,
         incoming_video_sink: Option<Box<dyn VideoSink>>,
     ) -> Result<Self> {
-        // Create a FSM runtime for this connection.
-        let context = Context::new()?;
-        let (fsm_sender, fsm_receiver) = futures::channel::mpsc::channel(256);
+        // Create a FSM worker for this connection.
+        let (fsm_sender, fsm_receiver) = std::sync::mpsc::sync_channel(256);
 
         let call_id = call.call_id();
         let direction = call.direction();
@@ -549,7 +512,6 @@ where
             direction,
             call: Arc::new(CallMutex::new(call, "call")),
             state: Arc::new(CallMutex::new(ConnectionState::NotYetStarted, "state")),
-            context: Arc::new(CallMutex::new(context, "context")),
             webrtc: Arc::new(CallMutex::new(webrtc, "webrtc")),
             bandwidth_controller: Arc::new(CallMutex::new(
                 BandwidthController {
@@ -574,7 +536,12 @@ where
             )),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             connection_type,
-            tick_context: Arc::new(CallMutex::new(TickContext::new(), "tick_context")),
+            tick_context: Actor::start("tick_context", Stopper::new(), |actor| {
+                Ok(TickState {
+                    ticks_elapsed: 0,
+                    actor,
+                })
+            })?,
             accumulated_rtp_data_message: Arc::new(CallMutex::new(
                 protobuf::rtp_data::Message::default(),
                 "accumulated_rtp_data_message",
@@ -595,12 +562,12 @@ where
     }
 
     fn start_fsm(&mut self) -> Result<()> {
-        let context = self.context.lock()?;
         if let Some(fsm_receiver) = self.fsm_receiver.take() {
             info!("Starting Connection FSM for {}", self.connection_id);
-            let connection_fsm = ConnectionStateMachine::new(fsm_receiver)?
-                .unwrap_or_else(|e| info!("connection state machine returned error: {}", e));
-            context.worker_runtime.spawn(connection_fsm);
+            let mut connection_fsm = ConnectionStateMachine::new(fsm_receiver.into())?;
+            thread::Builder::new()
+                .name("connection-fsm-worker".to_string())
+                .spawn(move || connection_fsm.run())?;
         } else {
             warn!(
                 "Starting Connection FSM for {} more than once",
@@ -1128,41 +1095,31 @@ where
         Ok(())
     }
 
-    /// Creates a runtime for statistics to run a timer for the given interval
-    /// duration to invoke PeerConnection::GetStats which will pass specific stats
-    /// to StatsObserver::on_stats_complete.
+    /// Creates a timer that will regularly invoke the [`tick`](Self::tick) method.
+    ///
+    /// The timer will continue until the call is terminated.
     pub fn start_tick(&self) -> Result<()> {
-        // Define the future for stats logging.
-        let mut connection = self.clone();
-
-        let (cancel_sender, cancel_receiver) = oneshot::channel::<()>();
-        let tick_forever = async move {
-            let mut interval = tokio::time::interval(TICK_INTERVAL);
-            let mut ticks_elapsed = 0u64;
-            loop {
-                interval.tick().await;
-                ticks_elapsed += 1;
-                if let Err(err) = connection.tick(ticks_elapsed) {
-                    warn!("connection.tick() failed: {:?}", err);
-                }
+        fn tick_and_reschedule<T: Platform>(
+            mut connection: Connection<T>,
+            tick_context: &mut TickState,
+        ) {
+            tick_context.ticks_elapsed += 1;
+            if let Err(err) = connection.tick(tick_context.ticks_elapsed) {
+                warn!("connection.tick() failed: {:?}", err);
             }
-        };
-        let tick_until_cancel = async move {
-            pin_mut!(tick_forever);
-            future::select(tick_forever, cancel_receiver).await;
-        };
-        debug!("start_tick(): starting the tick runtime");
-        let mut tick_context = self.tick_context.lock()?;
-        match tick_context.runtime {
-            Some(_) => warn!("start_tick(): tick timer already running"),
-            None => {
-                // Start the tick runtime.
-                let runtime = TaskQueueRuntime::new("connection-tick")?;
-                runtime.spawn(tick_until_cancel);
-                tick_context.runtime = Some(runtime);
-                tick_context.cancel_sender = Some(cancel_sender);
-            }
+            tick_context
+                .actor
+                .send_delayed(TICK_INTERVAL, move |tick_context| {
+                    tick_and_reschedule(connection, tick_context)
+                });
         }
+
+        debug!("start_tick():");
+        let connection = self.clone();
+        self.tick_context
+            .send_delayed(TICK_INTERVAL, move |tick_context| {
+                tick_and_reschedule(connection, tick_context)
+            });
 
         Ok(())
     }
@@ -1595,16 +1552,19 @@ where
 
     /// Send a ConnectionEvent to the internal FSM.
     fn inject_event(&mut self, event: ConnectionEvent) -> Result<()> {
-        if self.fsm_sender.is_closed() {
-            // The stream is closed, just eat the request
-            debug!(
-                "cc.inject_event(): stream is closed while sending: {}",
-                event
-            );
-            return Ok(());
-        }
-        self.fsm_sender.try_send((self.clone(), event))?;
-        Ok(())
+        self.fsm_sender
+            .try_send((self.clone(), event))
+            .or_else(|err| match &err {
+                std::sync::mpsc::TrySendError::Disconnected((_state, event)) => {
+                    // The stream is closed, just eat the request
+                    debug!(
+                        "cc.inject_event(): stream is closed while sending: {}",
+                        event
+                    );
+                    Ok(())
+                }
+                _ => Err(anyhow::anyhow!("{err}")),
+            })
     }
 
     /// Terminate the connection.
@@ -1623,16 +1583,8 @@ where
 
         self.set_state(ConnectionState::Terminated)?;
 
-        // Stop the timer runtime, if any.
-        let mut tick_context = self.tick_context.lock()?;
-        if let Some(rt) = tick_context.runtime.take() {
-            info!("close(): stopping the tick runtime");
-            // Send the cancel event
-            let sender = tick_context.cancel_sender.take().unwrap();
-            let _ = sender.send(());
-            // Drop the runtime to shut it down
-            std::mem::drop(rt);
-        }
+        // Stop the timer thread, if any.
+        self.tick_context.stopper().stop_all_and_join();
 
         // Free up webrtc related resources.
         let mut webrtc = self.webrtc.lock()?;
@@ -2042,10 +1994,12 @@ where
     fn inject_synchronize(&mut self) -> Result<()> {
         match self.state()? {
             ConnectionState::Terminating => {
-                if self.fsm_sender.is_closed() {
-                    self.wait_for_terminate()?;
-                    return Ok(());
-                }
+                // This may be redundant, but that's okay in this case:
+                // it's always acceptable to cut off a terminated connection early in a test.
+                // (A terminated call may still have cleanup work.)
+                self.inject_event(ConnectionEvent::Terminate)?;
+                self.wait_for_terminate()?;
+                return Ok(());
             }
             ConnectionState::Terminated => {
                 info!(

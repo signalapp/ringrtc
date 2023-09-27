@@ -7,14 +7,15 @@
 
 use std::collections::{hash_map, HashMap};
 use std::fmt;
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{
+    atomic::AtomicBool, atomic::Ordering, mpsc::SyncSender, Arc, Condvar, Mutex, MutexGuard,
+};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use futures::channel::mpsc::{Receiver, Sender};
-use futures::future::TryFutureExt;
 use x25519_dalek::StaticSecret;
 
+use crate::common::actor::{Actor, Stopper};
 use crate::common::{
     ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DeviceId, Result,
 };
@@ -24,35 +25,11 @@ use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionObserverEvent, ConnectionType};
 use crate::core::platform::Platform;
 use crate::core::signaling;
-use crate::core::util::TaskQueueRuntime;
 use crate::error::RingRtcError;
 use crate::webrtc::ice_gatherer::IceGatherer;
 use crate::webrtc::media::MediaStream;
 use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
-
-/// Encapsulates the FSM and runtime upon which a Call runs.
-struct Context {
-    /// Runtime upon which the CallStateMachine runs.
-    pub worker_runtime: TaskQueueRuntime,
-    /// Runtime that manages timing out a call.
-    pub timeout_runtime: Option<TaskQueueRuntime>,
-}
-
-impl Context {
-    fn new() -> Result<Self> {
-        Ok(Self {
-            worker_runtime: TaskQueueRuntime::new("fsm-worker")?,
-            timeout_runtime: None,
-        })
-    }
-
-    fn close(&mut self) {
-        info!("stopping timeout runtime");
-        self.timeout_runtime.take();
-        info!("stopping timeout runtime: complete");
-    }
-}
 
 /// Container for incoming call data, retained briefly while an
 /// underlying Connection object is created and initialized.
@@ -63,11 +40,7 @@ struct PendingCall {
     pub ice_candidates: Vec<signaling::IceCandidate>,
 }
 
-/// A mpsc::Receiver for receiving CallEvents in the
-/// [CallStateMachine](../call_fsm/struct.CallStateMachine.html)
-///
-/// The event stream is the tuple (Call, CallEvent).
-pub type EventStream<T> = Receiver<(Call<T>, CallEvent)>;
+pub type EventStream<T> = crate::core::util::EventStream<(Call<T>, CallEvent)>;
 
 struct ForkingState<T>
 where
@@ -108,9 +81,9 @@ where
     /// Pending remote offer and associated data.  Incoming calls only.
     pending_call: Arc<CallMutex<Option<PendingCall>>>,
     /// Injects events into the [CallStateMachine](../call_fsm/struct.CallStateMachine.html).
-    fsm_sender: Sender<(Call<T>, CallEvent)>,
-    /// Execution context for the call FSM
-    fsm_context: Arc<CallMutex<Context>>,
+    fsm_sender: SyncSender<(Call<T>, CallEvent)>,
+    /// Allows stopping the call timeout early.
+    timeout_stopper: Stopper,
     /// Collection of connections for this call
     connection_map: Arc<CallMutex<HashMap<DeviceId, Connection<T>>>>,
     /// Condition variable used at termination to quiesce and synchronize the FSM.
@@ -198,7 +171,7 @@ where
             active_device_id: Arc::clone(&self.active_device_id),
             pending_call: Arc::clone(&self.pending_call),
             fsm_sender: self.fsm_sender.clone(),
-            fsm_context: Arc::clone(&self.fsm_context),
+            timeout_stopper: self.timeout_stopper.clone(),
             connection_map: Arc::clone(&self.connection_map),
             terminate_condvar: Arc::clone(&self.terminate_condvar),
             did_send_offer: Arc::clone(&self.did_send_offer),
@@ -226,12 +199,12 @@ where
     ) -> Result<Self> {
         info!("new(): call_id: {}", call_id);
 
-        // create a FSM runtime for this connection
-        let fsm_context = Context::new()?;
-        let (fsm_sender, fsm_receiver) = futures::channel::mpsc::channel(256);
-        let call_fsm = CallStateMachine::new(fsm_receiver)?
-            .unwrap_or_else(|e| info!("call state machine returned error: {}", e));
-        fsm_context.worker_runtime.spawn(call_fsm);
+        // create a FSM worker for this connection
+        let (fsm_sender, fsm_receiver) = std::sync::mpsc::sync_channel(256);
+        let mut call_fsm = CallStateMachine::new(fsm_receiver.into())?;
+        thread::Builder::new()
+            .name("fsm-worker".to_string())
+            .spawn(move || call_fsm.run())?;
 
         let call = Self {
             call_manager: Arc::new(CallMutex::new(call_manager, "call_manager")),
@@ -245,7 +218,7 @@ where
             active_device_id: Arc::new(CallMutex::new(None, "active_device_id")),
             pending_call: Arc::new(CallMutex::new(None, "pending_call")),
             fsm_sender,
-            fsm_context: Arc::new(CallMutex::new(fsm_context, "fsm_context")),
+            timeout_stopper: Stopper::new(),
             connection_map: Arc::new(CallMutex::new(HashMap::new(), "connection_map")),
             terminate_condvar: Arc::new((Mutex::new(false), Condvar::new())),
             did_send_offer: Arc::new(AtomicBool::new(false)),
@@ -259,22 +232,15 @@ where
     /// Start a timer to terminate the call if setup takes too long.
     pub fn start_timeout_timer(&self, time_out_period: Duration) -> Result<()> {
         if !time_out_period.is_zero() {
-            if let Ok(mut fsm_context) = self.fsm_context.lock() {
-                let timeout_runtime = TaskQueueRuntime::new("fsm-timeout")?;
-
-                let mut call_clone = self.clone();
-                let when = Instant::now() + time_out_period;
-                let call_timeout_future = async move {
-                    let sleep = tokio::time::sleep_until(tokio::time::Instant::from_std(when));
-                    sleep.await;
+            let mut call_clone = self.clone();
+            Actor::start("fsm-timeout", self.timeout_stopper.clone(), |_| Ok(()))?.send_delayed(
+                time_out_period,
+                move |_| {
                     call_clone
                         .inject_call_timeout()
                         .unwrap_or_else(|e| error!("Inject call timeout failed: {:?}", e))
-                };
-
-                timeout_runtime.spawn(call_timeout_future);
-                fsm_context.timeout_runtime = Some(timeout_runtime);
-            }
+                },
+            )
         }
 
         Ok(())
@@ -841,16 +807,19 @@ where
     ///
     /// Using the `EventPump` send a CallEvent to the internal FSM.
     fn inject_event(&mut self, event: CallEvent) -> Result<()> {
-        if self.fsm_sender.is_closed() {
-            // The stream is closed, just eat the request
-            debug!(
-                "cc.inject_event(): stream is closed while sending: {}",
-                event
-            );
-            return Ok(());
-        }
-        self.fsm_sender.try_send((self.clone(), event))?;
-        Ok(())
+        self.fsm_sender
+            .try_send((self.clone(), event))
+            .or_else(|err| match &err {
+                std::sync::mpsc::TrySendError::Disconnected((_state, event)) => {
+                    // The stream is closed, just eat the request
+                    debug!(
+                        "cc.inject_event(): stream is closed while sending: {}",
+                        event
+                    );
+                    Ok(())
+                }
+                _ => Err(anyhow::anyhow!("{err}")),
+            })
     }
 
     /// Terminate Connections for this Call.
@@ -946,9 +915,7 @@ where
 
         self.terminate_connections()?;
 
-        // close down the FSM context
-        let mut fsm_context = self.fsm_context.lock()?;
-        fsm_context.close();
+        self.timeout_stopper.stop_all_and_join();
 
         self.set_state(CallState::Terminated)?;
 
@@ -1112,10 +1079,8 @@ where
     fn inject_synchronize(&mut self) -> Result<()> {
         match self.state()? {
             CallState::Terminating => {
-                if self.fsm_sender.is_closed() {
-                    self.wait_for_terminate()?;
-                    return Ok(());
-                }
+                self.wait_for_terminate()?;
+                return Ok(());
             }
             CallState::Terminated => {
                 info!(
