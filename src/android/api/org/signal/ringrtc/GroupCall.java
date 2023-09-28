@@ -607,6 +607,21 @@ public final class GroupCall {
 
     /**
      *
+     * Send a reaction to the group.
+     *
+     * @param value The string representing the reaction
+     *
+     * @throws CallException for native code failures
+     */
+    public void react(@NonNull String value)
+        throws CallException {
+        Log.i(TAG, "react(): value: " + value);
+
+        ringrtcReact(nativeCallManager, this.clientId, value);
+    }
+
+    /**
+     *
      * Callback from RingRTC when the group call object needs an updated
      * membership proof. Called via the CallManager.
      *
@@ -704,6 +719,10 @@ public final class GroupCall {
      */
     void handleLowBandwidthForVideo(boolean recovered) {
         this.observer.onLowBandwidthForVideo(this, recovered);
+    }
+
+    void handleReactions(List<Reaction> reactions) {
+        this.observer.onReactions(this, reactions);
     }
 
     /**
@@ -1125,6 +1144,19 @@ public final class GroupCall {
     }
 
     /**
+     * A class used to store a reaction from a group member.
+     */
+    public static class Reaction {
+        public long demuxId;
+        public @NonNull String value;
+
+        public Reaction(long demuxId, @NonNull String value) {
+            this.demuxId = demuxId;
+            this.value = value;
+        }
+    }
+
+    /**
      * The client must provide an observer for each group call object
      * which is used to convey callbacks and notifications from
      * RingRTC.
@@ -1163,6 +1195,14 @@ public final class GroupCall {
          *                   reliably
          */
         void onLowBandwidthForVideo(GroupCall groupCall, boolean recovered);
+
+        /**
+         * Notification that one or more reactions were received.
+         *
+         * @param reactions A list of reactions received by the client ordered
+         *                  from oldest to newest.
+         */
+        void onReactions(GroupCall groupCall, List<Reaction> reactions);
 
         /**
          * Notification that the remote device states have changed.
@@ -1301,5 +1341,11 @@ public final class GroupCall {
         void ringrtcSetMembershipProof(long nativeCallManager,
                                        long clientId,
                                        byte[] proof)
+        throws CallException;
+
+    private native
+        void ringrtcReact(long nativeCallManager,
+                          long clientId,
+                          String value)
         throws CallException;
 }

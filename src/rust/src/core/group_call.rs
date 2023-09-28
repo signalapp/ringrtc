@@ -258,6 +258,8 @@ pub trait Observer {
 
     fn handle_low_bandwidth_for_video(&self, client_id: ClientId, recovered: bool);
 
+    fn handle_reactions(&self, client_id: ClientId, reactions: Vec<Reaction>);
+
     // This will be the last callback.
     // The observer can assume the Call is completely shut down and can be deleted.
     fn handle_ended(&self, client_id: ClientId, reason: EndReason);
@@ -443,6 +445,13 @@ pub enum EndReason {
     IceFailedAfterConnected,
     ServerChangedDemuxId,
     HasMaxDevices,
+}
+
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct Reaction {
+    pub demux_id: DemuxId,
+    pub value: String,
 }
 
 // The callbacks from the Client to the "SFU client" for the group call.
@@ -979,6 +988,8 @@ struct State {
 
     outgoing_ring_state: OutgoingRingState,
 
+    reactions: Vec<Reaction>,
+
     actor: Actor<State>,
 }
 
@@ -1028,6 +1039,8 @@ const BWE_INTERVAL: Duration = Duration::from_secs(1);
 /// How much to delay the check for the bandwidth estimate to allow for the estimator to update
 /// when connecting.
 const DELAYED_BWE_CHECK: Duration = Duration::from_secs(10);
+
+const REACTION_STRING_MAX_SIZE: usize = 256;
 
 impl Client {
     #[allow(clippy::too_many_arguments)]
@@ -1176,6 +1189,8 @@ impl Client {
                     forwarding_videos: HashMap::default(),
 
                     outgoing_ring_state: OutgoingRingState::Unknown,
+
+                    reactions: Vec::new(),
 
                     actor,
                 })
@@ -1326,6 +1341,12 @@ impl Client {
             }
             BweCheckState::Disabled => {}
             BweCheckState::None => {}
+        }
+
+        if !state.reactions.is_empty() {
+            state
+                .observer
+                .handle_reactions(state.client_id, std::mem::take(&mut state.reactions));
         }
 
         state.actor.send_delayed(TICK_INTERVAL, Self::tick);
@@ -2173,6 +2194,33 @@ impl Client {
                 Self::request_remote_devices_as_soon_as_possible(state);
             }
         })
+    }
+
+    pub fn react(&self, value: String) {
+        debug!(
+            "group_call::Client(outer)::react(client_id: {} value: {})",
+            self.client_id, value
+        );
+
+        if value.is_empty() {
+            warn!("group_call::Client(outer)::react value is empty");
+        } else if value.len() > REACTION_STRING_MAX_SIZE {
+            warn!(
+                "group_call::Client(outer)::react reaction value size of {} exceeded allowed size of {}",
+                value.len(),
+                REACTION_STRING_MAX_SIZE
+            );
+        } else {
+            self.actor.send(move |state| {
+                debug!(
+                    "group_call::Client(inner)::react(client_id: {}, value: {})",
+                    state.client_id, value
+                );
+                if let Err(err) = Self::send_reaction(state, value) {
+                    warn!("Failed to send reaction: {:?}", err);
+                }
+            });
+        }
     }
 
     // Pulled into a named private method because it can be called in many places.
@@ -3192,6 +3240,16 @@ impl Client {
         Self::broadcast_data_through_sfu(state, &heartbeat_msg.encode_to_vec())
     }
 
+    fn send_reaction(state: &mut State, value: String) -> Result<()> {
+        let react_msg = protobuf::group_call::DeviceToDevice {
+            reaction: {
+                Some(protobuf::group_call::device_to_device::Reaction { value: Some(value) })
+            },
+            ..Default::default()
+        };
+        Self::broadcast_data_through_sfu(state, &react_msg.encode_to_vec())
+    }
+
     fn send_leave_to_sfu(state: &mut State) {
         use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
         let msg = DeviceToSfu {
@@ -3392,6 +3450,9 @@ impl Client {
                                 Self::handle_leaving_received(state, demux_id);
                             });
                         }
+                        if let Some(reaction) = msg.reaction {
+                            self.handle_reaction(demux_id, reaction);
+                        }
                     } else {
                         warn!(
                             "Ignoring received RTP data because decoding failed. demux_id: {}",
@@ -3589,6 +3650,30 @@ impl Client {
                         Self::request_remote_devices_as_soon_as_possible(state);
                     });
             }
+        }
+    }
+
+    fn handle_reaction(
+        &self,
+        demux_id: DemuxId,
+        reaction: protobuf::group_call::device_to_device::Reaction,
+    ) {
+        trace!("handle_reaction(): demux_id = {}", demux_id);
+
+        let value = reaction.value.unwrap_or(String::new());
+
+        if value.is_empty() {
+            warn!("group_call::handle_reaction reaction value is empty");
+        } else if value.len() > REACTION_STRING_MAX_SIZE {
+            warn!(
+                "group_call::handle_reaction reaction value size of {} exceeded allowed size of {}",
+                value.len(),
+                REACTION_STRING_MAX_SIZE
+            );
+        } else {
+            self.actor.send(move |state| {
+                state.reactions.push(Reaction { demux_id, value });
+            });
         }
     }
 
@@ -4106,6 +4191,7 @@ mod tests {
         connecting: Event,
         joined: Event,
         peek_changed: Event,
+        reactions_called: Event,
         remote_devices_changed: Event,
         remote_devices: Arc<CallMutex<Vec<RemoteDeviceState>>>,
         remote_devices_at_join_time: Arc<CallMutex<Vec<RemoteDeviceState>>>,
@@ -4113,11 +4199,14 @@ mod tests {
         send_rates: Arc<CallMutex<Option<SendRates>>>,
         ended: Waitable<EndReason>,
         era_id: Option<String>,
+        reactions: Arc<CallMutex<Vec<Reaction>>>,
 
         request_membership_proof_invocation_count: Arc<AtomicU64>,
         request_group_members_invocation_count: Arc<AtomicU64>,
         handle_remote_devices_changed_invocation_count: Arc<AtomicU64>,
         handle_audio_levels_invocation_count: Arc<AtomicU64>,
+        handle_reactions_invocation_count: Arc<AtomicU64>,
+        reactions_count: Arc<AtomicU64>,
     }
 
     impl FakeObserver {
@@ -4136,6 +4225,7 @@ mod tests {
                 connecting: Event::default(),
                 joined: Event::default(),
                 peek_changed: Event::default(),
+                reactions_called: Event::default(),
                 remote_devices_changed: Event::default(),
                 remote_devices: Arc::new(CallMutex::new(Vec::new(), "FakeObserver remote devices")),
                 remote_devices_at_join_time: Arc::new(CallMutex::new(
@@ -4149,10 +4239,13 @@ mod tests {
                 send_rates: Arc::new(CallMutex::new(None, "FakeObserver send rates")),
                 ended: Waitable::default(),
                 era_id: None,
+                reactions: Arc::new(CallMutex::new(Default::default(), "FakeObserver reactions")),
                 request_membership_proof_invocation_count: Default::default(),
                 request_group_members_invocation_count: Default::default(),
                 handle_remote_devices_changed_invocation_count: Default::default(),
                 handle_audio_levels_invocation_count: Default::default(),
+                handle_reactions_invocation_count: Default::default(),
+                reactions_count: Default::default(),
             }
         }
 
@@ -4211,6 +4304,11 @@ mod tests {
             send_rates.clone()
         }
 
+        fn reactions(&self) -> Vec<Reaction> {
+            let reactions = self.reactions.lock().expect("Lock reactions to read it");
+            reactions.clone()
+        }
+
         /// Gets the number of `request_membership_proof` since last checked.
         fn request_membership_proof_invocation_count(&self) -> u64 {
             self.request_membership_proof_invocation_count
@@ -4233,6 +4331,15 @@ mod tests {
         fn handle_audio_levels_invocation_count(&self) -> u64 {
             self.handle_audio_levels_invocation_count
                 .swap(0, Ordering::Relaxed)
+        }
+
+        fn handle_reactions_invocation_count(&self) -> u64 {
+            self.handle_reactions_invocation_count
+                .swap(0, Ordering::Relaxed)
+        }
+
+        fn reactions_count(&self) -> u64 {
+            self.reactions_count.swap(0, Ordering::Relaxed)
         }
     }
 
@@ -4298,6 +4405,20 @@ mod tests {
         }
 
         fn handle_low_bandwidth_for_video(&self, _client_id: ClientId, _recovered: bool) {}
+
+        fn handle_reactions(&self, _client_id: ClientId, reactions: Vec<Reaction>) {
+            let mut owned = self
+                .reactions
+                .lock()
+                .expect("Lock reactions to handle update");
+            *owned = reactions.clone();
+
+            self.handle_reactions_invocation_count
+                .fetch_add(1, Ordering::Relaxed);
+            self.reactions_count
+                .fetch_add(reactions.len() as u64, Ordering::Relaxed);
+            self.reactions_called.set();
+        }
 
         fn handle_peek_changed(
             &self,
@@ -5106,6 +5227,30 @@ mod tests {
 
     fn hash_set<T: std::hash::Hash + Eq + Clone>(vals: impl IntoIterator<Item = T>) -> HashSet<T> {
         vals.into_iter().collect()
+    }
+
+    #[test]
+    fn reactions() {
+        let client1 = TestClient::new(vec![1], 1);
+        client1.connect_join_and_wait_until_joined();
+
+        let client2 = TestClient::new(vec![2], 2);
+        client2.connect_join_and_wait_until_joined();
+
+        set_group_and_wait_until_applied(&[&client1, &client2]);
+
+        let value = "hello".to_string();
+
+        client1.client.react(value.clone());
+        assert!(client2
+            .observer
+            .reactions_called
+            .wait(Duration::from_secs(5)));
+        assert_eq!(1, client2.observer.handle_reactions_invocation_count());
+        assert_eq!(1, client2.observer.reactions_count());
+        assert_eq!(1, client2.observer.reactions().len());
+        assert_eq!(value, client2.observer.reactions()[0].value.to_string());
+        assert_eq!(1, client2.observer.reactions()[0].demux_id)
     }
 
     #[test]

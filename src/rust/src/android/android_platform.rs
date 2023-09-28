@@ -39,6 +39,7 @@ const CALL_MANAGER_CLASS: &str = "CallManager";
 const HTTP_HEADER_CLASS: &str = jni_class_name!(org.signal.ringrtc.HttpHeader);
 const HTTP_RESULT_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallManager::HttpResult);
 const PEEK_INFO_CLASS: &str = jni_class_name!(org.signal.ringrtc.PeekInfo);
+const REACTION_CLASS: &str = jni_class_name!(org.signal.ringrtc.GroupCall::Reaction);
 const REMOTE_DEVICE_STATE_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.GroupCall::RemoteDeviceState);
 const RECEIVED_AUDIO_LEVEL_CLASS: &str =
@@ -1040,7 +1041,6 @@ impl Platform for AndroidPlatform {
 
         if let Ok(env) = self.java_env() {
             // Set a frame capacity of min (5) + objects (2) + elements (N * 2 per level).
-            // TODO: If this creates too much garbage, use arrays instead of Lists.
             let capacity = (5 + 2 + received_levels.len() * 2) as i32;
             let _ = env.with_local_frame(capacity, || {
                 // create Java List<GroupCall.ReceivedAudioLevel>
@@ -1116,6 +1116,75 @@ impl Platform for AndroidPlatform {
                     jni_args!((
                         client_id as jlong => long,
                         recovered => boolean,
+                    ) -> void),
+                );
+
+                Ok(JObject::null())
+            });
+        }
+    }
+
+    fn handle_reactions(
+        &self,
+        client_id: group_call::ClientId,
+        reactions: Vec<group_call::Reaction>,
+    ) {
+        trace!(
+            "handle_reactions(): client_id: {}, reactions: {:?}",
+            client_id,
+            reactions,
+        );
+
+        if let Ok(env) = self.java_env() {
+            // Set a frame capacity of min (5) + objects (1) + elements (N * 2 per reaction).
+            let capacity = (5 + 1 + reactions.len() * 2) as i32;
+            let _ = env.with_local_frame(capacity, || {
+                // create Java List<GroupCall.Reaction>
+                let reaction_class = match self.class_cache.get_class(REACTION_CLASS) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                };
+
+                let reactions_list = match jni_new_arraylist(&env, reactions.len()) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                };
+
+                for reaction in reactions {
+                    let jni_value = JObject::from(env.new_string(reaction.value)?);
+                    let args = jni_args!((
+                        reaction.demux_id as jlong => long,
+                        jni_value => java.lang.String,
+                    ) -> void);
+
+                    let reaction_obj = match env.new_object(reaction_class, args.sig, &args.args) {
+                        Ok(v) => v,
+                        Err(error) => {
+                            error!("jni_reaction: {:?}", error);
+                            continue;
+                        }
+                    };
+
+                    let result = reactions_list.add(reaction_obj);
+                    if result.is_err() {
+                        error!("jni_reaction.add: {:?}", result.err());
+                        continue;
+                    }
+                }
+
+                let _ = jni_call_method(
+                    &env,
+                    self.jni_call_manager.as_obj(),
+                    "handleReactions",
+                    jni_args!((
+                        client_id as jlong => long,
+                        JObject::from(reactions_list) => java.util.List,
                     ) -> void),
                 );
 
@@ -1411,6 +1480,7 @@ impl AndroidPlatform {
             HTTP_HEADER_CLASS,
             HTTP_RESULT_CLASS,
             PEEK_INFO_CLASS,
+            REACTION_CLASS,
             REMOTE_DEVICE_STATE_CLASS,
             RECEIVED_AUDIO_LEVEL_CLASS,
             jni_class_name!(java.lang.Boolean),

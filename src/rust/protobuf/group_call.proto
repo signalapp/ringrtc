@@ -28,11 +28,17 @@ message DeviceToDevice {
     // When sent over signaling, you must indicate which device is leaving.
     optional uint32 demux_id = 1;
   }
- 
+
+  // Sent over RTP data
+  message Reaction {
+    optional string value = 1;
+  }
+
   optional bytes group_id = 1;
   optional MediaKey media_key = 2;
   optional Heartbeat heartbeat = 3;
   optional Leaving leaving = 4;
+  optional Reaction reaction = 5;
 }
 
 message DeviceToSfu {

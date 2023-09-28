@@ -709,6 +709,18 @@ pub fn set_membership_proof(
     Ok(())
 }
 
+pub fn react(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    value: String,
+) -> Result<()> {
+    info!("react(): value: {}", value);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.react(client_id, value);
+    Ok(())
+}
+
 pub fn validate_offer(
     opaque: Option<Vec<u8>>,
     age_sec: u64,

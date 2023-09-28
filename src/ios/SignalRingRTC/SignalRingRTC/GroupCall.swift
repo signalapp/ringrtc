@@ -76,6 +76,17 @@ public class ReceivedAudioLevel {
     }
 }
 
+@available(iOSApplicationExtension, unavailable)
+public class Reaction {
+    public let demuxId: UInt32
+    public let value: String
+
+    init(demuxId: UInt32, value: String) {
+        self.demuxId = demuxId
+        self.value = value
+    }
+}
+
 /// All remote devices in a group call and their associated state.
 @available(iOSApplicationExtension, unavailable)
 public class RemoteDeviceState: Hashable {
@@ -185,6 +196,12 @@ public protocol GroupCallDelegate: AnyObject {
      * bandwidth is high enough to send video reliably.
      */
     func groupCall(onLowBandwidthForVideo groupCall: GroupCall, recovered: Bool)
+
+    /**
+     * Indication that the application should notify the user that one or more reactions
+     * were received.
+     */
+    func groupCall(onReactions groupCall: GroupCall, reactions: [Reaction])
 
     /**
      * Indication that the application can retrieve an updated PeekInfo which
@@ -422,6 +439,21 @@ public class GroupCall {
         self.videoTrack?.isEnabled = false
 
         ringrtcDisconnect(self.ringRtcCallManager, clientId)
+    }
+
+    public func react(value: String) {
+        AssertIsOnMainThread()
+        Logger.debug("react")
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        let valueSlice = allocatedAppByteSliceFromString(maybe_string: value)
+        defer { valueSlice.bytes?.deallocate() }
+
+        ringrtcReact(self.ringRtcCallManager, clientId, valueSlice)
     }
 
     private var _isOutgoingAudioMuted = false
@@ -707,6 +739,12 @@ public class GroupCall {
         AssertIsOnMainThread()
 
         self.delegate?.groupCall(onLowBandwidthForVideo: self, recovered: recovered)
+    }
+
+    func handleReactions(reactions: [Reaction]) {
+        AssertIsOnMainThread()
+
+        self.delegate?.groupCall(onReactions: self, reactions: reactions)
     }
 
     func handleJoinStateChanged(joinState: JoinState) {

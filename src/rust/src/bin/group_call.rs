@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use log::info;
 
+use ringrtc::core::group_call::Reaction;
 use ringrtc::{
     common::units::DataRate,
     core::{
@@ -133,6 +134,10 @@ impl group_call::Observer for Observer {
     }
 
     fn handle_low_bandwidth_for_video(&self, _client_id: ClientId, _recovered: bool) {
+        // ignore
+    }
+
+    fn handle_reactions(&self, _client_id: ClientId, _reactions: Vec<Reaction>) {
         // ignore
     }
 }

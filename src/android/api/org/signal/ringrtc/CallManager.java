@@ -1683,6 +1683,17 @@ public class CallManager {
   }
 
   @CalledByNative
+  private void handleReactions(long clientId, List<GroupCall.Reaction> reactions) {
+    GroupCall groupCall = this.groupCallByClientId.get(clientId);
+    if (groupCall == null) {
+      Log.w(TAG, "groupCall not found by clientId: " + clientId);
+      return;
+    }
+
+    groupCall.handleReactions(reactions);
+  }
+
+  @CalledByNative
   private void handleJoinStateChanged(long clientId, GroupCall.JoinState joinState) {
     Log.i(TAG, "handleJoinStateChanged():");
 

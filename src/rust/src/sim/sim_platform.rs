@@ -542,6 +542,14 @@ impl Platform for SimPlatform {
         info!("handle_low_bandwidth_for_video(): {}", recovered);
     }
 
+    fn handle_reactions(
+        &self,
+        _client_id: group_call::ClientId,
+        reactions: Vec<group_call::Reaction>,
+    ) {
+        info!("handle_reactions(): {:?}", reactions);
+    }
+
     fn handle_join_state_changed(
         &self,
         _client_id: group_call::ClientId,

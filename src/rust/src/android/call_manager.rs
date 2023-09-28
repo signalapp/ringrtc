@@ -1222,3 +1222,16 @@ pub fn set_membership_proof(
     call_manager.set_membership_proof(client_id, proof);
     Ok(())
 }
+
+pub fn react(
+    env: &JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    value: JString,
+) -> Result<()> {
+    let value = env.get_string(value)?.into();
+    info!("react(): value: {}", value);
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.react(client_id, value);
+    Ok(())
+}

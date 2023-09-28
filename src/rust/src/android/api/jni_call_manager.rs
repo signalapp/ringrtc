@@ -1142,6 +1142,28 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetMembershipP
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcReact(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    value: JString,
+) {
+    match call_manager::react(
+        &env,
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        value,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallId_ringrtcFromEraId(
     env: JNIEnv,
     _class: JClass,

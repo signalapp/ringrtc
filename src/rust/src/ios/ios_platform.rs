@@ -15,12 +15,14 @@ use crate::common::{
 };
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
+use crate::core::group_call::{ClientId, Reaction};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::ios::api::call_manager_interface::{
     AppByteSlice, AppCallContext, AppConnectionInterface, AppIceCandidateArray, AppInterface,
-    AppObject, AppOptionalBool, AppOptionalUInt32, AppReceivedAudioLevel,
-    AppReceivedAudioLevelArray, AppRemoteDeviceState, AppRemoteDeviceStateArray, AppUuidArray,
+    AppObject, AppOptionalBool, AppOptionalUInt32, AppReaction, AppReactionsArray,
+    AppReceivedAudioLevel, AppReceivedAudioLevelArray, AppRemoteDeviceState,
+    AppRemoteDeviceStateArray, AppUuidArray,
 };
 use crate::ios::error::IosError;
 use crate::ios::ios_media_stream::IosMediaStream;
@@ -609,6 +611,29 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             client_id,
             recovered,
+        );
+    }
+
+    fn handle_reactions(&self, client_id: ClientId, reactions: Vec<Reaction>) {
+        trace!("handle_reactions(): {:?}", reactions);
+
+        let mut app_reactions: Vec<AppReaction> = Vec::new();
+        for reaction in reactions.iter() {
+            app_reactions.push(AppReaction {
+                demuxId: reaction.demux_id,
+                value: app_slice_from_str(Some(&reaction.value)),
+            });
+        }
+
+        let app_reactions_array = AppReactionsArray {
+            reactions: app_reactions.as_ptr(),
+            count: app_reactions.len(),
+        };
+
+        (self.app_interface.handleReactions)(
+            self.app_interface.object,
+            client_id,
+            app_reactions_array,
         );
     }
 

@@ -38,6 +38,7 @@ export {
   PeekDeviceInfo,
   PeekInfo,
   PeekStatusCodes,
+  Reaction,
   RemoteDeviceState,
   RingCancelReason,
   RingRTCType,

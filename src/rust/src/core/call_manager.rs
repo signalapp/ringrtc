@@ -28,7 +28,7 @@ use crate::common::{
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
-use crate::core::group_call::{HttpSfuClient, Observer};
+use crate::core::group_call::{HttpSfuClient, Observer, Reaction};
 use crate::core::platform::Platform;
 use crate::core::signaling::ReceivedOffer;
 use crate::core::util::{try_scoped, uuid_to_string};
@@ -2607,6 +2607,11 @@ where
         platform_handler!(self, handle_low_bandwidth_for_video, client_id, recovered);
     }
 
+    fn handle_reactions(&self, client_id: group_call::ClientId, reactions: Vec<Reaction>) {
+        info!("handle_reactions():");
+        platform_handler!(self, handle_reactions, client_id, reactions);
+    }
+
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
         info!("handle_ended({:?}):", reason);
         platform_handler!(self, handle_ended, client_id, reason);
@@ -2904,6 +2909,7 @@ where
     forward_group_call_api!(connect());
     forward_group_call_api!(join());
     forward_group_call_api!(leave());
+    forward_group_call_api!(react(value: String));
     forward_group_call_api!(disconnect());
     forward_group_call_api!(group_ring => ring(recipient: Option<UserId>));
     forward_group_call_api!(set_outgoing_audio_muted(muted: bool));

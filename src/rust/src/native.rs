@@ -255,6 +255,7 @@ pub enum GroupUpdate {
         group_id: group_call::ClientId,
         recovered: bool,
     },
+    Reactions(group_call::ClientId, Vec<group_call::Reaction>),
 }
 
 impl fmt::Display for GroupUpdate {
@@ -277,6 +278,9 @@ impl fmt::Display for GroupUpdate {
             }
             GroupUpdate::LowBandwidthForVideo { recovered, .. } => {
                 format!("LowBandwidthForVideo({})", recovered)
+            }
+            GroupUpdate::Reactions(_, reactions) => {
+                format!("Reactions({:?})", reactions)
             }
         };
         write!(f, "({})", display)
@@ -894,6 +898,18 @@ impl Platform for NativePlatform {
             group_id: client_id,
             recovered,
         });
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_reactions(
+        &self,
+        client_id: group_call::ClientId,
+        reactions: Vec<group_call::Reaction>,
+    ) {
+        trace!("NativePlatform::handle_reactions(): id: {}", client_id);
+        let result = self.send_group_update(GroupUpdate::Reactions(client_id, reactions));
         if result.is_err() {
             error!("{:?}", result.err());
         }

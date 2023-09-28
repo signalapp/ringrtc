@@ -13,6 +13,7 @@ class TestGroupCallDelegate: GroupCallDelegate {
     var onRemoteDeviceStatesChangedCount = 0
     var onAudioLevelsCount = 0
     var onLowBandwidthForVideoCount = 0
+    var onReactionsCount = 0
     var onPeekChangedCount = 0
     var onEndedCount = 0
     var lastOnEndedReason: GroupCallEndReason? = nil
@@ -39,6 +40,10 @@ class TestGroupCallDelegate: GroupCallDelegate {
 
     func groupCall(onLowBandwidthForVideo groupCall: GroupCall, recovered: Bool) {
         onLowBandwidthForVideoCount += 1
+    }
+
+    func groupCall(onReactions groupCall: GroupCall, reactions: [Reaction]) {
+        onReactionsCount += 1
     }
 
     func groupCall(onPeekChanged groupCall: GroupCall) {

@@ -36,6 +36,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute)
     func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel])
     func handleLowBandwidthForVideo(clientId: UInt32, recovered: Bool)
+    func handleReactions(clientId: UInt32, reactions: [Reaction])
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
@@ -92,6 +93,7 @@ class CallManagerInterface {
             handleNetworkRouteChanged: callManagerInterfaceHandleNetworkRouteChanged,
             handleAudioLevels: callManagerInterfaceHandleAudioLevels,
             handleLowBandwidthForVideo: callManagerInterfaceHandleLowBandwidthForVideo,
+            handleReactions: callManagerInterfaceHandleReactions,
             handleJoinStateChanged: callManagerInterfaceHandleJoinStateChanged,
             handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
@@ -296,6 +298,14 @@ class CallManagerInterface {
         }
 
         delegate.handleLowBandwidthForVideo(clientId: clientId, recovered: recovered)
+    }
+
+    func handleReactions(clientId: UInt32, reactions: [Reaction]) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleReactions(clientId: clientId, reactions: reactions)
     }
 
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
@@ -875,6 +885,32 @@ func callManagerInterfaceHandleLowBandwidthForVideo(object: UnsafeMutableRawPoin
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     obj.handleLowBandwidthForVideo(clientId: clientId, recovered: recovered)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceHandleReactions(object: UnsafeMutableRawPointer?, clientId: UInt32, reactions: AppReactionsArray) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    var finalReactions: [Reaction] = []
+
+    for index in 0..<reactions.count {
+        let reaction = reactions.reactions[index]
+
+        guard let value = reaction.value.asString() else {
+            Logger.debug("missing reaction for demuxId: 0x\(String(reaction.demuxId, radix: 16))")
+            continue
+        }
+
+        finalReactions.append(Reaction(demuxId: reaction.demuxId, value: value))
+    }
+
+    if !finalReactions.isEmpty {
+        obj.handleReactions(clientId: clientId, reactions: finalReactions)
+    }
 }
 
 @available(iOSApplicationExtension, unavailable)

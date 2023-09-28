@@ -133,6 +133,7 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).leave = Native.cm_leave;
 (NativeCallManager.prototype as any).disconnect = Native.cm_disconnect;
 (NativeCallManager.prototype as any).groupRing = Native.cm_groupRing;
+(NativeCallManager.prototype as any).groupReact = Native.cm_groupReact;
 (NativeCallManager.prototype as any).setOutgoingAudioMuted =
   Native.cm_setOutgoingAudioMuted;
 (NativeCallManager.prototype as any).setOutgoingVideoMuted =
@@ -171,6 +172,11 @@ type GroupCallUserId = Buffer;
 export interface PeekDeviceInfo {
   demuxId: number;
   userId?: GroupCallUserId;
+}
+
+export interface Reaction {
+  demuxId: number;
+  value: string;
 }
 
 export interface PeekInfo {
@@ -1266,6 +1272,19 @@ export class RingRTCType {
   }
 
   // Called by Rust
+  handleReactions(
+    clientId: GroupCallClientId,
+    reactions: Array<Reaction>
+  ): void {
+    sillyDeadlockProtection(() => {
+      const groupCall = this._groupCallByClientId.get(clientId);
+      if (groupCall) {
+        groupCall.handleReactions(reactions);
+      }
+    });
+  }
+
+  // Called by Rust
   handleRemoteDevicesChanged(
     clientId: GroupCallClientId,
     remoteDeviceStates: Array<RemoteDeviceState>
@@ -2222,6 +2241,7 @@ export interface GroupCallObserver {
   onRemoteDeviceStatesChanged(groupCall: GroupCall): void;
   onAudioLevels(groupCall: GroupCall): void;
   onLowBandwidthForVideo(groupCall: GroupCall, recovered: boolean): void;
+  onReactions(groupCall: GroupCall, reactions: Array<Reaction>): void;
   onPeekChanged(groupCall: GroupCall): void;
   onEnded(groupCall: GroupCall, reason: GroupCallEndReason): void;
 }
@@ -2300,6 +2320,11 @@ export class GroupCall {
     this._localDeviceState.audioMuted = muted;
     this._callManager.setOutgoingAudioMuted(this._clientId, muted);
     this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by UI
+  react(value: string): void {
+    this._callManager.groupReact(this._clientId, value);
   }
 
   // Called by UI
@@ -2443,6 +2468,10 @@ export class GroupCall {
 
   handleLowBandwidthForVideo(recovered: boolean): void {
     this._observer.onLowBandwidthForVideo(this, recovered);
+  }
+
+  handleReactions(reactions: Array<Reaction>): void {
+    this._observer.onReactions(this, reactions);
   }
 
   // Called by Rust via RingRTC object
@@ -2785,6 +2814,7 @@ export interface CallManager {
     isScreenShare: boolean
   ): void;
   groupRing(clientId: GroupCallClientId, recipient: Buffer | undefined): void;
+  groupReact(clientId: GroupCallClientId, value: string): void;
   resendMediaKeys(clientId: GroupCallClientId): void;
   setDataMode(clientId: GroupCallClientId, dataMode: DataMode): void;
   requestVideo(
