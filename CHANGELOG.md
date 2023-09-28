@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.33.0
+
+- Update to webrtc 5845h
+  - Add Rust_setIncomingAudioMuted
+  - Update libvpx dependency
+
+- Group Calls: Add Reactions feature
+
+- Group Calls: Prevent comfort noise from getting stuck on
+
+- Replace TaskQueueRuntime with Actors
+
+- Call Sim: Speed up chart generation
+
 ## v2.32.1
 
 - Desktop: Downgrade dependency for client
@@ -10,10 +24,8 @@
 
 - Increase max video receive resolution for desktop
 
-- Update webrtc to 5845e
-  - Disable audio and media flow by default
-
 - Update webrtc to 5845f
+  - Disable audio and media flow by default
   - Allow configuration of audio jitter buffer max target delay
 
 - iOS: Stop building for Catalyst
@@ -36,7 +48,7 @@
 
 - Generate license files for WebRTC builds
 
-- call-sim: Add test iterations and mos averaging
+- Call Sim: Add test iterations and mos averaging
 
 - Add more audio configuration and control
 
