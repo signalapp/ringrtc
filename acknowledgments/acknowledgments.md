@@ -1631,7 +1631,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## bitflags 2.4.0, log 0.4.20, regex 1.9.4, regex-automata 0.3.7, regex-syntax 0.6.29, regex-syntax 0.7.5, semver 0.9.0
+## bitflags 2.4.0, log 0.4.20, regex 1.9.6, regex-automata 0.3.9, regex-syntax 0.6.29, regex-syntax 0.7.5, semver 0.9.0
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -1662,7 +1662,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## libc 0.2.147
+## libc 0.2.148
 
 ```
 Copyright (c) 2014-2020 The Rust Project Developers
@@ -1811,7 +1811,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## which 4.4.0
+## which 4.4.2
 
 ```
 Copyright (c) 2015 fangyuanziti
@@ -1956,7 +1956,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## hashbrown 0.14.0
+## hashbrown 0.14.1
 
 ```
 Copyright (c) 2016 Amanieu d'Antras
@@ -2049,7 +2049,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## indexmap 2.0.0
+## indexmap 2.0.2
 
 ```
 Copyright (c) 2016--2017
@@ -2235,7 +2235,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## bytes 1.4.0
+## bytes 1.5.0
 
 ```
 Copyright (c) 2018 Carl Lerche
@@ -2297,7 +2297,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## smallvec 1.11.0
+## smallvec 1.11.1
 
 ```
 Copyright (c) 2018 The Servo Project Developers
@@ -2633,6 +2633,31 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
+## toml_edit 0.19.15
+
+```
+Copyright (c) Individual contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
 ## getrandom 0.1.16, rand 0.7.3, rand_chacha 0.2.2, rand_core 0.5.1
 
 ```
@@ -2662,33 +2687,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
-
-```
-
-## toml_edit 0.19.14
-
-```
-MIT License
-
-Copyright (c) 2017 Andronik Ordian
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 ```
 
@@ -2825,7 +2823,7 @@ SOFTWARE.
 
 ```
 
-## anyhow 1.0.75, fastrand 2.0.0, itoa 1.0.9, linux-raw-sys 0.4.5, num_enum 0.7.0, num_enum_derive 0.7.0, once_cell 1.18.0, pin-project-lite 0.2.13, prettyplease 0.1.25, proc-macro-crate 1.3.1, proc-macro2 1.0.66, quote 1.0.33, rustix 0.38.10, serde 1.0.188, serde_derive 1.0.188, serde_json 1.0.105, syn 1.0.109, syn 2.0.29, syn-mid 0.5.4, thiserror 1.0.47, thiserror-impl 1.0.47, unicode-ident 1.0.11
+## anyhow 1.0.75, fastrand 2.0.1, home 0.5.5, itoa 1.0.9, linux-raw-sys 0.4.8, num_enum 0.7.0, num_enum_derive 0.7.0, once_cell 1.18.0, pin-project-lite 0.2.13, prettyplease 0.1.25, proc-macro-crate 1.3.1, proc-macro2 1.0.67, quote 1.0.33, rustix 0.38.15, serde 1.0.188, serde_derive 1.0.188, serde_json 1.0.107, syn 1.0.109, syn 2.0.37, syn-mid 0.5.4, thiserror 1.0.49, thiserror-impl 1.0.49, unicode-ident 1.0.12
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -2930,7 +2928,7 @@ SOFTWARE.
 
 ```
 
-## typenum 1.16.0
+## typenum 1.17.0
 
 ```
 The MIT License (MIT)
@@ -2957,7 +2955,7 @@ SOFTWARE.
 
 ```
 
-## base64 0.13.1, base64 0.21.3
+## base64 0.13.1, base64 0.21.4
 
 ```
 The MIT License (MIT)
@@ -2984,7 +2982,7 @@ THE SOFTWARE.
 
 ```
 
-## aho-corasick 1.0.5, byteorder 1.4.3, memchr 2.6.2, regex-automata 0.1.10
+## aho-corasick 1.1.1, byteorder 1.4.3, memchr 2.6.3, regex-automata 0.1.10
 
 ```
 The MIT License (MIT)
@@ -3146,7 +3144,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## unicode-ident 1.0.11
+## unicode-ident 1.0.12
 
 ```
 UNICODE, INC. LICENSE AGREEMENT - DATA FILES AND SOFTWARE
