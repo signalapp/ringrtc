@@ -20,8 +20,8 @@ use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::ios::api::call_manager_interface::{
     AppByteSlice, AppCallContext, AppConnectionInterface, AppIceCandidateArray, AppInterface,
-    AppObject, AppOptionalBool, AppOptionalUInt32, AppReaction, AppReactionsArray,
-    AppReceivedAudioLevel, AppReceivedAudioLevelArray, AppRemoteDeviceState,
+    AppObject, AppOptionalBool, AppOptionalUInt32, AppRaisedHandsArray, AppReaction,
+    AppReactionsArray, AppReceivedAudioLevel, AppReceivedAudioLevelArray, AppRemoteDeviceState,
     AppRemoteDeviceStateArray, AppUuidArray,
 };
 use crate::ios::error::IosError;
@@ -686,6 +686,21 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             client_id,
             app_remote_device_states_array,
+        );
+    }
+
+    fn handle_raised_hands(&self, client_id: ClientId, raised_hands: Vec<DemuxId>) {
+        info!("handle_raised_hands(): {:?}", raised_hands);
+
+        let app_raised_hands_array = AppRaisedHandsArray {
+            raised_hands: raised_hands.as_ptr(),
+            count: raised_hands.len(),
+        };
+
+        (self.app_interface.handleRaisedHands)(
+            self.app_interface.object,
+            client_id,
+            app_raised_hands_array,
         );
     }
 

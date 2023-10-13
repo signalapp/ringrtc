@@ -286,6 +286,14 @@ pub struct AppReactionsArray {
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
+pub struct AppRaisedHandsArray {
+    pub raised_hands: *const DemuxId,
+    pub count: size_t,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+#[allow(non_snake_case)]
 pub struct AppGroupMemberInfo {
     pub userId: AppByteSlice,
     pub memberId: AppByteSlice,
@@ -476,6 +484,12 @@ pub struct AppInterface {
         object: *mut c_void,
         clientId: group_call::ClientId,
         reactions: AppReactionsArray,
+    ),
+
+    pub handleRaisedHands: extern "C" fn(
+        object: *mut c_void,
+        clientId: group_call::ClientId,
+        raisedHands: AppRaisedHandsArray,
     ),
 
     ///
@@ -1462,6 +1476,21 @@ pub extern "C" fn ringrtcReact(
     }
 
     let result = call_manager::react(callManager as *mut IosCallManager, clientId, v.unwrap());
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcRaiseHand(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    raise: bool,
+) {
+    info!("ringrtcRaiseHand(): {}", raise);
+
+    let result = call_manager::raise_hand(callManager as *mut IosCallManager, clientId, raise);
     if result.is_err() {
         error!("{:?}", result.err());
     }

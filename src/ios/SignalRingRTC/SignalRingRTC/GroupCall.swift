@@ -204,6 +204,12 @@ public protocol GroupCallDelegate: AnyObject {
     func groupCall(onReactions groupCall: GroupCall, reactions: [Reaction])
 
     /**
+     * Indication that the application should notify the user that raised hands
+     * changed.
+     */
+    func groupCall(onRaisedHands groupCall: GroupCall, raisedHands: [UInt32])
+
+    /**
      * Indication that the application can retrieve an updated PeekInfo which
      * includes a list of users that are actively in the group call.
      */
@@ -454,6 +460,18 @@ public class GroupCall {
         defer { valueSlice.bytes?.deallocate() }
 
         ringrtcReact(self.ringRtcCallManager, clientId, valueSlice)
+    }
+
+    public func raiseHand(raise: Bool) {
+        AssertIsOnMainThread()
+        Logger.debug("raiseHand")
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        ringrtcRaiseHand(self.ringRtcCallManager, clientId, raise)
     }
 
     private var _isOutgoingAudioMuted = false
@@ -745,6 +763,12 @@ public class GroupCall {
         AssertIsOnMainThread()
 
         self.delegate?.groupCall(onReactions: self, reactions: reactions)
+    }
+
+    func handleRaisedHands(raisedHands: [UInt32]) {
+        AssertIsOnMainThread()
+
+        self.delegate?.groupCall(onRaisedHands: self, raisedHands: raisedHands)
     }
 
     func handleJoinStateChanged(joinState: JoinState) {

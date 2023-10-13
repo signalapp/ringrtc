@@ -1164,6 +1164,27 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcReact(
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRaiseHand(
+    env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    raise: bool,
+) {
+    match call_manager::raise_hand(
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        raise,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallId_ringrtcFromEraId(
     env: JNIEnv,
     _class: JClass,

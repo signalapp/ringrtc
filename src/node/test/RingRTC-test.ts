@@ -910,6 +910,7 @@ describe('RingRTC', () => {
       onAudioLevels(_call: GroupCall) {}
       onLowBandwidthForVideo(_call: GroupCall, _recovered: boolean) {}
       onReactions(_call: GroupCall, _reactions: Array<Reaction>) {}
+      onRaisedHands(_call: GroupCall, _raisedHands: Array<number>) {}
       onPeekChanged(_call: GroupCall) {}
       onEnded(_call: GroupCall, _reason: GroupCallEndReason) {}
       /* eslint-enable @typescript-eslint/no-empty-function */

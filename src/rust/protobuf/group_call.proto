@@ -63,6 +63,11 @@ message DeviceToSfu {
     optional fixed32 target_demux_id = 1;
   }
 
+  message RaiseHand {
+    optional bool raise = 1;
+    optional uint32 seqnum = 2;
+  }
+
   optional VideoRequestMessage video_request = 1;
   optional LeaveMessage leave = 2;
 
@@ -73,6 +78,8 @@ message DeviceToSfu {
     GenericAdminAction remove = 5;
     GenericAdminAction block = 6;
   }
+
+  optional RaiseHand raise_hand = 7;
 }
 
 message SfuToDevice {
@@ -106,6 +113,12 @@ message SfuToDevice {
 
   message Removed {}
 
+  message RaisedHands {
+    repeated fixed32 demux_ids = 1;
+    repeated uint32 seqnums = 2;
+    optional uint32 target_seqnum = 3;
+  }
+
   reserved 1;
   optional VideoRequest video_request               = 2;
   reserved 3;
@@ -115,4 +128,5 @@ message SfuToDevice {
   optional CurrentDevices current_devices           = 7;
   optional Stats stats                              = 8;
   optional Removed removed                          = 9;
+  optional RaisedHands raised_hands                 = 10;
 }

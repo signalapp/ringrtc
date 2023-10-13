@@ -1193,6 +1193,68 @@ impl Platform for AndroidPlatform {
         }
     }
 
+    fn handle_raised_hands(&self, client_id: group_call::ClientId, raised_hands: Vec<DemuxId>) {
+        info!(
+            "handle_raised_hands(): client_id: {}, raised_hands: {:?}",
+            client_id, raised_hands,
+        );
+
+        if let Ok(env) = self.java_env() {
+            // Set a frame capacity of min (5) + objects (1) + N elements.
+            let capacity = (5 + 1 + raised_hands.len()) as i32;
+            let _ = env.with_local_frame(capacity, || {
+                // create Java List<Long>
+                let long_class = match self.class_cache.get_class(jni_class_name!(java.lang.Long)) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                };
+
+                let raised_hands_list = match jni_new_arraylist(&env, raised_hands.len()) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return Ok(JObject::null());
+                    }
+                };
+
+                for raised_hand in raised_hands {
+                    let args = jni_args!((
+                        raised_hand as jlong => long,
+                    ) -> void);
+
+                    let raised_hand_obj = match env.new_object(long_class, args.sig, &args.args) {
+                        Ok(v) => v,
+                        Err(error) => {
+                            error!("jni_raised_hands: {:?}", error);
+                            continue;
+                        }
+                    };
+
+                    let result = raised_hands_list.add(raised_hand_obj);
+                    if result.is_err() {
+                        error!("jni_raised_hands.add: {:?}", result.err());
+                        continue;
+                    }
+                }
+
+                let _ = jni_call_method(
+                    &env,
+                    self.jni_call_manager.as_obj(),
+                    "handleRaisedHands",
+                    jni_args!((
+                        client_id as jlong => long,
+                        JObject::from(raised_hands_list) => java.util.List,
+                    ) -> void),
+                );
+
+                Ok(JObject::null())
+            });
+        }
+    }
+
     fn handle_join_state_changed(
         &self,
         client_id: group_call::ClientId,

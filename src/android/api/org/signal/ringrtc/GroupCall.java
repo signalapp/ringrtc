@@ -622,6 +622,21 @@ public final class GroupCall {
 
     /**
      *
+     * Raise your hand.
+     *
+     * @param raise Set to true to raise your hand or false to lower it.
+     *
+     * @throws CallException for native code failures
+     */
+    public void raiseHand(boolean raise)
+        throws CallException {
+        Log.i(TAG, "raiseHand(): raise: " + raise);
+
+        ringrtcRaiseHand(nativeCallManager, this.clientId, raise);
+    }
+
+    /**
+     *
      * Callback from RingRTC when the group call object needs an updated
      * membership proof. Called via the CallManager.
      *
@@ -723,6 +738,10 @@ public final class GroupCall {
 
     void handleReactions(List<Reaction> reactions) {
         this.observer.onReactions(this, reactions);
+    }
+
+    void handleRaisedHands(List<Long> raisedHands) {
+        this.observer.onRaisedHands(this, raisedHands);
     }
 
     /**
@@ -1205,6 +1224,11 @@ public final class GroupCall {
         void onReactions(GroupCall groupCall, List<Reaction> reactions);
 
         /**
+         * Notification that the list of raised hands has changed.
+         */
+        void onRaisedHands(GroupCall groupCall, List<Long> raisedHands);
+
+        /**
          * Notification that the remote device states have changed.
          */
         void onRemoteDeviceStatesChanged(GroupCall groupCall);
@@ -1347,5 +1371,11 @@ public final class GroupCall {
         void ringrtcReact(long nativeCallManager,
                           long clientId,
                           String value)
+        throws CallException;
+
+    private native
+        void ringrtcRaiseHand(long nativeCallManager,
+                              long clientId,
+                              boolean raise)
         throws CallException;
 }

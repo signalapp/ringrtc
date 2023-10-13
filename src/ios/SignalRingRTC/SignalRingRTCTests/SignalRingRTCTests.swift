@@ -349,6 +349,10 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         Logger.debug("TestDelegate:onReactions - \(reactions)")
     }
 
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, onRaisedHands call: OpaqueCallData, raisedHands: [UInt32]) {
+        Logger.debug("TestDelegate:onRaisedHands - \(raisedHands)")
+    }
+
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendOffer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
         Logger.debug("TestDelegate:shouldSendOffer")
         generalInvocationDetected = true

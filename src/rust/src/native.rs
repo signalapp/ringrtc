@@ -256,6 +256,7 @@ pub enum GroupUpdate {
         recovered: bool,
     },
     Reactions(group_call::ClientId, Vec<group_call::Reaction>),
+    RaisedHands(group_call::ClientId, Vec<DemuxId>),
 }
 
 impl fmt::Display for GroupUpdate {
@@ -281,6 +282,9 @@ impl fmt::Display for GroupUpdate {
             }
             GroupUpdate::Reactions(_, reactions) => {
                 format!("Reactions({:?})", reactions)
+            }
+            GroupUpdate::RaisedHands(_, raised_hands) => {
+                format!("RaisedHands({:?})", raised_hands)
             }
         };
         write!(f, "({})", display)
@@ -910,6 +914,15 @@ impl Platform for NativePlatform {
     ) {
         trace!("NativePlatform::handle_reactions(): id: {}", client_id);
         let result = self.send_group_update(GroupUpdate::Reactions(client_id, reactions));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_raised_hands(&self, client_id: group_call::ClientId, raised_hands: Vec<DemuxId>) {
+        info!("NativePlatform::handle_raised_hands(): id: {}", client_id);
+
+        let result = self.send_group_update(GroupUpdate::RaisedHands(client_id, raised_hands));
         if result.is_err() {
             error!("{:?}", result.err());
         }

@@ -1113,6 +1113,20 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    func handleRaisedHands(clientId: UInt32, raisedHands: [UInt32]) {
+        Logger.debug("handleRaisedHands")
+
+        DispatchQueue.main.async {
+            Logger.debug("handleRaisedHands - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleRaisedHands(raisedHands: raisedHands)
+        }
+    }
+
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
         Logger.debug("handleJoinStateChanged")
 

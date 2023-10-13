@@ -14,6 +14,7 @@ class TestGroupCallDelegate: GroupCallDelegate {
     var onAudioLevelsCount = 0
     var onLowBandwidthForVideoCount = 0
     var onReactionsCount = 0
+    var onRaisedHandsCount = 0
     var onPeekChangedCount = 0
     var onEndedCount = 0
     var lastOnEndedReason: GroupCallEndReason? = nil
@@ -44,6 +45,10 @@ class TestGroupCallDelegate: GroupCallDelegate {
 
     func groupCall(onReactions groupCall: GroupCall, reactions: [Reaction]) {
         onReactionsCount += 1
+    }
+
+    func groupCall(onRaisedHands groupCall: GroupCall, raisedHands: [UInt32]) {
+        onRaisedHandsCount += 1
     }
 
     func groupCall(onPeekChanged groupCall: GroupCall) {

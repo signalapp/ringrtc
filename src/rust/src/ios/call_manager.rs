@@ -721,6 +721,18 @@ pub fn react(
     Ok(())
 }
 
+pub fn raise_hand(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    raise: bool,
+) -> Result<()> {
+    info!("raiseHand(): raise: {}", raise);
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.raise_hand(client_id, raise);
+    Ok(())
+}
+
 pub fn validate_offer(
     opaque: Option<Vec<u8>>,
     age_sec: u64,

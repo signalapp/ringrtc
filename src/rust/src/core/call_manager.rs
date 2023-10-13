@@ -2612,6 +2612,11 @@ where
         platform_handler!(self, handle_reactions, client_id, reactions);
     }
 
+    fn handle_raised_hands(&self, client_id: group_call::ClientId, raised_hands: Vec<DemuxId>) {
+        info!("handle_raised_hands(): {:?}", raised_hands);
+        platform_handler!(self, handle_raised_hands, client_id, raised_hands);
+    }
+
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
         info!("handle_ended({:?}):", reason);
         platform_handler!(self, handle_ended, client_id, reason);
@@ -2910,6 +2915,7 @@ where
     forward_group_call_api!(join());
     forward_group_call_api!(leave());
     forward_group_call_api!(react(value: String));
+    forward_group_call_api!(raise_hand(raise: bool));
     forward_group_call_api!(disconnect());
     forward_group_call_api!(group_ring => ring(recipient: Option<UserId>));
     forward_group_call_api!(set_outgoing_audio_muted(muted: bool));

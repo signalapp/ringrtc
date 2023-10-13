@@ -550,6 +550,10 @@ impl Platform for SimPlatform {
         info!("handle_reactions(): {:?}", reactions);
     }
 
+    fn handle_raised_hands(&self, _client_id: group_call::ClientId, raised_hands: Vec<DemuxId>) {
+        info!("handle_raised_hands(): {:?}", raised_hands);
+    }
+
     fn handle_join_state_changed(
         &self,
         _client_id: group_call::ClientId,

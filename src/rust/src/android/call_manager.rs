@@ -1235,3 +1235,14 @@ pub fn react(
     call_manager.react(client_id, value);
     Ok(())
 }
+
+pub fn raise_hand(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    raise: bool,
+) -> Result<()> {
+    info!("raise_hand(): raise: {}", raise);
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.raise_hand(client_id, raise);
+    Ok(())
+}

@@ -260,6 +260,8 @@ pub trait Observer {
 
     fn handle_reactions(&self, client_id: ClientId, reactions: Vec<Reaction>);
 
+    fn handle_raised_hands(&self, client_id: ClientId, raised_hands: Vec<DemuxId>);
+
     // This will be the last callback.
     // The observer can assume the Call is completely shut down and can be deleted.
     fn handle_ended(&self, client_id: ClientId, reason: EndReason);
@@ -887,6 +889,13 @@ enum BweCheckState {
     None,
 }
 
+#[derive(Default)]
+struct RaiseHandState {
+    pub seqnum: u32,
+    pub raise: bool,
+    pub outstanding: bool,
+}
+
 /// The state inside the Actor
 struct State {
     // Things passed in that never change
@@ -944,6 +953,8 @@ struct State {
 
     next_membership_proof_request_time: Option<Instant>,
 
+    next_raise_hand_time: Option<Instant>,
+
     bwe_check_state: BweCheckState,
 
     // We have to put this inside the actor state also because
@@ -989,6 +1000,8 @@ struct State {
     outgoing_ring_state: OutgoingRingState,
 
     reactions: Vec<Reaction>,
+    raised_hands: Vec<DemuxId>,
+    raise_hand_state: RaiseHandState,
 
     actor: Actor<State>,
 }
@@ -1033,6 +1046,8 @@ const STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
 
 // How often to request an updated membership proof (24 hours).
 const MEMBERSHIP_PROOF_REQUEST_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+const RAISE_HAND_INTERVAL: Duration = Duration::from_millis(500);
 
 // How often to check the latest bandwidth estimate from WebRTC
 const BWE_INTERVAL: Duration = Duration::from_secs(1);
@@ -1170,6 +1185,8 @@ impl Client {
 
                     next_membership_proof_request_time: None,
 
+                    next_raise_hand_time: None,
+
                     bwe_check_state: BweCheckState::Disabled,
 
                     frame_crypto_context,
@@ -1191,6 +1208,8 @@ impl Client {
                     outgoing_ring_state: OutgoingRingState::Unknown,
 
                     reactions: Vec::new(),
+                    raised_hands: Vec::new(),
+                    raise_hand_state: RaiseHandState::default(),
 
                     actor,
                 })
@@ -1349,6 +1368,13 @@ impl Client {
                 .handle_reactions(state.client_id, std::mem::take(&mut state.reactions));
         }
 
+        if let Some(next_raise_hand_time) = state.next_raise_hand_time {
+            if now >= next_raise_hand_time && state.raise_hand_state.outstanding {
+                state.next_raise_hand_time = Some(now + RAISE_HAND_INTERVAL);
+                Self::send_raise_hand(state);
+            }
+        }
+
         state.actor.send_delayed(TICK_INTERVAL, Self::tick);
     }
 
@@ -1448,9 +1474,10 @@ impl Client {
 
                     let now = Instant::now();
 
-                    // Start heartbeats and audio levels right away.
+                    // Start heartbeats, audio levels, and raise hand right away.
                     state.next_heartbeat_time = Some(now);
                     state.next_audio_levels_time = Some(now);
+                    state.next_raise_hand_time = Some(now);
 
                     // Request group membership refresh as we start polling the participant list.
                     if state.kind == GroupCallKind::SignalGroup {
@@ -2221,6 +2248,26 @@ impl Client {
                 }
             });
         }
+    }
+
+    pub fn raise_hand(&self, raise: bool) {
+        debug!(
+            "group_call::Client(outer)::raise_hand(client_id: {} raise: {})",
+            self.client_id, raise
+        );
+
+        self.actor.send(move |state| {
+            state.raise_hand_state.seqnum += 1;
+            state.raise_hand_state.raise = raise;
+            state.raise_hand_state.outstanding = true;
+
+            info!(
+                "group_call::Client(inner)::raise_hand(client_id: {}, raise: {} seqnum: {})",
+                state.client_id, state.raise_hand_state.raise, state.raise_hand_state.seqnum
+            );
+
+            Self::send_raise_hand(state);
+        });
     }
 
     // Pulled into a named private method because it can be called in many places.
@@ -3250,6 +3297,24 @@ impl Client {
         Self::broadcast_data_through_sfu(state, &react_msg.encode_to_vec())
     }
 
+    fn send_raise_hand(state: &mut State) {
+        use protobuf::group_call::{device_to_sfu::RaiseHand, DeviceToSfu};
+        let msg = DeviceToSfu {
+            raise_hand: {
+                Some(RaiseHand {
+                    raise: Some(state.raise_hand_state.raise),
+                    seqnum: Some(state.raise_hand_state.seqnum),
+                })
+            },
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+            warn!("Failed to send raise hand: {:?}", e);
+        }
+    }
+
     fn send_leave_to_sfu(state: &mut State) {
         use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
         let msg = DeviceToSfu {
@@ -3384,7 +3449,7 @@ impl Client {
 
     fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
         use protobuf::group_call::{
-            sfu_to_device::{CurrentDevices, DeviceJoinedOrLeft, Removed, Speaker},
+            sfu_to_device::{CurrentDevices, DeviceJoinedOrLeft, RaisedHands, Removed, Speaker},
             DeviceToDevice, SfuToDevice,
         };
 
@@ -3398,6 +3463,7 @@ impl Client {
                     stats,
                     video_request: _,
                     removed,
+                    raised_hands,
                 }) = SfuToDevice::decode(payload)
                 {
                     if let Some(Speaker {
@@ -3435,6 +3501,14 @@ impl Client {
                     }
                     if let Some(Removed {}) = removed {
                         self.handle_removed_received();
+                    }
+                    if let Some(RaisedHands {
+                        demux_ids,
+                        seqnums: _,
+                        target_seqnum: Some(target_seqnum),
+                    }) = raised_hands
+                    {
+                        self.handle_raised_hands(demux_ids, target_seqnum);
                     }
                 }
                 debug!("Received RTP data from SFU: {:?}.", payload);
@@ -3675,6 +3749,67 @@ impl Client {
                 state.reactions.push(Reaction { demux_id, value });
             });
         }
+    }
+
+    fn handle_raised_hands(&self, raised_hands: Vec<DemuxId>, server_seqnum: u32) {
+        self.actor.send(move |state| {
+            // The server has previously received a hand raise request from the client or admin
+            if server_seqnum != 0 {
+                if server_seqnum >= state.raise_hand_state.seqnum {
+                    // Set the local raised hand seqnum to the latest from the server
+                    state.raise_hand_state.seqnum = server_seqnum;
+
+                    // Issue a callback when the seqnum value of the local demux id in the
+                    // servers list is equal to or greater than the local seqnum and a raised
+                    // hand is outstanding. This ensures that a client will get a callback to
+                    // "unlock" the UI state even if the raised hand list is the same as before.
+                    if state.raise_hand_state.outstanding {
+                        state.raise_hand_state.outstanding = false;
+                        state.raised_hands = raised_hands;
+
+                        info!(
+                            "group_call::Client(inner)::handle_raised_hands(client_id: {} raised_hands: {:?} seqnum: {} raise: {} outstanding: {})",
+                            state.client_id,
+                            state.raised_hands,
+                            state.raise_hand_state.seqnum,
+                            state.raise_hand_state.raise,
+                            state.raise_hand_state.outstanding
+                        );
+
+                        state
+                            .observer
+                            .handle_raised_hands(state.client_id, state.raised_hands.clone());
+
+                    // Issue a callback when a raised hand is not outstanding and the
+                    // raised hand list has changed.
+                    } else if state.raised_hands != raised_hands {
+                        info!(
+                            "group_call::Client(inner)::handle_raised_hands(client_id: {} raised_hands: {:?} server seqnum: {} local seqnum: {} local raise: {} outstanding: {})",
+                            state.client_id,
+                            raised_hands,
+                            server_seqnum,
+                            state.raise_hand_state.seqnum,
+                            state.raise_hand_state.raise,
+                            state.raise_hand_state.outstanding
+                        );
+                        state.raised_hands = raised_hands;
+                        state
+                            .observer
+                            .handle_raised_hands(state.client_id, state.raised_hands.clone());
+                    }
+                }
+            // The server has never received a hand raise from this client
+            } else {
+                // Issue a callback if the client has never raised their hand and the server
+                // list is different than before.
+                if state.raise_hand_state.seqnum == 0 && state.raised_hands != raised_hands {
+                    state.raised_hands = raised_hands;
+                    state
+                        .observer
+                        .handle_raised_hands(state.client_id, state.raised_hands.clone());
+                }
+            }
+        });
     }
 
     #[cfg(feature = "sim")]
@@ -4419,6 +4554,8 @@ mod tests {
                 .fetch_add(reactions.len() as u64, Ordering::Relaxed);
             self.reactions_called.set();
         }
+
+        fn handle_raised_hands(&self, _client_id: ClientId, _raised_hands: Vec<DemuxId>) {}
 
         fn handle_peek_changed(
             &self,

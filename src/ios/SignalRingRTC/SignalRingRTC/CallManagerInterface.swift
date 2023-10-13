@@ -37,6 +37,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel])
     func handleLowBandwidthForVideo(clientId: UInt32, recovered: Bool)
     func handleReactions(clientId: UInt32, reactions: [Reaction])
+    func handleRaisedHands(clientId: UInt32, raisedHands: [UInt32])
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
@@ -94,6 +95,7 @@ class CallManagerInterface {
             handleAudioLevels: callManagerInterfaceHandleAudioLevels,
             handleLowBandwidthForVideo: callManagerInterfaceHandleLowBandwidthForVideo,
             handleReactions: callManagerInterfaceHandleReactions,
+            handleRaisedHands: callManagerInterfaceHandleRaisedHands,
             handleJoinStateChanged: callManagerInterfaceHandleJoinStateChanged,
             handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
@@ -306,6 +308,14 @@ class CallManagerInterface {
         }
 
         delegate.handleReactions(clientId: clientId, reactions: reactions)
+    }
+
+    func handleRaisedHands(clientId: UInt32, raisedHands: [UInt32]) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleRaisedHands(clientId: clientId, raisedHands: raisedHands)
     }
 
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
@@ -910,6 +920,24 @@ func callManagerInterfaceHandleReactions(object: UnsafeMutableRawPointer?, clien
 
     if !finalReactions.isEmpty {
         obj.handleReactions(clientId: clientId, reactions: finalReactions)
+    }
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceHandleRaisedHands(object: UnsafeMutableRawPointer?, clientId: UInt32, raisedHandsArray: AppRaisedHandsArray) {
+    guard let object = object else {
+        owsFailDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    var finalRaisedHands: [UInt32] = []
+    for index in 0..<raisedHandsArray.count {
+        finalRaisedHands.append(raisedHandsArray.raised_hands[index])
+    }
+
+    if !finalRaisedHands.isEmpty {
+        obj.handleRaisedHands(clientId: clientId, raisedHands: finalRaisedHands)
     }
 }
 

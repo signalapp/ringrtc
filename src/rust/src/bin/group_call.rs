@@ -140,6 +140,10 @@ impl group_call::Observer for Observer {
     fn handle_reactions(&self, _client_id: ClientId, _reactions: Vec<Reaction>) {
         // ignore
     }
+
+    fn handle_raised_hands(&self, _client_id: ClientId, raised_hands: Vec<DemuxId>) {
+        info!("Raised hands changed to {:?}", raised_hands);
+    }
 }
 
 impl VideoSink for Observer {
