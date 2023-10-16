@@ -530,6 +530,7 @@ export class RingRTCType {
         callId,
         settings.iceServer.username || '',
         settings.iceServer.password || '',
+        settings.iceServer.hostname || '',
         settings.iceServer.urls,
         settings.hideIp,
         settings.dataMode,
@@ -1790,6 +1791,7 @@ export interface CallSettings {
 interface IceServer {
   username?: string;
   password?: string;
+  hostname?: string;
   urls: Array<string>;
 }
 
@@ -2731,6 +2733,7 @@ export interface CallManager {
     callId: CallId,
     iceServerUsername: string,
     iceServerPassword: string,
+    iceServerHostname: string,
     iceServerUrls: Array<string>,
     hideIp: boolean,
     dataMode: DataMode,

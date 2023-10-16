@@ -43,6 +43,7 @@ const ADM_MAX_DEVICE_UUID_SIZE: usize = 128;
 pub struct RffiIceServer {
     pub username: webrtc::ptr::Borrowed<c_char>,
     pub password: webrtc::ptr::Borrowed<c_char>,
+    pub hostname: webrtc::ptr::Borrowed<c_char>,
     pub urls: webrtc::ptr::Borrowed<webrtc::ptr::Borrowed<c_char>>,
     pub urls_size: usize,
 }
@@ -58,6 +59,7 @@ pub enum RffiPeerConnectionKind {
 pub struct IceServer {
     username: CString,
     password: CString,
+    hostname: CString,
     // To own the strings
     _urls: Vec<CString>,
     // To hand the strings to C
@@ -68,7 +70,7 @@ unsafe impl Send for IceServer {}
 unsafe impl Sync for IceServer {}
 
 impl IceServer {
-    pub fn new(username: String, password: String, urls_in: Vec<String>) -> Self {
+    pub fn new(username: String, password: String, hostname: String, urls_in: Vec<String>) -> Self {
         let mut urls = Vec::new();
         for url in urls_in {
             urls.push(CString::new(url).expect("CString of URL"));
@@ -80,6 +82,7 @@ impl IceServer {
         Self {
             username: CString::new(username).expect("CString of username"),
             password: CString::new(password).expect("CString of password"),
+            hostname: CString::new(hostname).expect("CString of hostname"),
             _urls: urls,
             url_ptrs,
         }
@@ -90,6 +93,7 @@ impl IceServer {
         Self::new(
             "".to_string(), // username
             "".to_string(), // password
+            "".to_string(), // hostname
             vec![],         // urls
         )
     }
@@ -98,6 +102,7 @@ impl IceServer {
         RffiIceServer {
             username: webrtc::ptr::Borrowed::from_ptr(self.username.as_ptr()),
             password: webrtc::ptr::Borrowed::from_ptr(self.password.as_ptr()),
+            hostname: webrtc::ptr::Borrowed::from_ptr(self.hostname.as_ptr()),
             urls: webrtc::ptr::Borrowed::from_ptr(self.url_ptrs.as_ptr()),
             urls_size: self.url_ptrs.len(),
         }

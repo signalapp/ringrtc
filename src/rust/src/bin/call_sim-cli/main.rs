@@ -220,7 +220,13 @@ fn main() -> Result<()> {
         info!("  password: {}", args.relay_password);
         info!("     force: {}", args.force_relay);
 
-        IceServer::new(args.relay_username, args.relay_password, args.relay_servers)
+        IceServer::new(
+            args.relay_username,
+            args.relay_password,
+            // TODO: Add support for hostname when TLS TURN is supported with the call sim
+            "".to_string(),
+            args.relay_servers,
+        )
     };
 
     // Create a call configuration that should be used for the call.
