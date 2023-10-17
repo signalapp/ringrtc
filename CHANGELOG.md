@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.34.0
+
+- Group Calls: Add Hand Raise feature
+
+- Electron: Allow ICE server hostname to be set
+
+- Build improvements and dependency updates
+
 ## v2.33.0
 
 - Update to webrtc 5845h
