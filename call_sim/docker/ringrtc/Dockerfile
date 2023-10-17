@@ -11,4 +11,4 @@ RUN apt-get update \
 # Install `tcconfig` so that it can be used as an alternative to using `tc` directly.
 RUN pip install tcconfig==0.28.0
 
-COPY src/rust/target/release/call_sim-cli /usr/local/bin/
+COPY target/release/call_sim-cli /usr/local/bin/

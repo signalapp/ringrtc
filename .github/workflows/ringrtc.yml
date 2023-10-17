@@ -13,7 +13,6 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component rustfmt
     - name: Check rust format
       run: cargo fmt -- --check
-      working-directory: src/rust
     - name: Install for node
       run: yarn install --frozen-lockfile
       working-directory: src/node
@@ -39,29 +38,21 @@ jobs:
     - name: Check acknowledgments
       run: ./bin/regenerate_acknowledgments.sh && git diff --name-status --exit-code acknowledgments
     - name: Clippy
-      run: cargo clippy --tests --features sim -- -D warnings
-      working-directory: src/rust
+      run: cargo clippy --package ringrtc --tests --features sim -- -D warnings
     - name: Clippy (Android)
-      run: cargo clippy --target aarch64-linux-android -- -D warnings
-      working-directory: src/rust
+      run: cargo clippy --package ringrtc --target aarch64-linux-android -- -D warnings
     - name: Clippy (iOS)
-      run: cargo clippy --target aarch64-apple-ios -- -D warnings
-      working-directory: src/rust
+      run: cargo clippy --package ringrtc --target aarch64-apple-ios -- -D warnings
     - name: Clippy (Electron)
-      run: cargo clippy --features electron -- -D warnings
-      working-directory: src/rust
+      run: cargo clippy --package ringrtc --features electron -- -D warnings
     - name: Clippy (group_call)
-      run: cargo clippy --bin group_call --features native,http -- -D warnings
-      working-directory: src/rust
+      run: cargo clippy --package ringrtc --bin group_call --features native,http -- -D warnings
     - name: Clippy (call_link)
-      run: cargo clippy --bin call_link --features sim,http,rand_chacha -- -D warnings
-      working-directory: src/rust
+      run: cargo clippy --package ringrtc --bin call_link --features sim,http,rand_chacha -- -D warnings
     - name: Clippy (call_sim-cli)
-      run: cargo clippy --bin call_sim-cli --features call_sim -- -D warnings
-      working-directory: src/rust
+      run: cargo clippy --package ringrtc --bin call_sim-cli --features call_sim -- -D warnings
     - name: Clippy (call_sim)
-      run: cargo clippy -- -D warnings
-      working-directory: call_sim
+      run: cargo clippy --package call_sim -- -D warnings
     - name: Clippy (signaling_server)
       run: cargo clippy -- -D warnings
       working-directory: call_sim/docker/signaling_server

@@ -14,8 +14,7 @@ license = "AGPL-3.0-only"
 anyhow = "1.0"
 bollard = "0.14.0"
 chrono = "0.4"
-# Stay on 4.3 to avoid pulling in anstream 0.5.0 which uses unstable library feature is_terminal
-clap = { version = "=4.3.24", features = ["derive"] }
+clap = { version = "4.4.5", features = ["derive"] }
 futures-core = "0.3"
 futures-util = "0.3"
 hound = "3.5"

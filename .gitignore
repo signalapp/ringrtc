@@ -17,3 +17,5 @@ src/jar.list
 org.eclipse.buildship.core.prefs
 local.properties
 *.tar.gz
+.cargo
+target

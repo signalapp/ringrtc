@@ -33,10 +33,7 @@ clean()
     rm -rf ./src/node/build
     rm -rf ./src/node/dist
     rm -rf ./src/node/node_modules
-    rm -rf ./src/rust/target/debug
-    rm -rf ./src/rust/target/release
-    rm -rf ./src/webrtc/src/out/debug
-    rm -rf ./src/webrtc/src/out/release
+    cargo clean
 }
 
 BUILD_TYPE=debug
@@ -155,8 +152,6 @@ then
 
     # Build and link the final RingRTC library.
     (
-        cd src/rust
-
         INCLUDE_RELEASE_FLAG=
         if [ "${BUILD_TYPE}" = "release" ]
         then
@@ -204,10 +199,10 @@ then
             exit 1 # unreachable
         fi
 
-        RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
+        RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --package ringrtc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
 
-        mkdir -p ../node/build/${DEFAULT_PLATFORM}
-        copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} ../node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
+        mkdir -p src/node/build/${DEFAULT_PLATFORM}
+        copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} src/node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
 
         if [ "${BUILD_TYPE}" = "release" ]
         then

@@ -122,7 +122,3 @@ tonic-build = { version = "0.9.2" }
 [dev-dependencies]
 env_logger = { version = "0.10" }
 rand_chacha = { version = "0.2" }
-
-[patch.crates-io]
-# Use our fork of curve25519-dalek for zkgroup compatibility.
-curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', branch = 'lizard2' }

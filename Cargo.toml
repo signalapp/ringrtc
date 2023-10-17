@@ -1,0 +1,15 @@
+#
+# Copyright 2019-2022 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+[workspace]
+resolver = "2"
+members = [
+    "call_sim",
+    "src/rust",
+]
+
+[patch.crates-io]
+# Use our fork of curve25519-dalek for zkgroup compatibility.
+curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', branch = 'lizard2' }

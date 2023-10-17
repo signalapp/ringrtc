@@ -139,7 +139,7 @@ clean:
 PHONY += distclean
 distclean:
 	$(Q) rm -rf ./out
-	$(Q) rm -rf ./src/rust/target
+	$(Q) rm -rf ./target
 	$(Q) rm -rf ./src/node/build
 	$(Q) rm -rf ./src/node/dist
 	$(Q) rm -rf ./src/node/node_modules

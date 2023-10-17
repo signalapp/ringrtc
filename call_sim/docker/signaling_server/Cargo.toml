@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 
+[workspace]
+
 [package]
 name = "signaling_server"
 version = "0.1.0"
