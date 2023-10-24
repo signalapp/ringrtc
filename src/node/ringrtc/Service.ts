@@ -5,7 +5,6 @@
 
 /* eslint-disable max-classes-per-file */
 
-import * as process from 'process';
 import { GumVideoCaptureOptions, VideoPixelFormatEnum } from './VideoSupport';
 import {
   CallLinkState,
@@ -65,12 +64,6 @@ class NativeCallManager {
           config.use_new_audio_device_module,
           fieldTrialsString
         );
-
-        if (process.platform === 'darwin') {
-          // Preload devices to work around
-          // https://bugs.chromium.org/p/chromium/issues/detail?id=1287628
-          void window.navigator.mediaDevices.enumerateDevices();
-        }
 
         Object.defineProperty(this, Native.callEndpointPropertyKey, {
           configurable: true, // allows it to be changed
