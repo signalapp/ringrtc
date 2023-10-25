@@ -76,7 +76,6 @@ pub fn initialize(env: &JNIEnv) -> Result<()> {
 
 /// Creates a new AndroidCallManager object.
 pub fn create_call_manager(env: &JNIEnv, jni_call_manager: JObject) -> Result<jlong> {
-    info!("create_call_manager():");
     let platform = AndroidPlatform::new(env, env.new_global_ref(jni_call_manager)?)?;
 
     let http_client = http::DelegatingClient::new(platform.try_clone()?);
@@ -123,7 +122,7 @@ pub fn create_peer_connection(
             JObject::null(),
         )
     };
-    info!("jni_owned_pc: {}", jni_owned_pc);
+    debug!("jni_owned_pc: {}", jni_owned_pc);
 
     if jni_owned_pc == 0 {
         return Err(AndroidError::CreateJniPeerConnection.into());
@@ -147,7 +146,7 @@ pub fn create_peer_connection(
 
     connection.set_peer_connection(peer_connection)?;
 
-    info!("connection: {:?}", connection);
+    debug!("connection: {:?}", connection);
 
     Ok(jni_owned_pc)
 }
@@ -159,8 +158,6 @@ pub fn set_self_uuid(
     uuid: jbyteArray,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("set_self_uuid():");
     call_manager.set_self_uuid(env.convert_byte_array(uuid)?)
 }
 
@@ -173,11 +170,7 @@ pub fn call(
     local_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("call():");
-
     let app_remote_peer = env.new_global_ref(jni_remote)?;
-
     call_manager.call(app_remote_peer, call_media_type, local_device_id)
 }
 
@@ -192,9 +185,6 @@ pub fn proceed(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!("proceed(): {}", call_id);
-
     let platform = call_manager.platform()?.try_clone()?;
     let android_call_context =
         AndroidCallContext::new(platform, env.new_global_ref(jni_call_context)?);
@@ -211,8 +201,6 @@ pub fn proceed(
 pub fn message_sent(call_manager: *mut AndroidCallManager, call_id: jlong) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!("message_sent(): call_id: {}", call_id);
     call_manager.message_sent(call_id)
 }
 
@@ -220,16 +208,12 @@ pub fn message_sent(call_manager: *mut AndroidCallManager, call_id: jlong) -> Re
 pub fn message_send_failure(call_manager: *mut AndroidCallManager, call_id: jlong) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!("message_send_failure(): call_id: {}", call_id);
     call_manager.message_send_failure(call_id)
 }
 
 /// Application notification of local hangup
 pub fn hangup(call_manager: *mut AndroidCallManager) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("hangup():");
     call_manager.hangup()
 }
 
@@ -243,7 +227,6 @@ pub fn cancel_group_ring(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
-    info!("cancel_group_ring():");
     let reason = if reason == -1 {
         None
     } else {
@@ -269,11 +252,6 @@ pub fn received_answer(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!(
-        "received_answer(): call_id: {} sender_device_id: {}",
-        call_id, sender_device_id
-    );
 
     let opaque = if opaque.is_null() {
         return Err(RingRtcError::OptionValueNotSet(
@@ -317,11 +295,6 @@ pub fn received_offer(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
     let remote_peer = env.new_global_ref(remote_peer)?;
-
-    info!(
-        "received_offer(): call_id: {} sender_device_id: {}",
-        call_id, sender_device_id
-    );
 
     let opaque = if opaque.is_null() {
         return Err(RingRtcError::OptionValueNotSet(
@@ -369,13 +342,6 @@ pub fn received_ice(
         ice_candidates.push(signaling::IceCandidate::new(opaque));
     }
 
-    info!(
-        "received_ice(): call_id: {} sender_device_id: {} candidates: {}",
-        call_id,
-        sender_device_id,
-        ice_candidates.len()
-    );
-
     call_manager.received_ice(
         call_id,
         signaling::ReceivedIce {
@@ -397,12 +363,6 @@ pub fn received_hangup(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!(
-        "received_hangup(): call_id: {} sender_device_id: {}",
-        call_id, sender_device_id
-    );
-
     call_manager.received_hangup(
         call_id,
         signaling::ReceivedHangup {
@@ -420,12 +380,6 @@ pub fn received_busy(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!(
-        "received_busy(): call_id: {} sender_device_id: {}",
-        call_id, sender_device_id
-    );
-
     call_manager.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
 }
 
@@ -440,8 +394,6 @@ pub fn received_call_message(
     message_age_sec: u64,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("received_call_message():");
 
     let sender_uuid = if sender_uuid.is_null() {
         error!("Invalid sender_uuid");
@@ -476,8 +428,6 @@ pub fn received_http_response(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
-    info!("received_http_response(): request_id: {}", request_id);
-
     let body = if body.is_null() {
         error!("Invalid body");
         return Ok(());
@@ -497,9 +447,6 @@ pub fn received_http_response(
 /// Application notification of failed HTTP request.
 pub fn http_request_failed(call_manager: *mut AndroidCallManager, request_id: jlong) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("http_request_failed(): request_id: {}", request_id);
-
     call_manager.received_http_response(request_id as u32, None);
     Ok(())
 }
@@ -507,17 +454,12 @@ pub fn http_request_failed(call_manager: *mut AndroidCallManager, request_id: jl
 /// Application notification to accept the incoming call
 pub fn accept_call(call_manager: *mut AndroidCallManager, call_id: jlong) -> Result<()> {
     let call_id = CallId::from(call_id);
-
-    info!("accept_call(): {}", call_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.accept_call(call_id)
 }
 
 /// CMI request for the active Connection object
 pub fn get_active_connection(call_manager: *mut AndroidCallManager) -> Result<jobject> {
-    info!("get_active_connection():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection = call_manager.active_connection()?;
     let android_connection = connection.app_connection()?;
@@ -527,8 +469,6 @@ pub fn get_active_connection(call_manager: *mut AndroidCallManager) -> Result<jo
 
 /// CMI request for the active CallContext object
 pub fn get_active_call_context(call_manager: *mut AndroidCallManager) -> Result<jobject> {
-    info!("get_active_call_context():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call = call_manager.active_call()?;
     let android_call_context = call.call_context()?;
@@ -538,8 +478,6 @@ pub fn get_active_call_context(call_manager: *mut AndroidCallManager) -> Result<
 
 /// CMI request to set the video status
 pub fn set_video_enable(call_manager: *mut AndroidCallManager, enable: bool) -> Result<()> {
-    info!("set_video_enable():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
 
     if let Ok(mut active_connection) = call_manager.active_connection() {
@@ -554,8 +492,6 @@ pub fn set_video_enable(call_manager: *mut AndroidCallManager, enable: bool) -> 
 
 /// Request to update the data mode on the direct connection
 pub fn update_data_mode(call_manager: *mut AndroidCallManager, data_mode: DataMode) -> Result<()> {
-    info!("update_data_mode():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
     active_connection.inject_update_data_mode(data_mode)
@@ -564,17 +500,12 @@ pub fn update_data_mode(call_manager: *mut AndroidCallManager, data_mode: DataMo
 /// CMI request to drop the active call
 pub fn drop_call(call_manager: *mut AndroidCallManager, call_id: jlong) -> Result<()> {
     let call_id = CallId::from(call_id);
-
-    info!("drop_call(): {}", call_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.drop_call(call_id)
 }
 
 /// CMI request to reset the Call Manager
 pub fn reset(call_manager: *mut AndroidCallManager) -> Result<()> {
-    info!("reset():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.reset()
 }
@@ -583,8 +514,6 @@ pub fn reset(call_manager: *mut AndroidCallManager) -> Result<()> {
 ///
 /// This is a blocking call.
 pub fn close(call_manager: *mut AndroidCallManager) -> Result<()> {
-    info!("close():");
-
     // Convert the raw pointer back into a Box and let it go out of
     // scope when this function exits.
     let mut call_manager = unsafe { ptr_as_box(call_manager)? };
@@ -601,8 +530,6 @@ pub fn read_call_link(
     root_key: jbyteArray,
     request_id: jlong,
 ) -> Result<()> {
-    info!("read_call_link():");
-
     let sfu_url = env.get_string(sfu_url)?;
     let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
     let root_key =
@@ -634,8 +561,6 @@ pub fn create_call_link(
     call_link_public_params: jbyteArray,
     request_id: jlong,
 ) -> Result<()> {
-    info!("create_call_link():");
-
     let sfu_url = env.get_string(sfu_url)?;
     let create_credential_presentation = env.convert_byte_array(create_credential_presentation)?;
     let root_key =
@@ -673,8 +598,6 @@ pub fn update_call_link(
     new_revoked: jint,
     request_id: jlong,
 ) -> Result<()> {
-    info!("update_call_link():");
-
     let sfu_url = env.get_string(sfu_url)?;
     let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
     let root_key =
@@ -758,8 +681,6 @@ pub fn peek_group_call(
     membership_proof: jbyteArray,
     jni_serialized_group_members: jbyteArray,
 ) -> Result<()> {
-    info!("peek_group_call():");
-
     let request_id = request_id as u32;
 
     let sfu_url = env.get_string(sfu_url)?.into();
@@ -782,8 +703,6 @@ pub fn peek_call_link_call(
     auth_credential_presentation: jbyteArray,
     root_key: jbyteArray,
 ) -> Result<()> {
-    info!("peek_call_link_call():");
-
     let request_id = request_id as u32;
 
     let sfu_url = env.get_string(sfu_url)?;
@@ -817,8 +736,6 @@ pub fn create_group_call_client(
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
 ) -> Result<group_call::ClientId> {
-    info!("create_group_call_client():");
-
     let group_id = env.convert_byte_array(group_id)?;
     let sfu_url = env.get_string(sfu_url)?.into();
     let hkdf_extra_info = env.convert_byte_array(hkdf_extra_info)?;
@@ -884,8 +801,6 @@ pub fn create_call_link_call_client(
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
 ) -> Result<group_call::ClientId> {
-    info!("create_call_link_call_client():");
-
     let sfu_url = env.get_string(sfu_url)?.into();
     let auth_presentation = env.convert_byte_array(auth_presentation)?;
     let root_key =
@@ -959,24 +874,18 @@ pub fn connect(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
 ) -> Result<()> {
-    info!("connect(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.connect(client_id);
     Ok(())
 }
 
 pub fn join(call_manager: *mut AndroidCallManager, client_id: group_call::ClientId) -> Result<()> {
-    info!("join(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.join(client_id);
     Ok(())
 }
 
 pub fn leave(call_manager: *mut AndroidCallManager, client_id: group_call::ClientId) -> Result<()> {
-    info!("leave(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.leave(client_id);
     Ok(())
@@ -986,8 +895,6 @@ pub fn disconnect(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
 ) -> Result<()> {
-    info!("disconnect(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.disconnect(client_id);
     Ok(())
@@ -998,8 +905,6 @@ pub fn set_outgoing_audio_muted(
     client_id: group_call::ClientId,
     muted: bool,
 ) -> Result<()> {
-    info!("set_outgoing_audio_muted(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_outgoing_audio_muted(client_id, muted);
     Ok(())
@@ -1010,8 +915,6 @@ pub fn set_outgoing_video_muted(
     client_id: group_call::ClientId,
     muted: bool,
 ) -> Result<()> {
-    info!("set_outgoing_video_muted(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_outgoing_video_muted(client_id, muted);
     Ok(())
@@ -1023,8 +926,6 @@ pub fn group_ring(
     client_id: group_call::ClientId,
     recipient: jbyteArray,
 ) -> Result<()> {
-    info!("group_ring(): id: {}", client_id);
-
     let recipient = if recipient.is_null() {
         None
     } else {
@@ -1040,8 +941,6 @@ pub fn resend_media_keys(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
 ) -> Result<()> {
-    info!("resend_media_keys(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.resend_media_keys(client_id);
     Ok(())
@@ -1052,8 +951,6 @@ pub fn set_data_mode(
     client_id: group_call::ClientId,
     data_mode: DataMode,
 ) -> Result<()> {
-    info!("set_data_mode(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_data_mode(client_id, data_mode);
     Ok(())
@@ -1066,8 +963,6 @@ pub fn request_video(
     jni_rendered_resolutions: JObject,
     active_speaker_height: jint,
 ) -> Result<()> {
-    info!("request_video(): id: {}", client_id);
-
     // Convert Java list of VideoRequest into Rust Vec<group_call::VideoRequest>.
     let jni_rendered_resolution_list = env.get_list(jni_rendered_resolutions)?;
     let mut rendered_resolutions: Vec<group_call::VideoRequest> = Vec::new();
@@ -1144,10 +1039,7 @@ pub fn approve_user(
     client_id: group_call::ClientId,
     other_user_id: jbyteArray,
 ) -> Result<()> {
-    info!("approve_user(): id: {}", client_id);
-
     let other_user_id = env.convert_byte_array(other_user_id)?;
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.approve_user(client_id, other_user_id);
     Ok(())
@@ -1159,10 +1051,7 @@ pub fn deny_user(
     client_id: group_call::ClientId,
     other_user_id: jbyteArray,
 ) -> Result<()> {
-    info!("deny_user(): id: {}", client_id);
-
     let other_user_id = env.convert_byte_array(other_user_id)?;
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.deny_user(client_id, other_user_id);
     Ok(())
@@ -1173,8 +1062,6 @@ pub fn remove_client(
     client_id: group_call::ClientId,
     other_client_demux_id: jlong,
 ) -> Result<()> {
-    info!("remove_client(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.remove_client(client_id, other_client_demux_id as u32);
     Ok(())
@@ -1185,8 +1072,6 @@ pub fn block_client(
     client_id: group_call::ClientId,
     other_client_demux_id: jlong,
 ) -> Result<()> {
-    info!("block_client(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.block_client(client_id, other_client_demux_id as u32);
     Ok(())
@@ -1198,11 +1083,8 @@ pub fn set_group_members(
     client_id: group_call::ClientId,
     jni_serialized_group_members: jbyteArray,
 ) -> Result<()> {
-    info!("set_group_members(): id: {}", client_id);
-
     let group_members =
         deserialize_to_group_member_info(env.convert_byte_array(jni_serialized_group_members)?)?;
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_group_members(client_id, group_members);
     Ok(())
@@ -1214,10 +1096,7 @@ pub fn set_membership_proof(
     client_id: group_call::ClientId,
     proof: jbyteArray,
 ) -> Result<()> {
-    info!("set_group_membership_proof(): id: {}", client_id);
-
     let proof = env.convert_byte_array(proof)?;
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_membership_proof(client_id, proof);
     Ok(())
@@ -1230,7 +1109,6 @@ pub fn react(
     value: JString,
 ) -> Result<()> {
     let value = env.get_string(value)?.into();
-    info!("react(): value: {}", value);
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.react(client_id, value);
     Ok(())
@@ -1241,7 +1119,6 @@ pub fn raise_hand(
     client_id: group_call::ClientId,
     raise: bool,
 ) -> Result<()> {
-    info!("raise_hand(): raise: {}", raise);
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.raise_hand(client_id, raise);
     Ok(())

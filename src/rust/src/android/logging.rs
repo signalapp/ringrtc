@@ -7,7 +7,6 @@
 
 use jni::objects::{GlobalRef, JClass, JObject};
 use jni::{JNIEnv, JavaVM};
-
 use log::{Level, Log, Metadata, Record};
 
 use crate::android::error::AndroidError;
@@ -22,10 +21,10 @@ struct AndroidLogger {
 }
 
 // Method name and signature required of Java logger class
-// void log(int level, String tag, String message)
+// void log(int level, String message)
 const LOGGER_CLASS: &str = jni_class_name!(org.signal.ringrtc.Log);
 const LOGGER_METHOD: &str = "log";
-const LOGGER_SIG: &str = jni_signature!((int, java.lang.String, java.lang.String) -> void);
+const LOGGER_SIG: &str = jni_signature!((int, java.lang.String) -> void);
 
 impl AndroidLogger {
     // This is specifically *not* using ExceptionCheckingJNIEnv:
@@ -73,25 +72,31 @@ impl Log for AndroidLogger {
                 }
             }
 
-            let path = record.module_path().unwrap_or("unknown");
+            let get_file_name = || -> Option<&str> {
+                let file = record.file()?;
+                file.split(std::path::MAIN_SEPARATOR_STR).last()
+            };
+
+            let message = match (get_file_name(), record.line()) {
+                (Some(file), Some(line)) => {
+                    format!("{}:{}: {}", file, line, record.args())
+                }
+                (_, _) => {
+                    format!("{}", record.args())
+                }
+            };
 
             let level = record.level() as i32;
 
             let _ = env.with_local_frame(5, || {
-                let tag = match env.new_string(path) {
+                let msg = match env.new_string(message) {
                     Ok(v) => JObject::from(v),
                     Err(_) => return Ok(JObject::null()),
                 };
 
-                let msg = match env.new_string(format!("{}", record.args())) {
-                    Ok(v) => JObject::from(v),
-                    Err(_) => return Ok(JObject::null()),
-                };
+                let values = [level.into(), msg.into()];
 
-                let values = [level.into(), tag.into(), msg.into()];
-
-                // Ignore the result here, can't do anything about it
-                // anyway.
+                // Ignore the result here, can't do anything about it anyway.
                 let _ = env.call_static_method(
                     JClass::from(self.logger.as_obj()),
                     LOGGER_METHOD,

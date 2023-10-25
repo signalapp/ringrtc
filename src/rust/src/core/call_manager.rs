@@ -72,7 +72,7 @@ macro_rules! handle_active_call_api {
         $f:expr
             $( , $a:expr)*
     ) => {{
-        info!("API:{}():", stringify!($f));
+        info!("API:{}():", stringify!($f).replace("::", ":"));
         let mut call_manager = $s.clone();
         $s.worker_spawn(move || {
             if let Err(err) = $f(&mut call_manager $( , $a)*) {
@@ -114,7 +114,7 @@ macro_rules! handle_api {
             $( , $a:expr)*
     ) => {{
         let mut call_manager = $s.clone();
-        info!("API:{}():", stringify!($f));
+        info!("API:{}():", stringify!($f).replace("::", ":"));
         $s.worker_spawn(move || {
             if let Err(err) = $f(&mut call_manager $( , $a)*) {
                 error!("{} failed: {}", stringify!($f), err);

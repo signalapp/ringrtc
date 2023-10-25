@@ -432,7 +432,7 @@ pub fn join(
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
     result_callback: JoinResultCallback,
 ) {
-    info!("sfu::Join(): ");
+    info!("sfu:Join(): ");
 
     http_client.send_request(
         http::Request {

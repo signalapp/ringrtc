@@ -7,7 +7,7 @@ package org.signal.ringrtc;
 
 public class Log {
 
-  private static final String TAG = Log.class.getSimpleName();
+  private static final String TAG = "ringrtc";
 
   // Log levels corresponding to rust's Log::Level values
   private static final int LL_ERROR = 1;
@@ -22,21 +22,21 @@ public class Log {
     Log.logger = logger;
   }
 
-  public static void log(int level, String tag, String message) {
+  public static void log(int level, String message) {
 
     switch(level) {
     case LL_ERROR:
-      e(tag, message); break;
+      e(TAG, message); break;
     case LL_WARN:
-      w(tag, message); break;
+      w(TAG, message); break;
     case LL_INFO:
-      i(tag, message); break;
+      i(TAG, message); break;
     case LL_DEBUG:
-      d(tag, message); break;
+      d(TAG, message); break;
     case LL_TRACE:
-      v(tag, message); break;
+      v(TAG, message); break;
     default:
-      w(TAG, "Unknown log level: " + tag + ", " + message);
+      w(TAG, "Unknown log level: " + message);
     }
 
   }

@@ -178,9 +178,7 @@ impl fmt::Display for ConnectionEvent {
                 network_route
             ),
             ConnectionEvent::InternalError(e) => format!("InternalError: {}", e),
-            ConnectionEvent::ReceivedIncomingMedia(stream) => {
-                format!("ReceivedIncomingMedia, stream: {:?}", stream)
-            }
+            ConnectionEvent::ReceivedIncomingMedia(_) => "ReceivedIncomingMedia".to_string(),
             ConnectionEvent::Synchronize(_) => "Synchronize".to_string(),
             ConnectionEvent::Terminate => "Terminate".to_string(),
         };

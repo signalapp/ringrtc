@@ -13,7 +13,6 @@ pub mod ios {
     pub struct rtc_log_Record<'a> {
         message: rtc_String<'a>,
         file: rtc_String<'a>,
-        function: rtc_String<'a>,
         line: rtc_OptionalU32,
         level: u8,
     }
@@ -64,17 +63,11 @@ pub mod ios {
                 return;
             }
 
-            // Ignore tokio and mio logs. For our purposes they are just noise.
-            if record.target().contains("tokio") || record.target().contains("mio::") {
-                return;
-            }
-
             let message = format!("{}", record.args());
 
             (self.log)(rtc_log_Record {
                 message: rtc_String::from(&message),
                 file: rtc_String::from_or_default(record.file()),
-                function: rtc_String::from(record.target()),
                 line: rtc_OptionalU32::from_or_default(record.line()),
                 level: record.level() as u8,
             });

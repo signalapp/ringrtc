@@ -163,7 +163,7 @@ impl DelegatingClient {
     /// A None Response indicates a failure.
     pub fn received_response(&self, request_id: u32, response: Option<Response>) {
         info!(
-            "http::DelegatingClient::received_response(): request_id: {}",
+            "http:DelegatingClient:received_response(): request_id: {}",
             request_id
         );
 
@@ -181,15 +181,15 @@ impl DelegatingClient {
             let mut response_callbacks = self
                 .response_callbacks
                 .lock()
-                .expect("http::DelegatingClient::response_callbacks lock");
+                .expect("http:DelegatingClient:response_callbacks lock");
             response_callbacks.pop(request_id)
         };
         if let Some(response_callback) = response_callback {
-            debug!("http::DelegatingClient::received_response(): calling registered callback");
+            debug!("http:DelegatingClient:received_response(): calling registered callback");
             response_callback(response);
         } else {
             error!(
-                "http::DelegatingClient::received_response(): unknown request ID: {}",
+                "http:DelegatingClient:received_response(): unknown request ID: {}",
                 request_id
             );
         }
@@ -198,7 +198,7 @@ impl DelegatingClient {
 
 impl Client for DelegatingClient {
     fn send_request(&self, request: Request, response_callback: ResponseCallback) {
-        info!("http::DelegatingClient::make_request()");
+        info!("http:DelegatingClient:make_request()");
         debug!(
             "  url: {} method: {:?} headers: {:?}",
             request.url, request.method, request.headers
@@ -207,13 +207,13 @@ impl Client for DelegatingClient {
             let mut response_callbacks = self
                 .response_callbacks
                 .lock()
-                .expect("http::DelegatingClient::response_callbacks lock");
+                .expect("http:DelegatingClient:response_callbacks lock");
             response_callbacks.push(response_callback)
         };
         let delegate = self
             .delegate
             .lock()
-            .expect("http::DelegatingClient::state lock");
+            .expect("http:DelegatingClient:state lock");
         delegate.send_request(request_id, request)
     }
 }
@@ -367,7 +367,7 @@ pub mod ios {
     impl super::Delegate for rtc_http_Delegate {
         fn send_request(&self, request_id: u32, request: http::Request) {
             info!(
-                "rtc_http_Delegate::send_request(): request_id: {}",
+                "rtc_http_Delegate:send_request(): request_id: {}",
                 request_id
             );
 

@@ -16,7 +16,7 @@ use crate::ios::ios_platform::IosPlatform;
 
 use crate::common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result};
 use crate::core::call_manager::CallManager;
-use crate::core::util::{ptr_as_box, ptr_as_mut, uuid_to_string};
+use crate::core::util::{ptr_as_box, ptr_as_mut};
 use crate::core::{call_manager, group_call, signaling};
 use crate::error::RingRtcError;
 use crate::lite::call_links::CallLinkRootKey;
@@ -34,10 +34,8 @@ pub type IosCallManager = CallManager<IosPlatform>;
 
 /// Creates a new IosCallManager object.
 pub fn create(app_interface: AppInterface, http_client: http::ios::Client) -> Result<*mut c_void> {
-    info!("create_call_manager():");
     let platform = IosPlatform::new(app_interface)?;
     let call_manager = IosCallManager::new(platform, http_client)?;
-
     let call_manager_box = Box::new(call_manager);
     Ok(Box::into_raw(call_manager_box) as *mut c_void)
 }
@@ -45,9 +43,6 @@ pub fn create(app_interface: AppInterface, http_client: http::ios::Client) -> Re
 /// Updates the current user's UUID.
 pub fn set_self_uuid(call_manager: *mut IosCallManager, uuid: UserId) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("set_self_uuid():");
-
     call_manager.set_self_uuid(uuid)
 }
 
@@ -59,9 +54,6 @@ pub fn call(
     app_local_device: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("call():");
-
     call_manager.call(
         AppObject::from(app_remote),
         call_media_type,
@@ -79,9 +71,6 @@ pub fn proceed(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!("proceed(): {}", call_id);
-
     call_manager.proceed(
         call_id,
         Arc::new(app_call_context),
@@ -94,8 +83,6 @@ pub fn proceed(
 pub fn message_sent(call_manager: *mut IosCallManager, call_id: u64) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!("message_sent(): call_id: {}", call_id);
     call_manager.message_sent(call_id)
 }
 
@@ -103,16 +90,12 @@ pub fn message_sent(call_manager: *mut IosCallManager, call_id: u64) -> Result<(
 pub fn message_send_failure(call_manager: *mut IosCallManager, call_id: u64) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!("message_send_failure(): call_id: {}", call_id);
     call_manager.message_send_failure(call_id)
 }
 
 /// Application notification of local hangup.
 pub fn hangup(call_manager: *mut IosCallManager) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("hangup():");
     call_manager.hangup()
 }
 
@@ -124,8 +107,6 @@ pub fn cancel_group_ring(
     reason: Option<group_call::RingCancelReason>,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-
-    info!("cancel_group_ring(): ring_id: {}", ring_id);
     call_manager.cancel_group_ring(group_id, ring_id, reason)
 }
 
@@ -141,11 +122,6 @@ pub fn received_answer(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!(
-        "received_answer(): call_id: {} sender_device_id: {}",
-        call_id, sender_device_id
-    );
 
     let opaque = match opaque {
         Some(v) => v,
@@ -210,11 +186,6 @@ pub fn received_offer(
     let call_id = CallId::from(call_id);
     let remote_peer = AppObject::from(remote_peer);
 
-    info!(
-        "received_offer(): call_id: {} remote_device_id: {}",
-        call_id, sender_device_id
-    );
-
     let opaque = match opaque {
         Some(v) => v,
         None => {
@@ -271,14 +242,6 @@ pub fn received_ice(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!(
-        "received_ice(): call_id: {} sender_device_id: {} candidates len: {}",
-        call_id,
-        received.sender_device_id,
-        received.ice.candidates.len()
-    );
-
     call_manager.received_ice(call_id, received)
 }
 
@@ -292,12 +255,6 @@ pub fn received_hangup(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!(
-        "received_hangup(): call_id: {} sender device_id: {}",
-        call_id, sender_device_id
-    );
-
     call_manager.received_hangup(
         call_id,
         signaling::ReceivedHangup {
@@ -315,12 +272,6 @@ pub fn received_busy(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-
-    info!(
-        "received_busy(): call_id: {} sender device_id: {}",
-        call_id, sender_device_id
-    );
-
     call_manager.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
 }
 
@@ -332,12 +283,6 @@ pub fn received_call_message(
     message: Vec<u8>,
     message_age_sec: Duration,
 ) -> Result<()> {
-    info!(
-        "received_call_message(): sender_device_id: {}",
-        sender_device_id
-    );
-    debug!("  sender_uuid: {}", uuid_to_string(&sender_uuid));
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.received_call_message(
         sender_uuid,
@@ -351,17 +296,12 @@ pub fn received_call_message(
 /// Application notification to accept the incoming call
 pub fn accept_call(call_manager: *mut IosCallManager, call_id: u64) -> Result<()> {
     let call_id = CallId::from(call_id);
-
-    info!("accept_call(): {}", call_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.accept_call(call_id)
 }
 
 /// CMI request for the active Connection object
 pub fn get_active_connection(call_manager: *mut IosCallManager) -> Result<*mut c_void> {
-    info!("get_active_connection():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection = call_manager.active_connection()?;
     let app_connection = connection.app_connection()?;
@@ -371,8 +311,6 @@ pub fn get_active_connection(call_manager: *mut IosCallManager) -> Result<*mut c
 
 /// CMI request for the active CallContext object
 pub fn get_active_call_context(call_manager: *mut IosCallManager) -> Result<*mut c_void> {
-    info!("get_active_call_context():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call = call_manager.active_call()?;
     let app_call_context = call.call_context()?;
@@ -382,8 +320,6 @@ pub fn get_active_call_context(call_manager: *mut IosCallManager) -> Result<*mut
 
 /// CMI request to set the video status
 pub fn set_video_enable(call_manager: *mut IosCallManager, enable: bool) -> Result<()> {
-    info!("set_video_enable():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
     active_connection.update_sender_status(signaling::SenderStatus {
@@ -394,8 +330,6 @@ pub fn set_video_enable(call_manager: *mut IosCallManager, enable: bool) -> Resu
 
 /// Request to update the data mode on the direct connection
 pub fn update_data_mode(call_manager: *mut IosCallManager, data_mode: DataMode) -> Result<()> {
-    info!("update_data_mode():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let mut active_connection = call_manager.active_connection()?;
     active_connection.inject_update_data_mode(data_mode)
@@ -404,17 +338,12 @@ pub fn update_data_mode(call_manager: *mut IosCallManager, data_mode: DataMode) 
 /// CMI request to drop the active call
 pub fn drop_call(call_manager: *mut IosCallManager, call_id: u64) -> Result<()> {
     let call_id = CallId::from(call_id);
-
-    info!("drop_call(): {}", call_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.drop_call(call_id)
 }
 
 /// CMI request to reset the Call Manager
 pub fn reset(call_manager: *mut IosCallManager) -> Result<()> {
-    info!("reset():");
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.reset()
 }
@@ -423,8 +352,6 @@ pub fn reset(call_manager: *mut IosCallManager) -> Result<()> {
 ///
 /// This is a blocking call.
 pub fn close(call_manager: *mut IosCallManager) -> Result<()> {
-    info!("close():");
-
     // Convert the raw pointer back into a Box and let it go out of
     // scope when this function exits.
     let mut call_manager = unsafe { ptr_as_box(call_manager)? };
@@ -444,8 +371,6 @@ pub fn create_group_call_client(
     native_audio_track: webrtc::ptr::OwnedRc<media::RffiAudioTrack>,
     native_video_track: webrtc::ptr::OwnedRc<media::RffiVideoTrack>,
 ) -> Result<group_call::ClientId> {
-    info!("create_group_call_client():");
-
     let peer_connection_factory = unsafe {
         PeerConnectionFactory::from_native_factory(webrtc::Arc::from_owned(
             native_peer_connection_factory,
@@ -488,8 +413,6 @@ pub fn create_call_link_call_client(
     native_audio_track: webrtc::ptr::OwnedRc<media::RffiAudioTrack>,
     native_video_track: webrtc::ptr::OwnedRc<media::RffiVideoTrack>,
 ) -> Result<group_call::ClientId> {
-    info!("create_call_link_call_client():");
-
     let peer_connection_factory = unsafe {
         PeerConnectionFactory::from_native_factory(webrtc::Arc::from_owned(
             native_peer_connection_factory,
@@ -531,24 +454,18 @@ pub fn delete_group_call_client(
 }
 
 pub fn connect(call_manager: *mut IosCallManager, client_id: group_call::ClientId) -> Result<()> {
-    info!("connect(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.connect(client_id);
     Ok(())
 }
 
 pub fn join(call_manager: *mut IosCallManager, client_id: group_call::ClientId) -> Result<()> {
-    info!("join(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.join(client_id);
     Ok(())
 }
 
 pub fn leave(call_manager: *mut IosCallManager, client_id: group_call::ClientId) -> Result<()> {
-    info!("leave(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.leave(client_id);
     Ok(())
@@ -558,22 +475,8 @@ pub fn disconnect(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,
 ) -> Result<()> {
-    info!("disconnect(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.disconnect(client_id);
-    Ok(())
-}
-
-pub fn group_ring(
-    call_manager: *mut IosCallManager,
-    client_id: group_call::ClientId,
-    recipient: Option<UserId>,
-) -> Result<()> {
-    info!("group_ring(): id: {}", client_id);
-
-    let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    call_manager.group_ring(client_id, recipient);
     Ok(())
 }
 
@@ -582,8 +485,6 @@ pub fn set_outgoing_audio_muted(
     client_id: group_call::ClientId,
     muted: bool,
 ) -> Result<()> {
-    info!("set_outgoing_audio_muted(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_outgoing_audio_muted(client_id, muted);
     Ok(())
@@ -594,10 +495,18 @@ pub fn set_outgoing_video_muted(
     client_id: group_call::ClientId,
     muted: bool,
 ) -> Result<()> {
-    info!("set_outgoing_video_muted(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_outgoing_video_muted(client_id, muted);
+    Ok(())
+}
+
+pub fn group_ring(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    recipient: Option<UserId>,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.group_ring(client_id, recipient);
     Ok(())
 }
 
@@ -605,8 +514,6 @@ pub fn resend_media_keys(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,
 ) -> Result<()> {
-    info!("resend_media_keys(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.resend_media_keys(client_id);
     Ok(())
@@ -617,8 +524,6 @@ pub fn set_data_mode(
     client_id: group_call::ClientId,
     data_mode: DataMode,
 ) -> Result<()> {
-    info!("set_data_mode(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_data_mode(client_id, data_mode);
     Ok(())
@@ -630,8 +535,6 @@ pub fn request_video(
     rendered_resolutions: Vec<group_call::VideoRequest>,
     active_speaker_height: u16,
 ) -> Result<()> {
-    info!("request_video(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.request_video(client_id, rendered_resolutions, active_speaker_height);
     Ok(())
@@ -642,8 +545,6 @@ pub fn approve_user(
     client_id: group_call::ClientId,
     other_user_id: UserId,
 ) -> Result<()> {
-    info!("approve_user(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.approve_user(client_id, other_user_id);
     Ok(())
@@ -654,8 +555,6 @@ pub fn deny_user(
     client_id: group_call::ClientId,
     other_user_id: UserId,
 ) -> Result<()> {
-    info!("deny_user(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.deny_user(client_id, other_user_id);
     Ok(())
@@ -666,8 +565,6 @@ pub fn remove_client(
     client_id: group_call::ClientId,
     other_client_demux_id: DemuxId,
 ) -> Result<()> {
-    info!("remove_client(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.remove_client(client_id, other_client_demux_id);
     Ok(())
@@ -678,8 +575,6 @@ pub fn block_client(
     client_id: group_call::ClientId,
     other_client_demux_id: DemuxId,
 ) -> Result<()> {
-    info!("block_client(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.block_client(client_id, other_client_demux_id);
     Ok(())
@@ -690,8 +585,6 @@ pub fn set_group_members(
     client_id: group_call::ClientId,
     members: Vec<GroupMember>,
 ) -> Result<()> {
-    info!("set_group_members(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_group_members(client_id, members);
     Ok(())
@@ -702,8 +595,6 @@ pub fn set_membership_proof(
     client_id: group_call::ClientId,
     proof: Vec<u8>,
 ) -> Result<()> {
-    info!("set_group_membership_proof(): id: {}", client_id);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_membership_proof(client_id, proof);
     Ok(())
@@ -714,8 +605,6 @@ pub fn react(
     client_id: group_call::ClientId,
     value: String,
 ) -> Result<()> {
-    info!("react(): value: {}", value);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.react(client_id, value);
     Ok(())
@@ -726,8 +615,6 @@ pub fn raise_hand(
     client_id: group_call::ClientId,
     raise: bool,
 ) -> Result<()> {
-    info!("raiseHand(): raise: {}", raise);
-
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.raise_hand(client_id, raise);
     Ok(())
@@ -738,8 +625,6 @@ pub fn validate_offer(
     age_sec: u64,
     call_media_type: CallMediaType,
 ) -> Result<()> {
-    info!("validate_offer()");
-
     let opaque = match opaque {
         Some(v) => v,
         None => {
@@ -768,7 +653,6 @@ pub fn validate_call_message_as_opaque_ring(
     age: Duration,
     validate_group_ring: impl FnOnce(group_call::GroupIdRef, group_call::RingId) -> bool,
 ) -> Result<()> {
-    info!("validate_call_message_as_opaque_ring()");
     let message: protobuf::signaling::CallMessage = prost::Message::decode(message)?;
     call_manager::validate_call_message_as_opaque_ring(&message, age, validate_group_ring)
         .map_err(|e| anyhow!("{:?}", e))

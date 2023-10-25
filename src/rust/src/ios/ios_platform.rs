@@ -173,7 +173,7 @@ impl Platform for IosPlatform {
 
         connection.set_peer_connection(peer_connection)?;
 
-        info!("connection: {:?}", connection);
+        debug!("connection: {:?}", connection);
 
         connection.set_app_connection(Arc::new(app_connection_interface))?;
 

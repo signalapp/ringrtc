@@ -55,6 +55,7 @@ public class CallManagerGlobal {
         webRtcLogger.severity = webRtcLogLevel.toWebRTC
 
         webRtcLogger.start { (message, severity) in
+            let message = message.replacingOccurrences(of: "::", with: ":")
             switch severity {
             case .verbose:
                 OWSLogger.verbose(message)

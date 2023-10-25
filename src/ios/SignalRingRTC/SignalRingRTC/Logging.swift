@@ -64,7 +64,6 @@ public enum LogLevel: UInt8, Comparable {
 public struct LogRecord {
     public let message: String
     public let file: String
-    public let function: String
     public let line: Int
     public let level: LogLevel
 
@@ -77,7 +76,6 @@ public struct LogRecord {
         return LogRecord(
             message: rtcRecord.message.toString() ?? "",
             file: rtcRecord.file.toString() ?? "",
-            function: rtcRecord.function.toString() ?? "",
             line: Int(truncatingIfNeeded: rtcRecord.line.asUInt32() ?? 0),
             level: level ?? .error
         )
@@ -94,15 +92,14 @@ public func initLogging(maxLogLevel: LogLevel = .trace) {
                 let record = LogRecord.fromRtc(rtcRecord)
                 let message = record.message
                 let file = record.file
-                let function = record.function
                 let line = record.line
 
                 switch record.level {
-                case .error: Logger.error(message, file: file, function: function, line: line)
-                case .warn: Logger.warn(message, file: file, function: function, line: line)
-                case .info: Logger.info(message, file: file, function: function, line: line)
-                case .debug: Logger.debug(message, file: file, function: function, line: line)
-                case .trace: Logger.verbose(message, file: file, function: function, line: line)
+                case .error: Logger.error(message, file: file, function: "ringrtc", line: line)
+                case .warn: Logger.warn(message, file: file, function: "ringrtc", line: line)
+                case .info: Logger.info(message, file: file, function: "ringrtc", line: line)
+                case .debug: Logger.debug(message, file: file, function: "ringrtc", line: line)
+                case .trace: Logger.verbose(message, file: file, function: "ringrtc", line: line)
                 case .off:
                     // Do nothing.  This doesn't really come from Rust.
                     break
