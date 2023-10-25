@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.34.1
+
+- Cleanup logging
+
+- Desktop: Remove device preloading to avoid permission prompt
+
 ## v2.34.0
 
 - Group Calls: Add Hand Raise feature
