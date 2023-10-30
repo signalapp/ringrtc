@@ -36,6 +36,7 @@ use crate::webrtc::peer_connection_observer::NetworkRoute;
 const RINGRTC_PACKAGE: &str = jni_class_name!(org.signal.ringrtc);
 const CALL_LINK_STATE_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkState);
 const CALL_MANAGER_CLASS: &str = "CallManager";
+const GROUP_CALL_CLASS: &str = "GroupCall";
 const HTTP_HEADER_CLASS: &str = jni_class_name!(org.signal.ringrtc.HttpHeader);
 const HTTP_RESULT_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallManager::HttpResult);
 const PEEK_INFO_CLASS: &str = jni_class_name!(org.signal.ringrtc.PeekInfo);
@@ -1262,17 +1263,50 @@ impl Platform for AndroidPlatform {
     ) {
         info!("handle_join_state_changed():");
 
-        let join_state = join_state.ordinal();
+        let env = match self.java_env() {
+            Ok(v) => v,
+            Err(error) => {
+                error!("{:?}", error);
+                return;
+            }
+        };
+        let jni_call_manager = self.jni_call_manager.as_obj();
 
-        handle_state_change_via_jni!(
-            self,
+        let jni_client_id = client_id as jlong;
+        let jni_join_state =
+            match self.java_enum(&env, GROUP_CALL_CLASS, "JoinState", join_state.ordinal()) {
+                Ok(v) => AutoLocal::new(&env, v),
+                Err(error) => {
+                    error!("{:?}", error);
+                    return;
+                }
+            };
+        let jni_demux_id = match join_state {
+            group_call::JoinState::Pending(demux_id) | group_call::JoinState::Joined(demux_id) => {
+                match self.get_optional_u32_long_object(&env, Some(demux_id)) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return;
+                    }
+                }
+            }
+            _ => JObject::null(),
+        };
+
+        let result = jni_call_method(
+            &env,
+            jni_call_manager,
             "handleJoinStateChanged",
-            jni_signature!((long, org.signal.ringrtc.GroupCall::JoinState) -> void),
-            "GroupCall",
-            "JoinState",
-            client_id,
-            join_state
+            jni_args!((
+                jni_client_id => long,
+                jni_join_state.as_obj() => org.signal.ringrtc.GroupCall::JoinState,
+                jni_demux_id => java.lang.Long
+            ) -> void),
         );
+        if result.is_err() {
+            error!("jni_call_method: {:?}", result.err());
+        }
     }
 
     fn handle_remote_devices_changed(

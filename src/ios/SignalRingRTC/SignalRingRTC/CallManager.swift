@@ -1127,7 +1127,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
+    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState, demuxId: UInt32?) {
         Logger.debug("handleJoinStateChanged")
 
         DispatchQueue.main.async {
@@ -1137,7 +1137,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
                 return
             }
 
-            groupCall.handleJoinStateChanged(joinState: joinState)
+            groupCall.handleJoinStateChanged(joinState: joinState, demuxId: demuxId)
         }
     }
 

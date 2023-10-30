@@ -56,6 +56,7 @@ public class LocalDeviceState {
     public internal(set) var networkRoute: NetworkRoute
     public internal(set) var joinState: JoinState
     public internal(set) var audioLevel: UInt16
+    public internal(set) var demuxId: UInt32?
 
     init() {
         self.connectionState = .notConnected
@@ -771,10 +772,11 @@ public class GroupCall {
         self.delegate?.groupCall(onRaisedHands: self, raisedHands: raisedHands)
     }
 
-    func handleJoinStateChanged(joinState: JoinState) {
+    func handleJoinStateChanged(joinState: JoinState, demuxId: UInt32?) {
        AssertIsOnMainThread()
 
        self.localDeviceState.joinState = joinState
+       self.localDeviceState.demuxId = demuxId
 
        self.delegate?.groupCall(onLocalDeviceStateChanged: self)
     }

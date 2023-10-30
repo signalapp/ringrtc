@@ -38,7 +38,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleLowBandwidthForVideo(clientId: UInt32, recovered: Bool)
     func handleReactions(clientId: UInt32, reactions: [Reaction])
     func handleRaisedHands(clientId: UInt32, raisedHands: [UInt32])
-    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState)
+    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState, demuxId: UInt32?)
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
     func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo)
@@ -318,12 +318,12 @@ class CallManagerInterface {
         delegate.handleRaisedHands(clientId: clientId, raisedHands: raisedHands)
     }
 
-    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState) {
+    func handleJoinStateChanged(clientId: UInt32, joinState: JoinState, demuxId: UInt32?) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.handleJoinStateChanged(clientId: clientId, joinState: joinState)
+        delegate.handleJoinStateChanged(clientId: clientId, joinState: joinState, demuxId: demuxId)
     }
 
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState]) {
@@ -942,22 +942,27 @@ func callManagerInterfaceHandleRaisedHands(object: UnsafeMutableRawPointer?, cli
 }
 
 @available(iOSApplicationExtension, unavailable)
-func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinState: Int32) {
+func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinState: Int32, demuxId: AppOptionalUInt32) {
     guard let object = object else {
         owsFailDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
-    let _joinState: JoinState
+    let finalJoinState: JoinState
     if let validState = JoinState(rawValue: joinState) {
-        _joinState = validState
+        finalJoinState = validState
     } else {
         owsFailDebug("unexpected join state")
         return
     }
 
-    obj.handleJoinStateChanged(clientId: clientId, joinState: _joinState)
+    var finalDemuxId: UInt32?
+    if demuxId.valid {
+        finalDemuxId = demuxId.value
+    }
+
+    obj.handleJoinStateChanged(clientId: clientId, joinState: finalJoinState, demuxId: finalDemuxId)
 }
 
 @available(iOSApplicationExtension, unavailable)

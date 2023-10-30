@@ -642,10 +642,18 @@ impl Platform for IosPlatform {
         client_id: group_call::ClientId,
         join_state: group_call::JoinState,
     ) {
+        let app_demux_id = match join_state {
+            group_call::JoinState::Pending(demux_id) | group_call::JoinState::Joined(demux_id) => {
+                app_option_from_u32(Some(demux_id))
+            }
+            _ => app_option_from_u32(None),
+        };
+
         (self.app_interface.handleJoinStateChanged)(
             self.app_interface.object,
             client_id,
             join_state.ordinal(),
+            app_demux_id,
         );
     }
 

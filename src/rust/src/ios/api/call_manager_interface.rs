@@ -493,8 +493,12 @@ pub struct AppInterface {
     ),
 
     ///
-    pub handleJoinStateChanged:
-        extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, joinState: i32),
+    pub handleJoinStateChanged: extern "C" fn(
+        object: *mut c_void,
+        clientId: group_call::ClientId,
+        joinState: i32,
+        demuxId: AppOptionalUInt32,
+    ),
     ///
     pub handleRemoteDevicesChanged: extern "C" fn(
         object: *mut c_void,

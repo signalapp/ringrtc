@@ -682,11 +682,12 @@ public final class GroupCall {
      * the CallManager.
      *
      */
-    void handleJoinStateChanged(JoinState joinState) {
+    void handleJoinStateChanged(JoinState joinState, Long demuxId) {
         Log.i(TAG, "handleJoinStateChanged():");
 
         LocalDeviceState localDeviceState = new LocalDeviceState(this.localDeviceState);
         localDeviceState.joinState = joinState;
+        localDeviceState.demuxId = demuxId;
 
         this.localDeviceState = localDeviceState;
 
@@ -954,12 +955,13 @@ public final class GroupCall {
      * A convenience class grouping together all the local state.
      */
     public class LocalDeviceState {
-        ConnectionState connectionState;
-        JoinState       joinState;
-        boolean         audioMuted;
-        boolean         videoMuted;
-        NetworkRoute    networkRoute;
-        int             audioLevel;
+                  ConnectionState connectionState;
+                  JoinState       joinState;
+                  boolean         audioMuted;
+                  boolean         videoMuted;
+                  NetworkRoute    networkRoute;
+                  int             audioLevel;
+        @Nullable Long            demuxId;
 
         public LocalDeviceState() {
             this.connectionState = ConnectionState.NOT_CONNECTED;
@@ -977,6 +979,7 @@ public final class GroupCall {
             this.videoMuted = localDeviceState.videoMuted;
             this.networkRoute = localDeviceState.networkRoute;
             this.audioLevel = localDeviceState.audioLevel;
+            this.demuxId = localDeviceState.demuxId;
         }
 
         public ConnectionState getConnectionState() {
@@ -1002,6 +1005,10 @@ public final class GroupCall {
         // Range of 0-32767, where 0 is silence.
         public int getAudioLevel() {
             return audioLevel;
+        }
+
+        public @Nullable Long getDemuxId() {
+            return demuxId;
         }
     }
 
