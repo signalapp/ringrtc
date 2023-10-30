@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.34.2
+
+- Group Calls: Propagate demux_id to LocalDeviceState
+
 ## v2.34.1
 
 - Cleanup logging
