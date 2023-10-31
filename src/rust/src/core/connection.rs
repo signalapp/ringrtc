@@ -1528,6 +1528,9 @@ where
     pub fn enable_media(&self) -> Result<()> {
         info!("enable_media(): id: {}", self.connection_id);
 
+        #[cfg(feature = "call_sim")]
+        thread::sleep(Duration::from_millis(20));
+
         let webrtc = self.webrtc.lock()?;
         let pc = webrtc.peer_connection()?;
         pc.set_audio_playout_enabled(true);

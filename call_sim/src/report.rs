@@ -1247,7 +1247,9 @@ impl Report {
             iterations: test_case_config.iterations,
         };
 
-        test_report.create_charts(&test_case.test_path).await;
+        if test_case_config.create_charts {
+            test_report.create_charts(&test_case.test_path).await;
+        }
 
         Ok(test_report)
     }

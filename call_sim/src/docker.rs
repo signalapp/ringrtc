@@ -750,6 +750,11 @@ pub async fn start_cli(
     ));
 
     args.push(format!(
+        "--audio-jitter-buffer-max-target-delay-ms={}",
+        call_config.audio.jitter_buffer_max_target_delay_ms
+    ));
+
+    args.push(format!(
         "--audio-rtcp-report-interval-ms={}",
         call_config.audio.rtcp_report_interval_ms
     ));
@@ -917,7 +922,13 @@ pub async fn generate_spectrogram(location: &str, wav_file: &str, extension: &st
             "mysox",
             wav_file,
             "-n",
+            // Only show the first channel.
+            "remix",
+            "1",
             "spectrogram",
+            // Limit height since we are only showing one channel.
+            "-y",
+            "257",
             "-o",
             &format!("{}.{}", wav_file, extension),
         ])

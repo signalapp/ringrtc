@@ -184,6 +184,9 @@ pub struct TestCaseConfig {
     pub tcp_dump: bool,
     /// The number of times to run the test case.
     pub iterations: u16,
+    /// Whether to create charts for reports. This takes time and is sometimes not needed
+    /// when running large test sets.
+    pub create_charts: bool,
 }
 
 impl Default for TestCaseConfig {
@@ -195,6 +198,7 @@ impl Default for TestCaseConfig {
             client_b_config: Default::default(),
             tcp_dump: false,
             iterations: 1,
+            create_charts: true,
         }
     }
 }
@@ -344,6 +348,8 @@ pub struct AudioConfig {
     pub enable_agc: bool,
     /// The maximum number of packets the jitter buffer can hold.
     pub jitter_buffer_max_packets: i32,
+    /// The maximum amount of delay to allow in the jitter buffer.
+    pub jitter_buffer_max_target_delay_ms: i32,
     /// How often RTCP reports should be sent. Subject to jitter applied by WebRTC.
     pub rtcp_report_interval_ms: i32,
     /// Whether or not speech (wideband) analysis should be performed.
@@ -389,6 +395,7 @@ impl Default for AudioConfig {
             enable_ns: true,
             enable_agc: true,
             jitter_buffer_max_packets: 200,
+            jitter_buffer_max_target_delay_ms: 500,
             rtcp_report_interval_ms: 5000,
             speech_analysis: true,
             audio_analysis: false,
