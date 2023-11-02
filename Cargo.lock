@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.34.2"
+version = "2.34.3"
 dependencies = [
  "aes",
  "aes-gcm-siv",

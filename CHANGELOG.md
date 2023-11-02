@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.34.3
+
+- Update to webrtc 5845j
+  - Add low bitrate redundancy support
+  - Lower port allocation step delay
+  - Prune TurnPorts on a per-server basis
+  - Unregister sink properly when closing
+
+- Call Sim: Improvements for running large test sets
+
 ## v2.34.2
 
 - Group Calls: Propagate demux_id to LocalDeviceState
