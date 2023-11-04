@@ -29,6 +29,7 @@
   "author": "",
   "license": "AGPL-3.0-only",
   "dependencies": {
+    "https-proxy-agent": "^7.0.2",
     "tar": "^6.1.0"
   },
   "devDependencies": {
