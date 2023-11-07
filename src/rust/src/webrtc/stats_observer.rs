@@ -366,12 +366,7 @@ impl StatsObserver {
             for video_sender in video_senders.iter() {
                 let prev_video_send_stats = stats.video_send.entry(video_sender.ssrc).or_default();
 
-                // If the total number of packets sent or frames encoded is reduced, that means
-                // that the stats for the stream were reset. This can happen when entering or
-                // exiting screenshare mode.
-                if video_sender.packets_sent < prev_video_send_stats.packets_sent
-                    || video_sender.frames_encoded < prev_video_send_stats.frames_encoded
-                {
+                if video_sender.is_new_stream(prev_video_send_stats) {
                     *prev_video_send_stats = Default::default();
                 }
 
@@ -497,6 +492,20 @@ pub struct VideoSenderStatistics {
 }
 
 impl VideoSenderStatistics {
+    /// Returns whether the stats for this stream have been reset.
+    ///
+    /// Most of the values in [VideoSenderStatistics] are nondecreasing values for a specific
+    /// stream. If one of these values decreases, that's a sign that the stream was reset. This can
+    /// happen when entering or exiting screenshare mode.
+    fn is_new_stream(&self, prev_stats: &VideoSenderStatistics) -> bool {
+        self.packets_sent < prev_stats.packets_sent
+            || self.bytes_sent < prev_stats.bytes_sent
+            || self.frames_encoded < prev_stats.frames_encoded
+            || self.key_frames_encoded < prev_stats.key_frames_encoded
+            || self.nack_count < prev_stats.nack_count
+            || self.pli_count < prev_stats.pli_count
+    }
+
     fn quality_limitation_reason_description(&self) -> Cow<'static, str> {
         // See https://w3c.github.io/webrtc-stats/#rtcqualitylimitationreason-enum.
         match self.quality_limitation_reason {
