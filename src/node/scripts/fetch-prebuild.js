@@ -56,10 +56,6 @@ function download() {
     if (process.env.HTTPS_PROXY != undefined) {
       options.agent = new HttpsProxyAgent(process.env.HTTPS_PROXY);
     }
-    if (process.env.https_proxy != undefined) {
-      options.agent = new HttpsProxyAgent(process.env.https_proxy);
-    }
-
     https.get(URL, options, async res => {
       try {
         const out = fs.createWriteStream(tmpFile);
