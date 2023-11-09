@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.34.4
+
+- fetch build artifacts using a proxy where necessary
+
+- Update to WebRTC m118
+
 ## v2.34.3
 
 - Update to webrtc 5845j
