@@ -92,7 +92,7 @@ pub mod webrtc {
     pub use arc::Arc;
     pub mod field_trial;
     pub mod ice_gatherer;
-    #[cfg(feature = "simnet")]
+    #[cfg(feature = "injectable_network")]
     pub mod injectable_network;
     #[cfg(feature = "native")]
     pub mod logging;

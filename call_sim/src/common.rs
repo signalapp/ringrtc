@@ -203,6 +203,16 @@ impl Default for TestCaseConfig {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum CallProfile {
+    /// Don't set any special profile for the call.
+    None,
+    /// Sets loss percentage using a pre-determined loss map (via a client's injectable network).
+    /// Should allow for _almost_ reproducible measurements. Note that all packets for WebRTC
+    /// will flow through the lossy stream.
+    DeterministicLoss(u8),
+}
+
 /// General structure for configuration settings to send to the cli.
 #[derive(Debug, Clone)]
 pub struct CallConfig {
@@ -229,6 +239,8 @@ pub struct CallConfig {
     pub stats_interval_secs: u16,
     /// How soon to post stats to the log file before the first interval.
     pub stats_initial_offset_secs: u16,
+    /// Application of a profile for the call, to be set in the client.
+    pub profile: CallProfile,
 }
 
 impl CallConfig {
@@ -260,6 +272,7 @@ impl Default for CallConfig {
             extra_cli_args: vec![],
             stats_interval_secs: 1,
             stats_initial_offset_secs: 0,
+            profile: CallProfile::None,
         }
     }
 }

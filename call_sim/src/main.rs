@@ -15,8 +15,9 @@ use std::env;
 use std::time::Duration;
 
 use crate::common::{
-    AudioAnalysisMode, AudioConfig, CallConfig, ChartDimension, GroupConfig, NetworkConfig,
-    NetworkConfigWithOffset, NetworkProfile, TestCaseConfig, VideoConfig,
+    AudioAnalysisMode, AudioConfig, CallConfig, CallProfile::DeterministicLoss, ChartDimension,
+    GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig,
+    VideoConfig,
 };
 use crate::docker::{build_images, clean_network, clean_up};
 use crate::test::Test;
@@ -559,6 +560,71 @@ async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
+async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
+    let test_cases = [
+        (20, 0),
+        (20, 5),
+        (20, 10),
+        (20, 15),
+        (20, 20),
+        (20, 25),
+        (20, 30),
+        (20, 35),
+        (20, 40),
+        (20, 45),
+        (20, 50),
+        (60, 0),
+        (60, 5),
+        (60, 10),
+        (60, 15),
+        (60, 20),
+        (60, 25),
+        (60, 30),
+        (60, 35),
+        (60, 40),
+        (60, 45),
+        (60, 50),
+    ]
+    .map(|(initial_packet_size_ms, loss)| TestCaseConfig {
+        test_case_name: format!("ptime_{initial_packet_size_ms}_{loss}"),
+        length_seconds: 30,
+        client_a_config: CallConfig {
+            audio: AudioConfig {
+                input_name: "normal_phrasing".to_string(),
+                initial_packet_size_ms,
+                generate_spectrogram: false,
+                ..Default::default()
+            },
+            profile: DeterministicLoss(loss),
+            ..Default::default()
+        },
+        client_b_config: CallConfig {
+            audio: AudioConfig {
+                input_name: "normal_phrasing".to_string(),
+                initial_packet_size_ms,
+                audio_analysis: true,
+                ..Default::default()
+            },
+            profile: DeterministicLoss(loss),
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    test.run(
+        GroupConfig {
+            group_name: "deterministic_loss_test".to_string(),
+            chart_dimensions: vec![],
+            x_labels: &[],
+        },
+        test_cases.into(),
+        vec![NetworkProfile::None],
+    )
+    .await?;
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -609,6 +675,7 @@ async fn main() -> Result<()> {
             "video_send_over_bandwidth" => run_video_send_over_bandwidth(test).await?,
             "video_compare_vp8_vs_vp9" => run_video_compare_vp8_vs_vp9(test).await?,
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,
+            "deterministic_loss_test" => run_deterministic_loss_test(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
         test.report().await?;

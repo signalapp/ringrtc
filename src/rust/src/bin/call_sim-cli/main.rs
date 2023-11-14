@@ -186,6 +186,15 @@ struct Args {
 
     #[arg(long, default_value = "5000")]
     audio_rtcp_report_interval_ms: i32,
+
+    /// The IP address of the client (the main interface to test with).
+    #[arg(long, default_value = "")]
+    ip: String,
+
+    /// Deterministic loss percent to use to determine when to drop packets. This will
+    /// turn on the injectable network using a UDP socket.
+    #[arg(long)]
+    deterministic_loss: Option<u8>,
 }
 
 fn main() -> Result<()> {
@@ -194,10 +203,11 @@ fn main() -> Result<()> {
     let fern_logger = Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
-                "[{} {} {}] {}",
+                "[{} {} {}:{}] {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
                 record.level(),
-                record.target(),
+                record.file().unwrap(),
+                record.line().unwrap(),
                 message
             ))
         })
@@ -281,6 +291,7 @@ fn main() -> Result<()> {
     let mut scenario = ManagedScenario::new()?;
     scenario.run(
         &args.name,
+        &args.ip,
         call_config,
         scenario::ScenarioConfig {
             video_width: args.input_video_width,
@@ -292,6 +303,7 @@ fn main() -> Result<()> {
             ice_server,
             force_relay: args.force_relay,
         },
+        args.deterministic_loss,
     );
 
     Ok(())

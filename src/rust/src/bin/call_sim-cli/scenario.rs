@@ -66,7 +66,14 @@ impl ManagedScenario {
         Ok(ManagedScenario { client, rt })
     }
 
-    pub fn run(&mut self, name: &str, call_config: CallConfig, scenario_config: ScenarioConfig) {
+    pub fn run(
+        &mut self,
+        name: &str,
+        ip: &str,
+        call_config: CallConfig,
+        scenario_config: ScenarioConfig,
+        deterministic_loss: Option<u8>,
+    ) {
         info!("Starting managed scenario...");
 
         let stopper = Stopper::new();
@@ -88,6 +95,8 @@ impl ManagedScenario {
             )) as Box<dyn VideoSink>
         });
 
+        let packet_size_ms = call_config.audio_encoder_config.initial_packet_size_ms;
+
         let client = CallEndpoint::start(
             name,
             1 as DeviceId,
@@ -98,8 +107,13 @@ impl ManagedScenario {
             &stopper,
             event_sync,
             video_sink,
+            deterministic_loss.is_some(),
         )
         .expect("Start client");
+
+        if let Some(loss_rate) = deterministic_loss {
+            client.add_deterministic_loss_network(ip, loss_rate, packet_size_ms);
+        }
 
         // mut so that we can take() it exactly once when the call starts
         let mut video_input: Option<_> = scenario_config.video_input.as_ref().map(|path| {
@@ -205,9 +219,10 @@ impl ManagedScenario {
                                 Some(Command::Stop) => {
                                     info!("command_message::Command::Stop");
                                     client.hangup();
+                                    client.stop_network();
 
                                     // Then let the hangup settle.
-                                    thread::sleep(Duration::from_millis(500));
+                                    thread::sleep(Duration::from_millis(100));
 
                                     stopper.stop_all_and_join();
 
@@ -236,6 +251,8 @@ impl ManagedScenario {
             });
 
             let _ = self.rt.block_on(self.client.done(request));
+
+            info!("Done.");
         } else {
             error!(
                 "ManagedScenario: Could not send ready() message: {:?}",

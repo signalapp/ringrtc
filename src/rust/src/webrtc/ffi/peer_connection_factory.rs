@@ -7,7 +7,7 @@ use crate::webrtc;
 use crate::webrtc::ffi::media::{RffiAudioTrack, RffiVideoSource, RffiVideoTrack};
 use crate::webrtc::ffi::peer_connection::RffiPeerConnection;
 use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
-#[cfg(feature = "simnet")]
+#[cfg(feature = "injectable_network")]
 use crate::webrtc::injectable_network::RffiInjectableNetwork;
 use crate::webrtc::peer_connection_factory::{
     RffiAudioConfig, RffiIceServer, RffiPeerConnectionKind,
@@ -51,7 +51,7 @@ extern "C" {
     pub fn Rust_createPeerConnectionFactoryWrapper(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryInterface>,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner>;
-    #[cfg(feature = "simnet")]
+    #[cfg(feature = "injectable_network")]
     // The injectable network will live as long as the PeerConnectionFactoryOwner.
     pub fn Rust_getInjectableNetwork(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,

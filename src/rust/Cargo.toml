@@ -29,7 +29,7 @@ required-features = ["sim", "http", "rand_chacha"]
 
 [[bin]]
 name = "call_sim-cli"
-required-features = ["call_sim"]
+required-features = ["call_sim", "injectable_network"]
 
 [dependencies]
 regex-aot         = { path = "regex-aot" }
@@ -81,11 +81,12 @@ webpki = { version = "0.22", optional = true }
 rand_chacha = { version = "0.2", optional = true }
 
 # Optional, needed by the "call_sim" feature
+bitvec = {version = "1.0.1", optional = true }
 chrono = {version = "0.4", optional = true }
 clap = { version = "4.4.2", optional = true, features = ["derive"] }
 fern = { version = "0.6", optional = true }
-tonic = { version = "0.9.2", optional = true }
 tokio = { version = "1.32.0", optional = true, features = ["rt-multi-thread"] }
+tonic = { version = "0.9.2", optional = true }
 tower = { version = "0.4", optional = true }
 
 [target.'cfg(not(target_os="android"))'.dependencies]
@@ -96,11 +97,12 @@ sysinfo = { version = "0.29.10", default-features = false }
 default = []
 sim = []
 electron = ["neon", "native"]
-native = []  # We have this so we can more easily disable things only native clients need
-simnet = []  # We have this so we can more easily disable things only simulated native client need
+native = []
+simnet = ["injectable_network"]
+injectable_network = []
 http = ["ureq", "rustls", "webpki"]
 check-all = ["electron", "jni"]
-call_sim = ["native", "chrono", "clap", "fern", "tokio", "tonic", "tower"]
+call_sim = ["native", "injectable_network", "bitvec", "chrono", "clap", "fern", "tokio", "tonic", "tower"]
 
 [[test]]
 name = "incoming"

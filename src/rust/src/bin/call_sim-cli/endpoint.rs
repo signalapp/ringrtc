@@ -3,6 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use anyhow::anyhow;
+use bitvec::{
+    bits,
+    prelude::{BitSlice, LocalBits, Lsb0},
+};
 use log::*;
 use ringrtc::{
     common::{
@@ -16,13 +21,23 @@ use ringrtc::{
         NativePlatform, PeerId, SignalingSender,
     },
     webrtc::{
+        injectable_network,
+        injectable_network::InjectableNetwork,
         media::{VideoSink, VideoSource},
+        network::NetworkInterfaceType,
         peer_connection::AudioLevel,
         peer_connection_factory::{IceServer, PeerConnectionFactory},
         peer_connection_observer::NetworkRoute,
     },
 };
-use std::{sync::mpsc::Sender, time::Duration};
+use std::{
+    io,
+    iter::{Cycle, StepBy},
+    net::{SocketAddr, UdpSocket},
+    sync::mpsc::Sender,
+    thread,
+    time::Duration,
+};
 
 use crate::{server::Server, video::LoggingVideoSink, video::VideoInput};
 
@@ -66,6 +81,9 @@ struct CallEndpointState {
     actor: Actor<Self>,
     // Keep a copy around to be able to push out video frames
     outgoing_video_source: VideoSource,
+
+    network: Option<InjectableNetwork>,
+    socket: Option<UdpSocket>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -80,6 +98,7 @@ impl CallEndpoint {
         stopper: &Stopper,
         event_sync: EventSync,
         incoming_video_sink: Option<Box<dyn VideoSink>>,
+        use_injectable_network: bool,
     ) -> Result<Self> {
         let peer_id = PeerId::from(peer_id);
 
@@ -100,7 +119,10 @@ impl CallEndpoint {
                     // Option<CallManager> thing that we have to set later.
                     let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
-                    let mut pcf = PeerConnectionFactory::new(&call_config.audio_config, false)?;
+                    let mut pcf = PeerConnectionFactory::new(
+                        &call_config.audio_config,
+                        use_injectable_network,
+                    )?;
                     info!(
                         "Audio playout devices: {:?}",
                         pcf.get_audio_playout_devices()
@@ -146,6 +168,12 @@ impl CallEndpoint {
                         }),
                     );
 
+                    let network = if use_injectable_network {
+                        Some(pcf.injectable_network().expect("get Injectable Network"))
+                    } else {
+                        None
+                    };
+
                     Ok(CallEndpointState {
                         peer_id,
                         device_id,
@@ -158,6 +186,9 @@ impl CallEndpoint {
 
                         actor,
                         outgoing_video_source,
+
+                        network,
+                        socket: None,
                     })
                 },
             )?,
@@ -170,6 +201,84 @@ impl CallEndpoint {
             device_id,
             actor,
         }
+    }
+
+    pub fn add_deterministic_loss_network(&self, ip: &str, loss_rate: u8, packet_size_ms: i32) {
+        let ip = ip.parse().expect("parse IP address");
+
+        let mut deterministic_loss =
+            DeterministicLoss::new(loss_rate, packet_size_ms).expect("parameters should be valid");
+
+        self.actor.send(move |state| {
+            if state.network.is_none() {
+                error!("Error: Injectable network not set properly!");
+                return;
+            }
+            let network = state.network.clone().unwrap();
+
+            // The injectable network currently makes an assumption that socket ports will
+            // start from 2001. We also make that assumption, and we are only going to give
+            // one interface and no external servers for deterministic loss testing, so only
+            // one ip/port should end up being used by each client for these tests.
+            let local_socket_addr = SocketAddr::new(ip, 2001);
+            let socket = UdpSocket::bind(local_socket_addr).expect("bind to address");
+            let socket_as_sender = socket.try_clone().expect("clone the socket");
+            // Connect the Injectable Network's send function to the UdpSocket.
+            network.set_sender(Box::new(move |packet: injectable_network::Packet| {
+                if let Err(err) = socket_as_sender.send_to(&packet.data, packet.dest) {
+                    error!("Error: Sending packet to {}: {}", packet.dest, err);
+                }
+            }));
+
+            // Adding it to the network causes the PeerConnections to learn about it through
+            // the NetworkMonitor. For our tests, we just assume "wifi" for simplicity.
+            network.add_interface("wifi", NetworkInterfaceType::Wifi, ip, 1);
+
+            let socket_as_receiver = socket.try_clone().expect("clone the socket");
+            state.socket = Some(socket);
+
+            // Spawn a thread to maintain a receive loop on the socket. This waits for incoming
+            // UDP packets until the network is stopped and the socket is set to non-blocking
+            // mode. Then it will exit the loop and thread on a "Would Block" error.
+            thread::spawn(move || {
+                // 2K should be enough for any UDP packet.
+                let mut buf = [0; 2048];
+                loop {
+                    match socket_as_receiver.recv_from(&mut buf) {
+                        Ok((number_of_bytes, src_addr)) => {
+                            if number_of_bytes > 1200 {
+                                warn!(
+                                    "Warning: {} bytes received for one packet!",
+                                    number_of_bytes
+                                );
+                            }
+
+                            if !deterministic_loss.next_is_loss() {
+                                network.receive_udp(injectable_network::Packet {
+                                    source: src_addr,
+                                    dest: local_socket_addr,
+                                    data: buf[..number_of_bytes].to_vec(),
+                                });
+                            }
+                        }
+                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            break;
+                        }
+                        Err(err) => panic!("recv_from failed: {err}"),
+                    }
+                }
+            });
+        });
+    }
+
+    pub fn stop_network(&self) {
+        self.actor.send(move |state| {
+            if let Some(socket) = &state.socket {
+                socket
+                    .set_nonblocking(true)
+                    .expect("set socket to non-blocking");
+            }
+        });
     }
 
     pub fn create_outgoing_call(
@@ -441,5 +550,93 @@ impl GroupUpdateHandler for CallEndpoint {
 impl http::Delegate for CallEndpoint {
     fn send_request(&self, _request_id: u32, _request: http::Request) {
         unimplemented!()
+    }
+}
+
+pub struct DeterministicLoss {
+    ignore_first_n: u8,
+    current_loss_count: u8,
+    loss_map_iter: Cycle<StepBy<bitvec::slice::Iter<'static, usize, LocalBits>>>,
+}
+
+impl DeterministicLoss {
+    pub fn new(loss_rate: u8, packet_size_ms: i32) -> Result<Self> {
+        if loss_rate > 50 || loss_rate % 5 != 0 {
+            return Err(anyhow!(
+                "Loss rate must be less than 50% and a multiple of 5"
+            ));
+        }
+
+        // This loss map represents 1,024 decisions for a loss rate of 50%. From this, we can
+        // support any loss rate < 50% whilst keeping them all _somewhat_ aligned.
+        let loss_map: &'static BitSlice = bits![static
+            0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1,
+            0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1,
+            0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0,
+            0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1,
+            1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1,
+            1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1,
+            0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0,
+            0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1,
+            0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1,
+            0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1,
+            1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1,
+            1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1,
+            1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+            1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1,
+            0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0,
+            1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1,
+            0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0,
+            0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0,
+            1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1,
+            1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1,
+            0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 1,
+            0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1,
+            1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+            1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1,
+            1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1,
+            1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1,
+            0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1,
+            0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1,
+            1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 1,
+            1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0,
+            0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0,
+            0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0,
+            0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0,
+            1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1,
+            0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+            0, 1, 0, 1, 1, 1, 1, 1, 0,
+        ];
+
+        // For different loss rates (< 50), we will ignore one or more for every 10 loss signals,
+        // starting from the beginning of every 10 losses.
+        let ignore_first_n = 10 - loss_rate / 5;
+
+        // Iterate through the loss map. Based on the packet time, skip every n losses
+        // to help keep different packet times _somewhat_ aligned.
+        let packet_time_step = (packet_size_ms / 20) as usize;
+        let loss_map_iter = loss_map.iter().step_by(packet_time_step).cycle();
+
+        Ok(Self {
+            ignore_first_n,
+            current_loss_count: 0,
+            loss_map_iter,
+        })
+    }
+
+    pub fn next_is_loss(&mut self) -> bool {
+        if *self.loss_map_iter.next().expect("iterator has next()") {
+            // The packet should be 'lost' as per the loss map.
+            let ignore_loss = self.current_loss_count < self.ignore_first_n;
+
+            self.current_loss_count += 1;
+            if self.current_loss_count == 10 {
+                self.current_loss_count = 0;
+            }
+
+            !ignore_loss
+        } else {
+            false
+        }
     }
 }

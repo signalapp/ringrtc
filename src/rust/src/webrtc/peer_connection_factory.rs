@@ -14,7 +14,7 @@ use std::os::raw::c_char;
 use crate::common::Result;
 use crate::error::RingRtcError;
 use crate::webrtc;
-#[cfg(feature = "simnet")]
+#[cfg(feature = "injectable_network")]
 use crate::webrtc::injectable_network::InjectableNetwork;
 use crate::webrtc::media::{AudioTrack, VideoSource, VideoTrack};
 use crate::webrtc::peer_connection::PeerConnection;
@@ -280,7 +280,7 @@ impl PeerConnectionFactory {
         }
     }
 
-    #[cfg(feature = "simnet")]
+    #[cfg(feature = "injectable_network")]
     pub fn injectable_network(&self) -> Option<InjectableNetwork> {
         let rffi = unsafe { pcf::Rust_getInjectableNetwork(self.rffi.as_borrowed()) };
         if rffi.is_null() {
