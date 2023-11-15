@@ -54,10 +54,10 @@ def run_cmd(dry_run, cmd, cwd=None, env=os.environ.copy()):
 
 def verify_build_host_platform(target_platform):
     if target_platform == 'android' or target_platform == 'linux':
-        expected_description = 'Ubuntu 22.04.2 LTS'
-        description = subprocess.check_output(['lsb_release', '--short', '--description']).decode('UTF-8').rstrip()
-        if description != expected_description:
-            raise Exception(f"Invalid Host OS. Expected: {expected_description} Actual: {description}")
+        expected_os_major_version = 'Ubuntu 22'
+        actual_os = subprocess.check_output(['lsb_release', '--short', '--description']).decode('UTF-8')
+        if not expected_os_major_version in actual_os:
+            raise Exception(f"Invalid Host OS Major Version. Expected: {expected_os_major_version} Actual: {actual_os}")
     elif target_platform == 'ios' or target_platform == 'mac':
         expected_system = 'Darwin'
         if platform.system() != expected_system:
@@ -204,22 +204,24 @@ Build type      : {}
                         env=env)
 
     elif args.target == 'windows':
+        bash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+
         # Prepare workspace
-        run_cmd(args.dry_run, ['bash', 'bin/prepare-workspace', 'windows'], env=env)
+        run_cmd(args.dry_run, [bash, 'bin/prepare-workspace', 'windows'], env=env)
 
         for build_type in build_types:
             run_cmd(args.dry_run,
-                    ['bash', 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
+                    [bash, 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
                     env=env)
 
         # Prepare workspace for arm
         env['OUTPUT_DIR'] = "out_arm"
-        run_cmd(args.dry_run, ['bash', 'bin/prepare-workspace', 'windows'], env=env)
+        run_cmd(args.dry_run, [bash, 'bin/prepare-workspace', 'windows'], env=env)
 
         env['TARGET_ARCH'] = "arm64"
         for build_type in build_types:
             run_cmd(args.dry_run,
-                    ['bash', 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
+                    [bash, 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
                     env=env)
 
 

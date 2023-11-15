@@ -1,0 +1,212 @@
+name: Build WebRTC Artifacts
+run-name: Build WebRTC Artifacts (${{ github.ref_name }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "When true, don't upload to GCS"
+        default: false
+        required: false
+        type: boolean
+
+permissions:
+  # Needed to clone the repo
+  contents: 'read'
+  # Needed for google-github-actions/auth.
+  id-token: 'write'
+
+jobs:
+  build_android:
+    name: Build Android
+
+    runs-on: 'ubuntu-latest-8-cores'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - run: ./bin/build-webrtc.py --target android --release
+
+      - name: Output Artifact Checksum
+        run: |
+          sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+
+      - uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+          service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+
+      - uses: google-github-actions/upload-cloud-storage@v1
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: 'out'
+          destination: build-artifacts.signal.org/libraries
+          glob: 'webrtc-*.tar.bz2'
+          parent: false
+          process_gcloudignore: false
+
+  build_ios:
+    name: Build iOS
+
+    runs-on: 'macos-latest-xl'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - run: brew install protobuf
+
+      # Installs the pkg_resources python module needed to build webrtc on a mac host
+      - run: pip install setuptools
+
+      - run: ./bin/build-webrtc.py --target ios --release
+
+      - name: Output Artifact Checksum
+        run: |
+          sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+
+      - uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+          service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+
+      - uses: google-github-actions/upload-cloud-storage@v1
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: 'out'
+          destination: build-artifacts.signal.org/libraries
+          glob: 'webrtc-*.tar.bz2'
+          parent: false
+          process_gcloudignore: false
+
+  build_linux:
+    name: Build Linux
+
+    runs-on: 'ubuntu-latest-4-cores'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
+
+      - run: ./bin/build-webrtc.py --target linux --release
+
+      - name: Output Artifact Checksum
+        run: |
+          sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+          sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+
+      - uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+          service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+
+      - uses: google-github-actions/upload-cloud-storage@v1
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: 'out'
+          destination: build-artifacts.signal.org/libraries
+          glob: 'webrtc-*.tar.bz2'
+          parent: false
+          process_gcloudignore: false
+
+      - uses: google-github-actions/upload-cloud-storage@v1
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: 'out_arm'
+          destination: build-artifacts.signal.org/libraries
+          glob: 'webrtc-*.tar.bz2'
+          parent: false
+          process_gcloudignore: false
+
+  build_mac:
+    name: Build Mac
+
+    runs-on: 'macos-latest-xl'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - run: brew install protobuf
+
+      # Installs the pkg_resources python module needed to build webrtc on a mac host
+      - run: pip install setuptools
+
+      - run: ./bin/build-webrtc.py --target mac --release
+
+      - name: Output Artifact Checksum
+        run: |
+          sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+          sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+
+      - uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+          service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+
+      - uses: google-github-actions/upload-cloud-storage@v1
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: 'out'
+          destination: build-artifacts.signal.org/libraries
+          glob: 'webrtc-*.tar.bz2'
+          parent: false
+          process_gcloudignore: false
+
+      - uses: google-github-actions/upload-cloud-storage@v1
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: 'out_arm'
+          destination: build-artifacts.signal.org/libraries
+          glob: 'webrtc-*.tar.bz2'
+          parent: false
+          process_gcloudignore: false
+
+  build_windows:
+    name: Build Windows
+
+    runs-on: 'windows-latest-8-cores'
+
+    steps:
+    - name: Setup git to use linux line endings and keep permissions
+      run: |
+        git config --global core.autocrlf false
+        git config --global core.eol lf
+        git config --global core.filemode false
+
+    - uses: actions/checkout@v3
+
+    - run: python bin/build-webrtc.py --target windows --release
+      shell: bash
+
+    - name: Output Artifact Checksum
+      run: |
+        sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+        sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
+      shell: bash
+
+    - uses: google-github-actions/auth@v1
+      with:
+        workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+        service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+
+    - uses: google-github-actions/upload-cloud-storage@v1
+      if: ${{ !inputs.dry_run }}
+      with:
+        path: 'out'
+        destination: build-artifacts.signal.org/libraries
+        glob: 'webrtc-*.tar.bz2'
+        parent: false
+        process_gcloudignore: false
+
+    - uses: google-github-actions/upload-cloud-storage@v1
+      if: ${{ !inputs.dry_run }}
+      with:
+        path: 'out_arm'
+        destination: build-artifacts.signal.org/libraries
+        glob: 'webrtc-*.tar.bz2'
+        parent: false
+        process_gcloudignore: false
