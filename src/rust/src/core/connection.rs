@@ -668,6 +668,13 @@ where
 
             peer_connection.use_shared_ice_gatherer(ice_gatherer)?;
 
+            // Call create_offer again for the side effects it has with setting up the state of the
+            // RtpTransceivers:
+            // https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/pc/sdp_offer_answer.cc;l=4307-4312;drc=a6544377bc1dde24394255c0c83b43dcaa8905db
+            let observer = create_csd_observer();
+            peer_connection.create_offer(observer.as_ref());
+            let _ = observer.get_result()?;
+
             let (mut offer, mut answer, remote_public_key) =
                 if let (Some(v4_offer), Some(v4_answer)) = (offer.to_v4(), received.answer.to_v4())
                 {
