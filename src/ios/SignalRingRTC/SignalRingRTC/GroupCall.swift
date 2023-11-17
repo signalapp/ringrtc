@@ -125,6 +125,20 @@ public class RemoteDeviceState: Hashable {
         hasher.combine(demuxId)
         hasher.combine(userId)
     }
+
+    /// A trivial `RemoteDeviceState` to use for individual calls.
+    /// The `RemoteDeviceState` is a group call construct, but we
+    /// wish to bridge between call modes at times.
+    public static func individualCallRemoteDeviceState(userId: UUID) -> RemoteDeviceState {
+        return RemoteDeviceState(
+            demuxId: 0,
+            userId: userId,
+            mediaKeysReceived: true,
+            addedTime: 0,
+            speakerTime: 0,
+            isHigherResolutionPending: false
+        )
+    }
 }
 
 /// Used for the application to communicate the actual resolutions of
