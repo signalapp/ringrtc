@@ -206,8 +206,8 @@ impl CallEndpoint {
     pub fn add_deterministic_loss_network(&self, ip: &str, loss_rate: u8, packet_size_ms: i32) {
         let ip = ip.parse().expect("parse IP address");
 
-        let mut deterministic_loss =
-            DeterministicLoss::new(loss_rate, packet_size_ms).expect("parameters should be valid");
+        let mut deterministic_loss = DeterministicLoss::new(loss_rate, packet_size_ms, 10)
+            .expect("parameters should be valid");
 
         self.actor.send(move |state| {
             if state.network.is_none() {
@@ -554,13 +554,14 @@ impl http::Delegate for CallEndpoint {
 }
 
 pub struct DeterministicLoss {
-    ignore_first_n: u8,
+    pre_delay: u8,
+    ignore_last_n: u8,
     current_loss_count: u8,
     loss_map_iter: Cycle<StepBy<bitvec::slice::Iter<'static, usize, LocalBits>>>,
 }
 
 impl DeterministicLoss {
-    pub fn new(loss_rate: u8, packet_size_ms: i32) -> Result<Self> {
+    pub fn new(loss_rate: u8, packet_size_ms: i32, pre_delay: u8) -> Result<Self> {
         if loss_rate > 50 || loss_rate % 5 != 0 {
             return Err(anyhow!(
                 "Loss rate must be less than 50% and a multiple of 5"
@@ -609,8 +610,8 @@ impl DeterministicLoss {
         ];
 
         // For different loss rates (< 50), we will ignore one or more for every 10 loss signals,
-        // starting from the beginning of every 10 losses.
-        let ignore_first_n = 10 - loss_rate / 5;
+        // at the end of every 10 losses.
+        let ignore_last_n = 10 - loss_rate / 5;
 
         // Iterate through the loss map. Based on the packet time, skip every n losses
         // to help keep different packet times _somewhat_ aligned.
@@ -618,16 +619,22 @@ impl DeterministicLoss {
         let loss_map_iter = loss_map.iter().step_by(packet_time_step).cycle();
 
         Ok(Self {
-            ignore_first_n,
+            pre_delay,
+            ignore_last_n,
             current_loss_count: 0,
             loss_map_iter,
         })
     }
 
     pub fn next_is_loss(&mut self) -> bool {
+        if self.pre_delay > 0 {
+            self.pre_delay -= 1;
+            return false;
+        }
+
         if *self.loss_map_iter.next().expect("iterator has next()") {
             // The packet should be 'lost' as per the loss map.
-            let ignore_loss = self.current_loss_count < self.ignore_first_n;
+            let ignore_loss = (10 - self.current_loss_count) <= self.ignore_last_n;
 
             self.current_loss_count += 1;
             if self.current_loss_count == 10 {
