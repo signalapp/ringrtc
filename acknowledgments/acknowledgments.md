@@ -669,7 +669,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 ```
 
-## regex-aot 0.1.0, ringrtc 2.34.4
+## regex-aot 0.1.0, ringrtc 2.34.5
 
 ```
 GNU AFFERO GENERAL PUBLIC LICENSE

@@ -1,8 +1,20 @@
 # Changelog
 
+## v2.34.5
+
+- Use unified plan for 1:1 calls
+
+- iOS: Make trivial RemoteDeviceState for IndividualCalls
+
+- iOS: Make isUsingFrontCamera publically readable
+
+- Call Sim: Add deterministic loss handling and lbred test
+
+- Build webrtc using github actions
+
 ## v2.34.4
 
-- fetch build artifacts using a proxy where necessary
+- Fetch build artifacts using a proxy where necessary
 
 - Update to WebRTC m118
 
