@@ -19,7 +19,14 @@ public class VideoCaptureController {
         get { capturer.delegate }
     }
     private let serialQueue = DispatchQueue(label: "org.signal.videoCaptureController")
-    private var isUsingFrontCamera: Bool = true
+    private var _isUsingFrontCamera: Bool = true
+    public var isUsingFrontCamera: Bool? {
+        get {
+            serialQueue.sync { [weak self] in
+                return self?._isUsingFrontCamera
+            }
+        }
+    }
     private var isCapturing: Bool = false
 
     public var captureSession: AVCaptureSession {
@@ -70,8 +77,8 @@ public class VideoCaptureController {
             }
 
             // Only restart capturing again if the camera changes.
-            if strongSelf.isUsingFrontCamera != isUsingFrontCamera {
-                strongSelf.isUsingFrontCamera = isUsingFrontCamera
+            if strongSelf._isUsingFrontCamera != isUsingFrontCamera {
+                strongSelf._isUsingFrontCamera = isUsingFrontCamera
                 strongSelf.startCaptureSync()
             }
         }
@@ -87,7 +94,7 @@ public class VideoCaptureController {
         Logger.info("startCaptureSync():")
         assertIsOnSerialQueue()
 
-        let position: AVCaptureDevice.Position = isUsingFrontCamera ? .front : .back
+        let position: AVCaptureDevice.Position = _isUsingFrontCamera ? .front : .back
         guard let device: AVCaptureDevice = self.device(position: position) else {
             owsFailDebug("unable to find captureDevice")
             return
