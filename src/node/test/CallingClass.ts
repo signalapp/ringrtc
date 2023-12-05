@@ -206,7 +206,6 @@ export class CallingClass {
     log('initialize');
 
     RingRTC.setConfig({
-      use_new_audio_device_module: true,
       field_trials: undefined,
     });
 

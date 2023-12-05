@@ -31,9 +31,6 @@ use crate::webrtc::sim::peer_connection_factory as pcf;
 
 pub use pcf::{RffiPeerConnectionFactoryInterface, RffiPeerConnectionFactoryOwner};
 
-#[cfg(target_os = "windows")] // For the default ADM.
-const DEFAULT_COMMUNICATION_DEVICE_INDEX: u16 = 0xFFFF;
-
 #[cfg(feature = "native")]
 const ADM_MAX_DEVICE_NAME_SIZE: usize = 128;
 #[cfg(feature = "native")]
@@ -120,17 +117,6 @@ pub struct AudioDevice {
     pub i18n_key: String,
 }
 
-#[cfg(target_os = "windows")] // For the default ADM.
-impl AudioDevice {
-    fn default() -> AudioDevice {
-        AudioDevice {
-            name: "Default".to_string(),
-            unique_id: "Default".to_string(),
-            i18n_key: "default_communication_device".to_string(),
-        }
-    }
-}
-
 /// Stays in sync with RffiAudioDeviceModuleType in peer_connection_factory.h.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -138,8 +124,6 @@ pub enum RffiAudioDeviceModuleType {
     /// Use the default ADM provided by WebRTC for the platform.
     #[default]
     Default,
-    /// Use the `new` ADM where provided, such as ADM2 for Windows.
-    New,
     /// Use a file-based ADM for testing and simulation.
     File,
 }
@@ -213,14 +197,19 @@ impl AudioConfig {
     }
 }
 
+#[cfg(feature = "native")]
+#[derive(Clone, Debug, Default)]
+pub struct DeviceCounts {
+    playout: Option<u16>,
+    recording: Option<u16>,
+}
+
 /// Rust wrapper around WebRTC C++ PeerConnectionFactory object.
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // audio_device_module_type is currently used only for Windows builds.
 pub struct PeerConnectionFactory {
     rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
-    audio_device_module_type: RffiAudioDeviceModuleType,
-    playout_device_count: Option<u16>,
-    recording_device_count: Option<u16>,
+    #[cfg(feature = "native")]
+    device_counts: DeviceCounts,
 }
 
 impl PeerConnectionFactory {
@@ -229,31 +218,19 @@ impl PeerConnectionFactory {
     pub fn new(audio_config: &AudioConfig, use_injectable_network: bool) -> Result<Self> {
         debug!("PeerConnectionFactory::new()");
 
-        let (rffi, audio_device_module_type) = {
-            let rffi = unsafe {
-                webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(
-                    audio_config.rffi()?,
-                    use_injectable_network,
-                ))
-            };
-
-            #[cfg(target_os = "windows")]
-            if audio_config.audio_device_module_type == RffiAudioDeviceModuleType::New {
-                info!("PeerConnectionFactory::new(): Using the new ADM for Windows");
-            } else {
-                info!("PeerConnectionFactory::new(): Using the default ADM for Windows");
-            }
-
-            (rffi, audio_config.audio_device_module_type)
+        let rffi = unsafe {
+            webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(
+                audio_config.rffi()?,
+                use_injectable_network,
+            ))
         };
         if rffi.is_null() {
             return Err(RingRtcError::CreatePeerConnectionFactory.into());
         }
         Ok(Self {
             rffi,
-            audio_device_module_type,
-            playout_device_count: None,
-            recording_device_count: None,
+            #[cfg(feature = "native")]
+            device_counts: Default::default(),
         })
     }
 
@@ -274,9 +251,8 @@ impl PeerConnectionFactory {
         ));
         Self {
             rffi,
-            audio_device_module_type: RffiAudioDeviceModuleType::Default,
-            playout_device_count: None,
-            recording_device_count: None,
+            #[cfg(feature = "native")]
+            device_counts: Default::default(),
         }
     }
 
@@ -424,27 +400,21 @@ impl PeerConnectionFactory {
         let mut devices = Vec::<AudioDevice>::new();
 
         #[cfg(target_os = "windows")]
-        let device_count = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
-            // For the new ADM, if there is at least one real device, add slots
-            // for the "default" and "default communications" device. When setting,
-            // the new ADM already has them, but doesn't include them in the count.
-            if device_count > 0 {
-                device_count + 2
-            } else {
-                0
-            }
+        // If there is at least one real device, add slots for the "default" and
+        // "default communications" device. When setting, the ADM already has them,
+        // but doesn't include them in the count.
+        let device_count = if device_count > 0 {
+            device_count + 2
         } else {
-            // For the default ADM, add a slot for the "default" device.
-            devices.push(AudioDevice::default());
-            device_count
+            0
         };
 
-        if self.playout_device_count != Some(device_count) {
+        if self.device_counts.playout != Some(device_count) {
             info!(
                 "PeerConnectionFactory::get_audio_playout_devices(): device_count: {}",
                 device_count
             );
-            self.playout_device_count = Some(device_count);
+            self.device_counts.playout = Some(device_count);
         }
 
         for i in 0..device_count {
@@ -468,11 +438,10 @@ impl PeerConnectionFactory {
         }
 
         #[cfg(target_os = "windows")]
-        if self.audio_device_module_type == RffiAudioDeviceModuleType::New && devices.len() > 1 {
-            // For the new ADM, swap the first two devices, so that the
-            // "default communications" device is first and the "default"
-            // device is second. The UI treats the first index as the
-            // default, which for VoIP we prefer communications devices.
+        if devices.len() > 1 {
+            // Swap the first two devices, so that the "default communications" device
+            // is first and the "default" device is second. The UI treats the first
+            // index as the default, which for VoIP we prefer communications devices.
             devices.swap(0, 1);
 
             // Also, give both of those artificial slots unique ids so that
@@ -484,42 +453,14 @@ impl PeerConnectionFactory {
         Ok(devices)
     }
 
-    #[cfg(all(feature = "native", target_os = "windows"))] // For the default ADM.
-    fn get_default_playout_device_index(&mut self) -> Result<u16> {
-        let default_device = self.get_audio_playout_device(DEFAULT_COMMUNICATION_DEVICE_INDEX)?;
-        let all_devices = self.get_audio_playout_devices()?;
-        if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
-            Ok((index - 1) as u16)
-        } else {
-            error!("get_default_playout_device_index: Default communication device is not present in the list of all devices");
-            Err(RingRtcError::QueryAudioDevices.into())
-        }
-    }
-
     #[cfg(feature = "native")]
     pub fn set_audio_playout_device(&mut self, index: u16) -> Result<()> {
         #[cfg(target_os = "windows")]
-        let index = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
-            // For the new ADM, swap the first two devices back to ordinal if
-            // either are selected.
-            match index {
-                0 => 1,
-                1 => 0,
-                _ => index,
-            }
-        } else {
-            // For the default ADM, if the default device is selected, find the
-            // actual device index it represents.
-            if index == 0 {
-                if let Ok(default_device) = self.get_default_playout_device_index() {
-                    default_device
-                } else {
-                    0
-                }
-            } else {
-                // Account for device 0 being the synthetic "Default"
-                index - 1
-            }
+        // Swap the first two devices back to ordinal if either are selected.
+        let index = match index {
+            0 => 1,
+            1 => 0,
+            _ => index,
         };
 
         info!("PeerConnectionFactory::set_audio_playout_device({})", index);
@@ -575,27 +516,21 @@ impl PeerConnectionFactory {
         let mut devices = Vec::<AudioDevice>::new();
 
         #[cfg(target_os = "windows")]
-        let device_count = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
-            // For the new ADM, if there is at least one real device, add slots
-            // for the "default" and "default communications" device. When setting,
-            // the new ADM already has them, but doesn't include them in the count.
-            if device_count > 0 {
-                device_count + 2
-            } else {
-                0
-            }
+        // If there is at least one real device, add slots for the "default" and
+        // "default communications" device. When setting, the ADM already has them,
+        // but doesn't include them in the count.
+        let device_count = if device_count > 0 {
+            device_count + 2
         } else {
-            // For the default ADM, add a slot for the "default" device.
-            devices.push(AudioDevice::default());
-            device_count
+            0
         };
 
-        if self.recording_device_count != Some(device_count) {
+        if self.device_counts.recording != Some(device_count) {
             info!(
                 "PeerConnectionFactory::get_audio_recording_devices(): device_count: {}",
                 device_count
             );
-            self.recording_device_count = Some(device_count);
+            self.device_counts.recording = Some(device_count);
         }
 
         for i in 0..device_count {
@@ -619,11 +554,10 @@ impl PeerConnectionFactory {
         }
 
         #[cfg(target_os = "windows")]
-        if self.audio_device_module_type == RffiAudioDeviceModuleType::New && devices.len() > 1 {
-            // For the new ADM, swap the first two devices, so that the
-            // "default communications" device is first and the "default"
-            // device is second. The UI treats the first index as the
-            // default, which for VoIP we prefer communications devices.
+        if devices.len() > 1 {
+            // Swap the first two devices, so that the "default communications" device
+            // is first and the "default" device is second. The UI treats the first
+            // index as the default, which for VoIP we prefer communications devices.
             devices.swap(0, 1);
 
             // Also, give both of those artificial slots unique ids so that
@@ -635,42 +569,14 @@ impl PeerConnectionFactory {
         Ok(devices)
     }
 
-    #[cfg(all(feature = "native", target_os = "windows"))] // For the default ADM.
-    fn get_default_recording_device_index(&mut self) -> Result<u16> {
-        let default_device = self.get_audio_recording_device(DEFAULT_COMMUNICATION_DEVICE_INDEX)?;
-        let all_devices = self.get_audio_recording_devices()?;
-        if let Some(index) = all_devices.iter().position(|d| d == &default_device) {
-            Ok((index - 1) as u16)
-        } else {
-            error!("get_default_recording_device_index: Default communication device is not present in the list of all devices");
-            Err(RingRtcError::QueryAudioDevices.into())
-        }
-    }
-
     #[cfg(feature = "native")]
     pub fn set_audio_recording_device(&mut self, index: u16) -> Result<()> {
         #[cfg(target_os = "windows")]
-        let index = if self.audio_device_module_type == RffiAudioDeviceModuleType::New {
-            // For the new ADM, swap the first two devices back to ordinal if
-            // either are selected.
-            match index {
-                0 => 1,
-                1 => 0,
-                _ => index,
-            }
-        } else {
-            // For the default ADM, if the default device is selected, find the
-            // actual device index it represents.
-            if index == 0 {
-                if let Ok(default_device) = self.get_default_recording_device_index() {
-                    default_device
-                } else {
-                    0
-                }
-            } else {
-                // Account for device 0 being the synthetic "Default"
-                index - 1
-            }
+        // Swap the first two devices back to ordinal if either are selected.
+        let index = match index {
+            0 => 1,
+            1 => 0,
+            _ => index,
         };
 
         info!(

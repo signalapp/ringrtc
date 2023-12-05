@@ -24,7 +24,6 @@ export function callIdFromRingId(ringId: bigint): CallId {
 }
 
 class Config {
-  use_new_audio_device_module = false;
   field_trials: Record<string, string> | undefined;
 }
 
@@ -61,7 +60,6 @@ class NativeCallManager {
       get() {
         const callEndpoint = Native.createCallEndpoint(
           this,
-          config.use_new_audio_device_module,
           fieldTrialsString
         );
 
