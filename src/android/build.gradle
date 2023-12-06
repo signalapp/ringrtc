@@ -13,6 +13,7 @@ repositories {
 ext.debug_jni_lib_dirs   = project.hasProperty("debugRingrtcLibDir") ? [debugRingrtcLibDir] : ["jniLibs"]
 ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDir") ? [releaseRingrtcLibDir] : ["jniLibs"]
 ext.webrtc_jar           = project.hasProperty("webrtcJar") ? webrtcJar : "libs/libwebrtc.jar"
+ext.asset_dir            = project.hasProperty("assetDir") ? assetDir : "assets"
 
 android {
     namespace 'org.signal.ringrtc'
@@ -32,10 +33,12 @@ android {
         release {
             jniLibs.srcDirs = release_jni_lib_dirs
             java.srcDirs = ['api/']
+            assets.srcDir asset_dir
         }
         debug {
             jniLibs.srcDirs = debug_jni_lib_dirs
             java.srcDirs = ['api/']
+            assets.srcDir asset_dir
         }
     }
 

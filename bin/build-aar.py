@@ -157,10 +157,10 @@ def ParseArgs():
 
     return parser.parse_args()
 
-def RunCmd(dry_run, cmd, cwd=None):
+def RunCmd(dry_run, cmd, cwd=None, stdout=None):
     logging.debug('Running: {}'.format(cmd))
     if dry_run is False:
-        subprocess.check_call(cmd, cwd=cwd)
+        subprocess.check_call(cmd, cwd=cwd, stdout=stdout)
 
 def GetArchBuildRoot(build_dir, arch):
     return os.path.join(build_dir, 'android-{}'.format(arch))
@@ -183,6 +183,9 @@ def GetOutputDir(build_dir, debug_build):
 
 def GetGradleBuildDir(build_dir):
     return os.path.join(build_dir, 'gradle')
+
+def GetAarAssetDir(build_dir):
+    return os.path.join(build_dir, 'aar-assets')
 
 def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build,
               extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
@@ -406,6 +409,30 @@ def CreateLibs(dry_run, project_dir, webrtc_src_dir, build_dir, archs, output,
                             os.path.join(target_dir,
                                          os.path.basename(lib)))
 
+def CollectAarAssets(dry_run, project_dir, build_dir):
+    # Assets in AARs get merged into one directory in the final app,
+    # so we have to think about what files we're going to put in here.
+    aar_asset_dir = GetAarAssetDir(build_dir)
+    if not dry_run:
+        shutil.rmtree(aar_asset_dir, ignore_errors=True)
+
+    acknowledgments_dir = os.path.join(aar_asset_dir, 'acknowledgments')
+    acknowledgments_file = os.path.join(acknowledgments_dir, 'ringrtc.md')
+    logging.debug('Copying RingRTC acknowledgments to {}'.format(aar_asset_dir))
+    if not dry_run:
+        os.makedirs(acknowledgments_dir)
+        shutil.copyfile(os.path.join(project_dir, 'acknowledgments', 'acknowledgments.md'),
+                        acknowledgments_file)
+
+    logging.debug('Appending WebRTC acknowledgments')
+    acknowledgments_file_for_appending = open(acknowledgments_file, mode='ab') if not dry_run else None
+    convert_exec = [
+        os.path.join(project_dir, 'bin', 'convert_webrtc_acknowledgments.py'),
+        '--format', 'md',
+        os.path.join(build_dir, 'LICENSE.md'),
+    ]
+    RunCmd(dry_run, convert_exec, stdout=acknowledgments_file_for_appending)
+
 def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
                  gradle_dir, sonatype_user, sonatype_password, publish_to_maven,
                  signing_keyid, signing_password, signing_secret_keyring,
@@ -431,6 +458,7 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
         './gradlew',
         '-PringrtcVersion={}'.format(version),
         '-PbuildDir={}'.format(gradle_build_dir),
+        '-PassetDir={}'.format(GetAarAssetDir(build_dir)),
     ]
 
     if sonatype_user is not None:
@@ -478,6 +506,8 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
 
     if Project.AAR not in build_projects:
         return
+
+    CollectAarAssets(dry_run, project_dir=project_dir, build_dir=build_dir)
 
     gradle_exec.extend(('assembleDebug' if build_type == 'debug' else 'assembleRelease' for build_type in build_types))
 
