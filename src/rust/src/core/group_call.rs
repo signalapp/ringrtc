@@ -3734,7 +3734,7 @@ impl Client {
     ) {
         trace!("handle_reaction(): demux_id = {}", demux_id);
 
-        let value = reaction.value.unwrap_or(String::new());
+        let value = reaction.value.unwrap_or_default();
 
         if value.is_empty() {
             warn!("group_call::handle_reaction reaction value is empty");
