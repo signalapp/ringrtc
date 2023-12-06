@@ -465,7 +465,6 @@ pub struct AudioSenderStatistics {
     pub remote_jitter: f64,
     pub remote_round_trip_time: f64,
     pub total_audio_energy: f64,
-    pub echo_likelihood: f64,
 }
 
 #[repr(C)]
