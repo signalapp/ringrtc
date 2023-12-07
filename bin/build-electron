@@ -132,6 +132,8 @@ then
         *"-apple-darwin"* )
             DEFAULT_PLATFORM="darwin"
             CARGO_TARGET="${CARGO_ARCH}-apple-darwin"
+            # Set the version shown in crash dumps
+            RUSTFLAGS="${RUSTFLAGS} -Clink-arg=-Wl,-current_version,${PROJECT_VERSION}"
             ;;
         *"-pc-windows"* )
             DEFAULT_PLATFORM="win32"
