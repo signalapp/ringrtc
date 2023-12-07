@@ -17,7 +17,7 @@ jobs:
       run: yarn install --frozen-lockfile
       working-directory: src/node
     - name: Check typescript format
-      run: yarn format -c
+      run: yarn check-format
       working-directory: src/node
 
   lints:
@@ -58,7 +58,7 @@ jobs:
       run: yarn install --frozen-lockfile
       working-directory: src/node
     - name: Check typescript
-      run: yarn lint
+      run: yarn eslint
       working-directory: src/node
     - name: Check package.json for prebuildChecksum
       run: >-

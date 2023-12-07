@@ -58,10 +58,7 @@ class NativeCallManager {
     Object.defineProperty(this, Native.callEndpointPropertyKey, {
       configurable: true, // allows it to be changed
       get() {
-        const callEndpoint = Native.createCallEndpoint(
-          this,
-          fieldTrialsString
-        );
+        const callEndpoint = Native.createCallEndpoint(this, fieldTrialsString);
 
         Object.defineProperty(this, Native.callEndpointPropertyKey, {
           configurable: true, // allows it to be changed

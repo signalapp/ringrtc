@@ -19,6 +19,7 @@
     "eslint": "eslint .",
     "lint": "yarn format --list-different && yarn eslint",
     "format": "prettier --write .",
+    "check-format": "prettier . --check",
     "install": "node scripts/fetch-prebuild.js",
     "prepublishOnly": "node scripts/prepublish.js"
   },
