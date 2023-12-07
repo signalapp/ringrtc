@@ -37,27 +37,26 @@ regex-aot         = { path = "regex-aot" }
 aes               = { version = "0.7.5"  }
 aes-gcm-siv       = { version = "0.10.3" }
 anyhow            = { version = "1.0"    }
-base64            = { version = "0.21.3" }
+base64            = { version = "0.21.5" }
 bytes             = { version = "1.0"    }
 ctr               = { version = "0.8"    }
-futures           = { version = "0.3"    }
 hmac              = { version = "0.11"   }
 lazy_static       = { version = "1.4"    }
 libc              = { version = "0.2"    }
 log               = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
-num_enum          = { version = "0.7.0" }
-prost             = { version = "0.11"   }
+num_enum          = { version = "0.7.1"  }
+prost             = { version = "0.12.3" }
 rand              = { version = "0.7", features = [] }
 regex-automata    = { version = "0.1.10" }
 hkdf              = { version = "0.11"   }
 serde_json        = { version = "1.0"    }
-serde             = { version = "1.0", features = ["derive"] }
-serde_with        = { version = "2.3.2", features = ["base64", "hex"] }
+serde             = { version = "1.0.193", features = ["derive"] }
+serde_with        = { version = "3.4.0", features = ["base64", "hex"] }
 hex               = { version = "0.4", features = ["serde"] }
 sha2              = { version = "0.9.9"  }
 static_assertions = { version = "1.1.0"  }
 subtle            = { version = "2.4.1"  }
-thiserror         = { version = "1.0.47" }
+thiserror         = { version = "1.0.50" }
 x25519-dalek      = { version = "1.2"    }
 
 # Used by call links. Be careful not to pull in more than strictly needed, for both code size and
@@ -73,9 +72,9 @@ neon = { version = "0.10.1", optional = true, default-features = false, features
 jni = { version = "0.19.0", optional = true, default-features = false }
 
 # Optional, needed by the "http" feature
-ureq = { version = "2.7.1", optional = true }
+ureq = { version = "2.9.1", optional = true }
 rustls = { version = "0.21.6", optional = true, features = ["dangerous_configuration"] }
-webpki = { version = "0.22", optional = true }
+webpki = { version = "0.22.4", optional = true }
 
 # Optional, needed for call-link-test-client
 rand_chacha = { version = "0.2", optional = true }
@@ -86,12 +85,12 @@ chrono = {version = "0.4", optional = true }
 clap = { version = "4.4.2", optional = true, features = ["derive"] }
 fern = { version = "0.6", optional = true }
 tokio = { version = "1.32.0", optional = true, features = ["rt-multi-thread"] }
-tonic = { version = "0.9.2", optional = true }
+tonic = { version = "0.10.2", optional = true }
 tower = { version = "0.4", optional = true }
 
 [target.'cfg(not(target_os="android"))'.dependencies]
 # sysinfo depends on getgrgid_r, which was added in Android API level 24
-sysinfo = { version = "0.29.10", default-features = false }
+sysinfo = { version = "0.29.11", default-features = false }
 
 [features]
 default = []
@@ -118,9 +117,9 @@ required-features = ["sim"]
 jni = { version = "0.19.0", default-features = false }
 
 [build-dependencies]
-prost-build = { version = "0.11" }
-tonic-build = { version = "0.9.2" }
+prost-build = { version = "0.12.3" }
+tonic-build = { version = "0.10.2" }
 
 [dev-dependencies]
-env_logger = { version = "0.10" }
+env_logger = { version = "0.10.1" }
 rand_chacha = { version = "0.2" }

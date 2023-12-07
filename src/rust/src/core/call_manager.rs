@@ -328,7 +328,7 @@ pub fn validate_call_message_as_opaque_ring(
         } => {
             // Must match the implementation of handle_received_call_message for RingIntentions.
             use protobuf::signaling::call_message::ring_intention::Type as IntentionType;
-            if IntentionType::from_i32(*ring_type) != Some(IntentionType::Ring) {
+            if IntentionType::try_from(*ring_type) != Ok(IntentionType::Ring) {
                 return Err(OpaqueRingValidationError::NotARing);
             }
             if message_age > MAX_MESSAGE_AGE {
@@ -1613,7 +1613,9 @@ where
                 use protobuf::signaling::call_message::ring_intention::Type as IntentionType;
                 match (
                     &mut ring_intention.group_id,
-                    ring_intention.r#type.and_then(IntentionType::from_i32),
+                    ring_intention
+                        .r#type
+                        .and_then(|ty| IntentionType::try_from(ty).ok()),
                     ring_intention.ring_id,
                 ) {
                     (Some(group_id), Some(ring_type), Some(ring_id)) => {
@@ -1679,7 +1681,9 @@ where
                 use protobuf::signaling::call_message::ring_response::Type as ResponseType;
                 match (
                     &mut ring_response.group_id,
-                    ring_response.r#type.and_then(ResponseType::from_i32),
+                    ring_response
+                        .r#type
+                        .and_then(|ty| ResponseType::try_from(ty).ok()),
                     ring_response.ring_id,
                 ) {
                     (Some(_), Some(ResponseType::Ringing), Some(_)) => {

@@ -18,11 +18,11 @@ ext.asset_dir            = project.hasProperty("assetDir") ? assetDir : "assets"
 android {
     namespace 'org.signal.ringrtc'
 
-    compileSdk 33
+    compileSdk 34
 
     defaultConfig {
         minSdk 21
-        targetSdk 31
+        targetSdk 33
         versionName ringrtcVersion
         archivesBaseName = "ringrtc-android"
         consumerProguardFiles "proguard-rules.pro"

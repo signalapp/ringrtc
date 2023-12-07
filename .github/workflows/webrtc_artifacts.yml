@@ -23,7 +23,7 @@ jobs:
     runs-on: 'ubuntu-latest-8-cores'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -34,7 +34,7 @@ jobs:
         run: |
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
@@ -54,7 +54,7 @@ jobs:
     runs-on: 'macos-latest-xl'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - run: brew install protobuf
 
@@ -67,7 +67,7 @@ jobs:
         run: |
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
@@ -87,7 +87,7 @@ jobs:
     runs-on: 'ubuntu-latest-4-cores'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
@@ -99,7 +99,7 @@ jobs:
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
           sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
@@ -128,7 +128,7 @@ jobs:
     runs-on: 'macos-latest-xl'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - run: brew install protobuf
 
@@ -142,7 +142,7 @@ jobs:
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
           sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
@@ -177,7 +177,7 @@ jobs:
         git config --global core.eol lf
         git config --global core.filemode false
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - run: python bin/build-webrtc.py --target windows --release
       shell: bash
@@ -188,7 +188,7 @@ jobs:
         sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
       shell: bash
 
-    - uses: google-github-actions/auth@v1
+    - uses: google-github-actions/auth@v2
       with:
         workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
         service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'

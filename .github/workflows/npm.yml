@@ -44,14 +44,14 @@ jobs:
     runs-on: ${{ inputs.runner_linux }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-unknown-linux-gnu
 
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
 
-    - uses: actions/setup-node@v3
+    - uses: actions/setup-node@v4
       with:
         node-version-file: 'src/node/.nvmrc'
 
@@ -98,7 +98,7 @@ jobs:
     runs-on: ${{ inputs.runner_windows }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-pc-windows-msvc
 
@@ -106,7 +106,7 @@ jobs:
       run: choco install protoc
       shell: cmd
 
-    - uses: actions/setup-node@v3
+    - uses: actions/setup-node@v4
       with:
         node-version-file: 'src/node/.nvmrc'
 
@@ -155,13 +155,13 @@ jobs:
     runs-on: ${{ inputs.runner_mac }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - run: brew install protobuf coreutils # for grealpath
 
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-apple-darwin
 
-    - uses: actions/setup-node@v3
+    - uses: actions/setup-node@v4
       with:
         node-version-file: 'src/node/.nvmrc'
 
@@ -217,7 +217,7 @@ jobs:
     needs: [build_windows, build_mac, build_linux]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download Desktop Windows Artifacts
         uses: actions/download-artifact@v3
@@ -248,12 +248,12 @@ jobs:
           printf 'sha256=%s\n' "$(echo $shaAndFilename | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
         working-directory: src/node/
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version-file: 'src/node/.nvmrc'
           registry-url: 'https://registry.npmjs.org/'
 
-      - uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'

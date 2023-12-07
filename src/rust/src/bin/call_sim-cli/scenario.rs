@@ -167,8 +167,8 @@ impl ManagedScenario {
                     match stream.message().await {
                         Ok(Some(message)) => {
                             info!("ready(): Message to us? {}", message.client);
-                            match Command::from_i32(message.command) {
-                                Some(Command::StartAsCaller) => {
+                            match Command::try_from(message.command) {
+                                Ok(Command::StartAsCaller) => {
                                     info!("command_message::Command::StartAsCaller");
                                     // Run the call (the callee_id doesn't need to be the actual
                                     // id for testing).
@@ -192,7 +192,7 @@ impl ManagedScenario {
                                         )
                                     }
                                 }
-                                Some(Command::StartAsCallee) => {
+                                Ok(Command::StartAsCallee) => {
                                     info!("command_message::Command::StartAsCallee");
                                     // We should know what the incoming call_id is, but for now,
                                     // hardcode it like the original implementation.
@@ -216,7 +216,7 @@ impl ManagedScenario {
                                         )
                                     }
                                 }
-                                Some(Command::Stop) => {
+                                Ok(Command::Stop) => {
                                     info!("command_message::Command::Stop");
                                     client.hangup();
                                     client.stop_network();
@@ -228,7 +228,7 @@ impl ManagedScenario {
 
                                     break;
                                 }
-                                None => {}
+                                Err(_) => {}
                             }
                         }
                         Ok(None) => {
