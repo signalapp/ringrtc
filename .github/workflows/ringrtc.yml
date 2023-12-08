@@ -30,11 +30,17 @@ jobs:
         cache-targets: "false"
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    - name: Install Python tools
+      run: pip3 install flake8 mypy
     - uses: actions/checkout@v4
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
     - name: Install extra Rust tools
       run: cargo +stable install --version 0.5.6 --locked cargo-about
     - run: shellcheck **/*.sh bin/build-aar bin/build-call_sim-cli bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-artifact bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check bin/set-up-for-cocoapods src/rust/scripts/run-tests
+    # Skip the Python scripts not written with flake8 style. (Try not to add more.)
+    - run: cd bin && python3 -m flake8 . --exclude build-aar.py,logs-notebook/call_log_parser.py,logs-notebook/emos.py,measure-cpu.py,parse_log.py,print_build_env.py
+    # Only include typed Python scripts here.
+    - run: python3 -m mypy --python-version 3.8 --strict bin/convert_webrtc_acknowledgments.py bin/fetch-artifact.py
     - name: Check acknowledgments
       run: ./bin/regenerate_acknowledgments.sh && git diff --name-status --exit-code acknowledgments
     - name: Clippy

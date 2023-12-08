@@ -56,7 +56,7 @@ def verify_build_host_platform(target_platform):
     if target_platform == 'android' or target_platform == 'linux':
         expected_os_major_version = 'Ubuntu 22'
         actual_os = subprocess.check_output(['lsb_release', '--short', '--description']).decode('UTF-8')
-        if not expected_os_major_version in actual_os:
+        if expected_os_major_version not in actual_os:
             raise Exception(f"Invalid Host OS Major Version. Expected: {expected_os_major_version} Actual: {actual_os}")
     elif target_platform == 'ios' or target_platform == 'mac':
         expected_system = 'Darwin'
