@@ -22,6 +22,7 @@ try:
     import os
     import platform
     import shutil
+    import sys
     import tarfile
 
 except ImportError as e:
@@ -427,6 +428,7 @@ def CollectAarAssets(dry_run, project_dir, build_dir):
     logging.debug('Appending WebRTC acknowledgments')
     acknowledgments_file_for_appending = open(acknowledgments_file, mode='ab') if not dry_run else None
     convert_exec = [
+        sys.executable,
         os.path.join(project_dir, 'bin', 'convert_webrtc_acknowledgments.py'),
         '--format', 'md',
         os.path.join(build_dir, 'LICENSE.md'),
