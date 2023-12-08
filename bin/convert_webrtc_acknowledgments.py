@@ -10,8 +10,7 @@ import html
 import plistlib
 import sys
 
-from collections.abc import Iterable
-from typing import Dict, Tuple, TextIO
+from typing import Dict, Iterable, Tuple, TextIO
 
 
 def parse(input: TextIO, filename: str) -> Dict[str, str]:
