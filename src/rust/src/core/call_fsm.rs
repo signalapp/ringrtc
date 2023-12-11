@@ -63,7 +63,6 @@ use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// The different types of CallEvents.
-#[allow(clippy::large_enum_variant)]
 pub enum CallEvent {
     // Control events from client application
     /// Start a call (call struct has the direction attribute).

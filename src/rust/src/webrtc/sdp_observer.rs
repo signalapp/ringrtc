@@ -452,7 +452,6 @@ impl CreateSessionDescriptionObserver {
                     )
                 })?;
             }
-            // TODO: implement guard.1.clone() here ....
             match &mut guard.1 {
                 Ok(v) => Ok(SessionDescription::new(v.0.take())),
                 Err(e) => Err(
@@ -634,7 +633,6 @@ impl SetSessionDescriptionObserver {
                     RingRtcError::MutexPoisoned("SetSessionDescription condvar mutex".to_string())
                 })?;
             }
-            // TODO: implement guard.1.clone() here ....
             match &guard.1 {
                 Ok(_) => Ok(()),
                 Err(e) => {

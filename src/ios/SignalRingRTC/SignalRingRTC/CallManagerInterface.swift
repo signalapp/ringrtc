@@ -676,8 +676,6 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
 
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
-    // @todo Make sure there is a pcObserver.
-
     guard let callContext = context else {
         owsFailDebug("context was unexpectedly nil")
 
@@ -696,7 +694,6 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
     } else {
         // Swift was problematic to pass back some nullable structure, so we
         // now pass an empty structure back. Check pc for now to validate.
-        // @todo Should check object, not pc, for consistency. We will pass valid object if the whole thing is valid...
         return AppConnectionInterface(
             object: nil,
             pc: nil,

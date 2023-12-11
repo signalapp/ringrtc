@@ -134,6 +134,8 @@ enum MessageSendResult {
     NotSent,
 }
 
+type MessageClosure<T> = Box<dyn FnOnce(&CallManager<T>) -> Result<MessageSendResult> + Send>;
+
 /// A structure to hold messages in the message_queue, identified by their CallId.
 pub struct SignalingMessageItem<T>
 where
@@ -144,8 +146,7 @@ where
     /// The type of message the item corresponds to.
     message_type: signaling::MessageType,
     /// The closure to be called which will send the message.
-    #[allow(clippy::type_complexity)]
-    message_closure: Box<dyn FnOnce(&CallManager<T>) -> Result<MessageSendResult> + Send>,
+    message_closure: MessageClosure<T>,
 }
 
 /// A structure implementing a message queue used to control the
@@ -733,7 +734,6 @@ where
     /// Close down the call manager and all the calls it is currently managing.
     ///
     /// This is a blocking call.
-    #[allow(clippy::mutex_atomic)]
     pub fn close(&mut self) -> Result<()> {
         info!("close():");
 
@@ -897,7 +897,6 @@ where
         Ok(())
     }
 
-    #[allow(clippy::mutex_atomic)]
     #[cfg(feature = "sim")]
     fn sync_worker_thread(&mut self) -> Result<()> {
         // cycle a condvar through the worker thread

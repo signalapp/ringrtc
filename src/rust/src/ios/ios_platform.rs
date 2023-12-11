@@ -41,13 +41,12 @@ use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserv
 impl PlatformItem for IosMediaStream {}
 
 /// Concrete type for iOS AppConnection objects.
-// @todo Make a type of connection with an Arc. Finalize better naming...
-pub type AppConnectionX = Arc<AppConnectionInterface>;
-impl PlatformItem for AppConnectionX {}
+pub type IosConnection = Arc<AppConnectionInterface>;
+impl PlatformItem for IosConnection {}
 
 /// Concrete type for iOS AppCallContext objects.
-pub type AppCallContextX = Arc<AppCallContext>;
-impl PlatformItem for AppCallContextX {}
+pub type IosCallContext = Arc<AppCallContext>;
+impl PlatformItem for IosCallContext {}
 
 /// Concrete type for iOS AppRemotePeer objects.
 impl PlatformItem for AppObject {}
@@ -89,8 +88,8 @@ impl Drop for IosPlatform {
 impl Platform for IosPlatform {
     type AppIncomingMedia = IosMediaStream;
     type AppRemotePeer = AppObject;
-    type AppConnection = AppConnectionX;
-    type AppCallContext = AppCallContextX;
+    type AppConnection = IosConnection;
+    type AppCallContext = IosCallContext;
 
     fn create_connection(
         &mut self,

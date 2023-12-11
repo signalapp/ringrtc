@@ -475,7 +475,6 @@ where
     T: Platform,
 {
     /// Create a new Connection.
-    #[allow(clippy::mutex_atomic)]
     pub fn new(
         call: Call<T>,
         remote_device: DeviceId,
@@ -1992,7 +1991,6 @@ where
         self.inject_event(event)
     }
 
-    #[allow(clippy::mutex_atomic)]
     /// Inject a synchronizing event into the FSM.
     ///
     /// Blocks the caller while the event flushes through the FSM.

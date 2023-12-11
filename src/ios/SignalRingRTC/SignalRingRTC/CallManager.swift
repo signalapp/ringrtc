@@ -931,8 +931,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let configuration = RTCConfiguration()
 
         // Update the configuration with the provided Ice Servers.
-        // @todo Validate and if none, set a backup value, don't expect
-        // application to know what the backup should be.
         configuration.iceServers = appCallContext.iceServers
 
         // Initialize the configuration.

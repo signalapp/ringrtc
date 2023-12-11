@@ -100,17 +100,9 @@ export MACOSX_DEPLOYMENT_TARGET="10.13"
 (
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
-        # TODO: Figure out why and fix this
-        rm -f target/debug/deps/libringrtc.rlib
-
         OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=native,simnet
         echo "Can run with target/debug/direct"
     else
-        # HACK: IF we don't remove this file, changes to rffi code will not make it into the binary.
-        # TODO: Figure out why and fix this
-        rm -f target/release/deps/libringrtc.rlib
-
         OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=native,simnet --release
         echo "Can run with target/release/direct"
     fi

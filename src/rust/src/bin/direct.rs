@@ -4,13 +4,11 @@
 //
 
 use log::{debug, info};
-
-use ringrtc::common::CallConfig;
 use ringrtc::{
     common::{
         actor::{Actor, Stopper},
         units::DataRate,
-        CallId, CallMediaType, DataMode, DeviceId, Result,
+        CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result,
     },
     core::{call_manager::CallManager, group_call, signaling},
     lite::{http, sfu::UserId},
@@ -46,7 +44,7 @@ fn main() {
     ringrtc::webrtc::logging::set_logger(log::LevelFilter::Warn);
 
     let hide_ip = false;
-    // TODO: Real STUN/TURN servers.
+    // Add STUN/TURN servers here if required:
     let ice_server = IceServer::none();
     let stopper = Stopper::new();
     let signaling_server = SignalingServer::start(&stopper).expect("Start signaling server");
@@ -725,7 +723,6 @@ impl SignalingServer {
         let sender_id = sender_id.clone();
         let recipient_id = recipient_id.clone();
 
-        // TODO: Get a better simulation by having the signaling put traffic in the Router.
         self.actor.send(move |state| {
             if let Some(endpoints) = state.endpoints_by_peer_id.get(&recipient_id) {
                 for endpoint in endpoints {

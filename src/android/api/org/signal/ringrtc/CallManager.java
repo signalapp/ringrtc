@@ -155,8 +155,7 @@ public class CallManager {
   class PeerConnectionFactoryOptions extends PeerConnectionFactory.Options {
     public PeerConnectionFactoryOptions() {
       // Give the (native default) behavior of filtering out loopback addresses.
-      // See https://source.chromium.org/chromium/chromium/src/+/master:third_party/webrtc/rtc_base/network.h;l=47?q=.networkIgnoreMask&ss=chromium
-      this.networkIgnoreMask = 1 << 4;
+      this.networkIgnoreMask = PeerConnectionFactory.Options.ADAPTER_TYPE_LOOPBACK;
     }
   }
 

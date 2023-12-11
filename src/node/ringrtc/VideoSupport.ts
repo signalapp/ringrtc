@@ -87,6 +87,23 @@ export class GumVideoCaptureOptions {
   screenShareSourceId?: string;
 }
 
+interface GumConstraints extends MediaStreamConstraints {
+  video?: boolean | GumTrackConstraints;
+}
+
+interface GumTrackConstraints extends MediaTrackConstraints {
+  mandatory?: GumTrackConstraintSet;
+}
+
+type GumTrackConstraintSet = {
+  chromeMediaSource: string;
+  chromeMediaSourceId?: string;
+  maxWidth: number;
+  maxHeight: number;
+  minFrameRate: number;
+  maxFrameRate: number;
+};
+
 export class GumVideoCapturer {
   private defaultCaptureOptions: GumVideoCaptureOptions;
   private localPreview?: Ref<HTMLVideoElement>;
@@ -175,8 +192,7 @@ export class GumVideoCapturer {
   }
 
   private getUserMedia(options: GumVideoCaptureOptions): Promise<MediaStream> {
-    // TODO: Figure out a better way to make typescript accept "mandatory".
-    const constraints: any = {
+    const constraints: GumConstraints = {
       audio: false,
       video: {
         deviceId: options.preferredDeviceId ?? this.preferredDeviceId,

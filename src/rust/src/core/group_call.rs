@@ -2271,7 +2271,6 @@ impl Client {
     }
 
     // Pulled into a named private method because it can be called in many places.
-    #[allow(clippy::collapsible_if)]
     fn end(state: &mut State, reason: EndReason) {
         debug!(
             "group_call::Client(inner)::end(client_id: {})",
@@ -4315,7 +4314,6 @@ mod tests {
     }
 
     #[derive(Clone)]
-    #[allow(dead_code)] // Ignore clippy warning for era_id due to compile error.
     struct FakeObserver {
         // For sending messages
         user_id: UserId,
@@ -4333,7 +4331,6 @@ mod tests {
         peek_state: Arc<CallMutex<FakeObserverPeekState>>,
         send_rates: Arc<CallMutex<Option<SendRates>>>,
         ended: Waitable<EndReason>,
-        era_id: Option<String>,
         reactions: Arc<CallMutex<Vec<Reaction>>>,
 
         request_membership_proof_invocation_count: Arc<AtomicU64>,
@@ -4373,7 +4370,6 @@ mod tests {
                 )),
                 send_rates: Arc::new(CallMutex::new(None, "FakeObserver send rates")),
                 ended: Waitable::default(),
-                era_id: None,
                 reactions: Arc::new(CallMutex::new(Default::default(), "FakeObserver reactions")),
                 request_membership_proof_invocation_count: Default::default(),
                 request_group_members_invocation_count: Default::default(),
@@ -5031,7 +5027,6 @@ mod tests {
                 .unwrap()
         );
 
-        // TODO: Make Actors use tokio so we can use fake time
         std::thread::sleep(std::time::Duration::from_millis(2000));
 
         // client5 joins during the period between when the new key is generated
@@ -5484,8 +5479,8 @@ mod tests {
             hash_set(&peeker.observer.joined_members())
         );
 
-        // Temporary clear the observer state so we can verify we don't get a
-        // callback when nothing changes.
+        // Clear the observer state so we can verify we don't get a callback when
+        // nothing changes
         peeker.observer.handle_peek_changed(
             0,
             &PeekInfo {
@@ -6192,7 +6187,6 @@ mod tests {
             client1.observer.request_membership_proof_invocation_count()
         );
 
-        // TODO: Make Actors use tokio so we can use fake time
         std::thread::sleep(
             std::time::Duration::from_millis(2000) + MEMBERSHIP_PROOF_REQUEST_INTERVAL,
         );

@@ -25,7 +25,6 @@ use crate::webrtc::peer_connection_observer::{
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection_factory as pcf;
 
-// TODO: sim::pcf
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection_factory as pcf;
 

@@ -188,7 +188,6 @@ where
     T: Platform,
 {
     /// Create a new Call.
-    #[allow(clippy::mutex_atomic)]
     pub fn new(
         app_remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
@@ -1067,7 +1066,6 @@ where
         self.inject_event(event)
     }
 
-    #[allow(clippy::mutex_atomic)]
     /// Inject a synchronizing event into the FSM.
     ///
     /// Blocks the caller while the event flushes through the FSM.

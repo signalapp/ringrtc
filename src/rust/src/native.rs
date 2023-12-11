@@ -133,9 +133,7 @@ pub trait CallStateHandler {
 }
 
 // These are the different states a call can be in.
-// Closely tied with call_manager::ConnectionState and
-// call_manager::CallState.
-// TODO: Should we unify with ConnectionState and CallState?
+// Closely tied with call_manager::ConnectionState and call_manager::CallState.
 pub enum CallState {
     Incoming(CallMediaType), // !connected || !accepted
     Outgoing(CallMediaType), // !connected || !accepted
@@ -173,7 +171,6 @@ impl fmt::Debug for CallState {
 
 // These are the different reasons a call can end.
 // Closely tied to call_manager::ApplicationEvent.
-// TODO: Should we unify with ApplicationEvent?
 #[derive(Debug)]
 pub enum EndReason {
     LocalHangup,

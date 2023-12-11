@@ -176,8 +176,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         if doAutomaticProceed {
             // Do it on a different thread (off the main thread).
             signalingQueue.async {
-                // @todo Add ability to simulate failure.
-                // @todo Add configurable sleep.
                 usleep(100 * 1000)
 
                 // Get back on the main thread.
@@ -364,7 +362,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
 
         recentCallId = callId
 
-        // @todo Create a structure to hold offers by deviceId
         if destinationDeviceId == nil || destinationDeviceId == 1 {
             sentOfferOpaque = opaque
         }
@@ -372,7 +369,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         signalingQueue.async {
             Logger.debug("TestDelegate:shouldSendOffer - async")
 
-            // @todo Add ability to simulate failure.
             usleep(self.messageSendingDelay)
 
             DispatchQueue.main.async {
@@ -383,7 +379,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
                     do {
                         try callManager.signalingMessageDidSend(callId: callId)
                     } catch {
-                        // @todo
+                        Logger.debug("callManager.signalingMessageDidSend() failed")
                     }
                 } else {
                     callManager.signalingMessageDidFail(callId: callId)
@@ -398,7 +394,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
 
         recentCallId = callId
 
-        // @todo Create a structure to hold answers by deviceId
         if destinationDeviceId == nil || destinationDeviceId == 1 {
             sentAnswerOpaque = opaque
         }
@@ -406,7 +401,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         signalingQueue.async {
             Logger.debug("TestDelegate:shouldSendAnswer - async")
 
-            // @todo Add ability to simulate failure.
             usleep(self.messageSendingDelay)
 
             DispatchQueue.main.async {
@@ -417,7 +411,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
                     do {
                         try callManager.signalingMessageDidSend(callId: callId)
                     } catch {
-                        // @todo
+                        Logger.debug("callManager.signalingMessageDidSend() failed")
                     }
                 } else {
                     callManager.signalingMessageDidFail(callId: callId)
@@ -457,7 +451,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
                 // Clear the queue.
                 sentIceCandidates = []
             } catch {
-                // @todo
+                Logger.debug("callManager.receivedIceCandidates() failed")
             }
         }
     }
@@ -471,7 +465,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         signalingQueue.async {
             Logger.debug("TestDelegate:shouldSendIceCandidates - async")
 
-            // @todo Add ability to simulate failure.
             usleep(self.messageSendingDelay)
 
             DispatchQueue.main.async {
@@ -484,7 +477,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
                     do {
                         try callManager.signalingMessageDidSend(callId: callId)
                     } catch {
-                        // @todo
+                        Logger.debug("callManager.signalingMessageDidSend() failed")
                     }
                 } else {
                     callManager.signalingMessageDidFail(callId: callId)
@@ -502,7 +495,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         signalingQueue.async {
             Logger.debug("TestDelegate:shouldSendHangup - async")
 
-            // @todo Add ability to simulate failure.
             usleep(self.messageSendingDelay)
 
             DispatchQueue.main.async {
@@ -529,7 +521,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
                     do {
                         try callManager.signalingMessageDidSend(callId: callId)
                     } catch {
-                        // @todo
+                        Logger.debug("callManager.signalingMessageDidSend() failed")
                     }
                 } else {
                     callManager.signalingMessageDidFail(callId: callId)
@@ -548,7 +540,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         signalingQueue.async {
             Logger.debug("TestDelegate:shouldSendBusy - async")
 
-            // @todo Add ability to simulate failure.
             usleep(self.messageSendingDelay)
 
             DispatchQueue.main.async {
@@ -559,7 +550,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
                     do {
                         try callManager.signalingMessageDidSend(callId: callId)
                     } catch {
-                        // @todo
+                        Logger.debug("callManager.signalingMessageDidSend() failed")
                     }
                 } else {
                     callManager.signalingMessageDidFail(callId: callId)
@@ -810,7 +801,6 @@ class SignalRingRTCTests: XCTestCase {
         delegate.shouldSendOfferInvoked = false
 
         // We've sent an offer, so we should see some Ice candidates.
-        // @todo Update now that we can send Ice candidates before receiving the Answer.
 
         let sourceDevice: UInt32 = 1
 
@@ -1322,9 +1312,6 @@ class SignalRingRTCTests: XCTestCase {
 
         // shouldSendAnswerInvoked should NOT be invoked!
         expect(delegate.shouldSendAnswerInvoked).notTo(equal(true))
-
-        // @todo We should not expect startIncomingCallInvoked to be set.
-        // However, currently hangup() is not clobbering it...
 
         // Release the Call Manager.
         callManager = nil
@@ -2371,7 +2358,6 @@ class SignalRingRTCTests: XCTestCase {
                     if scenario == .calleeBusy {
                         if element.deviceId == busyCallee.deviceId {
                             // The busy callee should be sending Busy, which we'll give to the caller.
-                            // @todo Make another busy type and give it to Caller after ringing...
 
                             expect(element.delegate.shouldSendBusyInvoked).toEventually(equal(true), timeout: .seconds(2))
                             element.delegate.shouldSendBusyInvoked = false
@@ -2981,8 +2967,6 @@ class SignalRingRTCTests: XCTestCase {
                 expect(delegateB2.generalInvocationDetected).to(equal(false))
             }
         } else if scenario == .differentDevice {
-            // @todo Place A/B connection establishment code in its own class.
-
             // Get A1 and B1 in to a call.
 
             // Give the offer from A1 to B1 & B2.
@@ -3091,7 +3075,6 @@ class SignalRingRTCTests: XCTestCase {
             // Finally, get to the actual test. A2 should be able to call B2.
 
             // Clear any state.
-            // @todo Make a reset() function for delegates.
             delegateB2.sentIceCandidates = []
 
             do {

@@ -6,8 +6,6 @@
 import SignalRingRTC.RingRTC
 import SignalCoreKit
 
-// TODO: Figure out how to enable logging without CallManager.
-
 // Here is the new lite/modularized pattern for FFI for a module called X
 // (so far where X is "sfu" or "http")
 // 1. A swift XClient in X.swift owns a rust X::Client in x.rs

@@ -41,7 +41,6 @@ impl fmt::Display for Version {
 /// An enum representing the different types of signaling messages that
 /// can be sent and received.
 #[derive(Clone)]
-#[allow(clippy::large_enum_variant)]
 pub enum Message {
     Offer(Offer),
     Answer(Answer),

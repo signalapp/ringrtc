@@ -55,7 +55,6 @@ mod android {
     #[macro_use]
     mod jni_util;
 
-    #[allow(clippy::missing_safety_doc)]
     mod api {
         mod call_link_root_key;
         mod jni_call_manager;
