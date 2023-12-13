@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 
-# To run: 
+# To run:
 #
 #  python3 parse_log.py 1.log 2.log ...
 #
@@ -16,13 +16,15 @@
 from enum import Enum
 import re
 import sys
-from typing import Union, Optional, Iterator, NamedTuple, TypeVar, Iterable, List, Dict
+from typing import Union, Optional, Iterator, NamedTuple, Iterable, List, Dict
+
 
 class Duration(NamedTuple):
     secs: float
 
     def __repr__(self):
         return f"{self.secs:.2f}s"
+
 
 class Instant(NamedTuple):
     secs: float
@@ -33,15 +35,18 @@ class Instant(NamedTuple):
     def __sub__(after, before) -> Duration:
         return Duration(after.secs - before.secs)
 
+
 def parse_timestamp(unparsed: str) -> Instant:
     (hours, mins, secs) = (float(x) for x in unparsed.split(":")[:3])
     secs = (((60 * hours) + mins) * 60) + secs
     return Instant(secs)
 
+
 class NetworkAdapterType(Enum):
     UNKNOWN = 0
     WIFI = 1
     CELL = 2
+
 
 def parse_network_adapter_type_name(unparsed: str) -> NetworkAdapterType:
     if unparsed == "Wifi":
@@ -50,6 +55,7 @@ def parse_network_adapter_type_name(unparsed: str) -> NetworkAdapterType:
         return NetworkAdapterType.CELL
     else:
         return NetworkAdapterType.UNKNOWN
+
 
 class DataSize(NamedTuple):
     bits: int
@@ -62,7 +68,8 @@ class DataSize(NamedTuple):
         return f"{self.bits}bits"
 
     def __truediv__(self, duration):
-        return DataRate(int(self.bits/duration.secs))
+        return DataRate(int(self.bits / duration.secs))
+
 
 class DataRate(NamedTuple):
     bps: int
@@ -71,17 +78,21 @@ class DataRate(NamedTuple):
         return f"{self.bps/1000:.0f}kbps"
 
     def kbps(self) -> float:
-        return self.bps/1000.0
+        return self.bps / 1000.0
+
 
 def parse_bps(unparsed: str) -> DataRate:
     return DataRate(int(unparsed))
 
-TIMESTAMP_PATTERN_STR = ".*(\d\d:\d\d:\d\d.\d+).*"
+
+TIMESTAMP_PATTERN_STR = r".*(\d\d:\d\d:\d\d.\d+).*"
 
 OUTGOING_CALL_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "API:create_outgoing_call.*")
 
+
 class OutgoingCall(NamedTuple):
     time: Instant
+
 
 def parse_outgoing_call(line: str) -> Optional[OutgoingCall]:
     match = OUTGOING_CALL_PATTERN.match(line)
@@ -92,10 +103,13 @@ def parse_outgoing_call(line: str) -> Optional[OutgoingCall]:
     else:
         return None
 
+
 INCOMING_CALL_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "API:received_offer.*")
+
 
 class IncomingCall(NamedTuple):
     time: Instant
+
 
 def parse_incoming_call(line: str) -> Optional[IncomingCall]:
     match = INCOMING_CALL_PATTERN.match(line)
@@ -106,11 +120,14 @@ def parse_incoming_call(line: str) -> Optional[IncomingCall]:
     else:
         return None
 
+
 CALL_START_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "app -> cm: proceed.*REDACTED_HEX:...(.*?) ]")
+
 
 class CallStart(NamedTuple):
     time: Instant
     call_id: str
+
 
 def parse_call_start(line: str) -> Optional[CallStart]:
     match = CALL_START_PATTERN.match(line)
@@ -121,11 +138,14 @@ def parse_call_start(line: str) -> Optional[CallStart]:
     else:
         return None
 
+
 CALL_STATE_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "on_connection_observer_event.*StateChanged[(](.*)[)].*")
+
 
 class CallState(NamedTuple):
     time: Instant
     state: str
+
 
 def parse_call_state(line: str) -> Optional[CallState]:
     match = CALL_STATE_PATTERN.match(line)
@@ -137,11 +157,13 @@ def parse_call_state(line: str) -> Optional[CallState]:
         return None
 
 
-CONNECTION_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "create_connection.*remote_device_id: (\d+).*")
+CONNECTION_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + r"create_connection.*remote_device_id: (\d+).*")
+
 
 class Connection(NamedTuple):
     time: Instant
     remote_device_id: str
+
 
 def parse_connection(line: str) -> Optional[Connection]:
     match = CONNECTION_PATTERN.match(line)
@@ -155,9 +177,11 @@ def parse_connection(line: str) -> Optional[Connection]:
 
 LOCAL_ICE_CANDIDATE_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "Local ICE candidate:.*typ ([a-z]+).*")
 
+
 class LocalIceCandidate(NamedTuple):
     time: Instant
     type: str
+
 
 def parse_local_ice_candidate(line: str) -> Optional[LocalIceCandidate]:
     match = LOCAL_ICE_CANDIDATE_PATTERN.match(line)
@@ -168,11 +192,14 @@ def parse_local_ice_candidate(line: str) -> Optional[LocalIceCandidate]:
     else:
         return None
 
+
 REMOTE_ICE_CANDIDATE_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "Remote ICE candidate:.*typ ([a-z]+).*")
+
 
 class RemoteIceCandidate(NamedTuple):
     time: Instant
     type: str
+
 
 def parse_remote_ice_candidate(line: str) -> Optional[RemoteIceCandidate]:
     match = REMOTE_ICE_CANDIDATE_PATTERN.match(line)
@@ -183,10 +210,13 @@ def parse_remote_ice_candidate(line: str) -> Optional[RemoteIceCandidate]:
     else:
         return None
 
+
 ICE_CONNECTED_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "IceConnected.*")
+
 
 class IceConnected(NamedTuple):
     time: Instant
+
 
 def parse_ice_connected(line: str) -> Optional[IceConnected]:
     match = ICE_CONNECTED_PATTERN.match(line)
@@ -197,11 +227,14 @@ def parse_ice_connected(line: str) -> Optional[IceConnected]:
     else:
         return None
 
-NETWORK_ROUTE_CHANGE_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "rtc -> conn: ice_network_route_change\(NetworkRoute { local_adapter_type: ([A-Za-z]+).*")
+
+NETWORK_ROUTE_CHANGE_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + r"rtc -> conn: ice_network_route_change\(NetworkRoute { local_adapter_type: ([A-Za-z]+).*")
+
 
 class NetworkRouteChange(NamedTuple):
     time: Instant
     adapter_type: NetworkAdapterType
+
 
 def parse_network_route_change(line: str) -> Optional[NetworkRouteChange]:
     match = NETWORK_ROUTE_CHANGE_PATTERN.match(line)
@@ -213,11 +246,14 @@ def parse_network_route_change(line: str) -> Optional[NetworkRouteChange]:
     else:
         return None
 
-SEND_RATE_CHANGE_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "ringrtc_stats!,connection,.*?,.*?,(\d+).*")
+
+SEND_RATE_CHANGE_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + r"ringrtc_stats!,connection,.*?,.*?,(\d+).*")
+
 
 class SendRateChange(NamedTuple):
     time: Instant
     send_rate: DataRate
+
 
 def parse_send_rate_change(line: str) -> Optional[SendRateChange]:
     match = SEND_RATE_CHANGE_PATTERN.match(line)
@@ -229,7 +265,9 @@ def parse_send_rate_change(line: str) -> Optional[SendRateChange]:
     else:
         return None
 
-AUDIO_RECEIVE_STATS_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "ringrtc_stats!,audio,recv,(\d+?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?)")
+
+AUDIO_RECEIVE_STATS_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + r"ringrtc_stats!,audio,recv,(\d+?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?)")
+
 
 class AudioReceiveStats(NamedTuple):
     time: Instant
@@ -242,6 +280,7 @@ class AudioReceiveStats(NamedTuple):
     total_decode_time: float
     audio_level: float
     total_audio_energy: str
+
 
 def parse_audio_receive_stats(line: str) -> Optional[AudioReceiveStats]:
     match = AUDIO_RECEIVE_STATS_PATTERN.match(line)
@@ -261,7 +300,9 @@ def parse_audio_receive_stats(line: str) -> Optional[AudioReceiveStats]:
     else:
         return None
 
-VIDEO_RECEIVE_STATS_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "ringrtc_stats!,video,recv,(\d+?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*)")
+
+VIDEO_RECEIVE_STATS_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + r"ringrtc_stats!,video,recv,(\d+?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*)")
+
 
 class VideoReceiveStats(NamedTuple):
     time: Instant
@@ -275,6 +316,7 @@ class VideoReceiveStats(NamedTuple):
     total_decode_time: float
     frame_width: int
     frame_height: int
+
 
 def parse_video_receive_stats(line: str) -> Optional[VideoReceiveStats]:
     match = VIDEO_RECEIVE_STATS_PATTERN.match(line)
@@ -298,8 +340,10 @@ def parse_video_receive_stats(line: str) -> Optional[VideoReceiveStats]:
 
 LOCAL_HANGUP_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "app -> cm: hangup.*")
 
+
 class LocalHangup(NamedTuple):
     time: Instant
+
 
 def parse_local_hangup(line: str) -> Optional[LocalHangup]:
     match = LOCAL_HANGUP_PATTERN.match(line)
@@ -313,10 +357,12 @@ def parse_local_hangup(line: str) -> Optional[LocalHangup]:
 
 RECEIVED_HANGUP_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "ReceivedHangup, device: (.*?) hangup: (.*?)[)]")
 
+
 class ReceivedHangup(NamedTuple):
     time: Instant
     remote_device_id: str
     type: str
+
 
 def parse_received_hangup(line: str) -> Optional[ReceivedHangup]:
     match = RECEIVED_HANGUP_PATTERN.match(line)
@@ -329,9 +375,11 @@ def parse_received_hangup(line: str) -> Optional[ReceivedHangup]:
 
 
 CALL_END_PATTERN = re.compile(TIMESTAMP_PATTERN_STR + "ringrtc::core::call.*terminate_call.*")
- 
+
+
 class CallEnded(NamedTuple):
     time: Instant
+
 
 def parse_call_end(line: str) -> Optional[CallEnded]:
     match = CALL_END_PATTERN.match(line)
@@ -342,13 +390,17 @@ def parse_call_end(line: str) -> Optional[CallEnded]:
     else:
         return None
 
+
 Event = Union[OutgoingCall, IncomingCall, CallStart, CallState, Connection, LocalIceCandidate, RemoteIceCandidate, IceConnected, NetworkRouteChange, SendRateChange, AudioReceiveStats, VideoReceiveStats, LocalHangup, ReceivedHangup, CallEnded]
+
+
 def parse_events(lines: Iterable[str]) -> Iterator[Event]:
     for line in lines:
         for parse in [parse_outgoing_call, parse_incoming_call, parse_call_start, parse_call_state, parse_connection, parse_local_ice_candidate, parse_remote_ice_candidate, parse_ice_connected, parse_network_route_change, parse_send_rate_change, parse_audio_receive_stats, parse_video_receive_stats, parse_local_hangup, parse_received_hangup, parse_call_end]:
             event = parse(line)
             if event is not None:
                 yield event
+
 
 class NetworkRoutePeriod(NamedTuple):
     adapter_type: NetworkAdapterType
@@ -359,6 +411,7 @@ class NetworkRoutePeriod(NamedTuple):
         duration = end - self.start
         return f"{self.adapter_type} for {duration}; rates: {self.send_rates}"
 
+
 def print_stats(audio_receive_stats_by_ssrc: Optional[Dict[int, List[AudioReceiveStats]]], video_receive_stats_by_ssrc: Optional[Dict[int, List[VideoReceiveStats]]]):
     if audio_receive_stats_by_ssrc:
         print_audio_stats(audio_receive_stats_by_ssrc)
@@ -366,15 +419,16 @@ def print_stats(audio_receive_stats_by_ssrc: Optional[Dict[int, List[AudioReceiv
     if video_receive_stats_by_ssrc:
         print_video_stats(video_receive_stats_by_ssrc)
 
+
 def print_audio_stats(stats_by_ssrc: Dict[int, List[AudioReceiveStats]]):
-    print(f"Audio Receive Stats by SSRC:")
+    print("Audio Receive Stats by SSRC:")
     for (ssrc, stats) in stats_by_ssrc.items():
         print(f" from SSRC {ssrc}:")
         last_sample = None
         for sample in stats:
             loss_percent = "?"
             if sample.packets_received > 0:
-                loss_percent = int(sample.packets_lost*100.0/(sample.packets_received + sample.packets_lost))
+                loss_percent = int(sample.packets_lost * 100.0 / (sample.packets_received + sample.packets_lost))
             kbps_since_last_time = "?"
             if last_sample:
                 bytes_received_since_last_time = DataSize.from_bytes(sample.bytes_received - last_sample.bytes_received)
@@ -383,15 +437,16 @@ def print_audio_stats(stats_by_ssrc: Dict[int, List[AudioReceiveStats]]):
             print(f"    packets_received={sample.packets_received}; packets_lost={sample.packets_lost}; loss_percent={loss_percent}%; jitter={sample.jitter}; kbps={kbps_since_last_time}")
             last_sample = sample
 
+
 def print_video_stats(stats_by_ssrc: Dict[int, List[VideoReceiveStats]]):
-    print(f"Video Receive Stats by SSRC:")
+    print("Video Receive Stats by SSRC:")
     for (ssrc, stats) in stats_by_ssrc.items():
         print(f" from SSRC {ssrc}:")
         last_sample = None
         for sample in stats:
             loss_percent = "?"
             if sample.packets_received > 0:
-                loss_percent = int(sample.packets_lost*100.0/(sample.packets_received + sample.packets_lost))
+                loss_percent = int(sample.packets_lost * 100.0 / (sample.packets_received + sample.packets_lost))
             kbps_since_last_time = "?"
             if last_sample:
                 bytes_received_since_last_time = DataSize.from_bytes(sample.bytes_received - last_sample.bytes_received)
@@ -399,6 +454,7 @@ def print_video_stats(stats_by_ssrc: Dict[int, List[VideoReceiveStats]]):
                 kbps_since_last_time = (bytes_received_since_last_time / duration_since_last_time).kbps()
             print(f"    packets_received={sample.packets_received}; packets_lost={sample.packets_lost}; loss_percent={loss_percent}%; size={sample.frame_width}x{sample.frame_height}; kbps={kbps_since_last_time}")
             last_sample = sample
+
 
 for path in sys.argv[1:]:
     file = open(path, 'r')
@@ -477,5 +533,3 @@ for path in sys.argv[1:]:
 
     # Just in case the call didn't end in the log
     print_stats(audio_receive_stats_by_ssrc, video_receive_stats_by_ssrc)
-
-

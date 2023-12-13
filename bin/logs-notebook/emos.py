@@ -11,21 +11,21 @@ def compute_emos(rtt: int, jitter: int, fractionLost: float) -> float:
 
     r0: float = 94.768
 
-    effectiveLatency: int = rtt + (jitter * 2) + 10;
+    effectiveLatency: int = rtt + (jitter * 2) + 10
 
-    rFactor: float = 0;
+    rFactor: float = 0
     if effectiveLatency < 160:
-      rFactor = r0 - (effectiveLatency / 40);
+        rFactor = r0 - (effectiveLatency / 40)
     elif effectiveLatency < 1000:
-      rFactor = r0 - ((effectiveLatency - 120) / 10);
+        rFactor = r0 - ((effectiveLatency - 120) / 10)
 
     # Adjust "rFactor" with the fraction of packets lost.
     if fractionLost <= (rFactor / 2.5):
-      rFactor = max(rFactor - fractionLost * 2.5, 6.52);
+        rFactor = max(rFactor - fractionLost * 2.5, 6.52)
     else:
-      rFactor = 0;
+        rFactor = 0
 
     # Compute MOS from "rFactor".
-    mos: float = 1 + (0.035 * rFactor) + (0.000007 * rFactor) * (rFactor - 60) * (100 - rFactor);
+    mos: float = 1 + (0.035 * rFactor) + (0.000007 * rFactor) * (rFactor - 60) * (100 - rFactor)
 
-    return mos;
+    return mos

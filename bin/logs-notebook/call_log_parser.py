@@ -12,7 +12,7 @@ import zipfile
 from emos import compute_emos
 from io import BytesIO, StringIO
 from pandas.api.types import is_numeric_dtype
-from typing import Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 pd.set_option('display.precision', 1)
 # Disable scientific notation (doesn't go well with SSRCs)
@@ -20,8 +20,9 @@ pd.set_option('display.float_format', lambda x: '%.1f' % x)
 
 GROUP_CALL_TYPE = 'Group'
 
+
 class Call():
-    def __init__(self, id: str, logs: list[str], **kwargs: pd.DataFrame):
+    def __init__(self, id: str, logs: List[str], **kwargs: pd.DataFrame):
         self.connection = kwargs['connection']
         self.audio_send = kwargs['audio_send']
         self.audio_recv = kwargs['audio_recv']
@@ -46,15 +47,15 @@ class Call():
     def describe_ice_network_route_change(self) -> None:
         self.ice_network_route_change[
             ['local_relayed', 'remote_relayed']
-        ].plot(subplots=True, figsize=(10,10), grid=True)
+        ].plot(subplots=True, figsize=(10, 10), grid=True)
 
     def describe_connection(self) -> None:
         self.connection[
             ['current_round_trip_time', 'available_outgoing_bitrate']
-        ].plot(subplots=True, figsize=(10,10), grid=True)
+        ].plot(subplots=True, figsize=(10, 10), grid=True)
 
     def describe_audio_send(self) -> None:
-        self.audio_send[[x for x in list(self.audio_send.columns.values) if "ssrc" != x]].plot(subplots=True, figsize=(10,10), grid=True)
+        self.audio_send[[x for x in list(self.audio_send.columns.values) if "ssrc" != x]].plot(subplots=True, figsize=(10, 10), grid=True)
 
     def describe_audio_recv(self, ssrc: Optional[int] = None) -> None:
         if self.type == GROUP_CALL_TYPE:
@@ -64,7 +65,7 @@ class Call():
         if ssrc is not None:
             df = self.audio_recv[self.audio_recv.ssrc == ssrc]
 
-        df[[x for x in list(df.columns.values) if "ssrc" != x]].plot(subplots=True, figsize=(10,10), grid=True)
+        df[[x for x in list(df.columns.values) if "ssrc" != x]].plot(subplots=True, figsize=(10, 10), grid=True)
 
     def describe_video_send(self, layer: Optional[int] = None) -> None:
         if layer is None and self.type == GROUP_CALL_TYPE:
@@ -81,7 +82,7 @@ class Call():
 
         ax = self.video_send[self.video_send.ssrc == ssrc][
             [x for x in list(self.video_send.columns.values) if "ssrc" != x]
-        ].plot(subplots=True, figsize=(10,15), grid=True, title=title)[0]
+        ].plot(subplots=True, figsize=(10, 15), grid=True, title=title)[0]
 
         if title is not None:
             fig = ax.get_figure()
@@ -100,12 +101,12 @@ class Call():
 
         df[
             [x for x in list(df.columns.values) if "ssrc" != x]
-        ].plot(subplots=True, figsize=(10,10), grid=True)
+        ].plot(subplots=True, figsize=(10, 10), grid=True)
 
     def describe_sfu_recv(self) -> None:
         self.sfu_recv[
             ['target_send_rate', 'ideal_send_rate', 'allocated_send_rate']
-        ].plot(subplots=True, figsize=(10,10), grid=True)
+        ].plot(subplots=True, figsize=(10, 10), grid=True)
 
     def logs(self, query: str = '') -> None:
         """
@@ -116,7 +117,7 @@ class Call():
         print('\n'.join(matched))
 
 
-def _extract_logs(url: str, response: requests.Response) -> list[str]:
+def _extract_logs(url: str, response: requests.Response) -> List[str]:
     if '/ios/' in url:
         f = zipfile.ZipFile(BytesIO(response.content))
         # Look at only the main logs
@@ -141,8 +142,8 @@ def _extract_logs(url: str, response: requests.Response) -> list[str]:
         return log_lines[logger_start + 1:]
 
 
-def _parse_calls(logs: list[str]) -> list[Call]:
-    def new_raw_call() -> dict[str, Any]:
+def _parse_calls(logs: List[str]) -> List[Call]:
+    def new_raw_call() -> Dict[str, Any]:
         return {
             'connection': [],
             'ice_network_route_change': [],
@@ -160,28 +161,28 @@ def _parse_calls(logs: list[str]) -> list[Call]:
 
     def extract_timestamp(line: str) -> str:
         # e.g. "2022-12-03 11:38:08.357 CST"
-        android = re.findall('\d+-\d+-\d+ \d+:\d+:\d+\.\d+ \w+', line)
-        if android:
+        android = re.findall(r'\d+-\d+-\d+ \d+:\d+:\d+\.\d+ \w+', line)
+        if android and isinstance(android[0], str):
             return android[0]
 
         # e.g. "2022-11-28T00:41:41.299Z"
-        desktop = re.findall('\d+-\d+-\d+T\d+:\d+:\d+\.\d+Z', line)
-        if desktop:
+        desktop = re.findall(r'\d+-\d+-\d+T\d+:\d+:\d+\.\d+Z', line)
+        if desktop and isinstance(desktop[0], str):
             return desktop[0]
 
         # e.g. 2022/12/05 18:59:18:773
-        ios = re.findall('\d+/\d+/\d+ \d+:\d+:\d+\:\d+', line)
-        if ios:
+        ios = re.findall(r'\d+/\d+/\d+ \d+:\d+:\d+\:\d+', line)
+        if ios and isinstance(ios[0], str):
             return ios[0]
 
         return line
 
     def extract_call_id(line: str) -> str:
-        id = re.findall('0[x][0-9a-fA-F]+|0[x]\[ REDACTED_HEX.*\]', line)
-        return id[0] if len(id) > 0 else 'Unknown'
+        id = re.findall(r'0[x][0-9a-fA-F]+|0[x]\[ REDACTED_HEX.*\]', line)
+        return id[0] if isinstance(id[0], str) and len(id) > 0 else 'Unknown'
 
     raw_calls = []
-    raw_call: dict[str, Any] = {}
+    raw_call: Dict[str, Any] = {}
 
     def append(key: str, value: str) -> None:
         if raw_call:
@@ -199,7 +200,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
             raw_call['start'] = extract_timestamp(line)
             raw_call['id'] = extract_call_id(line)
 
-            typ = re.findall('direction: (\w+)', line)
+            typ = re.findall(r'direction: (\w+)', line)
             if typ:
                 raw_call['type'] = typ[0]
         elif 'Group Client created with id' in line:
@@ -236,7 +237,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
     if raw_call:
         raw_calls.append(raw_call)
 
-    def ice_network_route_change_lines_to_df(lines: list[str]) -> pd.DataFrame:
+    def ice_network_route_change_lines_to_df(lines: List[str]) -> pd.DataFrame:
         # Generate a comma delimited representation of the ice network route change data
         csv = []
 
@@ -343,7 +344,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
                     except ValueError:
                         # The stats header may appear multiple times for a call.
                         # Remove duplicate header entries
-                        df = df.iloc[1: , :]
+                        df = df.iloc[1:, :]
                     else:
                         break
 
@@ -355,7 +356,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
 
         return df
 
-    def create_call(raw_call: dict[str, Any]) -> Call:
+    def create_call(raw_call: Dict[str, Any]) -> Call:
         audio_send = clean_columns(lines_to_df(raw_call['audio_send']))
         connection = clean_columns(lines_to_df(raw_call['connection']))
         audio_recv = clean_columns(lines_to_df(raw_call['audio_recv']))
@@ -366,7 +367,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
                 lambda row: compute_emos(row['remote_round_trip_time'], row['remote_jitter'], row['remote_packets_lost_pct']),
                 axis=1)
         else:
-            audio_send['remote_mos'] = pd.DataFrame({'remote_mos' : []})
+            audio_send['remote_mos'] = pd.DataFrame({'remote_mos': []})
 
         # Compute audio_recv mos score
         if not connection.empty and not audio_recv.empty:
@@ -377,7 +378,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
                 axis=1)
             audio_recv = pd.concat([audio_recv, audio_recv_mos['mos']], axis=1)
         else:
-            audio_recv['mos'] = pd.DataFrame({'mos' : []})
+            audio_recv['mos'] = pd.DataFrame({'mos': []})
 
         return Call(
             raw_call['id'],
@@ -397,7 +398,7 @@ def _parse_calls(logs: list[str]) -> list[Call]:
     return [create_call(raw_call) for raw_call in raw_calls]
 
 
-def _match_call_ids(results: list[list[Call]]) -> list[list[Call]]:
+def _match_call_ids(results: List[List[Call]]) -> List[List[Call]]:
     """
     Returns calls which appear in all input logs
     """
@@ -414,10 +415,10 @@ def _match_call_ids(results: list[list[Call]]) -> list[list[Call]]:
         # e.g. `0x123456789abcdefabc`
         return id[-3:]
 
-    def contains_id(id: str, calls: list[Call]) -> bool:
+    def contains_id(id: str, calls: List[Call]) -> bool:
         return any(stable_id(call.id) == id for call in calls)
 
-    def matches_all(id: str, results: list[list[Call]]) -> bool:
+    def matches_all(id: str, results: List[List[Call]]) -> bool:
         return all(contains_id(id, calls) for calls in results)
 
     ids = [stable_id(call.id) for call in results[0]]
@@ -429,13 +430,13 @@ def _match_call_ids(results: list[list[Call]]) -> list[list[Call]]:
     return results
 
 
-def _load_calls_from_url(url: str) -> list[Call]:
+def _load_calls_from_url(url: str) -> List[Call]:
     response = requests.get(url)
     logs = _extract_logs(url, response)
     return _parse_calls(logs)
 
 
-def load_calls(*urls: str) -> Union[list[Call], list[list[Call]]]:
+def load_calls(*urls: str) -> Union[List[Call], List[List[Call]]]:
     if len(urls) == 1:
         return _load_calls_from_url(urls[0])
 
@@ -443,12 +444,14 @@ def load_calls(*urls: str) -> Union[list[Call], list[list[Call]]]:
 
     return _match_call_ids(results)
 
-def load_calls_from_file(path_to_file: str) -> list[Call]:
+
+def load_calls_from_file(path_to_file: str) -> List[Call]:
     with open(path_to_file, "r") as file:
         logs = file.read()
     return _parse_calls(logs.split('\n'))
 
-def describe(calls: list[Call]) -> pd.DataFrame:
+
+def describe(calls: List[Call]) -> pd.DataFrame:
     def ssrc_count(call: Call) -> Optional[int]:
         if 'ssrc' not in call.audio_recv:
             # The first call may not have columns set if the call started
