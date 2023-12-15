@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.35.0
+
+- Update zkgroup to 0.37.0
+
+- Code Cleanup
+
+- Desktop: Always use the Windows ADM2
+
+- Android: Generate assets/acknowledgments/ringrtc.md as part of build
+
+- Make lints on CI slightly faster
+
+- Build improvements and dependency updates
+
+- Update to Rust 1.74.1
+
 ## v2.34.5
 
 - Use unified plan for 1:1 calls

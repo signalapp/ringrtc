@@ -2021,7 +2021,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.34.5"
+version = "2.35.0"
 dependencies = [
  "aes",
  "aes-gcm-siv",
