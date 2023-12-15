@@ -4,7 +4,7 @@
 //
 
 use aes::Aes256;
-use ctr::cipher::{NewCipher, StreamCipher};
+use ctr::cipher::{KeyIvInit, StreamCipher};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac as _, NewMac};
 use rand::{CryptoRng, Rng};

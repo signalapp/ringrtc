@@ -20,6 +20,7 @@ use ringrtc::lite::call_links::{
     CallLinkRestrictions, CallLinkRootKey, CallLinkState, CallLinkUpdateRequest,
 };
 use ringrtc::lite::http::{self, Client};
+use uuid::Uuid;
 use zkgroup::call_links::CallLinkSecretParams;
 
 struct Log;
@@ -72,17 +73,18 @@ fn issue_and_present_auth_credential(
     root_key: &CallLinkRootKey,
 ) -> zkgroup::call_links::CallLinkAuthCredentialPresentation {
     let timestamp = start_of_today_in_epoch_seconds();
+    let user_id = Uuid::from_bytes(USER_ID).into();
     let auth_credential = zkgroup::call_links::CallLinkAuthCredentialResponse::issue_credential(
-        USER_ID,
+        user_id,
         timestamp,
         server_zkparams,
         rand::random(),
     )
-    .receive(USER_ID, timestamp, public_zkparams)
+    .receive(user_id, timestamp, public_zkparams)
     .unwrap();
     let call_link_zkparams = CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
     auth_credential.present(
-        USER_ID,
+        user_id,
         timestamp,
         public_zkparams,
         &call_link_zkparams,
@@ -169,6 +171,7 @@ fn main() {
         )
         .expect("zkparams should be a valid GenericServerSecretParams (not public!)");
     let public_zkparams = server_zkparams.get_public_params();
+    let user_id = Uuid::from_bytes(USER_ID).into();
 
     log::set_logger(&LOG).expect("set logger");
     log::set_max_level(log::LevelFilter::Info);
@@ -213,19 +216,19 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     );
                 let create_credential_response =
                     create_credential_request_context.get_request().issue(
-                        USER_ID,
+                        user_id,
                         start_of_today_in_epoch_seconds(),
                         &server_zkparams,
                         rand::random(),
                     );
                 let create_credential = create_credential_request_context
-                    .receive(create_credential_response, USER_ID, &public_zkparams)
+                    .receive(create_credential_response, user_id, &public_zkparams)
                     .unwrap();
                 let call_link_zkparams =
                     CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
                 let create_credential_presentation = create_credential.present(
                     &room_id,
-                    USER_ID,
+                    user_id,
                     &public_zkparams,
                     &call_link_zkparams,
                     rand::random(),

@@ -54,7 +54,7 @@ jobs:
     - name: Clippy (group_call)
       run: cargo clippy --package ringrtc --bin group_call --features native,http -- -D warnings
     - name: Clippy (call_link)
-      run: cargo clippy --package ringrtc --bin call_link --features sim,http,rand_chacha -- -D warnings
+      run: cargo clippy --package ringrtc --bin call_link --features uuid,sim,http,rand_chacha -- -D warnings
     - name: Clippy (call_sim-cli)
       run: cargo clippy --package ringrtc --bin call_sim-cli --features call_sim -- -D warnings
     - name: Clippy (call_sim)

@@ -4,8 +4,8 @@
 //
 
 use aes_gcm_siv::{
-    aead::{generic_array::typenum::Unsigned, Aead, AeadCore, AeadInPlace, NewAead},
-    Aes256GcmSiv, Key,
+    aead::{generic_array::typenum::Unsigned, Aead, AeadCore, AeadInPlace},
+    Aes256GcmSiv, Key, KeyInit,
 };
 use anyhow::{anyhow, bail};
 use hkdf::Hkdf;
@@ -75,7 +75,7 @@ impl CallLinkRootKey {
     }
 
     fn make_cipher(&self) -> Aes256GcmSiv {
-        let mut key = Key::<<Aes256GcmSiv as NewAead>::KeySize>::default();
+        let mut key = Key::<Aes256GcmSiv>::default();
         Hkdf::<Sha256>::new(None, &self.bytes)
             .expand(b"20230501-Signal-CallLinkRootKey-AES", &mut key)
             .expect("valid output length");

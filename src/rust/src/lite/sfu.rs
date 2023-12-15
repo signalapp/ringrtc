@@ -701,6 +701,7 @@ pub mod ios {
 #[cfg(test)]
 mod tests {
     use crate::lite::call_links::{CallLinkMemberResolver, CallLinkRootKey};
+    use uuid::Uuid;
 
     use super::*;
 
@@ -806,7 +807,9 @@ mod tests {
             zkgroup::call_links::CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
 
         fn encrypt(uuid: [u8; 16], params: &zkgroup::call_links::CallLinkSecretParams) -> String {
-            hex::encode(bincode::serialize(&params.encrypt_uuid(uuid)).unwrap())
+            hex::encode(
+                bincode::serialize(&params.encrypt_uid(Uuid::from_bytes(uuid).into())).unwrap(),
+            )
         }
 
         let resolver = CallLinkMemberResolver::from(&root_key);

@@ -1577,7 +1577,7 @@ impl Client {
                             state.next_membership_proof_request_time = Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
                         }
 
-                        let client_secret = EphemeralSecret::new(OsRng);
+                        let client_secret = EphemeralSecret::random_from_rng(OsRng);
                         let client_pub_key = PublicKey::from(&client_secret);
                         state.dhe_state = DheState::start(client_secret);
                         state.sfu_client.join(
@@ -4102,6 +4102,7 @@ fn random_alphanumeric(len: usize) -> String {
     std::iter::repeat(())
         .map(|()| rand::rngs::OsRng.sample(rand::distributions::Alphanumeric))
         .take(len)
+        .map(char::from)
         .collect()
 }
 
@@ -7245,8 +7246,8 @@ mod remote_devices_tests {
         impl<T: rand::RngCore> rand::CryptoRng for NotCryptoRng<T> {}
 
         let mut rand = NotCryptoRng(rand::rngs::mock::StepRng::new(1, 1));
-        let client_secret = EphemeralSecret::new(&mut rand);
-        let server_secret = EphemeralSecret::new(&mut rand);
+        let client_secret = EphemeralSecret::random_from_rng(&mut rand);
+        let server_secret = EphemeralSecret::random_from_rng(&mut rand);
         let client_pub_key = PublicKey::from(&client_secret);
         let server_pub_key = PublicKey::from(&server_secret);
         let server_cert = &b"server_cert"[..];

@@ -62,7 +62,11 @@ impl MemberResolver for CallLinkMemberResolver {
         let ciphertext_bytes = Vec::from_hex(opaque_user_id).ok()?;
         let ciphertext: zkgroup::groups::UuidCiphertext =
             bincode::deserialize(&ciphertext_bytes).ok()?;
-        let user_id = self.zkparams.decrypt_uuid(ciphertext).ok()?.to_vec();
+        let user_id = self
+            .zkparams
+            .decrypt_uid(ciphertext)
+            .ok()?
+            .service_id_binary();
 
         if locked_cache.len() > MAX_CACHE_ENTRIES {
             _ = locked_cache.pop_front();

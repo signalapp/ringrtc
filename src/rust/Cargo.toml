@@ -25,29 +25,30 @@ required-features = ["native", "http"]
 [[bin]]
 name = "call_link"
 # This binary doesn't depend on WebRTC at all, so either `sim` or `native` would work.
-required-features = ["sim", "http", "rand_chacha"]
+required-features = ["uuid", "sim", "http", "rand_chacha"]
 
 [[bin]]
 name = "call_sim-cli"
 required-features = ["call_sim", "injectable_network"]
 
 [dependencies]
-regex-aot         = { path = "regex-aot" }
+regex-aot = { path = "regex-aot" }
 
-aes               = { version = "0.7.5"  }
-aes-gcm-siv       = { version = "0.10.3" }
+aes               = { version = "0.8.3"  }
+aes-gcm-siv       = { version = "0.11.1", features = ["aes"] }
 anyhow            = { version = "1.0"    }
 base64            = { version = "0.21.5" }
 bytes             = { version = "1.0"    }
-ctr               = { version = "0.8"    }
+ctr               = { version = "0.9.2"  }
+futures           = { version = "0.3"    }
 hmac              = { version = "0.11"   }
 lazy_static       = { version = "1.4"    }
 libc              = { version = "0.2"    }
 log               = { version = "0.4", features = ["std", "max_level_trace", "release_max_level_info"] }
 num_enum          = { version = "0.7.1"  }
 prost             = { version = "0.12.3" }
-rand              = { version = "0.7", features = [] }
-regex-automata    = { version = "0.1.10" }
+rand              = { version = "0.8.5", features = [] }
+regex-automata    = { version = "0.4.3", default-features = false, features = ["dfa", "perf", "std"] }
 hkdf              = { version = "0.11"   }
 serde_json        = { version = "1.0"    }
 serde             = { version = "1.0.193", features = ["derive"] }
@@ -57,13 +58,14 @@ sha2              = { version = "0.9.9"  }
 static_assertions = { version = "1.1.0"  }
 subtle            = { version = "2.4.1"  }
 thiserror         = { version = "1.0.50" }
-x25519-dalek      = { version = "1.2"    }
+x25519-dalek      = { version = "2.0.0", features = ["static_secrets"] }
 
 # Used by call links. Be careful not to pull in more than strictly needed, for both code size and
 # maintenance reasons. In particular, anything involving credentials should be left to
 # libsignal-client.
 bincode = { version = "1.2.1" }
-zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.23.1" }
+uuid = { version = "1.6.1", optional = true }
+zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.37.0" }
 
 # Optional, needed by the "electron" feature
 neon = { version = "0.10.1", optional = true, default-features = false, features = ["napi-6", "channel-api", "try-catch-api"] }
@@ -77,7 +79,7 @@ rustls = { version = "0.21.6", optional = true, features = ["dangerous_configura
 webpki = { version = "0.22.4", optional = true }
 
 # Optional, needed for call-link-test-client
-rand_chacha = { version = "0.2", optional = true }
+rand_chacha = { version = "0.3.1", optional = true }
 
 # Optional, needed by the "call_sim" feature
 bitvec = {version = "1.0.1", optional = true }
@@ -121,5 +123,6 @@ prost-build = { version = "0.12.3" }
 tonic-build = { version = "0.10.2" }
 
 [dev-dependencies]
+uuid = { version = "1.6.1" }
 env_logger = { version = "0.10.1" }
-rand_chacha = { version = "0.2" }
+rand_chacha = { version = "0.3" }

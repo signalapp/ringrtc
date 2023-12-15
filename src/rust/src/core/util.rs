@@ -203,12 +203,14 @@ fn redact_ipv6(text: Cow<'_, str>) -> Cow<'_, str> {
 #[cfg(any(not(debug_assertions), test))]
 fn replace_all<'a>(
     text: Cow<'a, str>,
-    re: regex_automata::Regex<impl regex_automata::DFA>,
+    re: regex_automata::dfa::regex::Regex<regex_automata::dfa::sparse::DFA<&[u8]>>,
     replacement: &str,
 ) -> Cow<'a, str> {
     let mut result = String::new();
     let mut end_of_previous_match = 0;
-    for (start, end) in re.find_iter(text.as_bytes()) {
+    for m in re.find_iter(text.as_bytes()) {
+        let start = m.start();
+        let end = m.end();
         debug_assert!(
             end_of_previous_match <= start,
             "should not produce overlapping results"

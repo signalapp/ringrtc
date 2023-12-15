@@ -12,4 +12,4 @@ members = [
 
 [patch.crates-io]
 # Use our fork of curve25519-dalek for zkgroup compatibility.
-curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', branch = 'lizard2' }
+curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.1' }
