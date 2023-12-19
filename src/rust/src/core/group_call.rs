@@ -22,7 +22,9 @@ use rand::{rngs::OsRng, Rng};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-use crate::{common::CallId, core::util::uuid_to_string};
+use crate::{
+    common::CallId, core::util::uuid_to_string, webrtc::sdp_observer::create_csd_observer,
+};
 use crate::{
     common::{
         actor::{Actor, Stopper},
@@ -941,6 +943,10 @@ struct State {
     rtp_data_to_sfu_next_seqnum: u32,
     rtp_data_through_sfu_next_seqnum: u32,
     next_heartbeat_time: Option<Instant>,
+    /// The remote demux IDs are in the order of the corresponding transceivers
+    /// in peer_connection. Each demux ID is associated with two transceivers
+    /// (audio and video). None represents an unused transceiver pair.
+    remote_transceiver_demux_ids: Vec<Option<DemuxId>>,
 
     // Things for getting statistics from the PeerConnection
     // Stats gathering happens only when joined
@@ -1152,6 +1158,7 @@ impl Client {
                     connection_state: ConnectionState::NotConnected,
                     join_state: JoinState::NotJoined(ring_id),
                     dhe_state: DheState::default(),
+                    remote_transceiver_demux_ids: Default::default(),
                     remote_devices: Default::default(),
 
                     remote_devices_request_state: match kind {
@@ -2524,7 +2531,7 @@ impl Client {
             state.client_id
         );
 
-        Self::set_peer_connection_descriptions(state, sfu_info, local_demux_id, &[], srtp_keys)?;
+        Self::set_peer_connection_descriptions(state, sfu_info, local_demux_id, srtp_keys)?;
 
         for addr in &sfu_info.udp_addresses {
             // We use the octets instead of to_string() to bypass the IP address logging filter.
@@ -2699,6 +2706,9 @@ impl Client {
             // Recalculate to see the differences
             let new_demux_ids: HashSet<DemuxId> = state.remote_devices.demux_id_set();
 
+            let added_demux_ids: HashSet<DemuxId> =
+                new_demux_ids.difference(&old_demux_ids).copied().collect();
+
             let demux_ids_changed = old_demux_ids != new_demux_ids;
             // If demux IDs changed, let the PeerConnection know that related SSRCs changed as well
             if demux_ids_changed {
@@ -2707,12 +2717,26 @@ impl Client {
                     new_demux_ids
                 );
                 if let Some(sfu_info) = state.sfu_info.as_ref() {
-                    let new_demux_ids: Vec<DemuxId> = new_demux_ids.iter().copied().collect();
+                    let mut added_demux_ids_iter = added_demux_ids.iter().copied();
+                    for demux_id in &mut state.remote_transceiver_demux_ids {
+                        // If demux_id is None, that means that there's an empty space (from a
+                        // previously removed demux ID) in remote_transceiver_demux_ids that can be
+                        // used. If demux_id is Some, only replace it with a newly added demux ID
+                        // if it is being removed now (it's not in new_demux_ids).
+                        if demux_id.map_or(true, |id| !new_demux_ids.contains(&id)) {
+                            *demux_id = added_demux_ids_iter.next();
+                        }
+                    }
+
+                    // Add any remaining new demux IDs to remote_transceiver_demux_ids.
+                    state
+                        .remote_transceiver_demux_ids
+                        .extend(added_demux_ids_iter.map(Some));
+
                     let result = Self::set_peer_connection_descriptions(
                         state,
                         sfu_info,
                         local_demux_id,
-                        &new_demux_ids,
                         srtp_keys,
                     );
                     if result.is_err() {
@@ -2742,8 +2766,6 @@ impl Client {
 
             // If someone was added, we must advance the send media key
             // and send it to everyone that was added.
-            let added_demux_ids: HashSet<DemuxId> =
-                new_demux_ids.difference(&old_demux_ids).copied().collect();
             let users_with_added_devices: Vec<UserId> = state
                 .remote_devices
                 .iter()
@@ -2845,14 +2867,30 @@ impl Client {
         state: &State,
         sfu_info: &SfuInfo,
         local_demux_id: DemuxId,
-        remote_demux_ids: &[DemuxId],
         srtp_keys: &SrtpKeys,
     ) -> Result<()> {
+        let remote_demux_ids = state
+            .remote_transceiver_demux_ids
+            .iter()
+            .map(|id| id.unwrap_or(0))
+            .collect::<Vec<_>>();
+
+        state
+            .peer_connection
+            .update_transceivers(&remote_demux_ids)?;
+
+        // Call create_offer for the side effect of setting up the state of the RtpTransceivers
+        // potentially created above.
+        let observer = create_csd_observer();
+        state.peer_connection.create_offer(observer.as_ref());
+        let _ = observer.get_result()?;
+
         let local_description = SessionDescription::local_for_group_call(
             &state.local_ice_ufrag,
             &state.local_ice_pwd,
             &srtp_keys.client,
             Some(local_demux_id),
+            &remote_demux_ids,
         )?;
         let observer = create_ssd_observer();
         state
@@ -2864,7 +2902,8 @@ impl Client {
             &sfu_info.ice_ufrag,
             &sfu_info.ice_pwd,
             &srtp_keys.server,
-            remote_demux_ids,
+            local_demux_id,
+            &remote_demux_ids,
         )?;
         let observer = create_ssd_observer();
         state
@@ -3833,7 +3872,7 @@ impl Client {
 struct PeerConnectionObserverImpl {
     client: Option<Client>,
     incoming_video_sink: Option<Box<dyn VideoSink>>,
-    last_height_by_track_id: HashMap<u32, u32>,
+    last_height_by_demux_id: HashMap<DemuxId, u32>,
 }
 
 impl PeerConnectionObserverImpl {
@@ -3844,7 +3883,7 @@ impl PeerConnectionObserverImpl {
         let boxed_observer_impl = Box::new(Self {
             client: None,
             incoming_video_sink,
-            last_height_by_track_id: HashMap::new(),
+            last_height_by_demux_id: HashMap::new(),
         });
         let observer = PeerConnectionObserver::new(
             webrtc::ptr::Borrowed::from_ptr(&*boxed_observer_impl),
@@ -3955,7 +3994,11 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         Ok(())
     }
 
-    fn handle_incoming_video_added(&mut self, incoming_video_track: VideoTrack) -> Result<()> {
+    fn handle_incoming_video_added(
+        &mut self,
+        incoming_video_track: VideoTrack,
+        demux_id: Option<DemuxId>,
+    ) -> Result<()> {
         debug!(
             "group_call::Client(outer)::handle_incoming_video_track(client_id: {})",
             self.log_id()
@@ -3967,7 +4010,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                     state.client_id
                 );
 
-                if let Some(remote_demux_id) = incoming_video_track.id() {
+                if let Some(remote_demux_id) = demux_id {
                     // When PeerConnection::SetRemoteDescription triggers PeerConnectionObserver::OnAddTrack,
                     // if it's a VideoTrack, this is where it comes.  Each platform does different things:
                     // - iOS: The VideoTrack is wrapped in an RTCVideoTrack and passed to the app
@@ -3991,7 +4034,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
 
     fn handle_incoming_video_frame(
         &mut self,
-        track_id: u32,
+        demux_id: DemuxId,
         video_frame_metadata: VideoFrameMetadata,
         video_frame: Option<VideoFrame>,
     ) -> Result<()> {
@@ -3999,13 +4042,13 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         if let (Some(incoming_video_sink), Some(video_frame)) =
             (self.incoming_video_sink.as_ref(), video_frame)
         {
-            incoming_video_sink.on_video_frame(track_id, video_frame)
+            incoming_video_sink.on_video_frame(demux_id, video_frame)
         }
         if let Some(client) = &self.client {
-            let prev_height = self.last_height_by_track_id.insert(track_id, height);
+            let prev_height = self.last_height_by_demux_id.insert(demux_id, height);
             if prev_height != Some(height) {
                 client.actor.send(move |state| {
-                    if let Some(remote_device) = state.remote_devices.find_by_demux_id_mut(track_id)
+                    if let Some(remote_device) = state.remote_devices.find_by_demux_id_mut(demux_id)
                     {
                         // The height needs to be checked again because last_height_by_track_id
                         // doesn't account for video mute or forwarding state.

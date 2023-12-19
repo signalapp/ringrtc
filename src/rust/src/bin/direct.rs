@@ -4,6 +4,8 @@
 //
 
 use log::{debug, info};
+
+use ringrtc::lite::sfu::DemuxId;
 use ringrtc::{
     common::{
         actor::{Actor, Stopper},
@@ -662,11 +664,11 @@ struct LoggingVideoSink {
 }
 
 impl VideoSink for LoggingVideoSink {
-    fn on_video_frame(&self, track_id: u32, frame: VideoFrame) {
+    fn on_video_frame(&self, demux_id: DemuxId, frame: VideoFrame) {
         info!(
             "{:?}.{} received video frame size:{}x{}",
             self.peer_id,
-            track_id,
+            demux_id,
             frame.width(),
             frame.height(),
         );

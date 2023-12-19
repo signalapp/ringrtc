@@ -95,15 +95,18 @@ extern "C" {
         ice_ufrag: webrtc::ptr::Borrowed<c_char>,
         ice_pwd: webrtc::ptr::Borrowed<c_char>,
         client_srtp_key: RffiSrtpKey,
-        demux_id: u32,
+        local_demux_id: u32,
+        remote_demux_ids_data: webrtc::ptr::Borrowed<u32>,
+        remote_demux_ids_len: size_t,
     ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
     pub fn Rust_remoteDescriptionForGroupCall(
         ice_ufrag: webrtc::ptr::Borrowed<c_char>,
         ice_pwd: webrtc::ptr::Borrowed<c_char>,
         server_srtp_key: RffiSrtpKey,
-        demux_ids_data: webrtc::ptr::Borrowed<u32>,
-        demux_ids_len: size_t,
+        local_demux_id: u32,
+        remote_demux_ids_data: webrtc::ptr::Borrowed<u32>,
+        remote_demux_ids_len: size_t,
     ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 
     pub fn Rust_deleteSessionDescription(sdi: webrtc::ptr::Owned<RffiSessionDescription>);

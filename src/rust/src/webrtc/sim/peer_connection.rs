@@ -141,6 +141,16 @@ struct RffiPeerConnectionState {
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_updateTransceivers(
+    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    _remote_demux_ids_data: webrtc::ptr::Borrowed<u32>,
+    _remote_demux_ids_len: usize,
+) -> bool {
+    info!("Rust_updateTransceivers():");
+    true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createOffer(
     _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
     _csd_observer: webrtc::ptr::BorrowedRc<RffiCreateSessionDescriptionObserver>,

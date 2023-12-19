@@ -63,7 +63,6 @@ pub struct RffiVideoFrameBuffer {
 impl webrtc::RefCounted for RffiVideoFrameBuffer {}
 
 extern "C" {
-    pub fn Rust_getTrackIdAsUint32(track: webrtc::ptr::BorrowedRc<RffiVideoTrack>) -> u32;
     pub fn Rust_setAudioTrackEnabled(track: webrtc::ptr::BorrowedRc<RffiAudioTrack>, enabled: bool);
     pub fn Rust_setVideoTrackEnabled(track: webrtc::ptr::BorrowedRc<RffiVideoTrack>, enabled: bool);
     pub fn Rust_setVideoTrackContentHint(

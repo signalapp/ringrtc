@@ -149,7 +149,9 @@ pub unsafe fn Rust_localDescriptionForGroupCall(
     _ice_ufrag: webrtc::ptr::Borrowed<c_char>,
     _ice_pwd: webrtc::ptr::Borrowed<c_char>,
     _client_srtp_key: RffiSrtpKey,
-    _demux_id: u32,
+    _local_demux_id: u32,
+    _remote_demux_ids_data: webrtc::ptr::Borrowed<u32>,
+    _remote_demux_ids_len: size_t,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_localDescriptionForGroupCall(): ");
     webrtc::ptr::Owned::from_ptr(&FAKE_SDP_OFFER)
@@ -160,8 +162,9 @@ pub unsafe fn Rust_remoteDescriptionForGroupCall(
     _ice_ufrag: webrtc::ptr::Borrowed<c_char>,
     _ice_pwd: webrtc::ptr::Borrowed<c_char>,
     _server_srtp_key: RffiSrtpKey,
-    _demux_ids_data: webrtc::ptr::Borrowed<u32>,
-    _demux_ids_len: size_t,
+    _local_demux_id: u32,
+    _remote_demux_ids_data: webrtc::ptr::Borrowed<u32>,
+    _remote_demux_ids_len: size_t,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_remoteDescriptionForGroupCall(): ");
     webrtc::ptr::Owned::from_ptr(&FAKE_SDP_ANSWER)

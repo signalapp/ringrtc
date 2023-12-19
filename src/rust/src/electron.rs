@@ -454,15 +454,15 @@ impl CallEndpoint {
 
 #[derive(Clone, Default)]
 struct LastFramesVideoSink {
-    last_frame_by_track_id: Arc<Mutex<HashMap<u32, VideoFrame>>>,
+    last_frame_by_demux_id: Arc<Mutex<HashMap<u32, VideoFrame>>>,
 }
 
 impl VideoSink for LastFramesVideoSink {
-    fn on_video_frame(&self, track_id: u32, frame: VideoFrame) {
-        self.last_frame_by_track_id
+    fn on_video_frame(&self, demux_id: DemuxId, frame: VideoFrame) {
+        self.last_frame_by_demux_id
             .lock()
             .unwrap()
-            .insert(track_id, frame);
+            .insert(demux_id, frame);
     }
 
     fn box_clone(&self) -> Box<dyn VideoSink> {
@@ -471,15 +471,15 @@ impl VideoSink for LastFramesVideoSink {
 }
 
 impl LastFramesVideoSink {
-    fn pop(&self, track_id: u32) -> Option<VideoFrame> {
-        self.last_frame_by_track_id
+    fn pop(&self, demux_id: u32) -> Option<VideoFrame> {
+        self.last_frame_by_demux_id
             .lock()
             .unwrap()
-            .remove(&track_id)
+            .remove(&demux_id)
     }
 
     fn clear(&self) {
-        self.last_frame_by_track_id.lock().unwrap().clear();
+        self.last_frame_by_demux_id.lock().unwrap().clear();
     }
 }
 

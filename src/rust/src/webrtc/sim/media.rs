@@ -26,12 +26,6 @@ pub type RffiVideoFrameBuffer = u32;
 pub static FAKE_VIDEO_FRAME_BUFFER: RffiVideoFrameBuffer = 24;
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_getTrackIdAsUint32(_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>) -> u32 {
-    info!("Rust_getTrackIdAsUint32()");
-    1
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setAudioTrackEnabled(
     _track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
     _enabled: bool,

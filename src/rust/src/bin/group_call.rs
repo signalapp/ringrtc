@@ -35,7 +35,7 @@ use ringrtc::{
 #[derive(Clone, Default)]
 struct Observer {
     remote_devices: Arc<Mutex<Vec<group_call::RemoteDeviceState>>>,
-    last_frame_metadata_by_track_id: Arc<Mutex<HashMap<u32, VideoFrameMetadata>>>,
+    last_frame_metadata_by_demux_id: Arc<Mutex<HashMap<DemuxId, VideoFrameMetadata>>>,
 }
 
 impl group_call::Observer for Observer {
@@ -147,11 +147,11 @@ impl group_call::Observer for Observer {
 }
 
 impl VideoSink for Observer {
-    fn on_video_frame(&self, track_id: u32, frame: VideoFrame) {
-        self.last_frame_metadata_by_track_id
+    fn on_video_frame(&self, demux_id: DemuxId, frame: VideoFrame) {
+        self.last_frame_metadata_by_demux_id
             .lock()
             .unwrap()
-            .insert(track_id, frame.metadata());
+            .insert(demux_id, frame.metadata());
     }
 
     fn box_clone(&self) -> Box<dyn VideoSink> {
@@ -290,18 +290,18 @@ fn main() {
         info!(
             "Current videos: {}",
             observer
-                .last_frame_metadata_by_track_id
+                .last_frame_metadata_by_demux_id
                 .lock()
                 .unwrap()
                 .len()
         );
-        for (track_id, metadata) in observer
-            .last_frame_metadata_by_track_id
+        for (demux_id, metadata) in observer
+            .last_frame_metadata_by_demux_id
             .lock()
             .unwrap()
             .iter()
         {
-            info!("  {} {:?}", track_id, metadata);
+            info!("  {} {:?}", demux_id, metadata);
         }
         client.request_video(requests, height);
         std::thread::sleep(std::time::Duration::from_secs(10));

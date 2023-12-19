@@ -97,6 +97,22 @@ impl PeerConnection {
             .set_rtp_packet_sink(rtp_packet_sink)
     }
 
+    pub fn update_transceivers(&self, remote_demux_ids: &[u32]) -> Result<()> {
+        let success = unsafe {
+            pc::Rust_updateTransceivers(
+                self.rffi.as_borrowed(),
+                webrtc::ptr::Borrowed::from_ptr(remote_demux_ids.as_ptr()),
+                remote_demux_ids.len(),
+            )
+        };
+
+        if success {
+            Ok(())
+        } else {
+            Err(RingRtcError::UpdateTransceivers.into())
+        }
+    }
+
     /// Rust wrapper around C++ webrtc::CreateSessionDescription(kOffer).
     pub fn create_offer(&self, csd_observer: &CreateSessionDescriptionObserver) {
         unsafe { pc::Rust_createOffer(self.rffi.as_borrowed(), csd_observer.rffi().as_borrowed()) }

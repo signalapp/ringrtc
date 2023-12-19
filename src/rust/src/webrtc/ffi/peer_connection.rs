@@ -29,6 +29,12 @@ pub struct RffiPeerConnection {
 impl webrtc::RefCounted for RffiPeerConnection {}
 
 extern "C" {
+    pub fn Rust_updateTransceivers(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        remote_demux_ids_data: webrtc::ptr::Borrowed<u32>,
+        remote_demux_ids_len: usize,
+    ) -> bool;
+
     pub fn Rust_createOffer(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         csd_observer: webrtc::ptr::BorrowedRc<RffiCreateSessionDescriptionObserver>,

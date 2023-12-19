@@ -5,7 +5,7 @@
 
 use std::slice;
 
-use crate::webrtc;
+use crate::{lite::sfu::DemuxId, webrtc};
 
 pub use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
 
@@ -318,15 +318,6 @@ impl VideoTrack {
     pub fn set_content_hint(&self, is_screenshare: bool) {
         unsafe { media::Rust_setVideoTrackContentHint(self.rffi.as_borrowed(), is_screenshare) }
     }
-
-    pub fn id(&self) -> Option<u32> {
-        let id = unsafe { media::Rust_getTrackIdAsUint32(self.rffi.as_borrowed()) };
-        if id == 0 {
-            None
-        } else {
-            Some(id)
-        }
-    }
 }
 
 // You could have a non-Sync, non-Send VideoSink, but
@@ -335,7 +326,7 @@ pub trait VideoSink: Sync + Send {
     // Warning: this video frame's output buffer is shared with a video decoder,
     // and so must quickly be dropped (by copying it and dropping the original)
     // or the video decoder will soon stall and video will be choppy.
-    fn on_video_frame(&self, track_id: u32, frame: VideoFrame);
+    fn on_video_frame(&self, demux_id: DemuxId, frame: VideoFrame);
     fn box_clone(&self) -> Box<dyn VideoSink>;
 }
 

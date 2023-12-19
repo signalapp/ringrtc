@@ -17,6 +17,7 @@ use crate::common::{Result, RingBench};
 use crate::core::signaling;
 use crate::core::util::redact_string;
 use crate::error::RingRtcError;
+use crate::lite::sfu::DemuxId;
 use crate::webrtc;
 use crate::webrtc::media::{
     AudioTrack, MediaStream, RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer, RffiVideoTrack,
@@ -127,12 +128,16 @@ pub trait PeerConnectionObserverTrait {
     fn handle_incoming_audio_added(&mut self, _incoming_track: AudioTrack) -> Result<()> {
         Ok(())
     }
-    fn handle_incoming_video_added(&mut self, _incoming_track: VideoTrack) -> Result<()> {
+    fn handle_incoming_video_added(
+        &mut self,
+        _incoming_track: VideoTrack,
+        _demux_id: Option<DemuxId>,
+    ) -> Result<()> {
         Ok(())
     }
     fn handle_incoming_video_frame(
         &mut self,
-        _track_id: u32,
+        _demux_id: u32,
         _video_frame_metadata: VideoFrameMetadata,
         _video_frame: Option<VideoFrame>,
     ) -> Result<()> {
@@ -381,6 +386,7 @@ extern "C" fn pc_observer_OnAddAudioRtpReceiver<T>(
 extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
     observer: webrtc::ptr::Borrowed<T>,
     rffi_track: webrtc::ptr::OwnedRc<RffiVideoTrack>,
+    demux_id: u32,
 ) where
     T: PeerConnectionObserverTrait,
 {
@@ -394,7 +400,7 @@ extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
         // TODO: Figure out how to pass in a PeerConnection as an owner.
         let track = VideoTrack::new(webrtc::Arc::from_owned(rffi_track), None);
         observer
-            .handle_incoming_video_added(track)
+            .handle_incoming_video_added(track, if demux_id == 0 { None } else { Some(demux_id) })
             .unwrap_or_else(|e| error!("Problems handling incoming audio: {}", e));
     } else {
         error!("pc_observer_OnAddVideoRtpReceiver called with null observer");
@@ -405,7 +411,7 @@ extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnVideoFrame<T>(
     observer: webrtc::ptr::Borrowed<T>,
-    track_id: u32,
+    demux_id: u32,
     metadata: VideoFrameMetadata,
     rffi_buffer: webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>,
 ) where
@@ -413,7 +419,7 @@ extern "C" fn pc_observer_OnVideoFrame<T>(
 {
     // Safe because the observer should still be alive (it was just passed to us)
     if let Some(observer) = unsafe { observer.as_mut() } {
-        debug!("pc_observer_OnVideoFrame(): track_id: {}", track_id,);
+        debug!("pc_observer_OnVideoFrame(): demux_id: {}", demux_id,);
         // TODO: Figure out how to pass in a PeerConnection as an owner.
         let frame = if !rffi_buffer.is_null() {
             Some(VideoFrame::from_buffer(
@@ -424,7 +430,7 @@ extern "C" fn pc_observer_OnVideoFrame<T>(
             None
         };
         observer
-            .handle_incoming_video_frame(track_id, metadata, frame)
+            .handle_incoming_video_frame(demux_id, metadata, frame)
             .unwrap_or_else(|e| error!("Problems handling incoming video frame: {}", e));
     } else {
         error!("pc_observer_OnVideoFrame called with null observer");
@@ -622,10 +628,10 @@ where
     onAddAudioRtpReceiver:
         extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiAudioTrack>),
     onAddVideoRtpReceiver:
-        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiVideoTrack>),
+        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::OwnedRc<RffiVideoTrack>, u32),
     onVideoFrame: extern "C" fn(
         webrtc::ptr::Borrowed<T>,
-        track_id: u32,
+        demux_id: u32,
         VideoFrameMetadata,
         webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>,
     ),

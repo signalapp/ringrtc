@@ -33,6 +33,7 @@ use crate::core::platform::Platform;
 use crate::core::signaling;
 use crate::core::util::{ptr_as_box, redact_string};
 use crate::error::RingRtcError;
+use crate::lite::sfu::DemuxId;
 use crate::protobuf;
 
 use crate::webrtc;
@@ -2131,14 +2132,14 @@ where
 
     fn handle_incoming_video_frame(
         &mut self,
-        track_id: u32,
+        demux_id: DemuxId,
         _video_frame_metadata: VideoFrameMetadata,
         video_frame: Option<VideoFrame>,
     ) -> Result<()> {
         if let (Some(incoming_video_sink), Some(video_frame)) =
             (self.incoming_video_sink.as_ref(), video_frame)
         {
-            incoming_video_sink.on_video_frame(track_id, video_frame)
+            incoming_video_sink.on_video_frame(demux_id, video_frame)
         }
         Ok(())
     }

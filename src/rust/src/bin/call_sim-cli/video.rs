@@ -5,6 +5,7 @@
 
 use log::info;
 use ringrtc::{
+    lite::sfu::DemuxId,
     native::PeerId,
     webrtc::media::{VideoFrame, VideoPixelFormat, VideoSink},
 };
@@ -92,11 +93,11 @@ pub struct LoggingVideoSink {
 }
 
 impl VideoSink for LoggingVideoSink {
-    fn on_video_frame(&self, track_id: u32, frame: VideoFrame) {
+    fn on_video_frame(&self, demux_id: DemuxId, frame: VideoFrame) {
         info!(
             "{:?}.{} received video frame size:{}x{}",
             self.peer_id,
-            track_id,
+            demux_id,
             frame.width(),
             frame.height(),
         );
@@ -140,7 +141,7 @@ impl<T: Send + Sync + 'static> VideoSink for WriterVideoSink<T>
 where
     for<'a> &'a T: Write,
 {
-    fn on_video_frame(&self, _track_id: u32, frame: VideoFrame) {
+    fn on_video_frame(&self, _demux_id: DemuxId, frame: VideoFrame) {
         let write_frame_data = |frame_data| {
             (&self.shared_state.0)
                 .write_all(frame_data)

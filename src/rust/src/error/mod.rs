@@ -51,6 +51,8 @@ pub enum RingRtcError {
     CreatePeerConnectionFactory,
     #[error("Unable to create C++ PeerConnection")]
     CreatePeerConnection,
+    #[error("Unable to update C++ RtpTransceiver")]
+    UpdateTransceivers,
     #[error("Unable to create C++ VideoSource")]
     CreateVideoSource,
     #[error("Unable to create C++ VideoTrack")]
