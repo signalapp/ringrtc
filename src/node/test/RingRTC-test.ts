@@ -78,7 +78,6 @@ describe('RingRTC', () => {
         type: OfferType.AudioCall,
         opaque: Buffer.from([]),
       },
-      supportsMultiRing: true,
     };
     const age = 60 * 60;
     try {
@@ -122,7 +121,6 @@ describe('RingRTC', () => {
         type: OfferType.AudioCall,
         opaque: Buffer.from([]),
       },
-      supportsMultiRing: true,
     };
     try {
       const { reason, ageSec: reportedAge } = await new Promise<{

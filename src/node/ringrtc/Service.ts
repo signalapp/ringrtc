@@ -793,12 +793,9 @@ export class RingRTCType {
     broadcast: boolean,
     message: CallingMessage
   ): void {
-    /* eslint-disable no-param-reassign */
-    message.supportsMultiRing = true;
     if (!broadcast) {
       message.destinationDeviceId = remoteDeviceId;
     }
-    /* eslint-enable no-param-reassign */
 
     (async () => {
       if (this.handleOutgoingSignaling) {
@@ -1562,18 +1559,6 @@ export class RingRTCType {
       const callId = message.hangup.callId;
       const hangupType = message.hangup.type || HangupType.Normal;
       const hangupDeviceId = message.hangup.deviceId || null;
-      this.callManager.receivedHangup(
-        remoteUserId,
-        remoteDeviceId,
-        callId,
-        hangupType,
-        hangupDeviceId
-      );
-    }
-    if (message.legacyHangup?.callId) {
-      const callId = message.legacyHangup.callId;
-      const hangupType = message.legacyHangup.type || HangupType.Normal;
-      const hangupDeviceId = message.legacyHangup.deviceId || null;
       this.callManager.receivedHangup(
         remoteUserId,
         remoteDeviceId,
@@ -2619,11 +2604,9 @@ export class CallingMessage {
   offer?: OfferMessage;
   answer?: AnswerMessage;
   iceCandidates?: Array<IceCandidateMessage>;
-  legacyHangup?: HangupMessage;
   busy?: BusyMessage;
   hangup?: HangupMessage;
   opaque?: OpaqueMessage;
-  supportsMultiRing?: boolean;
   destinationDeviceId?: DeviceId;
 }
 
