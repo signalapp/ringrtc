@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.36.0
+
+- Use unified plan for group calls
+
+- Update jni crate to 0.21.1
+
+- Desktop: Remove legacy call message fields
+
 ## v2.35.0
 
 - Update zkgroup to 0.37.0
