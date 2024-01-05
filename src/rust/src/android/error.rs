@@ -21,7 +21,7 @@ const CALL_EXCEPTION_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallExcept
 ///
 /// This is used to communicate synchronous errors to the client
 /// application.
-pub fn throw_error(env: &JNIEnv, error: Error) {
+pub fn throw_error(env: &mut JNIEnv, error: Error) {
     if let Ok(exception) = env.exception_occurred() {
         if env.exception_clear().is_ok() {
             let _ = try_scoped(|| {

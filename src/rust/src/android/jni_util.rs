@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 
-use jni::objects::{GlobalRef, JClass, JList, JObject, JValue};
+use jni::objects::{GlobalRef, JClass, JObject, JValue, JValueOwned};
 use jni::JNIEnv;
 
 use crate::android::error::AndroidError;
@@ -50,7 +50,7 @@ macro_rules! jni_arg {
     };
     // Assume anything else is an object. This includes arrays and classes.
     ( $arg:expr => $($_:tt)+) => {
-        jni::objects::JValue::Object($arg.into())
+        jni::objects::JValue::Object($arg.as_ref())
     };
 }
 
@@ -101,14 +101,14 @@ pub type PhantomReturnType<R> = PhantomData<fn() -> R>;
 
 /// A JNI argument list, type-checked with its signature.
 #[derive(Debug, Clone, Copy)]
-pub struct JniArgs<'a, R, const LEN: usize> {
+pub struct JniArgs<'local, 'obj_ref, R, const LEN: usize> {
     pub sig: &'static str,
-    pub args: [JValue<'a>; LEN],
+    pub args: [JValue<'local, 'obj_ref>; LEN],
     pub _return: PhantomReturnType<R>,
 }
 
-impl<'a, const LEN: usize> JniArgs<'a, (), LEN> {
-    pub fn returning_void(sig: &'static str, args: [JValue<'a>; LEN]) -> Self {
+impl<'local, 'obj_ref, 'output, const LEN: usize> JniArgs<'local, 'obj_ref, JObject<'output>, LEN> {
+    pub fn returning_void(sig: &'static str, args: [JValue<'local, 'obj_ref>; LEN]) -> Self {
         Self {
             sig,
             args,
@@ -145,15 +145,18 @@ macro_rules! jni_args {
 }
 
 /// Wrapper around JNIEnv::call_method() with logging.
-pub fn jni_call_method<'a, R, const ARG_LEN: usize>(
-    env: &'a JNIEnv,
-    object: JObject<'a>,
-    name: &str,
-    args: JniArgs<'a, R, ARG_LEN>,
-) -> Result<R>
-where
-    R: TryFrom<JValue<'a>, Error = jni::errors::Error>,
-{
+pub fn jni_call_method<
+    'input,
+    'output,
+    O: AsRef<JObject<'input>>,
+    R: TryFrom<JValueOwned<'output>, Error = jni::errors::Error>,
+    const LEN: usize,
+>(
+    env: &mut JNIEnv<'output>,
+    object: O,
+    name: &'static str,
+    args: JniArgs<R, LEN>,
+) -> Result<R> {
     env.call_method(object, name, args.sig, &args.args)
         .and_then(|v| v.try_into())
         .map_err(|e| AndroidError::JniCallMethod(name.to_string(), args.sig.to_string(), e).into())
@@ -161,26 +164,27 @@ where
 
 /// Wrapper around JNIEnv::call_static_method() with logging.
 #[allow(dead_code)]
-pub fn jni_call_static_method<'a, R, const ARG_LEN: usize>(
-    env: &'a JNIEnv,
-    class: &str,
-    name: &str,
-    args: JniArgs<'a, R, ARG_LEN>,
-) -> Result<R>
-where
-    R: TryFrom<JValue<'a>, Error = jni::errors::Error>,
-{
+pub fn jni_call_static_method<
+    'output,
+    R: TryFrom<JValueOwned<'output>, Error = jni::errors::Error>,
+    const LEN: usize,
+>(
+    env: &mut JNIEnv<'output>,
+    class: &'static str,
+    name: &'static str,
+    args: JniArgs<R, LEN>,
+) -> Result<R> {
     env.call_static_method(class, name, args.sig, &args.args)
         .and_then(|v| v.try_into())
         .map_err(|e| AndroidError::JniCallMethod(name.to_string(), args.sig.to_string(), e).into())
 }
 
 /// Wrapper around JNIEnv::new_object() with logging.
-pub fn jni_new_object<'a, const ARG_LEN: usize>(
-    env: &'a JNIEnv,
-    class: &str,
-    args: JniArgs<'a, (), ARG_LEN>,
-) -> Result<JObject<'a>> {
+pub fn jni_new_object<'output, const LEN: usize>(
+    env: &mut JNIEnv<'output>,
+    class: &'static str,
+    args: JniArgs<(), LEN>,
+) -> Result<JObject<'output>> {
     match env.new_object(class, args.sig, &args.args) {
         Ok(v) => Ok(v),
         Err(_) => {
@@ -190,32 +194,32 @@ pub fn jni_new_object<'a, const ARG_LEN: usize>(
 }
 
 /// Wrapper around JNIEnv::get_field() with logging.
-pub fn jni_get_field<'a>(
-    env: &'a JNIEnv,
-    obj: JObject<'a>,
-    name: &str,
-    ty: &str,
-) -> Result<JValue<'a>> {
-    match env.get_field(obj, name, ty) {
-        Ok(v) => Ok(v),
-        Err(_) => Err(AndroidError::JniGetField(name.to_string(), ty.to_string()).into()),
-    }
+pub fn jni_get_field<'input, 'output, O: AsRef<JObject<'input>>>(
+    env: &mut JNIEnv<'output>,
+    object: O,
+    name: &'static str,
+    ty: &'static str,
+) -> Result<JValueOwned<'output>> {
+    env.get_field(object, name, ty)
+        .map_err(|_| AndroidError::JniGetField(name.to_string(), ty.to_string()).into())
 }
 
 /// Creates a new java.util.ArrayList object
-pub fn jni_new_arraylist<'a>(env: &'a JNIEnv, initial_capacity: usize) -> Result<JList<'a, 'a>> {
-    let list = jni_new_object(
+pub fn jni_new_arraylist<'output>(
+    env: &mut JNIEnv<'output>,
+    initial_capacity: usize,
+) -> Result<JObject<'output>> {
+    jni_new_object(
         env,
         jni_class_name!(java.util.ArrayList),
         jni_args!((initial_capacity.try_into().expect("too big for Java") => int) -> void),
-    )?;
-    Ok(env.get_list(list)?)
+    )
 }
 
 /// Prints local and global references to the log.
 #[allow(dead_code)]
-pub fn dump_references(env: &JNIEnv) {
-    let _ = env.with_local_frame(5, || {
+pub fn dump_references(env: &mut JNIEnv) {
+    let _ = env.with_local_frame(5, |env| -> Result<()> {
         info!("Dumping references ->");
         let _ = env.call_static_method(
             jni_class_name!(dalvik.system.VMDebug),
@@ -225,7 +229,7 @@ pub fn dump_references(env: &JNIEnv) {
         );
         info!("<- Done with references");
 
-        Ok(JObject::null())
+        Ok(())
     });
 }
 
@@ -257,9 +261,8 @@ impl ClassCache {
     ///
     /// * Adding the same class twice is treated as an error.
     /// * If the class lookup fails, return an error.
-    pub fn add_class(&mut self, env: &JNIEnv, class_name: &str) -> Result<()> {
-        let class_string = String::from(class_name);
-        if self.map.contains_key(&class_string) {
+    pub fn add_class(&mut self, env: &mut JNIEnv, class_name: &str) -> Result<()> {
+        if self.map.contains_key(class_name) {
             return Err(AndroidError::ClassCacheDuplicate(class_name.to_string()).into());
         }
 
@@ -276,10 +279,10 @@ impl ClassCache {
     /// Retrieve the class object specified by `class_name` and return it.
     ///
     /// * If the class is not in the cache, return an error.
-    pub fn get_class(&self, class_name: &str) -> Result<JClass> {
-        let class_string = String::from(class_name);
-        if let Some(class_ref) = self.map.get(&class_string) {
-            Ok(JClass::from(class_ref.as_obj()))
+    pub fn get_class(&self, class_name: &str) -> Result<&JClass> {
+        if let Some(class_ref) = self.map.get(class_name) {
+            let object = class_ref.as_obj();
+            Ok(<&JClass>::from(object))
         } else {
             Err(AndroidError::ClassCacheLookup(class_name.to_string()).into())
         }
@@ -312,7 +315,7 @@ impl Drop for ExceptionCheckingJNIEnv<'_> {
             )?;
             let handler = jni_call_method(
                 self,
-                thread,
+                &thread,
                 "getUncaughtExceptionHandler",
                 jni_args!(() -> java.lang.Thread::UncaughtExceptionHandler),
             )?;

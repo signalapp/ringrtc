@@ -8,9 +8,9 @@
 //! Native JNI interfaces, called by
 //! org.signal.ringrtc.CallManager objects.
 
-use jni::objects::{JClass, JObject, JString};
+use jni::objects::{JByteArray, JClass, JObject, JString};
 use jni::strings::JavaStr;
-use jni::sys::{jboolean, jbyteArray, jint, jlong, jobject};
+use jni::sys::{jboolean, jint, jlong, jobject};
 use jni::JNIEnv;
 
 use crate::android::android_platform::AndroidPlatform;
@@ -28,15 +28,15 @@ use std::time::Duration;
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcGetBuildInfo(
-    env: JNIEnv,
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcGetBuildInfo<'local>(
+    mut env: JNIEnv<'local>,
     _class: JClass,
-) -> jobject {
-    match call_manager::get_build_info(&env) {
+) -> JObject<'local> {
+    match call_manager::get_build_info(&mut env) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
-            0 as jobject
+            error::throw_error(&mut env, e);
+            JObject::default()
         }
     }
 }
@@ -44,25 +44,25 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcGetBuildInfo
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcInitialize(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
 ) {
-    if let Err(e) = call_manager::initialize(&env) {
-        error::throw_error(&env, e);
+    if let Err(e) = call_manager::initialize(&mut env) {
+        error::throw_error(&mut env, e);
     }
 }
 
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallManager(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     jni_call_manager: JObject,
 ) -> jlong {
-    match call_manager::create_call_manager(&env, jni_call_manager) {
+    match call_manager::create_call_manager(&mut env, jni_call_manager) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
             0
         }
     }
@@ -71,7 +71,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallMa
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerConnection(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     peer_connection_factory: jlong,
     native_connection_borrowed: jlong,
@@ -79,7 +79,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
     jni_media_constraints: JObject,
 ) -> jlong {
     match call_manager::create_peer_connection(
-        env,
+        &mut env,
         peer_connection_factory,
         webrtc::ptr::Borrowed::from_ptr(
             native_connection_borrowed as *mut Connection<AndroidPlatform>,
@@ -89,7 +89,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
             0
         }
     }
@@ -98,15 +98,15 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreatePeerCo
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetSelfUuid(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
-    uuid: jbyteArray,
+    uuid: JByteArray,
 ) {
     match call_manager::set_self_uuid(&env, call_manager as *mut AndroidCallManager, uuid) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -114,7 +114,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetSelfUuid(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCall(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     jni_remote: JObject,
@@ -130,7 +130,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCall(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -138,7 +138,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCall(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -162,7 +162,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -170,7 +170,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcMessageSent(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcMessageSent(
     match call_manager::message_sent(call_manager as *mut AndroidCallManager, call_id) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -186,7 +186,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcMessageSent(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcMessageSendFailure(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcMessageSendF
     match call_manager::message_send_failure(call_manager as *mut AndroidCallManager, call_id) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -202,14 +202,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcMessageSendF
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcHangup(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
 ) {
     match call_manager::hangup(call_manager as *mut AndroidCallManager) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -217,10 +217,10 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcHangup(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCancelGroupRing(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
-    group_id: jbyteArray,
+    group_id: JByteArray,
     ring_id: jlong,
     reason: jint,
 ) {
@@ -233,7 +233,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCancelGroupR
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -241,14 +241,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCancelGroupR
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnswer(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
     remote_device: jint,
-    opaque: jbyteArray,
-    sender_identity_key: jbyteArray,
-    receiver_identity_key: jbyteArray,
+    opaque: JByteArray,
+    sender_identity_key: JByteArray,
+    receiver_identity_key: JByteArray,
 ) {
     match call_manager::received_answer(
         &env,
@@ -261,7 +261,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -269,19 +269,19 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffer(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
     jni_remote: JObject,
     remote_device: jint,
-    opaque: jbyteArray,
+    opaque: JByteArray,
     message_age_sec: jlong,
     call_media_type: jint,
     local_device: jint,
     jni_is_local_device_primary: jboolean,
-    sender_identity_key: jbyteArray,
-    receiver_identity_key: jbyteArray,
+    sender_identity_key: JByteArray,
+    receiver_identity_key: JByteArray,
 ) {
     match call_manager::received_offer(
         &env,
@@ -299,7 +299,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -307,7 +307,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedIceCandidates(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -315,7 +315,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedIceC
     jni_ice_candidates: JObject,
 ) {
     match call_manager::received_ice(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         call_id,
         remote_device as DeviceId,
@@ -323,7 +323,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedIceC
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -331,7 +331,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedIceC
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHangup(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -348,7 +348,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHang
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -356,7 +356,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHang
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedBusy(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -369,7 +369,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedBusy
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -377,13 +377,13 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedBusy
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedCallMessage(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
-    sender_uuid: jbyteArray,
+    sender_uuid: JByteArray,
     sender_device_id: jint,
     local_device_id: jint,
-    message: jbyteArray,
+    message: JByteArray,
     message_age_sec: jlong,
 ) {
     match call_manager::received_call_message(
@@ -397,7 +397,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedCall
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -405,12 +405,12 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedCall
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHttpResponse(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     request_id: jlong,
     status_code: jint,
-    body: jbyteArray,
+    body: JByteArray,
 ) {
     match call_manager::received_http_response(
         &env,
@@ -421,7 +421,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHttp
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -429,7 +429,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHttp
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcHttpRequestFailed(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     request_id: jlong,
@@ -437,7 +437,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcHttpRequestF
     match call_manager::http_request_failed(call_manager as *mut AndroidCallManager, request_id) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -445,7 +445,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcHttpRequestF
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcAcceptCall(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -453,7 +453,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcAcceptCall(
     match call_manager::accept_call(call_manager as *mut AndroidCallManager, call_id) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -461,15 +461,17 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcAcceptCall(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcGetActiveConnection(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
 ) -> jobject {
+    // Return a jobject instead of a JObject because the Connection is a GlobalRef, which can't be
+    // safely converted to a JObject (it's meant to be used as a &JObject).
     match call_manager::get_active_connection(call_manager as *mut AndroidCallManager) {
-        Ok(v) => v,
+        Ok(v) => v.as_raw(),
         Err(e) => {
-            error::throw_error(&env, e);
-            0 as jobject
+            error::throw_error(&mut env, e);
+            std::ptr::null_mut() as jobject
         }
     }
 }
@@ -477,15 +479,17 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcGetActiveCon
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcGetActiveCallContext(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
 ) -> jobject {
+    // Return a jobject instead of a JObject because the CallContext is a GlobalRef, which can't be
+    // safely converted to a JObject (it's meant to be used as a &JObject).
     match call_manager::get_active_call_context(call_manager as *mut AndroidCallManager) {
-        Ok(v) => v,
+        Ok(v) => v.as_raw(),
         Err(e) => {
-            error::throw_error(&env, e);
-            0 as jobject
+            error::throw_error(&mut env, e);
+            std::ptr::null_mut() as jobject
         }
     }
 }
@@ -493,7 +497,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcGetActiveCal
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetVideoEnable(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     enable: jboolean,
@@ -501,7 +505,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetVideoEnab
     match call_manager::set_video_enable(call_manager as *mut AndroidCallManager, enable != 0) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -509,7 +513,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetVideoEnab
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateDataMode(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     data_mode: jint,
@@ -520,7 +524,7 @@ pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateDataMode(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -528,7 +532,7 @@ pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateDataMode(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcDrop(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
@@ -536,7 +540,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcDrop(
     match call_manager::drop_call(call_manager as *mut AndroidCallManager, call_id) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -544,14 +548,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcDrop(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReset(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
 ) {
     match call_manager::reset(call_manager as *mut AndroidCallManager) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -559,14 +563,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReset(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcClose(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
 ) {
     match call_manager::close(call_manager as *mut AndroidCallManager) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -576,16 +580,16 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcClose(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReadCallLink(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     sfu_url: JString,
-    auth_credential_presentation: jbyteArray,
-    root_key: jbyteArray,
+    auth_credential_presentation: JByteArray,
+    root_key: JByteArray,
     request_id: jlong,
 ) {
     match call_manager::read_call_link(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         sfu_url,
         auth_credential_presentation,
@@ -594,7 +598,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReadCallLink
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -602,18 +606,18 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReadCallLink
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallLink(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     sfu_url: JString,
-    create_credential_presentation: jbyteArray,
-    root_key: jbyteArray,
-    admin_passkey: jbyteArray,
-    call_link_public_params: jbyteArray,
+    create_credential_presentation: JByteArray,
+    root_key: JByteArray,
+    admin_passkey: JByteArray,
+    call_link_public_params: JByteArray,
     request_id: jlong,
 ) {
     match call_manager::create_call_link(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         sfu_url,
         create_credential_presentation,
@@ -624,7 +628,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallLi
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -632,20 +636,20 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallLi
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateCallLink(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     sfu_url: JString,
-    auth_credential_presentation: jbyteArray,
-    root_key: jbyteArray,
-    admin_passkey: jbyteArray,
+    auth_credential_presentation: JByteArray,
+    root_key: JByteArray,
+    admin_passkey: JByteArray,
     new_name: JString,
     new_restrictions: jint,
     new_revoked: jint,
     request_id: jlong,
 ) {
     match call_manager::update_call_link(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         sfu_url,
         auth_credential_presentation,
@@ -658,7 +662,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateCallLi
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -668,16 +672,16 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateCallLi
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekGroupCall(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     request_id: jlong,
     sfu_url: JString,
-    membership_proof: jbyteArray,
-    jni_serialized_group_members: jbyteArray,
+    membership_proof: JByteArray,
+    jni_serialized_group_members: JByteArray,
 ) {
     match call_manager::peek_group_call(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         request_id,
         sfu_url,
@@ -686,7 +690,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekGroupCal
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -694,16 +698,16 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekGroupCal
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekCallLinkCall(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     request_id: jlong,
     sfu_url: JString,
-    auth_credential_presentation: jbyteArray,
-    root_key: jbyteArray,
+    auth_credential_presentation: JByteArray,
+    root_key: JByteArray,
 ) {
     match call_manager::peek_call_link_call(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         request_id,
         sfu_url,
@@ -712,7 +716,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekCallLink
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -720,19 +724,19 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekCallLink
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCallClient(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _cls: JClass,
     call_manager: jlong,
-    group_id: jbyteArray,
+    group_id: JByteArray,
     sfu_url: JString,
-    hkdf_extra_info: jbyteArray,
+    hkdf_extra_info: JByteArray,
     audio_levels_interval_millis: jint,
     native_peer_connection_factory_borrowed_rc: jlong,
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
 ) -> jlong {
     match call_manager::create_group_call_client(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         group_id,
         sfu_url,
@@ -744,7 +748,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
     ) {
         Ok(v) => v as i64,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
             group_call::INVALID_CLIENT_ID as i64
         }
     }
@@ -753,21 +757,21 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateGroupCal
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateCallLinkCallClient(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _cls: JClass,
     call_manager: jlong,
     sfu_url: JString,
-    auth_presentation: jbyteArray,
-    call_link_bytes: jbyteArray,
-    admin_passkey: jbyteArray,
-    hkdf_extra_info: jbyteArray,
+    auth_presentation: JByteArray,
+    call_link_bytes: JByteArray,
+    admin_passkey: JByteArray,
+    hkdf_extra_info: JByteArray,
     audio_levels_interval_millis: jint,
     native_peer_connection_factory_borrowed_rc: jlong,
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
 ) -> jlong {
     match call_manager::create_call_link_call_client(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         sfu_url,
         auth_presentation,
@@ -781,7 +785,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateCallLink
     ) {
         Ok(v) => v as i64,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
             group_call::INVALID_CLIENT_ID as i64
         }
     }
@@ -790,7 +794,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateCallLink
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDeleteGroupCallClient(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -801,7 +805,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDeleteGroupCal
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -809,7 +813,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDeleteGroupCal
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcConnect(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -820,7 +824,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcConnect(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -828,7 +832,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcConnect(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcJoin(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -839,7 +843,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcJoin(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -847,7 +851,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcJoin(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcLeave(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -858,7 +862,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcLeave(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -866,7 +870,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcLeave(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDisconnect(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -877,7 +881,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDisconnect(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -885,7 +889,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDisconnect(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingAudioMuted(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -898,7 +902,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingAud
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -906,7 +910,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingAud
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingVideoMuted(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -919,7 +923,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingVid
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -927,11 +931,11 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingVid
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRing(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
-    recipient: jbyteArray,
+    recipient: JByteArray,
 ) {
     match call_manager::group_ring(
         &env,
@@ -941,7 +945,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRing(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -949,7 +953,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRing(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcResendMediaKeys(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -960,7 +964,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcResendMediaKey
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -968,7 +972,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcResendMediaKey
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetDataMode(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -981,7 +985,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetDataMode(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -989,7 +993,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetDataMode(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRequestVideo(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -997,7 +1001,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRequestVideo(
     active_speaker_height: jint,
 ) {
     match call_manager::request_video(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
         jni_rendered_resolutions,
@@ -1005,7 +1009,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRequestVideo(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1013,11 +1017,11 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRequestVideo(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcApproveUser(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
-    other_user_id: jbyteArray,
+    other_user_id: JByteArray,
 ) {
     match call_manager::approve_user(
         &env,
@@ -1027,7 +1031,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcApproveUser(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1035,11 +1039,11 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcApproveUser(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDenyUser(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
-    other_user_id: jbyteArray,
+    other_user_id: JByteArray,
 ) {
     match call_manager::deny_user(
         &env,
@@ -1049,7 +1053,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDenyUser(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1057,7 +1061,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcDenyUser(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRemoveClient(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -1070,7 +1074,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRemoveClient(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1078,7 +1082,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRemoveClient(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcBlockClient(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -1091,7 +1095,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcBlockClient(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1099,11 +1103,11 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcBlockClient(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetGroupMembers(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
-    jni_serialized_group_members: jbyteArray,
+    jni_serialized_group_members: JByteArray,
 ) {
     match call_manager::set_group_members(
         &env,
@@ -1113,7 +1117,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetGroupMember
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1121,11 +1125,11 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetGroupMember
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetMembershipProof(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
-    proof: jbyteArray,
+    proof: JByteArray,
 ) {
     match call_manager::set_membership_proof(
         &env,
@@ -1135,7 +1139,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetMembershipP
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1143,21 +1147,21 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetMembershipP
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcReact(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
     value: JString,
 ) {
     match call_manager::react(
-        &env,
+        &mut env,
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
         value,
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1165,7 +1169,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcReact(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRaiseHand(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _object: JObject,
     call_manager: jlong,
     client_id: jlong,
@@ -1178,7 +1182,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRaiseHand(
     ) {
         Ok(v) => v,
         Err(e) => {
-            error::throw_error(&env, e);
+            error::throw_error(&mut env, e);
         }
     }
 }
@@ -1186,18 +1190,18 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcRaiseHand(
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallId_ringrtcFromEraId(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     era: JString,
 ) -> jlong {
     try_scoped(|| {
         // Avoid copying if we don't need to.
-        let era_cesu8: JavaStr = env.get_string(era)?;
+        let era_cesu8: JavaStr = env.get_string(&era)?;
         let era_utf8: Cow<str> = Cow::from(&era_cesu8);
         Ok(group_call::RingId::from_era_id(&era_utf8).into())
     })
     .unwrap_or_else(|e| {
-        error::throw_error(&env, e);
+        error::throw_error(&mut env, e);
         0
     })
 }

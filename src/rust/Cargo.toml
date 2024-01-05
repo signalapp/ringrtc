@@ -71,7 +71,7 @@ zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.37.0" }
 neon = { version = "0.10.1", optional = true, default-features = false, features = ["napi-6", "channel-api", "try-catch-api"] }
 
 # Optional, needed to check Android-specific code when not targeting Android
-jni = { version = "0.19.0", optional = true, default-features = false }
+jni = { version = "0.21.1", optional = true, default-features = false }
 
 # Optional, needed by the "http" feature
 ureq = { version = "2.9.1", optional = true }
@@ -116,7 +116,7 @@ path = "tests/outgoing.rs"
 required-features = ["sim"]
 
 [target.'cfg(target_os="android")'.dependencies]
-jni = { version = "0.19.0", default-features = false }
+jni = { version = "0.21.1", default-features = false }
 
 [build-dependencies]
 prost-build = { version = "0.12.3" }

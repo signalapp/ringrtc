@@ -5,7 +5,7 @@
 
 //! Setup Android logging object
 
-use jni::objects::{GlobalRef, JClass, JObject};
+use jni::objects::{GlobalRef, JObject};
 use jni::{JNIEnv, JavaVM};
 use log::{Level, Log, Metadata, Record};
 
@@ -17,7 +17,7 @@ use crate::common::Result;
 struct AndroidLogger {
     level: Level,
     jvm: JavaVM,
-    logger: GlobalRef,
+    logger_class: GlobalRef,
 }
 
 // Method name and signature required of Java logger class
@@ -54,7 +54,7 @@ impl Log for AndroidLogger {
             }
 
             // Use the `JavaVM` interface to attach a `JNIEnv` to the current thread.
-            let env = match self.get_java_env() {
+            let mut env = match self.get_java_env() {
                 Ok(v) => v,
                 Err(_) => return,
             };
@@ -88,22 +88,18 @@ impl Log for AndroidLogger {
 
             let level = record.level() as i32;
 
-            let _ = env.with_local_frame(5, || {
+            let _ = env.with_local_frame(5, |env| -> Result<()> {
                 let msg = match env.new_string(message) {
                     Ok(v) => JObject::from(v),
-                    Err(_) => return Ok(JObject::null()),
+                    Err(_) => return Ok(()),
                 };
 
-                let values = [level.into(), msg.into()];
+                let values = [level.into(), (&msg).into()];
 
                 // Ignore the result here, can't do anything about it anyway.
-                let _ = env.call_static_method(
-                    JClass::from(self.logger.as_obj()),
-                    LOGGER_METHOD,
-                    LOGGER_SIG,
-                    &values,
-                );
-                Ok(JObject::null())
+                let _ =
+                    env.call_static_method(&self.logger_class, LOGGER_METHOD, LOGGER_SIG, &values);
+                Ok(())
             });
 
             // If we put an exception "on hold" earlier, try to throw it again now.
@@ -119,7 +115,7 @@ impl Log for AndroidLogger {
     fn flush(&self) {}
 }
 
-pub fn init_logging(env: &JNIEnv, level: Level) -> Result<()> {
+pub fn init_logging(env: &mut JNIEnv, level: Level) -> Result<()> {
     // Check if the Logger class contains a good logger method and signature
     if env
         .get_static_method_id(LOGGER_CLASS, LOGGER_METHOD, LOGGER_SIG)
@@ -137,13 +133,17 @@ pub fn init_logging(env: &JNIEnv, level: Level) -> Result<()> {
     // main thread, so stash a global ref to the class now, while
     // we're on the main thread.
     let logger_class = env.find_class(LOGGER_CLASS)?;
-    let logger = env.new_global_ref(JObject::from(logger_class))?;
+    let logger_class = env.new_global_ref(JObject::from(logger_class))?;
 
     // `JNIEnv` cannot be sent across thread boundaries. To be able to use JNI
     // functions in other threads, we must first obtain the `JavaVM` interface
     // which, unlike `JNIEnv` is `Send`.
     let jvm = env.get_java_vm()?;
-    let logger = AndroidLogger { level, jvm, logger };
+    let logger = AndroidLogger {
+        level,
+        jvm,
+        logger_class,
+    };
 
     log::set_boxed_logger(Box::new(logger))?;
     log::set_max_level(level.to_level_filter());

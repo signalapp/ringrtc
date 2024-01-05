@@ -6,8 +6,7 @@
 use std::borrow::Cow;
 
 use jni::{
-    objects::{JClass, JString},
-    sys::{jbyteArray, jobject, jstring},
+    objects::{JByteArray, JClass, JObject, JString},
     JNIEnv,
 };
 
@@ -19,107 +18,107 @@ use crate::{
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeParseKeyString(
-    env: JNIEnv,
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeParseKeyString<'local>(
+    mut env: JNIEnv<'local>,
     _class: JClass,
     string: JString,
-) -> jbyteArray {
+) -> JByteArray<'local> {
     try_scoped(|| {
-        let string = env.get_string(string)?;
+        let string = env.get_string(&string)?;
         let key = CallLinkRootKey::try_from(Cow::from(&string).as_ref())?;
         Ok(env.byte_array_from_slice(&key.bytes())?)
     })
     .unwrap_or_else(|e| {
-        error::throw_error(&env, e);
-        std::ptr::null_mut()
+        error::throw_error(&mut env, e);
+        JByteArray::default()
     })
 }
 
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeValidateKeyBytes(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
-    bytes: jbyteArray,
+    bytes: JByteArray,
 ) {
     try_scoped(|| {
         let bytes = env.convert_byte_array(bytes)?;
         let _ = CallLinkRootKey::try_from(bytes.as_slice())?;
         Ok(())
     })
-    .unwrap_or_else(|e| error::throw_error(&env, e))
+    .unwrap_or_else(|e| error::throw_error(&mut env, e))
 }
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generate(
-    env: JNIEnv,
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generate<'local>(
+    mut env: JNIEnv<'local>,
     _class: JClass,
-) -> jobject {
+) -> JObject<'local> {
     try_scoped(|| {
         let key = CallLinkRootKey::generate(rand::rngs::OsRng);
         let bytes = env.byte_array_from_slice(&key.bytes())?;
-        Ok(jni_new_object(
-            &env,
+        let object = jni_new_object(
+            &mut env,
             jni_class_name!(org.signal.ringrtc.CallLinkRootKey),
             jni_args!((bytes => [byte]) -> void),
-        )?
-        .into_inner())
+        )?;
+        Ok(object)
     })
     .unwrap_or_else(|e| {
-        error::throw_error(&env, e);
-        std::ptr::null_mut()
+        error::throw_error(&mut env, e);
+        JObject::default()
     })
 }
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generateAdminPasskey(
-    env: JNIEnv,
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generateAdminPasskey<'local>(
+    mut env: JNIEnv<'local>,
     _class: JClass,
-) -> jbyteArray {
+) -> JByteArray<'local> {
     try_scoped(|| {
         let passkey = CallLinkRootKey::generate_admin_passkey(rand::rngs::OsRng);
         Ok(env.byte_array_from_slice(&passkey)?)
     })
     .unwrap_or_else(|e| {
-        error::throw_error(&env, e);
-        std::ptr::null_mut()
+        error::throw_error(&mut env, e);
+        JByteArray::default()
     })
 }
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeDeriveRoomId(
-    env: JNIEnv,
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeDeriveRoomId<'local>(
+    mut env: JNIEnv<'local>,
     _class: JClass,
-    key_bytes: jbyteArray,
-) -> jbyteArray {
+    key_bytes: JByteArray,
+) -> JByteArray<'local> {
     try_scoped(|| {
         let key_bytes = env.convert_byte_array(key_bytes)?;
         let key = CallLinkRootKey::try_from(key_bytes.as_slice())?;
         Ok(env.byte_array_from_slice(&key.derive_room_id())?)
     })
     .unwrap_or_else(|e| {
-        error::throw_error(&env, e);
-        std::ptr::null_mut()
+        error::throw_error(&mut env, e);
+        JByteArray::default()
     })
 }
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeToFormattedString(
-    env: JNIEnv,
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeToFormattedString<'local>(
+    mut env: JNIEnv<'local>,
     _class: JClass,
-    key_bytes: jbyteArray,
-) -> jstring {
+    key_bytes: JByteArray,
+) -> JString<'local> {
     try_scoped(|| {
         let key_bytes = env.convert_byte_array(key_bytes)?;
         let key = CallLinkRootKey::try_from(key_bytes.as_slice())?;
-        Ok(env.new_string(&key.to_formatted_string())?.into_inner())
+        Ok(env.new_string(&key.to_formatted_string())?)
     })
     .unwrap_or_else(|e| {
-        error::throw_error(&env, e);
-        std::ptr::null_mut()
+        error::throw_error(&mut env, e);
+        JString::default()
     })
 }

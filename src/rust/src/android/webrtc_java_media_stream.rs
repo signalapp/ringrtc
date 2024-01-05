@@ -5,7 +5,7 @@
 
 //! webrtc::jni::JavaMediaStream Interface.
 
-use jni::objects::GlobalRef;
+use jni::objects::{GlobalRef, JObject};
 use jni::sys::jobject;
 use jni::JNIEnv;
 
@@ -50,8 +50,8 @@ impl JavaMediaStream {
     /// Return a JNI GlobalRef to the JavaMediaStream object
     pub fn global_ref(&self, env: &JNIEnv) -> Result<GlobalRef> {
         unsafe {
-            let jobject = Rust_getJavaMediaStreamObject(self.rffi.borrow());
-            Ok(env.new_global_ref(jobject)?)
+            let object = Rust_getJavaMediaStreamObject(self.rffi.borrow());
+            Ok(env.new_global_ref(JObject::from_raw(object))?)
         }
     }
 }
