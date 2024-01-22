@@ -2172,16 +2172,24 @@ export class RemoteDeviceState {
   presenting: boolean | undefined;
   sharingScreen: boolean | undefined;
   videoAspectRatio: number | undefined; // Float
-  addedTime: string | undefined; // unix millis (to be converted to a numeric type)
-  speakerTime: string | undefined; // unix millis; 0 if they've never spoken (to be converted to a numeric type)
+  addedTime: string; // unix millis (to be converted to a numeric type)
+  speakerTime: string; // unix millis; 0 if they've never spoken (to be converted to a numeric type)
   forwardingVideo: boolean | undefined;
   isHigherResolutionPending: boolean;
 
-  constructor(demuxId: number, userId: Buffer, mediaKeysReceived: boolean) {
+  constructor(
+    demuxId: number,
+    userId: Buffer,
+    addedTime: string,
+    speakerTime: string,
+    mediaKeysReceived: boolean
+  ) {
     this.demuxId = demuxId;
     this.userId = userId;
     this.mediaKeysReceived = mediaKeysReceived;
     this.audioLevel = 0;
+    this.addedTime = addedTime;
+    this.speakerTime = speakerTime;
     this.isHigherResolutionPending = false;
   }
 }
