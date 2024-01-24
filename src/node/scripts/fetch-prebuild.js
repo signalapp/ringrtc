@@ -15,11 +15,30 @@ const { Transform } = require('stream');
 const { pipeline } = require('stream/promises');
 
 const VERSION = process.env.npm_package_version;
-const URL = process.env.npm_package_config_prebuildUrl.replace(
+
+let config;
+
+// When installing from the registry, `npm` doesn't set `npm_package_config_*`
+// environment variables. However, unlike `yarn`, `npm` always provides a path
+// to the `package.json` so we can read `config` from it.
+if (process.env.npm_package_json) {
+  const json = fs.readFileSync(process.env.npm_package_json, {
+    encoding: 'utf8',
+  });
+
+  ({ config } = JSON.parse(json));
+} else {
+  config = {
+    prebuildUrl: process.env.npm_package_config_prebuildUrl,
+    prebuildChecksum: process.env.npm_package_config_prebuildChecksum,
+  };
+}
+
+const URL = config.prebuildUrl.replace(
   '${npm_package_version}', // eslint-disable-line no-template-curly-in-string
   VERSION
 );
-const HASH = process.env.npm_package_config_prebuildChecksum;
+const HASH = config.prebuildChecksum;
 
 const tmpFile = path.join(__dirname, 'unverified-prebuild.tmp');
 const finalFile = path.join(__dirname, 'prebuild.tar.gz');
