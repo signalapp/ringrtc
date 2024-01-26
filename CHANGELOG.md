@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.37.0
+
+- Update to WebRTC m120
+
+- Desktop: added_time and speaker_time are not optional
+
+- Desktop: Support installing via npm
+
+- Update dependencies
+
 ## v2.36.0
 
 - Use unified plan for group calls
