@@ -39,7 +39,7 @@ jobs:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v1
+      - uses: google-github-actions/upload-cloud-storage@v2
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -72,7 +72,7 @@ jobs:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v1
+      - uses: google-github-actions/upload-cloud-storage@v2
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -104,7 +104,7 @@ jobs:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v1
+      - uses: google-github-actions/upload-cloud-storage@v2
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -113,7 +113,7 @@ jobs:
           parent: false
           process_gcloudignore: false
 
-      - uses: google-github-actions/upload-cloud-storage@v1
+      - uses: google-github-actions/upload-cloud-storage@v2
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out_arm'
@@ -147,7 +147,7 @@ jobs:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v1
+      - uses: google-github-actions/upload-cloud-storage@v2
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -156,7 +156,7 @@ jobs:
           parent: false
           process_gcloudignore: false
 
-      - uses: google-github-actions/upload-cloud-storage@v1
+      - uses: google-github-actions/upload-cloud-storage@v2
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out_arm'
@@ -193,7 +193,7 @@ jobs:
         workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
         service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-    - uses: google-github-actions/upload-cloud-storage@v1
+    - uses: google-github-actions/upload-cloud-storage@v2
       if: ${{ !inputs.dry_run }}
       with:
         path: 'out'
@@ -202,7 +202,7 @@ jobs:
         parent: false
         process_gcloudignore: false
 
-    - uses: google-github-actions/upload-cloud-storage@v1
+    - uses: google-github-actions/upload-cloud-storage@v2
       if: ${{ !inputs.dry_run }}
       with:
         path: 'out_arm'
