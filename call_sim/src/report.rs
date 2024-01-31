@@ -18,8 +18,10 @@ use tokio::{
     task::JoinSet,
 };
 
-use crate::common::{ChartDimension, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig};
-use crate::test::{GroupRun, Sound, TestCase, TestResults};
+use crate::common::{
+    ChartDimension, GroupConfig, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig,
+};
+use crate::test::{AudioTestResults, GroupRun, Sound, TestCase};
 
 type ChartPoint = (f32, f32);
 
@@ -185,19 +187,62 @@ impl AnalysisReportMos {
 
 #[derive(Debug)]
 pub struct AnalysisReport {
-    pub mos_s: AnalysisReportMos,
-    pub mos_a: AnalysisReportMos,
+    /// Hold the audio results for reporting.
+    pub audio_test_results: AudioTestResults,
+    /// Store video results for reporting.
     pub vmaf: Option<f32>,
 }
 
 impl AnalysisReport {
-    pub async fn parse_audio_analysis(file_name: &str) -> Result<Option<f32>> {
+    pub async fn parse_visqol_mos_results(file_name: &str) -> Result<Option<f32>> {
         // Look through the file until we find the MOS line and return the value.
         let file = File::open(file_name).await?;
         let reader = BufReader::new(file);
 
         // Example: MOS-LQO:		4.14442
         let re_mos_line = Regex::new(r"MOS-LQO:\s*(?P<mos>[-+]?[0-9]*\.?[0-9]+)")?;
+
+        let mut mos = None;
+
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await? {
+            if let Some(cap) = re_mos_line.captures(&line) {
+                mos = Some(f32::from_str(&cap["mos"])?);
+                break;
+            }
+        }
+
+        Ok(mos)
+    }
+
+    pub async fn parse_pesq_mos_results(file_name: &str) -> Result<Option<f32>> {
+        // Look through the file until we find the MOS line and return the value.
+        let file = File::open(file_name).await?;
+        let reader = BufReader::new(file);
+
+        // Example: 4.470762252807617
+        let re_mos_line = Regex::new(r"(?P<mos>[-+]?[0-9]*\.?[0-9]+)")?;
+
+        let mut mos = None;
+
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await? {
+            if let Some(cap) = re_mos_line.captures(&line) {
+                mos = Some(f32::from_str(&cap["mos"])?);
+                break;
+            }
+        }
+
+        Ok(mos)
+    }
+
+    pub async fn parse_plc_mos_results(file_name: &str) -> Result<Option<f32>> {
+        // Look through the file until we find the MOS line and return the value.
+        let file = File::open(file_name).await?;
+        let reader = BufReader::new(file);
+
+        // Example: 0  /degraded/loss-0_16k.wav   4.193227
+        let re_mos_line = Regex::new(r"0.*wav\s*(?P<mos>[-+]?[0-9]*\.?[0-9]+)")?;
 
         let mut mos = None;
 
@@ -228,10 +273,9 @@ impl AnalysisReport {
             .ok_or_else(|| anyhow!("invalid vmaf json"))
     }
 
-    // There isn't much to build for audio, now that its only item, mos, is pre-calculated.
+    // There isn't much to build for audio, now that it is pre-calculated.
     pub async fn build(
-        mos_s: AnalysisReportMos,
-        mos_a: AnalysisReportMos,
+        audio_test_results: AudioTestResults,
         video_analysis_file_name: Option<&str>,
     ) -> Result<Self> {
         let vmaf = if let Some(video_analysis_file_name) = video_analysis_file_name {
@@ -240,7 +284,10 @@ impl AnalysisReport {
             None
         };
 
-        Ok(Self { mos_s, mos_a, vmaf })
+        Ok(Self {
+            audio_test_results,
+            vmaf,
+        })
     }
 }
 
@@ -1199,11 +1246,11 @@ impl Report {
     pub async fn build_b(
         test_case: &TestCase<'_>,
         test_case_config: &TestCaseConfig,
-        test_results: TestResults,
+        audio_test_results: AudioTestResults,
     ) -> Result<Self> {
         let analysis_report = AnalysisReport::build(
-            test_results.mos_s,
-            test_results.mos_a,
+            // Note: _Move_ the audio_test_results to the report.
+            audio_test_results,
             test_case
                 .client_b
                 .output_yuv
@@ -1432,12 +1479,18 @@ impl Report {
             ]);
         }
 
-        if let AnalysisReportMos::Series(stats) = &self.analysis_report.mos_s {
-            line_chart_stats.push(stats);
-        }
-
-        if let AnalysisReportMos::Series(stats) = &self.analysis_report.mos_a {
-            line_chart_stats.push(stats);
+        // Generate charts for audio mos results if they represent a series.
+        let audio_reports = [
+            &self.analysis_report.audio_test_results.visqol_mos_speech,
+            &self.analysis_report.audio_test_results.visqol_mos_audio,
+            &self.analysis_report.audio_test_results.visqol_mos_average,
+            &self.analysis_report.audio_test_results.pesq_mos,
+            &self.analysis_report.audio_test_results.plc_mos,
+        ];
+        for report in audio_reports {
+            if let AnalysisReportMos::Series(stats) = report {
+                line_chart_stats.push(stats);
+            }
         }
 
         let mut set = JoinSet::new();
@@ -1469,23 +1522,39 @@ impl Report {
         buf.extend_from_slice(
             html.report_heading(
                 set_name,
+                test_case_config,
                 &self.report_name,
                 &self.client_name,
-                self.analysis_report.mos_s.get_mos_for_display(),
-                self.analysis_report.mos_a.get_mos_for_display(),
+                &self.analysis_report.audio_test_results,
             )
             .as_bytes(),
         );
         buf.extend_from_slice(html.network_config_section(network_configs).as_bytes());
         buf.extend_from_slice(html.call_config_section(test_case_config).as_bytes());
 
+        // Add charts for audio mos results if they represent a series to the "Audio Core" section.
         let mut audio_core_stats: Vec<&Stats> = vec![];
 
-        if let AnalysisReportMos::Series(stats) = &self.analysis_report.mos_s {
+        if let AnalysisReportMos::Series(stats) =
+            &self.analysis_report.audio_test_results.visqol_mos_speech
+        {
             audio_core_stats.push(stats);
         }
-
-        if let AnalysisReportMos::Series(stats) = &self.analysis_report.mos_a {
+        if let AnalysisReportMos::Series(stats) =
+            &self.analysis_report.audio_test_results.visqol_mos_audio
+        {
+            audio_core_stats.push(stats);
+        }
+        if let AnalysisReportMos::Series(stats) =
+            &self.analysis_report.audio_test_results.visqol_mos_average
+        {
+            audio_core_stats.push(stats);
+        }
+        if let AnalysisReportMos::Series(stats) = &self.analysis_report.audio_test_results.pesq_mos
+        {
+            audio_core_stats.push(stats);
+        }
+        if let AnalysisReportMos::Series(stats) = &self.analysis_report.audio_test_results.plc_mos {
             audio_core_stats.push(stats);
         }
 
@@ -1636,9 +1705,7 @@ impl Report {
             .as_bytes(),
         );
 
-        if test_case_config.client_a_config.video.input_name.is_some()
-            || test_case_config.client_b_config.video.input_name.is_some()
-        {
+        if self.show_video {
             let video_send_stats = &self.client_log_report.video_send_stats;
             let video_send_stats = Self::build_stats_rows(
                 &html,
@@ -1741,12 +1808,14 @@ impl Report {
         match chart_dimension {
             ChartDimension::MosSpeech => report
                 .analysis_report
-                .mos_s
+                .audio_test_results
+                .visqol_mos_speech
                 .get_mos_for_display()
                 .unwrap_or(0f32),
             ChartDimension::MosAudio => report
                 .analysis_report
-                .mos_a
+                .audio_test_results
+                .visqol_mos_audio
                 .get_mos_for_display()
                 .unwrap_or(0f32),
             ChartDimension::ContainerCpuUsage => report.docker_stats_report.cpu_usage.data.ave,
@@ -2042,7 +2111,7 @@ impl Report {
         for (i, report) in group_reports.iter().enumerate() {
             // Add the report table to a report contents.
             let mut report_contents =
-                html.summary_report_section(&report.reports, &report.group_config.group_name);
+                html.summary_report_section(&report.reports, &report.group_config);
 
             let mut stats_charts = vec![];
 
@@ -2206,8 +2275,11 @@ struct SummaryRow {
     pub container_tx_bitrate: f32,
     pub container_rx_bitrate: f32,
 
-    pub mos_s: Option<f32>,
-    pub mos_a: Option<f32>,
+    pub visqol_mos_speech: Option<f32>,
+    pub visqol_mos_audio: Option<f32>,
+    pub visqol_mos_average: Option<f32>,
+    pub pesq_mos: Option<f32>,
+    pub plc_mos: Option<f32>,
 
     pub vmaf: Option<f32>,
 
@@ -2258,8 +2330,31 @@ impl SummaryRow {
             container_memory: report.docker_stats_report.mem_usage.data.ave,
             container_tx_bitrate: report.docker_stats_report.tx_bitrate.data.ave,
             container_rx_bitrate: report.docker_stats_report.rx_bitrate.data.ave,
-            mos_s: report.analysis_report.mos_s.get_mos_for_display(),
-            mos_a: report.analysis_report.mos_a.get_mos_for_display(),
+            visqol_mos_speech: report
+                .analysis_report
+                .audio_test_results
+                .visqol_mos_speech
+                .get_mos_for_display(),
+            visqol_mos_audio: report
+                .analysis_report
+                .audio_test_results
+                .visqol_mos_audio
+                .get_mos_for_display(),
+            visqol_mos_average: report
+                .analysis_report
+                .audio_test_results
+                .visqol_mos_average
+                .get_mos_for_display(),
+            pesq_mos: report
+                .analysis_report
+                .audio_test_results
+                .pesq_mos
+                .get_mos_for_display(),
+            plc_mos: report
+                .analysis_report
+                .audio_test_results
+                .plc_mos
+                .get_mos_for_display(),
             vmaf: report.analysis_report.vmaf,
             row_type: SummaryRowType::Single,
             row_index: 0,
@@ -2304,11 +2399,20 @@ impl SummaryRow {
                 new_average(self.container_rx_bitrate, new.container_rx_bitrate);
 
             // We expect mos and vmaf to always be there or never.
-            if let (Some(mos_s), Some(new_mos_s)) = (self.mos_s, new.mos_s) {
-                self.mos_s = Some(new_average(mos_s, new_mos_s));
+            if let (Some(old), Some(new)) = (self.visqol_mos_speech, new.visqol_mos_speech) {
+                self.visqol_mos_speech = Some(new_average(old, new));
             }
-            if let (Some(mos_a), Some(new_mos_a)) = (self.mos_a, new.mos_a) {
-                self.mos_a = Some(new_average(mos_a, new_mos_a));
+            if let (Some(old), Some(new)) = (self.visqol_mos_audio, new.visqol_mos_audio) {
+                self.visqol_mos_audio = Some(new_average(old, new));
+            }
+            if let (Some(old), Some(new)) = (self.visqol_mos_average, new.visqol_mos_average) {
+                self.visqol_mos_average = Some(new_average(old, new));
+            }
+            if let (Some(old), Some(new)) = (self.pesq_mos, new.pesq_mos) {
+                self.pesq_mos = Some(new_average(old, new));
+            }
+            if let (Some(old), Some(new)) = (self.plc_mos, new.plc_mos) {
+                self.plc_mos = Some(new_average(old, new));
             }
             if let (Some(vmaf), Some(new_vmaf)) = (self.vmaf, new.vmaf) {
                 self.vmaf = Some(new_average(vmaf, new_vmaf));
@@ -2413,20 +2517,27 @@ impl Html {
         buf
     }
 
-    fn get_text_emphasis_for_mos(mos_s: Option<f32>, mos_a: Option<f32>) -> &'static str {
-        let weight = match (mos_s, mos_a) {
-            (Some(mos_s), Some(mos_a)) => (mos_s + mos_a) / 2.0,
-            (Some(mos_s), None) => mos_s,
-            (None, Some(mos_a)) => mos_a,
-            (None, None) => 0.0,
+    fn get_emphasis_for_mos(
+        visqol_mos_speech: Option<f32>,
+        visqol_mos_audio: Option<f32>,
+        pesq_mos: Option<f32>,
+        plc_mos: Option<f32>,
+    ) -> &'static str {
+        let weight = match (visqol_mos_speech, visqol_mos_audio, pesq_mos, plc_mos) {
+            (Some(mos_s), Some(mos_a), _, _) => (mos_s + mos_a) / 2.0,
+            (Some(mos_s), None, _, _) => mos_s,
+            (None, Some(mos_a), _, _) => mos_a,
+            (None, None, Some(pesq_mos), _) => pesq_mos,
+            (None, None, None, Some(plc_mos)) => plc_mos,
+            (None, None, None, None) => 0.0,
         };
 
         if weight > 4.0 {
-            "table-success"
+            "success"
         } else if weight > 3.5 {
-            "table-warning"
+            "warning"
         } else if weight > 0.0 {
-            "table-danger"
+            "danger"
         } else {
             ""
         }
@@ -2435,10 +2546,10 @@ impl Html {
     pub fn report_heading(
         &self,
         set_name: &str,
+        test_case_config: &TestCaseConfig,
         test_name: &str,
         client_name: &str,
-        mos_s: Option<f32>,
-        mos_a: Option<f32>,
+        audio_test_results: &AudioTestResults,
     ) -> String {
         let mut buf = String::new();
 
@@ -2451,20 +2562,64 @@ impl Html {
         buf.push_str("</div>\n");
         buf.push_str("<div class=\"col-md-6\">\n");
 
-        let mos_s_string = mos_s
-            .map(|mos| format!("{:.3}", mos))
-            .unwrap_or_else(|| "None".to_string());
-        let mos_a_string = mos_a
-            .map(|mos| format!("{:.3}", mos))
-            .unwrap_or_else(|| "None".to_string());
+        let visqol_mos_speech = audio_test_results.visqol_mos_speech.get_mos_for_display();
+        let visqol_mos_audio = audio_test_results.visqol_mos_audio.get_mos_for_display();
+        let visqol_mos_average = audio_test_results.visqol_mos_average.get_mos_for_display();
+        let pesq_mos = audio_test_results.pesq_mos.get_mos_for_display();
+        let plc_mos = audio_test_results.plc_mos.get_mos_for_display();
 
-        let _ = writeln!(
-            buf,
-            "<h2 class=\"text-right {}\">MOS_S: {}/MOS_A: {}</h2>",
-            Html::get_text_emphasis_for_mos(mos_s, mos_a),
-            mos_s_string,
-            mos_a_string
-        );
+        let text_emphasis =
+            Html::get_emphasis_for_mos(visqol_mos_speech, visqol_mos_audio, pesq_mos, plc_mos);
+
+        if test_case_config
+            .client_b_config
+            .audio
+            .visqol_speech_analysis
+            || test_case_config.client_b_config.audio.visqol_audio_analysis
+        {
+            let visqol_mos_speech_string = visqol_mos_speech
+                .map(|mos| format!("{:.3}", mos))
+                .unwrap_or_else(|| "None".to_string());
+            let visqol_mos_audio_string = visqol_mos_audio
+                .map(|mos| format!("{:.3}", mos))
+                .unwrap_or_else(|| "None".to_string());
+            let visqol_mos_average_string = visqol_mos_average
+                .map(|mos| format!("{:.3}", mos))
+                .unwrap_or_else(|| "None".to_string());
+
+            let _ = writeln!(
+                buf,
+                "<h2 class=\"text-right text-{}\">Visqol Speech: {} Audio: {} Average: {}</h2>",
+                text_emphasis,
+                visqol_mos_speech_string,
+                visqol_mos_audio_string,
+                visqol_mos_average_string,
+            );
+        }
+
+        if test_case_config.client_b_config.audio.pesq_speech_analysis {
+            let pesq_mos_string = pesq_mos
+                .map(|mos| format!("{:.3}", mos))
+                .unwrap_or_else(|| "None".to_string());
+
+            let _ = writeln!(
+                buf,
+                "<h2 class=\"text-right text-{}\">PESQ MOS: {}</h2>",
+                text_emphasis, pesq_mos_string,
+            );
+        }
+
+        if test_case_config.client_b_config.audio.plc_speech_analysis {
+            let plc_mos_string = plc_mos
+                .map(|mos| format!("{:.3}", mos))
+                .unwrap_or_else(|| "None".to_string());
+
+            let _ = writeln!(
+                buf,
+                "<h2 class=\"text-right text-{}\">PLC MOS: {}</h2>",
+                text_emphasis, plc_mos_string,
+            );
+        }
 
         buf.push_str("</div>\n");
         buf.push_str("</div>\n");
@@ -2683,38 +2838,43 @@ impl Html {
 
     fn summary_report_row(
         &self,
-        group_name: &str,
+        group_config: &GroupConfig,
         report: &Report,
         summary_row: &SummaryRow,
         iteration_count_for_group: usize,
     ) -> String {
         let mut buf = String::new();
 
-        let table_emphasis = Html::get_text_emphasis_for_mos(summary_row.mos_s, summary_row.mos_a);
+        let table_emphasis = Html::get_emphasis_for_mos(
+            summary_row.visqol_mos_speech,
+            summary_row.visqol_mos_audio,
+            summary_row.pesq_mos,
+            summary_row.plc_mos,
+        );
 
         match summary_row.row_type {
             SummaryRowType::Single => {
                 let _ = writeln!(
                     buf,
-                    r#"<tr class="{} clickable" onclick="window.location='{}/{}/report.html'">"#,
-                    table_emphasis, group_name, report.report_name
+                    r#"<tr class="table-{} clickable" onclick="window.location='{}/{}/report.html'">"#,
+                    table_emphasis, group_config.group_name, report.report_name
                 );
             }
             SummaryRowType::Aggregate => {
                 let _ = writeln!(
                     buf,
-                    r#"<tr class="{}" data-bs-toggle="collapse" data-bs-target=".{}_{}_collapsed">"#,
-                    table_emphasis, group_name, iteration_count_for_group
+                    r#"<tr class="table-{}" data-bs-toggle="collapse" data-bs-target=".{}_{}_collapsed">"#,
+                    table_emphasis, group_config.group_name, iteration_count_for_group
                 );
             }
             SummaryRowType::AggregateItem => {
                 let _ = writeln!(
                     buf,
-                    r#"<tr class="{} clickable w-auto small fw-light collapse {}_{}_collapsed" onclick="window.location='{}/{}_{}/report.html'">"#,
+                    r#"<tr class="table-{} clickable w-auto small fw-light collapse {}_{}_collapsed" onclick="window.location='{}/{}_{}/report.html'">"#,
                     table_emphasis,
-                    group_name,
+                    group_config.group_name,
                     iteration_count_for_group,
-                    group_name,
+                    group_config.group_name,
                     report.report_name,
                     summary_row.row_index
                 );
@@ -2729,7 +2889,9 @@ impl Html {
 
         let _ = writeln!(buf, "<td>{}{}</td>", indent, report.test_case_name);
         let _ = writeln!(buf, "<td>{}{}</td>", indent, report.sound_name);
-        let _ = writeln!(buf, "<td>{}{}</td>", indent, report.video_name);
+        if group_config.summary_report_columns.show_video {
+            let _ = writeln!(buf, "<td>{}{}</td>", indent, report.video_name);
+        }
         let _ = writeln!(
             buf,
             "<td>{}{}</td>",
@@ -2786,21 +2948,50 @@ impl Html {
             indent, summary_row.container_rx_bitrate
         );
 
-        if let Some(mos) = summary_row.mos_s {
-            let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
-        } else {
-            buf.push_str("<td></td>\n");
+        if group_config.summary_report_columns.show_visqol_mos_speech {
+            if let Some(mos) = summary_row.visqol_mos_speech {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
         }
-        if let Some(mos) = summary_row.mos_a {
-            let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
-        } else {
-            buf.push_str("<td></td>\n");
+        if group_config.summary_report_columns.show_visqol_mos_audio {
+            if let Some(mos) = summary_row.visqol_mos_audio {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
         }
-        if let Some(vmaf) = summary_row.vmaf {
-            let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, vmaf);
-        } else {
-            buf.push_str("<td></td>\n");
+        if group_config.summary_report_columns.show_visqol_mos_average {
+            if let Some(mos) = summary_row.visqol_mos_average {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
         }
+        if group_config.summary_report_columns.show_pesq_mos {
+            if let Some(mos) = summary_row.pesq_mos {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
+        }
+        if group_config.summary_report_columns.show_plc_mos {
+            if let Some(mos) = summary_row.plc_mos {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
+        }
+
+        if group_config.summary_report_columns.show_video {
+            if let Some(vmaf) = summary_row.vmaf {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, vmaf);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
+        }
+
         buf.push_str("</tr>\n");
 
         buf
@@ -2809,7 +3000,7 @@ impl Html {
     pub fn summary_report_section(
         &self,
         reports: &Vec<Result<Report>>,
-        group_name: &str,
+        group_config: &GroupConfig,
     ) -> String {
         let mut buf = String::new();
 
@@ -2819,17 +3010,50 @@ impl Html {
         buf.push_str("<table class=\"table table-hover table-bordered\">\n");
         buf.push_str("<thead>\n");
         buf.push_str("<tr>\n");
-        buf.push_str("<th colspan=\"4\" style=\"width: 33%\">Test Case</th>\n");
+        if group_config.summary_report_columns.show_video {
+            buf.push_str("<th colspan=\"4\" style=\"width: 33%\">Test Case</th>\n");
+        } else {
+            buf.push_str("<th colspan=\"3\" style=\"width: 33%\">Test Case</th>\n");
+        }
         buf.push_str("<th colspan=\"3\">Client Send Stats (average)</th>\n");
         buf.push_str("<th colspan=\"3\">Client Receive Stats (average)</th>\n");
         buf.push_str("<th colspan=\"4\">Container Stats (average)</th>\n");
-        buf.push_str("<th colspan=\"2\">MOS</th>\n");
-        buf.push_str("<th rowspan=\"2\">VMAF</th>\n");
+
+        let mut colspan = 0;
+        if group_config.summary_report_columns.show_visqol_mos_speech {
+            colspan += 1;
+        }
+        if group_config.summary_report_columns.show_visqol_mos_audio {
+            colspan += 1;
+        }
+        if group_config.summary_report_columns.show_visqol_mos_average {
+            colspan += 1;
+        }
+        if colspan > 0 {
+            let _ = writeln!(buf, "<th colspan=\"{}\">Visqol MOS</th>\n", colspan);
+        }
+
+        let mut colspan = 0;
+        if group_config.summary_report_columns.show_pesq_mos {
+            colspan += 1;
+        }
+        if group_config.summary_report_columns.show_plc_mos {
+            colspan += 1;
+        }
+        if colspan > 0 {
+            let _ = writeln!(buf, "<th colspan=\"{}\">MOS</th>\n", colspan);
+        }
+
+        if group_config.summary_report_columns.show_video {
+            buf.push_str("<th rowspan=\"2\">VMAF</th>\n");
+        }
         buf.push_str("</tr>\n");
         buf.push_str("<tr>\n");
         buf.push_str("<th>Name</th>\n");
         buf.push_str("<th>Sound</th>\n");
-        buf.push_str("<th>Video</th>\n");
+        if group_config.summary_report_columns.show_video {
+            buf.push_str("<th>Video</th>\n");
+        }
         buf.push_str("<th>Profile</th>\n");
         buf.push_str("<th>Packet Size</th>\n");
         buf.push_str("<th>Packet Rate</th>\n");
@@ -2841,8 +3065,21 @@ impl Html {
         buf.push_str("<th>Mem</th>\n");
         buf.push_str("<th>TX Bitrate</th>\n");
         buf.push_str("<th>RX Bitrate</th>\n");
-        buf.push_str("<th>Speech</th>\n");
-        buf.push_str("<th>Audio</th>\n");
+        if group_config.summary_report_columns.show_visqol_mos_speech {
+            buf.push_str("<th>Speech</th>\n");
+        }
+        if group_config.summary_report_columns.show_visqol_mos_audio {
+            buf.push_str("<th>Audio</th>\n");
+        }
+        if group_config.summary_report_columns.show_visqol_mos_average {
+            buf.push_str("<th>Average</th>\n");
+        }
+        if group_config.summary_report_columns.show_pesq_mos {
+            buf.push_str("<th>PESQ</th>\n");
+        }
+        if group_config.summary_report_columns.show_plc_mos {
+            buf.push_str("<th>PLC</th>\n");
+        }
         buf.push_str("</tr>\n");
         buf.push_str("</thead>\n");
 
@@ -2875,7 +3112,7 @@ impl Html {
                                     // This is the end. Show the aggregate summary row first. Use
                                     // the current report for naming.
                                     buf.push_str(&self.summary_report_row(
-                                        group_name,
+                                        group_config,
                                         report,
                                         aggregate,
                                         iteration_count_for_group,
@@ -2884,7 +3121,7 @@ impl Html {
                                     // Show all the iterations.
                                     summary_rows.iter().for_each(|summary_line| {
                                         buf.push_str(&self.summary_report_row(
-                                            group_name,
+                                            group_config,
                                             report,
                                             summary_line,
                                             iteration_count_for_group,
@@ -2920,7 +3157,7 @@ impl Html {
                     } else {
                         // Display the report normally, one measurement for the line.
                         buf.push_str(&self.summary_report_row(
-                            group_name,
+                            group_config,
                             report,
                             &current_summary_row,
                             iteration_count_for_group,

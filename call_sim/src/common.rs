@@ -160,6 +160,31 @@ impl ChartDimension {
     }
 }
 
+#[derive(Debug)]
+pub struct SummaryReportColumns {
+    pub show_visqol_mos_speech: bool,
+    pub show_visqol_mos_audio: bool,
+    pub show_visqol_mos_average: bool,
+    pub show_pesq_mos: bool,
+    pub show_plc_mos: bool,
+    /// A general flag to control video columns.
+    pub show_video: bool,
+}
+
+impl Default for SummaryReportColumns {
+    fn default() -> Self {
+        Self {
+            show_visqol_mos_speech: true,
+            show_visqol_mos_audio: true,
+            show_visqol_mos_average: false,
+            show_pesq_mos: false,
+            show_plc_mos: false,
+            show_video: true,
+        }
+    }
+}
+
+#[derive(Default)]
 pub struct GroupConfig {
     /// A name to distinguish this group from others.
     pub group_name: String,
@@ -167,6 +192,8 @@ pub struct GroupConfig {
     pub chart_dimensions: Vec<ChartDimension>,
     /// The labels to use for the charts on the x-axis.
     pub x_labels: &'static [&'static str],
+    /// Columns to show in summary reports.
+    pub summary_report_columns: SummaryReportColumns,
 }
 
 #[derive(Debug, Clone)]
@@ -365,10 +392,14 @@ pub struct AudioConfig {
     pub jitter_buffer_max_target_delay_ms: i32,
     /// How often RTCP reports should be sent. Subject to jitter applied by WebRTC.
     pub rtcp_report_interval_ms: i32,
-    /// Whether or not speech (wideband) analysis should be performed.
-    pub speech_analysis: bool,
-    /// Whether or not audio (fullband) analysis should be performed.
-    pub audio_analysis: bool,
+    /// Flag to enable visqol speech (wideband) analysis.
+    pub visqol_speech_analysis: bool,
+    /// Flag to enable visqol audio (fullband) analysis.
+    pub visqol_audio_analysis: bool,
+    /// Flag to enable pesq speech analysis.
+    pub pesq_speech_analysis: bool,
+    /// Flag to enable plc speech analysis.
+    pub plc_speech_analysis: bool,
     /// The mechanism to use when analyzing speech/audio.
     pub analysis_mode: AudioAnalysisMode,
     /// Sometimes spectrogram generation takes too long, so we might want to disable it.
@@ -380,6 +411,10 @@ impl AudioConfig {
         self.input_name.clear();
         self.input_name.push_str(input);
         self
+    }
+
+    pub fn requires_speech(&self) -> bool {
+        self.visqol_speech_analysis || self.pesq_speech_analysis || self.plc_speech_analysis
     }
 }
 
@@ -410,8 +445,10 @@ impl Default for AudioConfig {
             jitter_buffer_max_packets: 200,
             jitter_buffer_max_target_delay_ms: 500,
             rtcp_report_interval_ms: 5000,
-            speech_analysis: true,
-            audio_analysis: false,
+            visqol_speech_analysis: true,
+            visqol_audio_analysis: false,
+            pesq_speech_analysis: false,
+            plc_speech_analysis: false,
             analysis_mode: AudioAnalysisMode::Normal,
             generate_spectrogram: true,
         }

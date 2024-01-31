@@ -49,11 +49,29 @@ pub async fn build_images() -> Result<()> {
         .wait()
         .await?;
 
-    println!("visqol:");
+    println!("visqol_mos:");
     stdout().flush().await?;
     let _ = Command::new("docker")
-        .current_dir("call_sim/docker/visqol")
-        .args(["build", "-t", "visqol", "-q", "."])
+        .current_dir("call_sim/docker/visqol_mos")
+        .args(["build", "-t", "visqol_mos", "-q", "."])
+        .spawn()?
+        .wait()
+        .await?;
+
+    println!("pesq_mos:");
+    stdout().flush().await?;
+    let _ = Command::new("docker")
+        .current_dir("call_sim/docker/pesq_mos")
+        .args(["build", "-t", "pesq_mos", "-q", "."])
+        .spawn()?
+        .wait()
+        .await?;
+
+    println!("plc_mos:");
+    stdout().flush().await?;
+    let _ = Command::new("docker")
+        .current_dir("call_sim/docker/plc_mos")
+        .args(["build", "-t", "plc_mos", "-q", "."])
         .spawn()?
         .wait()
         .await?;
@@ -950,7 +968,7 @@ pub async fn generate_spectrogram(location: &str, wav_file: &str, extension: &st
     Ok(())
 }
 
-pub async fn analyze_audio(
+pub async fn analyze_visqol_mos(
     degraded_path: &str,
     degraded_file: &str,
     ref_path: &str,
@@ -958,17 +976,17 @@ pub async fn analyze_audio(
     extension: &str,
     speech: bool,
 ) -> Result<()> {
-    println!("\nAnalyzing audio for `{}`:", degraded_file);
+    println!("\nAnalyzing visqol mos for `{}`:", degraded_file);
 
     let mut args = [
         "run",
         "--name",
-        "visqol",
+        "visqol_mos",
         "-v",
         &format!("{}:/degraded", degraded_path),
         "-v",
         &format!("{}:/ref", ref_path),
-        "visqol",
+        "visqol_mos",
         "--degraded_file",
         &format!("/degraded/{}", degraded_file),
         "--reference_file",
@@ -985,13 +1003,113 @@ pub async fn analyze_audio(
 
     // Get the logs.
     let output = Command::new("docker")
-        .args(["logs", "visqol"])
+        .args(["logs", "visqol_mos"])
         .output()
         .await?;
 
     // Remove the container.
     let _ = Command::new("docker")
-        .args(["rm", "visqol"])
+        .args(["rm", "visqol_mos"])
+        .spawn()?
+        .wait()
+        .await?;
+
+    // Save the logs.
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(format!("{}/{}.{}", degraded_path, degraded_file, extension))
+        .await?;
+    file.write_all(&output.stdout).await?;
+    file.write_all(&output.stderr).await?;
+
+    Ok(())
+}
+
+pub async fn analyze_pesq_mos(
+    degraded_path: &str,
+    degraded_file: &str,
+    ref_path: &str,
+    ref_file: &str,
+    extension: &str,
+) -> Result<()> {
+    println!("\nAnalyzing pesq mos for `{}`:", degraded_file);
+
+    let args = [
+        "run",
+        "--name",
+        "pesq_mos",
+        "-v",
+        &format!("{}:/degraded", degraded_path),
+        "-v",
+        &format!("{}:/ref", ref_path),
+        "pesq_mos",
+        &format!("/ref/{}", ref_file),
+        &format!("/degraded/{}", degraded_file),
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let _ = Command::new("docker").args(&args).spawn()?.wait().await?;
+
+    // Get the logs.
+    let output = Command::new("docker")
+        .args(["logs", "pesq_mos"])
+        .output()
+        .await?;
+
+    // Remove the container.
+    let _ = Command::new("docker")
+        .args(["rm", "pesq_mos"])
+        .spawn()?
+        .wait()
+        .await?;
+
+    // Save the logs.
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(format!("{}/{}.{}", degraded_path, degraded_file, extension))
+        .await?;
+    file.write_all(&output.stdout).await?;
+    file.write_all(&output.stderr).await?;
+
+    Ok(())
+}
+
+pub async fn analyze_plc_mos(
+    degraded_path: &str,
+    degraded_file: &str,
+    extension: &str,
+) -> Result<()> {
+    println!("\nAnalyzing plc mos for `{}`:", degraded_file);
+
+    let args = [
+        "run",
+        "--name",
+        "plc_mos",
+        "-v",
+        &format!("{}:/degraded", degraded_path),
+        "plc_mos",
+        "--degraded",
+        &format!("/degraded/{}", degraded_file),
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let _ = Command::new("docker").args(&args).spawn()?.wait().await?;
+
+    // Get the logs.
+    let output = Command::new("docker")
+        .args(["logs", "plc_mos"])
+        .output()
+        .await?;
+
+    // Remove the container.
+    let _ = Command::new("docker")
+        .args(["rm", "plc_mos"])
         .spawn()?
         .wait()
         .await?;

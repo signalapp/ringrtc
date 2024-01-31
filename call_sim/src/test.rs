@@ -25,16 +25,16 @@ use std::{
 use tonic::transport::Channel;
 use tower::timeout::Timeout;
 
-use crate::audio::{chop_audio_and_analyze, get_audio_and_analyze};
+use crate::audio::{chop_audio_and_analyze, get_audio_and_analyze, AudioFiles};
 use crate::common::{
     AudioAnalysisMode, GroupConfig, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig,
 };
 use crate::docker::{
-    analyze_audio, analyze_video, clean_network, clean_up, convert_mp4_to_yuv, convert_raw_to_wav,
-    convert_wav_to_16khz_mono, convert_yuv_to_mp4, create_network, emulate_network_change,
-    emulate_network_start, generate_spectrogram, get_signaling_server_logs, get_turn_server_logs,
-    start_cli, start_client, start_signaling_server, start_tcp_dump, start_turn_server,
-    DockerStats,
+    analyze_video, analyze_visqol_mos, clean_network, clean_up, convert_mp4_to_yuv,
+    convert_raw_to_wav, convert_wav_to_16khz_mono, convert_yuv_to_mp4, create_network,
+    emulate_network_change, emulate_network_start, generate_spectrogram, get_signaling_server_logs,
+    get_turn_server_logs, start_cli, start_client, start_signaling_server, start_tcp_dump,
+    start_turn_server, DockerStats,
 };
 use crate::report::{AnalysisReport, AnalysisReportMos, Report};
 
@@ -53,12 +53,19 @@ pub struct Client<'a> {
 /// A property bag used to attach results and artifacts to tests. Normally, artifacts are
 /// saved to the file system and processed when reporting, but it is more efficient to
 /// record and pass some things along as we create them.
-#[derive(Default)]
-pub struct TestResults {
-    /// MOS analysis using the speech model (wideband).
-    pub mos_s: AnalysisReportMos,
-    /// MOS analysis using the audio model (fullband).
-    pub mos_a: AnalysisReportMos,
+#[derive(Default, Debug)]
+pub struct AudioTestResults {
+    /// MOS analysis using visqol with the speech model (wideband).
+    pub visqol_mos_speech: AnalysisReportMos,
+    /// MOS analysis using visqol with the audio model (fullband).
+    pub visqol_mos_audio: AnalysisReportMos,
+    /// Averaging visqol audio and speech provides a useful relative metric.
+    /// This will get a value if both visqol speech and audio mos are present.
+    pub visqol_mos_average: AnalysisReportMos,
+    /// MOS analysis using pesq (wideband).
+    pub pesq_mos: AnalysisReportMos,
+    /// MOS analysis using plc.
+    pub plc_mos: AnalysisReportMos,
 }
 
 pub struct TestCase<'a> {
@@ -90,10 +97,6 @@ impl Sound {
         } else {
             format!("{}.wav", self.name)
         }
-    }
-
-    fn analysis_extension(&self) -> &str {
-        "analysis.log"
     }
 
     fn spectrogram_extension(&self) -> &str {
@@ -442,8 +445,8 @@ impl Test {
         &self,
         test_case: &TestCase<'_>,
         test_case_config: &TestCaseConfig,
-    ) -> Result<TestResults> {
-        let mut test_results = TestResults::default();
+    ) -> Result<AudioTestResults> {
+        let mut audio_test_results = AudioTestResults::default();
 
         // Perform conversions of audio data.
         convert_raw_to_wav(
@@ -454,7 +457,7 @@ impl Test {
         )
         .await?;
 
-        if test_case_config.client_a_config.audio.speech_analysis {
+        if test_case_config.client_a_config.audio.requires_speech() {
             convert_wav_to_16khz_mono(
                 &test_case.test_path,
                 &test_case.client_a.output_wav,
@@ -471,7 +474,7 @@ impl Test {
         )
         .await?;
 
-        if test_case_config.client_b_config.audio.speech_analysis {
+        if test_case_config.client_b_config.audio.requires_speech() {
             convert_wav_to_16khz_mono(
                 &test_case.test_path,
                 &test_case.client_b.output_wav,
@@ -480,63 +483,43 @@ impl Test {
             .await?;
         }
 
+        let audio_files = AudioFiles {
+            degraded_path: &test_case.test_path,
+            degraded_file: &test_case.client_b.output_wav,
+            ref_path: &self.set_path,
+            ref_file: &test_case.client_a.sound.wav(false),
+        };
+
+        let speech_files = AudioFiles {
+            degraded_path: &test_case.test_path,
+            degraded_file: &test_case.client_b.output_wav_speech,
+            ref_path: &self.set_path,
+            ref_file: &test_case.client_a.sound.wav(true),
+        };
+
         match test_case_config.client_b_config.audio.analysis_mode {
             AudioAnalysisMode::None => {
                 // Do nothing, no analysis is requested.
             }
             AudioAnalysisMode::Normal => {
-                if test_case_config.client_b_config.audio.speech_analysis {
-                    get_audio_and_analyze(
-                        &test_case.test_path,
-                        &test_case.client_b.output_wav_speech,
-                        &self.set_path,
-                        &test_case.client_a.sound.wav(true),
-                        test_case.client_b.sound.analysis_extension(),
-                        true,
-                        &mut test_results,
-                    )
-                    .await?;
-                }
-                if test_case_config.client_b_config.audio.audio_analysis {
-                    get_audio_and_analyze(
-                        &test_case.test_path,
-                        &test_case.client_b.output_wav,
-                        &self.set_path,
-                        &test_case.client_a.sound.wav(false),
-                        test_case.client_b.sound.analysis_extension(),
-                        false,
-                        &mut test_results,
-                    )
-                    .await?;
-                }
+                get_audio_and_analyze(
+                    &audio_files,
+                    &speech_files,
+                    test_case.client_b.name,
+                    &test_case_config.client_b_config.audio,
+                    &mut audio_test_results,
+                )
+                .await?;
             }
             AudioAnalysisMode::Chopped => {
-                if test_case_config.client_b_config.audio.speech_analysis {
-                    chop_audio_and_analyze(
-                        &test_case.test_path,
-                        &test_case.client_b.output_wav_speech,
-                        &self.set_path,
-                        &test_case.client_a.sound.wav(true),
-                        test_case.client_b.sound.analysis_extension(),
-                        test_case.client_b.name,
-                        true,
-                        &mut test_results,
-                    )
-                    .await?;
-                }
-                if test_case_config.client_b_config.audio.audio_analysis {
-                    chop_audio_and_analyze(
-                        &test_case.test_path,
-                        &test_case.client_b.output_wav,
-                        &self.set_path,
-                        &test_case.client_a.sound.wav(false),
-                        test_case.client_b.sound.analysis_extension(),
-                        test_case.client_b.name,
-                        false,
-                        &mut test_results,
-                    )
-                    .await?;
-                }
+                chop_audio_and_analyze(
+                    &audio_files,
+                    &speech_files,
+                    test_case.client_b.name,
+                    &test_case_config.client_b_config.audio,
+                    &mut audio_test_results,
+                )
+                .await?;
             }
         }
 
@@ -601,7 +584,7 @@ impl Test {
             .await?;
         }
 
-        Ok(test_results)
+        Ok(audio_test_results)
     }
 
     /// Generates reports by parsing/checking artifacts for the test, and returns summary
@@ -611,7 +594,7 @@ impl Test {
         test_case: &TestCase<'_>,
         test_case_config: &TestCaseConfig,
         network_configs: &Vec<NetworkConfigWithOffset>,
-        test_results: TestResults,
+        test_results: AudioTestResults,
     ) -> Result<Report> {
         let report = Report::build_b(test_case, test_case_config, test_results).await?;
 
@@ -663,41 +646,41 @@ impl Test {
             generate_spectrogram(&self.set_path, &wav_name, sound.spectrogram_extension()).await?;
 
             if analyze {
-                analyze_audio(
+                let extension = "visqol_mos_audio.log".to_string();
+
+                analyze_visqol_mos(
                     &self.set_path,
                     &wav_name,
                     &self.set_path,
                     &wav_name,
-                    sound.analysis_extension(),
+                    &extension,
                     false,
                 )
                 .await?;
 
-                let mos = AnalysisReport::parse_audio_analysis(&format!(
+                let mos = AnalysisReport::parse_visqol_mos_results(&format!(
                     "{}/{}.{}",
-                    self.set_path,
-                    wav_name,
-                    sound.analysis_extension()
+                    self.set_path, wav_name, &extension
                 ))
                 .await?;
 
                 sound.reference_mos = mos;
 
-                analyze_audio(
+                let extension = "visqol_mos_speech.log".to_string();
+
+                analyze_visqol_mos(
                     &self.set_path,
                     &wav_name_speech,
                     &self.set_path,
                     &wav_name_speech,
-                    sound.analysis_extension(),
+                    &extension,
                     true,
                 )
                 .await?;
 
-                let mos = AnalysisReport::parse_audio_analysis(&format!(
+                let mos = AnalysisReport::parse_visqol_mos_results(&format!(
                     "{}/{}.{}",
-                    self.set_path,
-                    wav_name_speech,
-                    sound.analysis_extension()
+                    self.set_path, wav_name_speech, &extension
                 ))
                 .await?;
 
