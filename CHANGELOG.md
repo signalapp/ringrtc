@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.37.1
+
+- Update to webrtc 6099b
+  - Apply upstream m120 change to JsepTransportController
+
+- Call Sim: Add PESQ and PLC MOS support
+
 ## v2.37.0
 
 - Update to WebRTC m120
