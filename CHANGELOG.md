@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.38.0
+
+- Update to webrtc 6099c
+  - Accept list of IceServers for Turn configuration
+
+- Desktop: Accept list of IceServers for Turn configuration
+
+- Enable "First Ready" Turn pruning policy
+
 ## v2.37.1
 
 - Update to webrtc 6099b
