@@ -5,7 +5,7 @@
 
 use crate::webrtc;
 use crate::webrtc::peer_connection_factory::{
-    RffiAudioConfig, RffiIceServer, RffiPeerConnectionKind,
+    RffiAudioConfig, RffiIceServers, RffiPeerConnectionKind,
 };
 use crate::webrtc::sim::media::{
     RffiAudioTrack, RffiVideoSource, RffiVideoTrack, FAKE_AUDIO_TRACK, FAKE_VIDEO_SOURCE,
@@ -51,7 +51,7 @@ pub unsafe fn Rust_createPeerConnection(
     _audio_jitter_buffer_max_packets: isize,
     _audio_jitter_buffer_max_target_delay_ms: isize,
     _audio_rtcp_report_interval_ms: isize,
-    _ice_server: RffiIceServer,
+    _ice_servers: RffiIceServers,
     _outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
     _outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
 ) -> webrtc::ptr::OwnedRc<RffiPeerConnection> {

@@ -295,7 +295,10 @@ impl Default for CallConfig {
             relay_password: "test".to_string(),
             force_relay: false,
             // By default, all tests will disable the ANY port allocator setting.
-            field_trials: vec!["RingRTC-AnyAddressPortsKillSwitch/Enabled".to_string()],
+            field_trials: vec![
+                "RingRTC-AnyAddressPortsKillSwitch/Enabled".to_string(),
+                "RingRTC-PruneTurnPorts/Enabled".to_string(),
+            ],
             extra_cli_args: vec![],
             stats_interval_secs: 1,
             stats_initial_offset_secs: 0,

@@ -46,7 +46,7 @@ use crate::{
             AudioEncoderConfig, AudioTrack, VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack,
         },
         peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, SendRates},
-        peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
+        peer_connection_factory::{self as pcf, PeerConnectionFactory},
         peer_connection_observer::{
             IceConnectionState, NetworkRoute, PeerConnectionObserver, PeerConnectionObserverTrait,
         },
@@ -1119,7 +1119,7 @@ impl Client {
                 let audio_jitter_buffer_max_packets = 50;
                 let audio_jitter_buffer_max_target_delay_ms = 500;
                 let audio_rtcp_report_interval_ms = 5000;
-                let ice_server = IceServer::none();
+                let ice_servers = vec![];
                 let peer_connection = peer_connection_factory
                     .create_peer_connection(
                         peer_connection_observer,
@@ -1127,7 +1127,7 @@ impl Client {
                         audio_jitter_buffer_max_packets,
                         audio_jitter_buffer_max_target_delay_ms,
                         audio_rtcp_report_interval_ms,
-                        &ice_server,
+                        &ice_servers,
                         outgoing_audio_track,
                         outgoing_video_track,
                     )

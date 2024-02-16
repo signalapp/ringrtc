@@ -733,33 +733,40 @@ fn cancelGroupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     let call_id = CallId::new(get_id_arg(&mut cx, 0));
-    let ice_server_username = cx.argument::<JsString>(1)?.value(&mut cx);
-    let ice_server_password = cx.argument::<JsString>(2)?.value(&mut cx);
-    let ice_server_hostname = cx.argument::<JsString>(3)?.value(&mut cx);
-    let js_ice_server_urls = cx.argument::<JsArray>(4)?;
-    let hide_ip = cx.argument::<JsBoolean>(5)?.value(&mut cx);
-    let data_mode = cx.argument::<JsNumber>(6)?.value(&mut cx) as i32;
-    let audio_levels_interval_millis = cx.argument::<JsNumber>(7)?.value(&mut cx) as u64;
-
-    let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len(&mut cx) as usize);
-    for i in 0..js_ice_server_urls.len(&mut cx) {
-        let url: String = js_ice_server_urls
-            .get::<JsString, _, _>(&mut cx, i)?
-            .value(&mut cx);
-        ice_server_urls.push(url);
-    }
+    let js_ice_servers = cx.argument::<JsArray>(1)?;
+    let hide_ip = cx.argument::<JsBoolean>(2)?.value(&mut cx);
+    let data_mode = cx.argument::<JsNumber>(3)?.value(&mut cx) as i32;
+    let audio_levels_interval_millis = cx.argument::<JsNumber>(4)?.value(&mut cx) as u64;
 
     info!("proceed(): callId: {}, hideIp: {}", call_id, hide_ip);
-    for ice_server_url in &ice_server_urls {
-        info!("  server: {}", ice_server_url);
-    }
+    let mut ice_servers = Vec::new();
+    for i in 0..js_ice_servers.len(&mut cx) {
+        let obj = js_ice_servers.get::<JsObject, _, _>(&mut cx, i)?;
+        let username = obj
+            .get::<JsString, _, _>(&mut cx, "username")
+            .map_or("".to_string(), |handle| handle.value(&mut cx));
+        let password: String = obj
+            .get::<JsString, _, _>(&mut cx, "password")
+            .map_or("".to_string(), |handle| handle.value(&mut cx));
+        let hostname = obj
+            .get::<JsString, _, _>(&mut cx, "hostname")
+            .map_or("".to_string(), |handle| handle.value(&mut cx));
+        let js_ice_server_urls = obj
+            .get_opt::<JsArray, _, _>(&mut cx, "urls")?
+            .expect("ice urls");
 
-    let ice_server = IceServer::new(
-        ice_server_username,
-        ice_server_password,
-        ice_server_hostname,
-        ice_server_urls,
-    );
+        let mut ice_server_urls = Vec::with_capacity(js_ice_server_urls.len(&mut cx) as usize);
+        for i in 0..js_ice_server_urls.len(&mut cx) {
+            let url: String = js_ice_server_urls
+                .get::<JsString, _, _>(&mut cx, i)?
+                .value(&mut cx);
+            info!("  server: {}", url);
+            ice_server_urls.push(url);
+        }
+
+        let ice_server = IceServer::new(username, password, hostname, ice_server_urls);
+        ice_servers.push(ice_server);
+    }
 
     let audio_levels_interval = if audio_levels_interval_millis == 0 {
         None
@@ -770,7 +777,7 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     with_call_endpoint(&mut cx, |endpoint| {
         let call_context = NativeCallContext::new(
             hide_ip,
-            ice_server,
+            ice_servers,
             endpoint.outgoing_audio_track.clone(),
             endpoint.outgoing_video_track.clone(),
             endpoint.incoming_video_sink.clone(),

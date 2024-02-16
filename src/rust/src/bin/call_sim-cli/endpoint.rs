@@ -103,7 +103,7 @@ impl CallEndpoint {
         let peer_id = PeerId::from(peer_id);
 
         // To send across threads
-        let ice_server = ice_server.clone();
+        let ice_servers = vec![ice_server.clone()];
 
         Ok(Self::from_actor(
             peer_id.clone(),
@@ -158,7 +158,7 @@ impl CallEndpoint {
                         pcf.create_outgoing_video_track(&outgoing_video_source)?;
                     let call_context = NativeCallContext::new(
                         hide_ip,
-                        ice_server,
+                        ice_servers,
                         outgoing_audio_track,
                         outgoing_video_track,
                         incoming_video_sink.unwrap_or_else(|| {

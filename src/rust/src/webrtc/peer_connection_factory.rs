@@ -105,6 +105,12 @@ impl IceServer {
     }
 }
 
+#[repr(C)]
+pub struct RffiIceServers {
+    servers: webrtc::ptr::Borrowed<RffiIceServer>,
+    servers_size: usize,
+}
+
 /// Describes an audio input or output device.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AudioDevice {
@@ -272,7 +278,7 @@ impl PeerConnectionFactory {
         audio_jitter_buffer_max_packets: isize,
         audio_jitter_buffer_max_target_delay_ms: isize,
         audio_rtcp_report_interval_ms: isize,
-        ice_servers: &IceServer,
+        ice_servers: &[IceServer],
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
     ) -> Result<PeerConnection> {
@@ -288,6 +294,11 @@ impl PeerConnectionFactory {
         // we do this by passing a webrtc::ptr::Unique<RffiPeerConnectionObserver> to
         // the Rust-level PeerConnection and let it own it.
         let pc_observer_rffi = pc_observer.into_rffi();
+        let servers: Vec<RffiIceServer> = ice_servers.iter().map(|s| s.rffi()).collect();
+        let rffi_ice_servers = RffiIceServers {
+            servers: webrtc::ptr::Borrowed::from_ptr(servers.as_ptr()),
+            servers_size: servers.len(),
+        };
 
         let rffi = webrtc::Arc::from_owned(unsafe {
             pcf::Rust_createPeerConnection(
@@ -297,7 +308,7 @@ impl PeerConnectionFactory {
                 audio_jitter_buffer_max_packets,
                 audio_jitter_buffer_max_target_delay_ms,
                 audio_rtcp_report_interval_ms,
-                ice_servers.rffi(),
+                rffi_ice_servers,
                 outgoing_audio_track.rffi().as_borrowed(),
                 outgoing_video_track
                     .map_or_else(webrtc::ptr::BorrowedRc::null, |outgoing_video_track| {

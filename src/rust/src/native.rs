@@ -35,7 +35,7 @@ use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserv
 #[derive(Clone)]
 pub struct NativeCallContext {
     hide_ip: bool,
-    ice_server: IceServer,
+    ice_servers: Vec<IceServer>,
     outgoing_audio_track: AudioTrack,
     outgoing_video_track: VideoTrack,
     incoming_video_sink: Box<dyn VideoSink>,
@@ -44,14 +44,14 @@ pub struct NativeCallContext {
 impl NativeCallContext {
     pub fn new(
         hide_ip: bool,
-        ice_server: IceServer,
+        ice_servers: Vec<IceServer>,
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: VideoTrack,
         incoming_video_sink: Box<dyn VideoSink>,
     ) -> Self {
         Self {
             hide_ip,
-            ice_server,
+            ice_servers,
             outgoing_audio_track,
             outgoing_video_track,
             incoming_video_sink,
@@ -455,7 +455,7 @@ impl Platform for NativePlatform {
                 .call_config()
                 .audio_jitter_buffer_max_target_delay_ms,
             connection.call_config().audio_rtcp_report_interval_ms,
-            &context.ice_server,
+            &context.ice_servers,
             context.outgoing_audio_track.clone(),
             Some(context.outgoing_video_track.clone()),
         )?;

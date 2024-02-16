@@ -45,6 +45,7 @@ class NativeCallManager {
       {
         'RingRTC-AnyAddressPortsKillSwitch': 'Enabled',
         'WebRTC-Audio-OpusSetSignalVoiceWithDtx': 'Enabled',
+        'RingRTC-PruneTurnPorts': 'Enabled',
       },
       config.field_trials
     );
@@ -516,10 +517,7 @@ export class RingRTCType {
     sillyDeadlockProtection(() => {
       this.callManager.proceed(
         callId,
-        settings.iceServer.username || '',
-        settings.iceServer.password || '',
-        settings.iceServer.hostname || '',
-        settings.iceServer.urls,
+        settings.iceServers,
         settings.hideIp,
         settings.dataMode,
         settings.audioLevelsIntervalMillis || 0
@@ -1755,7 +1753,7 @@ export class RingRTCType {
 }
 
 export interface CallSettings {
-  iceServer: IceServer;
+  iceServers: Array<IceServer>;
   hideIp: boolean;
   dataMode: DataMode;
   audioLevelsIntervalMillis?: number;
@@ -1764,6 +1762,7 @@ export interface CallSettings {
 interface IceServer {
   username?: string;
   password?: string;
+  /** Provide hostname when urls contain IP addresses instead of hostname */
   hostname?: string;
   urls: Array<string>;
 }
@@ -2710,10 +2709,7 @@ export interface CallManager {
   ): CallId;
   proceed(
     callId: CallId,
-    iceServerUsername: string,
-    iceServerPassword: string,
-    iceServerHostname: string,
-    iceServerUrls: Array<string>,
+    iceServers: Array<IceServer>,
     hideIp: boolean,
     dataMode: DataMode,
     audioLevelsIntervalMillis: number

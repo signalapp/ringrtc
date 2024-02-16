@@ -103,6 +103,7 @@ public class CallManager {
 
       Map<String, String> fieldTrialsWithDefaults = new HashMap<>();
       fieldTrialsWithDefaults.put("WebRTC-Audio-OpusSetSignalVoiceWithDtx", "Enabled");
+      fieldTrialsWithDefaults.put("RingRTC-PruneTurnPorts", "Enabled");
       fieldTrialsWithDefaults.putAll(fieldTrials);
 
       String fieldTrialsString = buildFieldTrialsString(fieldTrialsWithDefaults);
