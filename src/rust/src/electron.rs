@@ -743,13 +743,13 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
     for i in 0..js_ice_servers.len(&mut cx) {
         let obj = js_ice_servers.get::<JsObject, _, _>(&mut cx, i)?;
         let username = obj
-            .get::<JsString, _, _>(&mut cx, "username")
+            .get_opt::<JsString, _, _>(&mut cx, "username")?
             .map_or("".to_string(), |handle| handle.value(&mut cx));
         let password: String = obj
-            .get::<JsString, _, _>(&mut cx, "password")
+            .get_opt::<JsString, _, _>(&mut cx, "password")?
             .map_or("".to_string(), |handle| handle.value(&mut cx));
         let hostname = obj
-            .get::<JsString, _, _>(&mut cx, "hostname")
+            .get_opt::<JsString, _, _>(&mut cx, "hostname")?
             .map_or("".to_string(), |handle| handle.value(&mut cx));
         let js_ice_server_urls = obj
             .get_opt::<JsArray, _, _>(&mut cx, "urls")?

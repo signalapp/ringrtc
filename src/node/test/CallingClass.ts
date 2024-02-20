@@ -204,6 +204,9 @@ export class CallingClass {
           password: 'pass',
           urls: ['stun:123.123.123.1'],
         },
+        {
+          urls: ['stun:127.0.0.1'],
+        },
       ],
       hideIp: false,
       dataMode: DataMode.Normal,
