@@ -68,7 +68,7 @@ uuid = { version = "1.6.1", optional = true }
 zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.37.0" }
 
 # Optional, needed by the "electron" feature
-neon = { version = "0.10.1", optional = true, default-features = false, features = ["napi-6", "channel-api", "try-catch-api"] }
+neon = { version = "1.0.0", optional = true, default-features = false, features = ["napi-6"] }
 
 # Optional, needed to check Android-specific code when not targeting Android
 jni = { version = "0.21.1", optional = true, default-features = false }

@@ -1399,13 +1399,12 @@ export class RingRTCType {
   // Called by Rust
   groupCallRingUpdate(
     groupId: GroupId,
-    ringIdString: string,
+    ringId: bigint,
     sender: GroupCallUserId,
     state: RingUpdate
   ): void {
     sillyDeadlockProtection(() => {
       if (this.handleGroupCallRingUpdate) {
-        const ringId = BigInt(ringIdString);
         this.handleGroupCallRingUpdate(groupId, ringId, sender, state);
       } else {
         this.logError('RingRTC.handleGroupCallRingUpdate is not set!');

@@ -4,6 +4,7 @@
 //
 
 use lazy_static::lazy_static;
+use neon::types::JsBigInt;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -493,7 +494,7 @@ fn u64_to_js_num(val: u64) -> f64 {
     val as u32 as i32 as f64
 }
 
-fn get_id_arg(cx: &mut FunctionContext, i: i32) -> u64 {
+fn get_id_arg(cx: &mut FunctionContext, i: usize) -> u64 {
     let obj = cx.argument::<JsObject>(i).expect("Get id argument");
     let high = js_num_to_u64(
         obj.get::<JsNumber, _, _>(cx, "high")
@@ -540,7 +541,7 @@ fn to_js_peek_info<'a>(
         max_devices,
     } = &peek_info;
 
-    let js_devices = JsArray::new(cx, devices.len() as u32);
+    let js_devices = JsArray::new(cx, devices.len());
     for (i, device) in devices.iter().enumerate() {
         let js_device = cx.empty_object();
         let js_demux_id = cx.number(device.demux_id);
@@ -571,7 +572,7 @@ fn to_js_peek_info<'a>(
         cx.number(peek_info.devices.len() as u32).upcast();
 
     let pending_users = peek_info.unique_pending_users();
-    let js_pending_users = JsArray::new(cx, pending_users.len() as u32);
+    let js_pending_users = JsArray::new(cx, pending_users.len());
     for (i, user_id) in pending_users.iter().enumerate() {
         let js_user_id = to_js_buffer(cx, user_id);
         js_pending_users.set(cx, i as u32, js_user_id)?;
@@ -602,7 +603,8 @@ static CALL_ENDPOINT_PROPERTY_KEY: &str = "__call_endpoint_addr";
 
 fn with_call_endpoint<T>(cx: &mut FunctionContext, body: impl FnOnce(&mut CallEndpoint) -> T) -> T {
     let endpoint = cx
-        .this()
+        .this::<JsObject>()
+        .expect("this is an object")
         .get::<JsBox<RefCell<CallEndpoint>>, _, _>(cx, CALL_ENDPOINT_PROPERTY_KEY)
         .expect("has endpoint");
     let mut endpoint = endpoint.borrow_mut();
@@ -1980,7 +1982,7 @@ fn getAudioInputs(mut cx: FunctionContext) -> JsResult<JsValue> {
     })
     .unwrap_or_else(|_| Vec::<AudioDevice>::new());
 
-    let js_devices = JsArray::new(&mut cx, devices.len() as u32);
+    let js_devices = JsArray::new(&mut cx, devices.len());
     for (i, device) in devices.iter().enumerate() {
         let js_device = JsObject::new(&mut cx);
         let name = cx.string(device.name.clone());
@@ -2020,7 +2022,7 @@ fn getAudioOutputs(mut cx: FunctionContext) -> JsResult<JsValue> {
     })
     .unwrap_or_else(|_| Vec::<AudioDevice>::new());
 
-    let js_devices = JsArray::new(&mut cx, devices.len() as u32);
+    let js_devices = JsArray::new(&mut cx, devices.len());
     for (i, device) in devices.iter().enumerate() {
         let js_device = JsObject::new(&mut cx);
         let name = cx.string(device.name.clone());
@@ -2055,7 +2057,7 @@ fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let this = cx.this();
+    let this = cx.this::<JsObject>()?;
     let observer = this.get::<JsObject, _, _>(&mut cx, "observer")?;
 
     {
@@ -2108,7 +2110,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         )
                     }
                     signaling::Message::Ice(ice) => {
-                        let js_candidates = JsArray::new(&mut cx, ice.candidates.len() as u32);
+                        let js_candidates = JsArray::new(&mut cx, ice.candidates.len());
                         for (i, candidate) in ice.candidates.iter().enumerate() {
                             let opaque: neon::handle::Handle<JsValue> = {
                                 let mut js_opaque = cx.buffer(candidate.opaque.len())?;
@@ -2475,8 +2477,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             )) => {
                 let method_name = "handleRemoteDevicesChanged";
 
-                let js_remote_device_states =
-                    JsArray::new(&mut cx, remote_device_states.len() as u32);
+                let js_remote_device_states = JsArray::new(&mut cx, remote_device_states.len());
                 for (i, remote_device_state) in remote_device_states.iter().enumerate() {
                     let demux_id = cx.number(remote_device_state.demux_id);
                     let user_id = to_js_buffer(&mut cx, &remote_device_state.user_id);
@@ -2608,7 +2609,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
                 let args = [
                     to_js_buffer(&mut cx, &group_id).upcast::<JsValue>(),
-                    cx.string(ring_id.to_string()).upcast(),
+                    JsBigInt::from_i64(&mut cx, ring_id.into()).upcast(),
                     to_js_buffer(&mut cx, &sender).upcast(),
                     cx.number(update as i32).upcast(),
                 ];
@@ -2621,7 +2622,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 captured_level,
                 received_levels,
             )) => {
-                let js_received_levels = JsArray::new(&mut cx, received_levels.len() as u32);
+                let js_received_levels = JsArray::new(&mut cx, received_levels.len());
                 for (i, received_level) in received_levels.iter().enumerate() {
                     let js_received_level = JsObject::new(&mut cx);
                     let js_demux_id = cx.number(received_level.demux_id);
@@ -2659,7 +2660,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             Event::GroupUpdate(GroupUpdate::Reactions(client_id, reactions)) => {
                 let method_name = "handleReactions";
 
-                let js_reactions = JsArray::new(&mut cx, reactions.len() as u32);
+                let js_reactions = JsArray::new(&mut cx, reactions.len());
                 for (i, reaction) in reactions.into_iter().enumerate() {
                     let js_reaction = JsObject::new(&mut cx);
                     let js_demux_id = cx.number(reaction.demux_id);
@@ -2676,7 +2677,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             }
 
             Event::GroupUpdate(GroupUpdate::RaisedHands(client_id, raised_hands)) => {
-                let js_raised_hands = JsArray::new(&mut cx, raised_hands.len() as u32);
+                let js_raised_hands = JsArray::new(&mut cx, raised_hands.len());
                 for (i, raised_hand) in raised_hands.into_iter().enumerate() {
                     let js_demux_id = cx.number(raised_hand);
                     js_raised_hands.set(&mut cx, i as u32, js_demux_id)?;
