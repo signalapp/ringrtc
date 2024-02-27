@@ -9,8 +9,8 @@
 use std::{
     collections::{HashMap, HashSet},
     iter::FromIterator,
-    net::IpAddr,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -151,6 +151,31 @@ struct SerializedJoinResponse {
     call_creator: String,
     #[serde(rename = "conferenceId")]
     era_id: String,
+    #[serde(rename = "clientStatus")]
+    client_status: Option<String>,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum ClientStatus {
+    Active,
+    Pending,
+    Blocked,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseClientStatusError;
+
+impl std::str::FromStr for ClientStatus {
+    type Err = ParseClientStatusError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ACTIVE" => Ok(ClientStatus::Active),
+            "PENDING" => Ok(ClientStatus::Pending),
+            "BLOCKED" => Ok(ClientStatus::Blocked),
+            _ => Err(ParseClientStatusError),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -163,6 +188,7 @@ pub struct JoinResponse {
     pub server_dhe_pub_key: [u8; 32],
     pub call_creator: Option<UserId>,
     pub era_id: String,
+    pub client_status: ClientStatus,
 }
 
 impl JoinResponse {
@@ -188,6 +214,10 @@ impl JoinResponse {
             server_dhe_pub_key: deserialized.server_dhe_pub_key,
             call_creator: member_resolver.resolve(&deserialized.call_creator),
             era_id: deserialized.era_id,
+            client_status: deserialized
+                .client_status
+                .and_then(|cs| ClientStatus::from_str(&cs).ok())
+                .unwrap_or(ClientStatus::Pending),
         }
     }
 }

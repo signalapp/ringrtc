@@ -23,7 +23,8 @@ use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 use crate::{
-    common::CallId, core::util::uuid_to_string, webrtc::sdp_observer::create_csd_observer,
+    common::CallId, core::util::uuid_to_string, lite::sfu::ClientStatus,
+    webrtc::sdp_observer::create_csd_observer,
 };
 use crate::{
     common::{
@@ -313,18 +314,18 @@ pub enum ConnectionState {
 
 // The join states of a device joining a group call.
 // Has a state diagram like this:
-//      |
-//      | start()
-//      V
-//  NotJoined
-//      |            ^
-//      | join()     |
-//      V            |
-//   Joining      -->|  leave() or
-//      |            |  failed to join
-//      | joined     |
-//      V            |
-//   Joined       -->|
+//        |
+//        | start()
+//        V
+//    NotJoined
+//        |             ^
+//        | join()      |
+//        V             |
+//     Joining       -->|  leave() or
+//        |             |  failed to join
+//        | response    |
+//        V             |
+// Joined || Pending -->|
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JoinState {
     /// Join() has not yet been called
@@ -340,11 +341,13 @@ pub enum JoinState {
 
     /// Join() has been called, a response from the SFU has been received,
     /// and a DemuxId has been assigned...
-    /// but we haven't appeared in the list of active participants.
+    /// The SFU notified us our join is pending, and we are waiting to
+    /// appear in the list of active participants.
     Pending(DemuxId),
 
     /// Join() has been called, a response from the SFU has been received,
-    /// a DemuxId has been assigned, and we've appeared in the list of active participants.
+    /// a DemuxId has been assigned. Either the SFU notified us we joined
+    /// or we've appeared in the list of active participants.
     Joined(DemuxId),
 }
 
@@ -476,6 +479,7 @@ pub struct Joined {
     pub hkdf_extra_info: Vec<u8>,
     pub creator: Option<UserId>,
     pub era_id: String,
+    pub join_state: JoinState,
 }
 
 /// Communicates with the SFU using HTTP.
@@ -554,6 +558,15 @@ impl HttpSfuClient {
                         creator: join_response.call_creator,
                         era_id: join_response.era_id,
                         hkdf_extra_info,
+                        join_state: match join_response.client_status {
+                            ClientStatus::Active => {
+                                JoinState::Joined(join_response.client_demux_id)
+                            }
+                            // swallow the blocked status until we flesh out the UX
+                            ClientStatus::Pending | ClientStatus::Blocked => {
+                                JoinState::Pending(join_response.client_demux_id)
+                            }
+                        },
                     }),
                     Err(http_status) if http_status == http::ResponseStatus::REQUEST_FAILED => {
                         Err(RingRtcError::SfuClientRequestFailed.into())
@@ -1918,16 +1931,6 @@ impl Client {
             });
 
             state.data_mode = data_mode;
-            match state.join_state {
-                JoinState::NotJoined(_) | JoinState::Joining | JoinState::Pending(_) => {
-                    // The audio encoders will be configured with data_mode upon joining.
-                }
-                JoinState::Joined(_) => {
-                    state
-                        .peer_connection
-                        .configure_audio_encoders(&AudioEncoderConfig::default());
-                }
-            };
 
             if !state.on_demand_video_request_sent_since_last_heartbeat {
                 Self::send_video_requests_to_sfu(state);
@@ -2331,6 +2334,7 @@ impl Client {
                 hkdf_extra_info,
                 creator,
                 era_id,
+                join_state,
             }) = joined
             {
                 match state.connection_state {
@@ -2385,7 +2389,7 @@ impl Client {
                         // The call to set_peek_result_inner needs the demux ID to be set in the
                         // join state. But make sure to fire observer.handle_join_state_changed
                         // after set_peek_result_inner so that state.remote_devices are filled in.
-                        state.join_state = JoinState::Pending(local_demux_id);
+                        state.join_state = join_state;
                         if let Some(peek_info) = &state.last_peek_info {
                             // TODO: Do the same processing without making it look like we just
                             // got an update from the server even though the update actually came
@@ -2404,14 +2408,22 @@ impl Client {
                                 );
                             }
                         }
+
                         // Just in case, check if the cached peek info happened to have the local
                         // device in it already (possible if the peek raced with the join request).
                         // In that case, set_peek_info_inner will have notified the observer about
                         // the join state change already.
-                        if matches!(state.join_state, JoinState::Pending(_)) {
-                            state
-                                .observer
-                                .handle_join_state_changed(state.client_id, state.join_state);
+                        state
+                            .observer
+                            .handle_join_state_changed(state.client_id, state.join_state);
+
+                        // Check state.join_state to make sure we didn't process an `end()` since receiving the response.
+                        // We need to check the response's `join_state` since `peek_result_inner` can transition
+                        // the call to joined and have already called `on_client_joined`
+                        if matches!(join_state, JoinState::Joined(_))
+                            && matches!(state.join_state, JoinState::Joined(_))
+                        {
+                            Self::on_client_joined(state);
                         }
 
                         if creator.is_some() {
@@ -2449,6 +2461,15 @@ impl Client {
                 Self::end(state, EndReason::SfuClientFailedToJoin);
             }
         });
+    }
+
+    // Called once per call, when the client transistions to JoinState::Joined.
+    // Currently, this occurs via on_sfu_client_joined (Joining -> Joined) or
+    // or via peek_result_inner (Joining -> Pending -> Joined)
+    fn on_client_joined(state: &mut State) {
+        state
+            .peer_connection
+            .configure_audio_encoders(&AudioEncoderConfig::default());
     }
 
     pub fn on_signaling_message_received(
@@ -2759,9 +2780,7 @@ impl Client {
                 local_device_is_participant && matches!(state.join_state, JoinState::Pending(_));
             if newly_joined {
                 Self::set_join_state_and_notify_observer(state, JoinState::Joined(local_demux_id));
-                state
-                    .peer_connection
-                    .configure_audio_encoders(&AudioEncoderConfig::default());
+                Self::on_client_joined(state);
             }
 
             // If someone was added, we must advance the send media key
@@ -4264,6 +4283,7 @@ mod tests {
         call_creator: Option<UserId>,
         request_count: Arc<AtomicU64>,
         era_id: String,
+        response_join_state: Arc<Mutex<JoinState>>,
     }
 
     impl FakeSfuClient {
@@ -4279,7 +4299,17 @@ mod tests {
                 call_creator,
                 request_count: Arc::new(AtomicU64::new(0)),
                 era_id: "1111111111111111".to_string(),
+                response_join_state: Arc::new(Mutex::new(JoinState::Joined(local_demux_id))),
             }
+        }
+
+        fn get_response_join_state(&self) -> JoinState {
+            *self.response_join_state.lock().unwrap()
+        }
+
+        fn set_response_join_state(&mut self, join_state: JoinState) {
+            let mut data = self.response_join_state.lock().unwrap();
+            *data = join_state;
         }
     }
 
@@ -4298,6 +4328,7 @@ mod tests {
                 hkdf_extra_info: b"hkdf_extra_info".to_vec(),
                 creator: self.call_creator.clone(),
                 era_id: self.era_id.clone(),
+                join_state: self.get_response_join_state(),
             }));
         }
         fn peek(&mut self, _peek_result_callback: PeekResultCallback) {
@@ -6555,8 +6586,13 @@ mod tests {
 
     #[test]
     fn removal_before_approval() {
-        let client1 = TestClient::new(vec![1], 1);
+        let client1_demux_id = 1;
+        let mut client1 = TestClient::new(vec![1], client1_demux_id);
         let client2 = TestClient::new(vec![2], 2);
+        client1
+            .sfu_client
+            .set_response_join_state(JoinState::Pending(client1_demux_id));
+
         client1.client.connect();
         client1.client.join();
         client1.set_remotes_and_wait_until_applied(&[&client2]);
