@@ -17,7 +17,7 @@ use base64::engine::general_purpose::STANDARD as base64;
 use base64::Engine;
 use rand::SeedableRng;
 use ringrtc::lite::call_links::{
-    CallLinkRestrictions, CallLinkRootKey, CallLinkState, CallLinkUpdateRequest,
+    CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkUpdateRequest,
 };
 use ringrtc::lite::http::{self, Client};
 use uuid::Uuid;
@@ -148,7 +148,7 @@ fn make_testing_request(
     )
 }
 
-fn show_result(result: Result<CallLinkState, http::ResponseStatus>) {
+fn show_result<T: std::fmt::Debug>(result: Result<T, http::ResponseStatus>) {
     match result {
         Ok(state) => println!("{state:#?}"),
         Err(status) => println!("failed: {status}"),
@@ -255,6 +255,24 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     url,
                     root_key,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
+                    Box::new(show_result),
+                );
+            }
+            ["delete", id] => {
+                let root_key = root_key_from_id(id);
+                let auth_credential_presentation = issue_and_present_auth_credential(
+                    &server_zkparams,
+                    &public_zkparams,
+                    &root_key,
+                );
+                ringrtc::lite::call_links::delete_call_link(
+                    &http_client,
+                    url,
+                    root_key,
+                    &bincode::serialize(&auth_credential_presentation).unwrap(),
+                    &CallLinkDeleteRequest {
+                        admin_passkey: ADMIN_PASSKEY,
+                    },
                     Box::new(show_result),
                 );
             }

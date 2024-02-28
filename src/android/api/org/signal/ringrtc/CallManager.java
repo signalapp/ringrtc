@@ -73,6 +73,9 @@ public class CallManager {
   @NonNull
   private Requests<HttpResult<CallLinkState>> callLinkRequests;
 
+  @NonNull
+  private Requests<HttpResult<Boolean>>       emptyRequests;
+
   @Nullable
   private PeerConnectionFactory               groupFactory;
 
@@ -288,6 +291,7 @@ public class CallManager {
     this.groupCallByClientId = new LongSparseArray<>();
     this.peekRequests        = new Requests<>();
     this.callLinkRequests    = new Requests<>();
+    this.emptyRequests       = new Requests<>();
   }
 
   @Nullable
@@ -1099,12 +1103,12 @@ public class CallManager {
 
   /**
    *
-   * Asynchronous request to revoke or un-revoke a call link.
+   * Asynchronous request to delete a call link.
    *
    * Possible failure codes include:
    * <ul>
-   *   <li>401: the room does not exist (and this is the wrong API to create a new room)
    *   <li>403: the admin passkey is incorrect
+   *   <li>409: there is an ongoing call using the call link
    * </ul>
    *
    * This request is idempotent; if it fails due to a network issue, it is safe to retry.
@@ -1113,26 +1117,24 @@ public class CallManager {
    * @param authCredentialPresentation a serialized CallLinkAuthCredentialPresentation
    * @param linkRootKey                the root key for the call link
    * @param adminPasskey               the passkey specified when the link was created
-   * @param revoked                    whether the link should now be revoked
-   * @param handler                    a handler function which is invoked with the room's updated state, or an error status code
+   * @param handler                    a handler function which is invoked with a trash boolean, or an error status code
    *
    * @throws CallException for native code failures
    *
    */
-  public void updateCallLinkRevoked(
+  public void deleteCallLink(
     @NonNull String                                     sfuUrl,
     @NonNull byte[]                                     authCredentialPresentation,
     @NonNull CallLinkRootKey                            linkRootKey,
     @NonNull byte[]                                     adminPasskey,
-             boolean                                    revoked,
-    @NonNull ResponseHandler<HttpResult<CallLinkState>> handler)
+    @NonNull ResponseHandler<HttpResult<Boolean>>       handler)
     throws CallException
   {
     checkCallManagerExists();
-    Log.i(TAG, "updateCallLinkRevoked():");
+    Log.i(TAG, "deleteCallLink():");
 
-    long requestId = this.callLinkRequests.add(handler);
-    ringrtcUpdateCallLink(nativeCallManager, sfuUrl, authCredentialPresentation, linkRootKey.getKeyBytes(), adminPasskey, null, -1, revoked ? 1 : 0, requestId);
+    long requestId = this.emptyRequests.add(handler);
+    ringrtcDeleteCallLink(nativeCallManager, sfuUrl, authCredentialPresentation, linkRootKey.getKeyBytes(), adminPasskey, requestId);
   }
 
   /**
@@ -1593,6 +1595,14 @@ public class CallManager {
   private void handleCallLinkResponse(long requestId, HttpResult<CallLinkState> response) {
     if (!this.callLinkRequests.resolve(requestId, response)) {
       Log.w(TAG, "Invalid requestId for handleCallLinkResponse: " + requestId);
+    }
+  }
+
+  // HttpResult's success value cannot be null, so we use a Boolean. The value of the boolean is ignored
+  @CalledByNative
+  private void handleEmptyResponse(long requestId, HttpResult<Boolean> response) {
+    if (!this.emptyRequests.resolve(requestId, response)) {
+      Log.w(TAG, "Invalid requestId for handleEmptyResponse: " + requestId);
     }
   }
 
@@ -2444,6 +2454,15 @@ public class CallManager {
                                String newName,
                                int    newRestrictions,
                                int    newRevoked,
+                               long   requestId)
+    throws CallException;
+  
+  private native
+    void ringrtcDeleteCallLink(long   nativeCallManager,
+                               String sfuUrl,
+                               byte[] authCredentialPresentation,
+                               byte[] rootKeyBytes,
+                               byte[] adminPasskey,
                                long   requestId)
     throws CallException;
 

@@ -159,6 +159,7 @@ public class SFUClient {
     private let httpClient: HTTPClient
     private let peekRequests: Requests<PeekResponse> = Requests()
     private let callLinkRequests: Requests<SFUResult<CallLinkState>> = Requests()
+    private let emptyRequests: Requests<SFUResult<()>> = Requests()
 
     public init(httpClient: HTTPClient) {
         self.httpClient = httpClient
@@ -215,6 +216,13 @@ public class SFUClient {
         let resolved = self.callLinkRequests.resolve(id: requestId, response: response)
         if !resolved {
             Logger.warn("Invalid requestId for handleCallLinkResponse: \(requestId)")
+        }
+    }
+
+    func handleEmptyResponse(requestId: UInt32, response: SFUResult<()>) {
+        let resolved = self.emptyRequests.resolve(id: requestId, response: response)
+        if !resolved {
+            Logger.warn("Invalid requestId for handleEmptyResponse: \(requestId)")
         }
     }
 
@@ -359,11 +367,11 @@ public class SFUClient {
         return seal
     }
 
-    /// Asynchronous request to revoke or un-revoke a call link.
+    /// Asynchronous request to delete a call link.
     ///
     /// Possible failure codes include:
-    /// - 401: the room does not exist (and this is the wrong API to create a new room)
     /// - 403: the admin passkey is incorrect
+    /// - 409: the room has an ongoing call.
     ///
     /// This request is idempotent; if it fails due to a network issue, it is safe to retry.
     ///
@@ -371,17 +379,16 @@ public class SFUClient {
     /// - Parameter authCredentialPresentation: a serialized CallLinkAuthCredentialPresentation
     /// - Parameter linkRootKey: the root key for the call link
     /// - Parameter adminPasskey: the passkey specified when the link was created
-    /// - Parameter revoked: whether the link should now be revoked
-    public func updateCallLinkRevocation(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, revoked: Bool) -> Guarantee<SFUResult<CallLinkState>> {
+    public func deleteCallLink(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data) -> Guarantee<SFUResult<()>> {
         AssertIsOnMainThread()
-        Logger.debug("updateCallLinkRevocation")
+        Logger.debug("deleteCallLink")
 
-        let (requestId, seal) = self.callLinkRequests.add()
+        let (requestId, seal) = self.emptyRequests.add()
         let delegateWrapper = SFUDelegateWrapper(self)
         authCredentialPresentation.withRtcBytes { createCredentialPresentation in
             linkRootKey.bytes.withRtcBytes { linkRootKey in
                 adminPasskey.withRtcBytes { adminPasskey in
-                    rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, nil, -1, revoked ? 1 : 0, delegateWrapper.asRtc())
+                    rtc_sfu_deleteCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, delegateWrapper.asEmptyRtc())
                 }
             }
         }
@@ -480,6 +487,45 @@ private class SFUDelegateWrapper {
                         return
                     }
                     delegate.handleCallLinkResponse(requestId: requestId, response: result)
+                }
+            }
+        )
+    }
+
+    func asEmptyRtc() -> rtc_sfu_EmptyDelegate {
+        return rtc_sfu_EmptyDelegate(
+            retained: self.asRetainedPtr(),
+            release: { (retained: UnsafeMutableRawPointer?) in
+                guard let retained = retained else {
+                    return
+                }
+
+                _ = SFUDelegateWrapper.from(retained: retained)
+            },
+            handle_response: { (unretained: UnsafeRawPointer?, requestId: UInt32, response: rtc_sfu_Response_bool) in
+                guard let unretained = unretained else {
+                    return
+                }
+
+                let wrapper = SFUDelegateWrapper.from(unretained: unretained)
+                let result: SFUResult<()>
+
+                if let errorStatusCode = response.error_status_code.asUInt16() {
+                    result = .failure(errorStatusCode)
+                } else {
+                    result = .success(())
+                }
+
+                Logger.debug("SFUDelegateWrapper.handleEmptyResponse")
+
+                DispatchQueue.main.async {
+                    Logger.debug("SFUDelegateWrapper.handleEmptyResponse - main.async")
+
+                    guard let delegate = wrapper.delegate else {
+                        // Response came back after SFUClient was deleted
+                        return
+                    }
+                    delegate.handleEmptyResponse(requestId: requestId, response: result)
                 }
             }
         )

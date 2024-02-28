@@ -10,6 +10,7 @@ final class CallLinkTests: XCTestCase {
     private static let EXAMPLE_KEY = try! CallLinkRootKey("bcdf-ghkm-npqr-stxz-bcdf-ghkm-npqr-stxz")
     private static let EXPIRATION_EPOCH_SECONDS: TimeInterval = 4133980800 // 2101-01-01
     private static let EXAMPLE_STATE_JSON = #"{"restrictions": "none","name":"","revoked":false,"expiration":\#(UInt64(EXPIRATION_EPOCH_SECONDS))}"#
+    private static let EXAMPLE_EMPTY_JSON = #"{}"#
 
     func testKeyAccessors() throws {
         let anotherKey = CallLinkRootKey.generate()
@@ -227,13 +228,13 @@ final class CallLinkTests: XCTestCase {
     }
 
 
-    func testUpdateRevocationSuccess() throws {
+    func testDeleteCallLinkSuccess() throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
         let sfu = SFUClient(httpClient: httpClient)
 
         let callbackCompleted = expectation(description: "callbackCompleted")
-        sfu.updateCallLinkRevocation(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: CallLinkRootKey.generateAdminPasskey(), revoked: true)
+        sfu.deleteCallLink(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: CallLinkRootKey.generateAdminPasskey())
             .done { result in
                 switch result {
                 case .success(_):
@@ -247,9 +248,9 @@ final class CallLinkTests: XCTestCase {
 
         wait(for: [delegate.sentHttpRequestExpectation], timeout: 1.0)
         XCTAssert(try XCTUnwrap(delegate.sentHttpRequestUrl).starts(with: "sfu.example"))
-        XCTAssertEqual(delegate.sentHttpRequestMethod, .put)
+        XCTAssertEqual(delegate.sentHttpRequestMethod, .delete)
         let requestId = try XCTUnwrap(delegate.sentHttpRequestId)
-        httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 200, body: Self.EXAMPLE_STATE_JSON.data(using: .utf8)))
+        httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 200, body: Self.EXAMPLE_EMPTY_JSON.data(using: .utf8)))
         waitForExpectations(timeout: 1.0)
     }
 

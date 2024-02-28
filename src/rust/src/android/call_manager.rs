@@ -29,7 +29,8 @@ use crate::core::util::{ptr_as_box, ptr_as_mut};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
 use crate::lite::call_links::{
-    self, CallLinkMemberResolver, CallLinkRestrictions, CallLinkUpdateRequest,
+    self, CallLinkDeleteRequest, CallLinkMemberResolver, CallLinkRestrictions,
+    CallLinkUpdateRequest,
 };
 use crate::lite::sfu::{self, Delegate};
 use crate::lite::{http, sfu::GroupMember};
@@ -643,6 +644,40 @@ pub fn update_call_link(
         },
         Box::new(move |result| {
             platform.handle_call_link_result(request_id as u32, result);
+        }),
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn delete_call_link(
+    env: &mut JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    sfu_url: JString,
+    auth_credential_presentation: JByteArray,
+    root_key: JByteArray,
+    admin_passkey: JByteArray,
+    request_id: jlong,
+) -> Result<()> {
+    let sfu_url = env.get_string(&sfu_url)?;
+    let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
+    let root_key =
+        call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
+    let admin_passkey = env.convert_byte_array(admin_passkey)?;
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let platform = call_manager.platform()?.try_clone()?;
+    call_links::delete_call_link(
+        call_manager.http_client(),
+        &Cow::from(&sfu_url),
+        root_key,
+        &auth_credential_presentation,
+        &CallLinkDeleteRequest {
+            admin_passkey: &admin_passkey,
+        },
+        Box::new(move |result| {
+            platform.handle_empty_result(request_id as u32, result);
         }),
     );
 

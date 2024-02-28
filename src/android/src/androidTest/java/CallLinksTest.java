@@ -38,6 +38,7 @@ public class CallLinksTest extends CallTestBase {
     }
     private static final long EXPIRATION_EPOCH_SECONDS = 4133980800L; // 2101-01-01
     private static final String EXAMPLE_STATE_JSON = "{\"restrictions\": \"none\",\"name\":\"\",\"revoked\":false,\"expiration\":" + EXPIRATION_EPOCH_SECONDS + "}";
+    private static final String EXAMPLE_EMPTY_JSON = "{}";
 
     @Rule
     public ErrorCollector errors = new ErrorCollector();
@@ -209,20 +210,20 @@ public class CallLinksTest extends CallTestBase {
     }
 
     @Test
-    public void testUpdateRevokedSuccess() throws Exception {
+    public void testDeleteSuccess() throws Exception {
         CallManager.Observer observer = mock();
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.updateCallLinkRevoked("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), true, result -> {
+        callManager.deleteCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), result -> {
             errors.checkThat(result.isSuccess(), is(true));
             latch.countDown();
         });
 
         ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
-        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.PUT), any(), any());
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.DELETE), any(), any());
 
-        callManager.receivedHttpResponse(requestId.getValue(), 200, EXAMPLE_STATE_JSON.getBytes("UTF-8"));
+        callManager.receivedHttpResponse(requestId.getValue(), 200, EXAMPLE_EMPTY_JSON.getBytes("UTF-8"));
         latch.await();
     }
 

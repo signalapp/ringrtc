@@ -22,7 +22,8 @@ use crate::core::util::minmax;
 use crate::lite::sfu;
 use crate::lite::{
     call_links::{
-        self, CallLinkRestrictions, CallLinkRootKey, CallLinkState, CallLinkUpdateRequest,
+        self, CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkState,
+        CallLinkUpdateRequest, Empty,
     },
     http,
     sfu::{DemuxId, GroupMember, PeekInfo, UserId},
@@ -151,6 +152,11 @@ pub enum Event {
     CallLinkResponse {
         request_id: u32,
         result: std::result::Result<CallLinkState, http::ResponseStatus>,
+    },
+    // An empty response has completed.
+    EmptyResponse {
+        request_id: u32,
+        result: std::result::Result<Empty, http::ResponseStatus>,
     },
     // JavaScript should initiate an HTTP request.
     SendHttpRequest {
@@ -1974,6 +1980,39 @@ fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn deleteCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
+    let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
+    let auth_presentation = cx.argument::<JsBuffer>(2)?;
+    let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
+    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
+        .or_else(|e| cx.throw_type_error(e.to_string()))?;
+    let admin_passkey = cx.argument::<JsBuffer>(4)?;
+    let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        let event_reporter = endpoint.event_reporter.clone();
+        call_links::delete_call_link(
+            endpoint.call_manager.http_client(),
+            &sfu_url,
+            root_key,
+            &auth_presentation,
+            &CallLinkDeleteRequest {
+                admin_passkey: &admin_passkey,
+            },
+            Box::new(move |result| {
+                // Ignore errors, that can only mean we're shutting down.
+                let _ = event_reporter.send(Event::EmptyResponse { request_id, result });
+            }),
+        );
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn getAudioInputs(mut cx: FunctionContext) -> JsResult<JsValue> {
     let devices = with_call_endpoint(&mut cx, |endpoint| {
         endpoint
@@ -2471,6 +2510,23 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 )?;
             }
 
+            Event::EmptyResponse { request_id, result } => {
+                let method_name = "handleEmptyResponse";
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+
+                let js_request_id = cx.number(request_id);
+                let (status, state_object) = match result {
+                    Ok(_) => (cx.number(200), cx.empty_object().upcast()),
+                    Err(status_code) => (cx.number(status_code.code), cx.undefined().upcast()),
+                };
+
+                method.call(
+                    &mut cx,
+                    observer,
+                    [js_request_id.upcast(), status.upcast(), state_object],
+                )?;
+            }
+
             Event::GroupUpdate(GroupUpdate::RemoteDeviceStatesChanged(
                 client_id,
                 remote_device_states,
@@ -2844,6 +2900,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_readCallLink", readCallLink)?;
     cx.export_function("cm_createCallLink", createCallLink)?;
     cx.export_function("cm_updateCallLink", updateCallLink)?;
+    cx.export_function("cm_deleteCallLink", deleteCallLink)?;
     cx.export_function("cm_getAudioInputs", getAudioInputs)?;
     cx.export_function("cm_setAudioInput", setAudioInput)?;
     cx.export_function("cm_getAudioOutputs", getAudioOutputs)?;

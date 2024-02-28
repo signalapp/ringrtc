@@ -14,7 +14,7 @@ use std::{
 
 use base64::engine::general_purpose::STANDARD as base64;
 use base64::Engine;
-use serde::{Deserialize, Serialize};
+use serde::{self, Deserialize, Serialize};
 use serde_with::serde_as;
 
 use crate::lite::http;
@@ -74,8 +74,14 @@ impl CallLinkState {
     }
 }
 
+// Use type that serializes to `{}` in JSON
+#[derive(Deserialize, Debug)]
+pub struct Empty {}
+
 pub type ReadCallLinkResultCallback =
     Box<dyn FnOnce(Result<CallLinkState, http::ResponseStatus>) + Send>;
+
+pub type EmptyResultCallback = Box<dyn FnOnce(Result<Empty, http::ResponseStatus>) + Send>;
 
 fn call_link_url_from_sfu_url(sfu_url: &str) -> String {
     format!("{}/v1/call-link", sfu_url.trim_end_matches('/'))
@@ -143,6 +149,14 @@ pub struct CallLinkUpdateRequest<'a> {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub revoked: Option<bool>,
+}
+
+#[serde_as]
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CallLinkDeleteRequest<'a> {
+    #[serde_as(as = "serde_with::base64::Base64")]
+    pub admin_passkey: &'a [u8],
 }
 
 pub fn create_call_link(
@@ -213,6 +227,38 @@ pub fn update_call_link(
         Box::new(move |http_response| {
             let result = http::parse_json_response::<CallLinkResponse>(http_response.as_ref())
                 .map(|deserialized| CallLinkState::from(deserialized, &root_key));
+            result_callback(result);
+        }),
+    )
+}
+
+pub fn delete_call_link(
+    http_client: &dyn http::Client,
+    sfu_url: &str,
+    root_key: CallLinkRootKey,
+    auth_presentation: &[u8],
+    delete_request: &CallLinkDeleteRequest,
+    result_callback: EmptyResultCallback,
+) {
+    http_client.send_request(
+        http::Request {
+            method: http::Method::Delete,
+            url: call_link_url_from_sfu_url(sfu_url),
+            headers: HashMap::from_iter([
+                (
+                    "Authorization".to_string(),
+                    auth_header_from_auth_credential(auth_presentation),
+                ),
+                (
+                    "X-Room-Id".to_string(),
+                    hex::encode(root_key.derive_room_id()),
+                ),
+                ("Content-Type".to_string(), "application/json".to_string()),
+            ]),
+            body: Some(serde_json::to_vec(delete_request).expect("cannot fail to serialize")),
+        },
+        Box::new(move |http_response| {
+            let result = http::parse_json_response::<Empty>(http_response.as_ref());
             result_callback(result);
         }),
     )
@@ -383,6 +429,43 @@ pub mod ios {
         }
     }
 
+    #[repr(C)]
+    pub struct rtc_sfu_EmptyDelegate {
+        pub retained: *mut c_void,
+        pub release: extern "C" fn(retained: *mut c_void),
+        // to be FFI-safe response type parameter cannot be zero-sized so we use a bool
+        // value should be ignored
+        pub handle_response: extern "C" fn(
+            unretained: *const c_void,
+            request_id: u32,
+            response: rtc_sfu_Response<bool>,
+        ),
+    }
+
+    impl rtc_sfu_EmptyDelegate {
+        fn handle_response(&self, request_id: u32, result: Result<Empty, http::ResponseStatus>) {
+            let response = match result.as_ref() {
+                Ok(_) => rtc_sfu_Response {
+                    error_status_code: rtc_OptionalU16::default(),
+                    value: true,
+                },
+                Err(status) => rtc_sfu_Response {
+                    error_status_code: status.code.into(),
+                    value: false,
+                },
+            };
+            (self.handle_response)(self.retained, request_id, response);
+        }
+    }
+
+    unsafe impl Send for rtc_sfu_EmptyDelegate {}
+
+    impl Drop for rtc_sfu_EmptyDelegate {
+        fn drop(&mut self) {
+            (self.release)(self.retained)
+        }
+    }
+
     /// # Safety
     ///
     /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
@@ -523,6 +606,46 @@ pub mod ios {
             }
         } else {
             error!("null http_client passed into rtc_sfu_createCallLink");
+        }
+    }
+
+    /// # Safety
+    ///
+    /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
+    /// - `sfu_url` must be a valid, non-null C string.
+    #[no_mangle]
+    pub unsafe extern "C" fn rtc_sfu_deleteCallLink(
+        http_client: *const http::ios::Client,
+        request_id: u32,
+        sfu_url: *const c_char,
+        auth_credential_presentation: rtc_Bytes,
+        link_root_key: rtc_Bytes,
+        admin_passkey: rtc_Bytes,
+        delegate: rtc_sfu_EmptyDelegate,
+    ) {
+        info!("rtc_sfu_deleteCallLink():");
+
+        if let Some(http_client) = http_client.as_ref() {
+            if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
+                if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
+                    delete_call_link(
+                        http_client,
+                        sfu_url,
+                        link_root_key,
+                        auth_credential_presentation.as_slice(),
+                        &CallLinkDeleteRequest {
+                            admin_passkey: admin_passkey.as_slice(),
+                        },
+                        Box::new(move |result| delegate.handle_response(request_id, result)),
+                    )
+                } else {
+                    error!("invalid link_root_key");
+                }
+            } else {
+                error!("invalid sfu_url");
+            }
+        } else {
+            error!("null http_client passed into rtc_sfu_deleteCallLink");
         }
     }
 }

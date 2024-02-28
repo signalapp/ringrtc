@@ -667,6 +667,34 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateCallLi
     }
 }
 
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcDeleteCallLink(
+    mut env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    sfu_url: JString,
+    auth_credential_presentation: JByteArray,
+    root_key: JByteArray,
+    admin_passkey: JByteArray,
+    request_id: jlong,
+) {
+    match call_manager::delete_call_link(
+        &mut env,
+        call_manager as *mut AndroidCallManager,
+        sfu_url,
+        auth_credential_presentation,
+        root_key,
+        admin_passkey,
+        request_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&mut env, e);
+        }
+    }
+}
+
 // Group Calls
 
 #[no_mangle]

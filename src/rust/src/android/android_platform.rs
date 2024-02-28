@@ -24,7 +24,7 @@ use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
-use crate::lite::call_links::{CallLinkRestrictions, CallLinkState};
+use crate::lite::call_links::{CallLinkRestrictions, CallLinkState, Empty};
 use crate::lite::{
     http, sfu,
     sfu::{DemuxId, PeekInfo, PeekResult, UserId},
@@ -1816,6 +1816,81 @@ impl AndroidPlatform {
             Ok(()) => {}
             Err(error) => {
                 error!("handleCallLinkResponse: {:?}", error);
+            }
+        }
+    }
+
+    pub fn handle_empty_result(
+        &self,
+        request_id: u32,
+        response: std::result::Result<Empty, http::ResponseStatus>,
+    ) {
+        let mut env = match self.java_env() {
+            Ok(v) => v,
+            Err(error) => {
+                error!("{:?}", error);
+                return;
+            }
+        };
+        let jni_call_manager = self.jni_call_manager.as_obj();
+
+        let http_result_class = match self.class_cache.get_class(HTTP_RESULT_CLASS) {
+            Ok(v) => v,
+            Err(error) => {
+                error!("http_result_class: {:?}", error);
+                return;
+            }
+        };
+
+        let result_object = match response {
+            Ok(_) => {
+                // need to provide a non-null Object, so we use java.lang.Boolean
+                let success_filler = match self.get_optional_boolean_object(&mut env, Some(true)) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("empty result success filler java.lang.Boolean: {:?}", error);
+                        return;
+                    }
+                };
+
+                // Unconstrained generics get erased to java.lang.Object.
+                let args = jni_args!((
+                    success_filler => java.lang.Object,
+                ) -> void);
+                match env.new_object(http_result_class, args.sig, &args.args) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("new HttpResult(Boolean): {:?}", error);
+                        return;
+                    }
+                }
+            }
+            Err(status) => {
+                let args = jni_args!((
+                    status.code as jshort => short,
+                ) -> void);
+                match env.new_object(http_result_class, args.sig, &args.args) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("new HttpResult(short): {:?}", error);
+                        return;
+                    }
+                }
+            }
+        };
+
+        match jni_call_method(
+            &mut env,
+            jni_call_manager,
+            "handleEmptyResponse",
+            jni_args!((
+                request_id as jlong => long,
+                result_object => org.signal.ringrtc.CallManager::HttpResult,
+            ) -> void),
+        ) {
+            Ok(()) => {}
+            Err(error) => {
+                error!("handleEmptyResponse: {:?}", error);
             }
         }
     }

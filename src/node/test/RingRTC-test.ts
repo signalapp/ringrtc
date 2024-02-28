@@ -444,6 +444,7 @@ describe('RingRTC', () => {
     );
     const EXPIRATION_EPOCH_SECONDS = 4133980800; // 2101-01-01
     const EXAMPLE_STATE_JSON = `{"restrictions": "none","name":"","revoked":false,"expiration":${EXPIRATION_EPOCH_SECONDS}}`;
+    const EXAMPLE_EMPTY_RESPONSE = '{}';
 
     it('has accessors', () => {
       const anotherKey = CallLinkRootKey.generate();
@@ -754,7 +755,7 @@ describe('RingRTC', () => {
       assert.isTrue(state.success);
     });
 
-    it('can update call link revocation', async () => {
+    it('can delete call link', async () => {
       const requestIdPromise = new Promise<number>((resolve, reject) => {
         RingRTC.handleSendHttpRequest = (
           requestId,
@@ -765,25 +766,24 @@ describe('RingRTC', () => {
         ) => {
           try {
             assert.isTrue(url.startsWith('sfu.example'));
-            assert.equal(method, HttpMethod.Put);
+            assert.equal(method, HttpMethod.Delete);
             resolve(requestId);
           } catch (e) {
             reject(e);
           }
         };
       });
-      const callLinkResponse = RingRTC.updateCallLinkRevocation(
+      const callLinkResponse = RingRTC.deleteCallLink(
         'sfu.example',
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
-        CallLinkRootKey.generateAdminPassKey(),
-        true
+        CallLinkRootKey.generateAdminPassKey()
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
         requestId,
         200,
-        Buffer.from(EXAMPLE_STATE_JSON)
+        Buffer.from(EXAMPLE_EMPTY_RESPONSE)
       );
       const state = await callLinkResponse;
       // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
