@@ -2398,7 +2398,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
 
                 let args = [
                     cx.number(client_id).upcast(),
-                    cx.number(connection_state as i32).upcast(),
+                    cx.number(connection_state.ordinal()).upcast(),
                 ];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;

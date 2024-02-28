@@ -107,16 +107,6 @@ pub struct JniArgs<'local, 'obj_ref, R, const LEN: usize> {
     pub _return: PhantomReturnType<R>,
 }
 
-impl<'local, 'obj_ref, 'output, const LEN: usize> JniArgs<'local, 'obj_ref, JObject<'output>, LEN> {
-    pub fn returning_void(sig: &'static str, args: [JValue<'local, 'obj_ref>; LEN]) -> Self {
-        Self {
-            sig,
-            args,
-            _return: PhantomData,
-        }
-    }
-}
-
 /// Produces a JniArgs struct from the given arguments and return type.
 ///
 /// # Example

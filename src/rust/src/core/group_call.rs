@@ -312,6 +312,18 @@ pub enum ConnectionState {
     Reconnecting,
 }
 
+impl ConnectionState {
+    pub fn ordinal(&self) -> i32 {
+        // Must be kept in sync with the Java, Swift, and TypeScript enums.
+        match self {
+            ConnectionState::NotConnected => 0,
+            ConnectionState::Connecting => 1,
+            ConnectionState::Connected => 2,
+            ConnectionState::Reconnecting => 3,
+        }
+    }
+}
+
 // The join states of a device joining a group call.
 // Has a state diagram like this:
 //        |

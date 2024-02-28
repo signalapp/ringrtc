@@ -559,7 +559,7 @@ impl Platform for IosPlatform {
         (self.app_interface.handleConnectionStateChanged)(
             self.app_interface.object,
             client_id,
-            connection_state as i32,
+            connection_state.ordinal(),
         );
     }
 
