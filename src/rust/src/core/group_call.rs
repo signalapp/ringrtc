@@ -1979,7 +1979,8 @@ impl Client {
                 info!("Setting send rates to {:?}", send_rates);
                 state
                     .observer
-                    .handle_send_rates_changed(state.client_id, send_rates);
+                    .handle_send_rates_changed(state.client_id, send_rates.clone());
+                state.send_rates = send_rates;
             }
         }
     }
@@ -2788,9 +2789,7 @@ impl Client {
             }
             // Make sure not to notify for the updated join state until the remote devices have been
             // updated.
-            let newly_joined =
-                local_device_is_participant && matches!(state.join_state, JoinState::Pending(_));
-            if newly_joined {
+            if local_device_is_participant && matches!(state.join_state, JoinState::Pending(_)) {
                 Self::set_join_state_and_notify_observer(state, JoinState::Joined(local_demux_id));
                 Self::on_client_joined(state);
             }
@@ -2832,9 +2831,8 @@ impl Client {
                     secret,
                 );
             }
-            if newly_joined
-                || (local_device_is_participant && new_demux_ids.len() != old_demux_ids.len())
-            {
+
+            if local_device_is_participant {
                 let send_rates = Self::compute_send_rates(
                     new_demux_ids.len(),
                     state
