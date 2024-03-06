@@ -47,7 +47,7 @@ use crate::{
             AudioEncoderConfig, AudioTrack, VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack,
         },
         peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, SendRates},
-        peer_connection_factory::{self as pcf, PeerConnectionFactory},
+        peer_connection_factory::{self as pcf, AudioJitterBufferConfig, PeerConnectionFactory},
         peer_connection_observer::{
             IceConnectionState, NetworkRoute, PeerConnectionObserver, PeerConnectionObserverTrait,
         },
@@ -1141,16 +1141,13 @@ impl Client {
                 // but we can't uses dashes due to the sfu.
                 let local_ice_ufrag = random_alphanumeric(4);
                 let local_ice_pwd = random_alphanumeric(22);
-                let audio_jitter_buffer_max_packets = 50;
-                let audio_jitter_buffer_max_target_delay_ms = 500;
                 let audio_rtcp_report_interval_ms = 5000;
                 let ice_servers = vec![];
                 let peer_connection = peer_connection_factory
                     .create_peer_connection(
                         peer_connection_observer,
                         pcf::RffiPeerConnectionKind::GroupCall,
-                        audio_jitter_buffer_max_packets,
-                        audio_jitter_buffer_max_target_delay_ms,
+                        &AudioJitterBufferConfig::default(),
                         audio_rtcp_report_interval_ms,
                         &ice_servers,
                         outgoing_audio_track,

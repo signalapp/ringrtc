@@ -450,10 +450,7 @@ impl Platform for NativePlatform {
         let pc = self.peer_connection_factory.create_peer_connection(
             pc_observer,
             kind,
-            connection.call_config().audio_jitter_buffer_max_packets,
-            connection
-                .call_config()
-                .audio_jitter_buffer_max_target_delay_ms,
+            &connection.call_config().audio_jitter_buffer_config,
             connection.call_config().audio_rtcp_report_interval_ms,
             &context.ice_servers,
             context.outgoing_audio_track.clone(),

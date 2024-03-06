@@ -18,7 +18,8 @@ use ringrtc::{
         media::AudioBandwidth,
         media::AudioEncoderConfig,
         peer_connection_factory::{
-            AudioConfig, FileBasedAdmConfig, IceServer, RffiAudioDeviceModuleType,
+            AudioConfig, AudioJitterBufferConfig, FileBasedAdmConfig, IceServer,
+            RffiAudioDeviceModuleType,
         },
     },
 };
@@ -178,11 +179,17 @@ struct Args {
     #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
     force_relay: bool,
 
-    #[arg(long, default_value = "200")]
+    #[arg(long, default_value = "50")]
     audio_jitter_buffer_max_packets: i32,
+
+    #[arg(long, default_value = "0")]
+    audio_jitter_buffer_min_delay_ms: i32,
 
     #[arg(long, default_value = "500")]
     audio_jitter_buffer_max_target_delay_ms: i32,
+
+    #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
+    audio_jitter_buffer_fast_accelerate: bool,
 
     #[arg(long, default_value = "5000")]
     audio_rtcp_report_interval_ms: i32,
@@ -281,10 +288,13 @@ fn main() -> Result<()> {
         },
         enable_tcc_audio: args.tcc,
         enable_red_audio: args.red,
-        audio_jitter_buffer_max_packets: args.audio_jitter_buffer_max_packets as isize,
-        audio_jitter_buffer_max_target_delay_ms: args.audio_jitter_buffer_max_target_delay_ms
-            as isize,
-        audio_rtcp_report_interval_ms: args.audio_rtcp_report_interval_ms as isize,
+        audio_jitter_buffer_config: AudioJitterBufferConfig {
+            max_packets: args.audio_jitter_buffer_max_packets,
+            min_delay_ms: args.audio_jitter_buffer_min_delay_ms,
+            max_target_delay_ms: args.audio_jitter_buffer_max_target_delay_ms,
+            fast_accelerate: args.audio_jitter_buffer_fast_accelerate,
+        },
+        audio_rtcp_report_interval_ms: args.audio_rtcp_report_interval_ms,
         enable_vp9: args.vp9,
     };
 

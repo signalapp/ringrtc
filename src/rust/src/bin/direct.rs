@@ -69,7 +69,6 @@ fn main() {
     };
 
     let call_config = CallConfig {
-        audio_jitter_buffer_max_packets: 50,
         data_mode: DataMode::Low,
         ..Default::default()
     };
@@ -306,7 +305,7 @@ impl CallEndpoint {
                         pcf.create_outgoing_video_track(&outgoing_video_source)?;
                     let call_context = NativeCallContext::new(
                         hide_ip,
-                        ice_server,
+                        vec![ice_server],
                         outgoing_audio_track,
                         outgoing_video_track,
                         incoming_video_sink,

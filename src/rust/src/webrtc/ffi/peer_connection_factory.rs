@@ -10,7 +10,7 @@ use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
 #[cfg(feature = "injectable_network")]
 use crate::webrtc::injectable_network::RffiInjectableNetwork;
 use crate::webrtc::peer_connection_factory::{
-    RffiAudioConfig, RffiIceServers, RffiPeerConnectionKind,
+    RffiAudioConfig, RffiAudioJitterBufferConfig, RffiIceServers, RffiPeerConnectionKind,
 };
 #[cfg(feature = "native")]
 use std::os::raw::c_char;
@@ -45,7 +45,7 @@ impl webrtc::RefCounted for RffiAudioDeviceModule {}
 
 extern "C" {
     pub fn Rust_createPeerConnectionFactory(
-        audio_config: RffiAudioConfig,
+        audio_config: webrtc::ptr::Borrowed<RffiAudioConfig>,
         use_injectable_network: bool,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner>;
     pub fn Rust_createPeerConnectionFactoryWrapper(
@@ -61,10 +61,9 @@ extern "C" {
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         observer: webrtc::ptr::Borrowed<RffiPeerConnectionObserver>,
         kind: RffiPeerConnectionKind,
-        audio_jitter_buffer_max_packets: isize,
-        audio_jitter_buffer_max_target_delay_ms: isize,
-        audio_rtcp_report_interval_ms: isize,
-        ice_servers: RffiIceServers,
+        audio_jitter_buffer_config: webrtc::ptr::Borrowed<RffiAudioJitterBufferConfig>,
+        audio_rtcp_report_interval_ms: i32,
+        ice_servers: webrtc::ptr::Borrowed<RffiIceServers>,
         outgoing_audio_track: webrtc::ptr::BorrowedRc<RffiAudioTrack>,
         outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnection>;

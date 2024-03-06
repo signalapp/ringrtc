@@ -769,8 +769,18 @@ pub async fn start_cli(
     ));
 
     args.push(format!(
+        "--audio-jitter-buffer-min-delay-ms={}",
+        call_config.audio.jitter_buffer_min_delay_ms
+    ));
+
+    args.push(format!(
         "--audio-jitter-buffer-max-target-delay-ms={}",
         call_config.audio.jitter_buffer_max_target_delay_ms
+    ));
+
+    args.push(format!(
+        "--audio-jitter-buffer-fast-accelerate={}",
+        call_config.audio.jitter_buffer_fast_accelerate
     ));
 
     args.push(format!(

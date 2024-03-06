@@ -336,6 +336,19 @@ impl Clone for Box<dyn VideoSink> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "call_sim", derive(clap::ValueEnum))]
+#[repr(i32)]
+pub enum AudioBandwidth {
+    // Constants in libopus
+    Auto = -1000,
+    Full = 1105,
+    SuperWide = 1104,
+    Wide = 1103,
+    Medium = 1102,
+    Narrow = 1101,
+}
+
 // Same as webrtc::AudioEncoder::Config in api/audio_codecs/audio_encoder.h.
 // Very OPUS-specific
 #[repr(C)]
@@ -405,34 +418,21 @@ impl Default for AudioEncoderConfig {
     }
 }
 
-impl From<&AudioEncoderConfig> for RffiAudioEncoderConfig {
-    fn from(config: &AudioEncoderConfig) -> Self {
-        Self {
-            initial_packet_size_ms: config.initial_packet_size_ms,
-            min_packet_size_ms: config.min_packet_size_ms,
-            max_packet_size_ms: config.max_packet_size_ms,
-            initial_bitrate_bps: config.initial_bitrate_bps,
-            min_bitrate_bps: config.min_bitrate_bps,
-            max_bitrate_bps: config.max_bitrate_bps,
-            bandwidth: config.bandwidth as i32,
-            complexity: config.complexity,
-            adaptation: config.adaptation,
-            enable_cbr: config.enable_cbr,
-            enable_dtx: config.enable_dtx,
-            enable_fec: config.enable_fec,
+impl AudioEncoderConfig {
+    pub fn rffi(&self) -> RffiAudioEncoderConfig {
+        RffiAudioEncoderConfig {
+            initial_packet_size_ms: self.initial_packet_size_ms,
+            min_packet_size_ms: self.min_packet_size_ms,
+            max_packet_size_ms: self.max_packet_size_ms,
+            initial_bitrate_bps: self.initial_bitrate_bps,
+            min_bitrate_bps: self.min_bitrate_bps,
+            max_bitrate_bps: self.max_bitrate_bps,
+            bandwidth: self.bandwidth as i32,
+            complexity: self.complexity,
+            adaptation: self.adaptation,
+            enable_cbr: self.enable_cbr,
+            enable_dtx: self.enable_dtx,
+            enable_fec: self.enable_fec,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "call_sim", derive(clap::ValueEnum))]
-#[repr(i32)]
-pub enum AudioBandwidth {
-    // Constants in libopus
-    Auto = -1000,
-    Full = 1105,
-    SuperWide = 1104,
-    Wide = 1103,
-    Medium = 1102,
-    Narrow = 1101,
 }

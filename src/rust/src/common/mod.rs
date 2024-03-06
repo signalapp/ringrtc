@@ -11,7 +11,10 @@ pub mod units;
 
 use std::fmt;
 
-use crate::webrtc::{media::AudioEncoderConfig, peer_connection_factory::AudioConfig};
+use crate::webrtc::{
+    media::AudioEncoderConfig,
+    peer_connection_factory::{AudioConfig, AudioJitterBufferConfig},
+};
 
 /// Common Result type, using `anyhow::Error` for Error.
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
@@ -764,9 +767,8 @@ pub struct CallConfig {
     pub audio_encoder_config: AudioEncoderConfig,
     pub enable_tcc_audio: bool,
     pub enable_red_audio: bool,
-    pub audio_jitter_buffer_max_packets: isize,
-    pub audio_jitter_buffer_max_target_delay_ms: isize,
-    pub audio_rtcp_report_interval_ms: isize,
+    pub audio_jitter_buffer_config: AudioJitterBufferConfig,
+    pub audio_rtcp_report_interval_ms: i32,
 
     pub enable_vp9: bool,
 }
@@ -781,8 +783,7 @@ impl Default for CallConfig {
             audio_encoder_config: Default::default(),
             enable_tcc_audio: false,
             enable_red_audio: false,
-            audio_jitter_buffer_max_packets: 50,
-            audio_jitter_buffer_max_target_delay_ms: 500,
+            audio_jitter_buffer_config: Default::default(),
             audio_rtcp_report_interval_ms: 5000,
             enable_vp9: true,
         }

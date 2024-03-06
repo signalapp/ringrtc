@@ -202,6 +202,45 @@ impl AudioConfig {
     }
 }
 
+/// Stays in sync with RffiAudioJitterBufferConfig in peer_connection_factory.h.
+#[repr(C)]
+pub struct RffiAudioJitterBufferConfig {
+    pub max_packets: i32,
+    pub min_delay_ms: i32,
+    pub max_target_delay_ms: i32,
+    pub fast_accelerate: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct AudioJitterBufferConfig {
+    pub max_packets: i32,
+    pub min_delay_ms: i32,
+    pub max_target_delay_ms: i32,
+    pub fast_accelerate: bool,
+}
+
+impl Default for AudioJitterBufferConfig {
+    fn default() -> Self {
+        Self {
+            max_packets: 50,
+            min_delay_ms: 0,
+            max_target_delay_ms: 500,
+            fast_accelerate: false,
+        }
+    }
+}
+
+impl AudioJitterBufferConfig {
+    fn rffi(&self) -> RffiAudioJitterBufferConfig {
+        RffiAudioJitterBufferConfig {
+            max_packets: self.max_packets,
+            min_delay_ms: self.min_delay_ms,
+            max_target_delay_ms: self.max_target_delay_ms,
+            fast_accelerate: self.fast_accelerate,
+        }
+    }
+}
+
 #[cfg(feature = "native")]
 #[derive(Clone, Debug, Default)]
 pub struct DeviceCounts {
@@ -225,7 +264,7 @@ impl PeerConnectionFactory {
 
         let rffi = unsafe {
             webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(
-                audio_config.rffi()?,
+                webrtc::ptr::Borrowed::from_ptr(&audio_config.rffi()?),
                 use_injectable_network,
             ))
         };
@@ -275,9 +314,8 @@ impl PeerConnectionFactory {
         &self,
         pc_observer: PeerConnectionObserver<T>,
         kind: RffiPeerConnectionKind,
-        audio_jitter_buffer_max_packets: isize,
-        audio_jitter_buffer_max_target_delay_ms: isize,
-        audio_rtcp_report_interval_ms: isize,
+        audio_jitter_buffer_config: &AudioJitterBufferConfig,
+        audio_rtcp_report_interval_ms: i32,
         ice_servers: &[IceServer],
         outgoing_audio_track: AudioTrack,
         outgoing_video_track: Option<VideoTrack>,
@@ -305,10 +343,9 @@ impl PeerConnectionFactory {
                 self.rffi.as_borrowed(),
                 pc_observer_rffi.borrow(),
                 kind,
-                audio_jitter_buffer_max_packets,
-                audio_jitter_buffer_max_target_delay_ms,
+                webrtc::ptr::Borrowed::from_ptr(&audio_jitter_buffer_config.rffi()),
                 audio_rtcp_report_interval_ms,
-                rffi_ice_servers,
+                webrtc::ptr::Borrowed::from_ptr(&rffi_ice_servers),
                 outgoing_audio_track.rffi().as_borrowed(),
                 outgoing_video_track
                     .map_or_else(webrtc::ptr::BorrowedRc::null, |outgoing_video_track| {

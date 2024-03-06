@@ -391,8 +391,12 @@ pub struct AudioConfig {
     pub enable_agc: bool,
     /// The maximum number of packets the jitter buffer can hold.
     pub jitter_buffer_max_packets: i32,
-    /// The maximum amount of delay to allow in the jitter buffer.
+    /// The minimum amount of delay to allow in the jitter buffer.
+    pub jitter_buffer_min_delay_ms: i32,
+    /// The maximum amount of delay to target in the jitter buffer.
     pub jitter_buffer_max_target_delay_ms: i32,
+    /// Whether or not to turn on fast accelerate mode of the jitter buffer.
+    pub jitter_buffer_fast_accelerate: bool,
     /// How often RTCP reports should be sent. Subject to jitter applied by WebRTC.
     pub rtcp_report_interval_ms: i32,
     /// Flag to enable visqol speech (wideband) analysis.
@@ -445,8 +449,10 @@ impl Default for AudioConfig {
             enable_aec: false,
             enable_ns: true,
             enable_agc: true,
-            jitter_buffer_max_packets: 200,
+            jitter_buffer_max_packets: 50,
+            jitter_buffer_min_delay_ms: 0,
             jitter_buffer_max_target_delay_ms: 500,
+            jitter_buffer_fast_accelerate: false,
             rtcp_report_interval_ms: 5000,
             visqol_speech_analysis: true,
             visqol_audio_analysis: false,

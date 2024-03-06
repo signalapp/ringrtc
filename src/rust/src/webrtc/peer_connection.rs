@@ -12,7 +12,7 @@ use crate::core::util::redact_string;
 use crate::error::RingRtcError;
 use crate::webrtc;
 use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::{AudioEncoderConfig, RffiAudioEncoderConfig};
+use crate::webrtc::media::AudioEncoderConfig;
 use crate::webrtc::network::RffiIpPort;
 use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
 use crate::webrtc::peer_connection_observer::RffiPeerConnectionObserver;
@@ -336,13 +336,15 @@ impl PeerConnection {
         }
     }
 
-    pub fn configure_audio_encoders(&self, config: &AudioEncoderConfig) {
-        let config: RffiAudioEncoderConfig = config.into();
-        info!("PeerConnection.configure_audio_encoders({:?})", config);
+    pub fn configure_audio_encoders(&self, audio_encoder_config: &AudioEncoderConfig) {
+        info!(
+            "PeerConnection.configure_audio_encoders({:?})",
+            audio_encoder_config
+        );
         unsafe {
             pc::Rust_configureAudioEncoders(
                 self.rffi.as_borrowed(),
-                webrtc::ptr::Borrowed::from_ptr(&config),
+                webrtc::ptr::Borrowed::from_ptr(&audio_encoder_config.rffi()),
             )
         };
     }

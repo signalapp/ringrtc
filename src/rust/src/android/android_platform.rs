@@ -250,14 +250,9 @@ impl Platform for AndroidPlatform {
         let env = &mut self.java_env()?;
         let jni_call_manager = self.jni_call_manager.as_obj();
 
-        let audio_jitter_buffer_max_packets: i32 = call_config
-            .audio_jitter_buffer_max_packets
-            .try_into()
-            .expect("isize fits in an i32");
-        let audio_jitter_buffer_max_target_delay_ms: i32 = call_config
-            .audio_jitter_buffer_max_target_delay_ms
-            .try_into()
-            .expect("isize fits in an i32");
+        let audio_jitter_buffer_max_packets = call_config.audio_jitter_buffer_config.max_packets;
+        let audio_jitter_buffer_max_target_delay_ms =
+            call_config.audio_jitter_buffer_config.max_target_delay_ms;
 
         let connection = Connection::new(
             call.clone(),
