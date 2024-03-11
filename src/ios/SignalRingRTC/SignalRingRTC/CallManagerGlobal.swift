@@ -94,6 +94,7 @@ public class CallManagerGlobal {
             "RingRTC-AnyAddressPortsKillSwitch": "Enabled",
             "WebRTC-Audio-OpusSetSignalVoiceWithDtx": "Enabled",
             "RingRTC-PruneTurnPorts": "Enabled",
+            "WebRTC-Bwe-ProbingConfiguration": "skip_if_est_larger_than_fraction_of_max:0.99",
         ]) { (provided, _) in provided }
         RTCInitFieldTrialDictionary(fieldTrialsWithDefaults)
         Logger.info("Initialized field trials with \(fieldTrialsWithDefaults)")
