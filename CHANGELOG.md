@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.39.1
+
+- Call Sim: Add jitter buffer config
+
+- Don't probe when close to the max probe rate
+
+- Group Calls: Synchronize access to last_height_by_demux_id
+
+- Update dependencies
+
 ## v2.39.0
 
 - Update to WebRTC m122
