@@ -136,7 +136,7 @@ pub trait PeerConnectionObserverTrait {
         Ok(())
     }
     fn handle_incoming_video_frame(
-        &mut self,
+        &self,
         _demux_id: u32,
         _video_frame_metadata: VideoFrameMetadata,
         _video_frame: Option<VideoFrame>,
@@ -409,6 +409,8 @@ extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
 }
 
 /// PeerConnectionObserver OnVideoFrame() callback for video frames.
+///
+/// Note: This can be called from multiple threads.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnVideoFrame<T>(
     observer: webrtc::ptr::Borrowed<T>,
@@ -419,7 +421,7 @@ extern "C" fn pc_observer_OnVideoFrame<T>(
     T: PeerConnectionObserverTrait,
 {
     // Safe because the observer should still be alive (it was just passed to us)
-    if let Some(observer) = unsafe { observer.as_mut() } {
+    if let Some(observer) = unsafe { observer.as_ref() } {
         debug!("pc_observer_OnVideoFrame(): demux_id: {}", demux_id,);
         // TODO: Figure out how to pass in a PeerConnection as an owner.
         let frame = if !rffi_buffer.is_null() {

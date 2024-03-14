@@ -2131,7 +2131,7 @@ where
     }
 
     fn handle_incoming_video_frame(
-        &mut self,
+        &self,
         demux_id: DemuxId,
         _video_frame_metadata: VideoFrameMetadata,
         video_frame: Option<VideoFrame>,

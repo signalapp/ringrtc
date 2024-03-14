@@ -3901,7 +3901,7 @@ impl Client {
 struct PeerConnectionObserverImpl {
     client: Option<Client>,
     incoming_video_sink: Option<Box<dyn VideoSink>>,
-    last_height_by_demux_id: HashMap<DemuxId, u32>,
+    last_height_by_demux_id: CallMutex<HashMap<DemuxId, u32>>,
 }
 
 impl PeerConnectionObserverImpl {
@@ -3912,7 +3912,7 @@ impl PeerConnectionObserverImpl {
         let boxed_observer_impl = Box::new(Self {
             client: None,
             incoming_video_sink,
-            last_height_by_demux_id: HashMap::new(),
+            last_height_by_demux_id: CallMutex::new(HashMap::new(), "last_height_by_demux_id"),
         });
         let observer = PeerConnectionObserver::new(
             webrtc::ptr::Borrowed::from_ptr(&*boxed_observer_impl),
@@ -4062,7 +4062,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
     }
 
     fn handle_incoming_video_frame(
-        &mut self,
+        &self,
         demux_id: DemuxId,
         video_frame_metadata: VideoFrameMetadata,
         video_frame: Option<VideoFrame>,
@@ -4074,12 +4074,16 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
             incoming_video_sink.on_video_frame(demux_id, video_frame)
         }
         if let Some(client) = &self.client {
-            let prev_height = self.last_height_by_demux_id.insert(demux_id, height);
+            let prev_height = self
+                .last_height_by_demux_id
+                .lock()
+                .unwrap()
+                .insert(demux_id, height);
             if prev_height != Some(height) {
                 client.actor.send(move |state| {
                     if let Some(remote_device) = state.remote_devices.find_by_demux_id_mut(demux_id)
                     {
-                        // The height needs to be checked again because last_height_by_track_id
+                        // The height needs to be checked again because last_height_by_demux_id
                         // doesn't account for video mute or forwarding state.
                         if remote_device.client_decoded_height != Some(height)
                             // Workaround for a race where a frame is received after video muting
