@@ -704,8 +704,6 @@ impl Platform for AndroidPlatform {
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
-        info!("send_call_message():");
-
         let env = &mut self.java_env()?;
         let jni_call_manager = self.jni_call_manager.as_obj();
 

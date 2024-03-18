@@ -598,7 +598,6 @@ impl SetSessionDescriptionObserver {
     ///
     /// This call signals the condition variable.
     fn on_set_success(&self) {
-        info!("on_set_success()");
         let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             guard.1 = Ok(());
@@ -613,10 +612,6 @@ impl SetSessionDescriptionObserver {
     ///
     /// This call signals the condition variable.
     fn on_set_failure(&self, err_message: String, err_type: i32) {
-        warn!(
-            "on_set_failure(). error msg: {}, type: {}",
-            err_message, err_type
-        );
         let (mtx, cvar) = &*self.condition;
         if let Ok(mut guard) = mtx.lock() {
             guard.1 =

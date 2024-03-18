@@ -2563,7 +2563,10 @@ where
         remote_demux_id: DemuxId,
         incoming_video_track: VideoTrack,
     ) {
-        info!("handle_incoming_video_track():");
+        info!(
+            "handle_incoming_video_track(): id: {}; remote_demux_id: {}",
+            client_id, remote_demux_id
+        );
         platform_handler!(
             self,
             handle_incoming_video_track,

@@ -48,8 +48,14 @@ A single `Call` has the following attributes:
 - `sfu_recv`
 - `ice_network_route_change`
 
-These correspond to the `ringrtc_stats!` and `ringrtc!` lines in the logs. The
-associated value is a `DataFrame` of the parsed CSV values.
+These correspond to the `ringrtc_stats!` and `ringrtc!` lines in the logs.
+
+A `Call` also has this attribute:
+
+- `media_key_recv`
+
+The associated values of all of these attributes are a `DataFrame` of parsed
+values.
 
 The following methods are also available on `Call`:
 

@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional, Union
 pd.set_option('display.precision', 1)
 # Disable scientific notation (doesn't go well with SSRCs)
 pd.set_option('display.float_format', lambda x: '%.1f' % x)
+# Don't truncate rows of a data frame in the middle
+pd.set_option('display.max_rows', None)
 
 GROUP_CALL_TYPE = 'Group'
 
@@ -30,6 +32,7 @@ class Call():
         self.video_recv = kwargs['video_recv']
         self.sfu_recv = kwargs['sfu_recv']
         self.ice_network_route_change = kwargs['ice_network_route_change']
+        self.media_key_recv = kwargs['media_key_recv']
         self._logs = logs
         self.start = kwargs['start']
         self.end = kwargs['end']
@@ -152,6 +155,7 @@ def _parse_calls(logs: List[str]) -> List[Call]:
             'video_send': [],
             'video_recv': [],
             'sfu_recv': [],
+            'media_key_recv': [],
             'logs': [],
             'start': '',
             'end': '',
@@ -231,6 +235,10 @@ def _parse_calls(logs: List[str]) -> List[Call]:
             append('video_recv', line)
         elif 'ringrtc_stats!,sfu,recv' in line:
             append('sfu_recv', line)
+        elif 'handle_incoming_video_track(): id' in line:
+            append('media_key_recv', line)
+        elif 'Adding media receive key from' in line:
+            append('media_key_recv', line)
         elif raw_call:
             raw_call['logs'].append(line)
 
@@ -273,20 +281,27 @@ def _parse_calls(logs: List[str]) -> List[Call]:
 
         return df
 
+    def media_key_recv_to_df(lines: List[str]) -> pd.DataFrame:
+        data = []
+        for line in lines:
+            timestamp = extract_timestamp(line)
+            if 'handle_incoming_video_track' in line:
+                # Example: "handle_incoming_video_track(): id: 1; remote_demux_id: 1304248480"
+                id = re.findall(r'remote_demux_id: (\d+)', line)
+                if id:
+                    data.append([timestamp, int(id[0]), 'added'])
+            elif 'Adding media receive key' in line:
+                # Example: "Adding media receive key from 324391552. client_id: 1"
+                id = re.findall(r'from (\d+)', line)
+                if id:
+                    data.append([timestamp, int(id[0]), 'received key'])
+
+        return pd.DataFrame(data, columns=['timestamp', 'demux_id', 'event'])
+
     def lines_to_df(lines: str) -> pd.DataFrame:
         if not lines:
             # Handle the case when there are no lines
             return pd.DataFrame()
-        elif 'ringrtc_stats!,sfu,recv' in lines[0] and lines[0][-1].isdigit():
-            # Older logs didn't include a header for SFU receive stats, so set
-            # the column names manually.
-            return pd.read_csv(StringIO('\n'.join(lines)),
-                               names=['timestamp',
-                                      'sfu',
-                                      'recv',
-                                      'target_send_rate',
-                                      'ideal_send_rate',
-                                      'allocated_send_rate'])
         else:
             return pd.read_csv(StringIO('\n'.join(lines)))
 
@@ -389,6 +404,7 @@ def _parse_calls(logs: List[str]) -> List[Call]:
             video_recv=clean_columns(lines_to_df(raw_call['video_recv'])),
             sfu_recv=clean_columns(lines_to_df(raw_call['sfu_recv'])),
             ice_network_route_change=ice_network_route_change_lines_to_df(raw_call['ice_network_route_change']),
+            media_key_recv=media_key_recv_to_df(raw_call['media_key_recv']),
             logs=raw_call['logs'],
             start=raw_call['start'],
             end=raw_call['end'],

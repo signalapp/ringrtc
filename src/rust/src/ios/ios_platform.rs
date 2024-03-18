@@ -410,8 +410,6 @@ impl Platform for IosPlatform {
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
-        info!("send_call_message():");
-
         (self.app_interface.sendCallMessage)(
             self.app_interface.object,
             app_slice_from_bytes(Some(&recipient_uuid)),
