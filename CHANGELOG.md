@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.39.2
+
+- Group Calls: Apply removal of demux IDs separately
+
+- Log notebook improvements
+
+- Build improvements
+
+- Update to Rust 1.76.0
+
 ## v2.39.1
 
 - Call Sim: Add jitter buffer config
