@@ -2748,31 +2748,64 @@ impl Client {
                     new_demux_ids
                 );
                 if let Some(sfu_info) = state.sfu_info.as_ref() {
-                    let mut added_demux_ids_iter = added_demux_ids.iter().copied();
+                    let mut removed_demux_id = false;
                     for demux_id in &mut state.remote_transceiver_demux_ids {
-                        // If demux_id is None, that means that there's an empty space (from a
-                        // previously removed demux ID) in remote_transceiver_demux_ids that can be
-                        // used. If demux_id is Some, only replace it with a newly added demux ID
-                        // if it is being removed now (it's not in new_demux_ids).
-                        if demux_id.map_or(true, |id| !new_demux_ids.contains(&id)) {
-                            *demux_id = added_demux_ids_iter.next();
+                        if let Some(id) = demux_id {
+                            if !new_demux_ids.contains(id) {
+                                *demux_id = None;
+                                removed_demux_id = true;
+                            }
                         }
                     }
 
-                    // Add any remaining new demux IDs to remote_transceiver_demux_ids.
-                    state
-                        .remote_transceiver_demux_ids
-                        .extend(added_demux_ids_iter.map(Some));
+                    if removed_demux_id {
+                        // Apply demux ID removals separately from additions. This ensures that
+                        // transceivers are transitioned to the inactive direction before trying to
+                        // reuse them.
+                        //
+                        // Without this, a transceiver could persist the receiving direction across
+                        // a change in the associated demux ID. When that happens,
+                        // PeerConnectionObserver::OnTrack won't be called for the new demux ID
+                        // when the remote description is applied.
+                        let result = Self::set_peer_connection_descriptions(
+                            state,
+                            sfu_info,
+                            local_demux_id,
+                            srtp_keys,
+                        );
+                        if result.is_err() {
+                            Self::end(state, EndReason::FailedToUpdatePeerConnection);
+                            return;
+                        }
+                    }
 
-                    let result = Self::set_peer_connection_descriptions(
-                        state,
-                        sfu_info,
-                        local_demux_id,
-                        srtp_keys,
-                    );
-                    if result.is_err() {
-                        Self::end(state, EndReason::FailedToUpdatePeerConnection);
-                        return;
+                    if !added_demux_ids.is_empty() {
+                        let mut added_demux_ids_iter = added_demux_ids.iter().copied();
+                        for demux_id in &mut state.remote_transceiver_demux_ids {
+                            // If demux_id is None, that means that there's an empty space (from a
+                            // previously removed demux ID) in remote_transceiver_demux_ids that can be
+                            // used. If demux_id is Some, only replace it with a newly added demux ID
+                            // if it is being removed now (it's not in new_demux_ids).
+                            if demux_id.map_or(true, |id| !new_demux_ids.contains(&id)) {
+                                *demux_id = added_demux_ids_iter.next();
+                            }
+                        }
+
+                        // Add any remaining new demux IDs to remote_transceiver_demux_ids.
+                        state
+                            .remote_transceiver_demux_ids
+                            .extend(added_demux_ids_iter.map(Some));
+
+                        let result = Self::set_peer_connection_descriptions(
+                            state,
+                            sfu_info,
+                            local_demux_id,
+                            srtp_keys,
+                        );
+                        if result.is_err() {
+                            Self::end(state, EndReason::FailedToUpdatePeerConnection);
+                            return;
+                        }
                     }
                 }
             }
