@@ -215,6 +215,8 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             'rtc_enable_sctp': 'false',
             'rtc_libvpx_build_vp9': 'false',
             'rtc_include_ilbc': 'false',
+            'rtc_disable_metrics': 'true',
+            'rtc_disable_trace_events': 'true',
         }
         if debug_build is True:
             gn_args['is_debug'] = 'true'
