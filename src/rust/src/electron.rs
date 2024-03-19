@@ -397,13 +397,14 @@ impl CallEndpoint {
                     // because otherwise a new event could come in *during* the processing.
                     event_reported_for_callback.store(false, std::sync::atomic::Ordering::Relaxed);
 
-                    match cx.try_catch(|cx| {
+                    let result = cx.try_catch(|cx| {
                         let observer = js_object.as_ref().to_inner(cx);
                         let method_name = "processEvents";
                         let method = observer.get::<JsFunction, _, _>(cx, method_name)?;
                         method.call(cx, observer, [])?;
                         Ok(())
-                    }) {
+                    });
+                    match result {
                         Ok(_) => {}
                         Err(e) => {
                             error!(

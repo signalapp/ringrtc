@@ -291,7 +291,7 @@ pub struct ExceptionCheckingJNIEnv<'a>(JNIEnv<'a>);
 
 impl Drop for ExceptionCheckingJNIEnv<'_> {
     fn drop(&mut self) {
-        match try_scoped(|| {
+        let result = try_scoped(|| {
             let exception = self.exception_occurred()?;
             if exception.is_null() {
                 return Ok(());
@@ -316,7 +316,8 @@ impl Drop for ExceptionCheckingJNIEnv<'_> {
                 jni_args!((thread => java.lang.Thread, exception => java.lang.Throwable) -> void),
             )?;
             Ok(())
-        }) {
+        });
+        match result {
             Ok(()) => {}
             Err(e) => {
                 error!("unable to rethrow exception: {e}");

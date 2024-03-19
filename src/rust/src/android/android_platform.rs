@@ -2003,7 +2003,7 @@ impl sfu::Delegate for AndroidPlatform {
 
                 // Set a frame capacity of min (5) + objects (5) + elements (N * 1 object per element).
                 let capacity = (10 + joined_members.len()) as i32;
-                match env.with_local_frame_returning_local(capacity, |env| -> Result<_> {
+                let result = env.with_local_frame_returning_local(capacity, |env| -> Result<_> {
                     let jni_peek_info = match self.make_peek_info_object(
                         env,
                         &peek_info,
@@ -2020,7 +2020,8 @@ impl sfu::Delegate for AndroidPlatform {
                         jni_peek_info => java.lang.Object,
                     ) -> void);
                     Ok(env.new_object(http_result_class, args.sig, &args.args)?)
-                }) {
+                });
+                match result {
                     Ok(v) if !v.is_null() => v,
                     Ok(_) => {
                         // Already logged, so just bail out early.
