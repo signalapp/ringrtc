@@ -3210,12 +3210,14 @@ impl Client {
 
     // The portion of the frame we leave in the clear
     // to allow the SFU to forward media properly.
-    fn unencrypted_media_header_len(is_audio: bool, has_dependency_descriptor: bool) -> usize {
+    fn unencrypted_media_header_len(is_audio: bool, has_encrypted_media_header: bool) -> usize {
+        if has_encrypted_media_header {
+            return 0;
+        }
+
         if is_audio {
             // For Opus TOC
             1
-        } else if has_dependency_descriptor {
-            0
         } else {
             // For VP8 headers when dependency descriptor isn't used
             10
@@ -3306,7 +3308,7 @@ impl Client {
         is_audio: bool,
         ciphertext: &[u8],
         plaintext_buffer: &mut [u8],
-        has_dependency_descriptor: bool,
+        has_encrypted_media_header: bool,
     ) -> Result<usize> {
         let mut frame_crypto_context = self
             .frame_crypto_context
@@ -3314,7 +3316,7 @@ impl Client {
             .expect("Get e2ee context to decrypt media");
 
         let unencrypted_header_len =
-            Self::unencrypted_media_header_len(is_audio, has_dependency_descriptor);
+            Self::unencrypted_media_header_len(is_audio, has_encrypted_media_header);
         Self::decrypt(
             &mut frame_crypto_context,
             remote_demux_id,
@@ -4196,7 +4198,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         is_audio: bool,
         ciphertext: &[u8],
         plaintext_buffer: &mut [u8],
-        has_dependency_descriptor: bool,
+        has_encrypted_media_header: bool,
     ) -> Result<usize> {
         if let Some(client) = &self.client {
             let remote_demux_id = track_id;
@@ -4205,7 +4207,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                 is_audio,
                 ciphertext,
                 plaintext_buffer,
-                has_dependency_descriptor,
+                has_encrypted_media_header,
             )
         } else {
             warn!("Call isn't setup yet!  Can't decrypt");
@@ -4939,7 +4941,7 @@ mod tests {
             remote_demux_id: DemuxId,
             is_audio: bool,
             ciphertext: &[u8],
-            has_dependency_descriptor: bool,
+            has_encrypted_media_header: bool,
         ) -> Result<Vec<u8>> {
             let mut plaintext = vec![
                 0;
@@ -4958,7 +4960,7 @@ mod tests {
                     is_audio,
                     ciphertext,
                     &mut plaintext,
-                    has_dependency_descriptor
+                    has_encrypted_media_header
                 )?
             );
             Ok(plaintext)

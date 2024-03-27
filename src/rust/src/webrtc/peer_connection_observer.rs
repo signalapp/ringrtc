@@ -181,7 +181,7 @@ pub trait PeerConnectionObserverTrait {
         _is_audio: bool,
         _ciphertext: &[u8],
         _plaintext_buffer: &mut [u8],
-        _has_dependency_descriptor: bool,
+        _has_encrypted_media_header: bool,
     ) -> Result<usize> {
         Err(RingRtcError::FailedToDecrypt.into())
     }
@@ -576,7 +576,7 @@ extern "C" fn pc_observer_DecryptMedia<T>(
     plaintext_out: *mut u8,
     plaintext_out_size: size_t,
     plaintext_size_out: *mut size_t,
-    has_dependency_descriptor: bool,
+    has_encrypted_media_header: bool,
 ) -> bool
 where
     T: PeerConnectionObserverTrait,
@@ -595,7 +595,7 @@ where
             is_audio,
             ciphertext,
             plaintext,
-            has_dependency_descriptor,
+            has_encrypted_media_header,
         ) {
             Ok(size) => {
                 unsafe {
