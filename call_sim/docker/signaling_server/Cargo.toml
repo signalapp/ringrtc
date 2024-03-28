@@ -14,17 +14,17 @@ license = "AGPL-3.0-only"
 
 [dependencies]
 async-stream = "0.3.5"
-env_logger = "0.10.0"
-futures-core = "0.3"
-futures-util = "0.3"
-log = "0.4.17"
+env_logger = "0.11.3"
+futures-core = "0.3.30"
+futures-util = "0.3.30"
+log = "0.4.21"
 prost = "0.12.3"
 rand = "0.8.5"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
-tokio-stream = "0.1"
-tonic = "0.10.2"
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.114"
+tokio = { version = "1.36.0", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tokio-stream = "0.1.15"
+tonic = "0.11.0"
 
 [build-dependencies]
-tonic-build = "0.10.2"
+tonic-build = "0.11.0"

@@ -910,7 +910,7 @@ You should also get your employer (if you work as a programmer) or school, if an
 
 ```
 
-## ryu 1.0.16
+## ryu 1.0.17
 
 ```
                               Apache License
@@ -1399,7 +1399,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-## x25519-dalek 2.0.0
+## x25519-dalek 2.0.1
 
 ```
 Copyright (c) 2017-2021 isis agora lovecruft. All rights reserved.
@@ -1434,7 +1434,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
-## libloading 0.8.1
+## libloading 0.8.3
 
 ```
 Copyright © 2015, Simonas Kazlauskas
@@ -1452,7 +1452,7 @@ THIS SOFTWARE.
 
 ```
 
-## windows-sys 0.48.0, windows-sys 0.52.0, windows-targets 0.48.5, windows-targets 0.52.0, windows_aarch64_msvc 0.48.5, windows_aarch64_msvc 0.52.0, windows_x86_64_gnu 0.48.5, windows_x86_64_gnu 0.52.0, windows_x86_64_msvc 0.48.5, windows_x86_64_msvc 0.52.0
+## windows-sys 0.52.0, windows-targets 0.52.4, windows_aarch64_msvc 0.52.4, windows_x86_64_gnu 0.52.4, windows_x86_64_msvc 0.52.4
 
 ```
     MIT License
@@ -1600,7 +1600,7 @@ SOFTWARE.
 
 ```
 
-## cfg-if 1.0.0, toml_datetime 0.6.3
+## cfg-if 1.0.0
 
 ```
 Copyright (c) 2014 Alex Crichton
@@ -1631,7 +1631,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## bitflags 2.4.1, log 0.4.20, regex 1.10.2, regex-automata 0.4.3, regex-syntax 0.8.2
+## bitflags 2.5.0, log 0.4.21, regex 1.10.4, regex-automata 0.4.6, regex-syntax 0.8.2
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -1662,7 +1662,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## uuid 1.6.1
+## uuid 1.8.0
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -1694,7 +1694,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## libc 0.2.151
+## libc 0.2.153
 
 ```
 Copyright (c) 2014-2020 The Rust Project Developers
@@ -1725,7 +1725,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## either 1.9.0, itertools 0.11.0, petgraph 0.6.4, serde_with 3.4.0, serde_with_macros 3.4.0
+## either 1.10.0, itertools 0.11.0, petgraph 0.6.4, serde_with 3.7.0, serde_with_macros 3.7.0
 
 ```
 Copyright (c) 2015
@@ -1781,7 +1781,7 @@ THE SOFTWARE.
 
 ```
 
-## tempfile 3.8.1
+## tempfile 3.10.1
 
 ```
 Copyright (c) 2015 Steven Allen
@@ -1988,7 +1988,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## futures 0.3.29, futures-channel 0.3.29, futures-core 0.3.29, futures-executor 0.3.29, futures-io 0.3.29, futures-macro 0.3.29, futures-sink 0.3.29, futures-task 0.3.29, futures-util 0.3.29
+## futures 0.3.30, futures-channel 0.3.30, futures-core 0.3.30, futures-executor 0.3.30, futures-io 0.3.30, futures-macro 0.3.30, futures-sink 0.3.30, futures-task 0.3.30, futures-util 0.3.30
 
 ```
 Copyright (c) 2016 Alex Crichton
@@ -2113,7 +2113,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## indexmap 2.1.0
+## indexmap 2.2.6
 
 ```
 Copyright (c) 2016--2017
@@ -2268,7 +2268,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## aes 0.8.3
+## aes 0.8.4
 
 ```
 Copyright (c) 2018 Artyom Pavlov
@@ -2331,7 +2331,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## bytes 1.5.0
+## bytes 1.6.0
 
 ```
 Copyright (c) 2018 Carl Lerche
@@ -2393,7 +2393,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## smallvec 1.11.2
+## smallvec 1.13.2
 
 ```
 Copyright (c) 2018 The Servo Project Developers
@@ -2455,7 +2455,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## block-buffer 0.10.4, block-buffer 0.9.0, block-padding 0.3.3, opaque-debug 0.3.0
+## block-buffer 0.10.4, block-buffer 0.9.0, block-padding 0.3.3
 
 ```
 Copyright (c) 2018-2019 The RustCrypto Project Developers
@@ -2486,7 +2486,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## platforms 3.2.0
+## platforms 3.3.0
 
 ```
 Copyright (c) 2018-2020 The Rust Secure Code Working Group
@@ -2549,6 +2549,69 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
+## opaque-debug 0.3.1
+
+```
+Copyright (c) 2018-2024 The RustCrypto Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+```
+
+## getrandom 0.2.12
+
+```
+Copyright (c) 2018-2024 The rust-random Project Developers
+Copyright (c) 2014 The Rust Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+```
+
 ## slab 0.4.9
 
 ```
@@ -2580,7 +2643,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## ghash 0.5.0
+## ghash 0.5.1
 
 ```
 Copyright (c) 2019 RustCrypto Developers
@@ -2736,7 +2799,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## polyval 0.6.1
+## polyval 0.6.2
 
 ```
 Copyright (c) 2019-2023 RustCrypto Developers
@@ -2767,7 +2830,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## tonic-build 0.10.2
+## tonic-build 0.11.0
 
 ```
 Copyright (c) 2020 Lucio Franco
@@ -2792,7 +2855,7 @@ THE SOFTWARE.
 
 ```
 
-## cpufeatures 0.2.11
+## cpufeatures 0.2.12
 
 ```
 Copyright (c) 2020 The RustCrypto Project Developers
@@ -2886,7 +2949,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## toml_edit 0.19.15, toml_edit 0.20.2
+## toml_datetime 0.6.5, toml_edit 0.19.15, toml_edit 0.21.1
 
 ```
 Copyright (c) Individual contributors
@@ -2911,7 +2974,7 @@ SOFTWARE.
 
 ```
 
-## getrandom 0.2.11, rand 0.8.5, rand_chacha 0.3.1, rand_core 0.6.4
+## rand 0.8.5, rand_chacha 0.3.1, rand_core 0.6.4
 
 ```
 Copyright 2018 Developers of the Rand project
@@ -2970,7 +3033,7 @@ SOFTWARE.
 
 ```
 
-## darling 0.20.3, darling_core 0.20.3, darling_macro 0.20.3
+## darling 0.20.8, darling_core 0.20.8, darling_macro 0.20.8
 
 ```
 MIT License
@@ -3118,7 +3181,7 @@ SOFTWARE.
 
 ```
 
-## anyhow 1.0.75, fastrand 2.0.1, home 0.5.5, itoa 1.0.10, linux-raw-sys 0.4.12, num_enum 0.6.1, num_enum 0.7.1, num_enum_derive 0.6.1, num_enum_derive 0.7.1, once_cell 1.19.0, pin-project-lite 0.2.13, prettyplease 0.2.15, proc-macro-crate 1.3.1, proc-macro-crate 2.0.1, proc-macro2 1.0.70, quote 1.0.33, rustix 0.38.28, semver 1.0.20, send_wrapper 0.6.0, serde 1.0.193, serde_derive 1.0.193, serde_json 1.0.108, syn 1.0.109, syn 2.0.41, syn-mid 0.6.0, thiserror 1.0.50, thiserror-impl 1.0.50, unicode-ident 1.0.12
+## anyhow 1.0.81, fastrand 2.0.2, home 0.5.9, itoa 1.0.10, linux-raw-sys 0.4.13, num_enum 0.6.1, num_enum 0.7.2, num_enum_derive 0.6.1, num_enum_derive 0.7.2, once_cell 1.19.0, pin-project-lite 0.2.13, prettyplease 0.2.17, proc-macro-crate 1.3.1, proc-macro-crate 3.1.0, proc-macro2 1.0.79, quote 1.0.35, rustix 0.38.32, semver 1.0.22, send_wrapper 0.6.0, serde 1.0.197, serde_derive 1.0.197, serde_json 1.0.114, syn 1.0.109, syn 2.0.55, syn-mid 0.6.0, thiserror 1.0.58, thiserror-impl 1.0.58, unicode-ident 1.0.12
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -3176,7 +3239,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## winnow 0.5.28
+## winnow 0.5.40
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining
@@ -3250,7 +3313,7 @@ SOFTWARE.
 
 ```
 
-## base64 0.21.5
+## base64 0.21.7, base64 0.22.0
 
 ```
 The MIT License (MIT)
@@ -3277,7 +3340,7 @@ THE SOFTWARE.
 
 ```
 
-## aho-corasick 1.1.2, memchr 2.6.4
+## aho-corasick 1.1.3, memchr 2.7.1
 
 ```
 The MIT License (MIT)

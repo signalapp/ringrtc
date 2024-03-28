@@ -34,12 +34,13 @@ impl http::Client for HttpClient {
 
         self.actor.send(move |_| {
             let mut tls_config = rustls::client::ClientConfig::builder()
-                .with_safe_defaults()
                 .with_root_certificates(rustls::RootCertStore::empty())
                 .with_no_client_auth();
             tls_config
                 .dangerous()
-                .set_certificate_verifier(Arc::new(ServerCertVerifier {}));
+                .set_certificate_verifier(Arc::new(ServerCertVerifier::new(
+                    rustls::crypto::ring::default_provider(),
+                )));
             let agent = ureq::builder().tls_config(Arc::new(tls_config)).build();
 
             let mut request = match method {
@@ -87,18 +88,56 @@ impl http::Client for HttpClient {
     }
 }
 
-struct ServerCertVerifier {}
+#[derive(Debug)]
+struct ServerCertVerifier(rustls::crypto::CryptoProvider);
 
-impl rustls::client::ServerCertVerifier for ServerCertVerifier {
+impl ServerCertVerifier {
+    pub fn new(provider: rustls::crypto::CryptoProvider) -> Self {
+        Self(provider)
+    }
+}
+
+impl rustls::client::danger::ServerCertVerifier for ServerCertVerifier {
     fn verify_server_cert(
         &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
         _ocsp: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
     }
 }

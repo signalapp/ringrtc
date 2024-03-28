@@ -6,7 +6,7 @@
 //! Uses regex-automata's serialization support to build regexes at compile time.
 //!
 //! ```
-//! let re: regex_automata::Regex<_> = regex_aot::regex!(".+@.+");
+//! let re: regex_automata::dfa::regex::Regex<_> = regex_aot::regex!(".+@.+");
 //! ```
 
 use quote::quote;
