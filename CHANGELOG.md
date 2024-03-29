@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.39.3
+
+- Update to webrtc 6261d
+  - Add receive support for encrypted TOC byte
+  - Add logging when select fails
+
+- Add receive support for encrypted TOC byte
+
+- Update dependencies
+
 ## v2.39.2
 
 - Group Calls: Apply removal of demux IDs separately
