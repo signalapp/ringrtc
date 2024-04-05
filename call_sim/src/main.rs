@@ -146,13 +146,39 @@ async fn run_baseline_over_all_profiles(test: &mut Test) -> Result<()> {
     test.run(
         GroupConfig {
             group_name: "baseline_over_all_profiles".to_string(),
-            chart_dimensions: vec![ChartDimension::MosSpeech],
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: true,
+                show_visqol_mos_audio: true,
+                show_visqol_mos_average: true,
+                show_pesq_mos: true,
+                show_plc_mos: true,
+                show_video: false,
+            },
             ..Default::default()
         },
         vec![TestCaseConfig {
             test_case_name: "default".to_string(),
-            client_a_config: CallConfig::default().with_audio_input_name("normal_phrasing"),
-            client_b_config: CallConfig::default().with_audio_input_name("normal_phrasing"),
+            client_a_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    initial_packet_size_ms: 60,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            client_b_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    initial_packet_size_ms: 60,
+                    visqol_speech_analysis: true,
+                    visqol_audio_analysis: true,
+                    pesq_speech_analysis: true,
+                    plc_speech_analysis: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            iterations: 3,
             ..Default::default()
         }],
         vec![
@@ -160,12 +186,56 @@ async fn run_baseline_over_all_profiles(test: &mut Test) -> Result<()> {
             NetworkProfile::Moderate,
             NetworkProfile::International,
             NetworkProfile::SpikyLoss,
-            NetworkProfile::LimitedBandwidth(250),
             NetworkProfile::LimitedBandwidth(100),
             NetworkProfile::LimitedBandwidth(50),
-            NetworkProfile::SimpleLoss(10),
-            NetworkProfile::SimpleLoss(30),
+            NetworkProfile::LimitedBandwidth(25),
         ],
+    )
+    .await?;
+
+    let test_cases = [10, 20, 30].map(|loss| TestCaseConfig {
+        test_case_name: format!("loss_{loss}"),
+        client_a_config: CallConfig {
+            audio: AudioConfig {
+                input_name: "normal_phrasing".to_string(),
+                initial_packet_size_ms: 60,
+                ..Default::default()
+            },
+            profile: DeterministicLoss(loss),
+            ..Default::default()
+        },
+        client_b_config: CallConfig {
+            audio: AudioConfig {
+                input_name: "normal_phrasing".to_string(),
+                initial_packet_size_ms: 60,
+                visqol_speech_analysis: true,
+                visqol_audio_analysis: true,
+                pesq_speech_analysis: true,
+                plc_speech_analysis: true,
+                ..Default::default()
+            },
+            profile: DeterministicLoss(loss),
+            ..Default::default()
+        },
+        iterations: 3,
+        ..Default::default()
+    });
+
+    test.run(
+        GroupConfig {
+            group_name: "baseline_deterministic_loss".to_string(),
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: true,
+                show_visqol_mos_audio: true,
+                show_visqol_mos_average: true,
+                show_pesq_mos: true,
+                show_plc_mos: true,
+                show_video: false,
+            },
+            ..Default::default()
+        },
+        test_cases.into(),
+        vec![NetworkProfile::None],
     )
     .await?;
 
