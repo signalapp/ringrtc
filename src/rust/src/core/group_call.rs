@@ -770,10 +770,9 @@ const SMALL_CALL_MAX_SEND_RATE: DataRate = DataRate::from_kbps(1000);
 // This is the smallest rate at which WebRTC seems to still send VGA.
 const LARGE_CALL_MAX_SEND_RATE: DataRate = DataRate::from_kbps(671);
 
-// Use a higher bitrate for screen sharing
-const SCREENSHARE_MIN_SEND_RATE: DataRate = DataRate::from_mbps(2);
-const SCREENSHARE_START_SEND_RATE: DataRate = DataRate::from_mbps(2);
-const SCREENSHARE_MAX_SEND_RATE: DataRate = DataRate::from_mbps(5);
+const SCREENSHARE_MIN_SEND_RATE: DataRate = DataRate::from_kbps(500);
+const SCREENSHARE_START_SEND_RATE: DataRate = DataRate::from_mbps(1);
+const SCREENSHARE_MAX_SEND_RATE: DataRate = DataRate::from_mbps(2);
 
 const LOW_MAX_RECEIVE_RATE: DataRate = DataRate::from_kbps(500);
 
@@ -7038,9 +7037,9 @@ mod tests {
         client1.wait_for_client_to_process();
         assert_eq!(
             Some(SendRates {
-                min: Some(DataRate::from_kbps(2000)),
-                start: Some(DataRate::from_kbps(2000)),
-                max: Some(DataRate::from_kbps(5000)),
+                min: Some(DataRate::from_kbps(500)),
+                start: Some(DataRate::from_kbps(1000)),
+                max: Some(DataRate::from_kbps(2000)),
             }),
             client1.observer.send_rates()
         );
@@ -7094,9 +7093,9 @@ mod tests {
         client1.wait_for_client_to_process();
         assert_eq!(
             Some(SendRates {
-                min: Some(DataRate::from_kbps(2000)),
-                start: Some(DataRate::from_kbps(2000)),
-                max: Some(DataRate::from_kbps(5000)),
+                min: Some(DataRate::from_kbps(500)),
+                start: Some(DataRate::from_kbps(1000)),
+                max: Some(DataRate::from_kbps(2000)),
             }),
             client1.observer.send_rates()
         );
