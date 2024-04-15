@@ -130,7 +130,8 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     var sentCallMessageToGroupGroupId: Data?
     var sentCallMessageToGroupMessage: Data?
     var sentCallMessageToGroupUrgency: CallMessageUrgency?
-
+    var sentCallMessageToGroupOverrideRecipients: [UUID]?
+    
     var sentHttpRequestExpectation = XCTestExpectation(description: "sentHttpRequest")
     var sentHttpRequestId: UInt32?
     var sentHttpRequestUrl: String?
@@ -570,7 +571,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         sentCallMessageUrgency = urgency
     }
 
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency) {
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency, overrideRecipients: [UUID]) {
         Logger.debug("TestDelegate:shouldSendCallMessageToGroup")
         generalInvocationDetected = true
 
@@ -579,6 +580,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         sentCallMessageToGroupGroupId = groupId
         sentCallMessageToGroupMessage = message
         sentCallMessageToGroupUrgency = urgency
+        sentCallMessageToGroupOverrideRecipients = overrideRecipients
     }
     func sendRequest(requestId: UInt32, request: HTTPRequest) {
         Logger.debug("TestDelegate:shouldSendHttpRequest")

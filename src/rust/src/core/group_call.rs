@@ -197,19 +197,23 @@ pub trait Observer {
     fn request_membership_proof(&self, client_id: ClientId);
     // A response should be provided via Call.update_group_members.
     fn request_group_members(&self, client_id: ClientId);
-    // Send a signaling message to the given remote user
+    // Send a signaling message to the given remote user.
     fn send_signaling_message(
         &mut self,
-        recipient: UserId,
-        message: protobuf::signaling::CallMessage,
+        recipient_id: UserId,
+        call_message: protobuf::signaling::CallMessage,
         urgency: SignalingMessageUrgency,
     );
-    // Send a signaling message to all members of the group.
+    // Send a generic call message to a group. Send to all members of the group
+    // or, if recipients_override is not empty, send to the given subset of members
+    // using multi-recipient sealed sender.
     fn send_signaling_message_to_group(
         &mut self,
-        group: GroupId,
-        message: protobuf::signaling::CallMessage,
+        group_id: GroupId,
+        call_message: protobuf::signaling::CallMessage,
         urgency: SignalingMessageUrgency,
+        // Use `Default::default()` to send to all group members.
+        recipients_override: HashSet<UserId>,
     );
 
     // The following notify the observer of state changes to the local device.
@@ -1751,6 +1755,7 @@ impl Client {
                         state.group_id.clone(),
                         message,
                         SignalingMessageUrgency::HandleImmediately,
+                        Default::default(),
                     );
 
                     if state.remote_devices.is_empty() {
@@ -1905,15 +1910,13 @@ impl Client {
                         "Resending media keys to everyone (number of users: {})",
                         user_ids.len()
                     );
-                    for user_id in user_ids {
-                        Self::send_media_send_key_to_user_over_signaling(
-                            state,
-                            user_id,
-                            local_demux_id,
-                            ratchet_counter,
-                            secret,
-                        );
-                    }
+                    Self::send_media_send_key_to_users_over_signaling(
+                        state,
+                        user_ids,
+                        local_demux_id,
+                        ratchet_counter,
+                        secret,
+                    );
                 }
             }
         });
@@ -2826,7 +2829,7 @@ impl Client {
 
             // If someone was added, we must advance the send media key
             // and send it to everyone that was added.
-            let users_with_added_devices: Vec<UserId> = state
+            let users_with_added_devices: HashSet<UserId> = state
                 .remote_devices
                 .iter()
                 .filter(|device| added_demux_ids.contains(&device.demux_id))
@@ -2835,11 +2838,11 @@ impl Client {
             if !users_with_added_devices.is_empty() {
                 Self::advance_media_send_key_and_send_to_users_with_added_devices(
                     state,
-                    &users_with_added_devices[..],
+                    users_with_added_devices.clone(),
                 );
                 Self::send_pending_media_send_key_to_users_with_added_devices(
                     state,
-                    &users_with_added_devices[..],
+                    users_with_added_devices,
                 );
             }
 
@@ -3001,15 +3004,13 @@ impl Client {
                         "Sending newly rotated key to everyone (number of users: {})",
                         user_ids.len()
                     );
-                    for user_id in user_ids {
-                        Self::send_media_send_key_to_user_over_signaling(
-                            state,
-                            user_id,
-                            local_demux_id,
-                            ratchet_counter,
-                            secret,
-                        );
-                    }
+                    Self::send_media_send_key_to_users_over_signaling(
+                        state,
+                        user_ids,
+                        local_demux_id,
+                        ratchet_counter,
+                        secret,
+                    );
                 }
 
                 state.media_send_key_rotation_state = KeyRotationState::Pending {
@@ -3047,7 +3048,7 @@ impl Client {
 
     fn advance_media_send_key_and_send_to_users_with_added_devices(
         state: &mut State,
-        users_with_added_devices: &[UserId],
+        users_with_added_devices: HashSet<UserId>,
     ) {
         info!(
             "Advancing current media send key because a user has been added. client_id: {}",
@@ -3068,15 +3069,13 @@ impl Client {
                 "Sending newly advanced key to users with added devices (number of users: {})",
                 users_with_added_devices.len()
             );
-            for user_id in users_with_added_devices {
-                Self::send_media_send_key_to_user_over_signaling(
-                    state,
-                    user_id.to_vec(),
-                    local_demux_id,
-                    ratchet_counter,
-                    secret,
-                );
-            }
+            Self::send_media_send_key_to_users_over_signaling(
+                state,
+                users_with_added_devices,
+                local_demux_id,
+                ratchet_counter,
+                secret,
+            );
         }
     }
 
@@ -3132,16 +3131,13 @@ impl Client {
         }
     }
 
-    fn send_media_send_key_to_user_over_signaling(
+    fn send_media_send_key_to_users_over_signaling(
         state: &mut State,
-        recipient_id: UserId,
+        mut recipients: HashSet<UserId>,
         local_demux_id: DemuxId,
         ratchet_counter: frame_crypto::RatchetCounter,
         secret: frame_crypto::Secret,
     ) {
-        info!("send_media_send_key_to_user_over_signaling():");
-        debug!("  recipient_id: {}", uuid_to_string(&recipient_id));
-
         let media_key = protobuf::group_call::device_to_device::MediaKey {
             demux_id: Some(local_demux_id),
             ratchet_counter: Some(ratchet_counter as u32),
@@ -3157,34 +3153,62 @@ impl Client {
             ..Default::default()
         };
 
-        state.observer.send_signaling_message(
-            recipient_id,
-            call_message,
-            SignalingMessageUrgency::Droppable,
-        );
+        // The multi-recipient API should not be used to send to a user's own UUID. If it
+        // is in the set, remove it and send separately with a normal message.
+        let self_uuid_to_send_to =
+            if let Some(self_uuid) = state.self_uuid.lock().expect("can read UUID").deref() {
+                recipients.take(self_uuid)
+            } else {
+                None
+            };
+
+        if recipients.len() > 1 && state.kind == GroupCallKind::SignalGroup {
+            state.observer.send_signaling_message_to_group(
+                state.group_id.clone(),
+                call_message.clone(),
+                SignalingMessageUrgency::Droppable,
+                recipients,
+            );
+        } else {
+            for recipient_id in recipients {
+                debug!("  recipient_id: {}", uuid_to_string(&recipient_id));
+                state.observer.send_signaling_message(
+                    recipient_id.to_vec(),
+                    call_message.clone(),
+                    SignalingMessageUrgency::Droppable,
+                );
+            }
+        }
+
+        if let Some(self_uuid) = self_uuid_to_send_to {
+            debug!("  recipient_id: {}", uuid_to_string(&self_uuid));
+            state.observer.send_signaling_message(
+                self_uuid,
+                call_message,
+                SignalingMessageUrgency::Droppable,
+            );
+        }
     }
 
     fn send_pending_media_send_key_to_users_with_added_devices(
         state: &mut State,
-        users_with_added_devices: &[UserId],
+        users_with_added_devices: HashSet<UserId>,
     ) {
-        info!(
-            "Sending pending media key to users with added devices (number of users: {}).",
-            users_with_added_devices.len()
-        );
         if let JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) =
             state.join_state
         {
             if let KeyRotationState::Pending { secret, .. } = state.media_send_key_rotation_state {
-                for user_id in users_with_added_devices.iter() {
-                    Self::send_media_send_key_to_user_over_signaling(
-                        state,
-                        user_id.clone(),
-                        local_demux_id,
-                        0,
-                        secret,
-                    );
-                }
+                info!(
+                    "Sending pending media key to users with added devices (number of users: {})",
+                    users_with_added_devices.len()
+                );
+                Self::send_media_send_key_to_users_over_signaling(
+                    state,
+                    users_with_added_devices,
+                    local_demux_id,
+                    0,
+                    secret,
+                );
             }
         }
     }
@@ -3452,7 +3476,7 @@ impl Client {
             debug!("Send leaving message over RTP through SFU.");
         }
 
-        let msg = protobuf::signaling::CallMessage {
+        let call_message = protobuf::signaling::CallMessage {
             group_call_message: Some(DeviceToDevice {
                 group_id: Some(state.group_id.clone()),
                 leaving: Some(Leaving {
@@ -3462,14 +3486,45 @@ impl Client {
             }),
             ..Default::default()
         };
-        debug!(
-            "Send leaving message to everyone over signaling (recipients: {:?}).",
-            state.joined_members
+        debug!("leaving message recipients: {:?}", state.joined_members);
+
+        let mut recipients = state.joined_members.clone();
+
+        info!(
+            "Sending leaving message to everyone (number of users: {})",
+            recipients.len()
         );
-        for user_id in &state.joined_members {
+
+        // The multi-recipient API should not be used to send to a user's own UUID. If it
+        // is in the set, remove it and send separately with a normal message.
+        let self_uuid_to_send_to =
+            if let Some(self_uuid) = state.self_uuid.lock().expect("can read UUID").deref() {
+                recipients.take(self_uuid)
+            } else {
+                None
+            };
+
+        if recipients.len() > 1 && state.kind == GroupCallKind::SignalGroup {
+            state.observer.send_signaling_message_to_group(
+                state.group_id.clone(),
+                call_message.clone(),
+                SignalingMessageUrgency::Droppable,
+                recipients,
+            );
+        } else {
+            for user_id in &recipients {
+                state.observer.send_signaling_message(
+                    user_id.clone(),
+                    call_message.clone(),
+                    SignalingMessageUrgency::Droppable,
+                );
+            }
+        }
+
+        if let Some(self_uuid) = self_uuid_to_send_to {
             state.observer.send_signaling_message(
-                user_id.clone(),
-                msg.clone(),
+                self_uuid,
+                call_message,
                 SignalingMessageUrgency::Droppable,
             );
         }
@@ -3497,6 +3552,7 @@ impl Client {
                 state.group_id.clone(),
                 message,
                 SignalingMessageUrgency::HandleImmediately,
+                Default::default(),
             );
         }
     }
@@ -4470,6 +4526,9 @@ mod tests {
         handle_audio_levels_invocation_count: Arc<AtomicU64>,
         handle_reactions_invocation_count: Arc<AtomicU64>,
         reactions_count: Arc<AtomicU64>,
+        send_signaling_message_invocation_count: Arc<AtomicU64>,
+        send_signaling_message_to_group_invocation_count: Arc<AtomicU64>,
+        multi_recipient_count: Arc<AtomicU64>,
     }
 
     impl FakeObserver {
@@ -4508,6 +4567,9 @@ mod tests {
                 handle_audio_levels_invocation_count: Default::default(),
                 handle_reactions_invocation_count: Default::default(),
                 reactions_count: Default::default(),
+                send_signaling_message_invocation_count: Default::default(),
+                send_signaling_message_to_group_invocation_count: Default::default(),
+                multi_recipient_count: Default::default(),
             }
         }
 
@@ -4602,6 +4664,20 @@ mod tests {
 
         fn reactions_count(&self) -> u64 {
             self.reactions_count.swap(0, Ordering::Relaxed)
+        }
+
+        fn send_signaling_message_invocation_count(&self) -> u64 {
+            self.send_signaling_message_invocation_count
+                .swap(0, Ordering::Relaxed)
+        }
+
+        fn send_signaling_message_to_group_invocation_count(&self) -> u64 {
+            self.send_signaling_message_to_group_invocation_count
+                .swap(0, Ordering::Relaxed)
+        }
+
+        fn multi_recipient_count(&self) -> u64 {
+            self.multi_recipient_count.swap(0, Ordering::Relaxed)
         }
     }
 
@@ -4716,6 +4792,9 @@ mod tests {
             call_message: protobuf::signaling::CallMessage,
             _urgency: SignalingMessageUrgency,
         ) {
+            self.send_signaling_message_invocation_count
+                .fetch_add(1, Ordering::Relaxed);
+
             if self.outgoing_signaling_blocked() {
                 info!(
                     "Dropping message from {:?} to {:?} because we blocked signaling.",
@@ -4723,13 +4802,13 @@ mod tests {
                 );
                 return;
             }
-            let recipients = self
+            let recipient_ids = self
                 .recipients
                 .lock()
                 .expect("Lock recipients to add recipient");
             let mut sent = false;
             if let Some(message) = call_message.group_call_message {
-                for recipient in recipients.iter() {
+                for recipient in recipient_ids.iter() {
                     if recipient.user_id == recipient_id {
                         recipient
                             .client
@@ -4750,12 +4829,17 @@ mod tests {
                 );
             }
         }
+
         fn send_signaling_message_to_group(
             &mut self,
             _group: GroupId,
             call_message: protobuf::signaling::CallMessage,
             _urgency: SignalingMessageUrgency,
+            recipients_override: HashSet<UserId>,
         ) {
+            self.send_signaling_message_to_group_invocation_count
+                .fetch_add(1, Ordering::Relaxed);
+
             if self.outgoing_signaling_blocked() {
                 info!(
                     "Dropping message from {:?} to group because we blocked signaling.",
@@ -4763,12 +4847,53 @@ mod tests {
                 );
                 return;
             }
-            self.sent_group_signaling_messages
-                .lock()
-                .expect("adding message")
-                .push(call_message);
-            info!("Recorded group-wide call message from {:?}", self.user_id);
+            if !recipients_override.is_empty() {
+                self.multi_recipient_count
+                    .fetch_add(recipients_override.len() as u64, Ordering::Relaxed);
+
+                for recipient_id in recipients_override {
+                    assert_ne!(
+                        self.user_id, recipient_id,
+                        "User can't send to own UUID for multi-recipient API"
+                    );
+
+                    let recipient_ids = self
+                        .recipients
+                        .lock()
+                        .expect("Lock recipients to add recipient");
+                    let mut sent = false;
+                    if let Some(message) = call_message.clone().group_call_message {
+                        for recipient in recipient_ids.iter() {
+                            if recipient.user_id == recipient_id {
+                                recipient.client.on_signaling_message_received(
+                                    self.user_id.clone(),
+                                    message.clone(),
+                                );
+                                sent = true;
+                            }
+                        }
+                    }
+                    if sent {
+                        info!(
+                            "Sent message from {:?} to {:?}.",
+                            self.user_id, recipient_id
+                        );
+                    } else {
+                        info!(
+                            "Did not sent message from {:?} to {:?} because it's not a known recipient.",
+                            self.user_id, recipient_id
+                        );
+                    }
+                }
+            } else {
+                self.sent_group_signaling_messages
+                    .lock()
+                    .expect("adding message")
+                    .push(call_message);
+                info!("Recorded group-wide call message from {:?}", self.user_id);
+            }
         }
+
         fn handle_incoming_video_track(
             &mut self,
             _client_id: ClientId,
@@ -4776,6 +4901,7 @@ mod tests {
             _incoming_video_track: VideoTrack,
         ) {
         }
+
         fn handle_ended(&self, _client_id: ClientId, reason: EndReason) {
             self.ended.set(reason);
         }
@@ -5422,6 +5548,141 @@ mod tests {
         client2.set_remotes_and_wait_until_applied(&[&client1]);
         client1.wait_for_client_to_process();
         assert_eq!(0, client1.observer.request_group_members_invocation_count());
+    }
+
+    #[test]
+    #[rustfmt::skip] // The line wrapping makes this test hard to read.
+    fn send_media_keys_to_recipients() {
+        let client1 = TestClient::new(vec![1], 1);
+        client1.connect_join_and_wait_until_joined();
+        set_group_and_wait_until_applied(&[&client1]);
+
+        // With only one client in the call, no media keys should have been sent.
+        assert_eq!(0, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+
+        let client2 = TestClient::new(vec![2], 2);
+        client2.connect_join_and_wait_until_joined();
+        set_group_and_wait_until_applied(&[&client1, &client2]);
+
+        // Sending media keys to each-other after adding.
+        assert_eq!(1, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(1, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_to_group_invocation_count());
+
+        let client3 = TestClient::new(vec![3], 3);
+        client3.connect_join_and_wait_until_joined();
+        set_group_and_wait_until_applied(&[&client1, &client2, &client3]);
+
+        // client1 and client2 add client3.
+        assert_eq!(1, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(1, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_to_group_invocation_count());
+
+        // client3 must send to both client1 and client2 using the multi-recipient API.
+        assert_eq!(0, client3.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client3.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client3.observer.multi_recipient_count());
+
+        let client4 = TestClient::new(vec![4], 4);
+        client4.connect_join_and_wait_until_joined();
+        set_group_and_wait_until_applied(&[&client1, &client2, &client3, &client4]);
+
+        // client1, client2, and client3 add client4.
+        assert_eq!(1, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(1, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(1, client3.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client3.observer.send_signaling_message_to_group_invocation_count());
+
+        // client4 must send keys to all other clients using the multi-recipient API.
+        assert_eq!(0, client4.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client4.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(3, client4.observer.multi_recipient_count());
+
+        // client3 leaves, and should send a leave message to other clients. Also, it will
+        // send a leaving message to its user to let other devices know.
+        client3.disconnect_and_wait_until_ended();
+        assert_eq!(1, client3.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client3.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(3, client3.observer.multi_recipient_count());
+
+        // The other clients should all send rotated media keys to everyone else after
+        // learning that client3 has left.
+        set_group_and_wait_until_applied(&[&client1, &client2, &client4]);
+        assert_eq!(0, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client1.observer.multi_recipient_count());
+        assert_eq!(0, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client2.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client2.observer.multi_recipient_count());
+        assert_eq!(0, client4.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client4.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client4.observer.multi_recipient_count());
+
+        // client5 is another device from the user of client1.
+        let client5 = TestClient::new(vec![1], 5);
+        client5.connect_join_and_wait_until_joined();
+        set_group_and_wait_until_applied(&[&client1, &client2, &client4, &client5]);
+
+        // client1, client2, and client4 add client5 and sent it both their currently
+        // advanced key *and* pending key because client3 just left.
+        assert_eq!(2, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client4.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client4.observer.send_signaling_message_to_group_invocation_count());
+
+        // client5 sends its key to client1 normally and to client2 and client4 using
+        // the multi-recipient API.
+        assert_eq!(1, client5.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client5.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client5.observer.multi_recipient_count());
+
+        // Wait for keys to be fully rotated.
+        std::thread::sleep(std::time::Duration::from_millis(
+            MEDIA_SEND_KEY_ROTATION_DELAY_SECS * 1000 + 100,
+        ));
+
+        // client5 leaves the call.
+        client5.disconnect_and_wait_until_ended();
+        assert_eq!(1, client5.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client5.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client5.observer.multi_recipient_count());
+
+        // The other clients don't react because the user is still in the call as client1.
+        set_group_and_wait_until_applied(&[&client1, &client2, &client4]);
+        assert_eq!(0, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(0, client4.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client4.observer.send_signaling_message_to_group_invocation_count());
+
+        // client4 leaves the call.
+        client4.disconnect_and_wait_until_ended();
+        assert_eq!(1, client4.observer.send_signaling_message_invocation_count());
+        assert_eq!(1, client4.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(2, client4.observer.multi_recipient_count());
+
+        // Nothing should have happened to client1 or client2 yet.
+        assert_eq!(0, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_to_group_invocation_count());
+
+        // The other clients should all send rotated media keys to everyone else after
+        // learning that client4 and client5 have left. No multi-recipient sends are
+        // expected with just two clients remaining in the call.
+        set_group_and_wait_until_applied(&[&client1, &client2]);
+        assert_eq!(1, client1.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client1.observer.send_signaling_message_to_group_invocation_count());
+        assert_eq!(1, client2.observer.send_signaling_message_invocation_count());
+        assert_eq!(0, client2.observer.send_signaling_message_to_group_invocation_count());
     }
 
     #[test]

@@ -70,13 +70,13 @@ struct SimStats {
 pub struct GroupCallRingUpdate {
     pub group_id: group_call::GroupId,
     pub ring_id: group_call::RingId,
-    pub sender: UserId,
+    pub sender_id: UserId,
     pub update: group_call::RingUpdate,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct OutgoingCallMessage {
-    pub recipient: UserId,
+    pub recipient_id: UserId,
     pub message: Vec<u8>,
     pub urgency: group_call::SignalingMessageUrgency,
 }
@@ -395,7 +395,7 @@ impl Platform for SimPlatform {
 
     fn send_call_message(
         &self,
-        recipient: Vec<u8>,
+        recipient_id: UserId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
@@ -403,7 +403,7 @@ impl Platform for SimPlatform {
             .lock()
             .unwrap()
             .push(OutgoingCallMessage {
-                recipient,
+                recipient_id,
                 message,
                 urgency,
             });
@@ -412,11 +412,15 @@ impl Platform for SimPlatform {
 
     fn send_call_message_to_group(
         &self,
-        _group_id: Vec<u8>,
-        _message: Vec<u8>,
-        _urgency: group_call::SignalingMessageUrgency,
+        _group_id: group_call::GroupId,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        recipients_override: HashSet<UserId>,
     ) -> Result<()> {
-        unimplemented!()
+        for recipient_id in recipients_override {
+            let _ = self.send_call_message(recipient_id, message.clone(), urgency);
+        }
+        Ok(())
     }
 
     fn create_incoming_media(
@@ -595,7 +599,7 @@ impl Platform for SimPlatform {
         &self,
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: UserId,
+        sender_id: UserId,
         update: group_call::RingUpdate,
     ) {
         self.group_call_ring_updates
@@ -604,7 +608,7 @@ impl Platform for SimPlatform {
             .push(GroupCallRingUpdate {
                 group_id,
                 ring_id,
-                sender,
+                sender_id,
                 update,
             });
     }

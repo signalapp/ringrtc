@@ -2794,7 +2794,7 @@ fn cancel_group_ring() {
 
     match &messages[..] {
         [message] => {
-            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
             assert_eq!(SignalingMessageUrgency::HandleImmediately, message.urgency);
             let call_message = protobuf::signaling::CallMessage::decode(&message.message[..])
                 .expect(error_line!());
@@ -2883,7 +2883,7 @@ fn group_call_ring_accepted() {
         .take_outgoing_call_messages();
     match &messages[..] {
         [message] => {
-            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
             assert_eq!(
                 group_call::SignalingMessageUrgency::HandleImmediately,
                 message.urgency
@@ -2962,7 +2962,7 @@ fn group_call_ring_accepted_with_existing_call() {
         .take_outgoing_call_messages();
     match &messages[..] {
         [message] => {
-            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
             assert_eq!(
                 group_call::SignalingMessageUrgency::HandleImmediately,
                 message.urgency
@@ -3079,7 +3079,7 @@ fn group_call_ring_message_age_does_not_affect_ring_expiration() {
         .take_outgoing_call_messages();
     match &messages[..] {
         [message] => {
-            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
             assert_eq!(
                 group_call::SignalingMessageUrgency::HandleImmediately,
                 message.urgency
@@ -3165,7 +3165,7 @@ fn group_call_ring_last_ring_wins() {
         .take_outgoing_call_messages();
     match &messages[..] {
         [message] => {
-            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
             assert_eq!(
                 group_call::SignalingMessageUrgency::HandleImmediately,
                 message.urgency

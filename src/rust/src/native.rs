@@ -13,10 +13,7 @@ use crate::common::{
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
 use crate::core::platform::{Platform, PlatformItem};
-use crate::core::{
-    group_call::{self, GroupId, SignalingMessageUrgency},
-    signaling,
-};
+use crate::core::{group_call, signaling};
 use crate::lite::{
     sfu,
     sfu::{DemuxId, PeekInfo, PeekResult, UserId},
@@ -94,21 +91,22 @@ pub trait SignalingSender {
         recipient_id: &str,
         call_id: CallId,
         receiver_device_id: Option<DeviceId>,
-        msg: signaling::Message,
+        message: signaling::Message,
     ) -> Result<()>;
 
     fn send_call_message(
         &self,
         recipient_id: UserId,
-        msg: Vec<u8>,
-        urgency: SignalingMessageUrgency,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()>;
 
     fn send_call_message_to_group(
         &self,
-        group_id: GroupId,
-        msg: Vec<u8>,
-        urgency: SignalingMessageUrgency,
+        group_id: group_call::GroupId,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        recipients_override: HashSet<UserId>,
     ) -> Result<()>;
 }
 
@@ -243,7 +241,7 @@ pub enum GroupUpdate {
     Ring {
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: UserId,
+        sender_id: UserId,
         update: group_call::RingUpdate,
     },
     NetworkRouteChanged(group_call::ClientId, NetworkRoute),
@@ -792,23 +790,27 @@ impl Platform for NativePlatform {
 
     fn send_call_message(
         &self,
-        recipient_uuid: Vec<u8>,
+        recipient_id: UserId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
         self.signaling_sender
-            .send_call_message(recipient_uuid, message, urgency)
+            .send_call_message(recipient_id, message, urgency)
     }
 
     fn send_call_message_to_group(
         &self,
-        group_id: Vec<u8>,
+        group_id: group_call::GroupId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
+        recipients_override: HashSet<UserId>,
     ) -> Result<()> {
-        info!("NativePlatform::send_call_message_to_group():");
-        self.signaling_sender
-            .send_call_message_to_group(group_id, message, urgency)
+        self.signaling_sender.send_call_message_to_group(
+            group_id,
+            message,
+            urgency,
+            recipients_override,
+        )
     }
 
     // Group Calls
@@ -1001,7 +1003,7 @@ impl Platform for NativePlatform {
         &self,
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
-        sender: UserId,
+        sender_id: UserId,
         update: group_call::RingUpdate,
     ) {
         info!("NativePlatform::group_call_ring_update(): id: {}", ring_id);
@@ -1009,7 +1011,7 @@ impl Platform for NativePlatform {
         let result = self.send_group_update(GroupUpdate::Ring {
             group_id,
             ring_id,
-            sender,
+            sender_id,
             update,
         });
         if result.is_err() {

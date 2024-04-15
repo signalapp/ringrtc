@@ -2630,12 +2630,12 @@ where
 
     fn send_signaling_message(
         &mut self,
-        recipient: UserId,
+        recipient_id: UserId,
         call_message: protobuf::signaling::CallMessage,
         urgency: group_call::SignalingMessageUrgency,
     ) {
-        info!("send_signaling_message():");
-        debug!("  recipient: {}", uuid_to_string(&recipient));
+        debug!("send_signaling_message():");
+        debug!("  recipient: {}", uuid_to_string(&recipient_id));
 
         let platform = self.platform.lock().expect("platform.lock()");
         let mut bytes = BytesMut::with_capacity(call_message.encoded_len());
@@ -2643,7 +2643,7 @@ where
         match result {
             Ok(()) => {
                 platform
-                    .send_call_message(recipient, bytes.to_vec(), urgency)
+                    .send_call_message(recipient_id, bytes.to_vec(), urgency)
                     .unwrap_or_else(|_| {
                         error!("failed to send signaling message",);
                     });
@@ -2659,8 +2659,9 @@ where
         group_id: group_call::GroupId,
         call_message: protobuf::signaling::CallMessage,
         urgency: group_call::SignalingMessageUrgency,
+        recipients_override: HashSet<UserId>,
     ) {
-        info!("send_signaling_messag_to_group():");
+        debug!("send_signaling_message_to_group():");
         debug!("  group ID: {}", uuid_to_string(&group_id));
 
         let platform = self.platform.lock().expect("platform.lock()");
@@ -2669,7 +2670,12 @@ where
         match result {
             Ok(()) => {
                 platform
-                    .send_call_message_to_group(group_id, bytes.to_vec(), urgency)
+                    .send_call_message_to_group(
+                        group_id,
+                        bytes.to_vec(),
+                        urgency,
+                        recipients_override,
+                    )
                     .unwrap_or_else(|_| {
                         error!("failed to send signaling message",);
                     });

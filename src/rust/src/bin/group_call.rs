@@ -91,7 +91,17 @@ impl group_call::Observer for Observer {
         _message: ringrtc::protobuf::signaling::CallMessage,
         _urgency: ringrtc::core::group_call::SignalingMessageUrgency,
     ) {
-        // This isn't going to work :(.  Better turn of frame crypto.
+        // This isn't going to work :(.  Better turn off frame crypto.
+    }
+
+    fn send_signaling_message_to_group(
+        &mut self,
+        _group: group_call::GroupId,
+        _message: protobuf::signaling::CallMessage,
+        _urgency: group_call::SignalingMessageUrgency,
+        _recipients_override: HashSet<UserId>,
+    ) {
+        unimplemented!()
     }
 
     fn handle_incoming_video_track(
@@ -105,15 +115,6 @@ impl group_call::Observer for Observer {
 
     fn handle_ended(&self, _client_id: ClientId, reason: EndReason) {
         info!("Ended with reason {:?}", reason);
-    }
-
-    fn send_signaling_message_to_group(
-        &mut self,
-        _group: group_call::GroupId,
-        _message: protobuf::signaling::CallMessage,
-        _urgency: group_call::SignalingMessageUrgency,
-    ) {
-        unimplemented!()
     }
 
     fn handle_network_route_changed(

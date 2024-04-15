@@ -1353,7 +1353,7 @@ fn group_call_ring() {
     let mut cm = context.cm();
 
     let group_id = vec![1, 1, 1];
-    let sender = vec![1, 2, 3];
+    let sender_id = vec![1, 2, 3];
     let ring_id = group_call::RingId::from(42);
 
     let message = protobuf::signaling::CallMessage {
@@ -1369,7 +1369,7 @@ fn group_call_ring() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender_id.clone(), 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -1383,7 +1383,7 @@ fn group_call_ring() {
                 &ringrtc::sim::sim_platform::GroupCallRingUpdate {
                     group_id,
                     ring_id,
-                    sender,
+                    sender_id,
                     update: group_call::RingUpdate::Requested
                 },
                 update
@@ -1403,7 +1403,7 @@ fn group_call_ring_expired() {
     let mut cm = context.cm();
 
     let group_id = vec![1, 1, 1];
-    let sender = vec![1, 2, 3];
+    let sender_id = vec![1, 2, 3];
     let ring_id = group_call::RingId::from(42);
 
     let message = protobuf::signaling::CallMessage {
@@ -1420,7 +1420,7 @@ fn group_call_ring_expired() {
         .expect("cannot fail encoding to Vec");
 
     cm.received_call_message(
-        sender.clone(),
+        sender_id.clone(),
         1,
         2,
         buf,
@@ -1439,7 +1439,7 @@ fn group_call_ring_expired() {
                 &ringrtc::sim::sim_platform::GroupCallRingUpdate {
                     group_id,
                     ring_id,
-                    sender,
+                    sender_id,
                     update: group_call::RingUpdate::ExpiredRequest
                 },
                 update
@@ -1462,7 +1462,7 @@ fn group_call_ring_busy_in_direct_call() {
     cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
 
     let group_id = vec![1, 1, 1];
-    let sender = vec![1, 2, 3];
+    let sender_id = vec![1, 2, 3];
     let ring_id = group_call::RingId::from(42);
 
     let message = protobuf::signaling::CallMessage {
@@ -1478,7 +1478,7 @@ fn group_call_ring_busy_in_direct_call() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender_id.clone(), 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -1492,7 +1492,7 @@ fn group_call_ring_busy_in_direct_call() {
                 &ringrtc::sim::sim_platform::GroupCallRingUpdate {
                     group_id: group_id.clone(),
                     ring_id,
-                    sender,
+                    sender_id,
                     update: group_call::RingUpdate::BusyLocally
                 },
                 update
@@ -1507,7 +1507,7 @@ fn group_call_ring_busy_in_direct_call() {
         .take_outgoing_call_messages();
     match &messages[..] {
         [message] => {
-            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
             assert_eq!(
                 group_call::SignalingMessageUrgency::HandleImmediately,
                 message.urgency
@@ -1554,7 +1554,7 @@ fn group_call_ring_busy_in_group_call() {
     assert!(cm.busy());
 
     let group_id = vec![1, 1, 1];
-    let sender = vec![1, 2, 3];
+    let sender_id = vec![1, 2, 3];
     let ring_id = group_call::RingId::from(42);
 
     let message = protobuf::signaling::CallMessage {
@@ -1570,7 +1570,7 @@ fn group_call_ring_busy_in_group_call() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender_id.clone(), 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -1584,7 +1584,7 @@ fn group_call_ring_busy_in_group_call() {
                 &ringrtc::sim::sim_platform::GroupCallRingUpdate {
                     group_id: group_id.clone(),
                     ring_id,
-                    sender,
+                    sender_id,
                     update: group_call::RingUpdate::BusyLocally
                 },
                 update
@@ -1599,7 +1599,7 @@ fn group_call_ring_busy_in_group_call() {
         .take_outgoing_call_messages();
     match &messages[..] {
         [message] => {
-            assert_eq!(&self_uuid[..], &message.recipient[..]);
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
             assert_eq!(
                 group_call::SignalingMessageUrgency::HandleImmediately,
                 message.urgency
@@ -1634,7 +1634,7 @@ fn group_call_ring_responses() {
     let mut cm = context.cm();
 
     let group_id = vec![1, 1, 1];
-    let sender = vec![1, 2, 3];
+    let sender_id = vec![1, 2, 3];
     let ring_id = group_call::RingId::from(42);
 
     let message = protobuf::signaling::CallMessage {
@@ -1650,7 +1650,7 @@ fn group_call_ring_responses() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf.clone(), Duration::ZERO)
+    cm.received_call_message(sender_id.clone(), 1, 2, buf.clone(), Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -1664,10 +1664,10 @@ fn group_call_ring_responses() {
         ring_updates
     );
 
-    cm.set_self_uuid(sender.clone()).expect(error_line!());
+    cm.set_self_uuid(sender_id.clone()).expect(error_line!());
 
     // Okay, try again.
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender_id.clone(), 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -1682,7 +1682,7 @@ fn group_call_ring_responses() {
                 &ringrtc::sim::sim_platform::GroupCallRingUpdate {
                     group_id: group_id.clone(),
                     ring_id,
-                    sender: sender.clone(),
+                    sender_id: sender_id.clone(),
                     update: group_call::RingUpdate::DeclinedOnAnotherDevice
                 },
                 update
@@ -1705,7 +1705,7 @@ fn group_call_ring_responses() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender, 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender_id, 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -1727,7 +1727,7 @@ fn group_call_ring_timeout() {
     let mut cm = context.cm();
 
     let group_id = vec![1, 1, 1];
-    let sender = vec![1, 2, 3];
+    let sender_id = vec![1, 2, 3];
     let ring_id = group_call::RingId::from(42);
 
     let message = protobuf::signaling::CallMessage {
@@ -1743,7 +1743,7 @@ fn group_call_ring_timeout() {
         .encode(&mut buf)
         .expect("cannot fail encoding to Vec");
 
-    cm.received_call_message(sender.clone(), 1, 2, buf, Duration::ZERO)
+    cm.received_call_message(sender_id.clone(), 1, 2, buf, Duration::ZERO)
         .expect(error_line!());
     cm.synchronize().expect(error_line!());
 
@@ -1757,7 +1757,7 @@ fn group_call_ring_timeout() {
                 &ringrtc::sim::sim_platform::GroupCallRingUpdate {
                     group_id: group_id.clone(),
                     ring_id,
-                    sender: sender.clone(),
+                    sender_id: sender_id.clone(),
                     update: group_call::RingUpdate::Requested
                 },
                 update
@@ -1781,7 +1781,7 @@ fn group_call_ring_timeout() {
                 &ringrtc::sim::sim_platform::GroupCallRingUpdate {
                     group_id: group_id.clone(),
                     ring_id,
-                    sender,
+                    sender_id,
                     update: group_call::RingUpdate::ExpiredRequest
                 },
                 update

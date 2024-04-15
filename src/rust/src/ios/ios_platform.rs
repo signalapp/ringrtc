@@ -330,12 +330,12 @@ impl Platform for IosPlatform {
             return Ok(());
         }
 
-        let mut app_ice_candidates: Vec<AppByteSlice> = Vec::new();
-
-        for candidate in &send.ice.candidates {
-            let app_ice_candidate = app_slice_from_bytes(Some(&candidate.opaque));
-            app_ice_candidates.push(app_ice_candidate);
-        }
+        let app_ice_candidates: Vec<AppByteSlice> = send
+            .ice
+            .candidates
+            .iter()
+            .map(|candidate| app_slice_from_bytes(Some(&candidate.opaque)))
+            .collect();
 
         let app_ice_candidates_array = AppIceCandidateArray {
             candidates: app_ice_candidates.as_ptr(),
@@ -406,7 +406,7 @@ impl Platform for IosPlatform {
 
     fn send_call_message(
         &self,
-        recipient_uuid: Vec<u8>,
+        recipient_uuid: UserId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
@@ -422,17 +422,27 @@ impl Platform for IosPlatform {
 
     fn send_call_message_to_group(
         &self,
-        group_id: Vec<u8>,
+        group_id: group_call::GroupId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
+        recipients_override: HashSet<UserId>,
     ) -> Result<()> {
-        info!("send_call_message_to_group():");
+        let app_recipients_override: Vec<AppByteSlice> = recipients_override
+            .iter()
+            .map(|recipient| app_slice_from_bytes(Some(recipient)))
+            .collect();
+
+        let app_recipients_override_array = AppUuidArray {
+            uuids: app_recipients_override.as_ptr(),
+            count: app_recipients_override.len(),
+        };
 
         (self.app_interface.sendCallMessageToGroup)(
             self.app_interface.object,
             app_slice_from_bytes(Some(&group_id)),
             app_slice_from_bytes(Some(&message)),
             urgency as i32,
+            app_recipients_override_array,
         );
 
         Ok(())
@@ -577,13 +587,14 @@ impl Platform for IosPlatform {
         received_levels: Vec<ReceivedAudioLevel>,
     ) {
         trace!("handle_audio_levels(): {:?}", captured_level);
-        let mut app_received_levels: Vec<AppReceivedAudioLevel> = Vec::new();
-        for received in received_levels {
-            app_received_levels.push(AppReceivedAudioLevel {
+
+        let app_received_levels: Vec<AppReceivedAudioLevel> = received_levels
+            .iter()
+            .map(|received| AppReceivedAudioLevel {
                 demuxId: received.demux_id,
                 level: received.level,
-            });
-        }
+            })
+            .collect();
 
         let app_received_levels_array = AppReceivedAudioLevelArray {
             levels: app_received_levels.as_ptr(),
@@ -610,13 +621,13 @@ impl Platform for IosPlatform {
     fn handle_reactions(&self, client_id: ClientId, reactions: Vec<Reaction>) {
         trace!("handle_reactions(): {:?}", reactions);
 
-        let mut app_reactions: Vec<AppReaction> = Vec::new();
-        for reaction in reactions.iter() {
-            app_reactions.push(AppReaction {
+        let app_reactions: Vec<AppReaction> = reactions
+            .iter()
+            .map(|reaction| AppReaction {
                 demuxId: reaction.demux_id,
                 value: app_slice_from_str(Some(&reaction.value)),
-            });
-        }
+            })
+            .collect();
 
         let app_reactions_array = AppReactionsArray {
             reactions: app_reactions.as_ptr(),
@@ -656,12 +667,11 @@ impl Platform for IosPlatform {
         remote_device_states: &[group_call::RemoteDeviceState],
         _reason: group_call::RemoteDevicesChangedReason,
     ) {
-        let mut app_remote_device_states: Vec<AppRemoteDeviceState> = Vec::new();
-
-        for remote_device_state in remote_device_states {
-            let app_remote_device_state = AppRemoteDeviceState {
+        let app_remote_device_states: Vec<AppRemoteDeviceState> = remote_device_states
+            .iter()
+            .map(|remote_device_state| AppRemoteDeviceState {
                 demuxId: remote_device_state.demux_id,
-                user_id: app_slice_from_bytes(Some(remote_device_state.user_id.as_ref())),
+                user_id: app_slice_from_bytes(Some(&remote_device_state.user_id)),
                 mediaKeysReceived: remote_device_state.media_keys_received,
                 audioMuted: app_option_from_bool(remote_device_state.heartbeat_state.audio_muted),
                 videoMuted: app_option_from_bool(remote_device_state.heartbeat_state.video_muted),
@@ -673,10 +683,8 @@ impl Platform for IosPlatform {
                 speakerTime: remote_device_state.speaker_time_as_unix_millis(),
                 forwardingVideo: app_option_from_bool(remote_device_state.forwarding_video),
                 isHigherResolutionPending: remote_device_state.is_higher_resolution_pending,
-            };
-
-            app_remote_device_states.push(app_remote_device_state);
-        }
+            })
+            .collect();
 
         let app_remote_device_states_array = AppRemoteDeviceStateArray {
             states: app_remote_device_states.as_ptr(),
@@ -726,24 +734,21 @@ impl Platform for IosPlatform {
         peek_info: &PeekInfo,
         joined_members: &HashSet<UserId>,
     ) {
-        let mut app_joined_members: Vec<AppByteSlice> = Vec::new();
-
-        for member in joined_members {
-            let app_joined_member = app_slice_from_bytes(Some(member));
-            app_joined_members.push(app_joined_member);
-        }
+        let app_joined_members: Vec<AppByteSlice> = joined_members
+            .iter()
+            .map(|member| app_slice_from_bytes(Some(member)))
+            .collect();
 
         let app_joined_members_array = AppUuidArray {
             uuids: app_joined_members.as_ptr(),
             count: app_joined_members.len(),
         };
 
-        let mut app_pending_users: Vec<AppByteSlice> = Vec::new();
-
-        for member in peek_info.unique_pending_users() {
-            let app_pending_user = app_slice_from_bytes(Some(member));
-            app_pending_users.push(app_pending_user);
-        }
+        let app_pending_users: Vec<AppByteSlice> = peek_info
+            .unique_pending_users()
+            .iter()
+            .map(|&member| app_slice_from_bytes(Some(member)))
+            .collect();
 
         let app_pending_users_array = AppUuidArray {
             uuids: app_pending_users.as_ptr(),

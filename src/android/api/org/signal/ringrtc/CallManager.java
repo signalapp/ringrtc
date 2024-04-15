@@ -1557,9 +1557,15 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void sendCallMessageToGroup(@NonNull byte[] groupId, @NonNull byte[] message, int urgency) {
+  private void sendCallMessageToGroup(@NonNull byte[] groupId, @NonNull byte[] message, int urgency, @NonNull List<byte[]> overrideRecipients) {
     Log.i(TAG, "sendCallMessageToGroup():");
-    observer.onSendCallMessageToGroup(groupId, message, CallMessageUrgency.values()[urgency]);
+
+    List<UUID> finalOverrideRecipients = new ArrayList<UUID>();
+    for (byte[] recipient : overrideRecipients) {
+      finalOverrideRecipients.add(Util.getUuidFromBytes(recipient));
+    }
+
+    observer.onSendCallMessageToGroup(groupId, message, CallMessageUrgency.values()[urgency], finalOverrideRecipients);
   }
 
   @CalledByNative
@@ -2212,25 +2218,27 @@ public class CallManager {
 
     /**
      *
-     * A message that should be sent to the given user as a CallMessage.
+     * Send a generic call message to the given remote recipient.
      *
      * @param recipientUuid  UUID for the user to send the message to
      * @param message        the opaque bytes to send
-     * @param urgency        controls whether recipients should immediately handle this message.
-     *                       Affects out-of-app message processing.
+     * @param urgency        controls whether recipients should immediately handle this message
      */
     void onSendCallMessage(@NonNull UUID recipientUuid, @NonNull byte[] message, @NonNull CallMessageUrgency urgency);
 
     /**
      *
-     * A message that should be sent to all members of the given group as a CallMessage.
+     * Send a generic call message to a group. Send to all members of the group
+     * or, if overrideRecipients is not empty, send to the given subset of members
+     * using multi-recipient sealed sender. If the sealed sender request fails,
+     * clients should provide a fallback mechanism.
      *
-     * @param groupId                  the ID of the group in question
-     * @param message                  the opaque bytes to send
-     * @param urgency        controls whether recipients should immediately handle this message.
-     *                       Affects out-of-app message processing.
+     * @param groupId             the ID of the group in question
+     * @param message             the opaque bytes to send
+     * @param urgency             controls whether recipients should immediately handle this message
+     * @param overrideRecipients  a subset of group members to send to; if empty, send to all
      */
-    void onSendCallMessageToGroup(@NonNull byte[] groupId, @NonNull byte[] message, @NonNull CallMessageUrgency urgency);
+    void onSendCallMessageToGroup(@NonNull byte[] groupId, @NonNull byte[] message, @NonNull CallMessageUrgency urgency, @NonNull List<UUID> overrideRecipients);
 
     /**
      *

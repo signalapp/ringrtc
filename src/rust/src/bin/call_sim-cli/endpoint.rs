@@ -31,6 +31,7 @@ use ringrtc::{
     },
 };
 use std::{
+    collections::HashSet,
     io,
     iter::{Cycle, StepBy},
     net::{SocketAddr, UdpSocket},
@@ -436,7 +437,7 @@ impl SignalingSender for CallEndpoint {
     fn send_call_message(
         &self,
         _recipient_id: UserId,
-        _msg: Vec<u8>,
+        _message: Vec<u8>,
         _urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
         unimplemented!()
@@ -445,8 +446,9 @@ impl SignalingSender for CallEndpoint {
     fn send_call_message_to_group(
         &self,
         _group_id: group_call::GroupId,
-        _msg: Vec<u8>,
+        _message: Vec<u8>,
         _urgency: group_call::SignalingMessageUrgency,
+        _recipients_override: HashSet<UserId>,
     ) -> Result<()> {
         unimplemented!()
     }

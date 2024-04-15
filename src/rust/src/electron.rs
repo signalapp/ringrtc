@@ -6,7 +6,7 @@
 use lazy_static::lazy_static;
 use neon::types::JsBigInt;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -126,16 +126,18 @@ pub enum Event {
     // The JavaScript should send the following opaque call message to the
     // given recipient UUID.
     SendCallMessage {
-        recipient_uuid: UserId,
+        recipient_id: UserId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
     },
     // The JavaScript should send the following opaque call message to all
-    // other members of the given group
+    // other members of the given group or a subset of members specified
+    // by recipients, if not empty, using multi-recipient sealed sender.
     SendCallMessageToGroup {
         group_id: GroupId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
+        recipients_override: Vec<UserId>,
     },
     // The call with the given remote PeerId has changed state.
     // We assume only one call per remote PeerId at a time.
@@ -215,22 +217,20 @@ impl SignalingSender for EventReporter {
             receiver_device_id,
             call_id,
             msg,
-        ))?;
-        Ok(())
+        ))
     }
 
     fn send_call_message(
         &self,
-        recipient_uuid: UserId,
+        recipient_id: UserId,
         message: Vec<u8>,
         urgency: SignalingMessageUrgency,
     ) -> Result<()> {
         self.send(Event::SendCallMessage {
-            recipient_uuid,
+            recipient_id,
             message,
             urgency,
-        })?;
-        Ok(())
+        })
     }
 
     fn send_call_message_to_group(
@@ -238,13 +238,14 @@ impl SignalingSender for EventReporter {
         group_id: GroupId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
+        recipients_override: HashSet<UserId>,
     ) -> Result<()> {
         self.send(Event::SendCallMessageToGroup {
             group_id,
             message,
             urgency,
-        })?;
-        Ok(())
+            recipients_override: recipients_override.into_iter().collect::<Vec<_>>(),
+        })
     }
 }
 
@@ -259,8 +260,7 @@ impl CallStateHandler for EventReporter {
             remote_peer_id.to_string(),
             call_id,
             call_state,
-        ))?;
-        Ok(())
+        ))
     }
 
     fn handle_network_route(
@@ -271,24 +271,21 @@ impl CallStateHandler for EventReporter {
         self.send(Event::NetworkRouteChange(
             remote_peer_id.to_string(),
             network_route,
-        ))?;
-        Ok(())
+        ))
     }
 
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         self.send(Event::RemoteVideoStateChange(
             remote_peer_id.to_string(),
             enabled,
-        ))?;
-        Ok(())
+        ))
     }
 
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         self.send(Event::RemoteSharingScreenChange(
             remote_peer_id.to_string(),
             enabled,
-        ))?;
-        Ok(())
+        ))
     }
 
     fn handle_audio_levels(
@@ -301,16 +298,14 @@ impl CallStateHandler for EventReporter {
             peer_id: remote_peer_id.to_string(),
             captured_level,
             received_level,
-        })?;
-        Ok(())
+        })
     }
 
     fn handle_low_bandwidth_for_video(&self, remote_peer_id: &str, recovered: bool) -> Result<()> {
         self.send(Event::LowBandwidthForVideo {
             peer_id: remote_peer_id.to_string(),
             recovered,
-        })?;
-        Ok(())
+        })
     }
 }
 
@@ -2386,15 +2381,15 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             }
 
             Event::SendCallMessage {
-                recipient_uuid,
+                recipient_id,
                 message,
                 urgency,
             } => {
                 let method_name = "sendCallMessage";
-                let recipient_uuid = to_js_buffer(&mut cx, &recipient_uuid);
+                let recipient_id = to_js_buffer(&mut cx, &recipient_id);
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
-                let args = [recipient_uuid, message, urgency];
+                let args = [recipient_id, message, urgency];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2403,12 +2398,18 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 group_id,
                 message,
                 urgency,
+                recipients_override,
             } => {
                 let method_name = "sendCallMessageToGroup";
                 let group_id = to_js_buffer(&mut cx, &group_id);
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
-                let args = [group_id, message, urgency];
+                let js_recipients = JsArray::new(&mut cx, recipients_override.len());
+                for (i, recipient_id) in recipients_override.iter().enumerate() {
+                    let js_recipient_id = to_js_buffer(&mut cx, recipient_id);
+                    js_recipients.set(&mut cx, i as u32, js_recipient_id)?;
+                }
+                let args = [group_id, message, urgency, js_recipients.upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
@@ -2659,7 +2660,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             Event::GroupUpdate(GroupUpdate::Ring {
                 group_id,
                 ring_id,
-                sender,
+                sender_id,
                 update,
             }) => {
                 let method_name = "groupCallRingUpdate";
@@ -2667,7 +2668,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let args = [
                     to_js_buffer(&mut cx, &group_id).upcast::<JsValue>(),
                     JsBigInt::from_i64(&mut cx, ring_id.into()).upcast(),
-                    to_js_buffer(&mut cx, &sender).upcast(),
+                    to_js_buffer(&mut cx, &sender_id).upcast(),
                     cx.number(update as i32).upcast(),
                 ];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;

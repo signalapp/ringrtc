@@ -349,7 +349,12 @@ export class RingRTCType {
     | null = null;
 
   handleSendCallMessageToGroup:
-    | ((groupId: Buffer, message: Buffer, urgency: CallMessageUrgency) => void)
+    | ((
+        groupId: Buffer,
+        message: Buffer,
+        urgency: CallMessageUrgency,
+        overrideRecipients: Array<Buffer>
+      ) => void)
     | null = null;
 
   handleGroupCallRingUpdate:
@@ -1647,10 +1652,16 @@ export class RingRTCType {
   sendCallMessageToGroup(
     groupId: Buffer,
     message: Buffer,
-    urgency: CallMessageUrgency
+    urgency: CallMessageUrgency,
+    overrideRecipients: Array<Buffer>
   ): void {
     if (this.handleSendCallMessageToGroup) {
-      this.handleSendCallMessageToGroup(groupId, message, urgency);
+      this.handleSendCallMessageToGroup(
+        groupId,
+        message,
+        urgency,
+        overrideRecipients
+      );
     } else {
       this.logError('RingRTC.handleSendCallMessageToGroup is not set!');
     }
@@ -2977,7 +2988,8 @@ export interface CallManagerCallbacks {
   sendCallMessageToGroup(
     groupId: Buffer,
     message: Buffer,
-    urgency: CallMessageUrgency
+    urgency: CallMessageUrgency,
+    overrideRecipients: Array<Buffer>
   ): void;
   sendHttpRequest(
     requestId: number,

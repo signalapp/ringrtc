@@ -700,7 +700,7 @@ impl Platform for AndroidPlatform {
 
     fn send_call_message(
         &self,
-        recipient_uuid: Vec<u8>,
+        recipient_uuid: UserId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
     ) -> Result<()> {
@@ -735,19 +735,37 @@ impl Platform for AndroidPlatform {
 
     fn send_call_message_to_group(
         &self,
-        group_id: Vec<u8>,
+        group_id: group_call::GroupId,
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
+        recipients_override: HashSet<UserId>,
     ) -> Result<()> {
-        info!("send_call_message_to_group():");
-
         let env = &mut self.java_env()?;
         let jni_call_manager = self.jni_call_manager.as_obj();
 
-        // Set a frame capacity of min (5) + objects (2).
-        let capacity = 7;
+        // Set a frame capacity of min (5) + objects (3) + elements (N * 1 object per element).
+        let capacity = (8 + recipients_override.len()) as i32;
         env.with_local_frame(capacity, |env| -> Result<()> {
             let jni_group_id = JObject::from(env.byte_array_from_slice(&group_id)?);
+
+            let list = jni_new_arraylist(env, recipients_override.len())?;
+            let recipients_override_list = env.get_list(&list)?;
+            for recipient in recipients_override {
+                let jni_opaque_user_id = match env.byte_array_from_slice(&recipient) {
+                    Ok(v) => JObject::from(v),
+                    Err(error) => {
+                        error!("{:?}", error);
+                        continue;
+                    }
+                };
+
+                let result = recipients_override_list.add(env, &jni_opaque_user_id);
+                if result.is_err() {
+                    error!("{:?}", result.err());
+                    continue;
+                }
+            }
+
             let jni_message = JObject::from(env.byte_array_from_slice(&message)?);
 
             let result = jni_call_method(
@@ -758,6 +776,7 @@ impl Platform for AndroidPlatform {
                     jni_group_id => [byte],
                     jni_message => [byte],
                     urgency as i32 => int,
+                    recipients_override_list => java.util.List,
                 ) -> void),
             );
             if result.is_err() {

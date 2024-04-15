@@ -5,7 +5,6 @@
 
 use log::{debug, info};
 
-use ringrtc::lite::sfu::DemuxId;
 use ringrtc::{
     common::{
         actor::{Actor, Stopper},
@@ -13,7 +12,10 @@ use ringrtc::{
         CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result,
     },
     core::{call_manager::CallManager, group_call, signaling},
-    lite::{http, sfu::UserId},
+    lite::{
+        http,
+        sfu::{DemuxId, UserId},
+    },
     native::{
         CallState, CallStateHandler, GroupUpdate, GroupUpdateHandler, NativeCallContext,
         NativePlatform, PeerId, SignalingSender,
@@ -32,7 +34,11 @@ use ringrtc::{
         peer_connection_observer::NetworkRoute,
     },
 };
-use std::{collections::HashMap, thread, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    thread,
+    time::Duration,
+};
 
 fn main() {
     log::set_logger(&LOG).expect("set logger");
@@ -559,6 +565,7 @@ impl SignalingSender for CallEndpoint {
         _group_id: group_call::GroupId,
         _msg: Vec<u8>,
         _urgency: group_call::SignalingMessageUrgency,
+        _recipients_override: HashSet<UserId>,
     ) -> Result<()> {
         unimplemented!()
     }
