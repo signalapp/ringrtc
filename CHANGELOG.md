@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.40.0
+
+- Group Calls: Support multi-recipient message sending
+
+- Group Calls: Update bitrate limits for screen sharing
+
+- Update to webrtc 6261e
+  - Update to use Opus 1.5
+
 ## v2.39.3
 
 - Update to webrtc 6261d
