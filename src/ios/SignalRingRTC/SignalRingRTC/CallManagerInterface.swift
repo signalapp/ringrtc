@@ -543,7 +543,6 @@ func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, c
     let count = iceCandidates.pointee.count
 
     var finalCandidates: [Data] = []
-
     for index in 0..<count {
         guard let iceCandidate = iceCandidates.pointee.candidates[index].asData() else {
             continue
@@ -883,7 +882,6 @@ func callManagerInterfaceHandleAudioLevels(object: UnsafeMutableRawPointer?, cli
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     var finalReceivedLevels: [ReceivedAudioLevel] = []
-
     for index in 0..<receivedLevelArray.count {
         let receivedLevel = receivedLevelArray.levels[index]
 
@@ -913,7 +911,6 @@ func callManagerInterfaceHandleReactions(object: UnsafeMutableRawPointer?, clien
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     var finalReactions: [Reaction] = []
-
     for index in 0..<reactions.count {
         let reaction = reactions.reactions[index]
 
@@ -925,9 +922,7 @@ func callManagerInterfaceHandleReactions(object: UnsafeMutableRawPointer?, clien
         finalReactions.append(Reaction(demuxId: reaction.demuxId, value: value))
     }
 
-    if !finalReactions.isEmpty {
-        obj.handleReactions(clientId: clientId, reactions: finalReactions)
-    }
+    obj.handleReactions(clientId: clientId, reactions: finalReactions)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -943,9 +938,7 @@ func callManagerInterfaceHandleRaisedHands(object: UnsafeMutableRawPointer?, cli
         finalRaisedHands.append(raisedHandsArray.raised_hands[index])
     }
 
-    if !finalRaisedHands.isEmpty {
-        obj.handleRaisedHands(clientId: clientId, raisedHands: finalRaisedHands)
-    }
+    obj.handleRaisedHands(clientId: clientId, raisedHands: finalRaisedHands)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -981,7 +974,6 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     var finalRemoteDeviceStates: [RemoteDeviceState] = []
-
     for index in 0..<remoteDeviceStates.count {
         let remoteDeviceState = remoteDeviceStates.states[index]
 
