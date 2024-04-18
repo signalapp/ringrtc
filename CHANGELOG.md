@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.40.1
+
+- iOS: Raised hands array can be empty
+
 ## v2.40.0
 
 - Group Calls: Support multi-recipient message sending
