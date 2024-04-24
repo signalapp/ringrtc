@@ -51,7 +51,7 @@ jobs:
   build_ios:
     name: Build iOS
 
-    runs-on: 'macos-latest-xl'
+    runs-on: 'macos-13-xl'
 
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +125,7 @@ jobs:
   build_mac:
     name: Build Mac
 
-    runs-on: 'macos-latest-xl'
+    runs-on: 'macos-13-xl'
 
     steps:
       - uses: actions/checkout@v4

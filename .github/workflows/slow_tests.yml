@@ -115,7 +115,7 @@ jobs:
 
   ios:
     name: Build for all iOS targets
-    runs-on: macos-latest
+    runs-on: macos-13
     needs: [check-up-to-date]
     if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
 

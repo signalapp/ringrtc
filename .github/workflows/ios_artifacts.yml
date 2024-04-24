@@ -11,12 +11,12 @@ on:
         type: boolean
       runner:
         description: "Mac runner:"
-        default: 'macos-latest'
+        default: 'macos-13'
         required: true
         type: choice
         options:
-          - 'macos-latest'
-          - 'macos-latest-xl'
+          - 'macos-13'
+          - 'macos-13-xl'
 
 env:
   CARGO_TERM_COLOR: always
