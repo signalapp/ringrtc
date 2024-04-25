@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 53;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -19,6 +19,7 @@
 		383347F223AA952F00D53B63 /* ConnectionMediaStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */; };
 		383347F323AA952F00D53B63 /* CallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EB23AA952F00D53B63 /* CallManager.swift */; };
 		387059A724EB276700916F99 /* VideoCaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387059A624EB276700916F99 /* VideoCaptureController.swift */; };
+		3877D8242BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3877D8232BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift */; };
 		388AC0D122FA8B2D00BEC609 /* SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */; };
 		388AC0D622FA8B2D00BEC609 /* SignalRingRTCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388AC0D522FA8B2D00BEC609 /* SignalRingRTCTests.swift */; };
 		388AC0D822FA8B2D00BEC609 /* SignalRingRTC.h in Headers */ = {isa = PBXBuildFile; fileRef = 388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -59,6 +60,7 @@
 		383347EB23AA952F00D53B63 /* CallManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallManager.swift; sourceTree = "<group>"; };
 		383347F423AA973300D53B63 /* Nimble.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Nimble.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		387059A624EB276700916F99 /* VideoCaptureController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VideoCaptureController.swift; sourceTree = "<group>"; };
+		3877D8232BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceModuleForTests.swift; sourceTree = "<group>"; };
 		388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SignalRingRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		388AC0CA22FA8B2D00BEC609 /* SignalRingRTC.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SignalRingRTC.h; sourceTree = "<group>"; };
 		388AC0CB22FA8B2D00BEC609 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -154,6 +156,7 @@
 				17FC1EE22A09D6CC00D0A2A5 /* CallLinkTests.swift */,
 				17905A962A1D880400571FAB /* TestGroupCallDelegate.swift */,
 				388AC0D722FA8B2D00BEC609 /* Info.plist */,
+				3877D8232BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift */,
 			);
 			path = SignalRingRTCTests;
 			sourceTree = "<group>";
@@ -389,6 +392,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3877D8242BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift in Sources */,
 				17905A972A1D880400571FAB /* TestGroupCallDelegate.swift in Sources */,
 				388AC0D622FA8B2D00BEC609 /* SignalRingRTCTests.swift in Sources */,
 				17FC1EE32A09D6CC00D0A2A5 /* CallLinkTests.swift in Sources */,

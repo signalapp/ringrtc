@@ -15,7 +15,8 @@ typealias TestCallManager = CallManager<OpaqueCallData, TestDelegate>
 /// Never actually returns nil.
 func createCallManager(_ delegate: TestDelegate) -> TestCallManager? {
     let httpClient = HTTPClient(delegate: delegate)
-    let call_manager = TestCallManager(httpClient: httpClient)
+    // Provide a dummy ADM since no tests are currently measuring audio.
+    let call_manager = TestCallManager(httpClient: httpClient, audioDevice: AudioDeviceModuleForTests())
     call_manager.delegate = delegate
     return call_manager
 }

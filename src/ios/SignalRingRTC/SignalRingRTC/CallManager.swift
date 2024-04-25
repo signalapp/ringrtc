@@ -331,7 +331,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     private var videoCaptureController: VideoCaptureController?
 
-    public init(httpClient: HTTPClient, fieldTrials: [String: String] = [:]) {
+    public init(httpClient: HTTPClient, fieldTrials: [String: String] = [:], audioDevice: RTCAudioDevice? = nil) {
         // Initialize the global object (mainly for logging).
         CallManagerGlobal.initialize(fieldTrials: fieldTrials)
 
@@ -341,7 +341,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // Initialize the WebRTC factory.
         let decoderFactory = RTCDefaultVideoDecoderFactory()
         let encoderFactory = RTCDefaultVideoEncoderFactory()
-        self.factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory)
+        if audioDevice != nil {
+          self.factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory, audioDevice: audioDevice)
+        } else {
+          self.factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory)
+        }
 
         self.groupCallByClientId = GroupCallByClientId()
 
