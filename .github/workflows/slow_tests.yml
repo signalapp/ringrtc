@@ -84,7 +84,7 @@ jobs:
 
       # From reactivecircus/android-emulator-runner
       - name: AVD cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: avd-cache
         with:
           path: |
@@ -123,6 +123,7 @@ jobs:
     - uses: actions/checkout@v4
     - run: brew install protobuf coreutils # for grealpath
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim --component rust-src
+    - run: cargo install cbindgen
     - run: bin/fetch-artifact -p ios
     - run: bin/build-ios --release --ringrtc-only
 
