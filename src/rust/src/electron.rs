@@ -541,6 +541,7 @@ fn to_js_peek_info<'a>(
         creator,
         era_id,
         max_devices,
+        call_link_state: _call_link_state,
     } = &peek_info;
 
     let js_devices = JsArray::new(cx, devices.len());
@@ -579,6 +580,7 @@ fn to_js_peek_info<'a>(
         let js_user_id = to_js_buffer(cx, user_id);
         js_pending_users.set(cx, i as u32, js_user_id)?;
     }
+    let js_call_link_state = to_js_call_link_state(cx, peek_info.call_link_state.as_ref())?;
 
     let js_info = cx.empty_object();
     js_info.set(cx, "devices", js_devices)?;
@@ -598,7 +600,41 @@ fn to_js_peek_info<'a>(
     // For backwards compatibility.
     js_info.set(cx, "deviceCount", device_count_including_pending_devices)?;
     js_info.set(cx, "pendingUsers", js_pending_users)?;
+    js_info.set(cx, "callLinkState", js_call_link_state)?;
     Ok(js_info)
+}
+
+fn to_js_call_link_state<'a>(
+    cx: &mut FunctionContext<'a>,
+    state: Option<&CallLinkState>,
+) -> JsResult<'a, JsValue> {
+    match state {
+        Some(state) => {
+            let state_object = cx.empty_object();
+            let js_name = cx.string(&state.name);
+            state_object.set(cx, "name", js_name)?;
+            let js_revoked = cx.boolean(state.revoked);
+            state_object.set(cx, "revoked", js_revoked)?;
+            let js_restrictions = cx.number(match state.restrictions {
+                CallLinkRestrictions::None => 0,
+                CallLinkRestrictions::AdminApproval => 1,
+                CallLinkRestrictions::Unknown => -1,
+            });
+            state_object.set(cx, "rawRestrictions", js_restrictions)?;
+            let js_expiration = cx
+                .date(
+                    state
+                        .expiration
+                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as f64,
+                )
+                .or_else(|e| cx.throw_range_error(e.to_string()))?;
+            state_object.set(cx, "expiration", js_expiration)?;
+            Ok(state_object.upcast())
+        }
+        None => Ok(cx.undefined().upcast()),
+    }
 }
 
 static CALL_ENDPOINT_PROPERTY_KEY: &str = "__call_endpoint_addr";
@@ -1826,6 +1862,7 @@ fn peekCallLinkCall(mut cx: FunctionContext) -> JsResult<JsValue> {
             Some(hex::encode(root_key.derive_room_id())),
             call_links::auth_header_from_auth_credential(&auth_presentation),
             Arc::new(call_links::CallLinkMemberResolver::from(&root_key)),
+            Some(root_key.clone()),
             Box::new(move |peek_result| {
                 // Ignore errors, that can only mean we're shutting down.
                 let _ = event_reporter.send(Event::GroupUpdate(GroupUpdate::PeekResult {
@@ -2619,6 +2656,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let js_info = to_js_peek_info(&mut cx, peek_info)?;
 
                 let args = [cx.number(client_id).upcast(), js_info.upcast()];
+
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }

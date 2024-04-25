@@ -2709,6 +2709,7 @@ where
                 None,
                 auth_header,
                 Arc::new(member_resolver),
+                None,
                 Box::new(move |peek_result| {
                     info!("handle_peek_response");
                     platform_handler!(call_manager, handle_peek_result, request_id, peek_result);

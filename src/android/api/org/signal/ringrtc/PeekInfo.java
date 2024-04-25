@@ -48,6 +48,8 @@ public final class PeekInfo {
   private final long       deviceCountExcludingPendingDevices;
   @NonNull
   private final List<UUID> pendingUsers;
+  @Nullable
+  private final CallLinkState callLinkState;
 
   public PeekInfo(
     @NonNull  List<UUID> joinedMembers,
@@ -56,7 +58,8 @@ public final class PeekInfo {
     @Nullable Long       maxDevices,
               long       deviceCountIncludingPendingDevices,
               long       deviceCountExcludingPendingDevices,
-    @NonNull  List<UUID> pendingUsers
+    @NonNull  List<UUID> pendingUsers,
+    @Nullable CallLinkState callLinkState
   ) {
     this.joinedMembers = joinedMembers;
     this.creator = creator;
@@ -65,6 +68,7 @@ public final class PeekInfo {
     this.deviceCountIncludingPendingDevices = deviceCountIncludingPendingDevices;
     this.deviceCountExcludingPendingDevices = deviceCountExcludingPendingDevices;
     this.pendingUsers = pendingUsers;
+    this.callLinkState = callLinkState;
   }
 
   @CalledByNative
@@ -75,7 +79,8 @@ public final class PeekInfo {
     @Nullable Long         maxDevices,
               long         deviceCountIncludingPendingDevices,
               long         deviceCountExcludingPendingDevices,
-    @NonNull  List<byte[]> rawPendingUsers
+    @NonNull  List<byte[]> rawPendingUsers,
+    @Nullable CallLinkState callLinkState
   ) {
     Log.i(TAG, "fromNative(): joinedMembers.size = " + rawJoinedMembers.size());
 
@@ -89,7 +94,7 @@ public final class PeekInfo {
         pendingUsers.add(Util.getUuidFromBytes(pendingUser));
     }
 
-    return new PeekInfo(joinedMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCountIncludingPendingDevices, deviceCountExcludingPendingDevices, pendingUsers);
+    return new PeekInfo(joinedMembers, creator == null ? null : Util.getUuidFromBytes(creator), eraId, maxDevices, deviceCountIncludingPendingDevices, deviceCountExcludingPendingDevices, pendingUsers, callLinkState);
   }
 
   @NonNull
@@ -129,5 +134,10 @@ public final class PeekInfo {
   @NonNull
   public List<UUID> getPendingUsers() {
     return pendingUsers;
+  }
+
+  @Nullable
+  public CallLinkState getCallLinkState() {
+    return callLinkState;
   }
 }

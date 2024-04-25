@@ -1165,7 +1165,7 @@ public class CallManager {
       if (result.isSuccess()) {
         handler.handleResponse(result.getValue());
       } else {
-        handler.handleResponse(new PeekInfo(Collections.emptyList(), null, null, null, 0, 0, Collections.emptyList()));
+        handler.handleResponse(new PeekInfo(Collections.emptyList(), null, null, null, 0, 0, Collections.emptyList(), null));
       }
     });
     ringrtcPeekGroupCall(nativeCallManager, requestId, sfuUrl, membershipProof, Util.serializeFromGroupMemberInfo(groupMembers));

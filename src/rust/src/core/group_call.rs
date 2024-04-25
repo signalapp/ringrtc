@@ -631,6 +631,7 @@ impl SfuClient for HttpSfuClient {
                 self.room_id_header.clone(),
                 auth_header,
                 self.member_resolver.clone(),
+                None,
                 result_callback,
             ),
             None => {
@@ -5804,6 +5805,7 @@ mod tests {
             creator: None,
             era_id: None,
             max_devices: None,
+            call_link_state: None,
         };
         client.client.set_peek_result(Ok(peek_info));
         client.wait_for_client_to_process();
@@ -5835,6 +5837,7 @@ mod tests {
             creator: None,
             era_id: None,
             max_devices: None,
+            call_link_state: None,
         }));
 
         assert!(client
@@ -5886,6 +5889,7 @@ mod tests {
                 era_id: None,
                 devices: vec![],
                 max_devices: None,
+                call_link_state: None,
             },
             &HashSet::default(),
         );
@@ -5900,6 +5904,7 @@ mod tests {
                 era_id: None,
                 devices: vec![],
                 max_devices: None,
+                call_link_state: None,
             },
             &([joiner1.user_id.clone(), joiner2.user_id.clone()]
                 .iter()
@@ -6536,6 +6541,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.client.join();
         assert_eq!(
@@ -6553,6 +6559,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.connect_join_and_wait_until_joined();
         client1.disconnect_and_wait_until_ended();
@@ -6571,6 +6578,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         assert_eq!(
             0,
@@ -6954,6 +6962,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.wait_for_client_to_process();
         assert_eq!(
@@ -6971,6 +6980,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.wait_for_client_to_process();
         assert_eq!(
@@ -6988,6 +6998,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.wait_for_client_to_process();
         assert_eq!(
@@ -7005,6 +7016,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.wait_for_client_to_process();
         assert_eq!(
@@ -7022,6 +7034,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.wait_for_client_to_process();
         assert_eq!(
@@ -7061,6 +7074,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.wait_for_client_to_process();
         assert_eq!(
@@ -7089,6 +7103,7 @@ mod tests {
             pending_devices: vec![],
             creator: None,
             era_id: None,
+            call_link_state: None,
         }));
         client1.wait_for_client_to_process();
         assert_eq!(

@@ -21,7 +21,10 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sha2::{Digest, Sha256};
 
-use crate::lite::http;
+use crate::lite::{
+    call_links::{CallLinkResponse, CallLinkRootKey, CallLinkState},
+    http,
+};
 
 /// The state that can be observed by "peeking".
 #[derive(Clone, Debug, Default)]
@@ -36,6 +39,8 @@ pub struct PeekInfo {
     pub era_id: Option<String>,
     /// The maximum number of devices that can join this group call.
     pub max_devices: Option<u32>,
+    /// The call link state of the group call
+    pub call_link_state: Option<CallLinkState>,
 }
 
 impl PeekInfo {
@@ -70,7 +75,7 @@ pub struct PeekDeviceInfo {
 /// Form of PeekInfo sent over HTTP.
 /// Notably, it has obfuscated user IDs.
 #[derive(Deserialize, Debug)]
-struct SerializedPeekInfo {
+struct SerializedPeekInfo<'a> {
     #[serde(rename = "conferenceId")]
     era_id: Option<String>,
     #[serde(rename = "maxDevices")]
@@ -80,6 +85,8 @@ struct SerializedPeekInfo {
     creator: Option<String>,
     #[serde(rename = "pendingClients", default)]
     pending_clients: Vec<SerializedPeekDeviceInfo>,
+    #[serde(rename = "callLinkState", borrow)]
+    call_link_state: Option<CallLinkResponse<'a>>,
 }
 
 /// Form of PeekDeviceInfo sent over HTTP.
@@ -92,9 +99,21 @@ struct SerializedPeekDeviceInfo {
     demux_id: u32,
 }
 
-impl SerializedPeekInfo {
-    fn deobfuscate(self, member_resolver: &dyn MemberResolver) -> PeekInfo {
-        PeekInfo {
+impl<'a> SerializedPeekInfo<'a> {
+    fn deobfuscate(
+        self,
+        member_resolver: &dyn MemberResolver,
+        root_key: Option<CallLinkRootKey>,
+    ) -> PeekInfo {
+        let state: Option<CallLinkState> = match (self.call_link_state, root_key) {
+            (Some(s), Some(r)) => {
+                let s = CallLinkState::from(s, &r);
+                Some(s)
+            }
+            _ => None,
+        };
+
+        return PeekInfo {
             devices: self
                 .devices
                 .into_iter()
@@ -111,7 +130,8 @@ impl SerializedPeekInfo {
                 .and_then(|opaque_user_id| member_resolver.resolve(opaque_user_id)),
             era_id: self.era_id,
             max_devices: self.max_devices,
-        }
+            call_link_state: state,
+        };
     }
 }
 
@@ -378,6 +398,7 @@ pub fn peek(
     room_id_header: Option<String>,
     auth_header: String,
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
+    call_link_root_key: Option<CallLinkRootKey>,
     result_callback: PeekResultCallback,
 ) {
     http_client.send_request(
@@ -402,7 +423,7 @@ pub fn peek(
                         deserialized.devices.len(),
                         deserialized.pending_clients.len(),
                     );
-                    Ok(deserialized.deobfuscate(&*member_resolver))
+                    Ok(deserialized.deobfuscate(&*member_resolver, call_link_root_key))
                 }
                 Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
                     if let Some(body) = http_response
@@ -536,6 +557,7 @@ pub mod ios {
                         None,
                         auth_header,
                         Arc::new(opaque_user_id_mappings),
+                        None,
                         Box::new(move |peek_result| {
                             delegate.handle_peek_result(request_id, peek_result)
                         }),
@@ -577,6 +599,7 @@ pub mod ios {
                             auth_credential_presentation.as_slice(),
                         ),
                         Arc::new(CallLinkMemberResolver::from(&link_root_key)),
+                        Some(link_root_key),
                         Box::new(move |peek_result| {
                             delegate.handle_peek_result(request_id, peek_result)
                         }),
@@ -765,9 +788,10 @@ mod tests {
             ],
             pending_clients: vec![],
             creator: None,
+            call_link_state: None,
         };
 
-        let peek_info = peek_response.deobfuscate(&user_map);
+        let peek_info = peek_response.deobfuscate(&user_map, None);
         assert_eq!(
             peek_info
                 .devices
@@ -808,9 +832,10 @@ mod tests {
                 },
             ],
             creator: None,
+            call_link_state: None,
         };
 
-        let peek_info = peek_response.deobfuscate(&user_map);
+        let peek_info = peek_response.deobfuscate(&user_map, None);
         assert_eq!(
             peek_info
                 .pending_devices
@@ -860,9 +885,10 @@ mod tests {
                 ],
                 pending_clients: vec![],
                 creator: None,
+                call_link_state: None,
             };
 
-            let peek_info = peek_response.deobfuscate(&resolver);
+            let peek_info = peek_response.deobfuscate(&resolver, Some(root_key.clone()));
             assert_eq!(
                 peek_info
                     .devices

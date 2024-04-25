@@ -22,7 +22,7 @@ use crate::lite::http;
 pub use member_resolver::CallLinkMemberResolver;
 pub use root_key::CallLinkRootKey;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum CallLinkRestrictions {
     None,
@@ -31,8 +31,8 @@ pub enum CallLinkRestrictions {
     Unknown,
 }
 
-#[derive(Deserialize)]
-struct CallLinkResponse<'a> {
+#[derive(Deserialize, Debug)]
+pub struct CallLinkResponse<'a> {
     #[serde(rename = "name")]
     encrypted_name: &'a [u8],
     restrictions: CallLinkRestrictions,
@@ -41,7 +41,7 @@ struct CallLinkResponse<'a> {
     expiration_unix_timestamp: u64,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CallLinkState {
     pub name: String,
     pub restrictions: CallLinkRestrictions,
@@ -50,7 +50,7 @@ pub struct CallLinkState {
 }
 
 impl CallLinkState {
-    fn from(deserialized: CallLinkResponse<'_>, root_key: &CallLinkRootKey) -> Self {
+    pub fn from(deserialized: CallLinkResponse<'_>, root_key: &CallLinkRootKey) -> Self {
         let name = if deserialized.encrypted_name.is_empty() {
             "".to_string()
         } else {

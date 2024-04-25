@@ -172,6 +172,21 @@ export interface Reaction {
   value: string;
 }
 
+/** type returned by Rust */
+export interface RawPeekInfo {
+  devices: Array<PeekDeviceInfo>;
+  creator?: GroupCallUserId;
+  eraId?: string;
+  maxDevices?: number;
+  /** @deprecated Use {@link #deviceCountIncludingPendingDevices} and {@link #deviceCountExcludingPendingDevices} as appropriate */
+  deviceCount: number;
+  deviceCountIncludingPendingDevices: number;
+  deviceCountExcludingPendingDevices: number;
+  pendingUsers: Array<GroupCallUserId>;
+  callLinkState?: RawCallLinkState;
+}
+
+/** type derived from RawPeekInfo */
 export interface PeekInfo {
   devices: Array<PeekDeviceInfo>;
   creator?: GroupCallUserId;
@@ -182,6 +197,7 @@ export interface PeekInfo {
   deviceCountIncludingPendingDevices: number;
   deviceCountExcludingPendingDevices: number;
   pendingUsers: Array<GroupCallUserId>;
+  callLinkState?: CallLinkState;
 }
 
 export enum PeekStatusCodes {
@@ -239,8 +255,49 @@ export class ReceivedAudioLevel {
   }
 }
 
+interface RawCallLinkState {
+  name: string;
+  rawRestrictions: number;
+  revoked: boolean;
+  expiration: Date;
+}
+
 function normalizeAudioLevel(raw: RawAudioLevel): NormalizedAudioLevel {
   return raw / 32767;
+}
+
+function rawCallLinkStateToCallLinkState(
+  raw: RawCallLinkState | undefined
+): CallLinkState | undefined {
+  if (raw) {
+    let restrictions: CallLinkRestrictions;
+    switch (raw.rawRestrictions) {
+      case 0:
+        restrictions = CallLinkRestrictions.None;
+        break;
+      case 1:
+        restrictions = CallLinkRestrictions.AdminApproval;
+        break;
+      default:
+        restrictions = CallLinkRestrictions.Unknown;
+        break;
+    }
+    return new CallLinkState(
+      raw.name,
+      restrictions,
+      raw.revoked,
+      raw.expiration
+    );
+  } else {
+    return undefined;
+  }
+}
+
+function rawPeekInfoToPeekInfo(raw: RawPeekInfo): PeekInfo {
+  return {
+    ...raw,
+    callLinkState: rawCallLinkStateToCallLinkState(raw.callLinkState),
+  };
 }
 
 class Requests<T> {
@@ -1308,7 +1365,7 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  handlePeekChanged(clientId: GroupCallClientId, info: PeekInfo): void {
+  handlePeekChanged(clientId: GroupCallClientId, rawInfo: RawPeekInfo): void {
     sillyDeadlockProtection(() => {
       const groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
@@ -1316,6 +1373,7 @@ export class RingRTCType {
         return;
       }
 
+      const info = rawPeekInfoToPeekInfo(rawInfo);
       groupCall.handlePeekChanged(info);
     });
   }
@@ -1324,11 +1382,12 @@ export class RingRTCType {
   handlePeekResponse(
     requestId: number,
     statusCode: number,
-    info: PeekInfo | undefined
+    rawInfo: RawPeekInfo | undefined
   ): void {
     sillyDeadlockProtection(() => {
       let result: HttpResult<PeekInfo>;
-      if (info) {
+      if (rawInfo) {
+        const info = rawPeekInfoToPeekInfo(rawInfo);
         result = { success: true, value: info };
       } else {
         result = { success: false, errorStatusCode: statusCode };
@@ -1343,39 +1402,16 @@ export class RingRTCType {
   handleCallLinkResponse(
     requestId: number,
     statusCode: number,
-    state:
-      | {
-          name: string;
-          rawRestrictions: number;
-          revoked: boolean;
-          expiration: Date;
-        }
-      | undefined
+    state: RawCallLinkState | undefined
   ): void {
     sillyDeadlockProtection(() => {
       // Recreate the state so that we have the correct prototype, in case we add more methods to CallLinkState.
       let result: HttpResult<CallLinkState>;
-      if (state) {
-        let restrictions: CallLinkRestrictions;
-        switch (state.rawRestrictions) {
-          case 0:
-            restrictions = CallLinkRestrictions.None;
-            break;
-          case 1:
-            restrictions = CallLinkRestrictions.AdminApproval;
-            break;
-          default:
-            restrictions = CallLinkRestrictions.Unknown;
-            break;
-        }
+      const s = rawCallLinkStateToCallLinkState(state);
+      if (s) {
         result = {
           success: true,
-          value: new CallLinkState(
-            state.name,
-            restrictions,
-            state.revoked,
-            state.expiration
-          ),
+          value: s,
         };
       } else {
         result = { success: false, errorStatusCode: statusCode };
@@ -3016,11 +3052,11 @@ export interface CallManagerCallbacks {
     clientId: GroupCallClientId,
     remoteDeviceStates: Array<RemoteDeviceState>
   ): void;
-  handlePeekChanged(clientId: GroupCallClientId, info: PeekInfo): void;
+  handlePeekChanged(clientId: GroupCallClientId, rawInfo: RawPeekInfo): void;
   handlePeekResponse(
     requestId: number,
     statusCode: number,
-    info: PeekInfo | undefined
+    rawInfo: RawPeekInfo | undefined
   ): void;
   handleEnded(clientId: GroupCallClientId, reason: GroupCallEndReason): void;
 
