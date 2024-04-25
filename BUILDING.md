@@ -52,8 +52,17 @@ Windows, we recommend ensuring that the `msvc` toolchain is installed and used f
 ### Other Dependencies
 #### Android Dependencies
 
-You might need some of these. Of course it is assumed that you have the Android SDK installed,
-along with the NDK, LLDB, and SDK Tools options. A properly configured JDK (such as openjdk-11-jdk) is also assumed. You may also need the following (on Ubuntu):
+You might need some of these. Of course it is assumed that you have the Android
+SDK installed, along with the NDK, LLDB, and SDK Tools options. A properly
+configured JDK (such as openjdk-17-jdk) is also assumed.
+
+For the SDK, install [Android Studio](https://developer.android.com/studio) and
+set up the IDE. For the NDK, set up via the [Android Developer guide](https://developer.android.com/studio/projects/install-ndk).
+On Mac, LLDB should be present by default. On other platforms it should be
+available via your package manager (e.g. `apt`).  The JDK should be installed
+automatically when you install Android Studio, as should the SDK Tools.
+
+You may also need the following (on Ubuntu):
 
     sudo apt install libglib2.0-dev
 
