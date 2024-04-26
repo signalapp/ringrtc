@@ -163,11 +163,11 @@ then
     s.vendored_frameworks = "'${BUILD_TYPE}'/WebRTC.xcframework"
   end' >"${OUTPUT_DIR}"/WebRTCForTesting.podspec
 
-  "${BIN_DIR}"/convert_webrtc_acknowledgments.py -f plist "${OUTPUT_DIR}"/${BUILD_TYPE}/WebRTC.xcframework/LICENSE.md > "${OUTPUT_DIR}"/${BUILD_TYPE}/acknowledgments.plist
+  "${BIN_DIR}"/convert_webrtc_acknowledgments.py -f plist "${OUTPUT_DIR}"/${BUILD_TYPE}/WebRTC.xcframework/LICENSE.md > "${OUTPUT_DIR}"/${BUILD_TYPE}/acknowledgments-webrtc-ios.plist
 
   if [[ -n "${ARCHIVE_WEBRTC}" ]]
   then
-    tar -c --auto-compress --no-mac-metadata -f "${OUTPUT_DIR}/webrtc-${WEBRTC_VERSION}-ios-${BUILD_TYPE}.tar.bz2" -C "${OUTPUT_DIR}" WebRTCForTesting.podspec "${BUILD_TYPE}/WebRTC.xcframework" "${BUILD_TYPE}/acknowledgments.plist"
+    tar -c --auto-compress --no-mac-metadata -f "${OUTPUT_DIR}/webrtc-${WEBRTC_VERSION}-ios-${BUILD_TYPE}.tar.bz2" -C "${OUTPUT_DIR}" WebRTCForTesting.podspec "${BUILD_TYPE}/WebRTC.xcframework" "${BUILD_TYPE}/acknowledgments-webrtc-ios.plist"
   fi
 fi
 
