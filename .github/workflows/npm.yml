@@ -32,7 +32,7 @@ on:
         type: choice
         options:
           - 'macos-13'
-          - 'macos-13-xl'
+          - 'macos-13-large'
 
 env:
   CARGO_TERM_COLOR: always

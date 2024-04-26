@@ -159,15 +159,9 @@ Build type      : {}
         # Get grealpath
         run_cmd(args.dry_run, ['brew', 'install', 'coreutils'])
 
-        # Set up Xcode (https://github.com/RobotsAndPencils/xcodes)
-        run_cmd(args.dry_run, ['brew', 'install', 'robotsandpencils/made/xcodes'])
-
-        # This step requires Apple credentials provided as environment variables XCODES_USERNAME and XCODES_PASSWORD
-        run_cmd(args.dry_run, ['xcodes', 'install', '14.0.1'])
-        run_cmd(args.dry_run, ['sudo', 'xcodes', 'select', '14.0.1'])
-
-        # Clear saved credentials
-        run_cmd(args.dry_run, ['xcodes', 'signout'])
+        # Set up Xcode (https://github.com/XcodesOrg/xcodes)
+        run_cmd(args.dry_run, ['brew', 'install', 'xcodesorg/made/xcodes'])
+        run_cmd(args.dry_run, ['sudo', 'xcodes', 'select', '15.3'])
 
         # Accept the license
         run_cmd(args.dry_run, ['sudo', 'xcodebuild', '-license', 'accept'])

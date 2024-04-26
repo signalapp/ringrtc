@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.41.0
+
+- Call links: Add Call Link state to PeekInfo
+
+- Update to webrtc 6261g
+  - Update video settings
+  - iOS: Match WebRTC acknowledgments filename
+
+- iOS: Update builds and tests
+
+- Update dependencies and documentation
+
 ## v2.40.1
 
 - iOS: Raised hands array can be empty
