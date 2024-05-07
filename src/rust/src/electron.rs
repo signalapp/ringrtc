@@ -2128,6 +2128,19 @@ fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn setRtcStatsInterval(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let interval = Duration::from_millis(cx.argument::<JsNumber>(1)?.value(&mut cx) as u64);
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .call_manager
+            .set_rtc_stats_interval(client_id, interval)
+    });
+
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
     let this = cx.this::<JsObject>()?;
     let observer = this.get::<JsObject, _, _>(&mut cx, "observer")?;
@@ -2785,6 +2798,13 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
+
+            Event::GroupUpdate(GroupUpdate::RtcStatsReportComplete { report_json }) => {
+                let method_name = "handleRtcStatsReportComplete";
+                let args = [cx.string(report_json).upcast()];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
         }
     }
     Ok(cx.undefined().upcast())
@@ -2945,6 +2965,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_setAudioInput", setAudioInput)?;
     cx.export_function("cm_getAudioOutputs", getAudioOutputs)?;
     cx.export_function("cm_setAudioOutput", setAudioOutput)?;
+    cx.export_function("cm_setRtcStatsInterval", setRtcStatsInterval)?;
     cx.export_function("cm_processEvents", processEvents)?;
     Ok(())
 }

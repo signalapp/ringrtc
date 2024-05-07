@@ -252,6 +252,9 @@ pub enum GroupUpdate {
     },
     Reactions(group_call::ClientId, Vec<group_call::Reaction>),
     RaisedHands(group_call::ClientId, Vec<DemuxId>),
+    RtcStatsReportComplete {
+        report_json: String,
+    },
 }
 
 impl fmt::Display for GroupUpdate {
@@ -281,6 +284,7 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::RaisedHands(_, raised_hands) => {
                 format!("RaisedHands({:?})", raised_hands)
             }
+            GroupUpdate::RtcStatsReportComplete { .. } => "RtcStatsReportComplete".to_string(),
         };
         write!(f, "({})", display)
     }
@@ -985,6 +989,14 @@ impl Platform for NativePlatform {
             client_id,
             peek_info: peek_info.clone(),
         });
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_rtc_stats_report(&self, report_json: String) {
+        debug!("NativePlatform::handle_rtc_stats_report");
+        let result = self.send_group_update(GroupUpdate::RtcStatsReportComplete { report_json });
         if result.is_err() {
             error!("{:?}", result.err());
         }

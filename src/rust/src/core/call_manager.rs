@@ -2623,6 +2623,10 @@ where
         platform_handler!(self, handle_raised_hands, client_id, raised_hands);
     }
 
+    fn handle_rtc_stats_report(&self, report_json: String) {
+        platform_handler!(self, handle_rtc_stats_report, report_json);
+    }
+
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
         info!("handle_ended({:?}):", reason);
         platform_handler!(self, handle_ended, client_id, reason);
@@ -2947,6 +2951,7 @@ where
     forward_group_call_api!(block_client(other_client_id: DemuxId));
     forward_group_call_api!(set_group_members(members: Vec<GroupMember>));
     forward_group_call_api!(set_membership_proof(proof: Vec<u8>));
+    forward_group_call_api!(set_rtc_stats_interval(interval: Duration));
 }
 
 #[cfg(test)]

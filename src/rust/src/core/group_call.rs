@@ -269,6 +269,8 @@ pub trait Observer {
 
     fn handle_raised_hands(&self, client_id: ClientId, raised_hands: Vec<DemuxId>);
 
+    fn handle_rtc_stats_report(&self, report_json: String);
+
     // This will be the last callback.
     // The observer can assume the Call is completely shut down and can be deleted.
     fn handle_ended(&self, client_id: ClientId, reason: EndReason);
@@ -980,6 +982,7 @@ struct State {
     // Things for getting statistics from the PeerConnection
     // Stats gathering happens only when joined
     next_stats_time: Option<Instant>,
+    get_stats_interval: Duration,
     stats_observer: Box<StatsObserver>,
 
     // Things for getting audio levels from the PeerConnection
@@ -1076,7 +1079,7 @@ const TICK_INTERVAL: Duration = Duration::from_millis(200);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 
 // How often to get and log stats.
-const STATS_INTERVAL: Duration = Duration::from_secs(10);
+const DEFAULT_STATS_INTERVAL: Duration = Duration::from_secs(10);
 const STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
 
 // How often to request an updated membership proof (24 hours).
@@ -1211,7 +1214,11 @@ impl Client {
                     next_heartbeat_time: None,
 
                     next_stats_time: None,
-                    stats_observer: create_stats_observer(call_id_for_stats, STATS_INTERVAL),
+                    get_stats_interval: DEFAULT_STATS_INTERVAL,
+                    stats_observer: create_stats_observer(
+                        call_id_for_stats,
+                        DEFAULT_STATS_INTERVAL,
+                    ),
 
                     audio_levels_interval,
                     next_audio_levels_time: None,
@@ -1321,7 +1328,10 @@ impl Client {
                 let _ = state
                     .peer_connection
                     .get_stats(state.stats_observer.as_ref());
-                state.next_stats_time = Some(now + STATS_INTERVAL);
+                state.next_stats_time = Some(now + state.get_stats_interval);
+            }
+            if let Some(report_json) = state.stats_observer.take_stats_report() {
+                state.observer.handle_rtc_stats_report(report_json)
             }
         }
 
@@ -2620,6 +2630,28 @@ impl Client {
 
         self.actor.send(move |state| {
             Self::set_peek_result_inner(state, result);
+        });
+    }
+
+    pub fn set_rtc_stats_interval(&self, interval: Duration) {
+        info!(
+            "group_call::Client(outer)::set_rtc_stats_interval: {}, interval: {:?})",
+            self.client_id, interval
+        );
+
+        self.actor.send(move |state| {
+            let old_stats_interval = state.get_stats_interval;
+            state.get_stats_interval = if interval.is_zero() {
+                state.stats_observer.set_collect_raw_stats_report(false);
+                DEFAULT_STATS_INTERVAL
+            } else {
+                state.stats_observer.set_collect_raw_stats_report(true);
+                interval
+            };
+
+            state.next_stats_time = state
+                .next_stats_time
+                .map(|stats_time| stats_time - old_stats_interval + state.get_stats_interval);
         });
     }
 
@@ -4759,6 +4791,8 @@ mod tests {
         }
 
         fn handle_raised_hands(&self, _client_id: ClientId, _raised_hands: Vec<DemuxId>) {}
+
+        fn handle_rtc_stats_report(&self, _report_json: String) {}
 
         fn handle_peek_changed(
             &self,

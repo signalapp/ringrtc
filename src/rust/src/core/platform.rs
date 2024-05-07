@@ -267,5 +267,7 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
 
     fn handle_raised_hands(&self, client_id: group_call::ClientId, raised_hands: Vec<DemuxId>);
 
+    fn handle_rtc_stats_report(&self, _report_json: String) {}
+
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason);
 }

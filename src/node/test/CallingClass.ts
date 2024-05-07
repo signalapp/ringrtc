@@ -174,6 +174,10 @@ export class CallingClass {
     log('handleGroupCallRingUpdate');
   }
 
+  private handleRtcStatsReport(reportJson: string): void {
+    log('handleRtcStatsReport');
+  }
+
   ////////////////////////////////////////////////////////////////////////////////
   // Support
 
@@ -235,7 +239,7 @@ export class CallingClass {
       this.handleSendCallMessageToGroup.bind(this);
     RingRTC.handleGroupCallRingUpdate =
       this.handleGroupCallRingUpdate.bind(this);
-
+    RingRTC.handleRtcStatsReport = this.handleRtcStatsReport.bind(this);
     RingRTC.setSelfUuid(Buffer.from(uuidToBytes(this._id)));
   }
 

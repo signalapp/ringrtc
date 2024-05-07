@@ -158,6 +158,8 @@ class NativeCallManager {
   Native.cm_getAudioOutputs;
 (NativeCallManager.prototype as any).setAudioOutput = Native.cm_setAudioOutput;
 (NativeCallManager.prototype as any).processEvents = Native.cm_processEvents;
+(NativeCallManager.prototype as any).setRtcStatsInterval =
+  Native.cm_setRtcStatsInterval;
 
 type GroupId = Buffer;
 type GroupCallUserId = Buffer;
@@ -422,6 +424,8 @@ export class RingRTCType {
         update: RingUpdate
       ) => void)
     | null = null;
+
+  handleRtcStatsReport: ((reportJson: string) => void) | null = null;
 
   constructor() {
     this.callManager = new NativeCallManager(this) as unknown as CallManager;
@@ -1474,6 +1478,13 @@ export class RingRTCType {
         this.logError('RingRTC.handleGroupCallRingUpdate is not set!');
       }
     });
+  }
+
+  // Called by Rust
+  handleRtcStatsReportComplete(reportJson: string): void {
+    if (this.handleRtcStatsReport) {
+      this.handleRtcStatsReport(reportJson);
+    }
   }
 
   // Called by Rust
@@ -2610,6 +2621,10 @@ export class GroupCall {
       this._observer.onRemoteDeviceStatesChanged(this);
     }
   }
+
+  setRtcStatsInterval(intervalMillis: number): void {
+    this._callManager.setRtcStatsInterval(this._clientId, intervalMillis);
+  }
 }
 
 // Implements VideoSource for use in CanvasVideoRenderer
@@ -2911,6 +2926,10 @@ export interface CallManager {
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined;
+  setRtcStatsInterval(
+    clientId: GroupCallClientId,
+    intervalMillis: number
+  ): void;
   // Responses come back via handleCallLinkResponse
   readCallLink(
     requestId: number,

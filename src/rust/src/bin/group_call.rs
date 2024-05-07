@@ -145,6 +145,10 @@ impl group_call::Observer for Observer {
     fn handle_raised_hands(&self, _client_id: ClientId, raised_hands: Vec<DemuxId>) {
         info!("Raised hands changed to {:?}", raised_hands);
     }
+
+    fn handle_rtc_stats_report(&self, _report_json: String) {
+        // ignore
+    }
 }
 
 impl VideoSink for Observer {

@@ -24,4 +24,9 @@ extern "C" {
         stats_observer: webrtc::ptr::Borrowed<std::ffi::c_void>,
         stats_observer_cbs: webrtc::ptr::Borrowed<std::ffi::c_void>,
     ) -> webrtc::ptr::OwnedRc<RffiStatsObserver>;
+
+    pub fn Rust_setCollectRawStatsReport(
+        stats_observer: webrtc::ptr::BorrowedRc<RffiStatsObserver>,
+        collect_raw_stats_report: bool,
+    );
 }

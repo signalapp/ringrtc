@@ -44,10 +44,23 @@ pub unsafe fn Rust_createStatsObserver(
 
     // Hit on the onComplete() callback
     let callbacks = callbacks.as_ptr() as *const StatsObserverCallbacks;
+    let report_json = std::ffi::CString::new("{}").expect("CString::new failed");
     ((*callbacks).onStatsComplete)(
         webrtc::ptr::Borrowed::from_ptr(stats_observer.as_ptr() as *mut StatsObserver),
         webrtc::ptr::Borrowed::from_ptr(&dummy),
+        webrtc::ptr::Borrowed::from_ptr(report_json.as_ptr()),
     );
 
     webrtc::ptr::OwnedRc::from_ptr(&FAKE_STATS_OBSERVER)
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_setCollectRawStatsReport(
+    _stats_observer: webrtc::ptr::BorrowedRc<RffiStatsObserver>,
+    collect_raw_stats_report: bool,
+) {
+    info!(
+        "Rust_setCollectRawStatsReport: {}",
+        collect_raw_stats_report
+    );
 }
