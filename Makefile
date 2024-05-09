@@ -36,7 +36,7 @@ help:
 	$(Q) echo "  gctc         -- build the test cli (group calls)"
 	$(Q) echo "  call_sim-cli -- build the call simulator cli for testing"
 	$(Q) echo
-	$(Q) echo "For the electon/cli/gctc builds, you can specify an optional platform"
+	$(Q) echo "For the electron/cli/gctc builds, you can specify an optional platform"
 	$(Q) echo "which will download WebRTC. For example:"
 	$(Q) echo "  $ make electron PLATFORM=unix"
 	$(Q) echo
