@@ -29,25 +29,39 @@ PREBUILD_CHECKSUMS = {
 }
 
 
+def resolve_os(os_name: str) -> str:
+    if os_name in ['darwin', 'macos']:
+        return 'mac'
+    return os_name
+
+
+def resolve_arch(arch_name: str) -> str:
+    if arch_name in ['x86_64', 'amd64']:
+        return 'x64'
+    if arch_name in ['arm64', 'aarch64']:
+        return 'arm64'
+    return arch_name
+
+
 def resolve_platform(platform_name: str) -> str:
     if platform_name in PREBUILD_CHECKSUMS:
         return platform_name
-
-    if platform_name in ['windows', 'mac', 'linux']:
-        arch_name = platform.machine().lower()
-        if arch_name in ['x86_64', 'amd64']:
-            return resolve_platform(platform_name + '-x64')
-        if arch_name in ['arm64', 'aarch64']:
-            return resolve_platform(platform_name + '-arm64')
-        raise AssertionError('unsupported architecture: ' + arch_name)
-
     if platform_name == 'desktop':
-        os_name = platform.system().lower()
-        if os_name == 'darwin':
-            return resolve_platform('mac')
-        return resolve_platform(os_name)
+        return resolve_platform(platform.system().lower())
 
-    raise AssertionError('unsupported platform: ' + platform_name)
+    splits = platform_name.split('-')
+    os_name = resolve_os(splits[0])
+    if len(splits) > 2:
+        raise AssertionError('unsupported platform format: ' + platform_name)
+    elif len(splits) == 2:
+        arch_name = resolve_arch(splits[1])
+    else:
+        arch_name = resolve_arch(platform.machine().lower())
+
+    resolved_platform_name = "{}-{}".format(os_name, arch_name)
+    if resolved_platform_name not in PREBUILD_CHECKSUMS:
+        raise AssertionError('unsupported platform: ' + resolved_platform_name)
+    return resolved_platform_name
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -128,11 +142,11 @@ def main() -> None:
     if not url:
         if not args.webrtc_version:
             parser.error(message='--platform requires --webrtc-version')
-        platform = resolve_platform(args.platform)
+        platform_name = resolve_platform(args.platform)
         build_mode = 'debug' if args.debug else 'release'
-        url = "https://build-artifacts.signal.org/libraries/webrtc-{}-{}-{}.tar.bz2".format(args.webrtc_version, platform, build_mode)
+        url = "https://build-artifacts.signal.org/libraries/webrtc-{}-{}-{}.tar.bz2".format(args.webrtc_version, platform_name, build_mode)
         if not checksum:
-            checksum = PREBUILD_CHECKSUMS[platform]
+            checksum = PREBUILD_CHECKSUMS[platform_name]
 
     if not checksum:
         parser.error(message='missing --checksum')
@@ -145,7 +159,7 @@ def main() -> None:
     if args.skip_extract:
         return
 
-    print("extracting {}...".format(archive_file), file=sys.stderr)
+    print("extracting {} to {}".format(archive_file, args.output_dir), file=sys.stderr)
     open_archive.seek(0)
     tarfile.open(fileobj=open_archive).extractall(path=args.output_dir)
 

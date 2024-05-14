@@ -119,6 +119,31 @@ jobs:
     - run: ${{ matrix.test-runner }} yarn test
       working-directory: src/node
 
+  cargo_build_using_prebuilt:
+    name: RingRTC as dependency (using Prebuilt WebRTC)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-13]
+        include:
+        - os: ubuntu-latest
+          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        - os: macos-13
+          install-deps: brew install protobuf coreutils
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash # as opposed to PowerShell
+    steps:
+    - name: Install dependencies
+      run: ${{ matrix.install-deps }}
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: 'src/node/.nvmrc'
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+    - run: cargo build -p ringrtc --features prebuilt_webrtc
+
   android:
     name: Android Build
     runs-on: ubuntu-latest

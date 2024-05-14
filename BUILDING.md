@@ -126,9 +126,19 @@ You can then add the Signal repo to sync with upstream changes:
     git remote add upstream https://github.com/signalapp/ringrtc.git
 
 ## Building
-
 <i>Important: If building the for the first time, it will take a long time to download
-WebRTC dependencies and then a long time to build WebRTC and RingRTC.</i>
+WebRTC dependencies and then a long time to build WebRTC and RingRTC from scratch.</i>
+
+
+To quickly build RingRTC on Linux or MacOS using only the rust toolchain, you must add the `prebuilt_webrtc` feature. Note this is limited to arm64 and x86_64 architectures:
+
+Examples:
+```sh
+cargo build -p ringrtc --features prebuilt_webrtc
+cargo build -p ringrtc --features prebuilt_webrtc --target aarch64-apple-darwin
+cargo build -p ringrtc --features prebuilt_webrtc --target x86_64-apple-darwin
+cargo build -p ringrtc --features prebuilt_webrtc --target aarch64-unknown-linux-gnu 
+```
 
 ### Android
 
