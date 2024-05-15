@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.42.0
+
+- Add support for reporting rtc_stats to client application
+
+- Update to webrtc 6261i
+  - Support for reporting rtc_stats
+  - Enable per-layer PLI for screen sharing
+
 ## v2.41.0
 
 - Call links: Add Call Link state to PeekInfo
