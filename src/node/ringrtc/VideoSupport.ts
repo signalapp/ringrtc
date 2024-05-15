@@ -145,18 +145,22 @@ export class GumVideoCapturer {
     );
   }
 
-  enableCapture(): void {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    this.startCapturing(this.defaultCaptureOptions);
+  async enableCapture(): Promise<void> {
+    return this.startCapturing(this.defaultCaptureOptions);
   }
 
-  enableCaptureAndSend(
-    sender: VideoFrameSender,
+  async enableCaptureAndSend(
+    sender?: VideoFrameSender,
     options?: GumVideoCaptureOptions
-  ): void {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    this.startCapturing(options ?? this.defaultCaptureOptions);
-    this.startSending(sender);
+  ): Promise<void> {
+    const startCapturingPromise = this.startCapturing(
+      options ?? this.defaultCaptureOptions
+    );
+    if (sender) {
+      this.startSending(sender);
+    }
+    // Bubble up the error.
+    return startCapturingPromise;
   }
 
   disable(): void {
@@ -177,11 +181,8 @@ export class GumVideoCapturer {
       const { captureOptions, sender } = this;
 
       this.disable();
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      this.startCapturing(captureOptions);
-      if (sender) {
-        this.startSending(sender);
-      }
+      // Bubble up the error if starting video failed.
+      return this.enableCaptureAndSend(sender, captureOptions);
     }
   }
 
@@ -289,6 +290,8 @@ export class GumVideoCapturer {
         // We couldn't open the camera.  Oh well.
         this.captureOptions = undefined;
       }
+      // Re-raise so that callers can surface this condition to the user.
+      throw e;
     }
   }
 
