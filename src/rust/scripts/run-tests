@@ -7,4 +7,4 @@
 
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/ringrtc-tests}"
 export RANDOM_SEED="${RANDOM_SEED:-$(date +%s)}"
-cargo test --features sim --target-dir="$OUTPUT_DIR" "$@" -- --nocapture --test-threads=1
+cargo test -p mrp -p ringrtc --features=sim --target-dir="$OUTPUT_DIR" "$@" -- --nocapture --test-threads=1

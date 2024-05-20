@@ -1,0 +1,20 @@
+#
+# Copyright 2024 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+[package]
+name = "mrp"
+version = "2.41.0"
+authors = ["Calling Team <callingteam@signal.org>"]
+edition = "2021"
+description = "A MRP library, a simple way to reliably send packets"
+license = "AGPL-3.0-only"
+
+[dependencies]
+anyhow = "1.0.81"
+log = { version = "0.4.21", features = ["std", "max_level_trace", "release_max_level_info"] }
+thiserror = "1.0.50"
+
+[dev-dependencies]
+rand = { version = "0.8.5", features = [] }
