@@ -328,10 +328,16 @@ class Requests<T> {
 class CallInfo {
   isVideoCall: boolean;
   receivedAtCounter: number;
+  receivedAtDate: number;
 
-  constructor(isVideoCall: boolean, receivedAtCounter: number) {
+  constructor(
+    isVideoCall: boolean,
+    receivedAtCounter: number,
+    receivedAtDate: number
+  ) {
     this.isVideoCall = isVideoCall;
     this.receivedAtCounter = receivedAtCounter;
+    this.receivedAtDate = receivedAtDate;
   }
 }
 
@@ -376,7 +382,8 @@ export class RingRTCType {
         reason: CallEndedReason,
         ageSec: number,
         wasVideoCall: boolean,
-        receivedAtCounter: number | undefined
+        receivedAtCounter: number | undefined,
+        receivedAtDate: number | undefined
       ) => void)
     | null = null;
 
@@ -615,9 +622,10 @@ export class RingRTCType {
     ageSec: number
   ): void {
     const callInfo = this._callInfoByCallId.get(this.getCallInfoKey(callId));
-    const { isVideoCall, receivedAtCounter } = callInfo || {
+    const { isVideoCall, receivedAtCounter, receivedAtDate } = callInfo || {
       isVideoCall: false,
       receivedAtCounter: undefined,
+      receivedAtDate: undefined,
     };
     this._callInfoByCallId.delete(this.getCallInfoKey(callId));
 
@@ -659,7 +667,8 @@ export class RingRTCType {
           reason,
           ageSec,
           isVideoCall,
-          receivedAtCounter
+          receivedAtCounter,
+          receivedAtDate
         );
       }
 
@@ -1516,19 +1525,22 @@ export class RingRTCType {
 
   // Called by MessageReceiver
   handleCallingMessage(
-    remoteUserId: UserId,
-    remoteUuid: Buffer | null,
-    remoteDeviceId: DeviceId,
-    localDeviceId: DeviceId,
-    messageAgeSec: number,
-    messageReceivedAtCounter: number,
     message: CallingMessage,
-    senderIdentityKey: Buffer,
-    receiverIdentityKey: Buffer
+    options: {
+      remoteUserId: UserId;
+      remoteUuid?: Buffer;
+      remoteDeviceId: DeviceId;
+      localDeviceId: DeviceId;
+      ageSec: number;
+      receivedAtCounter: number;
+      receivedAtDate: number;
+      senderIdentityKey: Buffer;
+      receiverIdentityKey: Buffer;
+    }
   ): void {
     if (
       message.destinationDeviceId &&
-      message.destinationDeviceId !== localDeviceId
+      message.destinationDeviceId !== options.localDeviceId
     ) {
       // Drop the message as it isn't for this device, handleIgnoredCall() is not needed.
       return;
@@ -1552,20 +1564,21 @@ export class RingRTCType {
       // Save the call details for later when the call is ended.
       const callInfo = new CallInfo(
         offerType === OfferType.VideoCall,
-        messageReceivedAtCounter
+        options.receivedAtCounter,
+        options.receivedAtDate
       );
       this._callInfoByCallId.set(this.getCallInfoKey(callId), callInfo);
 
       this.callManager.receivedOffer(
-        remoteUserId,
-        remoteDeviceId,
-        localDeviceId,
-        messageAgeSec,
+        options.remoteUserId,
+        options.remoteDeviceId,
+        options.localDeviceId,
+        options.ageSec,
         callId,
         offerType,
         opaque,
-        senderIdentityKey,
-        receiverIdentityKey
+        options.senderIdentityKey,
+        options.receiverIdentityKey
       );
     }
     if (message.answer?.callId) {
@@ -1582,12 +1595,12 @@ export class RingRTCType {
       }
 
       this.callManager.receivedAnswer(
-        remoteUserId,
-        remoteDeviceId,
+        options.remoteUserId,
+        options.remoteDeviceId,
         callId,
         opaque,
-        senderIdentityKey,
-        receiverIdentityKey
+        options.senderIdentityKey,
+        options.receiverIdentityKey
       );
     }
     if (message.iceCandidates && message.iceCandidates.length > 0) {
@@ -1621,8 +1634,8 @@ export class RingRTCType {
       }
 
       this.callManager.receivedIceCandidates(
-        remoteUserId,
-        remoteDeviceId,
+        options.remoteUserId,
+        options.remoteDeviceId,
         callId,
         candidates
       );
@@ -1632,8 +1645,8 @@ export class RingRTCType {
       const hangupType = message.hangup.type || HangupType.Normal;
       const hangupDeviceId = message.hangup.deviceId || null;
       this.callManager.receivedHangup(
-        remoteUserId,
-        remoteDeviceId,
+        options.remoteUserId,
+        options.remoteDeviceId,
         callId,
         hangupType,
         hangupDeviceId
@@ -1641,10 +1654,14 @@ export class RingRTCType {
     }
     if (message.busy?.callId) {
       const callId = message.busy.callId;
-      this.callManager.receivedBusy(remoteUserId, remoteDeviceId, callId);
+      this.callManager.receivedBusy(
+        options.remoteUserId,
+        options.remoteDeviceId,
+        callId
+      );
     }
     if (message.opaque) {
-      if (remoteUuid == null) {
+      if (options.remoteUuid === undefined) {
         this.logError(
           'handleCallingMessage(): opaque message received without UUID!'
         );
@@ -1658,11 +1675,11 @@ export class RingRTCType {
         return;
       }
       this.callManager.receivedCallMessage(
-        remoteUuid,
-        remoteDeviceId,
-        localDeviceId,
+        options.remoteUuid,
+        options.remoteDeviceId,
+        options.localDeviceId,
         data,
-        messageAgeSec
+        options.ageSec
       );
     }
   }
