@@ -6,7 +6,14 @@
 syntax = "proto2";
 
 package group_call;
- 
+
+// Header for an MRPStream
+message MRPHeader {
+  optional uint64 seqnum = 1;
+
+  optional uint64 ack_num = 2;
+}
+
 message DeviceToDevice {
   // Sent over signaling
   message MediaKey {
@@ -80,6 +87,8 @@ message DeviceToSfu {
   }
 
   optional RaiseHand raise_hand = 7;
+
+  optional MRPHeader mrp_header = 8;
 }
 
 message SfuToDevice {
@@ -129,4 +138,5 @@ message SfuToDevice {
   optional Stats stats                              = 8;
   optional Removed removed                          = 9;
   optional RaisedHands raised_hands                 = 10;
+  optional MRPHeader mrp_header                     = 11;
 }

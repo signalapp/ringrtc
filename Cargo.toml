@@ -11,6 +11,10 @@ members = [
     "src/rust",
 ]
 
+[workspace.package]
+version = "2.42.0"
+authors = ["Calling Team <callingteam@signal.org>"]
+
 [patch.crates-io]
 # Use our fork of curve25519-dalek for zkgroup compatibility.
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.1' }

@@ -19,10 +19,10 @@ use std::{fmt::Debug, time::Instant};
 pub struct MrpHeader {
     /// SENDER -> RECEIVER
     /// sequence number in window
-    seqnum: Option<u64>,
+    pub seqnum: Option<u64>,
     /// RECEIVER -> SENDER
     /// The next expected SEQ_NUM
-    ack_num: Option<u64>,
+    pub ack_num: Option<u64>,
 }
 
 impl MrpHeader {

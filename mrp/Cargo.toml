@@ -5,8 +5,8 @@
 
 [package]
 name = "mrp"
-version = "2.41.0"
-authors = ["Calling Team <callingteam@signal.org>"]
+version.workspace = true
+authors.workspace = true
 edition = "2021"
 description = "A MRP library, a simple way to reliably send packets"
 license = "AGPL-3.0-only"

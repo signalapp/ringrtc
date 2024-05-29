@@ -5,8 +5,8 @@
 
 [package]
 name = "ringrtc"
-version = "2.42.0"
-authors = ["Calling Team <callingteam@signal.org>"]
+version.workspace = true
+authors.workspace = true
 edition = "2021"
 description = "A Rust interface for WebRTC"
 license = "AGPL-3.0-only"
@@ -88,6 +88,8 @@ fern = { version = "0.6.2", optional = true }
 tokio = { version = "1.36.0", optional = true, features = ["rt-multi-thread"] }
 tonic = { version = "0.11.0", optional = true }
 tower = { version = "0.4.13", optional = true }
+
+mrp = { path = "../../mrp" }
 
 [target.'cfg(not(target_os="android"))'.dependencies]
 # sysinfo depends on getgrgid_r, which was added in Android API level 24

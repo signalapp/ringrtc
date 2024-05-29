@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use anyhow;
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
@@ -23,8 +24,9 @@ use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 use crate::{
-    common::CallId, core::util::uuid_to_string, lite::sfu::ClientStatus,
-    webrtc::sdp_observer::create_csd_observer,
+    common::CallId,
+    core::util::uuid_to_string,
+    protobuf::group_call::{DeviceToSfu, SfuToDevice},
 };
 use crate::{
     common::{
@@ -37,7 +39,8 @@ use crate::{
     lite::{
         http, sfu,
         sfu::{
-            DemuxId, GroupMember, MembershipProof, PeekInfo, PeekResult, PeekResultCallback, UserId,
+            ClientStatus, DemuxId, GroupMember, MembershipProof, PeekInfo, PeekResult,
+            PeekResultCallback, UserId,
         },
     },
     protobuf,
@@ -52,10 +55,14 @@ use crate::{
             IceConnectionState, NetworkRoute, PeerConnectionObserver, PeerConnectionObserverTrait,
         },
         rtp,
-        sdp_observer::{create_ssd_observer, SessionDescription, SrtpCryptoSuite, SrtpKey},
+        sdp_observer::{
+            create_csd_observer, create_ssd_observer, SessionDescription, SrtpCryptoSuite, SrtpKey,
+        },
         stats_observer::{create_stats_observer, StatsObserver},
     },
 };
+
+use mrp::{MrpReceiveError, MrpSendError, MrpStream};
 
 // Each instance of a group_call::Client has an ID for logging and passing events
 // around (such as callbacks to the Observer).  It's just very convenient to have.
@@ -757,6 +764,9 @@ pub struct VideoRequest {
 
 // This must stay in sync with the data PT in SfuClient.
 const RTP_DATA_PAYLOAD_TYPE: rtp::PayloadType = 101;
+// This must stay in sync with the data PT in SfuClient.
+// Packets marked with this payload should contain a [MRPHeader] field
+const RTP_DATA_RELIABLE_PAYLOAD_TYPE: rtp::PayloadType = 100;
 // This must stay in sync with the data SSRC offset in SfuClient.
 const RTP_DATA_THROUGH_SFU_SSRC_OFFSET: rtp::Ssrc = 0xD;
 const RTP_DATA_TO_SFU_SSRC: rtp::Ssrc = 1;
@@ -1041,7 +1051,29 @@ struct State {
     raised_hands: Vec<DemuxId>,
     raise_hand_state: RaiseHandState,
 
+    sfu_reliable_stream: MrpStream<Vec<u8>, (rtp::Header, SfuToDevice)>,
     actor: Actor<State>,
+}
+
+const RELIABLE_RTP_BUFFER_SIZE: usize = 64;
+const DEVICE_TO_SFU_TIMEOUT: Duration = Duration::from_millis(1000);
+
+impl From<&protobuf::group_call::MrpHeader> for mrp::MrpHeader {
+    fn from(value: &protobuf::group_call::MrpHeader) -> Self {
+        Self {
+            seqnum: value.seqnum,
+            ack_num: value.ack_num,
+        }
+    }
+}
+
+impl From<mrp::MrpHeader> for protobuf::group_call::MrpHeader {
+    fn from(value: mrp::MrpHeader) -> Self {
+        Self {
+            seqnum: value.seqnum,
+            ack_num: value.ack_num,
+        }
+    }
 }
 
 impl RemoteDevices {
@@ -1251,6 +1283,8 @@ impl Client {
                     raised_hands: Vec::new(),
                     raise_hand_state: RaiseHandState::default(),
 
+                    sfu_reliable_stream: MrpStream::new(RELIABLE_RTP_BUFFER_SIZE),
+
                     actor,
                 })
             })?,
@@ -1416,6 +1450,44 @@ impl Client {
                 state.next_raise_hand_time = Some(now + RAISE_HAND_INTERVAL);
                 Self::send_raise_hand(state);
             }
+        }
+
+        let State {
+            join_state,
+            client_id,
+            rtp_data_to_sfu_next_seqnum,
+            peer_connection,
+            ..
+        } = state;
+        if let Err(err) = state.sfu_reliable_stream.try_send_ack(|header| {
+            let ack = DeviceToSfu {
+                mrp_header: Some(header.into()),
+                ..Default::default()
+            };
+            *rtp_data_to_sfu_next_seqnum = Self::reliable_send_to_sfu_inner(
+                *join_state,
+                *client_id,
+                *rtp_data_to_sfu_next_seqnum,
+                peer_connection,
+                &ack.encode_to_vec(),
+            )?;
+            Ok(())
+        }) {
+            warn!("Failed to send reliable ack to SFU: {:?}", err);
+        }
+
+        if let Err(err) = state.sfu_reliable_stream.try_resend(now, |payload| {
+            info!("Attempting resend over mrp stream ");
+            *rtp_data_to_sfu_next_seqnum = Self::reliable_send_to_sfu_inner(
+                *join_state,
+                *client_id,
+                *rtp_data_to_sfu_next_seqnum,
+                peer_connection,
+                payload,
+            )?;
+            Ok(Instant::now() + DEVICE_TO_SFU_TIMEOUT)
+        }) {
+            warn!("Failed to resend reliable data to SFU: {:?}", err);
         }
 
         state.actor.send_delayed(TICK_INTERVAL, Self::tick);
@@ -2015,11 +2087,8 @@ impl Client {
     }
 
     fn send_video_requests_to_sfu(state: &mut State) {
-        use protobuf::group_call::{
-            device_to_sfu::{
-                video_request_message::VideoRequest as VideoRequestProto, VideoRequestMessage,
-            },
-            DeviceToSfu,
+        use protobuf::group_call::device_to_sfu::{
+            video_request_message::VideoRequest as VideoRequestProto, VideoRequestMessage,
         };
         use std::cmp::min;
 
@@ -2077,10 +2146,7 @@ impl Client {
     }
 
     fn approve_or_deny_user(state: &mut State, user_id: UserId, approved: bool) {
-        use protobuf::group_call::{
-            device_to_sfu::{AdminAction, GenericAdminAction},
-            DeviceToSfu,
-        };
+        use protobuf::group_call::device_to_sfu::{AdminAction, GenericAdminAction};
 
         // Approval is implemented by demux ID (because we don't put user IDs in RTP messages).
         // So we have to find a corresponding demux ID in the pending users list.
@@ -2109,7 +2175,7 @@ impl Client {
                 ..Default::default()
             };
 
-            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+            if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
                 warn!("Failed to send {}: {:?}", action_to_log, e);
             }
         } else if let Some(demux_id) = peek_info
@@ -2153,10 +2219,7 @@ impl Client {
     }
 
     pub fn remove_client(&self, other_client: DemuxId) {
-        use protobuf::group_call::{
-            device_to_sfu::{AdminAction, GenericAdminAction},
-            DeviceToSfu,
-        };
+        use protobuf::group_call::device_to_sfu::{AdminAction, GenericAdminAction};
         debug!(
             "group_call::Client(outer)::remove_client(client_id: {})",
             self.client_id
@@ -2176,7 +2239,7 @@ impl Client {
                 ..Default::default()
             };
 
-            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+            if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
                 warn!("Failed to send removal: {:?}", e);
             }
         });
@@ -2185,10 +2248,7 @@ impl Client {
     // Blocks are performed on a particular client, but end up affecting all of the user's devices.
     // Still, we define it as a demux-ID-based operation for more flexibility later.
     pub fn block_client(&self, other_client: DemuxId) {
-        use protobuf::group_call::{
-            device_to_sfu::{AdminAction, GenericAdminAction},
-            DeviceToSfu,
-        };
+        use protobuf::group_call::device_to_sfu::{AdminAction, GenericAdminAction};
         debug!(
             "group_call::Client(outer)::block_client(client_id: {})",
             self.client_id
@@ -2208,7 +2268,7 @@ impl Client {
                 ..Default::default()
             };
 
-            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+            if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
                 warn!("Failed to send block: {:?}", e);
             }
         });
@@ -2617,6 +2677,13 @@ impl Client {
             .is_err()
         {
             warn!("Could not tell PeerConnection to receive RTP");
+        }
+        if state
+            .peer_connection
+            .receive_rtp(RTP_DATA_RELIABLE_PAYLOAD_TYPE, true)
+            .is_err()
+        {
+            warn!("Could not tell PeerConnection to receive reliable RTP");
         }
 
         Ok(())
@@ -3456,7 +3523,7 @@ impl Client {
     }
 
     fn send_raise_hand(state: &mut State) {
-        use protobuf::group_call::{device_to_sfu::RaiseHand, DeviceToSfu};
+        use protobuf::group_call::device_to_sfu::RaiseHand;
         let msg = DeviceToSfu {
             raise_hand: {
                 Some(RaiseHand {
@@ -3474,7 +3541,7 @@ impl Client {
     }
 
     fn send_leave_to_sfu(state: &mut State) {
-        use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
+        use protobuf::group_call::device_to_sfu::LeaveMessage;
         let msg = DeviceToSfu {
             leave: Some(LeaveMessage {}),
             ..Default::default()
@@ -3637,70 +3704,75 @@ impl Client {
         Ok(())
     }
 
-    fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
-        use protobuf::group_call::{
-            sfu_to_device::{CurrentDevices, DeviceJoinedOrLeft, RaisedHands, Removed, Speaker},
-            DeviceToDevice, SfuToDevice,
-        };
+    /// Reliably sends DeviceToSfu message over RTP
+    /// Only sends when join_state == Pending or Joined
+    fn reliable_send_to_sfu(
+        state: &mut State,
+        mut message: DeviceToSfu,
+    ) -> std::result::Result<(), MrpSendError> {
+        state.sfu_reliable_stream.try_send(|header| {
+            message.mrp_header = Some(header.into());
+            let payload = message.encode_to_vec();
 
-        if header.pt == RTP_DATA_PAYLOAD_TYPE {
+            let new_seqnum = Self::reliable_send_to_sfu_inner(
+                state.join_state,
+                state.client_id,
+                state.rtp_data_to_sfu_next_seqnum,
+                &state.peer_connection,
+                &payload,
+            )?;
+            state.rtp_data_through_sfu_next_seqnum = new_seqnum;
+            Ok((payload, Instant::now() + DEVICE_TO_SFU_TIMEOUT))
+        })
+    }
+
+    /// Should be called from within MrpStream methods like try_send, try_resend, and try_send_ack
+    /// Only sends when join_state == Pending or Joined
+    fn reliable_send_to_sfu_inner(
+        join_state: JoinState,
+        client_id: ClientId,
+        seqnum: u32,
+        peer_connection: &PeerConnection,
+        message: &[u8],
+    ) -> Result<u32> {
+        debug!(
+            "group_call::Client(inner)::reliable_send_to_sfu_inner(client_id: {}, message: {:?})",
+            client_id, message,
+        );
+        if let JoinState::Pending(_) | JoinState::Joined(_) = join_state {
+            let header = rtp::Header {
+                pt: RTP_DATA_RELIABLE_PAYLOAD_TYPE,
+                ssrc: RTP_DATA_TO_SFU_SSRC,
+                // This has to be incremented to make sure SRTP functions properly.
+                seqnum: seqnum as u16,
+                // Just imagine the clock is the number of messages :),
+                // Plus the above sequence number is too small to be useful.
+                timestamp: seqnum,
+            };
+            peer_connection.send_rtp(header, message)?;
+            Ok(seqnum.wrapping_add(1))
+        } else {
+            Err(anyhow::anyhow!(
+                "Can't perform reliable send, invalid JoinState: {:?}",
+                join_state
+            ))
+        }
+    }
+
+    fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
+        use protobuf::group_call::DeviceToDevice;
+
+        // Handle both Payload Types since SFU will not send reliable Payload Type until all clients
+        // support the MRP header
+        if header.pt == RTP_DATA_PAYLOAD_TYPE || header.pt == RTP_DATA_RELIABLE_PAYLOAD_TYPE {
             if header.ssrc == RTP_DATA_TO_SFU_SSRC {
-                // TODO: Use video_request to throttle down how much we send when it's not needed.
-                if let Ok(SfuToDevice {
-                    speaker,
-                    device_joined_or_left,
-                    current_devices,
-                    stats,
-                    video_request: _,
-                    removed,
-                    raised_hands,
-                }) = SfuToDevice::decode(payload)
-                {
-                    if let Some(Speaker {
-                        demux_id: speaker_demux_id,
-                    }) = speaker
-                    {
-                        if let Some(speaker_demux_id) = speaker_demux_id {
-                            self.handle_speaker_received(header.timestamp, speaker_demux_id);
-                        } else {
-                            warn!("Ignoring speaker demux ID of None from SFU");
-                        }
-                    };
-                    if let Some(DeviceJoinedOrLeft {}) = device_joined_or_left {
-                        self.handle_remote_device_joined_or_left();
-                    }
-                    // TODO: Use all_demux_ids to avoid polling
-                    if let Some(CurrentDevices {
-                        demux_ids_with_video,
-                        all_demux_ids: _,
-                        allocated_heights,
-                    }) = current_devices
-                    {
-                        self.handle_forwarding_video_received(
-                            demux_ids_with_video,
-                            allocated_heights,
-                        );
-                    }
-                    if let Some(stats) = stats {
-                        info!(
-                            "ringrtc_stats!,sfu,recv,{},{},{}",
-                            stats.target_send_rate_kbps.unwrap_or(0),
-                            stats.ideal_send_rate_kbps.unwrap_or(0),
-                            stats.allocated_send_rate_kbps.unwrap_or(0)
-                        );
-                    }
-                    if let Some(Removed {}) = removed {
-                        self.handle_removed_received();
-                    }
-                    if let Some(RaisedHands {
-                        demux_ids,
-                        seqnums: _,
-                        target_seqnum: Some(target_seqnum),
-                    }) = raised_hands
-                    {
-                        self.handle_raised_hands(demux_ids, target_seqnum);
-                    }
-                }
+                match SfuToDevice::decode(payload) {
+                    Ok(msg) => Self::handle_sfu_to_device(&self.actor, header, msg),
+                    Err(e) => warn!(
+                        "Ignoring received RTP marked SfuToDevice because decoding failed: {:?}",
+                        e
+                    ),
+                };
                 debug!("Received RTP data from SFU: {:?}.", payload);
             } else {
                 let demux_id = header.ssrc.saturating_sub(RTP_DATA_THROUGH_SFU_SSRC_OFFSET);
@@ -3749,8 +3821,100 @@ impl Client {
         }
     }
 
-    fn handle_removed_received(&self) {
-        self.actor.send(move |state| {
+    fn handle_sfu_to_device(actor: &Actor<State>, header: rtp::Header, msg: SfuToDevice) {
+        if let Some(mrp_header) = msg.mrp_header.as_ref() {
+            let mrp_header = mrp_header.into();
+            actor.send(move |state| {
+                match state
+                    .sfu_reliable_stream
+                    .receive(&mrp_header, (header, msg))
+                {
+                    Ok(ready_packets) => {
+                        for (buffered_header, sfu_to_device) in ready_packets {
+                            Self::handle_sfu_to_device_inner(
+                                &state.actor,
+                                buffered_header,
+                                sfu_to_device,
+                            )
+                        }
+                    }
+                    err @ Err(MrpReceiveError::ReceiveWindowFull(_)) => {
+                        warn!(
+                            "Error when receiving reliable SfuToDevice message, discarding. {:?}",
+                            err
+                        );
+                    }
+                };
+            });
+        } else {
+            if header.pt == RTP_DATA_RELIABLE_PAYLOAD_TYPE {
+                warn!("Received SfuToDevice reliable payload type without MRP Header, processing as normal payload");
+            }
+            Self::handle_sfu_to_device_inner(actor, header, msg);
+        }
+    }
+
+    fn handle_sfu_to_device_inner(actor: &Actor<State>, header: rtp::Header, msg: SfuToDevice) {
+        use protobuf::group_call::sfu_to_device::{
+            CurrentDevices, DeviceJoinedOrLeft, RaisedHands, Removed, Speaker,
+        };
+        // TODO: Use video_request to throttle down how much we send when it's not needed.
+        let SfuToDevice {
+            speaker,
+            device_joined_or_left,
+            current_devices,
+            stats,
+            video_request: _,
+            removed,
+            raised_hands,
+            mrp_header: _,
+        } = msg;
+
+        if let Some(Speaker {
+            demux_id: speaker_demux_id,
+        }) = speaker
+        {
+            if let Some(speaker_demux_id) = speaker_demux_id {
+                Self::handle_speaker_received(actor, header.timestamp, speaker_demux_id);
+            } else {
+                warn!("Ignoring speaker demux ID of None from SFU");
+            }
+        };
+        if let Some(DeviceJoinedOrLeft {}) = device_joined_or_left {
+            Self::handle_remote_device_joined_or_left(actor);
+        }
+        // TODO: Use all_demux_ids to avoid polling
+        if let Some(CurrentDevices {
+            demux_ids_with_video,
+            all_demux_ids: _,
+            allocated_heights,
+        }) = current_devices
+        {
+            Self::handle_forwarding_video_received(actor, demux_ids_with_video, allocated_heights);
+        }
+        if let Some(stats) = stats {
+            info!(
+                "ringrtc_stats!,sfu,recv,{},{},{}",
+                stats.target_send_rate_kbps.unwrap_or(0),
+                stats.ideal_send_rate_kbps.unwrap_or(0),
+                stats.allocated_send_rate_kbps.unwrap_or(0)
+            );
+        }
+        if let Some(Removed {}) = removed {
+            Self::handle_removed_received(actor);
+        }
+        if let Some(RaisedHands {
+            demux_ids,
+            seqnums: _,
+            target_seqnum: Some(target_seqnum),
+        }) = raised_hands
+        {
+            Self::handle_raised_hands(actor, demux_ids, target_seqnum);
+        }
+    }
+
+    fn handle_removed_received(actor: &Actor<State>) {
+        actor.send(move |state| {
             if matches!(state.join_state, JoinState::Joined(_)) {
                 Self::end(state, EndReason::RemovedFromCall);
             } else {
@@ -3759,8 +3923,8 @@ impl Client {
         });
     }
 
-    fn handle_speaker_received(&self, timestamp: rtp::Timestamp, demux_id: DemuxId) {
-        self.actor.send(move |state| {
+    fn handle_speaker_received(actor: &Actor<State>, timestamp: rtp::Timestamp, demux_id: DemuxId) {
+        actor.send(move |state| {
             if let Some(speaker_rtp_timestamp) = state.speaker_rtp_timestamp {
                 if timestamp <= speaker_rtp_timestamp {
                     // Ignored packets received out of order
@@ -3805,19 +3969,19 @@ impl Client {
         });
     }
 
-    fn handle_remote_device_joined_or_left(&self) {
-        self.actor.send(move |state| {
+    fn handle_remote_device_joined_or_left(actor: &Actor<State>) {
+        actor.send(move |state| {
             info!("SFU notified that a remote device has joined or left, requesting update");
             Self::request_remote_devices_as_soon_as_possible(state);
         })
     }
 
     fn handle_forwarding_video_received(
-        &self,
+        actor: &Actor<State>,
         mut demux_ids_with_video: Vec<DemuxId>,
         allocated_heights: Vec<u32>,
     ) {
-        self.actor.send(move |state| {
+        actor.send(move |state| {
             let forwarding_videos: HashMap<DemuxId, u16> = demux_ids_with_video
                 .iter()
                 .zip(allocated_heights.iter())
@@ -3941,8 +4105,8 @@ impl Client {
         }
     }
 
-    fn handle_raised_hands(&self, raised_hands: Vec<DemuxId>, server_seqnum: u32) {
-        self.actor.send(move |state| {
+    fn handle_raised_hands(actor: &Actor<State>, raised_hands: Vec<DemuxId>, server_seqnum: u32) {
+        actor.send(move |state| {
             // The server has previously received a hand raise request from the client or admin
             if server_seqnum != 0 {
                 if server_seqnum >= state.raise_hand_state.seqnum {
@@ -4405,7 +4569,10 @@ mod tests {
         mpsc, Arc, Condvar, Mutex,
     };
 
-    use crate::{lite::sfu::PeekDeviceInfo, webrtc::sim::media::FAKE_AUDIO_TRACK};
+    use crate::{
+        lite::sfu::PeekDeviceInfo, protobuf::group_call::MrpHeader,
+        webrtc::sim::media::FAKE_AUDIO_TRACK,
+    };
 
     use super::*;
     use std::sync::atomic::Ordering;
@@ -5127,8 +5294,7 @@ mod tests {
         }
 
         fn receive_speaker(&self, timestamp: u32, speaker_demux_id: DemuxId) {
-            self.client
-                .handle_speaker_received(timestamp, speaker_demux_id);
+            Client::handle_speaker_received(&self.client.actor, timestamp, speaker_demux_id);
             self.wait_for_client_to_process();
         }
 
@@ -6341,6 +6507,10 @@ mod tests {
                 admin_action: Some(AdminAction::Remove(GenericAdminAction {
                     target_demux_id: Some(32)
                 })),
+                mrp_header: Some(MrpHeader {
+                    seqnum: Some(1),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
@@ -6371,6 +6541,10 @@ mod tests {
                 admin_action: Some(AdminAction::Block(GenericAdminAction {
                     target_demux_id: Some(32)
                 })),
+                mrp_header: Some(MrpHeader {
+                    seqnum: Some(1),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
@@ -6405,6 +6579,10 @@ mod tests {
                 admin_action: Some(AdminAction::Approve(GenericAdminAction {
                     target_demux_id: Some(32)
                 })),
+                mrp_header: Some(MrpHeader {
+                    seqnum: Some(1),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
@@ -6458,6 +6636,10 @@ mod tests {
                 admin_action: Some(AdminAction::Deny(GenericAdminAction {
                     target_demux_id: Some(32)
                 })),
+                mrp_header: Some(MrpHeader {
+                    seqnum: Some(1),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
@@ -6817,9 +6999,7 @@ mod tests {
             get_forwarding_videos(&client1)
         );
 
-        client1
-            .client
-            .handle_forwarding_video_received(vec![2, 3], vec![240, 120]);
+        Client::handle_forwarding_video_received(&client1.client.actor, vec![2, 3], vec![240, 120]);
         client1.wait_for_client_to_process();
 
         assert_eq!(
@@ -6827,9 +7007,7 @@ mod tests {
             get_forwarding_videos(&client1)
         );
 
-        client1
-            .client
-            .handle_forwarding_video_received(vec![2], vec![120]);
+        Client::handle_forwarding_video_received(&client1.client.actor, vec![2], vec![120]);
         client1.wait_for_client_to_process();
 
         assert_eq!(
@@ -6863,17 +7041,13 @@ mod tests {
 
         assert_eq!(None, get_client_decoded_height(&client1));
 
-        client1
-            .client
-            .handle_forwarding_video_received(vec![2], vec![480]);
+        Client::handle_forwarding_video_received(&client1.client.actor, vec![2], vec![480]);
         client1.wait_for_client_to_process();
 
         set_client_decoded_height(&client1, 480);
 
         // There is no video when forwarding stops, so the height is None
-        client1
-            .client
-            .handle_forwarding_video_received(vec![], vec![]);
+        Client::handle_forwarding_video_received(&client1.client.actor, vec![], vec![]);
         client1.wait_for_client_to_process();
 
         assert_eq!(None, get_client_decoded_height(&client1));
@@ -6913,9 +7087,7 @@ mod tests {
         assert_eq!(vec![(2, 0)], get_forwarding_videos(&client1));
         assert!(!is_higher_resolution_pending(&client1));
 
-        client1
-            .client
-            .handle_forwarding_video_received(vec![2], vec![240]);
+        Client::handle_forwarding_video_received(&client1.client.actor, vec![2], vec![240]);
         client1.wait_for_client_to_process();
 
         assert_eq!(vec![(2, 240)], get_forwarding_videos(&client1));
@@ -6945,7 +7117,7 @@ mod tests {
         client1.client.join();
         client1.set_remotes_and_wait_until_applied(&[&client2]);
 
-        client1.client.handle_removed_received();
+        Client::handle_removed_received(&client1.client.actor);
         assert_eq!(
             Some(EndReason::DeniedRequestToJoinCall),
             client1.observer.ended.wait(Duration::from_secs(5))
@@ -6960,7 +7132,7 @@ mod tests {
         client1.client.join();
         client1.set_remotes_and_wait_until_applied(&[&client2, &client1]);
 
-        client1.client.handle_removed_received();
+        Client::handle_removed_received(&client1.client.actor);
         assert_eq!(
             Some(EndReason::RemovedFromCall),
             client1.observer.ended.wait(Duration::from_secs(5))
