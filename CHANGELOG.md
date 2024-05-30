@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.43.0
+
+- Add support for reliable Admin Actions (approve, deny, remove, block)
+- Propagate errors starting camera
+- electron: Add receivedAtData argument to handleAutoEndedIncoming
+
+- Update to webrtc 6261j
+  - Resolve warnings from delay settings
+
 ## v2.42.0
 
 - Add support for reporting rtc_stats to client application

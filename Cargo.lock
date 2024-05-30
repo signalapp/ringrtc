@@ -1506,7 +1506,7 @@ dependencies = [
 
 [[package]]
 name = "mrp"
-version = "2.42.0"
+version = "2.43.0"
 dependencies = [
  "anyhow",
  "log",
@@ -2031,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.42.0"
+version = "2.43.0"
 dependencies = [
  "aes",
  "aes-gcm-siv",
