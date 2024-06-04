@@ -764,9 +764,6 @@ pub struct VideoRequest {
 
 // This must stay in sync with the data PT in SfuClient.
 const RTP_DATA_PAYLOAD_TYPE: rtp::PayloadType = 101;
-// This must stay in sync with the data PT in SfuClient.
-// Packets marked with this payload should contain a [MRPHeader] field
-const RTP_DATA_RELIABLE_PAYLOAD_TYPE: rtp::PayloadType = 100;
 // This must stay in sync with the data SSRC offset in SfuClient.
 const RTP_DATA_THROUGH_SFU_SSRC_OFFSET: rtp::Ssrc = 0xD;
 const RTP_DATA_TO_SFU_SSRC: rtp::Ssrc = 1;
@@ -2678,13 +2675,6 @@ impl Client {
         {
             warn!("Could not tell PeerConnection to receive RTP");
         }
-        if state
-            .peer_connection
-            .receive_rtp(RTP_DATA_RELIABLE_PAYLOAD_TYPE, true)
-            .is_err()
-        {
-            warn!("Could not tell PeerConnection to receive reliable RTP");
-        }
 
         Ok(())
     }
@@ -3741,7 +3731,7 @@ impl Client {
         );
         if let JoinState::Pending(_) | JoinState::Joined(_) = join_state {
             let header = rtp::Header {
-                pt: RTP_DATA_RELIABLE_PAYLOAD_TYPE,
+                pt: RTP_DATA_PAYLOAD_TYPE,
                 ssrc: RTP_DATA_TO_SFU_SSRC,
                 // This has to be incremented to make sure SRTP functions properly.
                 seqnum: seqnum as u16,
@@ -3762,9 +3752,7 @@ impl Client {
     fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
         use protobuf::group_call::DeviceToDevice;
 
-        // Handle both Payload Types since SFU will not send reliable Payload Type until all clients
-        // support the MRP header
-        if header.pt == RTP_DATA_PAYLOAD_TYPE || header.pt == RTP_DATA_RELIABLE_PAYLOAD_TYPE {
+        if header.pt == RTP_DATA_PAYLOAD_TYPE {
             if header.ssrc == RTP_DATA_TO_SFU_SSRC {
                 match SfuToDevice::decode(payload) {
                     Ok(msg) => Self::handle_sfu_to_device(&self.actor, header, msg),
@@ -3847,9 +3835,6 @@ impl Client {
                 };
             });
         } else {
-            if header.pt == RTP_DATA_RELIABLE_PAYLOAD_TYPE {
-                warn!("Received SfuToDevice reliable payload type without MRP Header, processing as normal payload");
-            }
             Self::handle_sfu_to_device_inner(actor, header, msg);
         }
     }
