@@ -750,100 +750,6 @@ async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-async fn run_lbred_tests(test: &mut Test) -> Result<()> {
-    let vec_default = &vec!["RingRTC-AnyAddressPortsKillSwitch/Enabled".to_string()];
-    let vec_lbred = &vec![
-        "RingRTC-AnyAddressPortsKillSwitch/Enabled".to_string(),
-        "RingRTC-Audio-LBRed-For-Opus/Enabled,bitrate_pri:22000".to_string(),
-    ];
-
-    let test_cases = [
-        // 20ms/FEC
-        (32000, 20, true, false, 3, vec_default.clone(), 0),
-        (32000, 20, true, false, 3, vec_default.clone(), 5),
-        (32000, 20, true, false, 3, vec_default.clone(), 10),
-        (32000, 20, true, false, 3, vec_default.clone(), 15),
-        (32000, 20, true, false, 3, vec_default.clone(), 20),
-        (32000, 20, true, false, 3, vec_default.clone(), 25),
-        (32000, 20, true, false, 3, vec_default.clone(), 30),
-        (32000, 20, true, false, 3, vec_default.clone(), 35),
-        (32000, 20, true, false, 3, vec_default.clone(), 40),
-        (32000, 20, true, false, 3, vec_default.clone(), 45),
-        (32000, 20, true, false, 3, vec_default.clone(), 50),
-
-        // 60ms/FEC
-        (32000, 60, true, false, 3, vec_default.clone(), 0),
-        (32000, 60, true, false, 3, vec_default.clone(), 5),
-        (32000, 60, true, false, 3, vec_default.clone(), 10),
-        (32000, 60, true, false, 3, vec_default.clone(), 15),
-        (32000, 60, true, false, 3, vec_default.clone(), 20),
-        (32000, 60, true, false, 3, vec_default.clone(), 25),
-        (32000, 60, true, false, 3, vec_default.clone(), 30),
-        (32000, 60, true, false, 3, vec_default.clone(), 35),
-        (32000, 60, true, false, 3, vec_default.clone(), 40),
-        (32000, 60, true, false, 3, vec_default.clone(), 45),
-        (32000, 60, true, false, 3, vec_default.clone(), 50),
-
-        // 60ms/LBRED
-        (22000, 60, false, true, 3, vec_lbred.clone(), 0),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 5),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 10),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 15),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 20),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 25),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 30),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 35),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 40),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 45),
-        (22000, 60, false, true, 3, vec_lbred.clone(), 50),
-
-    ].map(|(initial_bitrate_bps, initial_packet_size_ms, enable_fec, enable_red, iterations, field_trials, loss)| TestCaseConfig {
-        test_case_name: format!("{initial_bitrate_bps}_{initial_packet_size_ms}_fec-{enable_fec}_red-{enable_red}_lbred-{}_loss-{loss}", if field_trials.len() == 2 {"yes"} else {"no"}),
-        length_seconds: 30,
-        client_a_config: CallConfig {
-            audio: AudioConfig {
-                input_name: "normal_phrasing".to_string(),
-                initial_packet_size_ms,
-                enable_fec,
-                enable_red,
-                ..Default::default()
-            },
-            field_trials: field_trials.clone(),
-            profile: DeterministicLoss(loss),
-            ..Default::default()
-        },
-        client_b_config: CallConfig {
-            audio: AudioConfig {
-                input_name: "normal_phrasing".to_string(),
-                initial_packet_size_ms,
-                initial_bitrate_bps,
-                enable_fec,
-                enable_red,
-                visqol_audio_analysis: true,
-                ..Default::default()
-            },
-            field_trials: field_trials.clone(),
-            profile: DeterministicLoss(loss),
-            ..Default::default()
-        },
-        iterations,
-        tcp_dump: true,
-        ..Default::default()
-    });
-
-    test.run(
-        GroupConfig {
-            group_name: "lbred".to_string(),
-            ..Default::default()
-        },
-        test_cases.into(),
-        vec![NetworkProfile::None],
-    )
-    .await?;
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -896,7 +802,6 @@ async fn main() -> Result<()> {
             "video_compare_vp8_vs_vp9" => run_video_compare_vp8_vs_vp9(test).await?,
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,
             "deterministic_loss_test" => run_deterministic_loss_test(test).await?,
-            "lbred_tests" => run_lbred_tests(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
         test.report().await?;
