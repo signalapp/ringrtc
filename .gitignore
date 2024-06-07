@@ -8,9 +8,7 @@ cscope.*
 *.code-workspace
 **/.vscode
 .idea
-src/webrtc/
-src/webrtc/.cipd
-src/webrtc/.gclient*
+src/webrtc*
 src/jar.list
 .project
 .classpath
