@@ -1074,7 +1074,7 @@ where
                     let mut call = Call::new(
                         remote_peer,
                         call_id,
-                        CallDirection::OutGoing,
+                        CallDirection::Outgoing,
                         call_media_type,
                         local_device_id,
                         self.clone(),
@@ -1318,7 +1318,7 @@ where
         let mut incoming_call = Call::new(
             remote_peer.clone(),
             incoming_call_id,
-            CallDirection::InComing,
+            CallDirection::Incoming,
             received.offer.call_media_type,
             received.receiver_device_id,
             self.clone(),
@@ -1495,7 +1495,7 @@ where
                 active_call.inject_received_ice(received)?;
             }
             Ok(active_call) => {
-                if active_call.direction() == CallDirection::OutGoing {
+                if active_call.direction() == CallDirection::Outgoing {
                     // Save the ICE candidates anyway, in case we have a glare scenario.
                     self.pending_call_messages
                         .lock()?
@@ -1537,7 +1537,7 @@ where
                 active_call.inject_received_hangup(received)?;
             }
             Ok(active_call) => {
-                if active_call.direction() == CallDirection::OutGoing {
+                if active_call.direction() == CallDirection::Outgoing {
                     // Save the hangup anyway, in case we have a glare scenario.
                     self.pending_call_messages
                         .lock()?

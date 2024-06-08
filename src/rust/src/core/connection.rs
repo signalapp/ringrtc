@@ -1467,8 +1467,8 @@ where
             pt: RTP_DATA_PAYLOAD_TYPE,
             // TODO: Once all clients are updated to accept the NEW_RTP_DATA_SSRC, use that.
             ssrc: match self.direction {
-                CallDirection::InComing => OLD_RTP_DATA_SSRC_FOR_INCOMING,
-                CallDirection::OutGoing => OLD_RTP_DATA_SSRC_FOR_OUTGOING,
+                CallDirection::Incoming => OLD_RTP_DATA_SSRC_FOR_INCOMING,
+                CallDirection::Outgoing => OLD_RTP_DATA_SSRC_FOR_OUTGOING,
             },
             // This has to be incremented to make sure SRTP functions properly, but rollovers are OK.
             seqnum: webrtc_data.last_sent_rtp_data_timestamp as rtp::SequenceNumber,
@@ -1826,7 +1826,7 @@ where
         let mut message_handled = false;
         let original_message = message.clone();
         if let Some(accepted) = message.accepted {
-            if let CallDirection::OutGoing = self.direction() {
+            if let CallDirection::Outgoing = self.direction() {
                 self.inject_received_accepted_via_rtp_data(CallId::new(accepted.id()))
                     .unwrap_or_else(|e| warn!("unable to inject remote accepted event: {}", e));
             } else {
@@ -2168,7 +2168,7 @@ where
         let mut last_received_rtp_data_timestamp = self
             .last_received_rtp_data_timestamp
             .lock()
-            .expect("Lock last_recived_rtp_data_timestamp");
+            .expect("Lock last_received_rtp_data_timestamp");
 
         // We allow equal timestamps because old clients send
         // multiple messages with the same timestamp.

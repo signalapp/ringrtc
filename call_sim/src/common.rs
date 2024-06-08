@@ -101,7 +101,7 @@ impl ChartDimension {
                 ("Video Send Delay Per Packet", "milliseconds")
             }
             ChartDimension::VideoSendNackCount => ("Received Nack Count", "NACKs"),
-            ChartDimension::VideoSendPliCount => ("Recieved PLI Count", "PLIs"),
+            ChartDimension::VideoSendPliCount => ("Received PLI Count", "PLIs"),
             ChartDimension::VideoSendRemotePacketLoss => ("Video Remote Packet Loss", "%"),
             ChartDimension::VideoSendRemoteJitter => ("Video Remote Jitter", "milliseconds"),
             ChartDimension::VideoSendRemoteRoundTripTime => ("Video Remote RTT", "milliseconds"),

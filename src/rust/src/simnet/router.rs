@@ -69,8 +69,8 @@ pub struct LinkConfig {
     // pub delay_std_dev:             Duration,
     pub delay_min: Duration,
     pub delay_max: Duration,
-    pub loss_probabilty: f64,
-    // If a packet is lost, the probably of the next one being a loss
+    pub loss_probability: f64,
+    // If a packet is lost, the probability of the next one being a loss
     pub repeated_loss_probability: f64,
     pub rate: DataRate,
     pub queue_size: DataSize,
@@ -216,12 +216,12 @@ impl Link {
 
     fn send_packet(&self, packet: Packet) {
         self.actor.send(move |state| {
-            let loss_probabilty = if state.previous_packet_dropped {
+            let loss_probability = if state.previous_packet_dropped {
                 state.config.repeated_loss_probability
             } else {
-                state.config.loss_probabilty
+                state.config.loss_probability
             };
-            if !packet.reliable() && state.rng.gen_bool(loss_probabilty) {
+            if !packet.reliable() && state.rng.gen_bool(loss_probability) {
                 println!(
                     "Dropped packet from {:?} to {:?} of size {} randomly (previous_packet_dropped={})",
                     packet.source, packet.dest, packet.size().as_bytes(), state.previous_packet_dropped
@@ -305,7 +305,7 @@ impl LeakyBucket {
 
             // Simulates the time it takes to transmit a packet.
             // TODO: accumulate sleep amounts and only sleep when more
-            // than some threshold for systems that have inprecise sleep.
+            // than some threshold for systems that have imprecise sleep.
             thread::sleep(packet_size_with_overhead / rate);
 
             state.receiver.receive_packet(packet);

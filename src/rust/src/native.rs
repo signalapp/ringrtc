@@ -502,8 +502,8 @@ impl Platform for NativePlatform {
             remote_peer,
             call_id,
             match direction {
-                CallDirection::OutGoing => CallState::Outgoing(call_media_type),
-                CallDirection::InComing => CallState::Incoming(call_media_type),
+                CallDirection::Outgoing => CallState::Outgoing(call_media_type),
+                CallDirection::Incoming => CallState::Incoming(call_media_type),
             },
         )?;
         Ok(())

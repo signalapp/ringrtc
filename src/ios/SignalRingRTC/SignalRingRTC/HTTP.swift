@@ -93,7 +93,7 @@ public protocol HTTPDelegate: AnyObject {
     // An HTTP request should be sent to the given url.
     // The HTTP response should be returned by calling the HttpClient.receivedResponse(requestId, ...).
     // or HttpClient.requestFailed(requestId) if the request failed to get a response.
-    // Invoked on the main thread, asychronously.
+    // Invoked on the main thread, asynchronously.
     func sendRequest(requestId: UInt32, request: HTTPRequest)
 }
 

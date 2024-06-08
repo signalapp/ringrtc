@@ -555,7 +555,7 @@ where
 
         // If the callee that originated the hangup, ignore messages that are propagated
         // back to us from the caller.
-        if direction == CallDirection::InComing && Some(call.local_device_id()) == hangup_device_id
+        if direction == CallDirection::Incoming && Some(call.local_device_id()) == hangup_device_id
         {
             info!("handle_received_hangup(): Ignoring hangup message originated by this device");
             return Ok(());
@@ -583,7 +583,7 @@ where
         // - app_event_override: The event, if any, to return to the UX to override the default
         let (expected, hangup_to_propagate, app_event_override) = match (hangup_type, direction) {
             // Caller gets NeedsPermission: propagate it with specific app event.
-            (signaling::HangupType::NeedPermission, CallDirection::OutGoing) => {
+            (signaling::HangupType::NeedPermission, CallDirection::Outgoing) => {
                 propagate_with_app_event(
                     signaling::Hangup::NeedPermission(Some(sender_device_id)),
                     ApplicationEvent::EndedRemoteHangupNeedPermission,
@@ -591,35 +591,35 @@ where
             }
 
             // Callee gets Normal: no propagation.
-            (signaling::HangupType::Normal, CallDirection::InComing) => {
+            (signaling::HangupType::Normal, CallDirection::Incoming) => {
                 no_app_event_and_no_propagation
             }
 
             // Caller gets Normal hangup: propagate it as Declined.
-            (signaling::HangupType::Normal, CallDirection::OutGoing) => {
+            (signaling::HangupType::Normal, CallDirection::Outgoing) => {
                 propagate_without_app_event(signaling::Hangup::DeclinedOnAnotherDevice(
                     sender_device_id,
                 ))
             }
 
             // Callee gets propagated hangup: use specific app event.
-            (signaling::HangupType::AcceptedOnAnotherDevice, CallDirection::InComing) => {
+            (signaling::HangupType::AcceptedOnAnotherDevice, CallDirection::Incoming) => {
                 app_event_without_propagation(ApplicationEvent::EndedRemoteHangupAccepted)
             }
-            (signaling::HangupType::DeclinedOnAnotherDevice, CallDirection::InComing) => {
+            (signaling::HangupType::DeclinedOnAnotherDevice, CallDirection::Incoming) => {
                 app_event_without_propagation(ApplicationEvent::EndedRemoteHangupDeclined)
             }
-            (signaling::HangupType::BusyOnAnotherDevice, CallDirection::InComing) => {
+            (signaling::HangupType::BusyOnAnotherDevice, CallDirection::Incoming) => {
                 app_event_without_propagation(ApplicationEvent::EndedRemoteHangupBusy)
             }
 
             // Everything else is unexpected: warn, and mostly treat like normal, no propagation.
             // TODO: Isn't NeedPermission for incoming normal because it's propagated above?
             // Should we make this no_app_event_and_no_propagation?
-            (signaling::HangupType::NeedPermission, CallDirection::InComing) => unexpected,
-            (signaling::HangupType::AcceptedOnAnotherDevice, CallDirection::OutGoing) => unexpected,
-            (signaling::HangupType::DeclinedOnAnotherDevice, CallDirection::OutGoing) => unexpected,
-            (signaling::HangupType::BusyOnAnotherDevice, CallDirection::OutGoing) => unexpected,
+            (signaling::HangupType::NeedPermission, CallDirection::Incoming) => unexpected,
+            (signaling::HangupType::AcceptedOnAnotherDevice, CallDirection::Outgoing) => unexpected,
+            (signaling::HangupType::DeclinedOnAnotherDevice, CallDirection::Outgoing) => unexpected,
+            (signaling::HangupType::BusyOnAnotherDevice, CallDirection::Outgoing) => unexpected,
         };
 
         if !expected {
@@ -635,7 +635,7 @@ where
 
         // Only callers can propagate hangups to other callee devices.
         if let Some(hangup_to_propagate) = hangup_to_propagate {
-            if state.should_propogate_hangup() {
+            if state.should_propagate_hangup() {
                 let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
                 let excluded_remote_device_id = hangup_device_id.unwrap_or(0);
                 call.send_hangup_via_rtp_data_and_signaling_to_all_except(
@@ -706,7 +706,7 @@ where
             ConnectionObserverEvent::StateChanged(connection_state) => {
                 match (direction, state, connection_state) {
                     (
-                        CallDirection::InComing,
+                        CallDirection::Incoming,
                         CallState::ConnectingBeforeAccepted,
                         ConnectionState::ConnectedBeforeAccepted,
                     ) => {
@@ -716,7 +716,7 @@ where
                         self.notify_application(call, ApplicationEvent::LocalRinging)
                     }
                     (
-                        CallDirection::OutGoing,
+                        CallDirection::Outgoing,
                         CallState::ConnectingBeforeAccepted,
                         ConnectionState::ConnectedBeforeAccepted,
                     ) => {
@@ -724,7 +724,7 @@ where
                         self.notify_application(call, ApplicationEvent::RemoteRinging)
                     }
                     | (
-                        CallDirection::OutGoing,
+                        CallDirection::Outgoing,
                         // Note: It's possible to have one connection in ConnectedBeforeAccepted and another in ConnectingAfterAccepted.
                         CallState::ConnectingBeforeAccepted | CallState::ConnectedBeforeAccepted,
                         ConnectionState::ConnectingAfterAccepted,
@@ -738,7 +738,7 @@ where
                         // Don't activate the remotely accepted connection until it's connected.
                     }
                     (
-                        CallDirection::OutGoing,
+                        CallDirection::Outgoing,
                         CallState::ConnectingAfterAccepted,
                         ConnectionState::ConnectedAndAccepted,
                     ) => {
@@ -761,7 +761,7 @@ where
                         }
                     }
                     (
-                        CallDirection::OutGoing,
+                        CallDirection::Outgoing,
                         CallState::ConnectedBeforeAccepted,
                         ConnectionState::ConnectedAndAccepted,
                     ) => {
@@ -774,7 +774,7 @@ where
                         self.activate_remotely_accepted_connection(call);
                     }
                     (
-                        CallDirection::InComing,
+                        CallDirection::Incoming,
                         CallState::ConnectedBeforeAccepted,
                         ConnectionState::ConnectedAndAccepted,
                     ) => {
@@ -816,7 +816,7 @@ where
                             call.handle_ice_failed(remote_device_id)
                         });
                     }
-                    // The following state tranisitions make sense but aren't interesting.
+                    // The following state transitions make sense but aren't interesting.
                     (
                         _,
                         _,
@@ -829,7 +829,7 @@ where
                     )
                     // This is possible for outgoing calls when multiple connections can all reach the connected state.
                     | (
-                        CallDirection::OutGoing,
+                        CallDirection::Outgoing,
                         CallState::ConnectedBeforeAccepted,
                         ConnectionState::ConnectedBeforeAccepted,
                     ) => {
@@ -864,7 +864,7 @@ where
                     // Note: This is possible for outgoing calls when multiple connections can all reach the connected state.
                     // (See that handled case above)
                     | (
-                        CallDirection::InComing,
+                        CallDirection::Incoming,
                         CallState::ConnectedBeforeAccepted,
                         ConnectionState::ConnectedBeforeAccepted,
                     )
@@ -874,17 +874,17 @@ where
                         ConnectionState::ReconnectingAfterAccepted,
                     )
                     | (
-                        CallDirection::InComing,
+                        CallDirection::Incoming,
                         CallState::ConnectingAfterAccepted,
                         _,
                     )
                     | (
-                        CallDirection::InComing,
+                        CallDirection::Incoming,
                         _,
                         ConnectionState::ConnectingAfterAccepted,
                     )
                     | (
-                        CallDirection::OutGoing,
+                        CallDirection::Outgoing,
                         CallState::ConnectingAfterAccepted,
                         ConnectionState::ConnectedBeforeAccepted | ConnectionState::ConnectingAfterAccepted | ConnectionState::ReconnectingAfterAccepted,
                     )

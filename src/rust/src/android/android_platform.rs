@@ -314,8 +314,8 @@ impl Platform for AndroidPlatform {
         let jni_remote = remote_peer.as_obj();
         let call_id_jlong = u64::from(call_id) as jlong;
         let is_outgoing = match direction {
-            CallDirection::OutGoing => true,
-            CallDirection::InComing => false,
+            CallDirection::Outgoing => true,
+            CallDirection::Incoming => false,
         };
         let jni_call_media_type = match self.java_enum(
             env,

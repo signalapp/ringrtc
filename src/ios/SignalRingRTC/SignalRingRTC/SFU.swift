@@ -67,7 +67,7 @@ public struct GroupMember {
     }
 }
 
-// Was previouly called GroupMemberInfo, so this makes
+// Was previously called GroupMemberInfo, so this makes
 // it a little easier to use with existing code.
 public typealias GroupMemberInfo = GroupMember
 

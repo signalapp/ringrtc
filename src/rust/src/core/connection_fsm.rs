@@ -422,7 +422,7 @@ where
         if let Some((_, status)) = self.last_remote_sender_status {
             Self::handle_remote_sender_status_changed(&connection, status)?;
         }
-        if connection.direction() == CallDirection::InComing {
+        if connection.direction() == CallDirection::Incoming {
             self.send_accepted_via_rtp_data(connection);
         }
         Ok(())

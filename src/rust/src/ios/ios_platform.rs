@@ -190,7 +190,7 @@ impl Platform for IosPlatform {
             self.app_interface.object,
             remote_peer.ptr,
             u64::from(call_id),
-            direction == CallDirection::OutGoing,
+            direction == CallDirection::Outgoing,
             call_media_type as i32,
         );
 

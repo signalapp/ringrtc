@@ -965,7 +965,7 @@ impl ClientLogReport {
 
         let nack_count_stats = Stats {
             config: StatsConfig {
-                title: "Video Recieved NACK Count".to_string(),
+                title: "Video Received NACK Count".to_string(),
                 chart_name: format!("{}.log.video.send.nack_count.svg", client_name),
                 x_label: "Test Seconds".to_string(),
                 y_label: "# NACKs".to_string(),

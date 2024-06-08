@@ -541,7 +541,7 @@ where
 
         match self.direction {
             // This happens after received_offer and an offer is put in self.pending_call.
-            CallDirection::InComing => {
+            CallDirection::Incoming => {
                 let mut pending_call = self.pending_call.lock()?;
                 if let Some(pending_call) = pending_call.take() {
                     let remote_device_id = pending_call.received.sender_device_id;
@@ -579,7 +579,7 @@ where
                     .into());
                 }
             }
-            CallDirection::OutGoing => {
+            CallDirection::Outgoing => {
                 let mut parent_connection = call_manager.create_connection(
                     self,
                     0,
@@ -693,7 +693,7 @@ where
     /// call or if the call is incoming.
     pub fn should_send_hangup(&self) -> bool {
         match self.direction {
-            CallDirection::OutGoing => {
+            CallDirection::Outgoing => {
                 // If the call is outgoing, only send hangup message if an
                 // offer was actually sent out.
                 self.did_send_offer.load(Ordering::Acquire)

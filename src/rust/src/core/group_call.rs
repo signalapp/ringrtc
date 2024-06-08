@@ -1035,7 +1035,7 @@ struct State {
     speaker_rtp_timestamp: Option<rtp::Timestamp>,
 
     send_rates: SendRates,
-    // If set, will always overide the send_rates.  Intended for testing.
+    // If set, will always override the send_rates.  Intended for testing.
     send_rates_override: Option<SendRates>,
     max_receive_rate: Option<DataRate>,
     data_mode: DataMode,
@@ -1347,7 +1347,7 @@ impl Client {
                 if let Err(err) = Self::send_heartbeat(state) {
                     warn!("Failed to send regular heartbeat: {:?}", err);
                 }
-                // Also send video requests at the same rate as the hearbeat.
+                // Also send video requests at the same rate as the heartbeat.
                 Self::send_video_requests_to_sfu(state);
                 state.on_demand_video_request_sent_since_last_heartbeat = false;
                 state.next_heartbeat_time = Some(now + HEARTBEAT_INTERVAL)
@@ -2543,7 +2543,7 @@ impl Client {
         });
     }
 
-    // Called once per call, when the client transistions to JoinState::Joined.
+    // Called once per call, when the client transitions to JoinState::Joined.
     // Currently, this occurs via on_sfu_client_joined (Joining -> Joined) or
     // or via peek_result_inner (Joining -> Pending -> Joined)
     fn on_client_joined(state: &mut State) {

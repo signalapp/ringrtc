@@ -263,11 +263,11 @@ describe('RingRTC', () => {
   async function runGlareScenario(
     calling: CallingClass,
     outgoingWinner: boolean,
-    delayIncomingCallSetings: number,
-    delayOutgoingCallSetings: number
+    delayIncomingCallSettings: number,
+    delayOutgoingCallSettings: number
   ) {
-    calling.delayOutgoingCallSettingsRequest = delayOutgoingCallSetings;
-    calling.delayIncomingCallSettingsRequest = delayIncomingCallSetings;
+    calling.delayOutgoingCallSettingsRequest = delayOutgoingCallSettings;
+    calling.delayIncomingCallSettingsRequest = delayIncomingCallSettings;
 
     const outgoingCallLatch = countDownLatch(1);
     calling

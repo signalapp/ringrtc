@@ -183,8 +183,8 @@ impl Platform for SimPlatform {
             Err(SimError::StartCallError.into())
         } else {
             let _ = match direction {
-                CallDirection::OutGoing => self.stats.start_outgoing.fetch_add(1, Ordering::AcqRel),
-                CallDirection::InComing => self.stats.start_incoming.fetch_add(1, Ordering::AcqRel),
+                CallDirection::Outgoing => self.stats.start_outgoing.fetch_add(1, Ordering::AcqRel),
+                CallDirection::Incoming => self.stats.start_incoming.fetch_add(1, Ordering::AcqRel),
             };
             Ok(())
         }

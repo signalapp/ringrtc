@@ -287,7 +287,7 @@ impl TestManagement for TestingService {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let (signal_tx, singal_rx) = oneshot::channel();
+    let (signal_tx, signal_rx) = oneshot::channel();
     tokio::spawn(async move {
         let _ = signal::ctrl_c().await;
         info!("SIGINT received: shutting down");
@@ -309,7 +309,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(calling_service)
         .add_service(testing_service)
         .serve_with_shutdown(addr, async {
-            singal_rx.await.ok();
+            signal_rx.await.ok();
         });
 
     server.await?;

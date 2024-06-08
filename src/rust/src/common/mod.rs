@@ -227,7 +227,7 @@ impl CallState {
             CallState::NotYetStarted => false,
 
             // Not sure why these are true, but they preserve logic during refactoring.
-            // Since the messasge won't go anywhere, we should consider removing it.
+            // Since the message won't go anywhere, we should consider removing it.
             CallState::WaitingToProceed => true,
             CallState::ConnectingBeforeAccepted => true,
             CallState::ConnectingAfterAccepted => true,
@@ -238,12 +238,12 @@ impl CallState {
             CallState::Terminating => true,
 
             // Not sure why this is true, but it preserves logic during refactoring.
-            // Since the messasge won't go anywhere, we should consider removing it.
+            // Since the message won't go anywhere, we should consider removing it.
             CallState::Terminated => true,
         }
     }
 
-    pub fn should_propogate_hangup(self) -> bool {
+    pub fn should_propagate_hangup(self) -> bool {
         match self {
             CallState::NotYetStarted => false,
 
@@ -660,10 +660,10 @@ impl ConnectionState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallDirection {
     /// Incoming call.
-    InComing = 0,
+    Incoming = 0,
 
     /// Outgoing call.
-    OutGoing,
+    Outgoing,
 }
 
 impl fmt::Display for CallDirection {
@@ -675,8 +675,8 @@ impl fmt::Display for CallDirection {
 impl CallDirection {
     pub fn from_i32(value: i32) -> Self {
         match value {
-            0 => CallDirection::InComing,
-            1 => CallDirection::OutGoing,
+            0 => CallDirection::Incoming,
+            1 => CallDirection::Outgoing,
             _ => panic!("Unknown value: {}", value),
         }
     }

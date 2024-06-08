@@ -35,7 +35,7 @@ pub struct PeekInfo {
     pub pending_devices: Vec<PeekDeviceInfo>,
     /// The user who created the call
     pub creator: Option<UserId>,
-    /// The "era" of this group call; changes every time the last partipant leaves and someone else joins again.
+    /// The "era" of this group call; changes every time the last participant leaves and someone else joins again.
     pub era_id: Option<String>,
     /// The maximum number of devices that can join this group call.
     pub max_devices: Option<u32>,

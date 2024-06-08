@@ -13,7 +13,7 @@ use crate::webrtc;
 use crate::webrtc::peer_connection::RffiPeerConnection;
 
 extern "C" {
-    /// Export the nativeCreatepeerconnection() call from the
+    /// Export the nativeCreatePeerConnection() call from the
     /// org.webrtc.PeerConnectionFactory class.
     pub fn Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection(
         env: JNIEnv,

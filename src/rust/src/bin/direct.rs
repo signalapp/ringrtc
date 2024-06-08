@@ -60,7 +60,7 @@ fn main() {
     let good_link = LinkConfig {
         delay_min: Duration::from_millis(10),
         delay_max: Duration::from_millis(20),
-        loss_probabilty: 0.00,
+        loss_probability: 0.00,
         repeated_loss_probability: 0.00,
         rate: DataRate::from_mbps(5),
         queue_size: DataRate::from_mbps(5) * Duration::from_millis(500),
@@ -68,7 +68,7 @@ fn main() {
     let bad_link = LinkConfig {
         delay_min: Duration::from_millis(100),
         delay_max: Duration::from_millis(200),
-        loss_probabilty: 0.005,
+        loss_probability: 0.005,
         repeated_loss_probability: 0.70,
         rate: DataRate::from_kbps(256),
         queue_size: DataRate::from_kbps(256) * Duration::from_secs(500),

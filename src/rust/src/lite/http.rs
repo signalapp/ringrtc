@@ -63,7 +63,7 @@ impl ResponseStatus {
     pub const GROUP_CALL_NOT_STARTED: Self = Self { code: 404 };
     pub const GROUP_CALL_FULL: Self = Self { code: 413 };
 
-    // Artifical codes not actually returned by the server
+    // Artificial codes not actually returned by the server
     pub const INVALID_CLIENT_AUTH: Self = Self { code: 601 };
     pub const REQUEST_FAILED: Self = Self { code: 602 };
     pub const INVALID_RESPONSE_BODY_UTF8: Self = Self { code: 701 };
