@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+@testable import SignalRingRTC
 import WebRTC
-import SignalCoreKit
 
 public class AudioDeviceModuleForTests: NSObject, RTCAudioDevice {
     public var deviceInputSampleRate: Double = 48000.0

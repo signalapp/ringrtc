@@ -8,6 +8,7 @@
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
     use crate::lite::ffi::ios::{rtc_OptionalU32, rtc_String, FromOrDefault};
+    use std::ffi::c_void;
 
     #[repr(C)]
     pub struct rtc_log_Record<'a> {
@@ -17,16 +18,22 @@ pub mod ios {
         level: u8,
     }
 
+    // It's up to the other side of the bridge to provide a Sync-friendly context.
+    unsafe impl Send for rtc_log_Delegate {}
+    unsafe impl Sync for rtc_log_Delegate {}
+
     #[repr(C)]
     pub struct rtc_log_Delegate {
-        pub log: extern "C" fn(record: rtc_log_Record),
+        pub ctx: *mut c_void,
+        pub log: extern "C" fn(ctx: *mut c_void, record: rtc_log_Record),
+        pub flush: extern "C" fn(ctx: *mut c_void),
     }
 
     #[no_mangle]
-    pub extern "C" fn rtc_log_init(delegate: rtc_log_Delegate, max_level: u8) {
+    pub extern "C" fn rtc_log_init(delegate: rtc_log_Delegate, max_level: u8) -> bool {
         if log::set_boxed_logger(Box::new(delegate)).is_err() {
             warn!("Logging already initialized");
-            return;
+            return false;
         }
 
         let max_level_filter = match max_level {
@@ -51,6 +58,8 @@ pub mod ios {
         }));
 
         debug!("RingRTC logging system initialized!");
+
+        true
     }
 
     impl log::Log for rtc_log_Delegate {
@@ -65,12 +74,15 @@ pub mod ios {
 
             let message = format!("{}", record.args());
 
-            (self.log)(rtc_log_Record {
-                message: rtc_String::from(&message),
-                file: rtc_String::from_or_default(record.file()),
-                line: rtc_OptionalU32::from_or_default(record.line()),
-                level: record.level() as u8,
-            });
+            (self.log)(
+                self.ctx,
+                rtc_log_Record {
+                    message: rtc_String::from(&message),
+                    file: rtc_String::from_or_default(record.file()),
+                    line: rtc_OptionalU32::from_or_default(record.line()),
+                    level: record.level() as u8,
+                },
+            );
         }
 
         fn flush(&self) {}

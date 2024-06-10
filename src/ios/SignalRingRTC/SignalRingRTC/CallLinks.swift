@@ -4,7 +4,6 @@
 //
 
 import SignalRingRTC.RingRTC
-import SignalCoreKit
 
 public struct CallLinkRootKey: CustomStringConvertible {
     public struct ValidationError: Error {}
@@ -59,7 +58,7 @@ public struct CallLinkRootKey: CustomStringConvertible {
             }
         }
         if let errorCStr {
-            owsFail(String(cString: errorCStr))
+            fail(String(cString: errorCStr))
         }
         return result!
     }
@@ -72,7 +71,7 @@ public struct CallLinkRootKey: CustomStringConvertible {
             }
         }
         if let errorCStr {
-            owsFail(String(cString: errorCStr))
+            fail(String(cString: errorCStr))
         }
         return result!
     }

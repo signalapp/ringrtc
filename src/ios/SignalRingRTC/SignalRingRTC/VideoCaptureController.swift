@@ -4,7 +4,6 @@
 //
 
 import WebRTC
-import SignalCoreKit
 
 @available(iOSApplicationExtension, unavailable)
 public class VideoCaptureController {
@@ -85,8 +84,8 @@ public class VideoCaptureController {
     }
 
     private func assertIsOnSerialQueue() {
-        if _isDebugAssertConfiguration(), #available(iOS 10.0, *) {
-            assertOnQueue(serialQueue)
+        if _isDebugAssertConfiguration() {
+            dispatchPrecondition(condition: .onQueue(serialQueue))
         }
     }
 
@@ -96,12 +95,12 @@ public class VideoCaptureController {
 
         let position: AVCaptureDevice.Position = _isUsingFrontCamera ? .front : .back
         guard let device: AVCaptureDevice = self.device(position: position) else {
-            owsFailDebug("unable to find captureDevice")
+            failDebug("unable to find captureDevice")
             return
         }
 
         guard let format: AVCaptureDevice.Format = self.format(device: device) else {
-            owsFailDebug("unable to find captureDevice")
+            failDebug("unable to find captureDevice")
             return
         }
 

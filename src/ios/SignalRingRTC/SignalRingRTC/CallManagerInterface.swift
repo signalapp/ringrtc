@@ -5,7 +5,6 @@
 
 import SignalRingRTC.RingRTC
 import WebRTC
-import SignalCoreKit
 
 @available(iOSApplicationExtension, unavailable)
 protocol CallManagerInterfaceDelegate: AnyObject {
@@ -122,7 +121,7 @@ class CallManagerInterface {
         if let validEvent = CallManagerEvent(rawValue: event) {
             delegate.onEvent(remote: remote, event: validEvent)
         } else {
-            owsFailDebug("invalid event: \(event)")
+            failDebug("invalid event: \(event)")
         }
     }
 
@@ -132,7 +131,7 @@ class CallManagerInterface {
         }
 
         guard let validLocalNetworkAdapterType = NetworkAdapterType(rawValue: localNetworkAdapterType) else {
-            owsFailDebug("invalid network adapter type: \(localNetworkAdapterType)")
+            failDebug("invalid network adapter type: \(localNetworkAdapterType)")
             return
         }
 
@@ -362,7 +361,7 @@ class CallManagerInterface {
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceDestroy(object: UnsafeMutableRawPointer?) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
 
@@ -374,13 +373,13 @@ func callManagerInterfaceDestroy(object: UnsafeMutableRawPointer?) {
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, callId: UInt64, isOutgoing: Bool, mediaType: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -388,7 +387,7 @@ func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: U
     if let validMediaType = CallMediaType(rawValue: mediaType) {
         callMediaType = validMediaType
     } else {
-        owsFailDebug("unexpected call media type")
+        failDebug("unexpected call media type")
         return
     }
 
@@ -398,13 +397,13 @@ func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: U
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, event: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -414,13 +413,13 @@ func callManagerInterfaceOnCallEvent(object: UnsafeMutableRawPointer?, remote: U
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnNetworkRouteChanged(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, localNetworkAdapterType: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -430,13 +429,13 @@ func callManagerInterfaceOnNetworkRouteChanged(object: UnsafeMutableRawPointer?,
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnAudioLevels(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, capturedLevel: UInt16, receivedLevel: UInt16) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -446,13 +445,13 @@ func callManagerInterfaceOnAudioLevels(object: UnsafeMutableRawPointer?, remote:
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnLowBandwidthForVideo(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, recovered: Bool) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -462,13 +461,13 @@ func callManagerInterfaceOnLowBandwidthForVideo(object: UnsafeMutableRawPointer?
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice, mediaType: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -479,7 +478,7 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
     }
 
     guard let opaque = opaque.asData() else {
-        owsFailDebug("opaque was unexpectedly nil")
+        failDebug("opaque was unexpectedly nil")
         return
     }
 
@@ -487,7 +486,7 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
     if let validMediaType = CallMediaType(rawValue: mediaType) {
         callMediaType = validMediaType
     } else {
-        owsFailDebug("unexpected call media type")
+        failDebug("unexpected call media type")
         return
     }
 
@@ -497,13 +496,13 @@ func callManagerInterfaceOnSendOffer(object: UnsafeMutableRawPointer?, callId: U
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, opaque: AppByteSlice) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -514,7 +513,7 @@ func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: 
     }
 
     guard let opaque = opaque.asData() else {
-        owsFailDebug("opaque was unexpectedly nil")
+        failDebug("opaque was unexpectedly nil")
         return
     }
 
@@ -524,18 +523,18 @@ func callManagerInterfaceOnSendAnswer(object: UnsafeMutableRawPointer?, callId: 
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, candidates: UnsafePointer<AppIceCandidateArray>?) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
     guard let candidates = candidates else {
-        owsFailDebug("candidates was unexpectedly nil")
+        failDebug("candidates was unexpectedly nil")
         return
     }
 
@@ -563,13 +562,13 @@ func callManagerInterfaceOnSendIceCandidates(object: UnsafeMutableRawPointer?, c
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool, type: Int32, deviceId: UInt32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -583,7 +582,7 @@ func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: 
     if let validHangupType = HangupType(rawValue: type) {
         hangupType = validHangupType
     } else {
-        owsFailDebug("unexpected hangup type")
+        failDebug("unexpected hangup type")
         return
     }
 
@@ -593,13 +592,13 @@ func callManagerInterfaceOnSendHangup(object: UnsafeMutableRawPointer?, callId: 
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UInt64, remote: UnsafeRawPointer?, destinationDeviceId: UInt32, broadcast: Bool) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -615,7 +614,7 @@ func callManagerInterfaceOnSendBusy(object: UnsafeMutableRawPointer?, callId: UI
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recipientUuid: AppByteSlice, message: AppByteSlice, urgency: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -629,7 +628,7 @@ func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recip
     }
 
     guard let urgency = CallMessageUrgency(rawValue: urgency) else {
-        owsFailDebug("unexpected urgency")
+        failDebug("unexpected urgency")
         return
     }
 
@@ -639,7 +638,7 @@ func callManagerInterfaceSendCallMessage(object: UnsafeMutableRawPointer?, recip
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, message: AppByteSlice, urgency: Int32, overrideRecipients: AppUuidArray) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -653,7 +652,7 @@ func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?
     }
 
     guard let urgency = CallMessageUrgency(rawValue: urgency) else {
-        owsFailDebug("unexpected urgency")
+        failDebug("unexpected urgency")
         return
     }
 
@@ -673,7 +672,7 @@ func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPointer?, pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, context: UnsafeMutableRawPointer?, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> AppConnectionInterface {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
 
         // Swift was problematic to pass back some nullable structure, so we
         // now pass an empty structure back. Check pc for now to validate.
@@ -686,7 +685,7 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let callContext = context else {
-        owsFailDebug("context was unexpectedly nil")
+        failDebug("context was unexpectedly nil")
 
         // Swift was problematic to pass back some nullable structure, so we
         // now pass an empty structure back. Check pc for now to validate.
@@ -713,7 +712,7 @@ func callManagerInterfaceOnCreateConnectionInterface(object: UnsafeMutableRawPoi
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCreateMediaStreamInterface(object: UnsafeMutableRawPointer?, connection: UnsafeMutableRawPointer?) -> AppMediaStreamInterface {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
 
         // Swift was problematic to pass back some nullable structure, so we
         // now pass an empty structure back.
@@ -726,7 +725,7 @@ func callManagerInterfaceOnCreateMediaStreamInterface(object: UnsafeMutableRawPo
     let _: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let appConnection = connection else {
-        owsFailDebug("appConnection was unexpectedly nil")
+        failDebug("appConnection was unexpectedly nil")
 
         // Swift was problematic to pass back some nullable structure, so we
         // now pass an empty structure back.
@@ -749,25 +748,25 @@ func callManagerInterfaceOnCreateMediaStreamInterface(object: UnsafeMutableRawPo
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnConnectMedia(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, context: UnsafeMutableRawPointer?, stream: UnsafeRawPointer?) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
     guard let callContext = context else {
-        owsFailDebug("context was unexpectedly nil")
+        failDebug("context was unexpectedly nil")
         return
     }
 
     let appCallContext: CallContext = Unmanaged.fromOpaque(callContext).takeUnretainedValue()
 
     guard let stream = stream else {
-        owsFailDebug("stream was unexpectedly nil")
+        failDebug("stream was unexpectedly nil")
         return
     }
 
@@ -779,18 +778,18 @@ func callManagerInterfaceOnConnectMedia(object: UnsafeMutableRawPointer?, remote
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCompareRemotes(object: UnsafeMutableRawPointer?, remote1: UnsafeRawPointer?, remote2: UnsafeRawPointer?) -> Bool {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return false
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote1 = remote1 else {
-        owsFailDebug("remote1 was unexpectedly nil")
+        failDebug("remote1 was unexpectedly nil")
         return false
     }
 
     guard let remote2 = remote2 else {
-        owsFailDebug("remote2 was unexpectedly nil")
+        failDebug("remote2 was unexpectedly nil")
         return false
     }
 
@@ -800,13 +799,13 @@ func callManagerInterfaceOnCompareRemotes(object: UnsafeMutableRawPointer?, remo
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceOnCallConcluded(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let remote = remote else {
-        owsFailDebug("remote was unexpectedly nil")
+        failDebug("remote was unexpectedly nil")
         return
     }
 
@@ -818,7 +817,7 @@ func callManagerInterfaceOnCallConcluded(object: UnsafeMutableRawPointer?, remot
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceRequestMembershipProof(object: UnsafeMutableRawPointer?, clientId: UInt32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -829,7 +828,7 @@ func callManagerInterfaceRequestMembershipProof(object: UnsafeMutableRawPointer?
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceRequestGroupMembers(object: UnsafeMutableRawPointer?, clientId: UInt32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -840,7 +839,7 @@ func callManagerInterfaceRequestGroupMembers(object: UnsafeMutableRawPointer?, c
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleConnectionStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, connectionState: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -849,7 +848,7 @@ func callManagerInterfaceHandleConnectionStateChanged(object: UnsafeMutableRawPo
     if let validState = ConnectionState(rawValue: connectionState) {
         _connectionState = validState
     } else {
-        owsFailDebug("unexpected connection state")
+        failDebug("unexpected connection state")
         return
     }
 
@@ -859,13 +858,13 @@ func callManagerInterfaceHandleConnectionStateChanged(object: UnsafeMutableRawPo
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleNetworkRouteChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, localNetworkAdapterType: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let localNetworkAdapterType = NetworkAdapterType(rawValue: localNetworkAdapterType) else {
-        owsFailDebug("unexpected connection state")
+        failDebug("unexpected connection state")
         return
     }
 
@@ -876,7 +875,7 @@ func callManagerInterfaceHandleNetworkRouteChanged(object: UnsafeMutableRawPoint
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleAudioLevels(object: UnsafeMutableRawPointer?, clientId: UInt32, capturedLevel: UInt16, receivedLevelArray: AppReceivedAudioLevelArray) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -894,7 +893,7 @@ func callManagerInterfaceHandleAudioLevels(object: UnsafeMutableRawPointer?, cli
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleLowBandwidthForVideo(object: UnsafeMutableRawPointer?, clientId: UInt32, recovered: Bool) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -905,7 +904,7 @@ func callManagerInterfaceHandleLowBandwidthForVideo(object: UnsafeMutableRawPoin
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleReactions(object: UnsafeMutableRawPointer?, clientId: UInt32, reactions: AppReactionsArray) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -928,7 +927,7 @@ func callManagerInterfaceHandleReactions(object: UnsafeMutableRawPointer?, clien
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleRaisedHands(object: UnsafeMutableRawPointer?, clientId: UInt32, raisedHandsArray: AppRaisedHandsArray) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -944,7 +943,7 @@ func callManagerInterfaceHandleRaisedHands(object: UnsafeMutableRawPointer?, cli
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinState: Int32, demuxId: AppOptionalUInt32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -953,7 +952,7 @@ func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?
     if let validState = JoinState(rawValue: joinState) {
         finalJoinState = validState
     } else {
-        owsFailDebug("unexpected join state")
+        failDebug("unexpected join state")
         return
     }
 
@@ -968,7 +967,7 @@ func callManagerInterfaceHandleJoinStateChanged(object: UnsafeMutableRawPointer?
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDeviceStates: AppRemoteDeviceStateArray) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -1020,7 +1019,7 @@ func callManagerInterfaceHandleRemoteDevicesChanged(object: UnsafeMutableRawPoin
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointer?, clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -1031,23 +1030,23 @@ func callManagerInterfaceHandleIncomingVideoTrack(object: UnsafeMutableRawPointe
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, groupId: AppByteSlice, ringId: Int64, sender: AppByteSlice, update: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
     guard let groupId = groupId.asData() else {
-        owsFailDebug("groupId was unexpectedly empty")
+        failDebug("groupId was unexpectedly empty")
         return
     }
 
     guard let sender = sender.toUUID() else {
-        owsFailDebug("sender was unexpectedly empty")
+        failDebug("sender was unexpectedly empty")
         return
     }
 
     guard let update = RingUpdate(rawValue: update) else {
-        owsFailDebug("unrecognized update")
+        failDebug("unrecognized update")
         return
     }
 
@@ -1057,7 +1056,7 @@ func callManagerInterfaceGroupCallRingUpdate(object: UnsafeMutableRawPointer?, g
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, clientId: UInt32, joinedMembers: AppUuidArray, creator: AppByteSlice, eraId: AppByteSlice, maxDevices: AppOptionalUInt32, deviceCountIncludingPendingDevices: UInt32, deviceCountExcludingPendingDevices: UInt32, pendingUsers: AppUuidArray) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -1096,7 +1095,7 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
 @available(iOSApplicationExtension, unavailable)
 func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId: UInt32, reason: Int32) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
@@ -1105,7 +1104,7 @@ func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId:
     if let validReason = GroupCallEndReason(rawValue: reason) {
         _reason = validReason
     } else {
-        owsFailDebug("unexpected end reason")
+        failDebug("unexpected end reason")
         return
     }
 

@@ -4,7 +4,6 @@
 //
 
 import SignalRingRTC.RingRTC
-import SignalCoreKit
 
 /// Type of media for call at time of origination.
 public enum CallMediaType: Int32 {

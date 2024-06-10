@@ -5,7 +5,6 @@
 
 import SignalRingRTC.RingRTC
 import WebRTC
-import SignalCoreKit
 
 // Errors that the Call Manager APIs can throw.
 @available(iOSApplicationExtension, unavailable)
@@ -355,7 +354,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         // Create the RingRTC Call Manager itself.
         guard let ringRtcCallManager = ringrtcCreateCallManager(interface.getWrapper(), self.httpClient.rtcClient) else {
-            owsFail("unable to create ringRtcCallManager")
+            fail("unable to create ringRtcCallManager")
         }
 
         self.ringRtcCallManager = ringRtcCallManager
@@ -372,7 +371,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         let retPtr = ringrtcSetSelfUuid(ringRtcCallManager, uuidSlice)
         if retPtr == nil {
-            owsFailDebug("setSelfUuid had an error")
+            failDebug("setSelfUuid had an error")
         }
     }
 
@@ -500,7 +499,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         let retPtr = ringrtcDrop(ringRtcCallManager, callId)
         if retPtr == nil {
-            owsFailDebug("ringrtcDrop() function failure")
+            failDebug("ringrtcDrop() function failure")
         }
     }
 
@@ -520,7 +519,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         let retPtr = ringrtcMessageSendFailure(ringRtcCallManager, callId)
         if retPtr == nil {
-            owsFailDebug("ringrtcMessageSendFailure() function failure")
+            failDebug("ringrtcMessageSendFailure() function failure")
         }
     }
 
@@ -530,7 +529,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
         let retPtr = ringrtcReset(ringRtcCallManager)
         if retPtr == nil {
-            owsFailDebug("ringrtcReset() function failure")
+            failDebug("ringrtcReset() function failure")
         }
     }
 
@@ -541,7 +540,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let retPtr = ringrtcGetActiveCallContext(ringRtcCallManager)
         guard let callContext = retPtr else {
             if enabled {
-                owsFailDebug("Can't enable audio on non-existent context")
+                failDebug("Can't enable audio on non-existent context")
             }
             return
         }
@@ -558,7 +557,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let retPtr = ringrtcGetActiveCallContext(ringRtcCallManager)
         guard let callContext = retPtr else {
             if enabled {
-                owsFailDebug("Can't enable video on non-existent context")
+                failDebug("Can't enable video on non-existent context")
             }
             return
         }
@@ -571,7 +570,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             appCallContext.setCameraEnabled(enabled: enabled)
 
             if ringrtcSetVideoEnable(ringRtcCallManager, enabled) == nil {
-                owsFailDebug("ringrtcSetVideoEnable() function failure")
+                failDebug("ringrtcSetVideoEnable() function failure")
                 return
             }
 
@@ -740,7 +739,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         Logger.debug("createGroupCall")
 
         guard let factory = self.factory else {
-            owsFailDebug("No factory found for GroupCall")
+            failDebug("No factory found for GroupCall")
             return nil
         }
 
@@ -753,7 +752,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         Logger.debug("createCallLinkCall")
 
         guard let factory = self.factory else {
-            owsFailDebug("No factory found for GroupCall")
+            failDebug("No factory found for GroupCall")
             return nil
         }
 
@@ -981,7 +980,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         Logger.debug("onConnectMedia")
 
         guard stream.videoTracks.count > 0 else {
-            owsFailDebug("Missing video stream")
+            failDebug("Missing video stream")
             return
         }
 
@@ -1164,12 +1163,12 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         Logger.debug("handleIncomingVideoTrack")
 
         guard let factory = self.factory else {
-            owsFailDebug("factory was unexpectedly nil")
+            failDebug("factory was unexpectedly nil")
             return
         }
 
         guard let nativeVideoTrackBorrowedRc = nativeVideoTrackBorrowedRc else {
-            owsFailDebug("videoTrack was unexpectedly nil")
+            failDebug("videoTrack was unexpectedly nil")
             return
         }
 

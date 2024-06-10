@@ -45,8 +45,6 @@ Pod::Spec.new do |s|
     'out/release/acknowledgments-webrtc-ios.plist',
   ]
 
-  s.dependency 'SignalCoreKit'
-
   s.pod_target_xcconfig = {
     # Make sure we link the static library, not a dynamic one.
     # Use an extra level of indirection because CocoaPods messes with OTHER_LDFLAGS too.

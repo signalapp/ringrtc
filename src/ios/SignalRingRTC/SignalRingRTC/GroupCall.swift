@@ -5,7 +5,6 @@
 
 import SignalRingRTC.RingRTC
 import WebRTC
-import SignalCoreKit
 
 /// Represents the connection state to a media server for a group call.
 @available(iOSApplicationExtension, unavailable)

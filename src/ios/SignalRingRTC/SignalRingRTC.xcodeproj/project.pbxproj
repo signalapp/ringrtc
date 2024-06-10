@@ -31,6 +31,7 @@
 		D09D0C2E27CEDCE80098758E /* SFU.swift in Sources */ = {isa = PBXBuildFile; fileRef = D09D0C2B27CEDCE80098758E /* SFU.swift */; };
 		D09D0C2F27CEDCE80098758E /* FFI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D09D0C2C27CEDCE80098758E /* FFI.swift */; };
 		D0A033A727DA6EF200B0BDC7 /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0A033A627DA6EF200B0BDC7 /* Logging.swift */; };
+		DC1A80E82C122E1000BF2923 /* Assertions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1A80E72C122E1000BF2923 /* Assertions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +77,7 @@
 		D09D0C2B27CEDCE80098758E /* SFU.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SFU.swift; sourceTree = "<group>"; };
 		D09D0C2C27CEDCE80098758E /* FFI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FFI.swift; sourceTree = "<group>"; };
 		D0A033A627DA6EF200B0BDC7 /* Logging.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
+		DC1A80E72C122E1000BF2923 /* Assertions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assertions.swift; sourceTree = "<group>"; };
 		DE6C4831733C40B0AA3F9822 /* Pods-SignalRingRTC.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTC.debug.xcconfig"; path = "Target Support Files/Pods-SignalRingRTC/Pods-SignalRingRTC.debug.xcconfig"; sourceTree = "<group>"; };
 		DF254E06AB2E2A67EA06C6FA /* Pods-SignalRingRTCTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTCTests.debug.xcconfig"; path = "Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests.debug.xcconfig"; sourceTree = "<group>"; };
 		EBFBB74B7B1783321FE6EEA7 /* Pods-SignalRingRTC.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalRingRTC.release.xcconfig"; path = "Target Support Files/Pods-SignalRingRTC/Pods-SignalRingRTC.release.xcconfig"; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 		388AC0C922FA8B2D00BEC609 /* SignalRingRTC */ = {
 			isa = PBXGroup;
 			children = (
+				DC1A80E72C122E1000BF2923 /* Assertions.swift */,
 				D09D0C2C27CEDCE80098758E /* FFI.swift */,
 				D0A033A627DA6EF200B0BDC7 /* Logging.swift */,
 				D09D0C2A27CEDCE80098758E /* HTTP.swift */,
@@ -376,6 +379,7 @@
 				D0A033A727DA6EF200B0BDC7 /* Logging.swift in Sources */,
 				383347EF23AA952F00D53B63 /* CallManagerUtil.swift in Sources */,
 				383347F123AA952F00D53B63 /* CallManagerGlobal.swift in Sources */,
+				DC1A80E82C122E1000BF2923 /* Assertions.swift in Sources */,
 				38C4E533251A73AC005C2ACB /* GroupCall.swift in Sources */,
 				383347F323AA952F00D53B63 /* CallManager.swift in Sources */,
 				383347F023AA952F00D53B63 /* Connection.swift in Sources */,
@@ -656,7 +660,6 @@
 					"$(inherited)",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/CocoaLumberjack\"",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/Nimble\"",
-					"\"${PODS_CONFIGURATION_BUILD_DIR}/SignalCoreKit\"",
 					"$(PROJECT_DIR)/../../../out",
 				);
 				INFOPLIST_FILE = SignalRingRTCTests/Info.plist;
@@ -688,7 +691,6 @@
 					"$(inherited)",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/CocoaLumberjack\"",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/Nimble\"",
-					"\"${PODS_CONFIGURATION_BUILD_DIR}/SignalCoreKit\"",
 					"$(PROJECT_DIR)/../../../out",
 				);
 				INFOPLIST_FILE = SignalRingRTCTests/Info.plist;

@@ -6,7 +6,6 @@
 import XCTest
 @testable import SignalRingRTC
 import WebRTC
-import SignalCoreKit
 
 import CryptoKit
 import Nimble
@@ -132,13 +131,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     var sentCallMessageToGroupMessage: Data?
     var sentCallMessageToGroupUrgency: CallMessageUrgency?
     var sentCallMessageToGroupOverrideRecipients: [UUID]?
-    
-    var sentHttpRequestExpectation = XCTestExpectation(description: "sentHttpRequest")
-    var sentHttpRequestId: UInt32?
-    var sentHttpRequestUrl: String?
-    var sentHttpRequestMethod: HTTPMethod?
-    var sentHttpRequestHeaders: [String: String]?
-    var sentHttpRequestBody: Data?
 
     var didUpdateRingForGroupGroupId: Data?
     var didUpdateRingForGroupRingId: Int64?
@@ -583,18 +575,23 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         sentCallMessageToGroupUrgency = urgency
         sentCallMessageToGroupOverrideRecipients = overrideRecipients
     }
+
+    private var sendRequestCallbacks: [(UInt32, HTTPRequest) -> Void] = []
+
+    func onSendRequest(callback: @escaping (UInt32, HTTPRequest) -> Void) {
+        sendRequestCallbacks.append(callback)
+    }
+
     func sendRequest(requestId: UInt32, request: HTTPRequest) {
         Logger.debug("TestDelegate:shouldSendHttpRequest")
         generalInvocationDetected = true
 
         shouldSendHttpRequestInvoked = true
 
-        sentHttpRequestExpectation.fulfill()
-        sentHttpRequestId = requestId
-        sentHttpRequestUrl = request.url
-        sentHttpRequestMethod = request.method
-        sentHttpRequestHeaders = request.headers
-        sentHttpRequestBody = request.body
+        if !sendRequestCallbacks.isEmpty {
+            let callback = sendRequestCallbacks.removeFirst()
+            callback(requestId, request)
+        }
 
         Logger.debug("requestId: \(requestId)")
         Logger.debug("url: \(request.url)")
@@ -657,9 +654,44 @@ extension XCTestCase {
 }
 
 class SignalRingRTCTests: XCTestCase {
+    // Use a static stored property for one-time initialization.
+    static let loggingInitialized: Bool = {
+        struct LogToNSLog: RingRTCLogger {
+            func log(level: RingRTCLogLevel, file: String, function: String, line: UInt32, message: String) {
+                let abbreviation: String
+                switch level {
+                case .error: abbreviation = "E"
+                case .warn: abbreviation = "W"
+                case .info: abbreviation = "I"
+                case .debug: abbreviation = "D"
+                case .trace: abbreviation = "T"
+                }
+                if file == "" && function == "" && line == 0 {
+                    NSLog("%@ %@", abbreviation, message)
+                } else {
+                    NSLog("%@ [%@:%u %@]: %@", abbreviation, file, line, function, message)
+                }
+            }
+
+            func flush() {}
+        }
+
+        let maxLogLevel: RingRTCLogLevel
+        if let overrideLogLevelString = ProcessInfo().environment["RINGRTC_MAX_LOG_LEVEL"],
+           let overrideLogLevelRaw = UInt8(overrideLogLevelString),
+           let overrideLogLevel = RingRTCLogLevel(rawValue: overrideLogLevelRaw) {
+            maxLogLevel = overrideLogLevel
+        } else {
+            maxLogLevel = .trace
+        }
+        LogToNSLog().setUpRingRTCLogging(maxLogLevel: maxLogLevel)
+
+        return true
+    }()
+
     override class func setUp() {
         // Initialize logging, direct it to the console.
-        DDLog.add(DDOSLogger.sharedInstance)
+        precondition(self.loggingInitialized)
 
         // Give a large timeout so that test cases wait long enough across different environments.
         Nimble.AsyncDefaults.timeout = .seconds(15)
@@ -3214,11 +3246,11 @@ class SignalRingRTCTests: XCTestCase {
             var hash = SHA256()
             hash.update(bufferPointer: UnsafeRawBufferPointer(input))
             let digest = hash.finalize().withUnsafeBytes { Data($0) }
-            return digest.hexadecimalString
+            return digest.map { String(format: "%02x", $0) }.joined()
         }
     }
 
-    func testPeekWithPendingClients() throws {
+    func testPeekWithPendingClients() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
         let sfu = SFUClient(httpClient: httpClient)
@@ -3233,44 +3265,39 @@ class SignalRingRTCTests: XCTestCase {
             GroupMember(userId: user3, userIdCipherText: "33".data(using: .utf8)!),
         ]
 
-        let callbackCompleted = expectation(description: "callbackCompleted")
-        sfu.peek(request: PeekRequest(sfuURL: "sfu.example", membershipProof: Data([1, 2, 3]), groupMembers: groupMembers))
-            .done { result in
-                XCTAssertNil(result.errorStatusCode)
-                let peekInfo = result.peekInfo
-                XCTAssertEqual(peekInfo.eraId, "mesozoic")
-                XCTAssertEqual(peekInfo.deviceCountIncludingPendingDevices, 7)
-                XCTAssertEqual(peekInfo.deviceCountExcludingPendingDevices, 3)
-                XCTAssertEqual(peekInfo.maxDevices, 20)
-                XCTAssertEqual(peekInfo.creator, user1)
-                XCTAssertEqual(Set(peekInfo.joinedMembers), [user1, user2]);
-                XCTAssertEqual(peekInfo.pendingUsers, [user3]);
-                callbackCompleted.fulfill()
-            }
+        delegate.onSendRequest { id, request in
+            XCTAssert(request.url.starts(with: "sfu.example"))
+            XCTAssertEqual(request.method, .get)
+            httpClient.receivedResponse(requestId: id, response: HTTPResponse(statusCode: 200, body: """
+    {
+      "conferenceId":"mesozoic",
+      "maxDevices":20,
+      "creator":"\(self.sha256Hex("11"))",
+      "participants":[
+        {"opaqueUserId":"\(self.sha256Hex("11"))","demuxId":\(32 * 1)},
+        {"opaqueUserId":"\(self.sha256Hex("22"))","demuxId":\(32 * 2)},
+        {"opaqueUserId":"\(self.sha256Hex("44"))","demuxId":\(32 * 3)}
+      ],
+      "pendingClients":[
+        {"opaqueUserId":"\(self.sha256Hex("33"))","demuxId":\(32 * 4)},
+        {"opaqueUserId":"\(self.sha256Hex("33"))","demuxId":\(32 * 5)},
+        {"opaqueUserId":"\(self.sha256Hex("44"))","demuxId":\(32 * 6)},
+        {"demuxId":\(32 * 7)}
+      ]
+    }
+    """.data(using: .utf8)))
+        }
 
-        wait(for: [delegate.sentHttpRequestExpectation], timeout: 1.0)
-        XCTAssert(try XCTUnwrap(delegate.sentHttpRequestUrl).starts(with: "sfu.example"))
-        XCTAssertEqual(delegate.sentHttpRequestMethod, .get)
-        let requestId = try XCTUnwrap(delegate.sentHttpRequestId)
-        httpClient.receivedResponse(requestId: requestId, response: HTTPResponse(statusCode: 200, body: """
-{
-  "conferenceId":"mesozoic",
-  "maxDevices":20,
-  "creator":"\(sha256Hex("11"))",
-  "participants":[
-    {"opaqueUserId":"\(sha256Hex("11"))","demuxId":\(32 * 1)},
-    {"opaqueUserId":"\(sha256Hex("22"))","demuxId":\(32 * 2)},
-    {"opaqueUserId":"\(sha256Hex("44"))","demuxId":\(32 * 3)}
-  ],
-  "pendingClients":[
-    {"opaqueUserId":"\(sha256Hex("33"))","demuxId":\(32 * 4)},
-    {"opaqueUserId":"\(sha256Hex("33"))","demuxId":\(32 * 5)},
-    {"opaqueUserId":"\(sha256Hex("44"))","demuxId":\(32 * 6)},
-    {"demuxId":\(32 * 7)}
-  ]
-}
-""".data(using: .utf8)))
-        waitForExpectations(timeout: 1.0)
+        let result = await sfu.peek(request: PeekRequest(sfuURL: "sfu.example", membershipProof: Data([1, 2, 3]), groupMembers: groupMembers))
+        XCTAssertNil(result.errorStatusCode)
+        let peekInfo = result.peekInfo
+        XCTAssertEqual(peekInfo.eraId, "mesozoic")
+        XCTAssertEqual(peekInfo.deviceCountIncludingPendingDevices, 7)
+        XCTAssertEqual(peekInfo.deviceCountExcludingPendingDevices, 3)
+        XCTAssertEqual(peekInfo.maxDevices, 20)
+        XCTAssertEqual(peekInfo.creator, user1)
+        XCTAssertEqual(Set(peekInfo.joinedMembers), [user1, user2]);
+        XCTAssertEqual(peekInfo.pendingUsers, [user3]);
     }
 
     // MARK: - Constants

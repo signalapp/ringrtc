@@ -5,7 +5,6 @@
 
 import SignalRingRTC.RingRTC
 import WebRTC
-import SignalCoreKit
 
 // This class's member functions are all called from the CallManager class
 // on the main thread.
@@ -89,7 +88,7 @@ public class CallContext {
 @available(iOSApplicationExtension, unavailable)
 func callContextDestroy(object: UnsafeMutableRawPointer?) {
     guard let object = object else {
-        owsFailDebug("object was unexpectedly nil")
+        failDebug("object was unexpectedly nil")
         return
     }
 

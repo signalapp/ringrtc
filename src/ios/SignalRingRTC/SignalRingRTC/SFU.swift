@@ -7,7 +7,6 @@
 // to the SFU, such as peeking a group call.
 
 import SignalRingRTC.RingRTC
-import SignalCoreKit
 
 public struct PeekRequest {
     public let sfuURL: String
@@ -165,18 +164,19 @@ public class SFUClient {
         self.httpClient = httpClient
     }
 
-    public func peek(request: PeekRequest) -> Guarantee<PeekResponse> {
-        AssertIsOnMainThread()
-        Logger.debug("peekGroupCall")
+    @MainActor
+    public func peek(request: PeekRequest) async -> PeekResponse {
+        return await withCheckedContinuation { continuation in
+            Logger.debug("peekGroupCall")
 
-        let (requestId, seal) = self.peekRequests.add()
-        let rtcRequest: rtc_sfu_PeekRequest = rtc_sfu_PeekRequest.allocate(request)
-        defer {
-            rtcRequest.deallocate()
+            let requestId = self.peekRequests.add(continuation)
+            let rtcRequest: rtc_sfu_PeekRequest = rtc_sfu_PeekRequest.allocate(request)
+            defer {
+                rtcRequest.deallocate()
+            }
+            let delegateWrapper = SFUDelegateWrapper(self)
+            rtc_sfu_peek(self.httpClient.rtcClient, requestId, rtcRequest, delegateWrapper.asRtc())
         }
-        let delegateWrapper = SFUDelegateWrapper(self)
-        rtc_sfu_peek(self.httpClient.rtcClient, requestId, rtcRequest, delegateWrapper.asRtc())
-        return seal
     }
 
     /// Asynchronous request for the active call state from the SFU for a particular
@@ -191,18 +191,19 @@ public class SFUClient {
     /// - Parameter sfuUrl: The URL to use when accessing the SFU.
     /// - Parameter authCredentialPresentation: A serialized `CallLinkAuthCredentialPresentation`
     /// - Parameter linkRootKey: The root key for the call link
-    public func peek(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey) -> Guarantee<PeekResponse> {
-        AssertIsOnMainThread()
-        Logger.debug("peekCallLinkCall")
+    @MainActor
+    public func peek(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey) async -> PeekResponse {
+        return await withCheckedContinuation { continuation in
+            Logger.debug("peekCallLinkCall")
 
-        let (requestId, promise) = self.peekRequests.add()
-        let delegateWrapper = SFUDelegateWrapper(self)
-        authCredentialPresentation.withRtcBytes { authCredentialPresentation in
-            linkRootKey.bytes.withRtcBytes { linkRootKey in
-                rtc_sfu_peekCallLink(self.httpClient.rtcClient, requestId, sfuUrl, authCredentialPresentation, linkRootKey, delegateWrapper.asRtc())
+            let requestId = self.peekRequests.add(continuation)
+            let delegateWrapper = SFUDelegateWrapper(self)
+            authCredentialPresentation.withRtcBytes { authCredentialPresentation in
+                linkRootKey.bytes.withRtcBytes { linkRootKey in
+                    rtc_sfu_peekCallLink(self.httpClient.rtcClient, requestId, sfuUrl, authCredentialPresentation, linkRootKey, delegateWrapper.asRtc())
+                }
             }
         }
-        return promise
     }
 
     func handlePeekResponse(requestId: UInt32, response: PeekResponse) {
@@ -234,18 +235,19 @@ public class SFUClient {
     ///
     /// Expected failure codes include:
     /// - 404: the room does not exist (or expired so long ago that it has been removed from the server)
-    public func readCallLink(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey) -> Guarantee<SFUResult<CallLinkState>> {
-        AssertIsOnMainThread()
-        Logger.debug("createCallLink")
+    @MainActor
+    public func readCallLink(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey) async -> SFUResult<CallLinkState> {
+        return await withCheckedContinuation { continuation in
+            Logger.debug("createCallLink")
 
-        let (requestId, seal) = self.callLinkRequests.add()
-        let delegateWrapper = SFUDelegateWrapper(self)
-        authCredentialPresentation.withRtcBytes { authCredentialPresentation in
-            linkRootKey.bytes.withRtcBytes { linkRootKey in
-                rtc_sfu_readCallLink(self.httpClient.rtcClient, requestId, sfuUrl, authCredentialPresentation, linkRootKey, delegateWrapper.asRtc())
+            let requestId = self.callLinkRequests.add(continuation)
+            let delegateWrapper = SFUDelegateWrapper(self)
+            authCredentialPresentation.withRtcBytes { authCredentialPresentation in
+                linkRootKey.bytes.withRtcBytes { linkRootKey in
+                    rtc_sfu_readCallLink(self.httpClient.rtcClient, requestId, sfuUrl, authCredentialPresentation, linkRootKey, delegateWrapper.asRtc())
+                }
             }
         }
-        return seal
     }
 
     /// Asynchronous request to create a new call link.
@@ -281,22 +283,23 @@ public class SFUClient {
     /// - Parameter linkRootKey: the root key for the call link
     /// - Parameter adminPasskey: the arbitrary passkey to use for the new room
     /// - Parameter callLinkPublicParams: the serialized CallLinkPublicParams for the new room
-    public func createCallLink(sfuUrl: String, createCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, callLinkPublicParams: [UInt8]) -> Guarantee<SFUResult<CallLinkState>> {
-        AssertIsOnMainThread()
-        Logger.debug("createCallLink")
+    @MainActor
+    public func createCallLink(sfuUrl: String, createCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, callLinkPublicParams: [UInt8]) async -> SFUResult<CallLinkState> {
+        return await withCheckedContinuation { continuation in
+            Logger.debug("createCallLink")
 
-        let (requestId, seal) = self.callLinkRequests.add()
-        let delegateWrapper = SFUDelegateWrapper(self)
-        createCredentialPresentation.withRtcBytes { createCredentialPresentation in
-            linkRootKey.bytes.withRtcBytes { linkRootKey in
-                adminPasskey.withRtcBytes { adminPasskey in
-                    callLinkPublicParams.withRtcBytes { callLinkPublicParams in
-                        rtc_sfu_createCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, callLinkPublicParams, delegateWrapper.asRtc())
+            let requestId = self.callLinkRequests.add(continuation)
+            let delegateWrapper = SFUDelegateWrapper(self)
+            createCredentialPresentation.withRtcBytes { createCredentialPresentation in
+                linkRootKey.bytes.withRtcBytes { linkRootKey in
+                    adminPasskey.withRtcBytes { adminPasskey in
+                        callLinkPublicParams.withRtcBytes { callLinkPublicParams in
+                            rtc_sfu_createCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, callLinkPublicParams, delegateWrapper.asRtc())
+                        }
                     }
                 }
             }
         }
-        return seal
     }
 
     /// Asynchronous request to update a call link's name.
@@ -312,20 +315,21 @@ public class SFUClient {
     /// - Parameter linkRootKey: the root key for the call link
     /// - Parameter adminPasskey: the passkey specified when the link was created
     /// - Parameter newName: the new name to use
-    public func updateCallLinkName(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, newName: String) -> Guarantee<SFUResult<CallLinkState>> {
-        AssertIsOnMainThread()
-        Logger.debug("updateCallLinkName")
+    @MainActor
+    public func updateCallLinkName(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, newName: String) async -> SFUResult<CallLinkState> {
+        return await withCheckedContinuation { continuation in
+            Logger.debug("updateCallLinkName")
 
-        let (requestId, seal) = self.callLinkRequests.add()
-        let delegateWrapper = SFUDelegateWrapper(self)
-        authCredentialPresentation.withRtcBytes { createCredentialPresentation in
-            linkRootKey.bytes.withRtcBytes { linkRootKey in
-                adminPasskey.withRtcBytes { adminPasskey in
-                    rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, newName, -1, -1, delegateWrapper.asRtc())
+            let requestId = self.callLinkRequests.add(continuation)
+            let delegateWrapper = SFUDelegateWrapper(self)
+            authCredentialPresentation.withRtcBytes { createCredentialPresentation in
+                linkRootKey.bytes.withRtcBytes { linkRootKey in
+                    adminPasskey.withRtcBytes { adminPasskey in
+                        rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, newName, -1, -1, delegateWrapper.asRtc())
+                    }
                 }
             }
         }
-        return seal
     }
 
     /// Asynchronous request to update a call link's restrictions.
@@ -342,29 +346,30 @@ public class SFUClient {
     /// - Parameter linkRootKey: the root key for the call link
     /// - Parameter adminPasskey: the passkey specified when the link was created
     /// - Parameter restrictions: the new restrictions
-    public func updateCallLinkRestrictions(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, restrictions: CallLinkState.Restrictions) -> Guarantee<SFUResult<CallLinkState>> {
-        AssertIsOnMainThread()
-        Logger.debug("updateCallLinkRestrictions")
+    @MainActor
+    public func updateCallLinkRestrictions(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, restrictions: CallLinkState.Restrictions) async -> SFUResult<CallLinkState> {
+        return await withCheckedContinuation { continuation in
+            Logger.debug("updateCallLinkRestrictions")
 
-        let (requestId, seal) = self.callLinkRequests.add()
-        let delegateWrapper = SFUDelegateWrapper(self)
-        authCredentialPresentation.withRtcBytes { createCredentialPresentation in
-            linkRootKey.bytes.withRtcBytes { linkRootKey in
-                adminPasskey.withRtcBytes { adminPasskey in
-                    let rawRestrictions: Int8
-                    switch restrictions {
-                    case .none:
-                        rawRestrictions = 0
-                    case .adminApproval:
-                        rawRestrictions = 1
-                    default:
-                        preconditionFailure("cannot update restrictions to 'unknown'")
+            let requestId = self.callLinkRequests.add(continuation)
+            let delegateWrapper = SFUDelegateWrapper(self)
+            authCredentialPresentation.withRtcBytes { createCredentialPresentation in
+                linkRootKey.bytes.withRtcBytes { linkRootKey in
+                    adminPasskey.withRtcBytes { adminPasskey in
+                        let rawRestrictions: Int8
+                        switch restrictions {
+                        case .none:
+                            rawRestrictions = 0
+                        case .adminApproval:
+                            rawRestrictions = 1
+                        default:
+                            preconditionFailure("cannot update restrictions to 'unknown'")
+                        }
+                        rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, nil, rawRestrictions, -1, delegateWrapper.asRtc())
                     }
-                    rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, nil, rawRestrictions, -1, delegateWrapper.asRtc())
                 }
             }
         }
-        return seal
     }
 
     /// Asynchronous request to delete a call link.
@@ -379,24 +384,25 @@ public class SFUClient {
     /// - Parameter authCredentialPresentation: a serialized CallLinkAuthCredentialPresentation
     /// - Parameter linkRootKey: the root key for the call link
     /// - Parameter adminPasskey: the passkey specified when the link was created
-    public func deleteCallLink(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data) -> Guarantee<SFUResult<()>> {
-        AssertIsOnMainThread()
-        Logger.debug("deleteCallLink")
+    @MainActor
+    public func deleteCallLink(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data) async -> SFUResult<()> {
+        return await withCheckedContinuation { continuation in
+            Logger.debug("deleteCallLink")
 
-        let (requestId, seal) = self.emptyRequests.add()
-        let delegateWrapper = SFUDelegateWrapper(self)
-        authCredentialPresentation.withRtcBytes { createCredentialPresentation in
-            linkRootKey.bytes.withRtcBytes { linkRootKey in
-                adminPasskey.withRtcBytes { adminPasskey in
-                    rtc_sfu_deleteCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, delegateWrapper.asEmptyRtc())
+            let requestId = self.emptyRequests.add(continuation)
+            let delegateWrapper = SFUDelegateWrapper(self)
+            authCredentialPresentation.withRtcBytes { createCredentialPresentation in
+                linkRootKey.bytes.withRtcBytes { linkRootKey in
+                    adminPasskey.withRtcBytes { adminPasskey in
+                        rtc_sfu_deleteCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, delegateWrapper.asEmptyRtc())
+                    }
                 }
             }
         }
-        return seal
     }
 }
 
-// NOTE: We don't need an SFUDelegate from the app yet because of how we use Guarantees instead.
+// NOTE: We don't need an SFUDelegate from the app yet.
 // But it's still nice to follow the same model as HTTPDelegateWrapper.
 // Plus, we need a weak ref somewhere.
 private class SFUDelegateWrapper {

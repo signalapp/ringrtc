@@ -5,7 +5,6 @@
 
 import SignalRingRTC.RingRTC
 import WebRTC
-import SignalCoreKit
 
 // Global singleton to guarantee certain things are only invoked
 // once...
@@ -24,11 +23,11 @@ public class CallManagerGlobal {
     private init() {
         // This initialization will be done only once per application lifetime.
 
-        let maxLogLevel: LogLevel
+        let maxLogLevel: RingRTCLogLevel
         #if DEBUG
         if let overrideLogLevelString = ProcessInfo().environment["RINGRTC_MAX_LOG_LEVEL"],
            let overrideLogLevelRaw = UInt8(overrideLogLevelString),
-           let overrideLogLevel = LogLevel(rawValue: overrideLogLevelRaw) {
+           let overrideLogLevel = RingRTCLogLevel(rawValue: overrideLogLevelRaw) {
             maxLogLevel = overrideLogLevel
         } else {
             maxLogLevel = .trace
@@ -37,15 +36,13 @@ public class CallManagerGlobal {
         maxLogLevel = .trace
         #endif
 
-        initLogging(maxLogLevel: maxLogLevel)
-
         // Don't write WebRTC logs to stdout.
         RTCSetMinDebugLogLevel(.none)
 
         // Show WebRTC logs via application Logger.
         webRtcLogger = RTCCallbackLogger()
 
-        let webRtcLogLevel: LogLevel
+        let webRtcLogLevel: RingRTCLogLevel
         #if DEBUG
         webRtcLogLevel = min(maxLogLevel, .info)
         #else
@@ -58,13 +55,13 @@ public class CallManagerGlobal {
             let message = message.replacingOccurrences(of: "::", with: ":")
             switch severity {
             case .verbose:
-                OWSLogger.verbose(message)
+                Logger.verbose(message, file: "", function: "", line: 0)
             case .info:
-                OWSLogger.info(message)
+                Logger.info(message, file: "", function: "", line: 0)
             case .warning:
-                OWSLogger.warn(message)
+                Logger.warn(message, file: "", function: "", line: 0)
             case .error:
-                OWSLogger.error(message)
+                Logger.error(message, file: "", function: "", line: 0)
             case .none:
                 // should not happen
                 break

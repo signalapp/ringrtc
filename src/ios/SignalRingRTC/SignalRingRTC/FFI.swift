@@ -4,7 +4,6 @@
 //
 
 import SignalRingRTC.RingRTC
-import SignalCoreKit
 
 // Here is the new lite/modularized pattern for FFI for a module called X
 // (so far where X is "sfu" or "http")
@@ -145,21 +144,19 @@ extension rtc_String {
 }
 
 class Requests<T> {
-    private var sealById: [UInt32: (T) -> Void] = [:]
+    private var continuationById: [UInt32: CheckedContinuation<T, Never>] = [:]
     private var nextId: UInt32 = 1
 
-    func add() -> (UInt32, Guarantee<T>) {
+    func add(_ continuation: CheckedContinuation<T, Never>) -> UInt32 {
         let id = self.nextId
         self.nextId &+= 1
-        let guarantee: Guarantee<T> = Guarantee { seal in
-            self.sealById[id] = seal
-        }
-        return (id, guarantee)
+        self.continuationById[id] = continuation
+        return id
     }
 
     func resolve(id: UInt32, response: T) -> Bool {
-        if let seal = self.sealById.removeValue(forKey: id) {
-            seal(response)
+        if let continuation = self.continuationById.removeValue(forKey: id) {
+            continuation.resume(returning: response)
             return true
         }
         return false
