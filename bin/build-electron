@@ -23,6 +23,7 @@ usage()
 
         --webrtc-only builds libwebrtc.a only
         --ringrtc-only builds libringrtc-ARCH.node only
+        --webrtc-tests also builds webrtc tests
 
         --archive-webrtc generates an archive suitable for later --ringrtc-only builds'
 }
@@ -47,6 +48,9 @@ while [ "$1" != "" ]; do
             ;;
         -r | --release )
             BUILD_TYPE=release
+            ;;
+        --webrtc-tests )
+            BUILD_WEBRTC_TESTS=yes
             ;;
         --webrtc-only )
             BUILD_WHAT=webrtc
@@ -98,7 +102,13 @@ if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
     echo "Building WebRTC for ${GN_ARCH}"
 
-    WEBRTC_ARGS="target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_include_ilbc=false rtc_disable_metrics=true rtc_disable_trace_events=true"
+    WEBRTC_ARGS="target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_include_ilbc=false rtc_disable_metrics=true rtc_disable_trace_events=true"
+    if [ -n "${BUILD_WEBRTC_TESTS}" ]
+    then
+      WEBRTC_ARGS="${WEBRTC_ARGS} rtc_include_tests=true rtc_enable_protobuf=true"
+    else
+      WEBRTC_ARGS="${WEBRTC_ARGS} rtc_include_tests=false rtc_enable_protobuf=false"
+    fi
 
     if [ "${BUILD_TYPE}" = "release" ]
     then
@@ -109,6 +119,14 @@ then
         cd src/webrtc/src
         gn gen -C "${OUTPUT_DIR}/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
         ninja -C "${OUTPUT_DIR}/${BUILD_TYPE}" webrtc
+        if [ -n "${BUILD_WEBRTC_TESTS}" ]
+        then
+          ninja -C "${OUTPUT_DIR}/${BUILD_TYPE}" default
+          echo "Downloading test resources"
+          download_from_google_storage --directory --recursive \
+               --num_threads=10 --no_auth --quiet \
+               --bucket chromium-webrtc-resources resources
+        fi
         tools_webrtc/libs/generate_licenses.py --target :webrtc "${OUTPUT_DIR}/${BUILD_TYPE}" "${OUTPUT_DIR}/${BUILD_TYPE}"
     )
 
