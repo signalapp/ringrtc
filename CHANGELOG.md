@@ -1,10 +1,29 @@
 # Changelog
 
-## v2.43.0
+## v2.44.0
+
+- Remove reliable payload type, reuse existing data payload type
+
+- Update to webrtc 6261l
+  - Remove code for supporting SDES
+  - Propagate externally-negotiated keys
+  - Only attempt to relay connections to addresses that are globally unique
+  - Remove lbred experiment
+  - Test fixes
+
+- Make it more convenient to build and run unit tests.
+
+- iOS: Remove SignalCoreKit dependency
+
+- Code Cleanup
+
+## v2.43.0 (not released)
 
 - Add support for reliable Admin Actions (approve, deny, remove, block)
+
 - Propagate errors starting camera
-- electron: Add receivedAtData argument to handleAutoEndedIncoming
+
+- Desktop: Add receivedAtData argument to handleAutoEndedIncoming
 
 - Update to webrtc 6261j
   - Resolve warnings from delay settings
