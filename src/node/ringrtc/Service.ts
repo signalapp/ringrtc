@@ -44,7 +44,6 @@ class NativeCallManager {
     const fieldTrials = Object.assign(
       {
         'RingRTC-AnyAddressPortsKillSwitch': 'Enabled',
-        'WebRTC-Audio-OpusSetSignalVoiceWithDtx': 'Enabled',
         'RingRTC-PruneTurnPorts': 'Enabled',
         'WebRTC-Bwe-ProbingConfiguration':
           'skip_if_est_larger_than_fraction_of_max:0.99',

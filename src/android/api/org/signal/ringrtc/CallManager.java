@@ -105,7 +105,6 @@ public class CallManager {
       BuildInfo buildInfo = ringrtcGetBuildInfo();
 
       Map<String, String> fieldTrialsWithDefaults = new HashMap<>();
-      fieldTrialsWithDefaults.put("WebRTC-Audio-OpusSetSignalVoiceWithDtx", "Enabled");
       fieldTrialsWithDefaults.put("RingRTC-PruneTurnPorts", "Enabled");
       fieldTrialsWithDefaults.put("WebRTC-Bwe-ProbingConfiguration", "skip_if_est_larger_than_fraction_of_max:0.99");
       fieldTrialsWithDefaults.putAll(fieldTrials);
