@@ -52,9 +52,9 @@ jobs:
     - name: Clippy (Electron)
       run: cargo clippy --package ringrtc --features electron -- -D warnings
     - name: Clippy (group_call)
-      run: cargo clippy --package ringrtc --bin group_call --features native,http -- -D warnings
+      run: cargo clippy --package ringrtc --bin group_call --features native,sim_http -- -D warnings
     - name: Clippy (call_link)
-      run: cargo clippy --package ringrtc --bin call_link --features uuid,sim,http,rand_chacha -- -D warnings
+      run: cargo clippy --package ringrtc --bin call_link --features uuid,sim,sim_http,rand_chacha -- -D warnings
     - name: Clippy (call_sim-cli)
       run: cargo clippy --package ringrtc --bin call_sim-cli --features call_sim -- -D warnings
     - name: Clippy (call_sim)

@@ -3,10 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-mod support {
-    pub mod http_client;
-}
-use support::http_client;
+use ringrtc::lite::http::sim as sim_http;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -199,7 +196,7 @@ fn main() {
     ringrtc::webrtc::logging::set_logger(log::LevelFilter::Info);
 
     let group_id = b"Test Group".to_vec();
-    let http_client = http_client::HttpClient::start();
+    let http_client = sim_http::HttpClient::start();
     let sfu_client = Box::new(HttpSfuClient::new(
         Box::new(http_client),
         url.to_string(),

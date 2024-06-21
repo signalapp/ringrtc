@@ -20,12 +20,12 @@ required-features = ["native", "simnet"]
 
 [[bin]]
 name = "group_call"
-required-features = ["native", "http"]
+required-features = ["native", "sim_http"]
 
 [[bin]]
 name = "call_link"
 # This binary doesn't depend on WebRTC at all, so either `sim` or `native` would work.
-required-features = ["uuid", "sim", "http", "rand_chacha"]
+required-features = ["uuid", "sim", "sim_http", "rand_chacha"]
 
 [[bin]]
 name = "call_sim-cli"
@@ -104,7 +104,7 @@ native = []
 prebuilt_webrtc = ["native"]
 simnet = ["injectable_network"]
 injectable_network = []
-http = ["ureq", "rustls"]
+sim_http = ["ureq", "rustls"]
 check-all = ["electron", "jni"]
 call_sim = ["call_protobuf/call_sim", "native", "injectable_network", "bitvec", "chrono", "clap", "fern", "tokio", "tonic", "tower"]
 
