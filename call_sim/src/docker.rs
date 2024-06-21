@@ -43,8 +43,15 @@ pub async fn build_images() -> Result<()> {
     println!("signaling-server:");
     stdout().flush().await?;
     let _ = Command::new("docker")
-        .current_dir("call_sim/docker/signaling_server")
-        .args(["build", "-t", "signaling-server", "-q", "."])
+        .args([
+            "build",
+            "-t",
+            "signaling-server",
+            "-q",
+            "-f",
+            "call_sim/docker/signaling_server/Dockerfile",
+            ".",
+        ])
         .spawn()?
         .wait()
         .await?;

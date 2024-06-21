@@ -457,12 +457,12 @@ dependencies = [
  "itertools 0.12.1",
  "plotly",
  "prost",
+ "protobuf",
  "regex",
  "relative-path",
  "serde_json",
  "tokio",
  "tonic",
- "tonic-build",
  "tower",
 ]
 
@@ -1905,6 +1905,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "protobuf"
+version = "2.44.0"
+dependencies = [
+ "prost-build",
+ "tonic-build",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2058,6 +2066,7 @@ dependencies = [
  "num_enum 0.7.2",
  "prost",
  "prost-build",
+ "protobuf",
  "rand",
  "rand_chacha",
  "regex-aot",

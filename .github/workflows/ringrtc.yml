@@ -61,6 +61,8 @@ jobs:
       run: cargo clippy --package call_sim -- -D warnings
     - name: Clippy (mrp)
       run: cargo clippy --package mrp -- -D warnings
+    - name: Clippy (protobuf)
+      run: cargo clippy --package protobuf --features call_sim -- -D warnings
     - name: Clippy (signaling_server)
       run: cargo clippy -- -D warnings
       working-directory: call_sim/docker/signaling_server

@@ -13,6 +13,7 @@ license = "AGPL-3.0-only"
 [dependencies]
 anyhow = "1.0.81"
 bollard = "0.15.0"
+protobuf = { path = "../protobuf", features = ["call_sim"] }
 chrono = "0.4.35"
 clap = { version = "4.5.3", features = ["derive"] }
 futures-core = "0.3.30"
@@ -27,6 +28,3 @@ serde_json = "1.0.114"
 tokio = { version = "1.36.0", features = ["rt-multi-thread", "macros", "time", "fs", "process"] }
 tonic = "0.11.0"
 tower = "0.4.13"
-
-[build-dependencies]
-tonic-build = "0.11.0"

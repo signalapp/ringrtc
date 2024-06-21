@@ -8,20 +8,6 @@ use std::env::{self, VarError};
 use std::fs;
 use std::process::Command;
 
-fn build_protos() {
-    let protos = [
-        "protobuf/group_call.proto",
-        "protobuf/rtp_data.proto",
-        "protobuf/signaling.proto",
-    ];
-
-    prost_build::compile_protos(&protos, &["protobuf"]).expect("Protobufs are valid");
-
-    for proto in &protos {
-        println!("cargo:rerun-if-changed={}", proto);
-    }
-}
-
 // corresponds to PROJECT_DIR in bin/env.sh
 fn project_dir() -> String {
     format!("{}/../..", env::current_dir().unwrap().display())
@@ -67,15 +53,6 @@ fn main() {
     // We only depend on environment variables, not any files.
     // Explicitly state that by depending on build.rs itself, as recommended.
     println!("cargo:rerun-if-changed=build.rs");
-
-    build_protos();
-
-    if cfg!(feature = "call_sim") {
-        tonic_build::configure()
-            .build_server(false)
-            .compile(&["protobuf/call_sim.proto"], &["protobuf"])
-            .expect("call_sim protobufs are valid")
-    }
 
     if cfg!(feature = "native") {
         let webrtc_dir = if cfg!(feature = "prebuilt_webrtc") {

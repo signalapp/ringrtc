@@ -6,13 +6,13 @@
 #![allow(clippy::derive_partial_eq_without_eq)]
 
 pub mod group_call {
-    include!(concat!(env!("OUT_DIR"), "/group_call.rs"));
+    call_protobuf::include_groupcall_proto!();
 }
 
 pub mod rtp_data {
-    include!(concat!(env!("OUT_DIR"), "/rtp_data.rs"));
+    call_protobuf::include_rtp_proto!();
 }
 
 pub mod signaling {
-    include!(concat!(env!("OUT_DIR"), "/signaling.rs"));
+    call_protobuf::include_signaling_proto!();
 }

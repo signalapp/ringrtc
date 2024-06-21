@@ -14,8 +14,9 @@ use tonic::{transport::Server, Request, Response, Status};
 
 pub mod calling {
     #![allow(clippy::derive_partial_eq_without_eq, clippy::redundant_async_block)]
-    tonic::include_proto!("calling");
+    protobuf::include_call_sim_proto!();
 }
+
 
 use calling::signaling_relay_server::{SignalingRelay, SignalingRelayServer};
 use calling::{Empty, Registration, RelayMessage};

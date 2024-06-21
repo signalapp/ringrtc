@@ -25,7 +25,7 @@ use crate::{
 // Modules for the testing service, from protobufs compiled by tonic.
 pub mod calling {
     #![allow(clippy::derive_partial_eq_without_eq, clippy::enum_variant_names)]
-    tonic::include_proto!("calling");
+    call_protobuf::include_call_sim_proto!();
 }
 use calling::test_management_client::TestManagementClient;
 use calling::{command_message::Command, Registration};

@@ -22,7 +22,7 @@ use crate::endpoint::CallEndpoint;
 // Modules for the calling service, from protobufs compiled by tonic.
 pub mod calling {
     #![allow(clippy::derive_partial_eq_without_eq, clippy::enum_variant_names)]
-    tonic::include_proto!("calling");
+    call_protobuf::include_call_sim_proto!();
 }
 use calling::signaling_relay_client::SignalingRelayClient;
 use calling::{call_message, CallMessage, Registration, RelayMessage};

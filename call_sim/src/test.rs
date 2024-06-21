@@ -3,12 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-// Modules for the testing service, from protobufs compiled by tonic.
 pub mod calling {
     #![allow(clippy::derive_partial_eq_without_eq, clippy::enum_variant_names)]
-    tonic::include_proto!("calling");
+    protobuf::include_call_sim_proto!();
 }
-
 use anyhow::Result;
 use calling::{
     command_message::Command, test_management_client::TestManagementClient, CommandMessage, Empty,
