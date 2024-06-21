@@ -97,12 +97,10 @@ impl ManagedScenario {
 
         let packet_size_ms = call_config.audio_encoder_config.initial_packet_size_ms;
 
-        let client = CallEndpoint::start(
+        let mut client = CallEndpoint::new(
             name,
             1 as DeviceId,
-            call_config,
-            scenario_config.force_relay,
-            &scenario_config.ice_server,
+            &call_config.audio_config,
             Box::new(signaling_server),
             &stopper,
             event_sync,
@@ -110,6 +108,12 @@ impl ManagedScenario {
             deterministic_loss.is_some(),
         )
         .expect("Start client");
+
+        client.init_direct_settings(
+            scenario_config.force_relay,
+            &scenario_config.ice_server,
+            call_config,
+        );
 
         if let Some(loss_rate) = deterministic_loss {
             client.add_deterministic_loss_network(ip, loss_rate, packet_size_ms);
@@ -173,7 +177,7 @@ impl ManagedScenario {
                                     // Run the call (the callee_id doesn't need to be the actual
                                     // id for testing).
                                     let call_id = CallId::new(0xCA111D);
-                                    client.create_outgoing_call(
+                                    client.create_outgoing_direct_call(
                                         &PeerId::from("dummy"),
                                         call_id,
                                         CallMediaType::Audio,
@@ -202,7 +206,7 @@ impl ManagedScenario {
                                     // incoming call.
                                     info!("Waiting to be ringing...");
                                     let _ = ringing_rx.recv();
-                                    client.accept_incoming_call(call_id);
+                                    client.accept_incoming_direct_call(call_id);
 
                                     info!("Waiting to be connected...");
                                     let _ = connected_rx.recv();
