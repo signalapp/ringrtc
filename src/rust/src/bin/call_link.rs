@@ -61,7 +61,7 @@ fn start_of_today_in_epoch_seconds() -> zkgroup::Timestamp {
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("time moves forwards");
     let remainder = now.as_secs() % (24 * 60 * 60);
-    now.as_secs() - remainder
+    zkgroup::Timestamp::from_epoch_seconds(now.as_secs() - remainder)
 }
 
 fn issue_and_present_auth_credential(
