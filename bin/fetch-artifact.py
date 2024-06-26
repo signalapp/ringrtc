@@ -161,7 +161,11 @@ def main() -> None:
 
     print("extracting {} to {}".format(archive_file, args.output_dir), file=sys.stderr)
     open_archive.seek(0)
-    tarfile.open(fileobj=open_archive).extractall(path=args.output_dir)
+    tar = tarfile.open(fileobj=open_archive)
+    # Trust the contents because we checked the hash
+    tar.extraction_filter = (lambda member, path: member)
+    tar.extractall(path=args.output_dir)
+    tar.close()
 
 
 main()
