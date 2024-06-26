@@ -131,6 +131,8 @@ pub enum RffiAudioDeviceModuleType {
     Default,
     /// Use a file-based ADM for testing and simulation.
     File,
+    /// Use RingRTC's ADM implementation.
+    RingRtc,
 }
 
 /// Stays in sync with RffiAudioConfig in peer_connection_factory.h.
@@ -164,7 +166,10 @@ pub struct AudioConfig {
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
+            #[cfg(not(feature = "ringrtc_adm"))]
             audio_device_module_type: Default::default(),
+            #[cfg(feature = "ringrtc_adm")]
+            audio_device_module_type: RffiAudioDeviceModuleType::RingRtc,
             file_based_adm_config: None,
             high_pass_filter_enabled: true,
             aec_enabled: true,

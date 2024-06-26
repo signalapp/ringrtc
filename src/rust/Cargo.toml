@@ -107,6 +107,7 @@ injectable_network = []
 sim_http = ["ureq", "rustls"]
 check-all = ["electron", "jni"]
 call_sim = ["call_protobuf/call_sim", "native", "injectable_network", "bitvec", "chrono", "clap", "fern", "tokio", "tonic", "tower"]
+ringrtc_adm = []
 
 [[test]]
 name = "incoming"

@@ -100,10 +100,10 @@ export MACOSX_DEPLOYMENT_TARGET="10.15"
 (
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=native,simnet
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=native,simnet${RINGRTC_ADM:+",ringrtc_adm"}
         echo "Can run with target/debug/direct"
     else
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=native,simnet --release
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=native,simnet${RINGRTC_ADM:+",ringrtc_adm"} --release
         echo "Can run with target/release/direct"
     fi
 )
