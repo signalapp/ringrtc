@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.44.1
+
+- Update to webrtc 6478a
+  - Update to WebRTC 6478 (m126)
+  - Enable sending dependency descriptor in group calls
+
+- Group Calls: Enable sending dependency descriptor
+
+- Refactored protobuf to own crate
+
+- Call Sim: Refactoring
+
+- Update dependencies
+
 ## v2.44.0
 
 - Remove reliable payload type, reuse existing data payload type
