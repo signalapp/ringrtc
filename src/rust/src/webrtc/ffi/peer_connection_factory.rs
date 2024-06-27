@@ -12,6 +12,7 @@ use crate::webrtc::injectable_network::RffiInjectableNetwork;
 use crate::webrtc::peer_connection_factory::{
     RffiAudioConfig, RffiAudioJitterBufferConfig, RffiIceServers, RffiPeerConnectionKind,
 };
+use libc::{c_void, size_t};
 #[cfg(feature = "native")]
 use std::os::raw::c_char;
 
@@ -107,4 +108,31 @@ extern "C" {
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         index: u16,
     ) -> bool;
+
+    pub fn Rust_recordedDataIsAvailable(
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+        audio_samples: *const c_void,
+        n_samples: size_t,
+        n_bytes_per_sample: size_t,
+        n_channels: size_t,
+        samples_per_sec: u32,
+        total_delay_ms: u32,
+        clock_drift: i32,
+        current_mic_level: u32,
+        key_pressed: bool,
+        new_mic_level: *mut u32,
+        estimated_capture_time_ns: i64,
+    ) -> i32;
+
+    pub fn Rust_needMorePlayData(
+        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
+        n_samples: size_t,
+        n_bytes_per_sample: size_t,
+        n_channels: size_t,
+        samples_per_sec: u32,
+        audio_samples: *mut c_void,
+        n_samples_out: *mut size_t,
+        elapsed_time_ms: *mut i64,
+        ntp_time_ms: *mut i64,
+    ) -> i32;
 }
