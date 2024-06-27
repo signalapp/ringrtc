@@ -3358,7 +3358,7 @@ impl Client {
             .lock()
             .expect("Get e2ee context to encrypt media");
 
-        let unencrypted_header_len = Self::unencrypted_media_header_len(is_audio, !is_audio);
+        let unencrypted_header_len = Self::unencrypted_media_header_len(is_audio, false);
         Self::encrypt(
             &mut frame_crypto_context,
             unencrypted_header_len,
@@ -5393,12 +5393,15 @@ mod tests {
         let plaintext = &b"Fake Video Needs To Be Bigger"[..];
         let ciphertext1 = client1.encrypt_media(is_audio, plaintext).unwrap();
 
+        // Check that the first 10 bytes of video is left unencrypted
+        // and the rest has changed
+        assert_eq!(plaintext[..10], ciphertext1[..10]);
         assert_ne!(plaintext, &ciphertext1[..plaintext.len()]);
 
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext1, true)
+                .decrypt_media(client1.demux_id, is_audio, &ciphertext1, false)
                 .unwrap()
         );
 
@@ -5601,7 +5604,7 @@ mod tests {
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, is_audio, &ciphertext, false)
                 .unwrap()
         );
     }
