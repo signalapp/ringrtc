@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.44.2
+
+- Add support for switching to RingRTC ADM
+
+- Fix Python deprecation warning
+
+- Update to webrtc 6478b
+  - ringrtc: Add stub ADM
+  - Revert "Enable sending dependency descriptor in group calls"
+
 ## v2.44.1
 
 - Update to webrtc 6478a
