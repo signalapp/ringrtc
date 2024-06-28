@@ -750,6 +750,12 @@ impl PeerConnectionFactory {
             )
         };
 
+        if ret != 0 {
+            // For safety, prevent reading any potentially invalid data if the call failed
+            // (note the truncate below).
+            samples_out = 0;
+        }
+
         data.truncate(samples_out);
 
         PlayData {
