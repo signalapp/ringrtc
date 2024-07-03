@@ -12,6 +12,8 @@ import androidx.annotation.Nullable;
 
 import android.os.Build;
 
+import android.media.AudioManager;
+
 import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
 import org.webrtc.ContextUtils;
@@ -33,6 +35,7 @@ import org.webrtc.VideoTrack;
 import org.webrtc.VideoSink;
 import org.webrtc.audio.AudioDeviceModule;
 import org.webrtc.audio.JavaAudioDeviceModule;
+import org.webrtc.audio.OboeAudioDeviceModule;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -163,12 +166,20 @@ public class CallManager {
     }
   }
 
+  /// Defines the method to use for audio processing of AEC and NS.
+  public enum AudioProcessingMethod {
+    Default,
+    ForceHardware,
+    ForceSoftwareAec3
+  }
+
   /// Creates a PeerConnectionFactory appropriate for our use of WebRTC.
   ///
   /// If `eglBase` is present, hardware codecs will be used unless they are known to be broken
   /// in some way. Otherwise, we'll fall back to software codecs.
   private PeerConnectionFactory createPeerConnectionFactory(@Nullable EglBase               eglBase,
-                                                                      AudioProcessingMethod audioProcessingMethod) {
+                                                                      AudioProcessingMethod audioProcessingMethod,
+                                                                      boolean               useOboe) {
     Set<String> HARDWARE_ENCODING_BLOCKLIST = new HashSet<String>() {{
       // Samsung S6 with Exynos 7420 SoC
       add("SM-G920F");
@@ -219,62 +230,54 @@ public class CallManager {
       decoderFactory = new DefaultVideoDecoderFactory(eglBase.getEglBaseContext());
     }
 
-    // This is a workaround to what appears to a bug in WebRTC. If you don't call
-    // setAudioDeviceModule, then the default ADM created by WebRTC will not have
-    // .release() called, and the ADM will be leaked. This also lets us control the
-    // use of hardware or software voice processing.
-    JavaAudioDeviceModule adm = createAudioDeviceModule(audioProcessingMethod);
-    PeerConnectionFactory factory = PeerConnectionFactory.builder()
-            .setOptions(new PeerConnectionFactoryOptions())
-            .setAudioDeviceModule(adm)
-            .setVideoEncoderFactory(encoderFactory)
-            .setVideoDecoderFactory(decoderFactory)
-            .createPeerConnectionFactory();
-    adm.release();
-    return factory;
-  }
-
-  /// Defines the method to use for audio processing of AEC and NS.
-  public enum AudioProcessingMethod {
-    Default,
-    ForceHardware,
-    ForceSoftwareAec3,
-    ForceSoftwareAecM
-  }
-
-  static JavaAudioDeviceModule createAudioDeviceModule(AudioProcessingMethod audioProcessingMethod) {
     // We'll set both AEC and NS equally to be either both hardware or
     // both software, assuming that they are co-tuned.
-    boolean useHardware;
-    boolean useAecM;
+    boolean useHardware = audioProcessingMethod != AudioProcessingMethod.ForceSoftwareAec3;
 
-    switch(audioProcessingMethod) {
-      case ForceSoftwareAecM:
-        useHardware = false;
-        useAecM = true;
-        break;
-      case ForceSoftwareAec3:
-        useHardware = false;
-        useAecM = false;
-        break;
-      default:
-        useHardware = true;
-        useAecM = false;
-        break;
-    }
-
-    Log.i(TAG, "createAudioDeviceModule(): useHardware: " + useHardware + " useAecM: " + useAecM);
+    Log.i(TAG, "createPeerConnectionFactory(): useHardware: " + useHardware + " useOboe: " + useOboe);
 
     // ContextUtils.getApplicationContext() is deprecated;
     // we're supposed to have a Context on hand instead.
     @SuppressWarnings("deprecation")
     Context context = ContextUtils.getApplicationContext();
 
-    return JavaAudioDeviceModule.builder(context)
-      .setUseHardwareAcousticEchoCanceler(useHardware)
-      .setUseHardwareNoiseSuppressor(useHardware)
-      .setUseAecm(useAecM)
-      .createAudioDeviceModule();
+    if (useOboe) {
+      // Use the Oboe Audio Device Module.
+
+      AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+      int audioSessionId = audioManager.generateAudioSessionId();
+
+      OboeAudioDeviceModule adm = OboeAudioDeviceModule.builder()
+        .setUseSoftwareAcousticEchoCanceler(!useHardware)
+        .setUseSoftwareNoiseSuppressor(!useHardware)
+        .setExclusiveSharingMode(true)
+        .setAudioSessionId(audioSessionId)
+        .createAudioDeviceModule();
+
+      PeerConnectionFactory factory = PeerConnectionFactory.builder()
+              .setOptions(new PeerConnectionFactoryOptions())
+              .setAudioDeviceModule(adm)
+              .setVideoEncoderFactory(encoderFactory)
+              .setVideoDecoderFactory(decoderFactory)
+              .createPeerConnectionFactory();
+      adm.release();
+      return factory;
+    } else {
+      // The legacy Java Audio Device Module is deprecated.
+      JavaAudioDeviceModule adm = JavaAudioDeviceModule.builder(context)
+        .setUseHardwareAcousticEchoCanceler(useHardware)
+        .setUseHardwareNoiseSuppressor(useHardware)
+        .createAudioDeviceModule();
+
+      PeerConnectionFactory factory = PeerConnectionFactory.builder()
+              .setOptions(new PeerConnectionFactoryOptions())
+              .setAudioDeviceModule(adm)
+              .setVideoEncoderFactory(encoderFactory)
+              .setVideoDecoderFactory(decoderFactory)
+              .createPeerConnectionFactory();
+      adm.release();
+      return factory;
+    }
   }
 
   private void checkCallManagerExists() {
@@ -388,6 +391,7 @@ public class CallManager {
    * @param context                Call service context
    * @param eglBase                eglBase to use for this Call
    * @param audioProcessingMethod  the method to use for audio processing
+   * @param useOboe                whether to use the oboe-based audio device module, otherwise use java
    * @param localSink              local video sink to use for this Call
    * @param remoteSink             remote video sink to use for this Call
    * @param camera                 camera control to use for this Call
@@ -404,6 +408,7 @@ public class CallManager {
                       @NonNull  Context                        context,
                       @NonNull  EglBase                        eglBase,
                                 AudioProcessingMethod          audioProcessingMethod,
+                                boolean                        useOboe,
                       @NonNull  VideoSink                      localSink,
                       @NonNull  VideoSink                      remoteSink,
                       @NonNull  CameraControl                  camera,
@@ -423,7 +428,7 @@ public class CallManager {
       }
     }
 
-    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase, audioProcessingMethod);
+    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase, audioProcessingMethod, useOboe);
 
     CallContext callContext = new CallContext(callId,
                                               context,
@@ -1218,6 +1223,7 @@ public class CallManager {
    * @param hkdfExtraInfo          additional entropy to use for the connection with the SFU (it's okay if this is empty)
    * @param audioLevelsIntervalMs  if provided, the observer will receive audio level callbacks at this interval
    * @param audioProcessingMethod  the method to use for audio processing
+   * @param useOboe                whether to use the oboe-based audio device module, otherwise use java
    * @param observer               the observer that the group call object will use for callback notifications
    *
    */
@@ -1227,13 +1233,14 @@ public class CallManager {
                                    @NonNull  byte[]                hkdfExtraInfo,
                                    @Nullable Integer               audioLevelsIntervalMs,
                                              AudioProcessingMethod audioProcessingMethod,
+                                             boolean               useOboe,
                                    @NonNull  GroupCall.Observer    observer)
   {
     checkCallManagerExists();
 
     if (this.groupFactory == null) {
       // The first GroupCall object will create a factory that will be re-used.
-      this.groupFactory = this.createPeerConnectionFactory(null, audioProcessingMethod);
+      this.groupFactory = this.createPeerConnectionFactory(null, audioProcessingMethod, useOboe);
       if (this.groupFactory == null) {
         Log.e(TAG, "createPeerConnectionFactory failed");
         return null;
@@ -1264,6 +1271,7 @@ public class CallManager {
    * @param hkdfExtraInfo              additional entropy to use for the connection with the SFU (it's okay if this is empty)
    * @param audioLevelsIntervalMs      if provided, the observer will receive audio level callbacks at this interval
    * @param audioProcessingMethod      the method to use for audio processing
+   * @param useOboe                    whether to use the oboe-based audio device module, otherwise use java
    * @param observer                   the observer that the group call object will use for callback notifications
    *
    * @throws CallException for native code failures
@@ -1277,13 +1285,14 @@ public class CallManager {
                                       @NonNull  byte[]                hkdfExtraInfo,
                                       @Nullable Integer               audioLevelsIntervalMs,
                                                 AudioProcessingMethod audioProcessingMethod,
+                                                boolean               useOboe,
                                       @NonNull  GroupCall.Observer    observer)
   {
     checkCallManagerExists();
 
     if (this.groupFactory == null) {
       // The first GroupCall object will create a factory that will be re-used.
-      this.groupFactory = this.createPeerConnectionFactory(null, audioProcessingMethod);
+      this.groupFactory = this.createPeerConnectionFactory(null, audioProcessingMethod, useOboe);
       if (this.groupFactory == null) {
         Log.e(TAG, "createPeerConnectionFactory failed");
         return null;
