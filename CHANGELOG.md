@@ -1,8 +1,19 @@
 # Changelog
 
+## v2.44.3
+
+- Android: Add audio device module based on Oboe
+
+- Update to webrtc 6478e
+  - Add audio device module for android based on Oboe
+  - Remove support for setting mobile aec
+  - Simplify handling of audio callbacks
+
+- Desktop ADM: Resolve dependency cycle and other improvements 
+
 ## v2.44.2
 
-- Add support for switching to RingRTC ADM
+- Desktop ADM: Add support for switching to RingRTC ADM
 
 - Fix Python deprecation warning
 
