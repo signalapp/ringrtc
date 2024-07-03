@@ -6,20 +6,19 @@
 //! WebRTC Peer Connection
 
 use anyhow::anyhow;
-#[cfg(not(feature = "sim"))]
+#[cfg(all(not(feature = "sim"), feature = "native"))]
 use std::ffi::c_void;
 #[cfg(feature = "native")]
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::os::raw::c_char;
-use std::time::Duration;
 
 use crate::common::Result;
 use crate::error::RingRtcError;
 use crate::webrtc;
-#[cfg(not(feature = "sim"))]
+#[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::audio_device_module::AudioDeviceModule;
-#[cfg(not(feature = "sim"))]
+#[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::ffi::audio_device_module::AUDIO_DEVICE_CBS_PTR;
 #[cfg(feature = "injectable_network")]
 use crate::webrtc::injectable_network::InjectableNetwork;
@@ -152,9 +151,9 @@ pub struct RffiAudioConfig {
     pub aec_enabled: bool,
     pub ns_enabled: bool,
     pub agc_enabled: bool,
-    #[cfg(not(feature = "sim"))]
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
     pub adm_borrowed: webrtc::ptr::Borrowed<c_void>,
-    #[cfg(not(feature = "sim"))]
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
     pub rust_audio_device_callbacks: webrtc::ptr::Borrowed<c_void>,
 }
 
@@ -214,12 +213,12 @@ impl AudioConfig {
             aec_enabled: self.aec_enabled,
             ns_enabled: self.ns_enabled,
             agc_enabled: self.agc_enabled,
-            #[cfg(not(feature = "sim"))]
+            #[cfg(all(not(feature = "sim"), feature = "native"))]
             adm_borrowed: webrtc::ptr::Borrowed::from_ptr(Box::into_raw(Box::new(
-                AudioDeviceModule {},
+                AudioDeviceModule::new(),
             )))
             .to_void(),
-            #[cfg(not(feature = "sim"))]
+            #[cfg(all(not(feature = "sim"), feature = "native"))]
             rust_audio_device_callbacks: webrtc::ptr::Borrowed::from_ptr(AUDIO_DEVICE_CBS_PTR)
                 .to_void(),
         })
@@ -278,19 +277,6 @@ pub struct PeerConnectionFactory {
     rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
     #[cfg(feature = "native")]
     device_counts: DeviceCounts,
-}
-
-/// Return type for need_more_play_data
-#[derive(Clone, Debug)]
-pub struct PlayData {
-    // Actual return value of the underlying C function
-    pub success: i32,
-    // Data generated
-    pub data: Vec<i16>,
-    // Elapsed time, if one could be ready
-    pub elapsed_time: Option<Duration>,
-    // NTP time if one could be ready
-    pub ntp_time: Option<Duration>,
 }
 
 impl PeerConnectionFactory {
@@ -674,95 +660,6 @@ impl PeerConnectionFactory {
         } else {
             error!("setAudioRecordingDevice({}) failed", index);
             Err(RingRtcError::SetAudioDevice.into())
-        }
-    }
-
-    #[cfg(not(feature = "sim"))]
-    #[allow(clippy::too_many_arguments)]
-    pub fn recorded_data_is_available(
-        &self,
-        samples: Vec<i16>,
-        channels: usize,
-        samples_per_sec: u32,
-        total_delay: Duration,
-        clock_drift: i32,
-        current_mic_level: u32,
-        key_pressed: bool,
-        estimated_capture_time: Option<Duration>,
-    ) -> (i32, u32) {
-        let mut new_mic_level = 0u32;
-        let estimated_capture_time_ns = estimated_capture_time.map_or(-1, |d| d.as_nanos() as i64);
-
-        // Safety:
-        // * self.rffi is within self, and will remain valid while this function is running.
-        // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
-        //   to the C layer, which should not read beyond that bound.
-        // * The local new_mic_level pointer is valid and this function is synchronous, so it'll
-        //   remain valid while it runs.
-        let ret = unsafe {
-            pcf::Rust_recordedDataIsAvailable(
-                self.rffi.as_borrowed(),
-                samples.as_ptr() as *const c_void,
-                samples.len(),
-                std::mem::size_of::<i16>(),
-                channels,
-                samples_per_sec,
-                total_delay.as_millis() as u32,
-                clock_drift,
-                current_mic_level,
-                key_pressed,
-                &mut new_mic_level,
-                estimated_capture_time_ns,
-            )
-        };
-        (ret, new_mic_level)
-    }
-
-    #[cfg(not(feature = "sim"))]
-    pub fn need_more_play_data(
-        &self,
-        samples: usize,
-        channels: usize,
-        samples_per_sec: u32,
-    ) -> PlayData {
-        let mut data = vec![0i16; samples];
-        let mut samples_out = 0usize;
-        let mut elapsed_time_ms = 0i64;
-        let mut ntp_time_ms = 0i64;
-
-        // Safety:
-        // * self.rffi is within self, and will remain valid while this function is running.
-        // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
-        //   to the C layer, which should not write beyond that bound.
-        // * The local variable pointers are all valid and this function is synchronous, so they'll
-        //   remain valid while it runs.
-        let ret = unsafe {
-            pcf::Rust_needMorePlayData(
-                self.rffi.as_borrowed(),
-                samples,
-                std::mem::size_of::<i16>(),
-                channels,
-                samples_per_sec,
-                data.as_mut_ptr() as *mut c_void,
-                &mut samples_out,
-                &mut elapsed_time_ms,
-                &mut ntp_time_ms,
-            )
-        };
-
-        if ret != 0 {
-            // For safety, prevent reading any potentially invalid data if the call failed
-            // (note the truncate below).
-            samples_out = 0;
-        }
-
-        data.truncate(samples_out);
-
-        PlayData {
-            success: ret,
-            data,
-            elapsed_time: elapsed_time_ms.try_into().ok().map(Duration::from_millis),
-            ntp_time: ntp_time_ms.try_into().ok().map(Duration::from_millis),
         }
     }
 }

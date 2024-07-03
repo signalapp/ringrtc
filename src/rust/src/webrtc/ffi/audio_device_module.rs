@@ -7,7 +7,15 @@
 
 use crate::webrtc;
 use crate::webrtc::audio_device_module::{AudioDeviceModule, AudioLayer, WindowsDeviceType};
+use libc::size_t;
+use std::ffi::c_void;
 use std::os::raw::c_char;
+
+/// Incomplete type for C++ AudioTransport.
+#[repr(C)]
+pub struct RffiAudioTransport {
+    _private: [u8; 0],
+}
 
 /// all_adm_functions is a higher-level macro that enables "tt muncher" macros
 /// The list of functions MUST be kept in sync with AudioDeviceCallbacks in webrtc C++, and
@@ -16,6 +24,8 @@ macro_rules! all_adm_functions {
     ($macro:ident) => {
         $macro!(
             active_audio_layer(audio_layer: webrtc::ptr::Borrowed<AudioLayer>) -> i32;
+
+            register_audio_callback(audio_callback: webrtc::ptr::Borrowed<RffiAudioTransport>) -> i32;
 
             // Main initialization and termination
             init() -> i32;
@@ -195,3 +205,32 @@ macro_rules! adm_struct_instantiation {
 
 all_adm_functions!(adm_struct_instantiation);
 pub const AUDIO_DEVICE_CBS_PTR: *const AudioDeviceCallbacks = &AUDIO_DEVICE_CBS;
+
+extern "C" {
+    pub fn Rust_recordedDataIsAvailable(
+        audio_transport: webrtc::ptr::Borrowed<RffiAudioTransport>,
+        audio_samples: *const c_void,
+        n_samples: size_t,
+        n_bytes_per_sample: size_t,
+        n_channels: size_t,
+        samples_per_sec: u32,
+        total_delay_ms: u32,
+        clock_drift: i32,
+        current_mic_level: u32,
+        key_pressed: bool,
+        new_mic_level: *mut u32,
+        estimated_capture_time_ns: i64,
+    ) -> i32;
+
+    pub fn Rust_needMorePlayData(
+        audio_transport: webrtc::ptr::Borrowed<RffiAudioTransport>,
+        n_samples: size_t,
+        n_bytes_per_sample: size_t,
+        n_channels: size_t,
+        samples_per_sec: u32,
+        audio_samples: *mut c_void,
+        n_samples_out: *mut size_t,
+        elapsed_time_ms: *mut i64,
+        ntp_time_ms: *mut i64,
+    ) -> i32;
+}
