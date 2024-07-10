@@ -2889,15 +2889,23 @@ where
 
 /// Example: `forward_group_call_api(group_ring => ring(recipient: Option<UserId>));`
 macro_rules! forward_group_call_api {
-    ($name:ident => $api:ident($($arg:ident: $arg_ty:ty),* $(,)?)) => {
+    ($name:ident => $api:ident($($arg:ident: $arg_ty:ty),* $(,)?), $log:expr) => {
         pub fn $name(&mut self, client_id: group_call::ClientId, $($arg: $arg_ty),*) {
-            info!("{}(): id: {}", stringify!($name), client_id);
+            if $log {
+                info!("{}(): id: {}", stringify!($name), client_id);
+            }
             self.with_group_call(client_id, |group_call| group_call.$api($($arg),*));
         }
     };
+    ($name:ident => $api:ident($($arg:ident: $arg_ty:ty),* $(,)?)) => {
+        forward_group_call_api!($name => $api($($arg: $arg_ty),*), true);
+    };
+    ($api:ident($($arg:ident: $arg_ty:ty),* $(,)?), $log:expr) => {
+        forward_group_call_api!($api => $api($($arg: $arg_ty),*), $log);
+    };
     ($api:ident($($arg:ident: $arg_ty:ty),* $(,)?)) => {
-        forward_group_call_api!($api => $api($($arg: $arg_ty),*));
-    }
+        forward_group_call_api!($api => $api($($arg: $arg_ty),*), true);
+    };
 }
 
 impl<T> CallManager<T>
@@ -2944,7 +2952,7 @@ where
     forward_group_call_api!(request_video(
         rendered_resolutions: Vec<group_call::VideoRequest>,
         active_speaker_height: u16,
-    ));
+    ), false);
     forward_group_call_api!(approve_user(user_id: UserId));
     forward_group_call_api!(deny_user(user_id: UserId));
     forward_group_call_api!(remove_client(other_client_id: DemuxId));
