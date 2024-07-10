@@ -35,7 +35,7 @@ jobs:
     - uses: actions/checkout@v4
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
     - name: Install extra Rust tools
-      run: cargo +stable install --version 0.6.0 --locked cargo-about
+      run: cargo +stable install --version 0.6.2 --locked cargo-about
     - run: shellcheck **/*.sh bin/build-aar bin/build-call_sim-cli bin/build-cli bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-artifact bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check bin/set-up-for-cocoapods src/rust/scripts/run-tests
     # Skip the Python scripts not written with flake8 style. (Try not to add more.)
     - run: cd bin && python3 -m flake8 . --exclude measure-cpu.py

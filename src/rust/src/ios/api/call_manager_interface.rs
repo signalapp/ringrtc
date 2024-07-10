@@ -23,7 +23,6 @@ use crate::lite::{http, sfu, sfu::DemuxId};
 use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::{self, media, peer_connection_factory as pcf};
 
-///
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 #[allow(non_snake_case)]

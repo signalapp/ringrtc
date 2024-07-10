@@ -17,7 +17,6 @@ pub mod calling {
     protobuf::include_call_sim_proto!();
 }
 
-
 use calling::signaling_relay_server::{SignalingRelay, SignalingRelayServer};
 use calling::{Empty, Registration, RelayMessage};
 

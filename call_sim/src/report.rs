@@ -462,10 +462,8 @@ pub struct AudioAdaptationTransfer {
 
 #[derive(Debug)]
 pub struct ConnectionStats {
-    pub timestamp_us: Vec<u64>,
     pub current_round_trip_time_stats: Stats,
     pub available_outgoing_bitrate_stats: Stats,
-    pub item_count: usize,
 }
 
 #[derive(Debug)]
@@ -477,7 +475,6 @@ pub struct AudioSendStats {
     pub remote_jitter_stats: Stats,
     pub remote_round_trip_time_stats: Stats,
     pub audio_energy_stats: Stats,
-    pub item_count: usize,
 }
 
 #[derive(Debug)]
@@ -495,7 +492,6 @@ pub struct VideoSendStats {
     pub remote_packet_loss_stats: Stats,
     pub remote_jitter_stats: Stats,
     pub remote_round_trip_time_stats: Stats,
-    pub item_count: usize,
 }
 
 #[derive(Debug)]
@@ -506,7 +502,6 @@ pub struct AudioReceiveStats {
     pub jitter_stats: Stats,
     pub audio_energy_stats: Stats,
     pub jitter_buffer_delay_stats: Stats,
-    pub item_count: usize,
 }
 
 #[derive(Debug, Default)]
@@ -754,8 +749,6 @@ impl ClientLogReport {
             return Err(anyhow!("RingRTC stats were not in sync!"));
         }
 
-        let item_count = connection_stats.timestamp_us.len();
-
         let current_round_trip_time_stats = Stats {
             config: StatsConfig {
                 title: "Current Round Trip Time".to_string(),
@@ -779,10 +772,8 @@ impl ClientLogReport {
         };
 
         let connection_stats = ConnectionStats {
-            timestamp_us: connection_stats.timestamp_us,
             current_round_trip_time_stats,
             available_outgoing_bitrate_stats,
-            item_count,
         };
 
         let packets_per_second_stats = Stats {
@@ -871,7 +862,6 @@ impl ClientLogReport {
             remote_jitter_stats,
             remote_round_trip_time_stats,
             audio_energy_stats,
-            item_count,
         };
 
         let packets_per_second_stats = Stats {
@@ -1032,7 +1022,6 @@ impl ClientLogReport {
             remote_packet_loss_stats,
             remote_jitter_stats,
             remote_round_trip_time_stats,
-            item_count,
         };
 
         let packets_per_second_stats = Stats {
@@ -1109,7 +1098,6 @@ impl ClientLogReport {
             jitter_stats,
             audio_energy_stats,
             jitter_buffer_delay_stats,
-            item_count,
         };
 
         let packets_per_second_stats = Stats {

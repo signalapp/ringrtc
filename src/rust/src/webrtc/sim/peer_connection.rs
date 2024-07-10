@@ -35,11 +35,11 @@ impl Default for RffiPeerConnection {
     }
 }
 
-pub struct RffiIp(u32);
+pub struct RffiIp;
 
 impl From<std::net::IpAddr> for RffiIp {
     fn from(_ip: std::net::IpAddr) -> RffiIp {
-        RffiIp(0)
+        RffiIp
     }
 }
 

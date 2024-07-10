@@ -53,7 +53,6 @@ impl PlatformItem for AppObject {}
 
 /// iOS implementation of platform::Platform.
 pub struct IosPlatform {
-    ///
     app_interface: AppInterface,
 }
 

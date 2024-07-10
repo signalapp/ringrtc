@@ -291,7 +291,7 @@ impl Server for RelayServer {
             }
             Message::Hangup(hangup) => {
                 let (hangup_type, device_id) = hangup.to_type_and_device_id();
-                let device_id = if let Some(id) = device_id { id } else { 0 };
+                let device_id = device_id.unwrap_or_default();
                 CallMessage {
                     hangup: Some(call_message::Hangup {
                         id: call_id.as_u64(),

@@ -12,7 +12,7 @@ description = "A Rust interface for WebRTC"
 license = "AGPL-3.0-only"
 
 [lib]
-crate_type = ["cdylib", "staticlib", "lib"]
+crate-type = ["cdylib", "staticlib", "lib"]
 
 [[bin]]
 name = "direct"

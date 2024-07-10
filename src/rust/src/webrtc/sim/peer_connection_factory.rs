@@ -25,8 +25,6 @@ pub static FAKE_PEER_CONNECTION_FACTORY: RffiPeerConnectionFactoryOwner = 10;
 
 pub type RffiPeerConnectionFactoryInterface = u32;
 
-pub type RffiAudioDeviceModule = u32;
-
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createPeerConnectionFactory(
     _audio_config: webrtc::ptr::Borrowed<RffiAudioConfig>,

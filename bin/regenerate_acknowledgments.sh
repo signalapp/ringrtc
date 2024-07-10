@@ -14,7 +14,7 @@ echo "Checking cargo-about version"
 VERSION=$(cargo about --version)
 echo "Found $VERSION"
 
-EXPECTED_VERSION="cargo-about 0.6.0"
+EXPECTED_VERSION="cargo-about 0.6.2"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
 	echo "This tool works with $EXPECTED_VERSION but $VERSION is installed"
 	false

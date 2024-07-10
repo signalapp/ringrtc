@@ -2271,7 +2271,7 @@ fn glare_before_connect_loser() {
 
     // The incoming offer's call_id will be greater than the active call_id.
     assert!(
-        context.active_call().call_id().as_u64() < std::u64::MAX,
+        context.active_call().call_id().as_u64() < u64::MAX,
         "Test case not valid if incoming call-id can't be greater than the active call-id."
     );
 
@@ -2413,7 +2413,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
 
     // The incoming offer's call_id will be greater than the active call_id.
     assert!(
-        context.active_call().call_id().as_u64() < std::u64::MAX,
+        context.active_call().call_id().as_u64() < u64::MAX,
         "Test case not valid if incoming call-id can't be greater than the active call-id."
     );
 
@@ -2479,7 +2479,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_after_start() {
 
     // The incoming offer's call_id will be greater than the active call_id.
     assert!(
-        context.active_call().call_id().as_u64() < std::u64::MAX,
+        context.active_call().call_id().as_u64() < u64::MAX,
         "Test case not valid if incoming call-id can't be greater than the active call-id."
     );
 
@@ -2582,7 +2582,7 @@ fn glare_after_connect_loser() {
 
     // The incoming offer's call_id will be greater than the active call_id.
     assert!(
-        context.active_call().call_id().as_u64() < std::u64::MAX,
+        context.active_call().call_id().as_u64() < u64::MAX,
         "Test case not valid if incoming call-id can't be greater than the active call-id."
     );
 

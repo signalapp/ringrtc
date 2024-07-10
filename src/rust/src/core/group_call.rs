@@ -4933,7 +4933,7 @@ mod tests {
                 .reactions
                 .lock()
                 .expect("Lock reactions to handle update");
-            *owned = reactions.clone();
+            owned.clone_from(&reactions);
 
             self.handle_reactions_invocation_count
                 .fetch_add(1, Ordering::Relaxed);
@@ -4957,8 +4957,8 @@ mod tests {
                 .lock()
                 .expect("Lock peek state to handle update");
             owned_state.joined_members = joined_members.iter().cloned().collect();
-            owned_state.creator = peek_info.creator.clone();
-            owned_state.era_id = peek_info.era_id.clone();
+            owned_state.creator.clone_from(&peek_info.creator);
+            owned_state.era_id.clone_from(&peek_info.era_id);
             owned_state.max_devices = peek_info.max_devices;
             owned_state.device_count = peek_info.device_count_including_pending_devices();
             self.peek_changed.set();

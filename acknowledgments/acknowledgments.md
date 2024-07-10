@@ -2,7 +2,7 @@
 
 RingRTC makes use of the following open source projects.
 
-## partial-default 0.1.0, poksho 0.7.0, signal-crypto 0.1.0, zkcredential 0.1.0, zkgroup 0.9.0
+## poksho 0.7.0, signal-crypto 0.1.0, zkcredential 0.1.0, zkgroup 0.9.0, partial-default 0.1.0
 
 ```
                     GNU AFFERO GENERAL PUBLIC LICENSE
@@ -669,7 +669,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 ```
 
-## libsignal-core 0.1.0, mrp 2.44.3, partial-default-derive 0.1.0, protobuf 2.44.3, regex-aot 0.1.0, ringrtc 2.44.3
+## libsignal-core 0.1.0, mrp 2.44.3, protobuf 2.44.3, ringrtc 2.44.3, regex-aot 0.1.0, partial-default-derive 0.1.0
 
 ```
 GNU AFFERO GENERAL PUBLIC LICENSE
@@ -1092,7 +1092,7 @@ END OF TERMS AND CONDITIONS
 
 ```
 
-## prost 0.12.3, prost-build 0.12.3, prost-derive 0.12.3, prost-types 0.12.3
+## prost-build 0.12.3, prost-derive 0.12.3, prost-types 0.12.3, prost 0.12.3
 
 ```
                               Apache License
@@ -1452,7 +1452,7 @@ THIS SOFTWARE.
 
 ```
 
-## windows-sys 0.52.0, windows-targets 0.52.4, windows_aarch64_msvc 0.52.4, windows_x86_64_gnu 0.52.4, windows_x86_64_msvc 0.52.4
+## windows-sys 0.45.0, windows-sys 0.52.0, windows-targets 0.42.2, windows-targets 0.52.4, windows_aarch64_msvc 0.42.2, windows_aarch64_msvc 0.52.4, windows_x86_64_gnu 0.52.4, windows_x86_64_msvc 0.42.2, windows_x86_64_msvc 0.52.4
 
 ```
     MIT License
@@ -1512,7 +1512,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## lazy_static 1.4.0, rayon 1.10.0, rayon-core 1.12.1
+## lazy_static 1.4.0, rayon-core 1.12.1, rayon 1.10.0
 
 ```
 Copyright (c) 2010 The Rust Project Developers
@@ -1631,7 +1631,38 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## bitflags 2.5.0, log 0.4.21, regex 1.10.4, regex-automata 0.4.6, regex-syntax 0.8.2
+## errno 0.3.8
+
+```
+Copyright (c) 2014 Chris Wong
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+```
+
+## bitflags 2.5.0, log 0.4.21, regex-automata 0.4.6, regex-syntax 0.8.2, regex 1.10.4
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -1843,6 +1874,31 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
+## jni-sys 0.3.0
+
+```
+Copyright (c) 2015 The rust-jni-sys Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
 ## which 4.4.2
 
 ```
@@ -1988,7 +2044,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## futures 0.3.30, futures-channel 0.3.30, futures-core 0.3.30, futures-executor 0.3.30, futures-io 0.3.30, futures-macro 0.3.30, futures-sink 0.3.30, futures-task 0.3.30, futures-util 0.3.30
+## futures-channel 0.3.30, futures-core 0.3.30, futures-executor 0.3.30, futures-io 0.3.30, futures-macro 0.3.30, futures-sink 0.3.30, futures-task 0.3.30, futures-util 0.3.30, futures 0.3.30
 
 ```
 Copyright (c) 2016 Alex Crichton
@@ -3110,7 +3166,7 @@ SOFTWARE.
 
 ```
 
-## neon 1.0.0
+## cesu8 1.1.0, neon 1.0.0
 
 ```
 MIT License
@@ -3150,7 +3206,7 @@ SOFTWARE.
 
 ```
 
-## anyhow 1.0.81, curve25519-dalek-derive 0.1.1, fastrand 2.0.2, home 0.5.9, itoa 1.0.10, linux-raw-sys 0.4.13, num_enum 0.6.1, num_enum 0.7.2, num_enum_derive 0.6.1, num_enum_derive 0.7.2, once_cell 1.19.0, pin-project-lite 0.2.13, prettyplease 0.2.17, proc-macro-crate 1.3.1, proc-macro-crate 3.1.0, proc-macro2 1.0.79, quote 1.0.35, rustix 0.38.32, semver 1.0.22, send_wrapper 0.6.0, serde 1.0.197, serde_derive 1.0.197, serde_json 1.0.114, syn 1.0.109, syn 2.0.55, syn-mid 0.6.0, thiserror 1.0.58, thiserror-impl 1.0.58, unicode-ident 1.0.12
+## curve25519-dalek-derive 0.1.1, anyhow 1.0.81, fastrand 2.0.2, home 0.5.9, itoa 1.0.10, linux-raw-sys 0.4.13, num_enum 0.6.1, num_enum 0.7.2, num_enum_derive 0.6.1, num_enum_derive 0.7.2, once_cell 1.19.0, pin-project-lite 0.2.13, prettyplease 0.2.17, proc-macro-crate 1.3.1, proc-macro-crate 3.1.0, proc-macro2 1.0.79, quote 1.0.35, rustix 0.38.32, semver 1.0.22, send_wrapper 0.6.0, serde 1.0.197, serde_derive 1.0.197, serde_json 1.0.114, syn-mid 0.6.0, syn 1.0.109, syn 2.0.55, thiserror-impl 1.0.58, thiserror 1.0.58, unicode-ident 1.0.12
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -3309,7 +3365,7 @@ THE SOFTWARE.
 
 ```
 
-## aho-corasick 1.1.3, memchr 2.7.1
+## aho-corasick 1.1.3, memchr 2.7.1, walkdir 2.5.0
 
 ```
 The MIT License (MIT)
@@ -3390,6 +3446,88 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+
+```
+
+## combine 4.6.6
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2015 Markus Westerlind
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+```
+
+## jni 0.21.1
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2016 Prevoty, Inc. and jni-rs contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## same-file 1.0.6, winapi-util 0.1.6
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2017 Andrew Gallant
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 ```
 

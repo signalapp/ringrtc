@@ -5,10 +5,10 @@
 
 //! WebRTC Simulation Create/Set SessionDescription
 
+use libc::{size_t, strdup};
 use std::ffi::CString;
 use std::os::raw::c_char;
-
-use libc::{size_t, strdup};
+use std::ptr::addr_of;
 
 use crate::webrtc;
 use crate::webrtc::sdp_observer::{
@@ -63,7 +63,7 @@ pub unsafe fn Rust_createCreateSessionDescriptionObserver(
         webrtc::ptr::Borrowed::from_ptr(
             csd_observer.as_ptr() as *mut CreateSessionDescriptionObserver
         ),
-        webrtc::ptr::Owned::from_ptr(&FAKE_SDP),
+        webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP)),
     );
 
     webrtc::ptr::OwnedRc::from_ptr(&FAKE_CSD_OBSERVER)
@@ -85,7 +85,7 @@ pub unsafe fn Rust_offerFromSdp(
     _sdp: webrtc::ptr::Borrowed<c_char>,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_offerFromSdp(): ");
-    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_ANSWER)
+    webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_ANSWER))
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -93,7 +93,7 @@ pub unsafe fn Rust_answerFromSdp(
     _sdp: webrtc::ptr::Borrowed<c_char>,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_answerFromSdp(): ");
-    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_OFFER)
+    webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_OFFER))
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -138,9 +138,9 @@ pub unsafe fn Rust_sessionDescriptionFromV4(
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_sessionDescriptionFromV4(): ");
     if offer {
-        webrtc::ptr::Owned::from_ptr(&FAKE_SDP_OFFER)
+        webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_OFFER))
     } else {
-        webrtc::ptr::Owned::from_ptr(&FAKE_SDP_ANSWER)
+        webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_ANSWER))
     }
 }
 
@@ -154,7 +154,7 @@ pub unsafe fn Rust_localDescriptionForGroupCall(
     _remote_demux_ids_len: size_t,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_localDescriptionForGroupCall(): ");
-    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_OFFER)
+    webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_OFFER))
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -167,7 +167,7 @@ pub unsafe fn Rust_remoteDescriptionForGroupCall(
     _remote_demux_ids_len: size_t,
 ) -> webrtc::ptr::Owned<RffiSessionDescription> {
     info!("Rust_remoteDescriptionForGroupCall(): ");
-    webrtc::ptr::Owned::from_ptr(&FAKE_SDP_ANSWER)
+    webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_ANSWER))
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
