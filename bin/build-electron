@@ -224,9 +224,9 @@ then
         mkdir -p src/node/build/${DEFAULT_PLATFORM}
         copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} src/node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
 
-        if [ "${BUILD_TYPE}" = "release" ]
+        if [ "${BUILD_TYPE}" = "release" ] && [ "$(command -v dump_syms)" ];
         then
-            tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc-"${PROJECT_VERSION}"-${DEFAULT_PLATFORM}-"${TARGET_ARCH}"-debuginfo.tar.bz2 -C "$(dirname target/${CARGO_TARGET}/${BUILD_TYPE}/${DEBUG_PACKAGE})" "$(basename ${DEBUG_PACKAGE})"
+          dump_syms "target/${CARGO_TARGET}/${BUILD_TYPE}/${DEBUG_PACKAGE}" -o "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc-"${PROJECT_VERSION}"-${DEFAULT_PLATFORM}-"${TARGET_ARCH}"-debuginfo.sym
         fi
     )
 fi
