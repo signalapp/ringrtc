@@ -172,6 +172,7 @@ jobs:
     - run: brew install protobuf coreutils # for grealpath
     - run: cargo install cbindgen
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios
+    - run: sudo xcodes select 15.2
     - run: bin/fetch-artifact -p ios
     - run: bin/build-ios --release --ringrtc-only --host-sim-only
     - run: pod install
