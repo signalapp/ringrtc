@@ -1474,7 +1474,7 @@ impl Client {
         }
 
         if let Err(err) = state.sfu_reliable_stream.try_resend(now, |payload| {
-            info!("Attempting resend over mrp stream ");
+            info!("Attempting resend over mrp stream");
             *rtp_data_to_sfu_next_seqnum = Self::reliable_send_to_sfu_inner(
                 *join_state,
                 *client_id,
@@ -6520,6 +6520,8 @@ mod tests {
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
+
+        client1.disconnect_and_wait_until_ended();
     }
 
     #[test]
@@ -6554,6 +6556,8 @@ mod tests {
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
+
+        client1.disconnect_and_wait_until_ended();
     }
 
     #[test]
@@ -6592,6 +6596,8 @@ mod tests {
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
+
+        client1.disconnect_and_wait_until_ended();
     }
 
     #[test]
@@ -6649,6 +6655,8 @@ mod tests {
             },
             DeviceToSfu::decode(&payload[..]).unwrap()
         );
+
+        client1.disconnect_and_wait_until_ended();
     }
 
     #[test]
