@@ -3473,8 +3473,10 @@ impl Client {
         let frame_counter = ciphertext.read_u32_from_end()?;
         let ratchet_counter = ciphertext.read_u8_from_end()?;
 
-        plaintext.write_slice(unencrypted_header)?;
-        let encrypted_payload = plaintext.write_slice(ciphertext.remaining())?;
+        // Allow for in-place decryption from ciphertext to plaintext_buffer by using
+        // the write_slice that supports overlapping copies.
+        plaintext.write_slice_overlapping(unencrypted_header)?;
+        let encrypted_payload = plaintext.write_slice_overlapping(ciphertext.remaining())?;
 
         frame_crypto_context.decrypt(
             remote_demux_id,
@@ -4498,6 +4500,24 @@ impl<'buf> Writer<'buf> {
         let end = start + input.len();
         let output = &mut self.buf[start..end];
         output.copy_from_slice(input);
+        self.offset = end;
+        Ok(output)
+    }
+
+    fn write_slice_overlapping(&mut self, input: &[u8]) -> Result<&mut [u8]> {
+        if self.remaining_len() < input.len() {
+            return Err(RingRtcError::BufferTooSmall.into());
+        }
+        let start = self.offset;
+        let end = start + input.len();
+        let output = &mut self.buf[start..end];
+
+        // Use memmove to handle potentially overlapping memory. This is safe
+        // because we've already checked the buffer lengths.
+        unsafe {
+            std::ptr::copy(input.as_ptr(), output.as_mut_ptr(), input.len());
+        }
+
         self.offset = end;
         Ok(output)
     }
