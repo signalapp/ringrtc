@@ -6,7 +6,7 @@
 use aes::Aes256;
 use ctr::cipher::{KeyIvInit, StreamCipher};
 use hkdf::Hkdf;
-use hmac::{Hmac, Mac as _, NewMac};
+use hmac::{Hmac, Mac as _};
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 use std::collections::HashMap;

@@ -1390,7 +1390,7 @@ impl Report {
 
         let layout = Layout::new()
             .title(
-                Title::new(&stats.config.title)
+                Title::with_text(&stats.config.title)
                     .font(Font::new().size(24).color(NamedColor::DimGray)),
             )
             .x_axis(x_axis)
