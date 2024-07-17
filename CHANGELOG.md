@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.44.4
+
+- Group Calls: Reduce log noise
+
+- Run dump_syms on CI
+
+- Support overlapping memory copy for decrypt
+
+- Enable sending dependency descriptor in group calls
+
+- Send encrypted TOC byte in group calls
+
+- Update dependencies
+
+- Update to webrtc 6478f
+  - Improve network type detection on macOS
+  - Enable sending dependency descriptor in group calls
+  - Mark audio packets as having an encrypted TOC byte
+  - Fix ios device orientation left/right assignment
+
 ## v2.44.3
 
 - Android: Add audio device module based on Oboe
