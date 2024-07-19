@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.44.5
+
+- Update to webrtc 6478g
+  - Android: Oboe refinements and latency improvements
+
 ## v2.44.4
 
 - Group Calls: Reduce log noise
