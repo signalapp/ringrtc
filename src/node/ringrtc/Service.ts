@@ -936,7 +936,8 @@ export class RingRTCType {
    * const secretParams = CallLinkSecretParams.deriveFromRootKey(linkKey.bytes);
    * const credentialPresentation = credential.present(roomId, secretParams).serialize();
    * const serializedPublicParams = secretParams.getPublicParams().serialize();
-   * const result = await RingRTC.createCallLink(sfuUrl, credentialPresentation, linkKey, adminPasskey, serializedPublicParams);
+   * const restrictions = CallLinkState.Restrictions.None;
+   * const result = await RingRTC.createCallLink(sfuUrl, credentialPresentation, linkKey, adminPasskey, serializedPublicParams, restrictions);
    * if (result.success) {
    *   const state = result.value;
    *   // In actuality you may not want to do this until the user clicks Done.
@@ -963,7 +964,8 @@ export class RingRTCType {
     createCredentialPresentation: Buffer,
     linkRootKey: CallLinkRootKey,
     adminPasskey: Buffer,
-    callLinkPublicParams: Buffer
+    callLinkPublicParams: Buffer,
+    restrictions: Exclude<CallLinkRestrictions, CallLinkRestrictions.Unknown>
   ): Promise<HttpResult<CallLinkState>> {
     const [requestId, promise] = this._callLinkRequests.add();
     // Response comes back via handleCallLinkResponse
@@ -974,7 +976,8 @@ export class RingRTCType {
         createCredentialPresentation,
         linkRootKey.bytes,
         adminPasskey,
-        callLinkPublicParams
+        callLinkPublicParams,
+        restrictions
       );
     });
     return promise;
@@ -2959,7 +2962,8 @@ export interface CallManager {
     createCredentialPresentation: Buffer,
     linkRootKey: Buffer,
     adminPasskey: Buffer,
-    callLinkPublicParams: Buffer
+    callLinkPublicParams: Buffer,
+    restrictions: number | undefined
   ): void;
   updateCallLink(
     requestId: number,

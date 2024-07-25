@@ -80,6 +80,17 @@ public struct CallLinkRootKey: CustomStringConvertible {
 public struct CallLinkState {
     public enum Restrictions {
       case none, adminApproval, unknown
+
+      func toOrdinal() -> Int8 {
+        return switch self {
+            case .none:
+                0
+            case .adminApproval:
+                1
+            default:
+                -1
+        }
+      }
     }
 
     /// Is never null, but may be empty.

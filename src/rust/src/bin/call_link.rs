@@ -237,6 +237,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &bincode::serialize(&create_credential_presentation).unwrap(),
                     ADMIN_PASSKEY,
                     &bincode::serialize(&call_link_zkparams.get_public_params()).unwrap(),
+                    None,
                     Box::new(show_result),
                 );
             }

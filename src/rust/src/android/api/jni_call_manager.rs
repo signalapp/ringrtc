@@ -614,6 +614,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallLi
     root_key: JByteArray,
     admin_passkey: JByteArray,
     call_link_public_params: JByteArray,
+    restrictions: jint,
     request_id: jlong,
 ) {
     match call_manager::create_call_link(
@@ -624,6 +625,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCreateCallLi
         root_key,
         admin_passkey,
         call_link_public_params,
+        restrictions,
         request_id,
     ) {
         Ok(v) => v,

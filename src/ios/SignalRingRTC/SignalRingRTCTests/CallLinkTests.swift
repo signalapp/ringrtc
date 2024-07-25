@@ -35,7 +35,7 @@ final class CallLinkTests: XCTestCase {
             httpClient.receivedResponse(requestId: id, response: HTTPResponse(statusCode: 200, body: Self.EXAMPLE_STATE_JSON.data(using: .utf8)))
         }
 
-        let result = await sfu.createCallLink(sfuUrl: "sfu.example", createCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: CallLinkRootKey.generateAdminPasskey(), callLinkPublicParams: [4, 5, 6])
+        let result = await sfu.createCallLink(sfuUrl: "sfu.example", createCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: CallLinkRootKey.generateAdminPasskey(), callLinkPublicParams: [4, 5, 6], restrictions: .none)
         switch result {
         case .success(let state):
             XCTAssertEqual(state.expiration.timeIntervalSince1970, Self.EXPIRATION_EPOCH_SECONDS)
@@ -55,7 +55,7 @@ final class CallLinkTests: XCTestCase {
             httpClient.receivedResponse(requestId: id, response: HTTPResponse(statusCode: 403, body: Data()))
         }
 
-        let result = await sfu.createCallLink(sfuUrl: "sfu.example", createCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: CallLinkRootKey.generateAdminPasskey(), callLinkPublicParams: [4, 5, 6])
+        let result = await sfu.createCallLink(sfuUrl: "sfu.example", createCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, adminPasskey: CallLinkRootKey.generateAdminPasskey(), callLinkPublicParams: [4, 5, 6], restrictions: .adminApproval)
         switch result {
         case .success(let state):
             XCTFail("unexpected success: \(state)")

@@ -479,7 +479,8 @@ describe('RingRTC', () => {
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
         CallLinkRootKey.generateAdminPassKey(),
-        Buffer.of(4, 5, 6)
+        Buffer.of(4, 5, 6),
+        CallLinkRestrictions.None
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
@@ -521,7 +522,8 @@ describe('RingRTC', () => {
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
         CallLinkRootKey.generateAdminPassKey(),
-        Buffer.of(4, 5, 6)
+        Buffer.of(4, 5, 6),
+        CallLinkRestrictions.None
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(requestId, 403, Buffer.of());

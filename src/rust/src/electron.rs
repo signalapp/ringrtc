@@ -1903,6 +1903,24 @@ fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
+fn jsvalue_to_restrictions(
+    raw_restrictions: Handle<'_, JsValue>,
+    cx: &mut FunctionContext,
+) -> std::result::Result<Option<CallLinkRestrictions>, neon::result::Throw> {
+    if raw_restrictions.is_a::<JsUndefined, _>(cx) {
+        Ok(None)
+    } else {
+        let raw_restrictions = raw_restrictions
+            .downcast_or_throw::<JsNumber, _>(cx)?
+            .value(cx);
+        Ok(match raw_restrictions as i8 {
+            0 => Some(CallLinkRestrictions::None),
+            1 => Some(CallLinkRestrictions::AdminApproval),
+            _ => None,
+        })
+    }
+}
+
 #[allow(non_snake_case)]
 fn createCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
@@ -1916,6 +1934,8 @@ fn createCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
     let public_zkparams = cx.argument::<JsBuffer>(5)?;
     let public_zkparams = public_zkparams.as_slice(&cx).to_vec();
+    let restrictions = cx.argument::<JsValue>(6)?;
+    let restrictions = jsvalue_to_restrictions(restrictions, &mut cx)?;
 
     with_call_endpoint(&mut cx, |endpoint| {
         let event_reporter = endpoint.event_reporter.clone();
@@ -1926,6 +1946,7 @@ fn createCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
             &create_presentation,
             &admin_passkey,
             &public_zkparams,
+            restrictions,
             Box::new(move |result| {
                 // Ignore errors, that can only mean we're shutting down.
                 let _ = event_reporter.send(Event::CallLinkResponse { request_id, result });
@@ -1964,18 +1985,7 @@ fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     };
 
     let new_restrictions = cx.argument::<JsValue>(6)?;
-    let new_restrictions = if new_restrictions.is_a::<JsUndefined, _>(&mut cx) {
-        None
-    } else {
-        let raw_restrictions = new_restrictions
-            .downcast_or_throw::<JsNumber, _>(&mut cx)?
-            .value(&mut cx);
-        match raw_restrictions as i8 {
-            0 => Some(CallLinkRestrictions::None),
-            1 => Some(CallLinkRestrictions::AdminApproval),
-            _ => None,
-        }
-    };
+    let new_restrictions = jsvalue_to_restrictions(new_restrictions, &mut cx)?;
 
     let new_revoked = cx.argument::<JsValue>(7)?;
     let new_revoked = if new_revoked.is_a::<JsUndefined, _>(&mut cx) {

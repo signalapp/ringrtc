@@ -982,7 +982,8 @@ public class CallManager {
    * CallLinkSecretParams secretParams = CallLinkSecretParams.deriveFromRootKey(linkKey.getKeyBytes());
    * byte[] credentialPresentation = credential.present(roomId, secretParams).serialize();
    * byte[] serializedPublicParams = secretParams.getPublicParams().serialize();
-   * callManager.createCallLink(sfuUrl, credentialPresentation, linkKey, adminPasskey, serializedPublicParams, result -> {
+   * CallLinkState.Restrictions restrictions = CallLinkState.Restrictions.NONE;
+   * callManager.createCallLink(sfuUrl, credentialPresentation, linkKey, adminPasskey, serializedPublicParams, restrictions, result -> {
    *   if (result.isSuccess()) {
    *     CallLinkState state = result.getValue();
    *     // In actuality you may not want to do this until the user clicks Done.
@@ -1016,6 +1017,7 @@ public class CallManager {
     @NonNull CallLinkRootKey                            linkRootKey,
     @NonNull byte[]                                     adminPasskey,
     @NonNull byte[]                                     callLinkPublicParams,
+    @NonNull CallLinkState.Restrictions                 restrictions,
     @NonNull ResponseHandler<HttpResult<CallLinkState>> handler)
     throws CallException
   {
@@ -1023,7 +1025,7 @@ public class CallManager {
     Log.i(TAG, "createCallLink():");
 
     long requestId = this.callLinkRequests.add(handler);
-    ringrtcCreateCallLink(nativeCallManager, sfuUrl, createCredentialPresentation, linkRootKey.getKeyBytes(), adminPasskey, callLinkPublicParams, requestId);
+    ringrtcCreateCallLink(nativeCallManager, sfuUrl, createCredentialPresentation, linkRootKey.getKeyBytes(), adminPasskey, callLinkPublicParams, restrictions.ordinal(), requestId);
   }
 
   /**
@@ -2459,6 +2461,7 @@ public class CallManager {
                                byte[] rootKeyBytes,
                                byte[] adminPasskey,
                                byte[] callLinkPublicParams,
+                               int    restrictions,
                                long   requestId)
     throws CallException;
 

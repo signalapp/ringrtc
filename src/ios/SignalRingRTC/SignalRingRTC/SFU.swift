@@ -262,8 +262,15 @@ public class SFUClient {
     /// let secretParams = CallLinkSecretParams.deriveFromRootKey(linkKey.bytes)
     /// let credentialPresentation = credential.present(roomId, secretParams).serialize()
     /// let serializedPublicParams = secretParams.getPublicParams().serialize()
-    /// sfu.createCallLink(sfuUrl: sfuUrl, createCredentialPresentation: credentialPresentation, linkRootKey: linkKey, adminPasskey: adminPasskey, callLinkPublicParams: serializedPublicParams)
-    ///     .done { result in
+    /// let restrictions = CallLinkState.Restrictions.adminApprovla
+    /// sfu.createCallLink(
+    ///     sfuUrl: sfuUrl,
+    ///     createCredentialPresentation: credentialPresentation,
+    ///     linkRootKey: linkKey,
+    ///     adminPasskey: adminPasskey,
+    ///     callLinkPublicParams: serializedPublicParams,
+    ///     restrictions: restrictions
+    /// ).done { result in
     ///   switch result {
     ///   case .success(let state):
     ///     // In actuality you may not want to do this until the user clicks Done.
@@ -283,8 +290,9 @@ public class SFUClient {
     /// - Parameter linkRootKey: the root key for the call link
     /// - Parameter adminPasskey: the arbitrary passkey to use for the new room
     /// - Parameter callLinkPublicParams: the serialized CallLinkPublicParams for the new room
+    /// - Parameter restrictions: the restrictions for joining the room. Restrictions.unknown is invalid for creation
     @MainActor
-    public func createCallLink(sfuUrl: String, createCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, callLinkPublicParams: [UInt8]) async -> SFUResult<CallLinkState> {
+    public func createCallLink(sfuUrl: String, createCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data, callLinkPublicParams: [UInt8], restrictions: CallLinkState.Restrictions) async -> SFUResult<CallLinkState> {
         return await withCheckedContinuation { continuation in
             Logger.debug("createCallLink")
 
@@ -294,7 +302,11 @@ public class SFUClient {
                 linkRootKey.bytes.withRtcBytes { linkRootKey in
                     adminPasskey.withRtcBytes { adminPasskey in
                         callLinkPublicParams.withRtcBytes { callLinkPublicParams in
-                            rtc_sfu_createCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, callLinkPublicParams, delegateWrapper.asRtc())
+                            let rawRestrictions = restrictions.toOrdinal()
+                            if rawRestrictions < 0 {
+                                preconditionFailure("cannot create call link with restrictions 'unknown'")
+                            }
+                            rtc_sfu_createCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, callLinkPublicParams, rawRestrictions, delegateWrapper.asRtc())
                         }
                     }
                 }
@@ -356,13 +368,8 @@ public class SFUClient {
             authCredentialPresentation.withRtcBytes { createCredentialPresentation in
                 linkRootKey.bytes.withRtcBytes { linkRootKey in
                     adminPasskey.withRtcBytes { adminPasskey in
-                        let rawRestrictions: Int8
-                        switch restrictions {
-                        case .none:
-                            rawRestrictions = 0
-                        case .adminApproval:
-                            rawRestrictions = 1
-                        default:
+                        let rawRestrictions = restrictions.toOrdinal()
+                        if rawRestrictions < 0 {
                             preconditionFailure("cannot update restrictions to 'unknown'")
                         }
                         rtc_sfu_updateCallLink(self.httpClient.rtcClient, requestId, sfuUrl, createCredentialPresentation, linkRootKey, adminPasskey, nil, rawRestrictions, -1, delegateWrapper.asRtc())

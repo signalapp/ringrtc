@@ -63,7 +63,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.createCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), new byte[] { 4, 5, 6 }, result -> {
+        callManager.createCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), new byte[] { 4, 5, 6 }, CallLinkState.Restrictions.NONE, result -> {
             errors.checkThat(result.getStatus(), is((short)200));
             errors.checkThat(result.isSuccess(), is(true));
             errors.checkThat(result.getValue().getExpiration().getEpochSecond(), is(EXPIRATION_EPOCH_SECONDS));
@@ -83,7 +83,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.createCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), new byte[] { 4, 5, 6 }, result -> {
+        callManager.createCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), new byte[] { 4, 5, 6 }, CallLinkState.Restrictions.NONE, result -> {
             errors.checkThat(result.getStatus(), is((short)403));
             errors.checkThat(result.isSuccess(), is(false));
             errors.checkThat(result.getValue(), is((CallLinkState)null));

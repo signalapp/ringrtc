@@ -129,6 +129,9 @@ struct CallLinkCreateRequest<'a> {
     #[serde_as(as = "serde_with::base64::Base64")]
     admin_passkey: &'a [u8],
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    restrictions: Option<CallLinkRestrictions>,
+
     #[serde_as(as = "serde_with::base64::Base64")]
     zkparams: &'a [u8],
 }
@@ -159,6 +162,7 @@ pub struct CallLinkDeleteRequest<'a> {
     pub admin_passkey: &'a [u8],
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_call_link(
     http_client: &dyn http::Client,
     sfu_url: &str,
@@ -166,6 +170,7 @@ pub fn create_call_link(
     auth_presentation: &[u8],
     admin_passkey: &[u8],
     public_zkparams: &[u8],
+    restrictions: Option<CallLinkRestrictions>,
     result_callback: ReadCallLinkResultCallback,
 ) {
     http_client.send_request(
@@ -186,6 +191,7 @@ pub fn create_call_link(
             body: Some(
                 serde_json::to_vec(&CallLinkCreateRequest {
                     admin_passkey,
+                    restrictions,
                     zkparams: public_zkparams,
                 })
                 .expect("cannot fail to serialize"),
@@ -277,6 +283,14 @@ pub mod ios {
     };
 
     pub type Client = http::DelegatingClient;
+
+    fn from_i8_to_restrictions(raw_restrictions: i8) -> Option<CallLinkRestrictions> {
+        match raw_restrictions {
+            0 => Some(CallLinkRestrictions::None),
+            1 => Some(CallLinkRestrictions::AdminApproval),
+            _ => None,
+        }
+    }
 
     /// Wrapper around `CallLinkRootKey::try_from(&str)`
     ///
@@ -515,10 +529,12 @@ pub mod ios {
         link_root_key: rtc_Bytes,
         admin_passkey: rtc_Bytes,
         call_link_public_params: rtc_Bytes,
+        restrictions: i8,
         delegate: rtc_sfu_CallLinkDelegate,
     ) {
         info!("rtc_sfu_createCallLink():");
 
+        let restrictions = from_i8_to_restrictions(restrictions);
         if let Some(http_client) = http_client.as_ref() {
             if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
                 if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
@@ -529,6 +545,7 @@ pub mod ios {
                         create_credential_presentation.as_slice(),
                         admin_passkey.as_slice(),
                         call_link_public_params.as_slice(),
+                        restrictions,
                         Box::new(move |result| delegate.handle_response(request_id, result)),
                     )
                 } else {
@@ -585,11 +602,7 @@ pub mod ios {
                         &CallLinkUpdateRequest {
                             admin_passkey: admin_passkey.as_slice(),
                             encrypted_name: encrypted_name.as_deref(),
-                            restrictions: match new_restrictions {
-                                0 => Some(CallLinkRestrictions::None),
-                                1 => Some(CallLinkRestrictions::AdminApproval),
-                                _ => None,
-                            },
+                            restrictions: from_i8_to_restrictions(new_restrictions),
                             revoked: match new_revoked {
                                 0 => Some(false),
                                 1 => Some(true),
