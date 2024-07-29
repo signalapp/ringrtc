@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.45.0
+
+- Call links: Add restrictions to create call link API
+
+- Update to webrtc 6478h
+  - Android: Add new OboeStream class for reliability
+
 ## v2.44.5
 
 - Update to webrtc 6478g
