@@ -362,6 +362,12 @@ pub enum ApplicationEvent {
     /// The call ended because the application wanted to drop the call.
     EndedAppDroppedCall,
 
+    /// The remote side has enabled audio.
+    RemoteAudioEnable,
+
+    /// The remote side has disabled audio.
+    RemoteAudioDisable,
+
     /// The remote side has enabled video.
     RemoteVideoEnable,
 

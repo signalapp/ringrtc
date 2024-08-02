@@ -932,14 +932,21 @@ where
                     if let Some(sharing_screen) = status.sharing_screen {
                         if sharing_screen {
                             self.notify_application(
-                                call,
+                                call.clone(),
                                 ApplicationEvent::RemoteSharingScreenEnable,
                             )
                         } else {
                             self.notify_application(
-                                call,
+                                call.clone(),
                                 ApplicationEvent::RemoteSharingScreenDisable,
                             )
+                        }
+                    }
+                    if let Some(audio_enabled) = status.audio_enabled {
+                        if audio_enabled {
+                            self.notify_application(call, ApplicationEvent::RemoteAudioEnable)
+                        } else {
+                            self.notify_application(call, ApplicationEvent::RemoteAudioDisable)
                         }
                     }
                 } else {

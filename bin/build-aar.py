@@ -252,7 +252,7 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
 
         cargo_target = GetCargoTarget(arch)
         # Set the linker as an environment variable, so it's available to dependencies as well.
-        linker = '{}/bin/{}{}-clang'.format(ndk_toolchain_dir, GetClangTarget(arch), GetAndroidApiLevel(arch))
+        linker = '{}/bin/{}21-clang'.format(ndk_toolchain_dir, GetClangTarget(arch))
         os.environ['CARGO_TARGET_{}_LINKER'.format(cargo_target.replace('-', '_').upper())] = linker
 
         cargo_args = [
@@ -325,13 +325,6 @@ def GetClangTarget(arch):
         return 'armv7a-linux-androideabi'
     else:
         return GetCargoTarget(arch)
-
-
-def GetAndroidApiLevel(arch):
-    if arch == 'arm' or arch == 'x86':
-        return 19
-    else:
-        return 21
 
 
 def CollectWebrtcLicenses(dry_run, project_dir, webrtc_src_dir, build_dir, debug_build, archs):

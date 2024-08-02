@@ -31,6 +31,7 @@ message SenderStatus {
   optional uint64 id             = 1;
   optional bool   video_enabled  = 2;
   optional bool   sharing_screen = 3;
+  optional bool   audio_enabled  = 4;
 }
 
 message ReceiverStatus {

@@ -792,6 +792,8 @@ public class CallManager {
 
     Connection connection = ringrtcGetActiveConnection(nativeCallManager);
     connection.setAudioEnabled(enable);
+
+    ringrtcSetAudioEnable(nativeCallManager, enable);
   }
 
   /**
@@ -1939,6 +1941,12 @@ public class CallManager {
     /** The call ended because the application wanted to drop the call. */
     ENDED_APP_DROPPED_CALL,
 
+    /** The remote peer indicates its audio stream is enabled. */
+    REMOTE_AUDIO_ENABLE,
+
+    /** The remote peer indicates its audio stream is disabled. */
+    REMOTE_AUDIO_DISABLE,
+
     /** The remote peer indicates its video stream is enabled. */
     REMOTE_VIDEO_ENABLE,
 
@@ -2416,6 +2424,10 @@ public class CallManager {
 
   private native
     CallContext ringrtcGetActiveCallContext(long nativeCallManager)
+    throws CallException;
+
+  private native
+    void ringrtcSetAudioEnable(long nativeCallManager, boolean enable)
     throws CallException;
 
   private native

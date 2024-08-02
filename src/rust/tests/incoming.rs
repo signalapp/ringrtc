@@ -1827,6 +1827,7 @@ fn received_status_before_accepted() {
             signaling::SenderStatus {
                 video_enabled: Some(true),
                 sharing_screen: None,
+                audio_enabled: Some(true),
             },
             1,
         )
@@ -1842,6 +1843,7 @@ fn received_status_before_accepted() {
 
     cm.synchronize().expect(error_line!());
 
+    assert_eq!(context.event_count(ApplicationEvent::RemoteAudioEnable), 0);
     assert_eq!(context.event_count(ApplicationEvent::RemoteVideoEnable), 0);
 
     assert_eq!(
@@ -1856,6 +1858,7 @@ fn received_status_before_accepted() {
 
     cm.synchronize().expect(error_line!());
 
+    assert_eq!(context.event_count(ApplicationEvent::RemoteAudioEnable), 1);
     assert_eq!(context.event_count(ApplicationEvent::RemoteVideoEnable), 1);
 
     assert_eq!(

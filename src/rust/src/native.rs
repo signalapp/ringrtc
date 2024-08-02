@@ -117,6 +117,7 @@ pub trait CallStateHandler {
         call_id: CallId,
         state: CallState,
     ) -> Result<()>;
+    fn handle_remote_audio_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_network_route(&self, remote_peer_id: &str, network_route: NetworkRoute)
@@ -357,6 +358,11 @@ impl NativePlatform {
 
     fn send_group_update(&self, update: GroupUpdate) -> Result<()> {
         self.group_handler.handle_group_update(update)
+    }
+
+    fn send_remote_audio_state(&self, peer_id: &str, enabled: bool) -> Result<()> {
+        self.state_handler
+            .handle_remote_audio_state(peer_id, enabled)
     }
 
     fn send_remote_video_state(&self, peer_id: &str, enabled: bool) -> Result<()> {
@@ -611,6 +617,10 @@ impl Platform for NativePlatform {
                 call_id,
                 CallState::Ended(EndReason::BusyOnAnotherDevice),
             ),
+            ApplicationEvent::RemoteAudioEnable => self.send_remote_audio_state(remote_peer, true),
+            ApplicationEvent::RemoteAudioDisable => {
+                self.send_remote_audio_state(remote_peer, false)
+            }
             ApplicationEvent::RemoteVideoEnable => self.send_remote_video_state(remote_peer, true),
             ApplicationEvent::RemoteVideoDisable => {
                 self.send_remote_video_state(remote_peer, false)

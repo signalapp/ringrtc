@@ -485,4 +485,5 @@ pub struct ReceivedBusy {
 pub struct SenderStatus {
     pub video_enabled: Option<bool>,
     pub sharing_screen: Option<bool>,
+    pub audio_enabled: Option<bool>,
 }

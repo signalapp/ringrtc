@@ -1409,10 +1409,13 @@ where
                 previous.and_then(|sender_status| sender_status.video_enabled);
             let previous_sharing_screen =
                 previous.and_then(|sender_status| sender_status.sharing_screen);
+            let previous_audio_enabled =
+                previous.and_then(|sender_status| sender_status.audio_enabled);
             data.sender_status = Some(protobuf::rtp_data::SenderStatus {
                 id: Some(u64::from(self.call_id)),
                 video_enabled: updated.video_enabled.or(previous_video_enabled),
                 sharing_screen: updated.sharing_screen.or(previous_sharing_screen),
+                audio_enabled: updated.audio_enabled.or(previous_audio_enabled),
             });
         })
     }
@@ -1859,6 +1862,7 @@ where
                 signaling::SenderStatus {
                     video_enabled: sender_status.video_enabled,
                     sharing_screen: sender_status.sharing_screen,
+                    audio_enabled: sender_status.audio_enabled,
                 },
                 seqnum,
             )

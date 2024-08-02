@@ -318,6 +318,16 @@ pub fn get_active_call_context(call_manager: *mut IosCallManager) -> Result<*mut
     Ok(app_call_context.object)
 }
 
+/// CMI request to set the audio status
+pub fn set_audio_enable(call_manager: *mut IosCallManager, enable: bool) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    let mut active_connection = call_manager.active_connection()?;
+    active_connection.update_sender_status(signaling::SenderStatus {
+        audio_enabled: Some(enable),
+        ..Default::default()
+    })
+}
+
 /// CMI request to set the video status
 pub fn set_video_enable(call_manager: *mut IosCallManager, enable: bool) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };

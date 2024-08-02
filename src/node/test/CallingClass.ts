@@ -61,6 +61,11 @@ export class CallingClass {
     };
 
     // eslint-disable-next-line no-param-reassign
+    call.handleRemoteAudioEnabled = () => {
+      log('handleRemoteAudioEnabled');
+    };
+
+    // eslint-disable-next-line no-param-reassign
     call.handleRemoteVideoEnabled = () => {
       log('handleRemoteVideoEnabled');
     };

@@ -292,6 +292,12 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
             eventGeneralEnded = true
             eventEndedDropped = true
 
+        case .remoteAudioEnable:
+            Logger.debug("TestDelegate:remoteAudioEnable")
+
+        case .remoteAudioDisable:
+            Logger.debug("TestDelegate:remoteAudioDisable")
+
         case .remoteVideoEnable:
             Logger.debug("TestDelegate:remoteVideoEnable")
 

@@ -55,6 +55,10 @@ public enum CallManagerEvent: Int32 {
     case endedGlareHandlingFailure
     /// The call ended because the application wanted to drop the call.
     case endedDropped
+    /// The remote side has enabled audio.
+    case remoteAudioEnable
+    /// The remote side has disabled audio.
+    case remoteAudioDisable
     /// The remote side has enabled video.
     case remoteVideoEnable
     /// The remote side has disabled video.
@@ -328,6 +332,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     private var ringRtcCallManager: UnsafeMutableRawPointer!
 
+    private var isAudioEnabled: Bool = true
+
     private var videoCaptureController: VideoCaptureController?
 
     public init(httpClient: HTTPClient, fieldTrials: [String: String] = [:], audioDevice: RTCAudioDevice? = nil) {
@@ -548,6 +554,12 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         let appCallContext: CallContext = Unmanaged.fromOpaque(callContext).takeUnretainedValue()
 
         appCallContext.setAudioEnabled(enabled: enabled)
+
+        // This will fail silently when called before the call has connected,
+        // and we'll try again when the connectedRemote event fires.
+        ringrtcSetAudioEnable(ringRtcCallManager, enabled)
+
+        isAudioEnabled = enabled
     }
 
     public func setLocalVideoEnabled(enabled: Bool, call: CallType) {
@@ -782,6 +794,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             Logger.debug("onEvent - main.async")
 
             guard let delegate = self.delegate else { return }
+
+            if event == .connectedRemote {
+                // Make sure the status gets sent.
+                self.setLocalAudioEnabled(enabled: self.isAudioEnabled)
+            }
 
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
             delegate.callManager(self, onEvent: callReference, event: event)

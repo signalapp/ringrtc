@@ -909,6 +909,18 @@ pub extern "C" fn ringrtcGetActiveCallContext(callManager: *mut c_void) -> *mut 
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub extern "C" fn ringrtcSetAudioEnable(callManager: *mut c_void, enable: bool) -> *mut c_void {
+    match call_manager::set_audio_enable(callManager as *mut IosCallManager, enable) {
+        Ok(_v) => {
+            // Return the object reference back as indication of success.
+            callManager
+        }
+        Err(_e) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) -> *mut c_void {
     match call_manager::set_video_enable(callManager as *mut IosCallManager, enable) {
         Ok(_v) => {
