@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.46.0
+
+- Send audio enabled status to remote device in 1:1 calls
+
+- Update to webrtc 6478i
+  - Add ice switch reason to logging
+  - Android: Oboe ADM uninitialize on stop
+  - Don't get stats from unused transceivers
+
+- Build improvements
+
 ## v2.45.0
 
 - Call links: Add restrictions to create call link API
