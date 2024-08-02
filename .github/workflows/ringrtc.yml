@@ -24,15 +24,15 @@ jobs:
     name: Lints
     runs-on: ubuntu-latest
     steps:
-    - name: Cargo Cache
-      uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
-      with:
-        cache-targets: "false"
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     - name: Install Python tools
       run: pip3 install flake8 mypy
     - uses: actions/checkout@v4
+    - name: Cargo Cache
+      uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+      with:
+        cache-targets: "false"
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
     - name: Install extra Rust tools
       run: cargo +stable install --version 0.6.2 --locked cargo-about
