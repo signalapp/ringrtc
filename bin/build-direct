@@ -1,0 +1,121 @@
+#!/bin/sh
+
+#
+# Copyright 2019-2021 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+set -e
+
+# shellcheck source=bin/env.sh
+. "$(dirname "$0")"/env.sh
+
+usage()
+{
+    echo 'usage: build-direct [-d|-r|-c]
+    where:
+        -d to create a debug build (default)
+        -r to create a release build
+        -c to clean the build artifacts'
+}
+
+clean()
+{
+    # Remove all possible artifact directories.
+    cargo clean
+}
+
+BUILD_TYPE=debug
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -d | --debug )
+            BUILD_TYPE=debug
+            ;;
+        -r | --release )
+            BUILD_TYPE=release
+            ;;
+        -c | --clean )
+            clean
+            exit
+            ;;
+        -h | --help )
+            usage
+            exit
+            ;;
+        * )
+            usage
+            exit 1
+    esac
+    shift
+done
+
+RUSTFLAGS="${RUSTFLAGS:-}"
+
+hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
+
+case "$(rustup show active-toolchain)" in
+    *"x86_64-apple-darwin"* )
+        BUILD_ARCH=x64
+        DEFAULT_PLATFORM="darwin"
+        ;;
+    *"aarch64-apple-darwin"* )
+        BUILD_ARCH=arm64
+        DEFAULT_PLATFORM="darwin"
+        ;;
+    *"x86_64-pc-windows"* )
+        BUILD_ARCH=x64
+        # Static linking to prevent build errors on Windows
+        RUSTFLAGS="${RUSTFLAGS} -C target-feature=+crt-static"
+        DEFAULT_PLATFORM="win32"
+        ;;
+    *"x86_64-unknown-linux"* )
+        BUILD_ARCH=x64
+        DEFAULT_PLATFORM="linux"
+        ;;
+    * )
+        printf "Unknown platform detected!\nPlease make sure you have installed a valid Rust toolchain via rustup! Aborting.\n"
+        exit 1
+esac
+
+export MACOSX_DEPLOYMENT_TARGET="10.15"
+
+# Build WebRTC.
+(
+    echo "Building WebRTC for ${BUILD_ARCH}"
+
+    WEBRTC_ARGS="target_cpu=\"${BUILD_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_include_ilbc=false rtc_disable_metrics=true rtc_disable_trace_events=true"
+    if [ "${BUILD_TYPE}" = "release" ]
+    then
+        WEBRTC_ARGS="${WEBRTC_ARGS} is_debug=false symbol_level=1"
+    fi
+
+    (
+        cd src/webrtc/src
+        gn gen -C "${OUTPUT_DIR}/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
+        ninja -C "${OUTPUT_DIR}/${BUILD_TYPE}" webrtc
+    )
+)
+
+# Build and link the final RingRTC library.
+(
+    echo "Building for platform ${DEFAULT_PLATFORM}, TARGET_ARCH=${BUILD_ARCH}"
+
+    INCLUDE_RELEASE_FLAG=
+    if [ "${BUILD_TYPE}" = "release" ]
+    then
+        INCLUDE_RELEASE_FLAG=yes
+    fi
+
+    # Build with debug line tables, but not full debug info.
+    export CARGO_PROFILE_RELEASE_DEBUG=1
+
+    RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=direct${RINGRTC_ADM:+",ringrtc_adm"} ${INCLUDE_RELEASE_FLAG:+"--release"}
+
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        echo "Can run with target/debug/direct"
+    else
+        echo "Can run with target/release/direct"
+    fi
+)

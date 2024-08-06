@@ -147,7 +147,7 @@ needed:
     ./bin/prepare-workspace unix
     src/webrtc/src/build/linux/sysroot_scripts/install-sysroot.py --arch=arm64
     export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-    TARGET_ARCH=arm64 OUTPUT_DIR=out_arm ./bin/build-cli --release
+    TARGET_ARCH=arm64 OUTPUT_DIR=out_arm ./bin/call_sim-cli --release
 
 The resulting `src/rust/target/release/call_sim-cli` file can be copied to your Mac amd64 machine or run in-place if
 using Linux/Ubuntu.

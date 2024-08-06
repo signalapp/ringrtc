@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use chrono;
 use log::{debug, info};
 
 use ringrtc::{
@@ -765,7 +766,14 @@ impl log::Log for Log {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            println!("{} - {}", record.level(), record.args());
+            println!(
+                "[{} {} {:?}:{:?}] {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
+                record.level(),
+                record.file(),
+                record.line(),
+                record.args()
+            );
         }
     }
 
