@@ -14,10 +14,10 @@ jobs:
     - name: Check rust format
       run: cargo fmt -- --check
     - name: Install for node
-      run: yarn install --frozen-lockfile
+      run: npm ci
       working-directory: src/node
     - name: Check typescript format
-      run: yarn check-format
+      run: npm run check-format
       working-directory: src/node
 
   lints:
@@ -67,10 +67,10 @@ jobs:
       run: cargo clippy -- -D warnings
       working-directory: call_sim/docker/signaling_server
     - name: Install for node
-      run: yarn install --frozen-lockfile
+      run: npm ci
       working-directory: src/node
     - name: Check typescript
-      run: yarn eslint
+      run: npm run eslint
       working-directory: src/node
     - name: Check package.json for prebuildChecksum
       run: >-
@@ -116,11 +116,11 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - run: bin/fetch-artifact -p desktop
     - run: bin/build-electron --release --ringrtc-only
-    - run: yarn install --frozen-lockfile
+    - run: npm ci
       working-directory: src/node
-    - run: yarn build
+    - run: npm run build
       working-directory: src/node
-    - run: ${{ matrix.test-runner }} yarn test
+    - run: ${{ matrix.test-runner }} npm test
       working-directory: src/node
 
   cargo_build_using_prebuilt:

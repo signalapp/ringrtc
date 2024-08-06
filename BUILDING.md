@@ -78,11 +78,7 @@ You may also need coreutils if not yet installed:
 
 #### Electron Dependencies
 
-Install the expected version of Node.jswhich can be found in src/node/.nvmrc. You can use [nvm](https://github.com/nvm-sh/nvm) or just manually install the corresponding version. Make sure you have node and npm installed.
-
-Then install Yarn (if not already):
-
-    npm install --global yarn
+Install the expected version of Node.js which can be found in src/node/.nvmrc. You can use [nvm](https://github.com/nvm-sh/nvm) or just manually install the corresponding version. Make sure you have node and npm installed.
 
 ##### MacOS
 

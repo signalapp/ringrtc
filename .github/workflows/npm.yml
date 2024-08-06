@@ -282,20 +282,20 @@ jobs:
         env:
           ARTIFACT_CHECKSUM: ${{ steps.artifact-checksum.outputs.sha256 }}
 
-      # Test download by deleting `build/` and running yarn install and yarn test again.
+      # Test download by deleting `build/` and running npm install and npm test again.
       - run: rm -rf build/
         # Skip this for dry runs because the install step won't be able to
         # download the prebuild.
         if: ${{ !inputs.dry_run }}
         working-directory: src/node/
 
-      - run: yarn install
+      - run: npm install
         working-directory: src/node/
 
-      - run: yarn build
+      - run: npm run build
         working-directory: src/node/
 
-      - run: xvfb-run --auto-servernum yarn test
+      - run: xvfb-run --auto-servernum npm test
         working-directory: src/node/
 
       # Collect RingRTC and WebRTC acknowledgments into one file.
@@ -327,7 +327,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - run: yarn pack
+      - run: npm pack
         if: ${{ inputs.dry_run }}
         working-directory: src/node/
 

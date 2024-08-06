@@ -85,7 +85,7 @@ electron:
 		echo "Electron: Release build" ; \
 		TARGET_ARCH=$(NODEJS_ARCH) BUILD_WHAT=$(BUILD_WHAT) BUILD_WEBRTC_TESTS=$(BUILD_WEBRTC_TESTS) ./bin/build-electron -r ; \
 	fi
-	$(Q) (cd src/node && yarn install && yarn build)
+	$(Q) (cd src/node && npm install && npm run build)
 
 cli:
 	$(Q) if [ "$(PLATFORM)" != "" ] ; then \

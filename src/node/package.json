@@ -17,7 +17,7 @@
     "clean": "rimraf dist",
     "test": "electron-mocha --renderer --recursive dist/test --timeout 10000 --require source-map-support/register",
     "eslint": "eslint .",
-    "lint": "yarn format --list-different && yarn eslint",
+    "lint": "npm run format --list-different && npm run eslint",
     "format": "prettier --write .",
     "check-format": "prettier . --check",
     "install": "node scripts/fetch-prebuild.js",
@@ -37,6 +37,7 @@
     "@types/chai": "4.3.11",
     "@types/chai-as-promised": "^7.1.5",
     "@types/dom-mediacapture-transform": "0.1.9",
+    "@types/lodash": "^4.17.7",
     "@types/mocha": "10.0.6",
     "@types/node": "18.17.1",
     "@types/offscreencanvas": "^2019.7.1",
@@ -51,6 +52,7 @@
     "eslint-plugin-import": "2.29.0",
     "eslint-plugin-mocha": "10.2.0",
     "eslint-plugin-more": "1.0.5",
+    "lodash": "4.17.21",
     "long": "5.2.3",
     "mocha": "10.2.0",
     "prettier": "^3.1.0",
@@ -58,7 +60,6 @@
     "sinon": "^17.0.1",
     "sinon-chai": "^3.7.0",
     "source-map-support": "^0.5.21",
-    "typescript": "5.2.2",
-    "yarn-audit-fix": "^10.0.1"
+    "typescript": "5.2.2"
   }
 }
