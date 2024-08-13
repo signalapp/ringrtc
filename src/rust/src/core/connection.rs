@@ -1434,7 +1434,7 @@ where
             let mut state = self.accumulated_rtp_data_message.lock()?;
             populate(&mut state);
             state.seqnum = Some(state.seqnum.unwrap_or(0) + 1);
-            state.clone()
+            state
         };
         info!("Sending RTP data message: {:?}", message);
         self.send_via_rtp_data(webrtc_data, &message)
@@ -1827,7 +1827,6 @@ where
         debug!("Received RTP data message: {:?}", message);
 
         let mut message_handled = false;
-        let original_message = message.clone();
         if let Some(accepted) = message.accepted {
             if let CallDirection::Outgoing = self.direction() {
                 self.inject_received_accepted_via_rtp_data(CallId::new(accepted.id()))
@@ -1879,7 +1878,7 @@ where
             message_handled = true;
         };
         if !message_handled {
-            info!("Unhandled RTP data message: {:?}", original_message);
+            info!("Unhandled RTP data message: {:?}", message);
         }
     }
 
@@ -2071,7 +2070,6 @@ where
             .lock()
             .unwrap()
             .sender_status
-            .clone()
     }
 }
 
