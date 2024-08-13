@@ -11,7 +11,7 @@ set -e
 . "$(dirname "$0")"/env.sh
 
 # Note: make sure to only use NodeJS architectures here, like x64, ia32, arm64, etc.
-TARGET_ARCH=${TARGET_ARCH:-x64}
+TARGET_ARCH=${TARGET_ARCH:-$(uname -m)}
 
 usage()
 {
@@ -77,9 +77,11 @@ while [ "$1" != "" ]; do
 done
 
 case "$TARGET_ARCH" in
-    "x64")
+    "x64"|"x86_64")
         GN_ARCH=x64
         CARGO_ARCH=x86_64
+        # Normalize TARGET_ARCH to x64
+        TARGET_ARCH=x64
         ;;
     "ia32")
         GN_ARCH=x86
