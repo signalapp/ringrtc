@@ -96,7 +96,7 @@ mrp = { path = "../../mrp" }
 
 [target.'cfg(not(target_os="android"))'.dependencies]
 # sysinfo depends on getgrgid_r, which was added in Android API level 24
-sysinfo = { version = "0.29.11", default-features = false }
+sysinfo = { version = "0.31.2", default-features = false, features = ["system"] }
 
 [features]
 default = []

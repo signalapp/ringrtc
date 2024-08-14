@@ -3110,7 +3110,7 @@ SOFTWARE.
 
 ```
 
-## cesu8 1.1.0, neon 1.0.0
+## cesu8 1.1.0, neon 1.0.0, windows-core 0.57.0, windows-implement 0.57.0, windows-interface 0.57.0, windows-result 0.1.2, windows 0.57.0
 
 ```
 MIT License
@@ -3336,7 +3336,7 @@ SOFTWARE.
 
 ```
 
-## sysinfo 0.29.11
+## sysinfo 0.31.2
 
 ```
 The MIT License (MIT)

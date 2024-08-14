@@ -3391,7 +3391,7 @@ THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRES
 			<key>License</key>
 			<string>MIT License</string>
 			<key>Title</key>
-			<string>cesu8 1.1.0, neon 1.0.0</string>
+			<string>cesu8 1.1.0, neon 1.0.0, windows-core 0.57.0, windows-implement 0.57.0, windows-interface 0.57.0, windows-result 0.1.2, windows 0.57.0</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>
@@ -3666,7 +3666,7 @@ SOFTWARE.
 			<key>License</key>
 			<string>MIT License</string>
 			<key>Title</key>
-			<string>sysinfo 0.29.11</string>
+			<string>sysinfo 0.31.2</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>

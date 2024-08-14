@@ -13,9 +13,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(not(target_os = "android"))]
-use sysinfo::{CpuExt, SystemExt};
-
 use crate::{common::CallId, webrtc};
 
 #[cfg(not(feature = "sim"))]
@@ -158,10 +155,10 @@ impl StatsObserver {
         {
             // Be careful adding new stats;
             // some have a fair amount of persistent state that raises memory usage.
-            self.system_stats.refresh_cpu();
+            self.system_stats.refresh_cpu_usage();
             info!(
                 "ringrtc_stats!,system,{cpu_pct:.0}%",
-                cpu_pct = self.system_stats.global_cpu_info().cpu_usage(),
+                cpu_pct = self.system_stats.global_cpu_usage(),
             )
         }
     }
@@ -307,7 +304,7 @@ impl StatsObserver {
             // Do an initial refresh for meaningful results on the first log.
             // Be careful adding new stats;
             // some have a fair amount of persistent state that raises memory usage.
-            stats.refresh_cpu();
+            stats.refresh_cpu_usage();
             stats
         };
 
