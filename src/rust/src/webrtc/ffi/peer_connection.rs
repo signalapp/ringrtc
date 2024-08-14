@@ -77,12 +77,6 @@ extern "C" {
         enabled: bool,
     );
 
-    pub fn Rust_setIncomingAudioMuted(
-        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
-        ssrc: u32,
-        muted: bool,
-    );
-
     pub fn Rust_addIceCandidateFromSdp(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         sdp: webrtc::ptr::Borrowed<c_char>,

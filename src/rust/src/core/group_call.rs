@@ -4021,12 +4021,6 @@ impl Client {
                             remote_device.recalculate_higher_resolution_pending();
                         }
 
-                        if let Some(muted) = heartbeat_state.audio_muted {
-                            state
-                                .peer_connection
-                                .set_incoming_audio_muted(demux_id, muted);
-                        }
-
                         remote_device.heartbeat_state = heartbeat_state;
 
                         state.observer.handle_remote_devices_changed(
