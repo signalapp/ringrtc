@@ -71,20 +71,18 @@ jobs:
         retention-days: 2
 
     - name: Upload Desktop x64 Debug Info
-      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v4
       with:
         name: ringrtc-desktop-linux-debuginfo-x64
         path: out/release/libringrtc-*-linux-x64-debuginfo.sym
-        retention-days: 120
+        retention-days: 2
 
     - name: Upload Desktop arm64 Debug Info
-      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v4
       with:
         name: ringrtc-desktop-linux-debuginfo-arm64
         path: out-arm/release/libringrtc-*-linux-arm64-debuginfo.sym
-        retention-days: 120
+        retention-days: 2
 
     - name: Upload WebRTC Acknowledgments
       uses: actions/upload-artifact@v4
@@ -130,20 +128,18 @@ jobs:
         retention-days: 2
 
     - name: Upload Desktop x64 Debug Info
-      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v4
       with:
         name: ringrtc-desktop-win32-debuginfo-x64
         path: out/release/libringrtc-*-win32-x64-debuginfo.sym
-        retention-days: 120
+        retention-days: 2
 
     - name: Upload Desktop arm64 Debug Info
-      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v4
       with:
         name: ringrtc-desktop-win32-debuginfo-arm64
         path: out-arm/release/libringrtc-*-win32-arm64-debuginfo.sym
-        retention-days: 120
+        retention-days: 2
 
     - name: Upload WebRTC Acknowledgments
       uses: actions/upload-artifact@v4
@@ -185,20 +181,18 @@ jobs:
         retention-days: 2
 
     - name: Upload Desktop x64 Debug Info
-      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v4
       with:
         name: ringrtc-desktop-darwin-debuginfo-x64
         path: out/release/libringrtc-*-darwin-x64-debuginfo.sym
-        retention-days: 120
+        retention-days: 2
 
     - name: Upload Desktop arm64 Debug Info
-      if: ${{ !inputs.dry_run }}
       uses: actions/upload-artifact@v4
       with:
         name: ringrtc-desktop-darwin-debuginfo-arm64
         path: out-arm/release/libringrtc-*-darwin-arm64-debuginfo.sym
-        retention-days: 120
+        retention-days: 2
 
     - name: Upload WebRTC Acknowledgments
       uses: actions/upload-artifact@v4
@@ -231,11 +225,35 @@ jobs:
           name: ringrtc-desktop-windows
           path: src/node/build/
 
+      - name: Download Desktop Windows x64 Symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: ringrtc-desktop-win32-debuginfo-x64
+          path: symbols/
+
+      - name: Download Desktop Windows arm64 Symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: ringrtc-desktop-win32-debuginfo-arm64
+          path: symbols/
+
       - name: Download Desktop macOS Artifacts
         uses: actions/download-artifact@v4
         with:
           name: ringrtc-desktop-mac
           path: src/node/build/
+
+      - name: Download Desktop macOS x64 Symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: ringrtc-desktop-darwin-debuginfo-x64
+          path: symbols/
+
+      - name: Download Desktop macOS arm64 Symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: ringrtc-desktop-darwin-debuginfo-arm64
+          path: symbols/
 
       - name: Download Desktop Linux Artifacts
         uses: actions/download-artifact@v4
@@ -243,9 +261,29 @@ jobs:
           name: ringrtc-desktop-linux
           path: src/node/build/
 
-      - name: Create Archive
-        run: tar czf "ringrtc-desktop-build-v$(jq --raw-output .version package.json).tar.gz" build
+      - name: Download Desktop Linux x64 Symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: ringrtc-desktop-linux-debuginfo-x64
+          path: symbols/
+
+      - name: Download Desktop Linux arm64 Symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: ringrtc-desktop-linux-debuginfo-arm64
+          path: symbols/
+
+      - name: Determine Version
+        id: determine-version
+        run: |
+          printf 'version=%s\n' "$(jq --raw-output .version package.json)" >> $GITHUB_OUTPUT
         working-directory: src/node/
+
+      - name: Create Archive
+        run: tar czf "ringrtc-desktop-build-v$VERSION.tar.gz" build
+        working-directory: src/node/
+        env:
+          VERSION: ${{ steps.determine-version.outputs.version }}
 
       - name: Output Artifact Checksum
         id: artifact-checksum
@@ -270,6 +308,33 @@ jobs:
           path: 'src/node'
           destination: build-artifacts.signal.org/libraries
           glob: 'ringrtc-desktop-build-v*.tar.gz'
+          parent: false
+          process_gcloudignore: false
+
+      - name: Set up directory structure for symbols
+        run: |
+          mkdir -p "$VERSION"/win32/x64/
+          mv libringrtc-*-win32-x64-debuginfo.sym "$VERSION"/win32/x64/symbols.sym
+          mkdir -p "$VERSION"/win32/arm64/
+          mv libringrtc-*-win32-arm64-debuginfo.sym "$VERSION"/win32/arm64/symbols.sym
+          mkdir -p "$VERSION"/darwin/x64/
+          mv libringrtc-*-darwin-x64-debuginfo.sym "$VERSION"/darwin/x64/symbols.sym
+          mkdir -p "$VERSION"/darwin/arm64/
+          mv libringrtc-*-darwin-arm64-debuginfo.sym "$VERSION"/darwin/arm64/symbols.sym
+          mkdir -p "$VERSION"/linux/x64/
+          mv libringrtc-*-linux-x64-debuginfo.sym "$VERSION"/linux/x64/symbols.sym
+          mkdir -p "$VERSION"/linux/arm64/
+          mv libringrtc-*-linux-arm64-debuginfo.sym "$VERSION"/linux/arm64/symbols.sym
+        working-directory: symbols/
+        env:
+          VERSION: ${{ steps.determine-version.outputs.version }}
+
+      - uses: google-github-actions/upload-cloud-storage@v2
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: 'symbols'
+          destination: build-artifacts.signal.org/ringrtc-symbols
+          glob: '**/*.sym'
           parent: false
           process_gcloudignore: false
 
@@ -336,5 +401,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: npm-package
-          path: src/node/signalapp-ringrtc-v*.tgz
+          path: src/node/signalapp-ringrtc-*.tgz
           retention-days: 7
