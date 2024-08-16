@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.46.1
+
+- CI: Upload desktop symbols to GCS
+
+- Update to webrtc 6478j
+  - Reduce kDefaultMinPixelsPerFrame
+  - Revert "Add Rust_setIncomingAudioMuted"
+  - Revert "Log more info when select fails"
+
+- Update dependencies
+
+- Build improvements
+
 ## v2.46.0
 
 - Send audio enabled status to remote device in 1:1 calls
