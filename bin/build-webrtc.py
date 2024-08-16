@@ -139,6 +139,7 @@ Build type      : {}
             run_cmd(args.dry_run, ['bin/prepare-workspace', 'unix'], env=env)
 
             # Build WebRTC for x86_64
+            env['TARGET_ARCH'] = "x64"
             for build_type in build_types:
                 run_cmd(args.dry_run,
                         ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
@@ -185,6 +186,7 @@ Build type      : {}
             # Prepare workspace
             run_cmd(args.dry_run, ['bin/prepare-workspace', 'mac'], env=env)
 
+            env['TARGET_ARCH'] = "x64"
             for build_type in build_types:
                 run_cmd(args.dry_run,
                         ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
@@ -203,6 +205,7 @@ Build type      : {}
         # Prepare workspace
         run_cmd(args.dry_run, [bash, 'bin/prepare-workspace', 'windows'], env=env)
 
+        env['TARGET_ARCH'] = "x64"
         for build_type in build_types:
             run_cmd(args.dry_run,
                     [bash, 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
