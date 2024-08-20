@@ -340,21 +340,21 @@ jobs:
 
       # Put the SHA-256 of the archive into prebuildChecksum in package.json
       - run: sed -i "/prebuildChecksum/ s/\"\"/\"${ARTIFACT_CHECKSUM}\"/" package.json
-        # Skip this for dry runs because the install step won't be able to
+        # Skip this for dry runs because the `npm ci` step won't be able to
         # download the prebuild.
         if: ${{ !inputs.dry_run }}
         working-directory: src/node/
         env:
           ARTIFACT_CHECKSUM: ${{ steps.artifact-checksum.outputs.sha256 }}
 
-      # Test download by deleting `build/` and running npm install and npm test again.
+      # Test download by deleting `build/` and running npm ci and npm test again.
       - run: rm -rf build/
-        # Skip this for dry runs because the install step won't be able to
+        # Skip this for dry runs because the `npm ci` step won't be able to
         # download the prebuild.
         if: ${{ !inputs.dry_run }}
         working-directory: src/node/
 
-      - run: npm install
+      - run: npm ci
         working-directory: src/node/
 
       - run: npm run build

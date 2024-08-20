@@ -76,6 +76,15 @@ jobs:
       run: >-
         grep -q '"prebuildChecksum": ""' package.json
       working-directory: src/node
+    - name: Compare package.json and package-lock.json versions
+      run: >
+        PKG_OG=$(jq -r .version package.json);
+        PKG_LOCK=$(jq -r .version package-lock.json);
+        if [ "$PKG_OG" != "$PKG_LOCK" ]; then
+          echo "package.json and package-lock.json versions do not match";
+          exit 1;
+        fi
+      working-directory: src/node
 
   tests:
     name: Tests
