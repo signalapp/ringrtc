@@ -1931,7 +1931,7 @@ where
     ///
     /// * `call_id` - Call ID from the remote peer.
     /// * `max_bitrate_bps` - the bitrate that the remote peer wants to use for
-    /// the session.
+    ///   the session.
     pub fn inject_received_receiver_status_via_rtp_data(
         &mut self,
         call_id: CallId,

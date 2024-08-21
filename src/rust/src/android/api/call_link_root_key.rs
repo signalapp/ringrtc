@@ -115,7 +115,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeToFormatt
     try_scoped(|| {
         let key_bytes = env.convert_byte_array(key_bytes)?;
         let key = CallLinkRootKey::try_from(key_bytes.as_slice())?;
-        Ok(env.new_string(&key.to_formatted_string())?)
+        Ok(env.new_string(key.to_formatted_string())?)
     })
     .unwrap_or_else(|e| {
         error::throw_error(&mut env, e);
