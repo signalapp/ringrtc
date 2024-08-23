@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.46.2
+
+- Update to webrtc 6478k
+  - iOS: Fixed issue with missing network interfaces
+
+- Android: Disable the use of sessionId for Oboe
+
+- Update to Rust 1.80.1
+
+- Build improvements
+
 ## v2.46.1
 
 - CI: Upload desktop symbols to GCS
