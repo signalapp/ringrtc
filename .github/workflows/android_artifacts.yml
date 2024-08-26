@@ -32,6 +32,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install NDK
+      run: echo "y" | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;${{ env.NDK_VERSION }}"
+
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
 
     - name: Install protoc
