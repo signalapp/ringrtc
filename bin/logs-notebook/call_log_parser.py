@@ -31,6 +31,7 @@ class Call():
         self.video_send = kwargs['video_send']
         self.video_recv = kwargs['video_recv']
         self.sfu_recv = kwargs['sfu_recv']
+        self.system = kwargs['system']
         self.ice_network_route_change = kwargs['ice_network_route_change']
         self.media_key_recv = kwargs['media_key_recv']
         self._logs = logs
@@ -111,6 +112,9 @@ class Call():
             ['target_send_rate', 'ideal_send_rate', 'allocated_send_rate']
         ].plot(subplots=True, figsize=(10, 10), grid=True)
 
+    def describe_system(self) -> None:
+        self.system[['cpu_usage_pct']].plot(figsize=(10, 10), grid=True)
+
     def logs(self, query: str = '') -> None:
         """
         Prints logs that were emitted during this call which contain `query`
@@ -155,6 +159,7 @@ def _parse_calls(logs: List[str]) -> List[Call]:
             'video_send': [],
             'video_recv': [],
             'sfu_recv': [],
+            'system': [],
             'media_key_recv': [],
             'logs': [],
             'start': '',
@@ -182,7 +187,7 @@ def _parse_calls(logs: List[str]) -> List[Call]:
         return line
 
     def extract_call_id(line: str) -> str:
-        id = re.findall(r'0[x][0-9a-fA-F]+|0[x]\[ REDACTED_HEX.*\]', line)
+        id = re.findall(r'0[x][0-9a-fA-F]+|0[x]…[0-9a-fA-F]+', line)
         return id[0] if isinstance(id[0], str) and len(id) > 0 else 'Unknown'
 
     raw_calls = []
@@ -235,6 +240,8 @@ def _parse_calls(logs: List[str]) -> List[Call]:
             append('video_recv', line)
         elif 'ringrtc_stats!,sfu,recv' in line:
             append('sfu_recv', line)
+        elif 'ringrtc_stats!,system' in line:
+            append('system', line)
         elif 'handle_incoming_video_track(): id' in line:
             append('media_key_recv', line)
         elif 'Adding media receive key from' in line:
@@ -342,6 +349,7 @@ def _parse_calls(logs: List[str]) -> List[Call]:
             ('target_send_rate', ''),
             ('ideal_send_rate', ''),
             ('allocated_send_rate', ''),
+            ('cpu_usage_pct', '%'),
         ]
 
         for (name, suffix) in numeric_columns:
@@ -403,6 +411,7 @@ def _parse_calls(logs: List[str]) -> List[Call]:
             video_send=clean_columns(lines_to_df(raw_call['video_send'])),
             video_recv=clean_columns(lines_to_df(raw_call['video_recv'])),
             sfu_recv=clean_columns(lines_to_df(raw_call['sfu_recv'])),
+            system=clean_columns(lines_to_df(raw_call['system'])),
             ice_network_route_change=ice_network_route_change_lines_to_df(raw_call['ice_network_route_change']),
             media_key_recv=media_key_recv_to_df(raw_call['media_key_recv']),
             logs=raw_call['logs'],
@@ -424,11 +433,7 @@ def _match_call_ids(results: List[List[Call]]) -> List[List[Call]]:
         Takes an ID found in logs and returns an ID that will be consistent
         across client platforms
         """
-        if id.startswith('0x[ REDACTED_HEX'):
-            # e.g. `0x[ REDACTED_HEX:...abc ]`
-            return id[-5:-2]
-
-        # e.g. `0x123456789abcdefabc`
+        # e.g. `0x123456789abcdefabc` or `0x…abc`
         return id[-3:]
 
     def contains_id(id: str, calls: List[Call]) -> bool:

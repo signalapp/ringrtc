@@ -42,7 +42,7 @@ jobs:
     - name: Set up mypy types
       run: mkdir .mypy_cache/ && python3 -m mypy --install-types --non-interactive bin/logs-notebook/call_log_parser.py --cache-dir=.mypy_cache/
     # Only include typed Python scripts here.
-    - run: python3 -m mypy --python-version 3.8 --strict bin/convert_webrtc_acknowledgments.py bin/fetch-artifact.py bin/logs-notebook/call_log_parser.py
+    - run: python3 -m mypy --python-version 3.8 --strict bin/convert_webrtc_acknowledgments.py bin/fetch-artifact.py bin/logs-notebook/call_log_parser.py bin/logs-notebook/emos.py
     - name: Check acknowledgments
       run: ./bin/regenerate_acknowledgments.sh && git diff --name-status --exit-code acknowledgments
     - name: Clippy

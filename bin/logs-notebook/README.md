@@ -68,6 +68,7 @@ The following methods are also available on `Call`:
 |`describe_video_send`               |Plots the `video,send` stats. All video layers are plotted by default for group calls. Pass the index of the layer to show only one.|
 |`describe_video_recv`               |Plots the `video,recv` stats. For group calls, the SSRC of the desired stream needs to be passed.|
 |`describe_sfu_recv`                 |Plots the `sfu,recv` stats. Only for group calls.|
+|`describe_system`                   |Plots the `system` stats.|
 |`describe_ice_network_route_change` |Plots the `ice_network_route_change` local and remote relay values.|
 |`logs`                              |Prints the logs for the call that contain the passed query.|
 
