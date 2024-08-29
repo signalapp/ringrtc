@@ -2436,6 +2436,17 @@ export class GroupCall {
   }
 
   // Called by UI
+  getCallId(): CallId | undefined {
+    const eraId = this._peekInfo?.eraId;
+
+    if (eraId) {
+      return callIdFromEra(eraId);
+    }
+
+    return undefined;
+  }
+
+  // Called by UI
   setOutgoingAudioMuted(muted: boolean): void {
     this._localDeviceState.audioMuted = muted;
     this._callManager.setOutgoingAudioMuted(this._clientId, muted);

@@ -51,10 +51,22 @@ impl PeekInfo {
             .collect()
     }
 
-    pub fn unique_pending_users(&self) -> HashSet<&UserId> {
+    /// Returns pending users in the order they requested approval
+    /// Currently relies on the SFU returning the clients in order
+    pub fn unique_pending_users(&self) -> Vec<&UserId> {
+        let mut seen: HashSet<Option<&UserId>> = HashSet::new();
+
         self.pending_devices
             .iter()
-            .filter_map(|device| device.user_id.as_ref())
+            .filter_map(|device| {
+                let user_ref = device.user_id.as_ref();
+
+                if seen.insert(user_ref) {
+                    user_ref
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
