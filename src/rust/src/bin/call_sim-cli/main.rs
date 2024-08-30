@@ -5,28 +5,32 @@
 
 mod endpoint;
 mod network;
+mod relay;
 mod scenario;
-mod server;
+mod util;
 mod video;
 
 use anyhow::Result;
+use base64::prelude::*;
 use clap::Parser;
 use fern::Dispatch;
 use log::*;
 use ringrtc::{
-    common::{units, CallConfig, DataMode},
+    common::{units, CallConfig, DataMode, DeviceId},
+    core::group_call::GroupId,
+    lite::sfu::{GroupMember, MembershipProof, UserId},
     webrtc::{
-        media::AudioBandwidth,
-        media::AudioEncoderConfig,
+        media::{AudioBandwidth, AudioEncoderConfig},
         peer_connection_factory::{
             AudioConfig, AudioJitterBufferConfig, FileBasedAdmConfig, IceServer,
             RffiAudioDeviceModuleType,
         },
     },
 };
+use scenario::ScenarioCallTypeConfig;
 use std::ffi::CString;
 
-use crate::scenario::ManagedScenario;
+use crate::scenario::ScenarioManager;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -203,6 +207,33 @@ struct Args {
     /// turn on the injectable network using a UDP socket.
     #[arg(long)]
     deterministic_loss: Option<u8>,
+
+    #[arg(short = 'g', long)]
+    is_group_call: bool,
+
+    /// Our UUID we use to identify our selves to the SFU. Should be a UUID.
+    #[arg(long, value_parser = parse_uuid)]
+    user_id: Option<UserId>,
+
+    #[arg(long, default_value = "1")]
+    device_id: DeviceId,
+
+    /// URL that exposes both the HTTP API and UDP media ports
+    #[arg(long)]
+    sfu_url: Option<String>,
+
+    /// Base64 encoded ID of the GroupV2
+    #[arg(long, value_parser = parse_base64)]
+    group_id: Option<GroupId>,
+
+    /// Base64 encoded Membership Proof
+    #[arg(long, value_parser = parse_base64)]
+    membership_proof: Option<MembershipProof>,
+
+    /// List of GroupMember info. Includes both the userId:memberId in base64 encoding.
+    /// Formatted as `{userId}:{memberId}`.
+    #[arg(short = 'm', long, value_delimiter = ',', value_parser = parse_group_member_info)]
+    pub group_member_info: Option<Vec<GroupMember>>,
 }
 
 fn main() -> Result<()> {
@@ -299,10 +330,29 @@ fn main() -> Result<()> {
         enable_vp9: args.vp9,
     };
 
-    let mut scenario = ManagedScenario::new()?;
+    let mut scenario = ScenarioManager::new()?;
+    let call_type_config = if args.is_group_call {
+        ScenarioCallTypeConfig::GroupCallConfig {
+            sfu_url: args.sfu_url.expect("sfu url should be provided"),
+            group_id: args.group_id.expect("group_id should be provided"),
+            membership_proof: args
+                .membership_proof
+                .expect("membership proof should be provided"),
+            group_member_info: args
+                .group_member_info
+                .expect("group_member_info should be provided"),
+        }
+    } else {
+        ScenarioCallTypeConfig::DirectCallConfig {
+            ice_server,
+            force_relay: args.force_relay,
+        }
+    };
     scenario.run(
         &args.name,
         &args.ip,
+        args.user_id,
+        args.device_id,
         call_config,
         scenario::ScenarioConfig {
             video_width: args.input_video_width,
@@ -311,11 +361,32 @@ fn main() -> Result<()> {
             output_video_width: args.output_video_width,
             output_video_height: args.output_video_height,
             video_output: args.output_video_file.map(Into::into),
-            ice_server,
-            force_relay: args.force_relay,
+            deterministic_loss: args.deterministic_loss,
+            call_type_config,
         },
-        args.deterministic_loss,
     );
 
     Ok(())
+}
+
+fn parse_base64(s: &str) -> Result<GroupId, String> {
+    BASE64_STANDARD.decode(s).map_err(|e| e.to_string())
+}
+
+// parses output of ringrtc::core::util::uuid_to_string
+fn parse_uuid(id: &str) -> Result<UserId, String> {
+    util::string_to_uuid(id).map_err(|e| e.to_string())
+}
+
+/// parses base64 encoded, then formatted as `{base 64 userId}:{base64 memberId}`
+fn parse_group_member_info(s: &str) -> Result<GroupMember, String> {
+    let splits = s.split(':').collect::<Vec<_>>();
+    assert_eq!(splits.len(), 2);
+    let user_id = BASE64_STANDARD
+        .decode(splits[0])
+        .expect("could not base64 decode user_id");
+    let member_id = BASE64_STANDARD
+        .decode(splits[1])
+        .expect("could not base64 decode user_id");
+    Ok(GroupMember { user_id, member_id })
 }

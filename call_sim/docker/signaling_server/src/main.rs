@@ -35,9 +35,10 @@ impl CallingServiceState {
     }
 
     async fn broadcast(&self, message: RelayMessage) {
+        let sender_id = format!("{}:{}", message.client, message.device_id);
         for (client, tx) in &self.clients {
             // Send only to other clients, not back to the sender...
-            if !client.eq(&message.client) {
+            if !client.eq(&sender_id) {
                 match tx.send(message.clone()).await {
                     Ok(_) => {
                         info!("[broadcast] to {}", client)

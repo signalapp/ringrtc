@@ -10,14 +10,18 @@ use bollard::{
 };
 use chrono::DateTime;
 use futures_util::stream::TryStreamExt;
+use itertools::Itertools;
 use std::process::Stdio;
 use tokio::fs::OpenOptions;
 use tokio::io::{stdout, AsyncWriteExt};
 use tokio::process::Command;
 
-use crate::common::{
-    CallConfig, CallProfile, DelayVariationStrategy, GeLossModel, Loss, MarkovLossModel,
-    NetworkConfig,
+use crate::{
+    common::{
+        CallConfig, CallProfile, ClientProfile, DelayVariationStrategy, GeLossModel, Loss,
+        MarkovLossModel, NetworkConfig,
+    },
+    test::{CallTypeConfig, MediaFileIo},
 };
 
 /// This function builds all docker images that we need.
@@ -669,18 +673,16 @@ pub async fn emulate_network_clear(name: &str) -> Result<()> {
 
 pub async fn start_cli(
     name: &str,
-    input_file: &str,
-    output_file: &str,
-    input_video_file: Option<&str>,
-    output_video_file: Option<&str>,
+    media_io: MediaFileIo,
     call_config: &CallConfig,
     remote_call_config: &CallConfig,
+    client_profile: &ClientProfile,
+    call_type: &CallTypeConfig,
 ) -> Result<()> {
     println!("Starting cli for `{}`", name);
-
     let log_file_arg = format!("/report/{}.log", name);
-    let input_file_arg = format!("/media/{}", input_file);
-    let output_file_arg = format!("/report/{}", output_file);
+    let input_file_arg = format!("/media/{}", media_io.audio_input_file);
+    let output_file_arg = format!("/report/{}", media_io.audio_output_file);
 
     let mut args = [
         "exec",
@@ -795,10 +797,10 @@ pub async fn start_cli(
         call_config.audio.rtcp_report_interval_ms
     ));
 
-    if let Some(input_video_file) = input_video_file {
+    if let Some(input_video_file) = media_io.video_input_file {
         args.push(format!("--input-video-file=/media/{}", input_video_file));
     }
-    if let Some(output_video_file) = output_video_file {
+    if let Some(output_video_file) = media_io.video_output_file {
         args.push(format!("--output-video-file=/report/{}", output_video_file));
     }
 
@@ -819,6 +821,43 @@ pub async fn start_cli(
 
     args.extend(call_config.extra_cli_args.iter().cloned());
 
+    args.push(format!("--user-id={}", client_profile.user_id));
+    args.push(format!("--device-id={}", client_profile.device_id));
+    if let CallTypeConfig::Group {
+        sfu_url,
+        group_name,
+    } = call_type
+    {
+        args.push(format!("--sfu-url={}", sfu_url));
+        args.push("--is-group-call".to_string());
+
+        let group = if let Some(group_name) = group_name {
+            client_profile
+                .groups
+                .iter()
+                .filter(|&g| group_name == &g.name)
+                .exactly_one()
+                .map_err(|_| {
+                    anyhow::anyhow!("Did't find exactly one group named: {:?}", group_name)
+                })?
+        } else {
+            client_profile
+                .groups
+                .first()
+                .expect("at least one group info detailed")
+        };
+        args.push(format!("--group-id={}", group.id));
+        args.push(format!("--membership-proof={}", group.membership_proof));
+
+        let member_info = group
+            .members
+            .iter()
+            .map(|member| format!("{}:{}", member.user_id, member.member_id))
+            .join(",");
+        args.push(format!("--group-member-info={}", member_info));
+    }
+
+    println!("Final Client args: {}", args.join(" "));
     let _ = Command::new("docker").args(&args).spawn()?.wait().await?;
 
     Ok(())

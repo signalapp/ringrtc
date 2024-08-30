@@ -12,7 +12,10 @@ use ringrtc::{
     core::signaling::{self, HangupType, Ice, IceCandidate, Message},
     native::PeerId,
 };
-use std::{sync::mpsc::Sender, time::Duration};
+use std::{
+    sync::mpsc::Sender,
+    time::{Duration, Instant},
+};
 use tokio::runtime::{Builder, Runtime};
 use tonic::transport::Channel;
 use tower::timeout::Timeout;
@@ -28,11 +31,11 @@ use calling::signaling_relay_client::SignalingRelayClient;
 use calling::{call_message, CallMessage, Registration, RelayMessage};
 
 /// A 'server' is any server that can relay signaling messages between clients.
-pub trait Server {
+pub trait SignalingRelay {
     /// Registers an endpoint with the server.
     fn register(&self, endpoint: &CallEndpoint);
-    /// Sends a message to another client.
-    fn send(
+    /// Sends a signaling message to another client. Used for 1:1 calls
+    fn send_signaling(
         &self,
         sender_id: &PeerId,
         sender_device_id: DeviceId,
@@ -40,21 +43,30 @@ pub trait Server {
         call_id: CallId,
         msg: Message,
     );
+
+    /// Sends a message to another client. Used for group calls
+    fn send_call_message(
+        &self,
+        sender_id: &PeerId,
+        sender_device_id: DeviceId,
+        recipient_id: Vec<u8>,
+        opaque_message: Vec<u8>,
+    );
 }
 
 #[derive(Clone)]
-pub struct RelayServer {
-    actor: Actor<RelayServerState>,
+pub struct CallSimSignalingRelayClient {
+    actor: Actor<SignalingRelayClientState>,
 }
 
-struct RelayServerState {
+struct SignalingRelayClientState {
     client: SignalingRelayClient<Timeout<Channel>>,
     rt: Runtime,
     /// Sends signal when the client has been registered.
     pub registered: Option<Sender<i32>>,
 }
 
-impl RelayServer {
+impl CallSimSignalingRelayClient {
     pub fn new(stopper: &Stopper, registered: Option<Sender<i32>>) -> Result<Self> {
         let rt = Builder::new_multi_thread().enable_all().build()?;
 
@@ -78,7 +90,7 @@ impl RelayServer {
 
         Ok(Self {
             actor: Actor::start("RelayServer", stopper.clone(), move |_actor| {
-                Ok(RelayServerState {
+                Ok(SignalingRelayClientState {
                     client,
                     rt,
                     registered,
@@ -86,17 +98,47 @@ impl RelayServer {
             })?,
         })
     }
+
+    // Retry the request up to 2 times.
+    fn send_relay_message(&self, request: RelayMessage) {
+        self.actor.send(move |state| {
+            for attempt in 1..=3 {
+                info!(
+                    "Attempting to send relay message attempt {} of 3: {:?}",
+                    attempt, request
+                );
+                let request = tonic::Request::new(request.clone());
+                let response = state.rt.block_on(state.client.send(request));
+                if response.is_err() {
+                    if attempt == 3 {
+                        error!(
+                            "RelayServer: Could not send send_relay_message() message: {:?}",
+                            response
+                        );
+                    } else {
+                        warn!(
+                            "RelayServer: Problem sending send_relay_message() message: {:?}",
+                            response
+                        );
+                    }
+                } else {
+                    info!("Sucessfully sent relay message");
+                    return;
+                }
+            }
+        });
+    }
 }
 
-impl Server for RelayServer {
+impl SignalingRelay for CallSimSignalingRelayClient {
     fn register(&self, endpoint: &CallEndpoint) {
         // To send across threads
-        let peer_id = endpoint.peer_id.clone();
+        let relay_id = endpoint.relay_id();
         let endpoint = endpoint.clone();
 
         self.actor.send(move |state| {
             let request = tonic::Request::new(Registration {
-                client: peer_id.clone(),
+                client: relay_id.clone(),
             });
             let mut response = state.rt.block_on(state.client.register(request));
 
@@ -111,11 +153,11 @@ impl Server for RelayServer {
                     // TODO: Can't clone tonic::Request?
                     // See https://github.com/hyperium/tonic/issues/694#issuecomment-1148598782
                     let request = tonic::Request::new(Registration {
-                        client: peer_id.clone(),
+                        client: relay_id.clone(),
                     });
                     response = state.rt.block_on(state.client.register(request));
                 } else {
-                    info!("RelayServer: Registered successfully!");
+                    info!("RelayServer: Registered successfully as {}!", relay_id);
                     if let Some(registered_sender) = &state.registered {
                         let _ = registered_sender.send(0);
                     }
@@ -138,6 +180,9 @@ impl Server for RelayServer {
 
                                 if let Some(call_message) = relay_message.call_message {
                                     info!("register(): {:?}", call_message);
+                                    if relay_message.opaque_message.is_some() {
+                                        warn!("Received both a call message and signaling message");
+                                    }
 
                                     // Even though the payload can have more, we'll always just
                                     // have one message type at a time in the payload.
@@ -223,6 +268,14 @@ impl Server for RelayServer {
                                             msg,
                                         );
                                     }
+                                } else if let Some(opaque_message) = relay_message.opaque_message {
+                                    info!("register(): received opaque message");
+                                    endpoint.receive_call_message(
+                                        &relay_message.client,
+                                        relay_message.device_id,
+                                        Instant::now(),
+                                        opaque_message.clone(),
+                                    );
                                 }
                             }
                             Ok(None) => {
@@ -246,7 +299,7 @@ impl Server for RelayServer {
         });
     }
 
-    fn send(
+    fn send_signaling(
         &self,
         sender_id: &PeerId,
         sender_device_id: DeviceId,
@@ -309,37 +362,28 @@ impl Server for RelayServer {
             },
         };
 
-        self.actor.send(move |state| {
-            let request = tonic::Request::new(RelayMessage {
-                client: sender_id.clone(),
-                device_id: sender_device_id,
-                call_message: call_message.clone().into(),
-            });
-            let mut response = state.rt.block_on(state.client.send(request));
+        self.send_relay_message(RelayMessage {
+            client: sender_id.clone(),
+            device_id: sender_device_id,
+            call_message: call_message.clone().into(),
+            opaque_message: None,
+        });
+    }
 
-            // Retry the request up to 2 times.
-            for _ in 1..=2 {
-                if response.is_err() {
-                    warn!(
-                        "RelayServer: Problem sending send() message: {:?}",
-                        response
-                    );
+    fn send_call_message(
+        &self,
+        sender_id: &PeerId,
+        sender_device_id: DeviceId,
+        recipient_id: Vec<u8>,
+        opaque_message: Vec<u8>,
+    ) {
+        info!("send_opaque_message(): Message to {:?}", recipient_id);
 
-                    // TODO: Can't clone tonic::Request?
-                    let request = tonic::Request::new(RelayMessage {
-                        client: sender_id.clone(),
-                        device_id: sender_device_id,
-                        call_message: call_message.clone().into(),
-                    });
-                    response = state.rt.block_on(state.client.send(request));
-                } else {
-                    break;
-                }
-            }
-
-            if response.is_err() {
-                error!("RelayServer: Could not send send() message: {:?}", response);
-            }
+        self.send_relay_message(RelayMessage {
+            client: sender_id.clone(),
+            device_id: sender_device_id,
+            call_message: None,
+            opaque_message: Some(opaque_message.clone()),
         });
     }
 }

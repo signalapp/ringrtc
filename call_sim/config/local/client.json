@@ -1,0 +1,19 @@
+{
+    "name": "group_sim_client",
+    "userId": "<ACI>",
+    "deviceId": "1",
+    "sfuUrl": "https://<sfu-url>",
+    "groups": [
+        {
+            "name": "<group-name>",
+            "id": "<base64-group-id",
+            "membershipProof": "<base64-membershipProof-token>",
+            "members": [
+                {
+                    "userId": "<base64-aci>",
+                    "memberId": "<base64-member-id-sha256-ciphertext>"
+                }
+            ]
+        }
+    ]
+}

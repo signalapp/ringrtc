@@ -411,6 +411,9 @@ pub mod sim {
 
     impl HttpClient {
         pub fn start() -> Self {
+            rustls::crypto::ring::default_provider()
+                .install_default()
+                .expect("Failed to install rustls crypto provider");
             Self {
                 actor: Actor::start("HttpClient", Stopper::new(), |_| Ok(())).unwrap(),
             }

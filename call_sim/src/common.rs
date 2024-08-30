@@ -828,3 +828,29 @@ impl NetworkProfile {
         }
     }
 }
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientProfile {
+    pub user_id: String,
+    pub device_id: String,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Group {
+    // friendly name for group, expected to be unique in config file
+    pub name: String,
+    // Base64 encoded
+    pub id: String,
+    pub membership_proof: String,
+    pub members: Vec<GroupMember>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupMember {
+    pub user_id: String,
+    pub member_id: String,
+}

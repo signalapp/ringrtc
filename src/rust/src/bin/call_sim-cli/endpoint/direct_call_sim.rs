@@ -37,7 +37,10 @@ impl CallStateHandler for CallEndpoint {
     ) -> Result<()> {
         info!(
             "State change in call from {}.{} to {}: now {:?}",
-            self.peer_id, self.device_id, remote_peer_id, call_state
+            self.peer_id(),
+            self.device_id,
+            remote_peer_id,
+            call_state
         );
 
         self.actor.send(move |state| {
@@ -73,7 +76,9 @@ impl CallStateHandler for CallEndpoint {
     ) -> Result<()> {
         info!(
             "Network route changed for {} => {}: {:?}",
-            self.peer_id, remote_peer_id, network_route
+            self.peer_id(),
+            remote_peer_id,
+            network_route
         );
         Ok(())
     }
@@ -86,7 +91,10 @@ impl CallStateHandler for CallEndpoint {
     ) -> Result<()> {
         debug!(
             "Audio Levels captured for {} => {}: captured: {}; received: {}",
-            self.peer_id, remote_peer_id, captured_level, received_level
+            self.peer_id(),
+            remote_peer_id,
+            captured_level,
+            received_level
         );
         Ok(())
     }
@@ -94,7 +102,9 @@ impl CallStateHandler for CallEndpoint {
     fn handle_low_bandwidth_for_video(&self, remote_peer_id: &str, recovered: bool) -> Result<()> {
         info!(
             "Not enough bandwidth to send video reliably {} => {}: recovered: {}",
-            self.peer_id, remote_peer_id, recovered
+            self.peer_id(),
+            remote_peer_id,
+            recovered
         );
         Ok(())
     }
@@ -102,7 +112,9 @@ impl CallStateHandler for CallEndpoint {
     fn handle_remote_audio_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         info!(
             "Audio State for {} => {}: {}",
-            self.peer_id, remote_peer_id, enabled
+            self.peer_id(),
+            remote_peer_id,
+            enabled
         );
         Ok(())
     }
@@ -110,7 +122,9 @@ impl CallStateHandler for CallEndpoint {
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         info!(
             "Video State for {} => {}: {}",
-            self.peer_id, remote_peer_id, enabled
+            self.peer_id(),
+            remote_peer_id,
+            enabled
         );
         Ok(())
     }
@@ -118,7 +132,9 @@ impl CallStateHandler for CallEndpoint {
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()> {
         info!(
             "Sharing Screen for {} => {}: {}",
-            self.peer_id, remote_peer_id, enabled
+            self.peer_id(),
+            remote_peer_id,
+            enabled
         );
         Ok(())
     }

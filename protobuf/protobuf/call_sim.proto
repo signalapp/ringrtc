@@ -70,6 +70,8 @@ message RelayMessage {
   uint32 deviceId         = 2;
   // The actual message we are passing through.
   CallMessage callMessage = 3;
+  // Intended for Group CallMessage, which uses the Opaque field in the Signal Protocol
+  optional bytes opaqueMessage = 4;
 }
 
 service SignalingRelay {

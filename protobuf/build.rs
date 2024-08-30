@@ -26,6 +26,7 @@ fn main() {
             .build_client(true)
             .build_server(true)
             .build_transport(true)
+            .protoc_arg("--experimental_allow_proto3_optional")
             .compile(&["protobuf/call_sim.proto"], &["protobuf"])
             .expect("call_sim service protobufs are valid")
     }

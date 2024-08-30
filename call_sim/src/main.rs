@@ -5,14 +5,20 @@
 
 mod audio;
 mod common;
+mod config;
 mod docker;
 mod report;
 mod test;
 
 use anyhow::Result;
 use clap::Parser;
+use common::ClientProfile;
+use hex::FromHex;
+use itertools::Itertools;
 use std::env;
-use std::time::Duration;
+use std::fs::File;
+use std::path::Path;
+use std::time::{Duration, SystemTime};
 
 use crate::common::{
     AudioAnalysisMode, AudioConfig, CallConfig, CallProfile::DeterministicLoss, ChartDimension,
@@ -20,7 +26,7 @@ use crate::common::{
     TestCaseConfig, VideoConfig,
 };
 use crate::docker::{build_images, clean_network, clean_up};
-use crate::test::Test;
+use crate::test::{CallTypeConfig, Test};
 
 fn compile_time_root_directory() -> &'static std::ffi::OsStr {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -56,6 +62,22 @@ struct Args {
     /// Cleans up containers and networks before running (in case prior runs failed to do so).
     #[arg(short, long)]
     clean: bool,
+
+    #[arg(long)]
+    client_profile_dir: Option<String>,
+
+    /// Specify a group from the group list in the client_profile file
+    /// If None, then uses the first group in the list
+    #[arg(long)]
+    group_name: Option<String>,
+}
+
+// Set these two values when running call sim group calls. The Auth Key is used to generate profiles
+// and the SFU url points to the SFU connect to
+const SFU_URL: &str = "https://sfu.test.voip.signal.org";
+fn group_auth_key_gen() -> [u8; 32] {
+    <[u8; 32]>::from_hex("deaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddead")
+        .unwrap()
 }
 
 // This is an example test set. It is both a useful reference and a standard set of
@@ -778,18 +800,42 @@ async fn main() -> Result<()> {
         clean_network().await?;
     }
 
+    let client_profiles = args
+        .client_profile_dir
+        .map_or_else(generate_client_profiles, |client_profile_dir| {
+            get_client_profiles(&client_profile_dir)
+        });
+
     let mut test_sets = args.test_sets;
     if test_sets.is_empty() {
         // For quick testing, change this to the name of your test case.
         test_sets.push("minimal_example".to_string());
     }
 
+    let direct_call_config = CallTypeConfig::Direct;
+    let group_call_config = CallTypeConfig::Group {
+        sfu_url: SFU_URL.to_owned(),
+        group_name: args.group_name,
+    };
+
     for test_set_name in test_sets {
+        let (call_type_config, test_set_name) =
+            if let Some(name) = test_set_name.strip_prefix("group_") {
+                (group_call_config.clone(), name.to_owned())
+            } else {
+                (direct_call_config.clone(), test_set_name)
+            };
+        println!(
+            "Running test set {} as call type {:?}",
+            test_set_name, call_type_config,
+        );
         let test = &mut Test::new(
             &root_path,
             &args.output_dir,
             &args.media_dir,
             &test_set_name,
+            client_profiles.clone(),
+            call_type_config,
         )?;
         match test_set_name.as_str() {
             "minimal_example" => run_minimal_example(test).await?,
@@ -808,4 +854,28 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn generate_client_profiles() -> Vec<ClientProfile> {
+    let now = SystemTime::now();
+    config::generate_client_profiles(2, &group_auth_key_gen(), now)
+}
+
+fn get_client_profiles(dir_path: &str) -> Vec<ClientProfile> {
+    println!("Looking for client profiles in `{}`", dir_path);
+    let files = std::fs::read_dir(dir_path)
+        .expect("Failed to list client profile directory")
+        .map(|entry| entry.unwrap().path())
+        .filter(|p| p.extension().map_or(false, |ext| ext == "json"))
+        .sorted();
+    println!("Found {} client profiles config files", files.len());
+    files.map(|path| get_client_profile(&path)).collect()
+}
+
+fn get_client_profile(path: &Path) -> ClientProfile {
+    if let Ok(file) = File::open(path) {
+        serde_json::from_reader(file).expect("client config file to be in JSON format")
+    } else {
+        panic!("Failed to find client config file `{}`", path.display());
+    }
 }

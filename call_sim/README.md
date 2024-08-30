@@ -63,6 +63,16 @@ Run the simulator with the `--help` option to see more details about the availab
 - The `test_results` directory can get quite large if you run lots of tests, especially with video, 
 it is a good idea to clean it up occasionally
 
+### Running a Group Call
+By default, the call sim will run Direct (1 to 1) calls, potentially starting Turn server containers if enabled. If you
+want to run a test as a group call, prefix "group_" to the test name. For example:
+
+    cargo run --release -- -b -c -- group_minimal_example
+
+This will run the test in 2 person group call. Note that the call sim does not start an SFU. Instead, you have to
+configure the call sim with an SFU URL and either provide client profile config files (see <repo-root>/config/local for
+a template file) or configure an auth key in src/main.rs
+
 ## How Does It Work?
 The Call Simulator coordinates the tests, it is the _Test Manager_. When run, it executes the tests configured in the
 `main.rs` file. The simulator acts as a pseudo-"Docker Compose", running various Docker containers. The first is the
