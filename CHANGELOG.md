@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.47.0
+
+- Update to webrtc 6613a
+
+- Update PeekInfo::unique_pending_users to maintain order from SFU
+
+- Desktop: Add function to get CallID from EraID on GroupCall object
+
+- Retain old ratchet secrets to allow for out-of-order decryption
+
+- Call Sim: Add group calling support
+
+- logs-notebook: Parse system stats
+
+- Simplify running WebRTC tests
+
 ## v2.46.2
 
 - Update to webrtc 6478k
