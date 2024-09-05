@@ -36,8 +36,8 @@ JAR_FILES = [
 ]
 WEBRTC_SO_LIBS = ['libringrtc_rffi.so']
 SO_LIBS = WEBRTC_SO_LIBS + ['libringrtc.so']
-# Android NDK used in webrtc/src/third_party/android_toolchain/.../ndk-version.h
-NDK_REVISION = '25.2.9519653'
+# Android NDK used in webrtc/src/third_party/android_toolchain/README.chromium
+NDK_REVISION = '26.1.10909125'
 
 
 class Project(enum.Flag):
