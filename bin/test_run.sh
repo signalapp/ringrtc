@@ -61,13 +61,13 @@ function run_test() {
   set -o pipefail
   # This line's a bit complex, so it's worth digging into.
   # First, we run the command, redirecting *its* stderr to stdout, so we can
-  # filter on it and directly output it to the specified file.
+  # output it to the specified file.
   # Then, we need to capture the output of `time`, which is a bash builtin and
   # doesn't directly write to stdout or stderr. So, we run the `time` in a
   # subshell and redirect that *subshell's* output. Finally, we use `tee` to
   # echo the output of time to both stdout *AND* the output file, so that the
   # person running the script, if any, can get updates on progress.
-  ( time $1 2>&1 | grep -v "thread.cc.*will stop processing" >> "$2"; exit "${PIPESTATUS[0]}" ) 2>&1 | tee -a "$2"
+  ( time $1 >> "$2" 2>&1 ) 2>&1 | tee -a "$2"
   echo " =========== $1 exit status $? ======= " | tee -a "$2"
 }
 
