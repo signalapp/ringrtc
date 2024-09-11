@@ -87,6 +87,7 @@ extern "C" {
         ip: RffiIp,
         port: u16,
         tcp: bool,
+        hostname: webrtc::ptr::Borrowed<c_char>,
     ) -> bool;
 
     pub fn Rust_removeIceCandidates(

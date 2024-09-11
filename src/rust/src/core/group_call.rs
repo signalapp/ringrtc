@@ -49,7 +49,7 @@ use crate::{
         media::{
             AudioEncoderConfig, AudioTrack, VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack,
         },
-        peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, SendRates},
+        peer_connection::{AudioLevel, PeerConnection, Protocol, ReceivedAudioLevel, SendRates},
         peer_connection_factory::{self as pcf, AudioJitterBufferConfig, PeerConnectionFactory},
         peer_connection_observer::{
             IceConnectionState, NetworkRoute, PeerConnectionObserver, PeerConnectionObserverTrait,
@@ -451,6 +451,8 @@ impl DheState {
 pub struct SfuInfo {
     pub udp_addresses: Vec<SocketAddr>,
     pub tcp_addresses: Vec<SocketAddr>,
+    pub tls_addresses: Vec<SocketAddr>,
+    pub hostname: Option<String>,
     pub ice_ufrag: String,
     pub ice_pwd: String,
 }
@@ -575,6 +577,8 @@ impl HttpSfuClient {
                         sfu_info: SfuInfo {
                             udp_addresses: join_response.server_udp_addresses,
                             tcp_addresses: join_response.server_tcp_addresses,
+                            tls_addresses: join_response.server_tls_addresses,
+                            hostname: join_response.server_hostname,
                             ice_ufrag: join_response.server_ice_ufrag,
                             ice_pwd: join_response.server_ice_pwd,
                         },
@@ -2647,7 +2651,7 @@ impl Client {
             state.peer_connection.add_ice_candidate_from_server(
                 addr.ip(),
                 addr.port(),
-                false, /* tcp */
+                Protocol::Udp,
             )?;
         }
 
@@ -2664,8 +2668,28 @@ impl Client {
             state.peer_connection.add_ice_candidate_from_server(
                 addr.ip(),
                 addr.port(),
-                true, /* tcp */
+                Protocol::Tcp,
             )?;
+        }
+
+        for addr in &sfu_info.tls_addresses {
+            if let Some(hostname) = &sfu_info.hostname {
+                // We use the octets instead of to_string() to bypass the IP address logging filter.
+                info!(
+                    "Connecting to group call SFU via TLS with ip={:?} port={} hostname={}",
+                    match addr.ip() {
+                        std::net::IpAddr::V4(v4) => v4.octets().to_vec(),
+                        std::net::IpAddr::V6(v6) => v6.octets().to_vec(),
+                    },
+                    addr.port(),
+                    &hostname
+                );
+                state.peer_connection.add_ice_candidate_from_server(
+                    addr.ip(),
+                    addr.port(),
+                    Protocol::Tls(hostname),
+                )?;
+            }
         }
 
         if state
@@ -4592,6 +4616,8 @@ mod tests {
                 sfu_info: SfuInfo {
                     udp_addresses: Vec::new(),
                     tcp_addresses: Vec::new(),
+                    tls_addresses: Vec::new(),
+                    hostname: None,
                     ice_ufrag: "fake ICE ufrag".to_string(),
                     ice_pwd: "fake ICE pwd".to_string(),
                 },

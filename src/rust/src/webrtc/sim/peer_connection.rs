@@ -236,6 +236,7 @@ pub unsafe fn Rust_addIceCandidateFromServer(
     _ip: RffiIp,
     _port: u16,
     _tcp: bool,
+    _hostname: webrtc::ptr::Borrowed<c_char>,
 ) -> bool {
     info!("Rust_addIceCandidateFromServer():");
     true

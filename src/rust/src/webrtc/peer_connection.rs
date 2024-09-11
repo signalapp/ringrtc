@@ -77,6 +77,12 @@ pub struct RffiReceivedAudioLevel {
 pub type AudioLevel = RffiAudioLevel;
 pub type ReceivedAudioLevel = RffiReceivedAudioLevel;
 
+pub enum Protocol<'a> {
+    Udp,
+    Tcp,
+    Tls(&'a str),
+}
+
 impl PeerConnection {
     pub fn new(
         rffi: webrtc::Arc<RffiPeerConnection>,
@@ -209,11 +215,30 @@ impl PeerConnection {
         &self,
         ip: std::net::IpAddr,
         port: u16,
-        tcp: bool,
+        protocol: Protocol,
     ) -> Result<()> {
-        let add_ok = unsafe {
-            pc::Rust_addIceCandidateFromServer(self.rffi.as_borrowed(), ip.into(), port, tcp)
+        let (tcp, hostname_c) = match protocol {
+            Protocol::Udp => (false, None),
+            Protocol::Tcp => (true, None),
+            Protocol::Tls(hostname) => (true, Some(CString::new(hostname)?)),
         };
+
+        let add_ok = unsafe {
+            let hostname_ptr = hostname_c
+                .as_ref()
+                .map_or(webrtc::ptr::Borrowed::null(), |h| {
+                    webrtc::ptr::Borrowed::from_ptr(h.as_ptr())
+                });
+
+            pc::Rust_addIceCandidateFromServer(
+                self.rffi.as_borrowed(),
+                ip.into(),
+                port,
+                tcp,
+                hostname_ptr,
+            )
+        };
+
         if add_ok {
             Ok(())
         } else {

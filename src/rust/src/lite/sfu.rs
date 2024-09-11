@@ -173,6 +173,10 @@ struct SerializedJoinResponse {
     server_port: u16,
     #[serde(rename = "portTcp")]
     server_port_tcp: u16,
+    #[serde(rename = "portTls", default)]
+    server_port_tls: Option<u16>,
+    #[serde(rename = "hostname", default)]
+    server_hostname: Option<String>,
     #[serde(rename = "iceUfrag")]
     server_ice_ufrag: String,
     #[serde(rename = "icePwd")]
@@ -184,7 +188,7 @@ struct SerializedJoinResponse {
     #[serde(rename = "conferenceId")]
     era_id: String,
     #[serde(rename = "clientStatus")]
-    client_status: Option<String>,
+    client_status: String,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -215,6 +219,8 @@ pub struct JoinResponse {
     pub client_demux_id: u32,
     pub server_udp_addresses: Vec<SocketAddr>,
     pub server_tcp_addresses: Vec<SocketAddr>,
+    pub server_tls_addresses: Vec<SocketAddr>,
+    pub server_hostname: Option<String>,
     pub server_ice_ufrag: String,
     pub server_ice_pwd: String,
     pub server_dhe_pub_key: [u8; 32],
@@ -236,19 +242,29 @@ impl JoinResponse {
             .iter()
             .map(|ip| SocketAddr::new(*ip, deserialized.server_port_tcp))
             .collect();
+        let server_tls_addresses = deserialized
+            .server_port_tls
+            .map_or(vec![], |server_port_tls| {
+                deserialized
+                    .server_ips
+                    .iter()
+                    .map(|ip| SocketAddr::new(*ip, server_port_tls))
+                    .collect()
+            });
 
         Self {
             client_demux_id: deserialized.client_demux_id,
             server_udp_addresses,
             server_tcp_addresses,
+            server_tls_addresses,
+            server_hostname: deserialized.server_hostname,
             server_ice_ufrag: deserialized.server_ice_ufrag,
             server_ice_pwd: deserialized.server_ice_pwd,
             server_dhe_pub_key: deserialized.server_dhe_pub_key,
             call_creator: member_resolver.resolve(&deserialized.call_creator),
             era_id: deserialized.era_id,
-            client_status: deserialized
-                .client_status
-                .and_then(|cs| ClientStatus::from_str(&cs).ok())
+            client_status: ClientStatus::from_str(&deserialized.client_status)
+                .ok()
                 .unwrap_or(ClientStatus::Pending),
         }
     }
