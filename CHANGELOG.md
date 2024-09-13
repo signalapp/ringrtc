@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.47.1
+
+- Group Calls: Allow connection to a TCP+TLS server candidate
+
+- Update dependencies
+
 ## v2.47.0
 
 - Update to webrtc 6613a
