@@ -85,6 +85,7 @@ export class GumVideoCaptureOptions {
   maxFramerate = 30;
   preferredDeviceId?: string;
   screenShareSourceId?: string;
+  mediaStream?: MediaStream;
 }
 
 interface GumConstraints extends MediaStreamConstraints {
@@ -192,7 +193,14 @@ export class GumVideoCapturer {
     return cameras;
   }
 
-  private getUserMedia(options: GumVideoCaptureOptions): Promise<MediaStream> {
+  private async getUserMedia(
+    options: GumVideoCaptureOptions
+  ): Promise<MediaStream> {
+    // Return provided media stream
+    if (options.mediaStream) {
+      return options.mediaStream;
+    }
+
     const constraints: GumConstraints = {
       audio: false,
       video: {
