@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.48.0
+
+- Desktop: Allow VideoSupport to accept a MediaStream
+
+- Group Calls: Avoid creating a client if one already exists
+
+- Update to webrtc 6613c
+  - Desktop/Mac: check for a channel change for input only
+
+- Update node and ios dependencies
+
 ## v2.47.1
 
 - Group Calls: Allow connection to a TCP+TLS server candidate
