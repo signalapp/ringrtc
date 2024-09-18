@@ -238,6 +238,8 @@ public protocol GroupCallDelegate: AnyObject {
 
 @available(iOSApplicationExtension, unavailable)
 public class GroupCall {
+    public static let invalidClientId: Int = 0
+
     public enum Kind {
         case signalGroup
         case callLink
@@ -393,7 +395,7 @@ public class GroupCall {
                 // TODO: Consider renaming getOwnedNativeX to takeNative.
                 clientId = ringrtcCreateCallLinkCallClient(self.ringRtcCallManager, sfuUrlSlice, authCredentialPresentationSlice, rootKeySlice, adminPasskeySlice, hkdfExtraInfoSlice, audioLevelsIntervalMillis, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
             }
-            if clientId != 0 {
+            if clientId != GroupCall.invalidClientId {
                 // Add this instance to the shared dictionary.
                 self.groupCallByClientId[clientId] = self
                 self.clientId = clientId

@@ -1038,7 +1038,7 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
         },
     ) {
         Ok(client_id) => client_id,
-        Err(_e) => 0,
+        Err(_e) => group_call::INVALID_CLIENT_ID,
     }
 }
 

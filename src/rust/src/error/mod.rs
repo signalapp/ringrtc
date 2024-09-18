@@ -43,6 +43,8 @@ pub enum RingRtcError {
     AppConnectionAlreadySet(DeviceId),
     #[error("Application Call Context is already set, call_id: {0}")]
     AppCallContextAlreadySet(CallId),
+    #[error("Client already exists for call")]
+    ClientAlreadyExistsForCall,
 
     // WebRTC / C++ error codes
     #[error("Unable to create C++ PeerConnectionObserver")]

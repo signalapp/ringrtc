@@ -13,6 +13,8 @@ import {
 } from './CallLinks';
 import Native from './Native';
 
+const INVALID_CLIENT_ID = 0;
+
 export const callIdFromEra: (era: string) => CallId = Native.callIdFromEra;
 
 export function callIdFromRingId(ringId: bigint): CallId {
@@ -1146,6 +1148,11 @@ export class RingRTCType {
       hkdfExtraInfo,
       audioLevelsIntervalMillis || 0
     );
+    if (clientId === INVALID_CLIENT_ID) {
+      // Return undefined since the group call client creation failed.
+      return undefined;
+    }
+
     const groupCall = new GroupCall(
       GroupCallKind.SignalGroup,
       this.callManager,
@@ -1176,6 +1183,11 @@ export class RingRTCType {
       hkdfExtraInfo,
       audioLevelsIntervalMillis || 0
     );
+    if (clientId === INVALID_CLIENT_ID) {
+      // Return undefined since the call link client creation failed.
+      return undefined;
+    }
+
     const groupCall = new GroupCall(
       GroupCallKind.CallLink,
       this.callManager,
@@ -2640,9 +2652,9 @@ export class GroupCall {
 
   // Called by Rust via RingRTC object
   handleEnded(reason: GroupCallEndReason): void {
-    this._observer.onEnded(this, reason);
-
     this._callManager.deleteGroupCallClient(this._clientId);
+
+    this._observer.onEnded(this, reason);
   }
 
   // With this, a GroupCall is a VideoFrameSender

@@ -346,6 +346,17 @@ pub fn validate_call_message_as_opaque_ring(
     }
 }
 
+/// A wrapper for group call and call link clients.
+#[derive(Clone)]
+struct GroupCallClient {
+    /// The underlying group call or call link client.
+    client: group_call::Client,
+    /// Flag to indicate if the client is active or not. For a specific group, duplicate
+    /// clients can exist, but only one of those can be active at a time. A client is
+    /// considered `active` until the UI initiates a `disconnect`.
+    active: bool,
+}
+
 pub struct CallManager<T>
 where
     T: Platform,
@@ -361,7 +372,7 @@ where
     /// 1:1 call messages that arrived before the Offer for a particular call.
     pending_call_messages: Arc<CallMutex<PendingCallMessages>>,
     /// Map of all group calls.
-    group_call_by_client_id: Arc<CallMutex<HashMap<group_call::ClientId, group_call::Client>>>,
+    group_call_by_client_id: Arc<CallMutex<HashMap<group_call::ClientId, GroupCallClient>>>,
     /// Next value of the group call client id (sequential).
     next_group_call_client_id: Arc<CallMutex<u32>>,
     /// Recent outstanding group rings, keyed by group ID.
@@ -824,9 +835,9 @@ where
             }
 
             let mut group_calls = self.group_call_by_client_id.lock()?.clone();
-            for (client_id, call) in group_calls.iter_mut() {
+            for (client_id, group_call) in group_calls.iter_mut() {
                 info!("synchronize(): syncing group call: {}", client_id);
-                call.synchronize();
+                group_call.client.synchronize();
             }
 
             self.sync_worker_thread()?;
@@ -1721,11 +1732,13 @@ where
                         .group_call_by_client_id
                         .lock()
                         .expect("lock group_call_by_client_id");
-                    let group_call = group_calls.values().find(|c| &c.group_id == group_id);
+                    let group_call = group_calls
+                        .values()
+                        .find(|c| &c.client.group_id == group_id && c.active);
                     match group_call {
-                        Some(call) => {
-                            call.on_signaling_message_received(sender_uuid, group_call_message)
-                        }
+                        Some(group_call) => group_call
+                            .client
+                            .on_signaling_message_received(sender_uuid, group_call_message),
                         None => warn!("Received signaling message for unknown group ID"),
                     };
                 }
@@ -1763,8 +1776,10 @@ where
             if let Ok(mut group_calls) = self.group_call_by_client_id.lock() {
                 group_calls
                     .values_mut()
-                    .filter(|call| call.group_id == group_id)
-                    .for_each(|call| call.provide_ring_id_if_absent(ring_id))
+                    .filter(|group_call| {
+                        group_call.client.group_id == group_id && group_call.active
+                    })
+                    .for_each(|group_call| group_call.client.provide_ring_id_if_absent(ring_id))
             } else {
                 // Ignore the failure to lock; it's more important that we cancel the ring.
             }
@@ -2743,6 +2758,18 @@ where
             sfu_url
         );
 
+        let mut client_by_id = self.group_call_by_client_id.lock()?;
+        if let Some((client_id, _)) = client_by_id
+            .iter()
+            .find(|(_, c)| c.client.group_id == group_id && c.active)
+        {
+            error!(
+                "Group Client already exists for group_id with id: {}",
+                client_id
+            );
+            return Err(anyhow::anyhow!(RingRtcError::ClientAlreadyExistsForCall));
+        }
+
         let client_id = {
             let mut next_group_call_client_id = self.next_group_call_client_id.lock()?;
             if *next_group_call_client_id == group_call::INVALID_CLIENT_ID {
@@ -2785,8 +2812,13 @@ where
             audio_levels_interval,
         )?;
 
-        let mut client_by_id = self.group_call_by_client_id.lock()?;
-        client_by_id.insert(client_id, client);
+        client_by_id.insert(
+            client_id,
+            GroupCallClient {
+                client,
+                active: true,
+            },
+        );
 
         info!("Group Client created with id: {}", client_id);
 
@@ -2815,6 +2847,18 @@ where
             hex::encode(&room_id),
             sfu_url
         );
+
+        let mut client_by_id = self.group_call_by_client_id.lock()?;
+        if let Some((client_id, _)) = client_by_id
+            .iter()
+            .find(|(_, c)| c.client.group_id == room_id && c.active)
+        {
+            error!(
+                "Call Link Client already exists for room_id with id: {}",
+                client_id
+            );
+            return Err(anyhow::anyhow!(RingRtcError::ClientAlreadyExistsForCall));
+        }
 
         let client_id = {
             let mut next_group_call_client_id = self.next_group_call_client_id.lock()?;
@@ -2855,8 +2899,13 @@ where
             audio_levels_interval,
         )?;
 
-        let mut client_by_id = self.group_call_by_client_id.lock()?;
-        client_by_id.insert(client_id, client);
+        client_by_id.insert(
+            client_id,
+            GroupCallClient {
+                client,
+                active: true,
+            },
+        );
 
         info!("Call Link Client created with id: {}", client_id);
 
@@ -2923,7 +2972,7 @@ where
                 let group_call = group_call_map.get_mut(&client_id);
                 match group_call {
                     Some(group_call) => {
-                        use_group_call(group_call);
+                        use_group_call(&mut group_call.client);
                     }
                     None => {
                         warn!("Group Client not found for id: {}", client_id);
@@ -2941,7 +2990,6 @@ where
     forward_group_call_api!(leave());
     forward_group_call_api!(react(value: String));
     forward_group_call_api!(raise_hand(raise: bool));
-    forward_group_call_api!(disconnect());
     forward_group_call_api!(group_ring => ring(recipient: Option<UserId>));
     forward_group_call_api!(set_outgoing_audio_muted(muted: bool));
     forward_group_call_api!(set_outgoing_video_muted(muted: bool));
@@ -2960,6 +3008,32 @@ where
     forward_group_call_api!(set_group_members(members: Vec<GroupMember>));
     forward_group_call_api!(set_membership_proof(proof: Vec<u8>));
     forward_group_call_api!(set_rtc_stats_interval(interval: Duration));
+
+    pub fn disconnect(&mut self, client_id: group_call::ClientId) {
+        info!("disconnect(): id: {}", client_id);
+
+        let group_call_map = self.group_call_by_client_id.lock();
+        match group_call_map {
+            Ok(mut group_call_map) => {
+                let group_call = group_call_map.get_mut(&client_id);
+                match group_call {
+                    Some(group_call) => {
+                        // When the UI wants to disconnect(), we assume that the call is
+                        // not active on the UI anymore, so we will mark it as not active
+                        // (the group call client won't receive messages anymore).
+                        group_call.active = false;
+                        group_call.client.disconnect();
+                    }
+                    None => {
+                        warn!("Group Client not found for id: {}", client_id);
+                    }
+                }
+            }
+            Err(error) => {
+                error!("{}", error);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
