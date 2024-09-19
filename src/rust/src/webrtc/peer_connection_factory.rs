@@ -176,10 +176,7 @@ pub struct AudioConfig {
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
-            #[cfg(not(feature = "ringrtc_adm"))]
             audio_device_module_type: Default::default(),
-            #[cfg(feature = "ringrtc_adm")]
-            audio_device_module_type: RffiAudioDeviceModuleType::RingRtc,
             file_based_adm_config: None,
             high_pass_filter_enabled: true,
             aec_enabled: true,

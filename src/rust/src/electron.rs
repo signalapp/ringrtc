@@ -38,7 +38,7 @@ use crate::webrtc::media::{
 };
 use crate::webrtc::peer_connection::AudioLevel;
 use crate::webrtc::peer_connection_factory::{
-    self as pcf, AudioDevice, IceServer, PeerConnectionFactory,
+    self as pcf, AudioDevice, IceServer, PeerConnectionFactory, RffiAudioDeviceModuleType,
 };
 use crate::webrtc::peer_connection_observer::NetworkRoute;
 use neon::types::buffer::TypedArray;
@@ -364,11 +364,18 @@ pub struct CallEndpoint {
 }
 
 impl CallEndpoint {
-    fn new<'a>(cx: &mut impl Context<'a>, js_object: Handle<'a, JsObject>) -> Result<Self> {
+    fn new<'a>(
+        cx: &mut impl Context<'a>,
+        js_object: Handle<'a, JsObject>,
+        use_ringrtc_adm: bool,
+    ) -> Result<Self> {
         // Relevant for both group calls and 1:1 calls
         let (events_sender, events_receiver) = channel::<Event>();
-        let peer_connection_factory =
-            PeerConnectionFactory::new(&pcf::AudioConfig::default(), false)?;
+        let mut audio_config = pcf::AudioConfig::default();
+        if use_ringrtc_adm {
+            audio_config.audio_device_module_type = RffiAudioDeviceModuleType::RingRtc;
+        }
+        let peer_connection_factory = PeerConnectionFactory::new(&audio_config, false)?;
         let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
         outgoing_audio_track.set_enabled(false);
         let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;
@@ -669,6 +676,7 @@ impl Finalize for CallEndpoint {
 fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     let js_call_manager = cx.argument::<JsObject>(0)?;
     let field_trial_string = cx.argument::<JsString>(1)?.value(&mut cx);
+    let use_ringrtc_adm = cx.argument::<JsBoolean>(2)?.value(&mut cx);
 
     if ENABLE_LOGGING {
         let is_first_time_initializing_logger = log::set_logger(&LOG).is_ok();
@@ -693,7 +701,7 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     let _ = field_trial::init(&field_trial_string);
     info!("initialized field trials with {}", field_trial_string);
 
-    let endpoint = CallEndpoint::new(&mut cx, js_call_manager)
+    let endpoint = CallEndpoint::new(&mut cx, js_call_manager, use_ringrtc_adm)
         .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.boxed(RefCell::new(endpoint)).upcast())
 }

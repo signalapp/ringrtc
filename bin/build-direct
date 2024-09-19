@@ -110,7 +110,7 @@ export MACOSX_DEPLOYMENT_TARGET="10.15"
     # Build with debug line tables, but not full debug info.
     export CARGO_PROFILE_RELEASE_DEBUG=1
 
-    RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=direct${RINGRTC_ADM:+",ringrtc_adm"} ${INCLUDE_RELEASE_FLAG:+"--release"}
+    RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin direct --features=direct ${INCLUDE_RELEASE_FLAG:+"--release"}
 
     if [ "${BUILD_TYPE}" = "debug" ]
     then

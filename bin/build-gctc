@@ -100,10 +100,10 @@ export MACOSX_DEPLOYMENT_TARGET="10.15"
 (
     if [ "${BUILD_TYPE}" = "debug" ]
     then
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin group_call --features=native,sim_http${RINGRTC_ADM:+",ringrtc_adm"}
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin group_call --features=native,sim_http
         echo "Can run with target/debug/group_call"
     else
-        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin group_call --features=native,sim_http${RINGRTC_ADM:+",ringrtc_adm"} --release
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin group_call --features=native,sim_http --release
         echo "Can run with target/release/group_call"
     fi
 )

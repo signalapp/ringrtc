@@ -4,6 +4,7 @@
 //
 
 use chrono;
+use clap::Parser;
 use log::{debug, info};
 
 use ringrtc::{
@@ -31,7 +32,9 @@ use ringrtc::{
         media::{VideoFrame, VideoPixelFormat, VideoSink, VideoSource},
         network::NetworkInterfaceType,
         peer_connection::AudioLevel,
-        peer_connection_factory::{self as pcf, IceServer, PeerConnectionFactory},
+        peer_connection_factory::{
+            self as pcf, IceServer, PeerConnectionFactory, RffiAudioDeviceModuleType,
+        },
         peer_connection_observer::NetworkRoute,
     },
 };
@@ -41,7 +44,16 @@ use std::{
     time::Duration,
 };
 
+#[derive(Debug, Parser)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(long)]
+    use_ringrtc_adm: bool,
+}
+
 fn main() {
+    let args = Args::parse();
+
     log::set_logger(&LOG).expect("set logger");
     log::set_max_level(log::LevelFilter::Debug);
 
@@ -89,6 +101,7 @@ fn main() {
         &signaling_server,
         &router,
         &stopper,
+        args.use_ringrtc_adm,
     )
     .expect("Start caller");
     caller.add_network_interface(
@@ -117,6 +130,7 @@ fn main() {
         &signaling_server,
         &router,
         &stopper,
+        args.use_ringrtc_adm,
     )
     .expect("Start callee");
     callee.add_network_interface(
@@ -148,6 +162,7 @@ fn main() {
                 &signaling_server,
                 &router,
                 &stopper,
+                args.use_ringrtc_adm,
             )
             .expect("Start ignored callee");
             callee.add_network_interface(
@@ -241,6 +256,7 @@ impl CallEndpoint {
         signaling_server: &SignalingServer,
         router: &Router,
         stopper: &Stopper,
+        use_ringrtc_adm: bool,
     ) -> Result<Self> {
         let peer_id = PeerId::from(peer_id);
 
@@ -263,7 +279,11 @@ impl CallEndpoint {
                     // Option<CallManager> thing that we have to set later.
                     let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
-                    let mut pcf = PeerConnectionFactory::new(&pcf::AudioConfig::default(), true)?; // Set up packet flow
+                    let mut audio_config = pcf::AudioConfig::default();
+                    if use_ringrtc_adm {
+                        audio_config.audio_device_module_type = RffiAudioDeviceModuleType::RingRtc;
+                    }
+                    let mut pcf = PeerConnectionFactory::new(&audio_config, true)?; // Set up packet flow
                     info!(
                         "Audio playout devices: {:?}",
                         pcf.get_audio_playout_devices()

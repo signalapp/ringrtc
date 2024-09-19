@@ -27,6 +27,7 @@ export function callIdFromRingId(ringId: bigint): CallId {
 
 class Config {
   field_trials: Record<string, string> | undefined;
+  use_ringrtc_adm?: boolean;
 }
 
 class NativeCallManager {
@@ -62,7 +63,13 @@ class NativeCallManager {
     Object.defineProperty(this, Native.callEndpointPropertyKey, {
       configurable: true, // allows it to be changed
       get() {
-        const callEndpoint = Native.createCallEndpoint(this, fieldTrialsString);
+        const use_ringrtc_adm =
+          config.use_ringrtc_adm === undefined ? false : config.use_ringrtc_adm;
+        const callEndpoint = Native.createCallEndpoint(
+          this,
+          fieldTrialsString,
+          use_ringrtc_adm
+        );
 
         Object.defineProperty(this, Native.callEndpointPropertyKey, {
           configurable: true, // allows it to be changed

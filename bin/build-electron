@@ -221,7 +221,7 @@ then
             exit 1 # unreachable
         fi
 
-        RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --package ringrtc --target ${CARGO_TARGET} --features electron${RINGRTC_ADM:+",ringrtc_adm"} ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
+        RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --package ringrtc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
 
         mkdir -p src/node/build/${DEFAULT_PLATFORM}
         copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} src/node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
