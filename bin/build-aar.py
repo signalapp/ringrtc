@@ -140,7 +140,8 @@ def ParseArgs():
                         help='Dry Run: print what would happen, but do not actually do anything')
     parser.add_argument('-u', '--unstripped',
                         action='store_true',
-                        help='Store the unstripped libraries in the .aar. Default is false')
+                        default=True,
+                        help='Store the unstripped libraries in the .aar. Default is true')
     parser.add_argument('-c', '--compile-only', dest='disabled_projects',
                         action='append_const', const=Project.AAR,
                         help='Only compile the code, do not build the .aar. Default is false')
