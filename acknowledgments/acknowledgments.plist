@@ -1501,6 +1501,29 @@ THIS SOFTWARE.
 		</dict>
 		<dict>
 			<key>FooterText</key>
+			<string>Copyright © 2017 Mozilla Foundation
+
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+</string>
+			<key>License</key>
+			<string>ISC License</string>
+			<key>Title</key>
+			<string>cubeb-core 0.14.0, cubeb-sys 0.14.0, cubeb 0.14.0</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
 			<string>    MIT License
 
     Copyright (c) Microsoft Corporation.
@@ -1698,7 +1721,7 @@ DEALINGS IN THE SOFTWARE.
 			<key>License</key>
 			<string>MIT License</string>
 			<key>Title</key>
-			<string>cfg-if 1.0.0</string>
+			<string>cc 1.1.5, cfg-if 1.0.0, cmake 0.1.50, pkg-config 0.3.30</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>
@@ -1768,7 +1791,7 @@ DEALINGS IN THE SOFTWARE.
 			<key>License</key>
 			<string>MIT License</string>
 			<key>Title</key>
-			<string>bitflags 2.6.0, log 0.4.22, regex-automata 0.4.7, regex-syntax 0.8.4, regex 1.10.5</string>
+			<string>bitflags 1.3.2, bitflags 2.6.0, log 0.4.22, regex-automata 0.4.7, regex-syntax 0.8.4, regex 1.10.5</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>
@@ -3391,7 +3414,7 @@ THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRES
 			<key>License</key>
 			<string>MIT License</string>
 			<key>Title</key>
-			<string>cesu8 1.1.0, neon 1.0.0, windows-core 0.57.0, windows-implement 0.57.0, windows-interface 0.57.0, windows-result 0.1.2, windows 0.57.0</string>
+			<string>cesu8 1.1.0, neon 1.0.0, windows-core 0.57.0, windows-core 0.58.0, windows-implement 0.57.0, windows-implement 0.58.0, windows-interface 0.57.0, windows-interface 0.58.0, windows-result 0.1.2, windows-result 0.2.0, windows-strings 0.1.0, windows 0.57.0, windows 0.58.0</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>

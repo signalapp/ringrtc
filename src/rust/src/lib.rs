@@ -91,6 +91,8 @@ pub mod webrtc {
     pub use arc::Arc;
     #[cfg(all(not(feature = "sim"), feature = "native"))]
     pub mod audio_device_module;
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
+    pub mod audio_device_module_utils;
     pub mod field_trial;
     pub mod ice_gatherer;
     #[cfg(feature = "injectable_network")]

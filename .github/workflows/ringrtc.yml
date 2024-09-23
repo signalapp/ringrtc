@@ -26,6 +26,8 @@ jobs:
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    - name: Install cmake
+      run: sudo apt-get update && sudo apt-get install -y cmake
     - name: Install Python tools
       run: pip3 install flake8 mypy
     - uses: actions/checkout@v4
@@ -92,6 +94,8 @@ jobs:
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    - name: Install cmake
+      run: sudo apt-get update && sudo apt-get install -y cmake
     - uses: actions/checkout@v4
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - name: Run rust tests
@@ -105,12 +109,12 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-13]
         include:
         - os: ubuntu-latest
-          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
           test-runner: xvfb-run --auto-servernum
         - os: windows-latest
-          install-deps: choco install protoc
+          install-deps: choco install protoc cmake
         - os: macos-13
-          install-deps: brew install protobuf coreutils
+          install-deps: brew install protobuf coreutils cmake
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -140,9 +144,9 @@ jobs:
         os: [ubuntu-latest, macos-13]
         include:
         - os: ubuntu-latest
-          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
         - os: macos-13
-          install-deps: brew install protobuf coreutils
+          install-deps: brew install protobuf coreutils cmake
     runs-on: ${{ matrix.os }}
     defaults:
       run:

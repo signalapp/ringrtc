@@ -26,6 +26,17 @@ Install rustup, the Rust management system:
 
 We use a pinned nightly toolchain for official builds, specified by our [rust-toolchain file](https://github.com/signalapp/ringrtc/blob/master/rust-toolchain) ([more information](https://rust-lang.github.io/rustup/overrides.html)).
 
+
+### cmake
+
+For Desktop builds, one of ringrtc's dependencies relies on `cmake` being
+available. This can be installed via some package managers, such as:
+
+    brew install cmake  # MacOS dev machine
+
+If it is not available in your system's package manger, see
+https://cmake.org/download/.
+
 #### Android
 
 Install Rust target support for Android via `rustup`:

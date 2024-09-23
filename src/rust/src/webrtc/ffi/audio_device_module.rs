@@ -8,14 +8,16 @@
 use crate::webrtc;
 use crate::webrtc::audio_device_module::{AudioDeviceModule, AudioLayer, WindowsDeviceType};
 use libc::size_t;
-use std::ffi::c_void;
-use std::os::raw::c_char;
+use std::ffi::{c_uchar, c_void};
 
-/// Incomplete type for C++ AudioTransport.
-#[repr(C)]
+/// Wrapper type for C++ AudioTransport.
+#[derive(Copy, Clone)]
 pub struct RffiAudioTransport {
-    _private: [u8; 0],
+    pub callback: *const c_void,
 }
+
+// Safety: managed by not allowing changes to the transport while playout or recording are in progress.
+unsafe impl Send for RffiAudioTransport {}
 
 /// all_adm_functions is a higher-level macro that enables "tt muncher" macros
 /// The list of functions MUST be kept in sync with AudioDeviceCallbacks in webrtc C++, and
@@ -25,7 +27,7 @@ macro_rules! all_adm_functions {
         $macro!(
             active_audio_layer(audio_layer: webrtc::ptr::Borrowed<AudioLayer>) -> i32;
 
-            register_audio_callback(audio_callback: webrtc::ptr::Borrowed<RffiAudioTransport>) -> i32;
+            register_audio_callback(audio_callback: *const c_void) -> i32;
 
             // Main initialization and termination
             init() -> i32;
@@ -35,8 +37,8 @@ macro_rules! all_adm_functions {
             // Device enumeration
             playout_devices() -> i16;
             recording_devices() -> i16;
-            playout_device_name(index: u16, name: webrtc::ptr::Borrowed<c_char>, guid: webrtc::ptr::Borrowed<c_char>) -> i32;
-            recording_device_name(index: u16, name: webrtc::ptr::Borrowed<c_char>, guid: webrtc::ptr::Borrowed<c_char>) -> i32;
+            playout_device_name(index: u16, name: webrtc::ptr::Borrowed<c_uchar>, guid: webrtc::ptr::Borrowed<c_uchar>) -> i32;
+            recording_device_name(index: u16, name: webrtc::ptr::Borrowed<c_uchar>, guid: webrtc::ptr::Borrowed<c_uchar>) -> i32;
 
             // Device selection
             set_playout_device(index: u16) -> i32;
@@ -136,7 +138,16 @@ macro_rules! adm_wrapper {
     () => {};
     ($f:ident($($param:ident: $arg_ty:ty),*) -> $ret:ty ; $($t:tt)*) => {
         extern "C" fn $f(ptr: webrtc::ptr::Borrowed<AudioDeviceModule>, $($param: $arg_ty),*) -> $ret {
-            debug!("{} wrapper", stringify!($f));
+            // Safety: Safe as long as this function is only called from a single thread, which will
+            // be the case.
+            static mut LOG_COUNT: i32 = 0;
+            unsafe {
+                if LOG_COUNT % 100 == 0 {
+                    info!("{} wrapper", stringify!($f));
+                    LOG_COUNT = 0;
+                }
+                LOG_COUNT += 1;
+            }
             if let Some(adm) = unsafe { ptr.as_mut() } {
                 adm.$f($($param),*)
             } else {
@@ -208,7 +219,7 @@ pub const AUDIO_DEVICE_CBS_PTR: *const AudioDeviceCallbacks = &AUDIO_DEVICE_CBS;
 
 extern "C" {
     pub fn Rust_recordedDataIsAvailable(
-        audio_transport: webrtc::ptr::Borrowed<RffiAudioTransport>,
+        audio_transport: *const c_void,
         audio_samples: *const c_void,
         n_samples: size_t,
         n_bytes_per_sample: size_t,
@@ -223,7 +234,7 @@ extern "C" {
     ) -> i32;
 
     pub fn Rust_needMorePlayData(
-        audio_transport: webrtc::ptr::Borrowed<RffiAudioTransport>,
+        audio_transport: *const c_void,
         n_samples: size_t,
         n_bytes_per_sample: size_t,
         n_channels: size_t,
