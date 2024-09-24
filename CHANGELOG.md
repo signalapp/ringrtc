@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.48.1
+
+- Desktop: Add new Audio Device Module option
+  - Implement ADM using cubeb
+  - Update ADM switch to support a startup flag
+  - Use min_latency to limit latency requested
+  - Skip building ringrtc ADM on linux aarch64
+
+- Add CallLink AdminAction logs to improve debugging
+
+- Android: Package libraries unstripped by default
+
 ## v2.48.0
 
 - Desktop: Allow VideoSupport to accept a MediaStream
