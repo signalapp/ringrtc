@@ -114,7 +114,7 @@ jobs:
         - os: windows-latest
           install-deps: choco install protoc cmake
         - os: macos-13
-          install-deps: brew install protobuf coreutils cmake
+          install-deps: brew install protobuf coreutils
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -146,7 +146,7 @@ jobs:
         - os: ubuntu-latest
           install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
         - os: macos-13
-          install-deps: brew install protobuf coreutils cmake
+          install-deps: brew install protobuf coreutils
     runs-on: ${{ matrix.os }}
     defaults:
       run:
