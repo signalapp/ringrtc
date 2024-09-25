@@ -108,11 +108,8 @@ const ADM_MAX_GUID_SIZE: usize = 128;
 const ADM_CONTEXT: &str = "ringrtc";
 
 const SAMPLE_FREQUENCY: u32 = 48_000;
-
-// Windows hack: Need sample latency to be at most 22ms
-#[cfg(target_os = "windows")]
-const SAMPLE_LATENCY: u32 = SAMPLE_FREQUENCY / 10;
-#[cfg(not(target_os = "windows"))]
+// Target sample latency. The actual sample latency will
+// not always match this. (it's limited by cubeb's Context::min_latency)
 const SAMPLE_LATENCY: u32 = SAMPLE_FREQUENCY / 100;
 
 // WebRTC always expects to provide 10ms of samples at a time.
@@ -484,6 +481,14 @@ impl AudioDeviceModule {
             .take();
         let mut builder = cubeb::StreamBuilder::<Frame>::new();
         let transport = Arc::clone(&self.audio_transport);
+        let min_latency = ctx.min_latency(&params).unwrap_or_else(|e| {
+            error!(
+                "Could not get min latency for playout; using default: {:?}",
+                e
+            );
+            SAMPLE_LATENCY
+        });
+        info!("min playout latency: {}", min_latency);
         // WebRTC can only report data in WEBRTC_WINDOW-sized chunks.
         // This buffer tracks any extra data that would not fit in `output`,
         // if `output.len()` is not an exact multiple of WEBRTC_WINDOW.
@@ -492,8 +497,7 @@ impl AudioDeviceModule {
         builder
             .name("ringrtc output")
             .output(out_device, &params)
-            // TODO(mutexlox): Clamp this to latency_lo and latency_hi, if those are nonzero
-            .latency(SAMPLE_LATENCY)
+            .latency(std::cmp::max(SAMPLE_LATENCY, min_latency))
             .data_callback(move |_, output| {
                 if output.is_empty() {
                     return 0;
@@ -610,6 +614,14 @@ impl AudioDeviceModule {
             .take();
         let mut builder = cubeb::StreamBuilder::<Frame>::new();
         let transport = Arc::clone(&self.audio_transport);
+        let min_latency = ctx.min_latency(&params).unwrap_or_else(|e| {
+            error!(
+                "Could not get min latency for recording; using default: {:?}",
+                e
+            );
+            SAMPLE_LATENCY
+        });
+        info!("min recording latency: {}", min_latency);
         // WebRTC can only accept data in WEBRTC_WINDOW-sized chunks.
         // This buffer tracks any extra data that would not fit in a call to WebRTC,
         // if `input.len()` is not an exact multiple of WEBRTC_WINDOW.
@@ -618,8 +630,7 @@ impl AudioDeviceModule {
         builder
             .name("ringrtc input")
             .input(recording_device, &params)
-            // TODO(mutexlox): Clamp this to latency_lo and latency_hi, if those are nonzero
-            .latency(SAMPLE_LATENCY)
+            .latency(std::cmp::max(SAMPLE_LATENCY, min_latency))
             .data_callback(move |input, _| {
                 // First add data from prior call(s).
                 let data = buffer
