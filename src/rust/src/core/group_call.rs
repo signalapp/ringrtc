@@ -481,6 +481,8 @@ pub enum EndReason {
     HasMaxDevices,
 }
 
+const ADMIN_LOG_TAG: &str = "AdminAction";
+
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct Reaction {
@@ -2152,7 +2154,7 @@ impl Client {
         // Approval is implemented by demux ID (because we don't put user IDs in RTP messages).
         // So we have to find a corresponding demux ID in the pending users list.
         let Some(peek_info) = state.last_peek_info.as_ref() else {
-            error!("Cannot approve users without peek info");
+            error!("{ADMIN_LOG_TAG}: Cannot approve users without peek info");
             return;
         };
 
@@ -2177,7 +2179,11 @@ impl Client {
             };
 
             if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
-                warn!("Failed to send {}: {:?}", action_to_log, e);
+                warn!(
+                    "{ADMIN_LOG_TAG}: Failed to send {action_to_log} for demux {demux_id}: {e:?}"
+                );
+            } else {
+                info!("{ADMIN_LOG_TAG}: Sent {action_to_log} for {demux_id}");
             }
         } else if let Some(demux_id) = peek_info
             .devices
@@ -2185,9 +2191,9 @@ impl Client {
             .find(|device| device.user_id.as_ref() == Some(&user_id))
             .map(|device| device.demux_id)
         {
-            info!("User has already been added to call with demux ID {demux_id}");
+            info!("{ADMIN_LOG_TAG}: User has already been added to call with demux ID {demux_id}");
         } else {
-            warn!("Failed to find user for {action_to_log} (they may have left or been denied by another admin)");
+            warn!("{ADMIN_LOG_TAG}: Failed to find user for {action_to_log}. They may have left or been denied by another admin.");
         }
     }
 
@@ -2241,7 +2247,9 @@ impl Client {
             };
 
             if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
-                warn!("Failed to send removal: {:?}", e);
+                warn!("{ADMIN_LOG_TAG}: Failed to send removal for {other_client}: {e:?}");
+            } else {
+                info!("{ADMIN_LOG_TAG}: Sent removal for {other_client}.");
             }
         });
     }
@@ -2270,7 +2278,9 @@ impl Client {
             };
 
             if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
-                warn!("Failed to send block: {:?}", e);
+                warn!("{ADMIN_LOG_TAG}: Failed to send block for {other_client}: {e:?}");
+            } else {
+                info!("{ADMIN_LOG_TAG}: Sent block for {other_client}");
             }
         });
     }
@@ -2792,6 +2802,8 @@ impl Client {
                 a.wrapping_add(b)
             });
 
+        let pending_users_changed = state.pending_users_signature != new_pending_users_signature;
+
         let old_era_id = state
             .last_peek_info
             .as_ref()
@@ -2800,7 +2812,7 @@ impl Client {
         if is_first_peek_info
             || old_user_ids != new_user_ids
             || old_era_id != peek_info.era_id.as_ref()
-            || state.pending_users_signature != new_pending_users_signature
+            || pending_users_changed
         {
             state
                 .observer
@@ -2924,6 +2936,19 @@ impl Client {
                         }
                     }
                 }
+            }
+
+            if pending_users_changed {
+                let demux_ids: Vec<String> = peek_info
+                    .pending_devices
+                    .iter()
+                    .map(|pd| pd.demux_id.to_string())
+                    .collect();
+                info!(
+                    "Pending users changed ({} total): {:?}",
+                    demux_ids.len(),
+                    demux_ids
+                );
             }
 
             if demux_ids_changed {
