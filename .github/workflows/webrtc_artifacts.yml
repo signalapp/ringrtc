@@ -20,7 +20,7 @@ jobs:
   build_android:
     name: Build Android
 
-    runs-on: 'ubuntu-latest-8-cores'
+    runs-on: 'ubuntu-22.04-8-cores'
 
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +84,7 @@ jobs:
   build_linux:
     name: Build Linux
 
-    runs-on: 'ubuntu-latest-4-cores'
+    runs-on: 'ubuntu-22.04-4-cores'
 
     steps:
       - uses: actions/checkout@v4

@@ -7,7 +7,7 @@ on:
 jobs:
   code_formatting:
     name: Code Formatting
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component rustfmt
@@ -22,7 +22,7 @@ jobs:
 
   lints:
     name: Lints
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -90,7 +90,7 @@ jobs:
 
   tests:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -106,9 +106,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13]
+        os: [ubuntu-22.04, windows-latest, macos-13]
         include:
-        - os: ubuntu-latest
+        - os: ubuntu-22.04
           install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
           test-runner: xvfb-run --auto-servernum
         - os: windows-latest
@@ -141,9 +141,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-13]
+        os: [ubuntu-22.04, macos-13]
         include:
-        - os: ubuntu-latest
+        - os: ubuntu-22.04
           install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
         - os: macos-13
           install-deps: brew install protobuf coreutils
@@ -163,7 +163,7 @@ jobs:
 
   android:
     name: Android Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler

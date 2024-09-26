@@ -13,7 +13,7 @@ on:
 jobs:
   check-up-to-date:
     name: Already up to date?
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: ${{ github.event_name == 'schedule' && github.repository_owner == 'signalapp' && endsWith(github.repository, '-private') }}
     outputs:
       has-changes: ${{ steps.check.outputs.has-changes }}
@@ -24,7 +24,7 @@ jobs:
 
   android:
     name: Build for Android
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [check-up-to-date]
     if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
 
@@ -50,7 +50,7 @@ jobs:
   android-emulator-tests:
     name: Android Emulator Tests
     # For hardware acceleration; see https://github.blog/changelog/2023-02-23-hardware-accelerated-android-virtualization-on-actions-windows-and-linux-larger-hosted-runners/
-    runs-on: ubuntu-latest-4-cores
+    runs-on: ubuntu-22.04-4-cores
     needs: [android]
     if: ${{ always() && needs.android.result == 'success' }}
 
@@ -130,7 +130,7 @@ jobs:
 
   report_failures:
     name: Report Failures
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [android, android-emulator-tests, ios]
     if: ${{ failure() && github.event_name == 'schedule' }}
 

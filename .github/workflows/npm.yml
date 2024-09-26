@@ -212,7 +212,7 @@ jobs:
       # Needed for google-github-actions/auth.
       id-token: 'write'
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     needs: [build_windows, build_mac, build_linux]
 
