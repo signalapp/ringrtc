@@ -28,13 +28,3 @@ internal func failDebug(
     Logger.error(message, file: file, function: function, line: UInt32(line))
     assertionFailure(message, file: file, line: UInt(line))
 }
-
-internal func AssertIsOnMainThread(
-    file: StaticString = #fileID,
-    function: StaticString = #function,
-    line: Int = #line
-) {
-    if !Thread.isMainThread {
-        failDebug("Must be on main thread.", file: file, function: function, line: line)
-    }
-}

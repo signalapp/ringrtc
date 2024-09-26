@@ -24,6 +24,7 @@ final class CallLinkTests: XCTestCase {
         XCTAssertEqual(String(describing: Self.EXAMPLE_KEY), "bcdf-ghkm-npqr-stxz-bcdf-ghkm-npqr-stxz")
     }
 
+    @MainActor
     func testCreateSuccess() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -44,6 +45,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testCreateFailure() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -64,6 +66,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testReadSuccess() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -84,6 +87,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testReadFailure() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -104,6 +108,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testUpdateNameSuccess() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -126,6 +131,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testUpdateNameFailure() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -146,6 +152,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testUpdateNameEmptySuccess() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -167,6 +174,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testUpdateRestrictionsSuccess() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -188,7 +196,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
-
+    @MainActor
     func testDeleteCallLinkSuccess() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -210,6 +218,7 @@ final class CallLinkTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testPeekNoActiveCall() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -228,6 +237,7 @@ final class CallLinkTests: XCTestCase {
         XCTAssertEqual(0, result.peekInfo.deviceCountExcludingPendingDevices)
     }
 
+    @MainActor
     func testPeekExpiredLink() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -246,6 +256,7 @@ final class CallLinkTests: XCTestCase {
         XCTAssertEqual(0, result.peekInfo.deviceCountExcludingPendingDevices)
     }
 
+    @MainActor
     func testPeekInvalidLink() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
@@ -264,6 +275,7 @@ final class CallLinkTests: XCTestCase {
         XCTAssertEqual(0, result.peekInfo.deviceCountExcludingPendingDevices)
     }
 
+    @MainActor
     func testConnectWithNoResponse() throws {
         let delegate = TestDelegate()
         let callManager = createCallManager(delegate)!

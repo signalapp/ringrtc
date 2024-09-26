@@ -194,20 +194,20 @@ public protocol CallManagerDelegate: AnyObject {
 
     /**
      * A call, either outgoing or incoming, should be started by the application.
-     * Invoked on the main thread, asynchronously.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldStartCall call: CallManagerDelegateCallType, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
 
     /**
      * onEvent will be invoked in response to Call Manager library operations.
-     * Invoked on the main thread, asynchronously.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onEvent call: CallManagerDelegateCallType, event: CallManagerEvent)
 
     /**
      * onNetworkRouteChangedFor will be invoked when changes to the network routing (e.g. wifi/cellular) are detected.
-     * Invoked on the main thread, asynchronously.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onNetworkRouteChangedFor call: CallManagerDelegateCallType, networkRoute: NetworkRoute)
 
     /**
@@ -219,54 +219,54 @@ public protocol CallManagerDelegate: AnyObject {
     /**
      * onLowBandwidthForVideoFor will be invoked when the estimated upload
      * bandwidth is too low to send video reliably.
-     * Invoked on the main thread, asynchronously.
      *
      * When this is first called, recovered will be false. The second call (if
      * any) will have recovered set to true and will be called when the upload
      * bandwidth is high enough to send video reliably.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onLowBandwidthForVideoFor call: CallManagerDelegateCallType, recovered: Bool)
 
     /**
      * An Offer message should be sent to the given remote.
-     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendOffer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType)
 
     /**
      * An Answer message should be sent to the given remote.
-     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendAnswer callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, opaque: Data)
 
     /**
      * An Ice Candidate message should be sent to the given remote.
-     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendIceCandidates callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, candidates: [Data])
 
     /**
      * A Hangup message should be sent to the given remote.
-     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendHangup callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32)
 
     /**
      * A Busy message should be sent to the given remote.
-     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendBusy callId: UInt64, call: CallManagerDelegateCallType, destinationDeviceId: UInt32?)
 
     /**
      * Send a generic call message to the given remote recipient.
-     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessage recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
 
     /**
@@ -274,9 +274,9 @@ public protocol CallManagerDelegate: AnyObject {
      * or, if overrideRecipients is not empty, send to the given subset of members
      * using multi-recipient sealed sender. If the sealed sender request fails,
      * clients should provide a fallback mechanism.
-     * Invoked on the main thread, asynchronously.
      * If there is any error, the UI can reset UI state and invoke the reset() API.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency, overrideRecipients: [UUID])
 
     /**
@@ -289,24 +289,23 @@ public protocol CallManagerDelegate: AnyObject {
     /**
      * The local video track has been enabled and can be connected to the
      * UI's display surface/view for the outgoing media.
-     * Invoked on the main thread, asynchronously.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onUpdateLocalVideoSession call: CallManagerDelegateCallType, session: AVCaptureSession?)
 
     /**
      * The remote peer has connected and their video track can be connected to the
      * UI's display surface/view for the incoming media.
-     * Invoked on the main thread, asynchronously.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onAddRemoteVideoTrack call: CallManagerDelegateCallType, track: RTCVideoTrack)
 
     /**
      * An update from `sender` has come in for the ring in `groupId` identified by `ringId`.
      *
      * `sender` will be the current user's ID if the update came from another device.
-     *
-     * Invoked on the main thread, asynchronously.
      */
+    @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, didUpdateRingForGroup groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate)
 }
 
@@ -368,8 +367,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         Logger.debug("object! CallManager created... \(ObjectIdentifier(self))")
     }
 
+    @MainActor
     public func setSelfUuid(_ uuid: UUID) {
-        AssertIsOnMainThread()
         Logger.debug("setSelfUuid")
 
         let uuidSlice = allocatedAppByteSliceFromData(maybe_data: uuid.data)
@@ -399,8 +398,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - call: The application call context
     ///   - callMediaType: The type of call to place (audio or video)
     ///   - localDevice: The local device ID of the client (must be valid for lifetime of the call)
+    @MainActor
     public func placeCall(call: CallType, callMediaType: CallMediaType, localDevice: UInt32) throws {
-        AssertIsOnMainThread()
         Logger.debug("call")
 
         let unmanagedCall: Unmanaged<CallType> = Unmanaged.passUnretained(call)
@@ -414,8 +413,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         _ = unmanagedCall.retain()
     }
 
+    @MainActor
     public func accept(callId: UInt64) throws {
-        AssertIsOnMainThread()
         Logger.debug("accept")
 
         let retPtr = ringrtcAccept(ringRtcCallManager, callId)
@@ -424,8 +423,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func hangup() throws {
-        AssertIsOnMainThread()
         Logger.debug("hangup")
 
         let retPtr = ringrtcHangup(ringRtcCallManager)
@@ -434,8 +433,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func cancelGroupRing(groupId: Data, ringId: Int64, reason: RingCancelReason?) throws {
-        AssertIsOnMainThread()
         Logger.debug("cancelGroupRing")
 
         let groupId = allocatedAppByteSliceFromData(maybe_data: groupId)
@@ -458,8 +457,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - videoCaptureController: UI provided capturer interface
     ///   - dataMode: The desired data mode to start the session with
     ///   - audioLevelsIntervalMillis: If non-zero, the desired interval between audio level events (in milliseconds)
+    @MainActor
     public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, dataMode: DataMode, audioLevelsIntervalMillis: UInt64?) throws {
-        AssertIsOnMainThread()
         Logger.info("proceed(): callId: 0x\(String(callId, radix: 16)), hideIp: \(hideIp)")
         for iceServer in iceServers {
             for url in iceServer.urlStrings {
@@ -499,8 +498,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func drop(callId: UInt64) {
-        AssertIsOnMainThread()
         Logger.debug("drop")
 
         let retPtr = ringrtcDrop(ringRtcCallManager, callId)
@@ -509,8 +508,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func signalingMessageDidSend(callId: UInt64) throws {
-        AssertIsOnMainThread()
         Logger.debug("signalingMessageDidSend")
 
         let retPtr = ringrtcMessageSent(ringRtcCallManager, callId)
@@ -519,8 +518,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func signalingMessageDidFail(callId: UInt64) {
-        AssertIsOnMainThread()
         Logger.debug("signalingMessageDidFail")
 
         let retPtr = ringrtcMessageSendFailure(ringRtcCallManager, callId)
@@ -529,8 +528,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func reset() {
-        AssertIsOnMainThread()
         Logger.debug("reset")
 
         let retPtr = ringrtcReset(ringRtcCallManager)
@@ -539,8 +538,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func setLocalAudioEnabled(enabled: Bool) {
-        AssertIsOnMainThread()
         Logger.info("#outgoing_audio_enabled: \(enabled)")
 
         let retPtr = ringrtcGetActiveCallContext(ringRtcCallManager)
@@ -562,8 +561,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         isAudioEnabled = enabled
     }
 
+    @MainActor
     public func setLocalVideoEnabled(enabled: Bool, call: CallType) {
-        AssertIsOnMainThread()
         Logger.debug("setLocalVideoEnabled(\(enabled))")
 
         let retPtr = ringrtcGetActiveCallContext(ringRtcCallManager)
@@ -586,7 +585,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
                 return
             }
 
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 Logger.debug("setLocalVideoEnabled - main async")
 
                 guard let delegate = self.delegate else { return }
@@ -600,16 +599,17 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func updateDataMode(dataMode: DataMode) {
-        AssertIsOnMainThread()
         Logger.debug("updateDataMode(\(dataMode))")
 
         ringrtcUpdateDataMode(ringRtcCallManager, dataMode.rawValue)
     }
 
     // MARK: - Signaling API
-    public func receivedOffer<CallType: CallManagerCallReference>(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, isLocalDevicePrimary: Bool, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
-        AssertIsOnMainThread()
+
+    @MainActor
+    public func receivedOffer(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, isLocalDevicePrimary: Bool, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
         Logger.debug("receivedOffer")
 
         let opaqueSlice = allocatedAppByteSliceFromData(maybe_data: opaque)
@@ -641,8 +641,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         _ = unmanagedRemote.retain()
     }
 
+    @MainActor
     public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, opaque: Data, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
-        AssertIsOnMainThread()
         Logger.debug("receivedAnswer")
 
         let opaqueSlice = allocatedAppByteSliceFromData(maybe_data: opaque)
@@ -670,8 +670,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func receivedIceCandidates(sourceDevice: UInt32, callId: UInt64, candidates: [Data]) throws {
-        AssertIsOnMainThread()
         Logger.debug("receivedIceCandidates")
 
         let appIceCandidates: [AppByteSlice] = candidates.map { candidate in
@@ -702,8 +702,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func receivedHangup(sourceDevice: UInt32, callId: UInt64, hangupType: HangupType, deviceId: UInt32) throws {
-        AssertIsOnMainThread()
         Logger.debug("receivedHangup")
 
         let retPtr = ringrtcReceivedHangup(ringRtcCallManager, callId, sourceDevice, hangupType.rawValue, deviceId)
@@ -712,8 +712,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func receivedBusy(sourceDevice: UInt32, callId: UInt64) throws {
-        AssertIsOnMainThread()
         Logger.debug("receivedBusy")
 
         let retPtr = ringrtcReceivedBusy(ringRtcCallManager, callId, sourceDevice)
@@ -722,8 +722,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
     public func receivedCallMessage(senderUuid: UUID, senderDeviceId: UInt32, localDeviceId: UInt32, message: Data, messageAgeSec: UInt64) {
-        AssertIsOnMainThread()
         Logger.debug("receivedCallMessage")
 
         let senderUuidSlice = allocatedAppByteSliceFromData(maybe_data: senderUuid.data)
@@ -746,8 +746,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
 
     // MARK: - Group Call
 
+    @MainActor
     public func createGroupCall(groupId: Data, sfuUrl: String, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) -> GroupCall? {
-        AssertIsOnMainThread()
         Logger.debug("createGroupCall")
 
         guard let factory = self.factory else {
@@ -759,8 +759,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         return groupCall
     }
 
+    @MainActor
     public func createCallLinkCall(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) -> GroupCall? {
-        AssertIsOnMainThread()
         Logger.debug("createCallLinkCall")
 
         guard let factory = self.factory else {
@@ -777,7 +777,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType) {
         Logger.debug("onStartCall")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onStartCall - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -790,7 +790,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent) {
         Logger.debug("onEvent")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onEvent - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -808,7 +808,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onNetworkRouteChangedFor(remote: UnsafeRawPointer, networkRoute: NetworkRoute) {
         Logger.debug("onNetworkRouteChanged")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onNetworkRouteChanged - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -831,7 +831,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onLowBandwidthForVideoFor(remote: UnsafeRawPointer, recovered: Bool) {
         Logger.debug("onLowBandwidthForVideo")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onLowBandwidthForVideo - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -846,7 +846,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onSendOffer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
         Logger.debug("onSendOffer")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onSendOffer - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -859,7 +859,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onSendAnswer(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, opaque: Data) {
         Logger.debug("onSendAnswer")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onSendAnswer - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -872,7 +872,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onSendIceCandidates(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, candidates: [Data]) {
         Logger.debug("onSendIceCandidates")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onSendIceCandidates - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -885,7 +885,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onSendHangup(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?, hangupType: HangupType, deviceId: UInt32) {
         Logger.debug("onSendHangup")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onSendHangup - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -898,7 +898,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?) {
         Logger.debug("onSendBusy")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onSendBusy - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -911,7 +911,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency) {
         Logger.debug("sendCallMessage")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("sendCallMessage - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -923,7 +923,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency, overrideRecipients: [UUID]) {
         Logger.debug("sendCallMessageToGroup")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("sendCallMessageToGroup - main.async")
 
             guard let delegate = self.delegate else { return }
@@ -935,7 +935,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func groupCallRingUpdate(groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate) {
         Logger.debug("onSendHttpRequest")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onSendHttpRequest - main.async")
 
             self.delegate?.callManager(self, didUpdateRingForGroup: groupId, ringId: ringId, sender: sender, update: update)
@@ -1001,7 +1001,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             return
         }
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onConnectMedia - main async")
 
             guard let delegate = self.delegate else { return }
@@ -1028,7 +1028,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func onCallConcluded(remote: UnsafeRawPointer) {
         Logger.debug("onCallConcluded")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("onCallConcluded - main.async")
 
             let unmanagedRemote: Unmanaged<CallType> = Unmanaged.fromOpaque(remote)
@@ -1043,7 +1043,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func requestMembershipProof(clientId: UInt32) {
         Logger.debug("requestMembershipProof")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("requestMembershipProof - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1057,7 +1057,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func requestGroupMembers(clientId: UInt32) {
         Logger.debug("requestGroupMembers")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("requestGroupMembers - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1071,7 +1071,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleConnectionStateChanged(clientId: UInt32, connectionState: ConnectionState) {
         Logger.debug("handleConnectionStateChanged")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleConnectionStateChanged - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1085,7 +1085,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleNetworkRouteChanged(clientId: UInt32, networkRoute: NetworkRoute) {
         Logger.debug("handleNetworkRouteChanged")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleNetworkRouteChanged - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1097,7 +1097,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 
     func handleAudioLevels(clientId: UInt32, capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel]) {
-        DispatchQueue.main.async {
+        Task { @MainActor in
            guard let groupCall = self.groupCallByClientId[clientId] else {
                return
            }
@@ -1109,7 +1109,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleLowBandwidthForVideo(clientId: UInt32, recovered: Bool) {
         Logger.debug("handleLowBandwidthForVideo")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleLowBandwidthForVideo - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1123,7 +1123,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleReactions(clientId: UInt32, reactions: [Reaction]) {
         Logger.debug("handleReactions")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleReactions - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1137,7 +1137,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleRaisedHands(clientId: UInt32, raisedHands: [UInt32]) {
         Logger.debug("handleRaisedHands")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleRaisedHands - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1151,7 +1151,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleJoinStateChanged(clientId: UInt32, joinState: JoinState, demuxId: UInt32?) {
         Logger.debug("handleJoinStateChanged")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleJoinStateChanged - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1165,7 +1165,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState]) {
         Logger.debug("handleRemoteDevicesChanged")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleRemoteDevicesChanged - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1192,7 +1192,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // This takes a borrowed RC.
         let videoTrack = factory.videoTrack(fromNativeTrack: nativeVideoTrackBorrowedRc)
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleIncomingVideoTrack - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1206,7 +1206,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo) {
         Logger.debug("handlePeekChanged")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handlePeekChanged - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {
@@ -1220,7 +1220,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     func handleEnded(clientId: UInt32, reason: GroupCallEndReason) {
         Logger.debug("handleEnded")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Logger.debug("handleEnded - main.async")
 
             guard let groupCall = self.groupCallByClientId[clientId] else {

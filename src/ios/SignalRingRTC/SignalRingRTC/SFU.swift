@@ -206,6 +206,7 @@ public class SFUClient {
         }
     }
 
+    @MainActor
     func handlePeekResponse(requestId: UInt32, response: PeekResponse) {
         let resolved = self.peekRequests.resolve(id: requestId, response: response);
         if !resolved {
@@ -213,6 +214,7 @@ public class SFUClient {
         }
     }
 
+    @MainActor
     func handleCallLinkResponse(requestId: UInt32, response: SFUResult<CallLinkState>) {
         let resolved = self.callLinkRequests.resolve(id: requestId, response: response)
         if !resolved {
@@ -220,6 +222,7 @@ public class SFUClient {
         }
     }
 
+    @MainActor
     func handleEmptyResponse(requestId: UInt32, response: SFUResult<()>) {
         let resolved = self.emptyRequests.resolve(id: requestId, response: response)
         if !resolved {
@@ -453,7 +456,7 @@ private class SFUDelegateWrapper {
 
                 Logger.debug("SFUDelegateWrapper.handlePeekResponse")
 
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     Logger.debug("SFUDelegateWrapper.handlePeekResponse - main.async")
 
                     guard let delegate = wrapper.delegate else {
@@ -492,7 +495,7 @@ private class SFUDelegateWrapper {
 
                 Logger.debug("SFUDelegateWrapper.handleResponse")
 
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     Logger.debug("SFUDelegateWrapper.handleResponse - main.async")
 
                     guard let delegate = wrapper.delegate else {
@@ -531,7 +534,7 @@ private class SFUDelegateWrapper {
 
                 Logger.debug("SFUDelegateWrapper.handleEmptyResponse")
 
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     Logger.debug("SFUDelegateWrapper.handleEmptyResponse - main.async")
 
                     guard let delegate = wrapper.delegate else {

@@ -176,29 +176,34 @@ public protocol GroupCallDelegate: AnyObject {
      * Indication that the application should provide an updated proof of membership
      * for the group call.
      */
+    @MainActor
     func groupCall(requestMembershipProof groupCall: GroupCall)
 
     /**
      * Indication that the application should provide the list of group members that
      * belong to the group for the purposes of the group call.
      */
+    @MainActor
     func groupCall(requestGroupMembers groupCall: GroupCall)
 
     /**
      * Indication that the application should retrieve the latest local device
      * state from the group call and refresh the presentation.
      */
+    @MainActor
     func groupCall(onLocalDeviceStateChanged groupCall: GroupCall)
 
     /**
      * Indication that the application should retrieve the latest remote device
      * states from the group call and refresh the presentation.
      */
+    @MainActor
     func groupCall(onRemoteDeviceStatesChanged groupCall: GroupCall)
 
     /**
      * Indication that the application should draw audio levels.
      */
+    @MainActor
     func groupCall(onAudioLevels groupCall: GroupCall)
 
     /**
@@ -209,30 +214,35 @@ public protocol GroupCallDelegate: AnyObject {
      * any) will have recovered set to true and will be called when the upload
      * bandwidth is high enough to send video reliably.
      */
+    @MainActor
     func groupCall(onLowBandwidthForVideo groupCall: GroupCall, recovered: Bool)
 
     /**
      * Indication that the application should notify the user that one or more reactions
      * were received.
      */
+    @MainActor
     func groupCall(onReactions groupCall: GroupCall, reactions: [Reaction])
 
     /**
      * Indication that the application should notify the user that raised hands
      * changed.
      */
+    @MainActor
     func groupCall(onRaisedHands groupCall: GroupCall, raisedHands: [UInt32])
 
     /**
      * Indication that the application can retrieve an updated PeekInfo which
      * includes a list of users that are actively in the group call.
      */
+    @MainActor
     func groupCall(onPeekChanged groupCall: GroupCall)
 
     /**
      * Indication that group call ended due to a reason other than the user choosing
      * to disconnect from it.
      */
+    @MainActor
     func groupCall(onEnded groupCall: GroupCall, reason: GroupCallEndReason)
 }
 
@@ -273,9 +283,8 @@ public class GroupCall {
     var audioTrack: RTCAudioTrack?
     var videoTrack: RTCVideoTrack?
 
+    @MainActor
     internal init(ringRtcCallManager: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, groupCallByClientId: GroupCallByClientId, groupId: Data, sfuUrl: String, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) {
-        AssertIsOnMainThread()
-
         self.ringRtcCallManager = ringRtcCallManager
         self.factory = factory
         self.groupCallByClientId = groupCallByClientId
@@ -292,9 +301,8 @@ public class GroupCall {
         Logger.debug("object! GroupCall created... \(ObjectIdentifier(self))")
     }
 
+    @MainActor
     internal init(ringRtcCallManager: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, groupCallByClientId: GroupCallByClientId, sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) {
-        AssertIsOnMainThread()
-
         self.ringRtcCallManager = ringRtcCallManager
         self.factory = factory
         self.groupCallByClientId = groupCallByClientId
@@ -326,8 +334,8 @@ public class GroupCall {
 
     /// Connect to a group call, creating a client if one does not already exist.
     /// Return true if successful.
+    @MainActor
     public func connect() -> Bool {
-        AssertIsOnMainThread()
         Logger.debug("connect")
 
         if self.clientId == nil {
@@ -419,8 +427,8 @@ public class GroupCall {
         return true
     }
 
+    @MainActor
     public func join() {
-        AssertIsOnMainThread()
         Logger.debug("join")
 
         guard let clientId = self.clientId else {
@@ -431,8 +439,8 @@ public class GroupCall {
         ringrtcJoin(self.ringRtcCallManager, clientId)
     }
 
+    @MainActor
     public func leave() {
-        AssertIsOnMainThread()
         Logger.debug("leave")
 
         guard let clientId = self.clientId else {
@@ -447,8 +455,8 @@ public class GroupCall {
         ringrtcLeave(self.ringRtcCallManager, clientId)
     }
 
+    @MainActor
     public func disconnect() {
-        AssertIsOnMainThread()
         Logger.debug("disconnect")
 
         guard let clientId = self.clientId else {
@@ -463,8 +471,8 @@ public class GroupCall {
         ringrtcDisconnect(self.ringRtcCallManager, clientId)
     }
 
+    @MainActor
     public func react(value: String) {
-        AssertIsOnMainThread()
         Logger.debug("react")
 
         guard let clientId = self.clientId else {
@@ -478,8 +486,8 @@ public class GroupCall {
         ringrtcReact(self.ringRtcCallManager, clientId, valueSlice)
     }
 
+    @MainActor
     public func raiseHand(raise: Bool) {
-        AssertIsOnMainThread()
         Logger.debug("raiseHand")
 
         guard let clientId = self.clientId else {
@@ -491,13 +499,12 @@ public class GroupCall {
     }
 
     private var _isOutgoingAudioMuted = false
+    @MainActor
     public var isOutgoingAudioMuted: Bool {
         get {
-            AssertIsOnMainThread()
             return _isOutgoingAudioMuted
         }
         set {
-            AssertIsOnMainThread()
             Logger.debug("setOutgoingAudioMuted")
 
             _isOutgoingAudioMuted = newValue
@@ -513,13 +520,12 @@ public class GroupCall {
     }
 
     private var _isOutgoingVideoMuted = false
+    @MainActor
     public var isOutgoingVideoMuted: Bool {
         get {
-            AssertIsOnMainThread()
             return _isOutgoingVideoMuted
         }
         set {
-            AssertIsOnMainThread()
             Logger.debug("setOutgoingVideoMuted")
 
             _isOutgoingVideoMuted = newValue
@@ -534,8 +540,8 @@ public class GroupCall {
         }
     }
 
+    @MainActor
     public func ringAll() {
-        AssertIsOnMainThread()
         Logger.debug("ring")
 
         guard let clientId = self.clientId else {
@@ -546,8 +552,8 @@ public class GroupCall {
         ringrtcGroupRing(self.ringRtcCallManager, clientId, AppByteSlice(bytes: nil, len: 0))
     }
 
+    @MainActor
     public func resendMediaKeys() {
-        AssertIsOnMainThread()
         Logger.debug("resendMediaKeys")
 
         guard let clientId = self.clientId else {
@@ -559,8 +565,8 @@ public class GroupCall {
     }
 
     /// Sets a data mode, allowing the client to limit the media bandwidth used.
+    @MainActor
     public func updateDataMode(dataMode: DataMode) {
-        AssertIsOnMainThread()
         Logger.debug("updateDataMode")
 
         guard let clientId = self.clientId else {
@@ -578,8 +584,8 @@ public class GroupCall {
     ///
     /// - parameter resolutions: the VideoRequest objects for each user rendered on the screen
     /// - parameter activeSpeakerHeight: the height of the view for the active speaker, in pixels
+    @MainActor
     public func updateVideoRequests(resolutions: [VideoRequest], activeSpeakerHeight: UInt16) {
-        AssertIsOnMainThread()
         Logger.debug("updateVideoRequests")
 
         guard let clientId = self.clientId else {
@@ -608,8 +614,8 @@ public class GroupCall {
         ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray, activeSpeakerHeight)
     }
 
+    @MainActor
     public func approveUser(_ userId: UUID) {
-        AssertIsOnMainThread()
         Logger.debug("approveUser")
 
         guard let clientId = self.clientId else {
@@ -623,8 +629,8 @@ public class GroupCall {
         ringrtcApproveUser(self.ringRtcCallManager, clientId, userIdSlice)
     }
 
+    @MainActor
     public func denyUser(_ userId: UUID) {
-        AssertIsOnMainThread()
         Logger.debug("denyUser")
 
         guard let clientId = self.clientId else {
@@ -638,8 +644,8 @@ public class GroupCall {
         ringrtcDenyUser(self.ringRtcCallManager, clientId, userIdSlice)
     }
 
+    @MainActor
     public func removeClient(demuxId otherClientDemuxId: UInt32) {
-        AssertIsOnMainThread()
         Logger.debug("removeClient")
 
         guard let clientId = self.clientId else {
@@ -650,8 +656,8 @@ public class GroupCall {
         ringrtcRemoveClient(self.ringRtcCallManager, clientId, otherClientDemuxId)
     }
 
+    @MainActor
     public func blockClient(demuxId otherClientDemuxId: UInt32) {
-        AssertIsOnMainThread()
         Logger.debug("blockClient")
 
         guard let clientId = self.clientId else {
@@ -662,8 +668,8 @@ public class GroupCall {
         ringrtcBlockClient(self.ringRtcCallManager, clientId, otherClientDemuxId)
     }
 
+    @MainActor
     public func updateGroupMembers(members: [GroupMember]) {
-        AssertIsOnMainThread()
         Logger.debug("updateGroupMembers")
 
         guard let clientId = self.clientId else {
@@ -702,8 +708,8 @@ public class GroupCall {
         ringrtcSetGroupMembers(self.ringRtcCallManager, clientId, &appGroupMemberInfoArray)
     }
 
+    @MainActor
     public func updateMembershipProof(proof: Data) {
-        AssertIsOnMainThread()
         Logger.debug("updateMembershipProof")
 
         guard let clientId = self.clientId else {
@@ -727,37 +733,32 @@ public class GroupCall {
 
     // MARK: - Internal Callback Handlers
 
+    @MainActor
     func requestMembershipProof() {
-        AssertIsOnMainThread()
-
         self.delegate?.groupCall(requestMembershipProof: self)
     }
 
+    @MainActor
     func requestGroupMembers() {
-        AssertIsOnMainThread()
-
         self.delegate?.groupCall(requestGroupMembers: self)
     }
 
+    @MainActor
     func handleConnectionStateChanged(connectionState: ConnectionState) {
-        AssertIsOnMainThread()
-
         self.localDeviceState.connectionState = connectionState
 
         self.delegate?.groupCall(onLocalDeviceStateChanged: self)
     }
 
+    @MainActor
     func handleNetworkRouteChanged(networkRoute: NetworkRoute) {
-        AssertIsOnMainThread()
-
         self.localDeviceState.networkRoute = networkRoute;
 
         self.delegate?.groupCall(onLocalDeviceStateChanged: self)
     }
 
+    @MainActor
     func handleAudioLevels(capturedLevel: UInt16, receivedLevels: [ReceivedAudioLevel]) {
-        AssertIsOnMainThread()
-
         self.localDeviceState.audioLevel = capturedLevel;
         for received in receivedLevels {
             let remoteDeviceState = self.remoteDeviceStates[received.demuxId]
@@ -769,35 +770,31 @@ public class GroupCall {
         self.delegate?.groupCall(onAudioLevels: self)
     }
 
+    @MainActor
     func handleLowBandwidthForVideo(recovered: Bool) {
-        AssertIsOnMainThread()
-
         self.delegate?.groupCall(onLowBandwidthForVideo: self, recovered: recovered)
     }
 
+    @MainActor
     func handleReactions(reactions: [Reaction]) {
-        AssertIsOnMainThread()
-
         self.delegate?.groupCall(onReactions: self, reactions: reactions)
     }
 
+    @MainActor
     func handleRaisedHands(raisedHands: [UInt32]) {
-        AssertIsOnMainThread()
-
         self.delegate?.groupCall(onRaisedHands: self, raisedHands: raisedHands)
     }
 
+    @MainActor
     func handleJoinStateChanged(joinState: JoinState, demuxId: UInt32?) {
-       AssertIsOnMainThread()
-
        self.localDeviceState.joinState = joinState
        self.localDeviceState.demuxId = demuxId
 
        self.delegate?.groupCall(onLocalDeviceStateChanged: self)
     }
 
+    @MainActor
     func handleRemoteDevicesChanged(remoteDeviceStates: [RemoteDeviceState]) {
-        AssertIsOnMainThread()
         Logger.debug("handleRemoteDevicesChanged() count: \(remoteDeviceStates.count)")
 
         var remoteDeviceByDemuxId: [UInt32: RemoteDeviceState] = [:]
@@ -818,8 +815,8 @@ public class GroupCall {
         self.delegate?.groupCall(onRemoteDeviceStatesChanged: self)
     }
 
+    @MainActor
     func handleIncomingVideoTrack(remoteDemuxId: UInt32, videoTrack: RTCVideoTrack) {
-        AssertIsOnMainThread()
         Logger.debug("handleIncomingVideoTrack() for remoteDemuxId: 0x\(String(remoteDemuxId, radix: 16))")
 
         guard let remoteDeviceState = self.remoteDeviceStates[remoteDemuxId] else {
@@ -832,17 +829,15 @@ public class GroupCall {
         self.delegate?.groupCall(onRemoteDeviceStatesChanged: self)
     }
 
+    @MainActor
     func handlePeekChanged(peekInfo: PeekInfo) {
-        AssertIsOnMainThread()
-
         self.peekInfo = peekInfo
 
         self.delegate?.groupCall(onPeekChanged: self)
     }
 
+    @MainActor
     func handleEnded(reason: GroupCallEndReason) {
-        AssertIsOnMainThread()
-
         guard let clientId = self.clientId else {
             Logger.error("no clientId defined for groupCall")
             return

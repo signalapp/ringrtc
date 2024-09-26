@@ -426,6 +426,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         shouldSendIceCandidatesInvoked = false
     }
 
+    @MainActor
     func tryToSendIceCandidates(callId: UInt64, destinationDeviceId: UInt32?, candidates: [Data]) {
         if destinationDeviceId != nil {
             Logger.debug("callId: \(callId) destinationDeviceId: \(destinationDeviceId ?? 0) candidates.count: \(candidates.count)")
@@ -796,6 +797,7 @@ class SignalRingRTCTests: XCTestCase {
         delay(interval: 0.1)
     }
 
+    @MainActor
     func outgoingTesting(dataMode: DataMode) {
         Logger.debug("Test: Outgoing Call...")
 
@@ -895,14 +897,17 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testOutgoingNormal() {
         outgoingTesting(dataMode: .normal)
     }
 
+    @MainActor
     func testOutgoingLow() {
         outgoingTesting(dataMode: .low)
     }
 
+    @MainActor
     func testOutgoingSendOfferFail() {
         Logger.debug("Test: Outgoing Call Send Offer Fail...")
 
@@ -967,6 +972,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testIncoming() {
         Logger.debug("Test: Incoming Call...")
 
@@ -1054,6 +1060,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testOutgoingMultiHangupMin() {
         Logger.debug("Test: MultiHangup Minimum...")
 
@@ -1101,6 +1108,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testOutgoingMultiHangup() {
         Logger.debug("Test: MultiHangup...")
 
@@ -1151,6 +1159,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testOutgoingMultiHangupProceed() {
         Logger.debug("Test: MultiHangup with Proceed...")
 
@@ -1225,6 +1234,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testOutgoingMultiHangupProceedOffer() {
         Logger.debug("Test: MultiHangup with Proceed until offer sent...")
 
@@ -1300,6 +1310,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testIncomingQuickHangupNoDelay() {
         Logger.debug("Test: Incoming Call Offer with quick Hangup No Delay...")
 
@@ -1360,6 +1371,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testIncomingQuickHangupWithDelay() {
         Logger.debug("Test: Incoming Call Offer with quick Hangup with Delay...")
 
@@ -1426,6 +1438,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func multiCallTesting(loopIterations: Int) {
         Logger.debug("Test: MultiCall...")
 
@@ -1600,10 +1613,12 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testMultiCallOpaque() {
         multiCallTesting(loopIterations: 2)
     }
 
+    @MainActor
     func testMultiCallFastIceCheck() {
         Logger.debug("Test: MultiCall check that immediate ICE message is handled...")
 
@@ -1764,6 +1779,7 @@ class SignalRingRTCTests: XCTestCase {
         case equal
     }
 
+    @MainActor
     func glareTesting(scenario: GlareScenario, condition: GlareCondition) {
         Logger.debug("Test: Testing glare for scenario: \(scenario) and condition: \(condition)...")
 
@@ -1925,26 +1941,32 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testGlareWinnerBeforeProceed() {
         glareTesting(scenario: .beforeProceed, condition: .winner)
     }
 
+    @MainActor
     func testGlareWinnerAfterProceed() {
         glareTesting(scenario: .afterProceed, condition: .winner)
     }
 
+    @MainActor
     func testGlareLoserBeforeProceed() {
         glareTesting(scenario: .beforeProceed, condition: .loser)
     }
 
+    @MainActor
     func testGlareLoserAfterProceed() {
         glareTesting(scenario: .afterProceed, condition: .loser)
     }
 
+    @MainActor
     func testGlareEqualBeforeProceed() {
         glareTesting(scenario: .beforeProceed, condition: .equal)
     }
 
+    @MainActor
     func testGlareEqualAfterProceed() {
         glareTesting(scenario: .afterProceed, condition: .equal)
     }
@@ -1955,6 +1977,7 @@ class SignalRingRTCTests: XCTestCase {
         case calleeReconnecting
     }
 
+    @MainActor
     func reCallTesting(scenario: ReCallScenario) {
         Logger.debug("Test: Testing ReCall for scenario: \(scenario)...")
 
@@ -2157,10 +2180,12 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testRecallStillInCall() {
         reCallTesting(scenario: .calleeStillInCall)
     }
 
+    @MainActor
     func testRecallReconnecting() {
         reCallTesting(scenario: .calleeReconnecting)
     }
@@ -2172,6 +2197,7 @@ class SignalRingRTCTests: XCTestCase {
         case calleeAccepts   /// Caller rings multiple callee devices, one callee accepts and gets in to call, all other callees stop ringing.
     }
 
+    @MainActor
     func multiRingTesting(calleeDeviceCount: Int, loopIterations: Int, scenario: MultiRingScenario) {
         Logger.debug("Test: Testing multi-ring for scenario: \(scenario)...")
 
@@ -2649,18 +2675,22 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testMultiRing() {
         multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .callerEnds)
     }
 
+    @MainActor
     func testMultiRingDeclined() {
         multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .calleeDeclines)
     }
 
+    @MainActor
     func testMultiRingBusy() {
         multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .calleeBusy)
     }
 
+    @MainActor
     func testMultiRingAccepted() {
         multiRingTesting(calleeDeviceCount: 2, loopIterations: 1, scenario: .calleeAccepts)
     }
@@ -2672,6 +2702,7 @@ class SignalRingRTCTests: XCTestCase {
         case differentDevice  /// A1 is in call with B1; A2 calls B, should ring on B2
     }
 
+    @MainActor
     func multiRingGlareTesting(scenario: MultiRingGlareScenario) {
         Logger.debug("Test: Testing multi-ring glare for scenario: \(scenario)...")
 
@@ -3220,22 +3251,27 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Exiting test function...")
     }
 
+    @MainActor
     func testMultiRingGlarePrimaryWinner() {
         multiRingGlareTesting(scenario: .primaryWinner)
     }
 
+    @MainActor
     func testMultiRingGlarePrimaryLoser() {
         multiRingGlareTesting(scenario: .primaryLoser)
     }
 
+    @MainActor
     func testMultiRingGlarePrimaryEqual() {
         multiRingGlareTesting(scenario: .primaryEqual)
     }
 
+    @MainActor
     func testMultiRingGlareDifferentDevice() {
         multiRingGlareTesting(scenario: .differentDevice)
     }
 
+    @MainActor
     func testCallIdFromEra() {
         let fromHex = callIdFromEra("1122334455667788")
         XCTAssertEqual(fromHex, 0x1122334455667788)
@@ -3256,6 +3292,7 @@ class SignalRingRTCTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testPeekWithPendingClients() async throws {
         let delegate = TestDelegate()
         let httpClient = HTTPClient(delegate: delegate)
