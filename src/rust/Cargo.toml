@@ -94,9 +94,12 @@ chrono = {version = "0.4.38", optional = true }
 call_protobuf = { path = "../../protobuf", package = "protobuf"}
 mrp = { path = "../../mrp" }
 
+[target.'cfg(not(all(target_os="linux", target_arch="aarch64")))'.dependencies]
 # Optional, needed by "native" feature
 cubeb = {  version = "0.14.0", optional = true }
 cubeb-core = {  version = "0.14.0", optional = true }
+
+[target.'cfg(windows)'.dependencies]
 # Only needed by native feature on windows
 windows = { version = "0.58.0", optional = true, features = ["Win32_System_Com"] }
 
