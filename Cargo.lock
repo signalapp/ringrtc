@@ -1701,7 +1701,7 @@ checksum = "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
 
 [[package]]
 name = "mrp"
-version = "2.48.1"
+version = "2.48.2"
 dependencies = [
  "anyhow",
  "log",
@@ -2115,7 +2115,7 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.48.1"
+version = "2.48.2"
 dependencies = [
  "prost-build",
  "tonic-build",
@@ -2259,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.48.1"
+version = "2.48.2"
 dependencies = [
  "aes",
  "aes-gcm-siv",

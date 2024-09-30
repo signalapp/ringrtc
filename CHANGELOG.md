@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.48.2
+
+- iOS: Use MainActor annotations
+
 ## v2.48.1
 
 - Desktop: Add new Audio Device Module option
