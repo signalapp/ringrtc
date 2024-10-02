@@ -24,10 +24,8 @@ jobs:
     name: Lints
     runs-on: ubuntu-22.04
     steps:
-    - name: Install protoc
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - name: Install cmake
-      run: sudo apt-get update && sudo apt-get install -y cmake
+    - name: Install deps
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
     - name: Install Python tools
       run: pip3 install flake8 mypy
     - uses: actions/checkout@v4
@@ -92,10 +90,8 @@ jobs:
     name: Tests
     runs-on: ubuntu-22.04
     steps:
-    - name: Install protoc
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - name: Install cmake
-      run: sudo apt-get update && sudo apt-get install -y cmake
+    - name: Install deps
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
     - uses: actions/checkout@v4
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - name: Run rust tests
@@ -109,7 +105,7 @@ jobs:
         os: [ubuntu-22.04, windows-latest, macos-13]
         include:
         - os: ubuntu-22.04
-          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
           test-runner: xvfb-run --auto-servernum
         - os: windows-latest
           install-deps: choco install protoc cmake
@@ -144,7 +140,7 @@ jobs:
         os: [ubuntu-22.04, macos-13]
         include:
         - os: ubuntu-22.04
-          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
         - os: macos-13
           install-deps: brew install protobuf coreutils
     runs-on: ${{ matrix.os }}
