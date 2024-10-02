@@ -97,6 +97,17 @@ jobs:
     - name: Run rust tests
       run: cd src/rust && ./scripts/run-tests
 
+  aarch64_cross:
+    name: Cross compile Linux aarch64 (using prebuilt WebRTC)
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64 libpulse-dev
+    - uses: actions/checkout@v4
+    - run: rustup target add aarch64-unknown-linux-gnu
+    - run: ./bin/fetch-artifact --platform linux-arm64 --release -o out-arm
+    - run: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-electron --ringrtc-only --release
+
   electron:
     name: Electron Tests
     strategy:
