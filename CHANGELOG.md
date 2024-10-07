@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.48.3
+
+- Desktop: Install pulse to build for linux
+
+- Desktop: Add action to cross-compile for linux aarch64
+
+- Desktop: Add onEnded to capture options
+
 ## v2.48.2
 
 - iOS: Use MainActor annotations
