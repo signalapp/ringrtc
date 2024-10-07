@@ -86,6 +86,7 @@ export class GumVideoCaptureOptions {
   preferredDeviceId?: string;
   screenShareSourceId?: string;
   mediaStream?: MediaStream;
+  onEnded?: () => void;
 }
 
 interface GumConstraints extends MediaStreamConstraints {
@@ -343,6 +344,8 @@ export class GumVideoCapturer {
       return;
     }
 
+    const captureOptions = this.captureOptions;
+
     if (track.readyState === 'ended') {
       this.stopCapturing();
       RingRTC.logError(
@@ -403,6 +406,7 @@ export class GumVideoCapturer {
         RingRTC.logError(`spawnSender(): ${e}`);
       } finally {
         reader.releaseLock();
+        captureOptions?.onEnded?.();
       }
       this.spawnedSenderRunning = false;
     })();
