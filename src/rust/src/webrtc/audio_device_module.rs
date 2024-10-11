@@ -176,7 +176,10 @@ impl AudioDeviceModule {
         let ctx_name = CString::new(ADM_CONTEXT).unwrap();
         match Context::init(Some(ctx_name.as_c_str()), None) {
             Ok(ctx) => {
-                info!("Successfully initialized backend {}", ctx.backend_id());
+                info!(
+                    "Successfully initialized cubeb backend {}",
+                    ctx.backend_id()
+                );
                 self.cubeb_ctx = Some(ctx);
                 self.initialized = true;
                 0
