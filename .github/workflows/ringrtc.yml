@@ -46,7 +46,9 @@ jobs:
     - name: Check acknowledgments
       run: ./bin/regenerate_acknowledgments.sh && git diff --name-status --exit-code acknowledgments
     - name: Clippy
-      run: cargo clippy --package ringrtc --tests --features sim -- -D warnings
+      run: cargo clippy --all-targets -- -D warnings
+    - name: Clippy (with sim)
+      run: cargo clippy --all-targets --features sim -- -D warnings
     - name: Clippy (Android & iOS)
       run: cargo clippy --package ringrtc --target aarch64-linux-android --target aarch64-apple-ios -- -D warnings
     - name: Clippy (Electron)

@@ -53,7 +53,7 @@ pub fn chop_audio(
     {
         let output_name = format!("{}.{}.{}", degraded_stem, i, degraded_extension);
         let mut writer =
-            hound::WavWriter::create(&format!("{}/{}", degraded_path, output_name), spec)?;
+            hound::WavWriter::create(format!("{}/{}", degraded_path, output_name), spec)?;
 
         for sample in chunk {
             if let Ok(sample) = sample {

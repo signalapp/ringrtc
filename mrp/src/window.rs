@@ -154,7 +154,7 @@ mod tests {
         // We use this iter instead of IntoIterator until impl's in return position in traits are supported
         // https://rustc-dev-guide.rust-lang.org/return-position-impl-trait-in-trait.html
         // Iter goes to the right_edge of the window, not to the right_bounds
-        pub fn iter<'a>(&'a self) -> WindowIter<'a, T> {
+        pub fn iter(&self) -> WindowIter<'_, T> {
             WindowIter {
                 seqnum: self.left_bounds(),
                 window: self,

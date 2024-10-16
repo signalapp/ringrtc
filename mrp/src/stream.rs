@@ -384,7 +384,7 @@ mod tests {
     static BASE_TIME: OnceLock<Instant> = OnceLock::new();
 
     fn base_time() -> Instant {
-        *BASE_TIME.get_or_init(|| Instant::now())
+        *BASE_TIME.get_or_init(Instant::now)
     }
 
     fn instant_of(offset: u64) -> Instant {
@@ -643,7 +643,7 @@ mod tests {
         };
         let mut tc = TestCase::new(
             16,
-            Event::schedule_of((10..=60).map(event.clone()).collect()),
+            Event::schedule_of((10..=60).map(event).collect()),
             Event::schedule_of((10..=60).map(event).collect()),
         );
 
@@ -973,7 +973,7 @@ mod tests {
             alice,
             to_bob,
             alice_receiver,
-            send_pace.clone(),
+            send_pace,
             timeout,
         );
         let bob_endpoint = spawn_endpoint(
@@ -982,7 +982,7 @@ mod tests {
             bob,
             to_alice,
             bob_receiver,
-            send_pace.clone(),
+            send_pace,
             timeout,
         );
 
@@ -1024,14 +1024,15 @@ mod tests {
                 let now = Instant::now();
                 if now >= last_sent + pace && sent < num_packets {
                     let mut pkt = packet(stream.next_seqnum());
-                    if let Ok(_) = stream.try_send(|header| {
+                    let res = stream.try_send(|header| {
                         pkt.0 = header;
                         if let Err(err) = sender.send(pkt.clone()) {
                             Err(anyhow::anyhow!(err))
                         } else {
                             Ok((pkt, now + timeout))
                         }
-                    }) {
+                    });
+                    if res.is_ok() {
                         last_sent = now;
                         sent += 1;
                     }
@@ -1119,7 +1120,7 @@ mod tests {
 
     impl<T: Debug + PartialEq> PartialOrd for Delayed<T> {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            std::cmp::Reverse(self.1).partial_cmp(&std::cmp::Reverse(other.1))
+            Some(self.cmp(other))
         }
     }
 
@@ -1127,7 +1128,7 @@ mod tests {
 
     impl<T: Debug + PartialEq> Ord for Delayed<T> {
         fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-            self.partial_cmp(other).unwrap()
+            std::cmp::Reverse(self.1).cmp(&std::cmp::Reverse(other.1))
         }
     }
 }
