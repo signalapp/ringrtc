@@ -229,21 +229,35 @@ impl AudioDeviceModule {
         }
     }
 
+    fn redact_for_logging(opt: Option<&str>) -> Option<String> {
+        if cfg!(debug_assertions) {
+            // For debug testing/local builds only, allow the full string.
+            opt.map(|s| s.to_string())
+        } else {
+            // Take a small number of characters, but fewer if they are non-ascii unicode, as
+            // unicode provides a substantially higher amount of information per char.
+            // (e.g. four mandarin characters could be a full name)
+            opt.map(|s| {
+                if s.is_ascii() {
+                    s.chars().take(4).collect()
+                } else {
+                    s.chars().take(1).collect()
+                }
+            })
+        }
+    }
+
     fn device_str(device: &cubeb::DeviceInfo) -> String {
-        // Only print friendly name in debug builds.
-        #[cfg(debug_assertions)]
-        let friendly_name = device.friendly_name();
-        #[cfg(not(debug_assertions))]
-        let friendly_name: Option<&str> = None;
         format!(
             concat!("dev id: {:?}, device_id: {:?}, friendly_name: {:?}, group_id: {:?}, ",
             "vendor_name: {:?}, device_type: {:?}, state: {:?}, preferred: {:?}, format: {:?}, ",
             "default_format: {:?}, max channels: {:?}, default_rate: {:?}, max_rate: {:?}, ",
             "min_rate: {:?}, latency_lo: {:?}, latency_hi: {:?})"),
             device.devid(),
-            device.device_id(),
-            friendly_name,
-            device.group_id(),
+            // Truncate these fields, as they can contain e.g. mac addresses or user-specified names.
+            Self::redact_for_logging(device.device_id()),
+            Self::redact_for_logging(device.friendly_name()),
+            Self::redact_for_logging(device.group_id()),
             device.vendor_name(),
             device.device_type(),
             device.state(),
