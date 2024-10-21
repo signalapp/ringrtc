@@ -1,4 +1,4 @@
-platform :ios, '13'
+platform :ios, '15.0'
 
 use_frameworks!
 
@@ -7,5 +7,5 @@ target 'SignalRingRTC' do
 end
 
 target 'SignalRingRTCTests' do
-  pod 'Nimble', '~> 9.0'
+  pod 'Nimble', '~> 13.5.0'
 end

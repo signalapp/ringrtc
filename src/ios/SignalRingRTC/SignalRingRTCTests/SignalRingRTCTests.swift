@@ -149,6 +149,14 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     // main thread, we don't need any protection.
     var canSendICE = false
 
+    init() {
+        Logger.debug("object! TestDelegate created... \(ObjectIdentifier(self))")
+    }
+
+    deinit {
+        Logger.debug("object! TestDelegate destroyed... \(ObjectIdentifier(self))")
+    }
+
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldStartCall call: OpaqueCallData, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType) {
         Logger.debug("TestDelegate:shouldStartCall")
         generalInvocationDetected = true
@@ -341,14 +349,6 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
 
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, onLowBandwidthForVideoFor call: OpaqueCallData, recovered: Bool) {
         Logger.debug("TestDelegate:onLowBandwidthForVideoFor - \(recovered)")
-    }
-
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, onReactions call: OpaqueCallData, reactions: [Reaction]) {
-        Logger.debug("TestDelegate:onReactions - \(reactions)")
-    }
-
-    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, onRaisedHands call: OpaqueCallData, raisedHands: [UInt32]) {
-        Logger.debug("TestDelegate:onRaisedHands - \(raisedHands)")
     }
 
     func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendOffer callId: UInt64, call: OpaqueCallData, destinationDeviceId: UInt32?, opaque: Data, callMediaType: CallMediaType) {
@@ -701,8 +701,8 @@ class SignalRingRTCTests: XCTestCase {
         precondition(self.loggingInitialized)
 
         // Give a large timeout so that test cases wait long enough across different environments.
-        Nimble.AsyncDefaults.timeout = .seconds(15)
-        Logger.info("Test: Nimble.AsyncDefaults.timeout: \(Nimble.AsyncDefaults.timeout)")
+        Nimble.PollingDefaults.timeout = .seconds(15)
+        Logger.info("Test: Nimble.PollingDefaults.timeout: \(Nimble.PollingDefaults.timeout)")
 
         // Allow as many file descriptors as possible.
         var limits = rlimit()
@@ -716,6 +716,16 @@ class SignalRingRTCTests: XCTestCase {
         }
     }
 
+    override func tearDown() {
+        // Give a slight delay after every test to give logs time to catch up
+        // and resources to be released.
+        delay(interval: 1.0)
+
+        Logger.debug("Test: Exiting test function...")
+
+        super.tearDown()
+    }
+
     func testMinimalLifetime() {
         Logger.debug("Test: Minimal Lifetime...")
 
@@ -726,10 +736,9 @@ class SignalRingRTCTests: XCTestCase {
         let delegate = TestDelegate()
         var callManager = createCallManager(delegate)
         expect(delegate.generalInvocationDetected).to(equal(false))
-        callManager = nil
 
-        // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 0.1)
+        // Cleanup
+        callManager = nil
     }
 
     func testMinimalLifetimeMulti() {
@@ -764,9 +773,6 @@ class SignalRingRTCTests: XCTestCase {
         expect(callManager).toNot(beNil())
         expect(delegate.generalInvocationDetected).to(equal(false))
         callManager = nil
-
-        // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 0.1)
     }
 
     func testShortLife() {
@@ -786,15 +792,8 @@ class SignalRingRTCTests: XCTestCase {
         // We didn't do anything, so there should not have been any notifications.
         expect(delegate.generalInvocationDetected).to(equal(false))
 
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        // It should have blocked, so we can move on.
-
-        expect(delegate.generalInvocationDetected).to(equal(false))
-
-        // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 0.1)
     }
 
     @MainActor
@@ -888,13 +887,8 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 0.1)
-
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -966,10 +960,8 @@ class SignalRingRTCTests: XCTestCase {
         // Just to be sure, it will send the hangup...
         expect(delegate.shouldSendHangupNormalInvoked).toEventually(equal(true))
 
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1051,13 +1043,8 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 0.1)
-
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1099,13 +1086,8 @@ class SignalRingRTCTests: XCTestCase {
             }
         }
 
-        // Add a small delay before closing.
-        delay(interval: 0.05)
-
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1150,13 +1132,8 @@ class SignalRingRTCTests: XCTestCase {
             }
         }
 
-        // Add a small delay before closing.
-        delay(interval: 0.05)
-
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1214,24 +1191,18 @@ class SignalRingRTCTests: XCTestCase {
                 XCTFail("Call Manager hangup() failed: \(error)")
                 return
             }
+
+            // Give the hangup some time.
+            delay(interval: 0.1)
         }
-
-        Logger.debug("Test: Waiting to end...")
-
-        // Add a small delay before closing.
-        delay(interval: 0.1)
 
         // We call hangup immediately, but internally no offer should have gone out.
         // No hangup should have been sent for any of the tests either.
         expect(delegate.shouldSendOfferInvoked).to(equal(false))
         expect(delegate.shouldSendHangupNormalInvoked).to(equal(false))
 
-        Logger.debug("Test: Now ending...")
-
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1293,21 +1264,15 @@ class SignalRingRTCTests: XCTestCase {
                 return
             }
 
+            // Give the hangup some time.
+            delay(interval: 0.1)
+
             expect(delegate.shouldSendHangupNormalInvoked).toEventually(equal(true))
             delegate.shouldSendHangupNormalInvoked = false
         }
 
-        Logger.debug("Test: Waiting to end...")
-
-        // Add a small delay before closing.
-        delay(interval: 0.5)
-
-        Logger.debug("Test: Now ending...")
-
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1357,7 +1322,7 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        // Wait a half second to see what events were fired.
+        // Wait to see what events were fired.
         delay(interval: 0.5)
 
         expect(delegate.eventEndedRemoteHangup).to(equal(true))
@@ -1365,10 +1330,8 @@ class SignalRingRTCTests: XCTestCase {
         // shouldSendAnswerInvoked should NOT be invoked!
         expect(delegate.shouldSendAnswerInvoked).notTo(equal(true))
 
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1421,7 +1384,7 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        // Wait a half second to see what events were fired.
+        // Wait to see what events were fired.
         delay(interval: 0.5)
 
         expect(delegate.eventEndedRemoteHangup).to(equal(true))
@@ -1432,10 +1395,8 @@ class SignalRingRTCTests: XCTestCase {
         // shouldSendAnswerInvoked should be invoked!
         expect(delegate.shouldSendAnswerInvoked).to(equal(true))
 
-        // Release the Call Manager.
+        // Cleanup
         callManager = nil
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1595,22 +1556,18 @@ class SignalRingRTCTests: XCTestCase {
             expect(delegateCallee.eventEndedRemoteHangup).toEventually(equal(true))
             delegateCallee.eventEndedRemoteHangup = false
 
+            delay(interval: 1.0)
+
             Logger.debug("Test: End of test loop...")
         }
 
         Logger.debug("Test: Done with test loop...")
 
-        // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 1.0)
-
-        // Release the Call Managers (but there still might be references in the delegates!).
+        // Cleanup
+        delegateCaller.callManagerICE = []
+        delegateCallee.callManagerICE = []
         callManagerCaller = nil
         callManagerCallee = nil
-
-        // See what clears up after closing the Call Manager...
-        delay(interval: 1.0)
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1756,16 +1713,9 @@ class SignalRingRTCTests: XCTestCase {
         expect(delegateCaller.eventRemoteRingingInvoked).toEventually(equal(true))
         expect(delegateCallee.eventLocalRingingInvoked).toEventually(equal(true))
 
-        delay(interval: 1.0)
-
-        // Release the Call Managers.
+        // Cleanup
         callManagerCaller = nil
         callManagerCallee = nil
-
-        // See what clears up after closing the Call Manager...
-        delay(interval: 1.0)
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     enum GlareScenario {
@@ -1931,14 +1881,11 @@ class SignalRingRTCTests: XCTestCase {
 
         // Operation on B should be the same on A, no further testing required.
 
-        // Release the Call Managers (but there still might be references in the delegates!).
+        // Cleanup
+        delegateA.callManagerICE = []
+        delegateB.callManagerICE = []
         callManagerA = nil
         callManagerB = nil
-
-        // See what clears up after closing the Call Manager...
-        delay(interval: 1.0)
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -1982,7 +1929,7 @@ class SignalRingRTCTests: XCTestCase {
         Logger.debug("Test: Testing ReCall for scenario: \(scenario)...")
 
         let delegateCaller = TestDelegate()
-        let callManagerCaller = createCallManager(delegateCaller)
+        var callManagerCaller = createCallManager(delegateCaller)
         expect(callManagerCaller).toNot(beNil())
 
         let delegateA = TestDelegate()
@@ -2163,21 +2110,18 @@ class SignalRingRTCTests: XCTestCase {
             // Neither side should have ended the new call.
             expect(delegateB.eventGeneralEnded).to(equal(false))
             expect(delegateA.eventGeneralEnded).to(equal(false))
-
-            delay(interval: 1.0)
         } catch {
            XCTFail("Scenario failed: \(error)")
            return
        }
 
-        // Release the Call Managers (but there still might be references in the delegates!).
+        // Cleanup
+        delegateCaller.callManagerICE = []
+        delegateA.callManagerICE = []
+        delegateB.callManagerICE = []
+        callManagerCaller = nil
         callManagerA = nil
         callManagerB = nil
-
-        // See what clears up after closing the Call Manager...
-        delay(interval: 1.0)
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor
@@ -2656,23 +2600,22 @@ class SignalRingRTCTests: XCTestCase {
                 // hungup, so we won't simulate that now.
             }
 
+            delay(interval: 1.0)
+
             Logger.debug("Test: End of test loop...")
         }
 
         Logger.debug("Test: Done with test loop...")
 
-        // Delay the end of the test to give Logger time to catch up.
-        delay(interval: 1.0)
-
-        // Release the Call Managers (but there still might be references in the delegates!).
+        // Cleanup
+        delegateCaller.callManagerICE = []
+        for device in calleeDevices {
+            device.delegate.callManagerICE = []
+        }
+        delegateExtra.callManagerICE = []
         callManagerExtra = nil
-        callManagerCaller = nil
         calleeDevices = []
-
-        // See what clears up after closing the Call Manager...
-        delay(interval: 1.0)
-
-        Logger.debug("Test: Exiting test function...")
+        callManagerCaller = nil
     }
 
     @MainActor
@@ -3239,16 +3182,15 @@ class SignalRingRTCTests: XCTestCase {
             delegateA2.shouldSendHangupBusyInvoked = false
         }
 
-        // Release the Call Managers (but there still might be references in the delegates!).
+        // Cleanup
+        delegateA1.callManagerICE = []
+        delegateA2.callManagerICE = []
+        delegateB1.callManagerICE = []
+        delegateB2.callManagerICE = []
         callManagerA1 = nil
         callManagerA2 = nil
         callManagerB1 = nil
         callManagerB2 = nil
-
-        // See what clears up after closing the Call Manager...
-        delay(interval: 1.0)
-
-        Logger.debug("Test: Exiting test function...")
     }
 
     @MainActor

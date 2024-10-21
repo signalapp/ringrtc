@@ -1,13 +1,28 @@
 PODS:
-  - Nimble (9.2.1)
+  - CwlCatchException (2.2.1):
+    - CwlCatchExceptionSupport (~> 2.2.1)
+  - CwlCatchExceptionSupport (2.2.1)
+  - CwlMachBadInstructionHandler (2.2.2)
+  - CwlPosixPreconditionTesting (2.2.2)
+  - CwlPreconditionTesting (2.2.2):
+    - CwlCatchException (~> 2.2.1)
+    - CwlMachBadInstructionHandler (~> 2.2.2)
+    - CwlPosixPreconditionTesting (~> 2.2.2)
+  - Nimble (13.5.0):
+    - CwlPreconditionTesting (~> 2.2.0)
   - WebRTCForTesting (0.0.1)
 
 DEPENDENCIES:
-  - Nimble (~> 9.0)
+  - Nimble (~> 13.5.0)
   - WebRTCForTesting (from `../../../out/`)
 
 SPEC REPOS:
   trunk:
+    - CwlCatchException
+    - CwlCatchExceptionSupport
+    - CwlMachBadInstructionHandler
+    - CwlPosixPreconditionTesting
+    - CwlPreconditionTesting
     - Nimble
 
 EXTERNAL SOURCES:
@@ -15,9 +30,14 @@ EXTERNAL SOURCES:
     :path: "../../../out/"
 
 SPEC CHECKSUMS:
-  Nimble: e7e615c0335ee4bf5b0d786685451e62746117d5
+  CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
+  CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
+  CwlMachBadInstructionHandler: dae4fdd124d45c9910ac240287cc7b898f4502a1
+  CwlPosixPreconditionTesting: ecd095aa2129e740b44301c34571e8d85906fb88
+  CwlPreconditionTesting: 67a0047dd4de4382b93442c0e3f25207f984f35a
+  Nimble: cc0469644d253140c6bab7e88d4ee3bbed59a25c
   WebRTCForTesting: ff4429619838fdb844c51afdac36cc033360ceeb
 
-PODFILE CHECKSUM: 4e51f5b40367d7fa52c82d411ebcf3a9e78c24a3
+PODFILE CHECKSUM: d2ed6b0d162f729e8eb59b23d2d6eb99a2e6952d
 
 COCOAPODS: 1.15.2
