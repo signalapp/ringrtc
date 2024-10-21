@@ -1,5 +1,5 @@
-name: Build RingRTC AAR
-run-name: Build RingRTC AAR (${{ github.ref_name }})
+name: Build RingRTC Android Artifacts
+run-name: Build RingRTC Android Artifacts (${{ github.ref_name }})
 
 on:
   workflow_dispatch:
