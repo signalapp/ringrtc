@@ -8,6 +8,7 @@ use crate::webrtc::audio_device_module_utils::{copy_and_truncate_string, DeviceC
 use crate::webrtc::ffi::audio_device_module::RffiAudioTransport;
 use anyhow::anyhow;
 use cubeb::{Context, DeviceId, DeviceType, MonoFrame, Stream, StreamPrefs};
+use cubeb_core::InputProcessingParams;
 use std::collections::VecDeque;
 use std::ffi::{c_uchar, c_void, CString};
 use std::sync::{Arc, Mutex};
@@ -691,7 +692,20 @@ impl AudioDeviceModule {
             Ok(stream) => {
                 match ctx.supported_input_processing_params() {
                     Ok(params) => {
+                        // With cubeb-coreaudio-rs, the VPIO input is inaudible without these settings.
+                        // See https://github.com/mozilla/cubeb-coreaudio-rs/issues/239#issuecomment-2430361990
                         info!("Available input processing params: {:?}", params);
+                        let mut desired_params = InputProcessingParams::empty();
+                        if params.contains(InputProcessingParams::AUTOMATIC_GAIN_CONTROL) {
+                            desired_params |= InputProcessingParams::AUTOMATIC_GAIN_CONTROL;
+                        }
+                        // With the coreaudio-rust backend, these settings must be set together.
+                        if params.contains(InputProcessingParams::ECHO_CANCELLATION | InputProcessingParams::NOISE_SUPPRESSION) {
+                           desired_params |= InputProcessingParams::ECHO_CANCELLATION | InputProcessingParams::NOISE_SUPPRESSION;
+                        }
+                        if let Err(e) = stream.set_input_processing_params(desired_params) {
+                            error!("couldn't set input params: {:?}", e);
+                        }
                     }
                     Err(e) => warn!("Failed to get supported input processing parameters; proceeding without: {}", e)
                 }
