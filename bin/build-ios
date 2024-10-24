@@ -121,7 +121,7 @@ webrtc_arch_for_host_sim() {
 }
 
 # The Rust compiler expects this to always be in the form "major.minor".
-export IPHONEOS_DEPLOYMENT_TARGET="13.0"
+export IPHONEOS_DEPLOYMENT_TARGET="14.0"
 
 # The WebRTC part of the build resulting in WebRTC.xcframework.
 if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
