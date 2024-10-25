@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.48.4
+
+- Update to webrtc 6723a (m130)
+
+- Desktop: Updates to the new Audio Device Module
+
+- Update dependencies
+
+- Build improvements
+
 ## v2.48.3
 
 - Desktop: Install pulse to build for linux
@@ -43,7 +53,7 @@
 
 ## v2.47.0
 
-- Update to webrtc 6613a
+- Update to webrtc 6613a (m128)
 
 - Update PeekInfo::unique_pending_users to maintain order from SFU
 
