@@ -195,7 +195,9 @@ impl Default for AudioConfig {
 }
 
 impl AudioConfig {
-    fn rffi(&self) -> Result<RffiAudioConfig> {
+    // Return both the RffiAudioConfig as well as the name of the cubeb backend
+    // in use, if any.
+    fn rffi(&self) -> Result<(RffiAudioConfig, Option<String>)> {
         let (input_file, output_file) =
             if self.audio_device_module_type == RffiAudioDeviceModuleType::File {
                 if let Some(file_based_adm_config) = &self.file_based_adm_config {
@@ -210,11 +212,10 @@ impl AudioConfig {
                 (std::ptr::null(), std::ptr::null())
             };
 
-        #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
-        let audio_device_module_type = self.audio_device_module_type;
-        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
         let audio_device_module_type =
-            if self.audio_device_module_type == RffiAudioDeviceModuleType::RingRtc {
+            if cfg!(not(all(target_os = "linux", target_arch = "aarch64"))) {
+                self.audio_device_module_type
+            } else if self.audio_device_module_type == RffiAudioDeviceModuleType::RingRtc {
                 RffiAudioDeviceModuleType::Default
             } else {
                 self.audio_device_module_type
@@ -225,11 +226,22 @@ impl AudioConfig {
             feature = "native",
             not(all(target_os = "linux", target_arch = "aarch64"))
         ))]
-        let adm_borrowed =
-            webrtc::ptr::Borrowed::from_ptr(Box::into_raw(Box::new(AudioDeviceModule::new())))
-                .to_void();
+        let (adm_borrowed, backend_name) = {
+            let mut adm = AudioDeviceModule::new();
+            // Initialize the ADM here. This isn't strictly necessary, but allows
+            // us to log the backend name (e.g. audiounit vs audiounit-rust).
+            adm.init();
+            let backend_name = adm.backend_name();
+            (
+                webrtc::ptr::Borrowed::from_ptr(Box::into_raw(Box::new(AudioDeviceModule::new())))
+                    .to_void(),
+                backend_name,
+            )
+        };
         #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        let adm_borrowed = webrtc::ptr::Borrowed::null();
+        let (adm_borrowed, backend_name) = (webrtc::ptr::Borrowed::null(), None);
+        #[cfg(any(feature = "sim", not(feature = "native")))]
+        let backend_name = None;
 
         #[cfg(all(
             not(feature = "sim"),
@@ -241,19 +253,22 @@ impl AudioConfig {
         #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
         let rust_audio_device_callbacks = webrtc::ptr::Borrowed::null();
 
-        Ok(RffiAudioConfig {
-            audio_device_module_type,
-            input_file: webrtc::ptr::Borrowed::from_ptr(input_file),
-            output_file: webrtc::ptr::Borrowed::from_ptr(output_file),
-            high_pass_filter_enabled: self.high_pass_filter_enabled,
-            aec_enabled: self.aec_enabled,
-            ns_enabled: self.ns_enabled,
-            agc_enabled: self.agc_enabled,
-            #[cfg(all(not(feature = "sim"), feature = "native"))]
-            adm_borrowed,
-            #[cfg(all(not(feature = "sim"), feature = "native"))]
-            rust_audio_device_callbacks,
-        })
+        Ok((
+            RffiAudioConfig {
+                audio_device_module_type,
+                input_file: webrtc::ptr::Borrowed::from_ptr(input_file),
+                output_file: webrtc::ptr::Borrowed::from_ptr(output_file),
+                high_pass_filter_enabled: self.high_pass_filter_enabled,
+                aec_enabled: self.aec_enabled,
+                ns_enabled: self.ns_enabled,
+                agc_enabled: self.agc_enabled,
+                #[cfg(all(not(feature = "sim"), feature = "native"))]
+                adm_borrowed,
+                #[cfg(all(not(feature = "sim"), feature = "native"))]
+                rust_audio_device_callbacks,
+            },
+            backend_name,
+        ))
     }
 }
 
@@ -309,6 +324,7 @@ pub struct PeerConnectionFactory {
     rffi: webrtc::Arc<RffiPeerConnectionFactoryOwner>,
     #[cfg(feature = "native")]
     device_counts: DeviceCounts,
+    backend_name: Option<String>,
 }
 
 impl PeerConnectionFactory {
@@ -317,9 +333,11 @@ impl PeerConnectionFactory {
     pub fn new(audio_config: &AudioConfig, use_injectable_network: bool) -> Result<Self> {
         debug!("PeerConnectionFactory::new()");
 
+        let (audio_config_rffi, backend_name) = audio_config.rffi()?;
+
         let rffi = unsafe {
             webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(
-                webrtc::ptr::Borrowed::from_ptr(&audio_config.rffi()?),
+                webrtc::ptr::Borrowed::from_ptr(&audio_config_rffi),
                 use_injectable_network,
             ))
         };
@@ -330,6 +348,7 @@ impl PeerConnectionFactory {
             rffi,
             #[cfg(feature = "native")]
             device_counts: Default::default(),
+            backend_name,
         })
     }
 
@@ -352,6 +371,7 @@ impl PeerConnectionFactory {
             rffi,
             #[cfg(feature = "native")]
             device_counts: Default::default(),
+            backend_name: None,
         }
     }
 
@@ -693,5 +713,9 @@ impl PeerConnectionFactory {
             error!("setAudioRecordingDevice({}) failed", index);
             Err(RingRtcError::SetAudioDevice.into())
         }
+    }
+
+    pub fn audio_backend(&self) -> Option<String> {
+        self.backend_name.clone()
     }
 }

@@ -192,6 +192,12 @@ impl AudioDeviceModule {
         }
     }
 
+    pub fn backend_name(&self) -> Option<String> {
+        self.cubeb_ctx
+            .as_ref()
+            .map(|ctx| ctx.backend_id().to_string())
+    }
+
     pub fn terminate(&mut self) -> i32 {
         if self.recording {
             self.stop_recording();

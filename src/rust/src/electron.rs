@@ -439,6 +439,12 @@ impl CallEndpoint {
             *event_reporter_for_logging = Some(event_reporter.clone());
         }
 
+        if use_ringrtc_adm {
+            // After initializing logs, log the backend in use.
+            let backend = peer_connection_factory.audio_backend();
+            info!("audio_device_module using cubeb backend {:?}", backend);
+        }
+
         // Only relevant for 1:1 calls
         let signaling_sender = Box::new(event_reporter.clone());
         let should_assume_messages_sent = false; // Use async notification from app to send next message.
