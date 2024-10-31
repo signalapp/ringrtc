@@ -1108,3 +1108,28 @@ impl AudioDeviceModule {
         }
     }
 }
+
+#[cfg(test)]
+mod audio_device_module_tests {
+    use crate::webrtc::audio_device_module::AudioDeviceModule;
+
+    #[test]
+    fn init_backend_id() {
+        #[cfg(target_os = "windows")]
+        let expected_backend = "wasapi";
+        #[cfg(target_os = "macos")]
+        let expected_backend = "audiounit-rust";
+        #[cfg(target_os = "linux")]
+        let expected_backend = "pulse-rust";
+
+        cubeb_core::set_logging(
+            cubeb_core::LogLevel::Normal,
+            Some(|cstr| println!("{:?}", cstr)),
+        )
+        .expect("failed to set logging");
+        let mut adm = AudioDeviceModule::new();
+        assert_eq!(adm.init(), 0);
+
+        assert_eq!(adm.backend_name(), Some(expected_backend.to_string()));
+    }
+}

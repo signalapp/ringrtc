@@ -16,17 +16,9 @@ use std::os::raw::c_char;
 use crate::common::Result;
 use crate::error::RingRtcError;
 use crate::webrtc;
-#[cfg(all(
-    not(feature = "sim"),
-    feature = "native",
-    not(all(target_os = "linux", target_arch = "aarch64"))
-))]
+#[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::audio_device_module::AudioDeviceModule;
-#[cfg(all(
-    not(feature = "sim"),
-    feature = "native",
-    not(all(target_os = "linux", target_arch = "aarch64"))
-))]
+#[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::ffi::audio_device_module::AUDIO_DEVICE_CBS_PTR;
 #[cfg(feature = "injectable_network")]
 use crate::webrtc::injectable_network::InjectableNetwork;
@@ -212,20 +204,7 @@ impl AudioConfig {
                 (std::ptr::null(), std::ptr::null())
             };
 
-        let audio_device_module_type =
-            if cfg!(not(all(target_os = "linux", target_arch = "aarch64"))) {
-                self.audio_device_module_type
-            } else if self.audio_device_module_type == RffiAudioDeviceModuleType::RingRtc {
-                RffiAudioDeviceModuleType::Default
-            } else {
-                self.audio_device_module_type
-            };
-
-        #[cfg(all(
-            not(feature = "sim"),
-            feature = "native",
-            not(all(target_os = "linux", target_arch = "aarch64"))
-        ))]
+        #[cfg(all(not(feature = "sim"), feature = "native"))]
         let (adm_borrowed, backend_name) = {
             let mut adm = AudioDeviceModule::new();
             // Initialize the ADM here. This isn't strictly necessary, but allows
@@ -238,24 +217,12 @@ impl AudioConfig {
                 backend_name,
             )
         };
-        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        let (adm_borrowed, backend_name) = (webrtc::ptr::Borrowed::null(), None);
         #[cfg(any(feature = "sim", not(feature = "native")))]
         let backend_name = None;
 
-        #[cfg(all(
-            not(feature = "sim"),
-            feature = "native",
-            not(all(target_os = "linux", target_arch = "aarch64"))
-        ))]
-        let rust_audio_device_callbacks =
-            webrtc::ptr::Borrowed::from_ptr(AUDIO_DEVICE_CBS_PTR).to_void();
-        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        let rust_audio_device_callbacks = webrtc::ptr::Borrowed::null();
-
         Ok((
             RffiAudioConfig {
-                audio_device_module_type,
+                audio_device_module_type: self.audio_device_module_type,
                 input_file: webrtc::ptr::Borrowed::from_ptr(input_file),
                 output_file: webrtc::ptr::Borrowed::from_ptr(output_file),
                 high_pass_filter_enabled: self.high_pass_filter_enabled,
@@ -265,7 +232,8 @@ impl AudioConfig {
                 #[cfg(all(not(feature = "sim"), feature = "native"))]
                 adm_borrowed,
                 #[cfg(all(not(feature = "sim"), feature = "native"))]
-                rust_audio_device_callbacks,
+                rust_audio_device_callbacks: webrtc::ptr::Borrowed::from_ptr(AUDIO_DEVICE_CBS_PTR)
+                    .to_void(),
             },
             backend_name,
         ))
