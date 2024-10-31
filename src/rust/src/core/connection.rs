@@ -1292,8 +1292,10 @@ where
     ) -> Result<()> {
         let mut added_sdps = vec![];
         let mut removed_addresses = vec![];
+        let mut removed_ports = vec![];
         for candidate in remote_ice_candidates {
             if let Some(removed_address) = candidate.removed_address() {
+                removed_ports.push(removed_address.port());
                 removed_addresses.push(removed_address);
                 // We don't add a candidate if it's both added and removed because of
                 // the backwards-compatibility mechanism we have that contains a dummy
@@ -1312,6 +1314,8 @@ where
                 removed_addresses.len()
             )
         );
+
+        info!("Remote ICE candidates removed; ports: {:?}", removed_ports);
 
         for added_sdp in added_sdps {
             if let Err(e) = pc.add_ice_candidate_from_sdp(&added_sdp) {
@@ -1743,7 +1747,7 @@ where
             .iter()
             .map(|address| address.port())
             .collect();
-        info!("Local ICE candidates removed; ports: {:?}", removed_ports,);
+        info!("Local ICE candidates removed; ports: {:?}", removed_ports);
 
         let candidates = removed_addresses
             .into_iter()
