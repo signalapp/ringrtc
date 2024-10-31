@@ -150,12 +150,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13]
+        os: [ubuntu-22.04, macos-13, windows-latest]
         include:
         - os: ubuntu-22.04
           install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
         - os: macos-13
           install-deps: brew install protobuf coreutils
+        - os: windows-latest
+          install-deps: choco install protoc cmake
     runs-on: ${{ matrix.os }}
     defaults:
       run:

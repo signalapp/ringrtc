@@ -142,9 +142,10 @@ fn fetch_webrtc_artifact(
         platform, artifact_out_dir
     );
 
-    let output = Command::new(fetch_script)
+    let output = Command::new("bash")
         .current_dir(project_dir())
         .env("OUTPUT_DIR", artifact_out_dir)
+        .arg(fetch_script)
         .arg("--platform")
         .arg(platform)
         .output()
