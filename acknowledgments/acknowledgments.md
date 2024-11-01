@@ -669,7 +669,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 ```
 
-## libsignal-core 0.1.0, mrp 2.48.4, protobuf 2.48.4, ringrtc 2.48.4, regex-aot 0.1.0, partial-default-derive 0.1.0
+## libsignal-core 0.1.0, mrp 2.48.5, protobuf 2.48.5, ringrtc 2.48.5, regex-aot 0.1.0, partial-default-derive 0.1.0
 
 ```
 GNU AFFERO GENERAL PUBLIC LICENSE

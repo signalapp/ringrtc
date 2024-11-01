@@ -761,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.48.4"
+version = "2.48.5"
 dependencies = [
  "prost-build",
  "tonic-build",

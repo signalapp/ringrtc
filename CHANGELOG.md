@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.48.5
+
+- Desktop: Improve new Audio Device Module support on mac and linux
+  - Update cubeb
+  - Reenable build on aarch64 linux
+  - Debug logging
+
+- Additional debug logging
+
+- Build improvements
+
 ## v2.48.4
 
 - Update to webrtc 6723a (m130)
