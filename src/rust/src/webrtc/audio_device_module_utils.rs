@@ -17,6 +17,15 @@ pub struct DeviceCollectionWrapper<'a> {
     device_collection: DeviceCollection<'a>,
 }
 
+#[cfg(target_os = "linux")]
+fn device_is_monitor(device: &DeviceInfo) -> bool {
+    device.device_type() == cubeb::DeviceType::INPUT
+        && device
+            .device_id()
+            .as_ref()
+            .map_or(false, |s| s.ends_with(".monitor"))
+}
+
 impl DeviceCollectionWrapper<'_> {
     pub fn new(device_collection: DeviceCollection<'_>) -> DeviceCollectionWrapper<'_> {
         DeviceCollectionWrapper { device_collection }
@@ -29,6 +38,16 @@ impl DeviceCollectionWrapper<'_> {
         self.device_collection
             .iter()
             .filter(|d| d.state() == DeviceState::Enabled)
+    }
+
+    // For linux only, a method that will ignore "monitor" devices.
+    #[cfg(target_os = "linux")]
+    pub fn iter_non_monitor(
+        &self,
+    ) -> std::iter::Filter<std::slice::Iter<'_, DeviceInfo>, fn(&&DeviceInfo) -> bool> {
+        self.device_collection
+            .iter()
+            .filter(|&d| d.state() == DeviceState::Enabled && !device_is_monitor(d))
     }
 
     #[cfg(target_os = "windows")]
@@ -59,9 +78,19 @@ impl DeviceCollectionWrapper<'_> {
         if self.count() == 0 {
             None
         } else if idx > 0 {
-            self.iter().nth(idx - 1)
+            #[cfg(target_os = "macos")]
+            {
+                self.iter().nth(idx - 1)
+            }
+            #[cfg(target_os = "linux")]
+            {
+                // filter out "monitor" devices.
+                self.iter_non_monitor().nth(idx - 1)
+            }
         } else {
             // Find a device that's preferred for VOICE -- device 0 is the "default"
+            // Even on linux, we do *NOT* filter monitor devices -- if the user specified that as
+            // default, we respect it.
             self.iter()
                 .find(|&device| device.preferred().contains(DevicePref::VOICE))
         }
@@ -75,10 +104,16 @@ impl DeviceCollectionWrapper<'_> {
     pub fn count(&self) -> usize {
         self.iter().count()
     }
+
     #[cfg(not(target_os = "windows"))]
     /// Returns the number of devices, counting the default device.
     pub fn count(&self) -> usize {
+        #[cfg(target_os = "macos")]
         let count = self.iter().count();
+        // Whether a monitor device is default or not, there will be an additional default,
+        // so no need to do anything different.
+        #[cfg(target_os = "linux")]
+        let count = self.iter_non_monitor().count();
         if count == 0 {
             0
         } else {
