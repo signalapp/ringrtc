@@ -221,6 +221,9 @@ then
             exit 1 # unreachable
         fi
 
+        # Propagate this cross-compilation request to child processes;
+        # e.g. cubeb rust libs.
+        export CARGO_BUILD_TARGET="${CARGO_TARGET}"
         RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --package ringrtc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
 
         mkdir -p src/node/build/${DEFAULT_PLATFORM}
