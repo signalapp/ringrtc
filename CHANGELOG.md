@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.48.6
+
+- Desktop:
+  - Don't show `Monitor of` devices as inputs to match existing ADM behavior
+  - Uprev cubeb to 0.17.0 to fix cross-compilation
+
 ## v2.48.5
 
 - Desktop: Improve new Audio Device Module support on mac and linux
