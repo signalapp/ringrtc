@@ -138,16 +138,6 @@ macro_rules! adm_wrapper {
     () => {};
     ($f:ident($($param:ident: $arg_ty:ty),*) -> $ret:ty ; $($t:tt)*) => {
         extern "C" fn $f(ptr: webrtc::ptr::Borrowed<AudioDeviceModule>, $($param: $arg_ty),*) -> $ret {
-            // Safety: Safe as long as this function is only called from a single thread, which will
-            // be the case.
-            static mut LOG_COUNT: i32 = 0;
-            unsafe {
-                if LOG_COUNT % 100 == 0 {
-                    info!("{} wrapper", stringify!($f));
-                    LOG_COUNT = 0;
-                }
-                LOG_COUNT += 1;
-            }
             if let Some(adm) = unsafe { ptr.as_mut() } {
                 adm.$f($($param),*)
             } else {

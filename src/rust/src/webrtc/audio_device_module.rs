@@ -992,10 +992,7 @@ impl AudioDeviceModule {
                     }
                 }
             }
-            None => {
-                error!("Cannot get playout delay with no stream");
-                -1
-            }
+            None => -1,
         }
     }
 
