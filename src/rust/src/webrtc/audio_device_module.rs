@@ -8,11 +8,13 @@ use crate::webrtc::audio_device_module_utils::{copy_and_truncate_string, DeviceC
 use crate::webrtc::ffi::audio_device_module::RffiAudioTransport;
 use anyhow::anyhow;
 use cubeb::{Context, DeviceId, DeviceType, MonoFrame, Stream, StreamPrefs};
-use cubeb_core::InputProcessingParams;
-use std::collections::VecDeque;
-use std::ffi::{c_uchar, c_void, CString};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use cubeb_core::{log_enabled, set_logging, InputProcessingParams, LogLevel};
+use lazy_static::lazy_static;
+use regex::Regex;
+use std::collections::{HashMap, VecDeque};
+use std::ffi::{c_uchar, c_void, CStr, CString};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Com;
 
@@ -132,6 +134,63 @@ fn write_to_null_or_valid_pointer<T>(ptr: webrtc::ptr::Borrowed<T>, v: T) -> any
     }
 }
 
+fn log_c_str(s: &CStr) {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"(?<ident>[^\s]+:\d+)(?<message>.*)").unwrap();
+    }
+    lazy_static! {
+        static ref RATE_LIMITER: RwLock<HashMap<String, Instant>> = RwLock::new(HashMap::new());
+    }
+
+    match s.to_str() {
+        Ok(msg) => {
+            if msg.contains("DeviceID") && msg.contains("Name") {
+                // Shortcut:
+                // Suppress spammy lines that log all devices (we already do this)
+                // See `log_device` in cubeb.c
+                return;
+            }
+
+            // Assume valid lines are formatted "file:lineno" and ignore anything
+            // not matching
+            let Some(caps) = RE.captures(msg) else { return };
+            let ident = &caps["ident"];
+            let contents = &caps["message"];
+
+            // Rate limit each line to 1/5 sec.
+            let too_recent = if let Ok(guard) = RATE_LIMITER.read() {
+                guard.get(ident).as_ref().map_or(false, |&i| {
+                    Instant::now().duration_since(*i) < Duration::from_secs(5)
+                })
+            } else {
+                return;
+            };
+
+            if too_recent {
+                return;
+            }
+
+            if let Ok(mut guard) = RATE_LIMITER.write() {
+                guard.insert(ident.to_string(), Instant::now());
+            } else {
+                return;
+            }
+            // To minimize sensitive data in logs, only take first few characters.
+            // This impairs debuggability but at least will give a good pointer
+            // to *which* line in cubeb has a problem, if any.
+            let to_log = if cfg!(debug_assertions) {
+                contents.to_string()
+            } else {
+                contents.chars().take(20).collect::<String>()
+            };
+            info!("cubeb: {}{}...", ident, to_log);
+        }
+        Err(e) => {
+            warn!("cubeb log message not UTF-8: {:?}", e);
+        }
+    }
+}
+
 impl AudioDeviceModule {
     pub fn new() -> Self {
         Self::default()
@@ -159,6 +218,11 @@ impl AudioDeviceModule {
         // Don't bother re-initializing.
         if self.initialized {
             return 0;
+        }
+        if !log_enabled() {
+            if let Err(e) = set_logging(LogLevel::Normal, Some(log_c_str)) {
+                warn!("failed to set cubeb logging: {:?}", e);
+            }
         }
         #[cfg(target_os = "windows")]
         {
