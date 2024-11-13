@@ -253,6 +253,12 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
         joined_members: &HashSet<UserId>,
     );
 
+    fn handle_speaking_notification(
+        &self,
+        client_id: group_call::ClientId,
+        event: group_call::SpeechEvent,
+    );
+
     fn handle_audio_levels(
         &self,
         _client_id: group_call::ClientId,

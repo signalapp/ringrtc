@@ -15,7 +15,7 @@ use crate::common::{
 };
 use crate::core::call::Call;
 use crate::core::connection::{Connection, ConnectionType};
-use crate::core::group_call::{ClientId, Reaction};
+use crate::core::group_call::Reaction;
 use crate::core::platform::{Platform, PlatformItem};
 use crate::core::{group_call, signaling};
 use crate::ios::api::call_manager_interface::{
@@ -617,7 +617,7 @@ impl Platform for IosPlatform {
         );
     }
 
-    fn handle_reactions(&self, client_id: ClientId, reactions: Vec<Reaction>) {
+    fn handle_reactions(&self, client_id: group_call::ClientId, reactions: Vec<Reaction>) {
         trace!("handle_reactions(): {:?}", reactions);
 
         let app_reactions: Vec<AppReaction> = reactions
@@ -697,7 +697,7 @@ impl Platform for IosPlatform {
         );
     }
 
-    fn handle_raised_hands(&self, client_id: ClientId, raised_hands: Vec<DemuxId>) {
+    fn handle_raised_hands(&self, client_id: group_call::ClientId, raised_hands: Vec<DemuxId>) {
         info!("handle_raised_hands(): {:?}", raised_hands);
 
         let app_raised_hands_array = AppRaisedHandsArray {
@@ -777,6 +777,18 @@ impl Platform for IosPlatform {
 
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
         (self.app_interface.handleEnded)(self.app_interface.object, client_id, reason as i32);
+    }
+
+    fn handle_speaking_notification(
+        &self,
+        client_id: group_call::ClientId,
+        event: group_call::SpeechEvent,
+    ) {
+        (self.app_interface.handleSpeakingNotification)(
+            self.app_interface.object,
+            client_id,
+            event as i32,
+        );
     }
 }
 

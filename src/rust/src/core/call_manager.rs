@@ -2607,6 +2607,15 @@ where
         );
     }
 
+    fn handle_speaking_notification(
+        &mut self,
+        client_id: group_call::ClientId,
+        event: group_call::SpeechEvent,
+    ) {
+        info!("handle_speaking_notification():");
+        platform_handler!(self, handle_speaking_notification, client_id, event);
+    }
+
     fn handle_audio_levels(
         &self,
         client_id: group_call::ClientId,

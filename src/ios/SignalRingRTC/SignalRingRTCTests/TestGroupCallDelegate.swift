@@ -17,7 +17,9 @@ class TestGroupCallDelegate: GroupCallDelegate {
     var onRaisedHandsCount = 0
     var onPeekChangedCount = 0
     var onEndedCount = 0
+    var onSpeakingCount = 0
     var lastOnEndedReason: GroupCallEndReason? = nil
+    var lastOnSpeakingEvent: SpeechEvent? = nil
 
     func groupCall(requestMembershipProof groupCall: GroupCall) {
         requestMembershipProofCount += 1
@@ -58,5 +60,10 @@ class TestGroupCallDelegate: GroupCallDelegate {
     func groupCall(onEnded groupCall: GroupCall, reason: GroupCallEndReason) {
         onEndedCount += 1
         lastOnEndedReason = reason
+    }
+
+    func groupCall(onSpeakingNotification groupCall: GroupCall, event: SpeechEvent) {
+        onSpeakingCount += 1
+        lastOnSpeakingEvent = event
     }
 }

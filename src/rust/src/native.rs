@@ -256,6 +256,7 @@ pub enum GroupUpdate {
     RtcStatsReportComplete {
         report_json: String,
     },
+    SpeechEvent(group_call::ClientId, group_call::SpeechEvent),
 }
 
 impl fmt::Display for GroupUpdate {
@@ -286,6 +287,9 @@ impl fmt::Display for GroupUpdate {
                 format!("RaisedHands({:?})", raised_hands)
             }
             GroupUpdate::RtcStatsReportComplete { .. } => "RtcStatsReportComplete".to_string(),
+            GroupUpdate::SpeechEvent(_, event) => {
+                format!("SpeechEvent({:?}", event)
+            }
         };
         write!(f, "({})", display)
     }
@@ -880,6 +884,21 @@ impl Platform for NativePlatform {
         );
         let result =
             self.send_group_update(GroupUpdate::NetworkRouteChanged(client_id, network_route));
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_speaking_notification(
+        &self,
+        client_id: group_call::ClientId,
+        event: group_call::SpeechEvent,
+    ) {
+        info!(
+            "NativePlatform::handle_speaking_notification(): {:?}",
+            event
+        );
+        let result = self.send_group_update(GroupUpdate::SpeechEvent(client_id, event));
         if result.is_err() {
             error!("{:?}", result.err());
         }

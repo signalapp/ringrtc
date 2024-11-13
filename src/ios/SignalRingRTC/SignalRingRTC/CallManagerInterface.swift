@@ -42,6 +42,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
     func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo)
     func handleEnded(clientId: UInt32, reason: GroupCallEndReason)
+    func handleSpeakingNotification(clientId: UInt32, event: SpeechEvent)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -99,7 +100,8 @@ class CallManagerInterface {
             handleRemoteDevicesChanged: callManagerInterfaceHandleRemoteDevicesChanged,
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
             handlePeekChanged: callManagerInterfaceHandlePeekChanged,
-            handleEnded: callManagerInterfaceHandleEnded
+            handleEnded: callManagerInterfaceHandleEnded,
+            handleSpeakingNotification: callManagerInterfaceHandleSpeakingNotification
         )
     }
 
@@ -355,6 +357,14 @@ class CallManagerInterface {
         }
 
         delegate.handleEnded(clientId: clientId, reason: reason)
+    }
+
+    func handleSpeakingNotification(clientId: UInt32, event: SpeechEvent) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleSpeakingNotification(clientId: clientId, event: event)
     }
 }
 
@@ -1109,4 +1119,23 @@ func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId:
     }
 
     obj.handleEnded(clientId: clientId, reason: _reason)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceHandleSpeakingNotification(object: UnsafeMutableRawPointer?, clientId: UInt32, event: Int32) {
+    guard let object = object else {
+        failDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    let _event: SpeechEvent
+    if let validEvent = SpeechEvent(rawValue: event) {
+        _event = validEvent
+    } else {
+        failDebug("unexpected speech event")
+        return
+    }
+
+    obj.handleSpeakingNotification(clientId: clientId, event: _event)
 }

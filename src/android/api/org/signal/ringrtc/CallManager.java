@@ -1787,6 +1787,20 @@ public class CallManager {
     groupCall.handleEnded(reason);
   }
 
+  @CalledByNative
+  private void handleSpeakingNotification(long clientId, GroupCall.SpeechEvent event) {
+    Log.i(TAG, "handleSpeakingNotification():");
+
+    GroupCall groupCall = this.groupCallByClientId.get(clientId);
+    if (groupCall == null) {
+      Log.w(TAG, "groupCall not found by clientId: " + clientId);
+      return;
+    }
+
+    groupCall.handleSpeakingNotification(event);
+  }
+
+
   /**
    *
    * Contains parameters for creating Connection objects

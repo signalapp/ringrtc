@@ -48,6 +48,13 @@ public enum GroupCallEndReason: Int32 {
     case hasMaxDevices
 }
 
+/// The inferred state of user speech (e.g. to suggest lowering hand)
+@available(iOSApplicationExtension, unavailable)
+public enum SpeechEvent: Int32 {
+    case StoppedSpeaking = 0
+    case LowerHandSuggestion
+}
+
 /// The local device state for a group call.
 @available(iOSApplicationExtension, unavailable)
 public class LocalDeviceState {
@@ -244,6 +251,12 @@ public protocol GroupCallDelegate: AnyObject {
      */
     @MainActor
     func groupCall(onEnded groupCall: GroupCall, reason: GroupCallEndReason)
+
+    /**
+     * Indication that the user may have been speaking for a certain amount of time -- or stopped speaking.
+     */
+    @MainActor
+    func groupCall(onSpeakingNotification groupCall: GroupCall, event: SpeechEvent)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -858,5 +871,10 @@ public class GroupCall {
         ringrtcDeleteGroupCallClient(self.ringRtcCallManager, clientId)
 
         self.delegate?.groupCall(onEnded: self, reason: reason)
+    }
+
+    @MainActor
+    func handleSpeakingNotification(event: SpeechEvent) {
+        self.delegate?.groupCall(onSpeakingNotification: self, event: event)
     }
 }

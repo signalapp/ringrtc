@@ -2853,6 +2853,15 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
+            Event::GroupUpdate(GroupUpdate::SpeechEvent(client_id, event)) => {
+                let method_name = "handleSpeechEvent";
+                let args = [
+                    cx.number(client_id).upcast(),
+                    cx.number(event as i32).upcast(),
+                ];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
         }
     }
     Ok(cx.undefined().upcast())

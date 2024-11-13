@@ -186,6 +186,39 @@ impl SrtpKeys {
 
 pub const INVALID_CLIENT_ID: ClientId = 0;
 
+// The minimum level of sound to detect as "likely speaking" if we get consistently above this level
+// for a minimum amount of time.
+// AudioLevel can go up to ~32k, and even quiet sounds (e.g. a mouse click) can empirically cause
+// audio levels up to ~400.
+// In an unscientific test, even soft speaking with a distant microphone easily gets levels of 2000.
+// So, use 1000 as a cutoff for "silence".
+const MIN_NON_SILENT_LEVEL: AudioLevel = 1000;
+// How often to poll for speaking/silence.
+const SPEAKING_POLL_INTERVAL: Duration = Duration::from_millis(200);
+// The amount of time with audio at or below `MIN_NON_SILENT_LEVEL` before we consider the
+// user as having stopped speaking, rather than pausing.
+// This should be less than MIN_SPEAKING_HAND_LOWER, or it won't be effective.
+const STOPPED_SPEAKING_DURATION: Duration = Duration::from_secs(3);
+// Amount of "continuous" speech (i.e., with gaps no longer than `STOPPED_SPEAKING_DURATION`)
+// after which we suggest lowering a raised hand.
+const MIN_SPEAKING_HAND_LOWER: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum SpeechEvent {
+    StoppedSpeaking = 0,
+    LowerHandSuggestion,
+}
+
+impl SpeechEvent {
+    pub fn ordinal(&self) -> i32 {
+        // Must be kept in sync with the Java, Swift, and TypeScript enums.
+        match self {
+            SpeechEvent::StoppedSpeaking => 0,
+            SpeechEvent::LowerHandSuggestion => 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum RemoteDevicesChangedReason {
     DemuxIdsChanged,
@@ -262,6 +295,8 @@ pub trait Observer {
         remote_demux_id: DemuxId,
         incoming_video_track: VideoTrack,
     );
+
+    fn handle_speaking_notification(&mut self, client_id: ClientId, speech_event: SpeechEvent);
 
     fn handle_audio_levels(
         &self,
@@ -1001,6 +1036,16 @@ struct State {
     // Things for getting audio levels from the PeerConnection
     audio_levels_interval: Option<Duration>,
     next_audio_levels_time: Option<Instant>,
+    // Variables to track the start of the current utterance, and how frequently
+    // to poll for "is the user speaking?"
+    speaking_interval: Duration,
+    next_speaking_audio_levels_time: Option<Instant>,
+    // Track the time the current speech began, if the user is not silent.
+    started_speaking: Option<Instant>,
+    // Track the time the current silence started, if the user is not speaking.
+    silence_started: Option<Instant>,
+    // Tracker for the last time speech-related notification sent to the client.
+    last_speaking_notification: Option<SpeechEvent>,
 
     next_membership_proof_request_time: Option<Instant>,
 
@@ -1257,6 +1302,12 @@ impl Client {
                     audio_levels_interval,
                     next_audio_levels_time: None,
 
+                    speaking_interval: SPEAKING_POLL_INTERVAL,
+                    next_speaking_audio_levels_time: None,
+                    started_speaking: None,
+                    silence_started: None,
+                    last_speaking_notification: None,
+
                     next_membership_proof_request_time: None,
 
                     next_raise_hand_time: None,
@@ -1368,6 +1419,48 @@ impl Client {
             }
             if let Some(report_json) = state.stats_observer.take_stats_report() {
                 state.observer.handle_rtc_stats_report(report_json)
+            }
+        }
+
+        if let Some(next_speaking_audio_levels_time) = state.next_speaking_audio_levels_time {
+            if now >= next_speaking_audio_levels_time {
+                let (captured_level, _) = state.peer_connection.get_audio_levels();
+                state.started_speaking = if captured_level > MIN_NON_SILENT_LEVEL
+                    && !state.outgoing_heartbeat_state.audio_muted.unwrap_or(true)
+                {
+                    state.silence_started = None;
+                    state.started_speaking.or(Some(now))
+                } else {
+                    state.silence_started = state.silence_started.or(Some(now));
+                    let time_silent = state
+                        .silence_started
+                        .map_or(Duration::from_secs(0), |start| now.duration_since(start));
+                    if time_silent >= STOPPED_SPEAKING_DURATION {
+                        None
+                    } else {
+                        state.started_speaking
+                    }
+                };
+
+                let time_speaking = now.duration_since(state.silence_started.unwrap_or(now));
+
+                let event = if time_speaking > MIN_SPEAKING_HAND_LOWER {
+                    Some(SpeechEvent::LowerHandSuggestion)
+                } else if time_speaking.is_zero() && state.last_speaking_notification.is_some() {
+                    Some(SpeechEvent::StoppedSpeaking)
+                } else {
+                    None
+                };
+                if state.last_speaking_notification != event {
+                    if let Some(event) = event {
+                        state
+                            .observer
+                            .handle_speaking_notification(state.client_id, event);
+                        state.last_speaking_notification = Some(event);
+                    }
+                }
+
+                state.next_speaking_audio_levels_time = Some(now + state.speaking_interval);
             }
         }
 
@@ -1594,6 +1687,7 @@ impl Client {
                     // Start heartbeats, audio levels, and raise hand right away.
                     state.next_heartbeat_time = Some(now);
                     state.next_audio_levels_time = Some(now);
+                    state.next_speaking_audio_levels_time = Some(now);
                     state.next_raise_hand_time = Some(now);
 
                     // Request group membership refresh as we start polling the participant list.
@@ -1787,6 +1881,7 @@ impl Client {
         state.next_heartbeat_time = None;
         state.next_stats_time = None;
         state.next_audio_levels_time = None;
+        state.next_speaking_audio_levels_time = None;
         state.next_membership_proof_request_time = None;
     }
 
@@ -4773,6 +4868,7 @@ mod tests {
         request_group_members_invocation_count: Arc<AtomicU64>,
         handle_remote_devices_changed_invocation_count: Arc<AtomicU64>,
         handle_audio_levels_invocation_count: Arc<AtomicU64>,
+        handle_speaking_notification_invocation_count: Arc<AtomicU64>,
         handle_reactions_invocation_count: Arc<AtomicU64>,
         reactions_count: Arc<AtomicU64>,
         send_signaling_message_invocation_count: Arc<AtomicU64>,
@@ -4814,6 +4910,7 @@ mod tests {
                 request_group_members_invocation_count: Default::default(),
                 handle_remote_devices_changed_invocation_count: Default::default(),
                 handle_audio_levels_invocation_count: Default::default(),
+                handle_speaking_notification_invocation_count: Default::default(),
                 handle_reactions_invocation_count: Default::default(),
                 reactions_count: Default::default(),
                 send_signaling_message_invocation_count: Default::default(),
@@ -4906,6 +5003,13 @@ mod tests {
                 .swap(0, Ordering::Relaxed)
         }
 
+        /// Gets the number of `speaking_notification` since last checked.
+        #[allow(unused)]
+        fn handle_speaking_notification_count(&self) -> u64 {
+            self.handle_speaking_notification_invocation_count
+                .swap(0, Ordering::Relaxed)
+        }
+
         fn handle_reactions_invocation_count(&self) -> u64 {
             self.handle_reactions_invocation_count
                 .swap(0, Ordering::Relaxed)
@@ -4979,6 +5083,11 @@ mod tests {
             self.handle_remote_devices_changed_invocation_count
                 .fetch_add(1, Ordering::Relaxed);
             self.remote_devices_changed.set();
+        }
+
+        fn handle_speaking_notification(&mut self, _client_id: ClientId, _event: SpeechEvent) {
+            self.handle_speaking_notification_invocation_count
+                .fetch_add(1, Ordering::Relaxed);
         }
 
         fn handle_audio_levels(

@@ -5,12 +5,11 @@
 
 use ringrtc::lite::http::sim as sim_http;
 
+use log::info;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use log::info;
-
-use ringrtc::core::group_call::Reaction;
+use ringrtc::core::group_call::{Reaction, SpeechEvent};
 use ringrtc::{
     common::units::DataRate,
     core::{
@@ -120,6 +119,10 @@ impl group_call::Observer for Observer {
         _network_route: ringrtc::webrtc::peer_connection_observer::NetworkRoute,
     ) {
         // ignore
+    }
+
+    fn handle_speaking_notification(&mut self, _client_id: ClientId, event: SpeechEvent) {
+        info!("Speaking {:?}", event);
     }
 
     fn handle_audio_levels(

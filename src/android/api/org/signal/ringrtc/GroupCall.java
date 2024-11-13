@@ -712,6 +712,18 @@ public final class GroupCall {
 
     /**
      *
+     * Callback from RingRTC with details about a speech event.
+     * @param event The speech event.
+     *
+     */
+    void handleSpeakingNotification(SpeechEvent event) {
+        Log.i(TAG, "handleSpeakingNotification():");
+
+        this.observer.onSpeakingNotification(this, event);
+    }
+
+    /**
+     *
      * Callback from RingRTC with details about audio levels.
      *
      */
@@ -887,6 +899,20 @@ public final class GroupCall {
             return values()[nativeIndex];
         }
     }
+
+    /**
+     * Enumeration of the type of speech durations we notify the client for.
+     */
+    public enum SpeechEvent {
+        /** The user was speaking, and is not anymore. */
+        STOPPED_SPEAKING,
+        /** The user has been speaking for long enough that they may want to lower their hand. */
+        LOWER_HAND_SUGGESTION;
+
+        @CalledByNative
+        static SpeechEvent fromNativeIndex(int nativeIndex) { return values()[nativeIndex]; }
+    }
+
 
     /**
      * A set of reasons why the group call has ended.
@@ -1203,6 +1229,11 @@ public final class GroupCall {
          * Notification that the local device state has changed.
          */
         void onLocalDeviceStateChanged(GroupCall groupCall);
+
+        /**
+         * Notification that speech state has changed.
+         */
+        void onSpeakingNotification(GroupCall groupCall, SpeechEvent event);
 
         /**
          * Notification of audio levels.

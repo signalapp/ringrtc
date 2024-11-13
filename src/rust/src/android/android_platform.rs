@@ -1016,6 +1016,38 @@ impl Platform for AndroidPlatform {
         }
     }
 
+    fn handle_speaking_notification(
+        &self,
+        client_id: group_call::ClientId,
+        event: group_call::SpeechEvent,
+    ) {
+        info!(
+            "handle_speaking_notification(): client_id {}, event: {:?}",
+            client_id, event
+        );
+
+        if let Ok(env) = &mut self.java_env() {
+            let jni_speech_event =
+                match self.java_enum(env, GROUP_CALL_CLASS, "SpeechEvent", event.ordinal()) {
+                    Ok(v) => AutoLocal::new(v, env),
+                    Err(error) => {
+                        error!("{:?}", error);
+                        return;
+                    }
+                };
+
+            let _ = jni_call_method(
+                env,
+                self.jni_call_manager.as_obj(),
+                "handleSpeakingNotification",
+                jni_args!((
+                    client_id as jlong => long,
+                    jni_speech_event => org.signal.ringrtc.GroupCall::SpeechEvent
+                ) -> void),
+            );
+        }
+    }
+
     fn handle_audio_levels(
         &self,
         client_id: group_call::ClientId,

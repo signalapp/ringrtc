@@ -43,6 +43,7 @@ export {
   RingCancelReason,
   RingRTCType,
   RingUpdate,
+  SpeechEvent,
   UserId,
   VideoCapturer,
   VideoRenderer,

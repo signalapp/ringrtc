@@ -1230,6 +1230,20 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             groupCall.handleEnded(reason: reason)
         }
     }
+
+    func handleSpeakingNotification(clientId: UInt32, event: SpeechEvent) {
+        Logger.debug("handleSpeakingNotification")
+
+        Task { @MainActor in
+            Logger.debug("handleSpeakingNotification - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleSpeakingNotification(event: event)
+        }
+    }
 }
 
 @available(iOSApplicationExtension, unavailable)

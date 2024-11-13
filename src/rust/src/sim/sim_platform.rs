@@ -529,6 +529,14 @@ impl Platform for SimPlatform {
         info!("handle_network_route_changed(): {:?}", network_route);
     }
 
+    fn handle_speaking_notification(
+        &self,
+        _client_id: group_call::ClientId,
+        event: group_call::SpeechEvent,
+    ) {
+        info!("handle_speaking_notification(): {:?}", event,);
+    }
+
     fn handle_audio_levels(
         &self,
         _client_id: group_call::ClientId,

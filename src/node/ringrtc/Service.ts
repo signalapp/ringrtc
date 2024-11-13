@@ -1528,6 +1528,16 @@ export class RingRTCType {
   }
 
   // Called by Rust
+  handleSpeechEvent(clientId: GroupCallClientId, event: SpeechEvent): void {
+    sillyDeadlockProtection(() => {
+      const groupCall = this._groupCallByClientId.get(clientId);
+      if (groupCall) {
+        groupCall.handleSpeechEvent(event);
+      }
+    });
+  }
+
+  // Called by Rust
   onLogMessage(
     level: number,
     fileName: string,
@@ -2246,6 +2256,14 @@ export enum GroupCallEndReason {
   HasMaxDevices,
 }
 
+// Matches SpeechEvent in rust.
+export enum SpeechEvent {
+  // User was speaking but stopped.
+  StoppedSpeaking = 0,
+  // User has been speaking for a while -- maybe lower hand?
+  LowerHandSuggestion,
+}
+
 export enum CallMessageUrgency {
   Droppable = 0,
   HandleImmediately,
@@ -2383,6 +2401,7 @@ export interface GroupCallObserver {
   onRaisedHands(groupCall: GroupCall, raisedHands: Array<number>): void;
   onPeekChanged(groupCall: GroupCall): void;
   onEnded(groupCall: GroupCall, reason: GroupCallEndReason): void;
+  onSpeechEvent(groupCall: GroupCall, event: SpeechEvent): void;
 }
 
 export class GroupCall {
@@ -2697,6 +2716,10 @@ export class GroupCall {
 
   setRtcStatsInterval(intervalMillis: number): void {
     this._callManager.setRtcStatsInterval(this._clientId, intervalMillis);
+  }
+
+  handleSpeechEvent(event: SpeechEvent): void {
+    this._observer.onSpeechEvent(this, event);
   }
 }
 

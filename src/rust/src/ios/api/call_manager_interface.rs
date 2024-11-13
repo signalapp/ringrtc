@@ -501,6 +501,8 @@ pub struct AppInterface {
     ),
     pub handleEnded:
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, reason: i32),
+    pub handleSpeakingNotification:
+        extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, event: i32),
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.

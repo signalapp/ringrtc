@@ -22,6 +22,7 @@ import {
   OfferType,
   PeekStatusCodes,
   Reaction,
+  SpeechEvent,
   RingRTC,
   callIdFromEra,
   callIdFromRingId,
@@ -907,6 +908,7 @@ describe('RingRTC', () => {
       onRaisedHands(_call: GroupCall, _raisedHands: Array<number>) {}
       onPeekChanged(_call: GroupCall) {}
       onEnded(_call: GroupCall, _reason: GroupCallEndReason) {}
+      onSpeechEvent(_call: GroupCall, _event: SpeechEvent) {}
       /* eslint-enable @typescript-eslint/no-empty-function */
     }
 
