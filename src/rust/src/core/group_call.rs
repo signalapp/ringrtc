@@ -1425,6 +1425,7 @@ impl Client {
         if let Some(next_speaking_audio_levels_time) = state.next_speaking_audio_levels_time {
             if now >= next_speaking_audio_levels_time {
                 let (captured_level, _) = state.peer_connection.get_audio_levels();
+                let mut time_silent = Duration::from_secs(0);
                 state.started_speaking = if captured_level > MIN_NON_SILENT_LEVEL
                     && !state.outgoing_heartbeat_state.audio_muted.unwrap_or(true)
                 {
@@ -1432,7 +1433,7 @@ impl Client {
                     state.started_speaking.or(Some(now))
                 } else {
                     state.silence_started = state.silence_started.or(Some(now));
-                    let time_silent = state
+                    time_silent = state
                         .silence_started
                         .map_or(Duration::from_secs(0), |start| now.duration_since(start));
                     if time_silent >= STOPPED_SPEAKING_DURATION {
@@ -1442,7 +1443,9 @@ impl Client {
                     }
                 };
 
-                let time_speaking = now.duration_since(state.silence_started.unwrap_or(now));
+                let time_speaking = now
+                    .duration_since(state.started_speaking.unwrap_or(now))
+                    .saturating_sub(time_silent);
 
                 let event = if time_speaking > MIN_SPEAKING_HAND_LOWER {
                     Some(SpeechEvent::LowerHandSuggestion)
