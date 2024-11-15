@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.48.7
+
+- Desktop:
+  - Logging improvements for ringrtc ADM
+  - Use a dedicated runner to build for linux ARM, fixing crash
+
+- Notify clients for important speech events
+
 ## v2.48.6
 
 - Desktop:
