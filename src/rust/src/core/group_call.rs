@@ -3449,7 +3449,6 @@ impl Client {
     }
 
     // The format for the ciphertext is:
-    // 1 (audio) or 10 (video) bytes of unencrypted media
     // N bytes of encrypted media (the rest of the given plaintext_size)
     // 1 byte RatchetCounter
     // 4 byte FrameCounter
@@ -3467,22 +3466,6 @@ impl Client {
         + size_of::<u32>()
         + size_of::<frame_crypto::Mac>();
 
-    // The portion of the frame we leave in the clear
-    // to allow the SFU to forward media properly.
-    fn unencrypted_media_header_len(is_audio: bool, has_encrypted_media_header: bool) -> usize {
-        if has_encrypted_media_header {
-            return 0;
-        }
-
-        if is_audio {
-            // For Opus TOC
-            1
-        } else {
-            // For VP8 headers when dependency descriptor isn't used
-            10
-        }
-    }
-
     // Called by WebRTC through PeerConnectionObserver
     // See comment on FRAME_ENCRYPTION_FOOTER_LEN for more details on the format
     fn get_ciphertext_buffer_size(plaintext_size: usize) -> usize {
@@ -3493,24 +3476,13 @@ impl Client {
 
     // Called by WebRTC through PeerConnectionObserver
     // See comment on FRAME_ENCRYPTION_FOOTER_LEN for more details on the format
-    fn encrypt_media(
-        &self,
-        is_audio: bool,
-        plaintext: &[u8],
-        ciphertext_buffer: &mut [u8],
-    ) -> Result<usize> {
+    fn encrypt_media(&self, plaintext: &[u8], ciphertext_buffer: &mut [u8]) -> Result<usize> {
         let mut frame_crypto_context = self
             .frame_crypto_context
             .lock()
             .expect("Get e2ee context to encrypt media");
 
-        let unencrypted_header_len = Self::unencrypted_media_header_len(is_audio, true);
-        Self::encrypt(
-            &mut frame_crypto_context,
-            unencrypted_header_len,
-            plaintext,
-            ciphertext_buffer,
-        )
+        Self::encrypt(&mut frame_crypto_context, plaintext, ciphertext_buffer)
     }
 
     fn encrypt_data(state: &mut State, plaintext: &[u8]) -> Result<Vec<u8>> {
@@ -3520,27 +3492,23 @@ impl Client {
             .expect("Get e2ee context to encrypt data");
 
         let mut ciphertext = vec![0; Self::get_ciphertext_buffer_size(plaintext.len())];
-        Self::encrypt(&mut frame_crypto_context, 0, plaintext, &mut ciphertext)?;
+        Self::encrypt(&mut frame_crypto_context, plaintext, &mut ciphertext)?;
         Ok(ciphertext)
     }
 
     fn encrypt(
         frame_crypto_context: &mut frame_crypto::Context,
-        unencrypted_header_len: usize,
         plaintext: &[u8],
         ciphertext_buffer: &mut [u8],
     ) -> Result<usize> {
         let ciphertext_size = Self::get_ciphertext_buffer_size(plaintext.len());
-        let mut plaintext = Reader::new(plaintext);
         let mut ciphertext = Writer::new(ciphertext_buffer);
 
-        let unencrypted_header = plaintext.read_slice(unencrypted_header_len)?;
-        ciphertext.write_slice(unencrypted_header)?;
-        let encrypted_payload = ciphertext.write_slice(plaintext.remaining())?;
+        let encrypted_payload = ciphertext.write_slice(plaintext)?;
 
         let mut mac = frame_crypto::Mac::default();
         let (ratchet_counter, frame_counter) =
-            frame_crypto_context.encrypt(encrypted_payload, unencrypted_header, &mut mac)?;
+            frame_crypto_context.encrypt(encrypted_payload, &mut mac)?;
         if frame_counter > u32::MAX as u64 {
             return Err(RingRtcError::FrameCounterTooBig.into());
         }
@@ -3564,22 +3532,17 @@ impl Client {
     fn decrypt_media(
         &self,
         remote_demux_id: DemuxId,
-        is_audio: bool,
         ciphertext: &[u8],
         plaintext_buffer: &mut [u8],
-        has_encrypted_media_header: bool,
     ) -> Result<usize> {
         let mut frame_crypto_context = self
             .frame_crypto_context
             .lock()
             .expect("Get e2ee context to decrypt media");
 
-        let unencrypted_header_len =
-            Self::unencrypted_media_header_len(is_audio, has_encrypted_media_header);
         Self::decrypt(
             &mut frame_crypto_context,
             remote_demux_id,
-            unencrypted_header_len,
             ciphertext,
             plaintext_buffer,
         )
@@ -3595,7 +3558,6 @@ impl Client {
         Self::decrypt(
             &mut frame_crypto_context,
             remote_demux_id,
-            0,
             ciphertext,
             &mut plaintext,
         )?;
@@ -3605,14 +3567,12 @@ impl Client {
     fn decrypt(
         frame_crypto_context: &mut frame_crypto::Context,
         remote_demux_id: DemuxId,
-        unencrypted_header_len: usize,
         ciphertext: &[u8],
         plaintext_buffer: &mut [u8],
     ) -> Result<usize> {
         let mut ciphertext = Reader::new(ciphertext);
         let mut plaintext = Writer::new(plaintext_buffer);
 
-        let unencrypted_header = ciphertext.read_slice(unencrypted_header_len)?;
         let mac: frame_crypto::Mac = ciphertext
             .read_slice_from_end(size_of::<frame_crypto::Mac>())?
             .try_into()?;
@@ -3621,7 +3581,6 @@ impl Client {
 
         // Allow for in-place decryption from ciphertext to plaintext_buffer by using
         // the write_slice that supports overlapping copies.
-        plaintext.write_slice_overlapping(unencrypted_header)?;
         let encrypted_payload = plaintext.write_slice_overlapping(ciphertext.remaining())?;
 
         frame_crypto_context.decrypt(
@@ -3629,10 +3588,9 @@ impl Client {
             ratchet_counter,
             frame_counter as u64,
             encrypted_payload,
-            unencrypted_header,
             &mac,
         )?;
-        Ok(unencrypted_header.len() + encrypted_payload.len())
+        Ok(encrypted_payload.len())
     }
 
     fn send_heartbeat(state: &mut State) -> Result<()> {
@@ -4547,14 +4505,9 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
     }
 
     // See comment on FRAME_ENCRYPTION_FOOTER_LEN for more details on the format
-    fn encrypt_media(
-        &mut self,
-        is_audio: bool,
-        plaintext: &[u8],
-        ciphertext_buffer: &mut [u8],
-    ) -> Result<usize> {
+    fn encrypt_media(&mut self, plaintext: &[u8], ciphertext_buffer: &mut [u8]) -> Result<usize> {
         if let Some(client) = &self.client {
-            client.encrypt_media(is_audio, plaintext, ciphertext_buffer)
+            client.encrypt_media(plaintext, ciphertext_buffer)
         } else {
             warn!("Call isn't setup yet!  Can't encrypt.");
             Err(RingRtcError::FailedToEncrypt.into())
@@ -4574,20 +4527,12 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
     fn decrypt_media(
         &mut self,
         track_id: u32,
-        is_audio: bool,
         ciphertext: &[u8],
         plaintext_buffer: &mut [u8],
-        has_encrypted_media_header: bool,
     ) -> Result<usize> {
         if let Some(client) = &self.client {
             let remote_demux_id = track_id;
-            client.decrypt_media(
-                remote_demux_id,
-                is_audio,
-                ciphertext,
-                plaintext_buffer,
-                has_encrypted_media_header,
-            )
+            client.decrypt_media(remote_demux_id, ciphertext, plaintext_buffer)
         } else {
             warn!("Call isn't setup yet!  Can't decrypt");
             Err(RingRtcError::FailedToDecrypt.into())
@@ -4686,15 +4631,6 @@ impl<'data> Reader<'data> {
         Ok(u32::from_be_bytes(
             self.read_slice_from_end(size_of::<u32>())?.try_into()?,
         ))
-    }
-
-    fn read_slice(&mut self, len: usize) -> Result<&'data [u8]> {
-        if len > self.data.len() {
-            return Err(RingRtcError::BufferTooSmall.into());
-        }
-        let (read, rest) = self.data.split_at(len);
-        self.data = rest;
-        Ok(read)
     }
 
     fn read_slice_from_end(&mut self, len: usize) -> Result<&'data [u8]> {
@@ -5411,7 +5347,7 @@ mod tests {
             event.wait(Duration::from_secs(5));
         }
 
-        fn encrypt_media(&mut self, is_audio: bool, plaintext: &[u8]) -> Result<Vec<u8>> {
+        fn encrypt_media(&mut self, plaintext: &[u8]) -> Result<Vec<u8>> {
             let mut ciphertext = vec![0; plaintext.len() + Client::FRAME_ENCRYPTION_FOOTER_LEN];
             assert_eq!(
                 ciphertext.len(),
@@ -5419,8 +5355,7 @@ mod tests {
             );
             assert_eq!(
                 ciphertext.len(),
-                self.client
-                    .encrypt_media(is_audio, plaintext, &mut ciphertext)?
+                self.client.encrypt_media(plaintext, &mut ciphertext)?
             );
             Ok(ciphertext)
         }
@@ -5428,9 +5363,7 @@ mod tests {
         fn decrypt_media(
             &mut self,
             remote_demux_id: DemuxId,
-            is_audio: bool,
             ciphertext: &[u8],
-            has_encrypted_media_header: bool,
         ) -> Result<Vec<u8>> {
             let mut plaintext = vec![
                 0;
@@ -5444,13 +5377,8 @@ mod tests {
             );
             assert_eq!(
                 plaintext.len(),
-                self.client.decrypt_media(
-                    remote_demux_id,
-                    is_audio,
-                    ciphertext,
-                    &mut plaintext,
-                    has_encrypted_media_header
-                )?
+                self.client
+                    .decrypt_media(remote_demux_id, ciphertext, &mut plaintext,)?
             );
             Ok(plaintext)
         }
@@ -5512,18 +5440,17 @@ mod tests {
         // And while client2 has shared the key with client1, client1 has not yet learned
         // about client2 so can't decrypt either.
 
-        let is_audio = true;
         let plaintext = &b"Fake Audio"[..];
-        let ciphertext1 = client1.encrypt_media(is_audio, plaintext).unwrap();
-        let ciphertext2 = client2.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext1 = client1.encrypt_media(plaintext).unwrap();
+        let ciphertext2 = client2.encrypt_media(plaintext).unwrap();
 
         assert_ne!(plaintext, &ciphertext1[..plaintext.len()]);
 
         assert!(client1
-            .decrypt_media(client2.demux_id, is_audio, &ciphertext2, true)
+            .decrypt_media(client2.demux_id, &ciphertext2)
             .is_err());
         assert!(client2
-            .decrypt_media(client1.demux_id, is_audio, &ciphertext1, true)
+            .decrypt_media(client1.demux_id, &ciphertext1)
             .is_err());
 
         client1.set_remotes_and_wait_until_applied(&[&client2]);
@@ -5535,44 +5462,41 @@ mod tests {
 
         // Because client1 just learned about client2, it advanced its key
         // and so we need to re-encrypt with that key.
-        let mut ciphertext1 = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let mut ciphertext1 = client1.encrypt_media(plaintext).unwrap();
 
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext1, true)
+                .decrypt_media(client1.demux_id, &ciphertext1)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client1
-                .decrypt_media(client2.demux_id, is_audio, &ciphertext2, true)
+                .decrypt_media(client2.demux_id, &ciphertext2)
                 .unwrap()
         );
 
         // But if the footer is too small, decryption should fail
-        assert!(client1
-            .decrypt_media(client2.demux_id, is_audio, b"small", true)
-            .is_err());
+        assert!(client1.decrypt_media(client2.demux_id, b"small").is_err());
 
         // And if the unencrypted media header has been modified, it should fail (bad mac)
         ciphertext1[0] = ciphertext1[0].wrapping_add(1);
         assert!(client2
-            .decrypt_media(client1.demux_id, is_audio, &ciphertext1, true)
+            .decrypt_media(client1.demux_id, &ciphertext1)
             .is_err());
 
         // Finally, let's make sure video works as well
 
-        let is_audio = false;
         let plaintext = &b"Fake Video Needs To Be Bigger"[..];
-        let ciphertext1 = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext1 = client1.encrypt_media(plaintext).unwrap();
 
         assert_ne!(plaintext, &ciphertext1[..plaintext.len()]);
 
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext1, true)
+                .decrypt_media(client1.demux_id, &ciphertext1)
                 .unwrap()
         );
 
@@ -5602,23 +5526,22 @@ mod tests {
 
         // client2 and client3 can decrypt client1
         // client4 can't yet
-        let is_audio = true;
         let plaintext = &b"Fake Audio"[..];
-        let ciphertext = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext = client1.encrypt_media(plaintext).unwrap();
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client3
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert!(client4
-            .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+            .decrypt_media(client1.demux_id, &ciphertext)
             .is_err());
 
         // Add client4 and remove client3
@@ -5626,23 +5549,23 @@ mod tests {
 
         // client2 and client4 can decrypt client1
         // client3 can as well, at least for a little while
-        let ciphertext = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext = client1.encrypt_media(plaintext).unwrap();
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client3
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client4
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
 
@@ -5655,29 +5578,29 @@ mod tests {
         // one.
         set_group_and_wait_until_applied(&[&client1, &client4, &client5]);
 
-        let ciphertext = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext = client1.encrypt_media(plaintext).unwrap();
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client3
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client4
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client5
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
 
@@ -5685,26 +5608,26 @@ mod tests {
 
         // client4 and client5 can still decrypt from client1
         // but client3 no longer can
-        let ciphertext = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext = client1.encrypt_media(plaintext).unwrap();
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert!(client3
-            .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+            .decrypt_media(client1.demux_id, &ciphertext)
             .is_err());
         assert_eq!(
             plaintext,
             client4
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client5
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
 
@@ -5712,23 +5635,23 @@ mod tests {
 
         // After the next key rotation is applied, now client2 cannot decrypt,
         // but client4 and client5 can.
-        let ciphertext = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext = client1.encrypt_media(plaintext).unwrap();
         assert!(client2
-            .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+            .decrypt_media(client1.demux_id, &ciphertext)
             .is_err());
         assert!(client3
-            .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+            .decrypt_media(client1.demux_id, &ciphertext)
             .is_err());
         assert_eq!(
             plaintext,
             client4
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
         assert_eq!(
             plaintext,
             client5
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
 
@@ -5755,12 +5678,11 @@ mod tests {
         assert_eq!(1, remote_devices.len());
         assert!(!remote_devices[0].media_keys_received);
 
-        let is_audio = false;
         let plaintext = &b"Fake Video is big"[..];
-        let ciphertext = client1.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext = client1.encrypt_media(plaintext).unwrap();
         // We can't decrypt because the keys got dropped
         assert!(client2
-            .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+            .decrypt_media(client1.demux_id, &ciphertext)
             .is_err());
 
         client1.observer.set_outgoing_signaling_blocked(false);
@@ -5775,7 +5697,7 @@ mod tests {
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext, true)
+                .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
     }
@@ -5790,24 +5712,23 @@ mod tests {
         client2a.connect_join_and_wait_until_joined();
         set_group_and_wait_until_applied(&[&client1a, &client2a]);
 
-        let is_audio = true;
         let plaintext = &b"Fake Audio"[..];
-        let ciphertext1a = client1a.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext1a = client1a.encrypt_media(plaintext).unwrap();
         assert_eq!(
             plaintext,
             client2a
-                .decrypt_media(client1a.demux_id, is_audio, &ciphertext1a, true)
+                .decrypt_media(client1a.demux_id, &ciphertext1a)
                 .unwrap()
         );
 
         // Make sure the advanced key gets sent to client2b even though it's the same user as 2a.
         client2b.connect_join_and_wait_until_joined();
         set_group_and_wait_until_applied(&[&client1a, &client2a, &client2b]);
-        let ciphertext1a = client1a.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext1a = client1a.encrypt_media(plaintext).unwrap();
         assert_eq!(
             plaintext,
             client2b
-                .decrypt_media(client1a.demux_id, is_audio, &ciphertext1a, true)
+                .decrypt_media(client1a.demux_id, &ciphertext1a)
                 .unwrap()
         );
     }
@@ -5827,20 +5748,19 @@ mod tests {
 
         set_group_and_wait_until_applied(&[&client1, &client2, &client3]);
 
-        let is_audio = true;
         let plaintext = &b"Fake Audio"[..];
-        let ciphertext1 = client1.encrypt_media(is_audio, plaintext).unwrap();
-        let ciphertext3 = client3.encrypt_media(is_audio, plaintext).unwrap();
+        let ciphertext1 = client1.encrypt_media(plaintext).unwrap();
+        let ciphertext3 = client3.encrypt_media(plaintext).unwrap();
         // The forger doesn't mess anything up for the others
         assert_eq!(
             plaintext,
             client2
-                .decrypt_media(client1.demux_id, is_audio, &ciphertext1, true)
+                .decrypt_media(client1.demux_id, &ciphertext1)
                 .unwrap()
         );
         // And you can't decrypt from the forger.
         assert!(client2
-            .decrypt_media(client3.demux_id, is_audio, &ciphertext3, true)
+            .decrypt_media(client3.demux_id, &ciphertext3)
             .is_err());
 
         client1.disconnect_and_wait_until_ended();

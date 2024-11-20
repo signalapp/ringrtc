@@ -206,21 +206,14 @@ fn convert_frame_counter_to_iv(frame_counter: FrameCounter) -> Iv {
     result
 }
 
-fn check_mac(
-    state: &ReceiverState,
-    frame_counter: FrameCounter,
-    data: &[u8],
-    associated_data: &[u8],
-    mac: &Mac,
-) -> bool {
+fn check_mac(state: &ReceiverState, frame_counter: FrameCounter, data: &[u8], mac: &Mac) -> bool {
     let iv = convert_frame_counter_to_iv(frame_counter);
     let mut hmac = HmacSha256::new_from_slice(&state.sender_state.current_hmac_key[..])
         .expect("HMAC can take key of any size");
     hmac.update(&iv[..]);
     hmac.update(&len_as_u32_be_bytes(data)[..]);
     hmac.update(data);
-    hmac.update(&len_as_u32_be_bytes(associated_data)[..]);
-    hmac.update(associated_data);
+    hmac.update(&0_u32.to_be_bytes());
     let hmac_result = hmac.finalize().into_bytes();
     const_assert!(MAC_SIZE_BYTES <= HMAC_SHA256_SIZE_BYTES);
     let result = hmac_result[..MAC_SIZE_BYTES].ct_eq(mac);
@@ -264,7 +257,6 @@ impl Context {
     pub fn encrypt(
         &mut self,
         data: &mut [u8],
-        associated_data: &[u8],
         mac: &mut Mac,
     ) -> Result<(RatchetCounter, FrameCounter), Error> {
         let frame_counter = self.next_frame_counter;
@@ -278,8 +270,7 @@ impl Context {
         hmac.update(&iv[..]);
         hmac.update(&len_as_u32_be_bytes(data)[..]);
         hmac.update(data);
-        hmac.update(&len_as_u32_be_bytes(associated_data)[..]);
-        hmac.update(associated_data);
+        hmac.update(&0_u32.to_be_bytes());
         let hmac_result = hmac.finalize().into_bytes();
         const_assert!(MAC_SIZE_BYTES <= HMAC_SHA256_SIZE_BYTES);
         mac.copy_from_slice(&hmac_result[..MAC_SIZE_BYTES]);
@@ -295,7 +286,6 @@ impl Context {
         ratchet_counter: RatchetCounter,
         frame_counter: FrameCounter,
         data: &mut [u8],
-        associated_data: &[u8],
         mac: &Mac,
     ) -> Result<(), Error> {
         let states = self.get_mut_ref_state_vec_by_id(sender_id);
@@ -303,7 +293,7 @@ impl Context {
         // try all states with matching ratchet counters first
         for state in states.iter() {
             if state.sender_state.ratchet_counter == ratchet_counter
-                && check_mac(state, frame_counter, data, associated_data, mac)
+                && check_mac(state, frame_counter, data, mac)
             {
                 decrypt_internal(state, frame_counter, data);
                 return Ok(());
@@ -313,7 +303,7 @@ impl Context {
         // before giving up, try more expensive repeated ratcheting of each state to match given ratchet counter
         for state in states.iter_mut() {
             let mut try_state = state.try_advance_ratchet(ratchet_counter, frame_counter);
-            if check_mac(&try_state, frame_counter, data, associated_data, mac) {
+            if check_mac(&try_state, frame_counter, data, mac) {
                 try_state.limit_ooo();
                 *state = try_state;
                 decrypt_internal(state, frame_counter, data);
@@ -407,10 +397,8 @@ mod tests {
         ctx.add_receive_secret(sender_id, 0, send_secret);
 
         let mut data = plaintext.to_vec();
-        let associated_data = Vec::from("Can't touch this");
         let mut mac = Mac::default();
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
         assert_eq!(0, ratchet_counter);
         assert_ne!(&plaintext[..], &data[..]);
 
@@ -419,7 +407,6 @@ mod tests {
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data[..],
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
@@ -437,17 +424,14 @@ mod tests {
         ctx.add_receive_secret(sender_id, 0, send_secret);
 
         let mut data = plaintext.to_vec();
-        let associated_data = Vec::from("Can't touch this");
         let mut mac = Mac::default();
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
         assert_eq!(0, ratchet_counter);
         ctx.decrypt(
             sender_id,
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data[..],
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
@@ -458,31 +442,26 @@ mod tests {
         ctx2.add_receive_secret(sender_id, ratchet_counter2, secret2);
 
         let mut data = plaintext.to_vec();
-        let associated_data = Vec::from("Can't touch this");
         let mut mac = [0u8; MAC_SIZE_BYTES];
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
         assert_eq!(1, ratchet_counter);
         ctx.decrypt(
             sender_id,
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data[..],
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
 
         let mut data = plaintext.to_vec();
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
         assert_eq!(ratchet_counter2, ratchet_counter);
         ctx2.decrypt(
             sender_id,
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data[..],
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
@@ -500,10 +479,8 @@ mod tests {
         ctx.add_receive_secret(sender_id, 0, send_secret);
 
         let mut data = plaintext.to_vec();
-        let associated_data = Vec::from("Can't touch this");
         let mut mac = Mac::default();
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
         assert_eq!(0, ratchet_counter);
         assert_eq!(1, frame_counter);
         ctx.decrypt(
@@ -511,7 +488,6 @@ mod tests {
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data[..],
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
@@ -520,10 +496,8 @@ mod tests {
         ctx.add_receive_secret(sender_id, 0, new_secret);
 
         let mut data = plaintext.to_vec();
-        let associated_data = Vec::from("Can't touch this");
         let mut mac = Mac::default();
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
         assert_eq!(0, ratchet_counter);
         assert_eq!(2, frame_counter);
         ctx.decrypt(
@@ -531,7 +505,6 @@ mod tests {
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data[..],
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
@@ -540,8 +513,7 @@ mod tests {
 
         let mut data = plaintext.to_vec();
         let mut mac = Mac::default();
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
         assert_eq!(0, ratchet_counter);
         assert_eq!(3, frame_counter);
         ctx.decrypt(
@@ -549,7 +521,6 @@ mod tests {
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data,
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
@@ -567,10 +538,8 @@ mod tests {
         ctx.add_receive_secret(sender_id, 0, send_secret);
 
         let mut data = plaintext.to_vec();
-        let mut associated_data = Vec::from("Can't touch this");
         let mut mac = Mac::default();
-        let (ratchet_counter, frame_counter) =
-            ctx.encrypt(&mut data[..], &associated_data[..], &mut mac)?;
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut data[..], &mut mac)?;
 
         mac[0] = mac[0].wrapping_add(1);
         let err = ctx
@@ -579,7 +548,6 @@ mod tests {
                 ratchet_counter,
                 frame_counter,
                 &mut data[..],
-                &associated_data[..],
                 &mac,
             )
             .expect_err("decrypt should have returned an error");
@@ -591,23 +559,9 @@ mod tests {
             ratchet_counter,
             frame_counter,
             &mut data[..],
-            &associated_data[..],
             &mac,
         )?;
         assert_eq!(&plaintext[..], &data[..]);
-
-        associated_data[0] = associated_data[0].wrapping_add(1);
-        let err = ctx
-            .decrypt(
-                sender_id,
-                ratchet_counter,
-                frame_counter,
-                &mut data[..],
-                &associated_data[..],
-                &mac,
-            )
-            .expect_err("decrypt should have returned an error");
-        assert_eq!(err, Error::NoMatchingReceiverState);
 
         Ok(())
     }
@@ -636,10 +590,8 @@ mod tests {
         ctx.add_receive_secret(sender_id, 0, send_secret);
 
         let mut data1 = plaintext.to_vec();
-        let associated_data1 = Vec::from("Can't touch this");
         let mut mac1 = Mac::default();
-        let (ratchet_counter1, frame_counter1) =
-            ctx.encrypt(&mut data1[..], &associated_data1[..], &mut mac1)?;
+        let (ratchet_counter1, frame_counter1) = ctx.encrypt(&mut data1[..], &mut mac1)?;
         assert_eq!(0, ratchet_counter1);
 
         let (ratchet_counter2, secret2) = ctx.advance_send_ratchet();
@@ -648,17 +600,14 @@ mod tests {
         ctx2.add_receive_secret(sender_id, ratchet_counter2, secret2);
 
         let mut data2 = plaintext.to_vec();
-        let associated_data2 = Vec::from("Can't touch this");
         let mut mac2 = [0u8; MAC_SIZE_BYTES];
-        let (ratchet_counter2, frame_counter2) =
-            ctx.encrypt(&mut data2[..], &associated_data2[..], &mut mac2)?;
+        let (ratchet_counter2, frame_counter2) = ctx.encrypt(&mut data2[..], &mut mac2)?;
         assert_eq!(1, ratchet_counter2);
         ctx.decrypt(
             sender_id,
             ratchet_counter2,
             frame_counter2,
             &mut data2[..],
-            &associated_data2[..],
             &mac2,
         )?;
         assert_eq!(&plaintext[..], &data2[..]);
@@ -669,7 +618,6 @@ mod tests {
             ratchet_counter1,
             frame_counter1,
             &mut data1[..],
-            &associated_data1[..],
             &mac1,
         )?;
         assert_eq!(&plaintext[..], &data1[..]);

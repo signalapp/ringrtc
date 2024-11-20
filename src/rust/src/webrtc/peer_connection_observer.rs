@@ -159,12 +159,7 @@ pub trait PeerConnectionObserverTrait {
     ) -> usize {
         0
     }
-    fn encrypt_media(
-        &mut self,
-        _is_audio: bool,
-        _plaintext: &[u8],
-        _ciphertext_buffer: &mut [u8],
-    ) -> Result<usize> {
+    fn encrypt_media(&mut self, _plaintext: &[u8], _ciphertext_buffer: &mut [u8]) -> Result<usize> {
         Err(RingRtcError::FailedToEncrypt.into())
     }
     fn get_media_plaintext_buffer_size(
@@ -178,10 +173,8 @@ pub trait PeerConnectionObserverTrait {
     fn decrypt_media(
         &mut self,
         _track_id: u32,
-        _is_audio: bool,
         _ciphertext: &[u8],
         _plaintext_buffer: &mut [u8],
-        _has_encrypted_media_header: bool,
     ) -> Result<usize> {
         Err(RingRtcError::FailedToDecrypt.into())
     }
@@ -498,7 +491,6 @@ where
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_EncryptMedia<T>(
     observer: webrtc::ptr::Borrowed<T>,
-    is_audio: bool,
     plaintext: webrtc::ptr::Borrowed<u8>,
     plaintext_size: size_t,
     ciphertext_out: *mut u8,
@@ -514,8 +506,7 @@ where
     }
 
     trace!(
-        "pc_observer_EncryptMedia(): is_audio: {} plaintext_size: {}, ciphertext_out_size: {}",
-        is_audio,
+        "pc_observer_EncryptMedia(): plaintext_size: {}, ciphertext_out_size: {}",
         plaintext_size,
         ciphertext_out_size
     );
@@ -525,7 +516,7 @@ where
         let plaintext = unsafe { slice::from_raw_parts(plaintext.as_ptr(), plaintext_size) };
         let ciphertext = unsafe { slice::from_raw_parts_mut(ciphertext_out, ciphertext_out_size) };
 
-        match observer.encrypt_media(is_audio, plaintext, ciphertext) {
+        match observer.encrypt_media(plaintext, ciphertext) {
             Ok(size) => {
                 unsafe {
                     *ciphertext_size_out = size;
@@ -570,13 +561,11 @@ where
 extern "C" fn pc_observer_DecryptMedia<T>(
     observer: webrtc::ptr::Borrowed<T>,
     track_id: u32,
-    is_audio: bool,
     ciphertext: webrtc::ptr::Borrowed<u8>,
     ciphertext_size: usize,
     plaintext_out: *mut u8,
     plaintext_out_size: size_t,
     plaintext_size_out: *mut size_t,
-    has_encrypted_media_header: bool,
 ) -> bool
 where
     T: PeerConnectionObserverTrait,
@@ -590,13 +579,7 @@ where
         let ciphertext = unsafe { slice::from_raw_parts(ciphertext.as_ptr(), ciphertext_size) };
         let plaintext = unsafe { slice::from_raw_parts_mut(plaintext_out, plaintext_out_size) };
 
-        match observer.decrypt_media(
-            track_id,
-            is_audio,
-            ciphertext,
-            plaintext,
-            has_encrypted_media_header,
-        ) {
+        match observer.decrypt_media(track_id, ciphertext, plaintext) {
             Ok(size) => {
                 unsafe {
                     *plaintext_size_out = size;
@@ -661,7 +644,6 @@ where
     getMediaCiphertextBufferSize: extern "C" fn(webrtc::ptr::Borrowed<T>, bool, size_t) -> size_t,
     encryptMedia: extern "C" fn(
         webrtc::ptr::Borrowed<T>,
-        bool,
         webrtc::ptr::Borrowed<u8>,
         size_t,
         *mut u8,
@@ -673,13 +655,11 @@ where
     decryptMedia: extern "C" fn(
         webrtc::ptr::Borrowed<T>,
         u32,
-        bool,
         webrtc::ptr::Borrowed<u8>,
         size_t,
         *mut u8,
         size_t,
         *mut size_t,
-        bool,
     ) -> bool,
 }
 
