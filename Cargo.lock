@@ -778,9 +778,9 @@ dependencies = [
 
 [[package]]
 name = "cubeb-sys"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3a1b58889aa85e1df0292cf8eb579b3f669893f4d18967e8f74be3ec4e597da"
+checksum = "aa5ea151dfe7491d9f7bc109fd60b660b3c3dd6d50dc9cbbd1a0327624f5fd14"
 dependencies = [
  "cmake",
  "pkg-config",
