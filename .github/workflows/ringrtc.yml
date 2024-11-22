@@ -131,12 +131,6 @@ jobs:
     steps:
     - name: Install dependencies
       run: ${{ matrix.install-deps }}
-    - name: Set up virtual sound devices
-      uses: LABSN/sound-ci-helpers@v1
-      if: ${{ matrix.os == 'windows-latest' }}
-    - name: Start audiosrv
-      run: net start audiosrv
-      if: ${{ matrix.os == 'windows-latest' }}
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
@@ -144,6 +138,9 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - run: bin/fetch-artifact -p desktop
     - run: bin/build-electron --release --ringrtc-only --test-ringrtc-adm
+      if: ${{ matrix.os != 'windows-latest' }}
+    - run: bin/build-electron --release --ringrtc-only
+      if: ${{ matrix.os == 'windows-latest' }}
     - run: npm ci
       working-directory: src/node
     - run: npm run build
