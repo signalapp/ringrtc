@@ -24,6 +24,7 @@ usage()
         --webrtc-only builds libwebrtc.a only
         --ringrtc-only builds libringrtc-ARCH.node only
         --webrtc-tests also builds webrtc tests
+        --test-ringrtc-adm also tests the ringrtc ADM.
 
         --archive-webrtc generates an archive suitable for later --ringrtc-only builds'
 }
@@ -40,6 +41,7 @@ clean()
 BUILD_TYPE=debug
 BUILD_WHAT=all
 ARCHIVE_WEBRTC=
+TEST_RINGRTC_ADM=
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -60,6 +62,9 @@ while [ "$1" != "" ]; do
             ;;
         --archive-webrtc )
             ARCHIVE_WEBRTC=yes
+            ;;
+        --test-ringrtc-adm )
+            TEST_RINGRTC_ADM=yes
             ;;
         -c | --clean )
             clean
@@ -225,6 +230,11 @@ then
         # e.g. cubeb rust libs.
         export CARGO_BUILD_TARGET="${CARGO_TARGET}"
         RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo rustc --package ringrtc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} --crate-type cdylib
+
+        if [ "${TEST_RINGRTC_ADM}" = "yes" ]; then
+          RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo test --package ringrtc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} -- --nocapture audio_device_module_tests
+        fi
+
 
         mkdir -p src/node/build/${DEFAULT_PLATFORM}
         copy_to_node target/${CARGO_TARGET}/${BUILD_TYPE}/${OUTPUT_LIBRARY} src/node/build/${DEFAULT_PLATFORM}/libringrtc-"${TARGET_ARCH}".node
