@@ -196,7 +196,7 @@ jobs:
 
   ios:
     name: iOS Tests
-    runs-on: macos-13
+    runs-on: macos-13-large
     steps:
     - uses: actions/checkout@v4
     - run: brew install protobuf coreutils # for grealpath
