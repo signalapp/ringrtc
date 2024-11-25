@@ -50,6 +50,7 @@ class NativeCallManager {
         'RingRTC-PruneTurnPorts': 'Enabled',
         'WebRTC-Bwe-ProbingConfiguration':
           'skip_if_est_larger_than_fraction_of_max:0.99',
+        'WebRTC-IncreaseIceCandidatePriorityHostSrflx': 'Enabled',
       },
       config.field_trials
     );
