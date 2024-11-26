@@ -212,8 +212,7 @@ impl AudioConfig {
             adm.init();
             let backend_name = adm.backend_name();
             (
-                webrtc::ptr::Borrowed::from_ptr(Box::into_raw(Box::new(AudioDeviceModule::new())))
-                    .to_void(),
+                webrtc::ptr::Borrowed::from_ptr(Box::into_raw(Box::new(adm))).to_void(),
                 backend_name,
             )
         };
