@@ -121,7 +121,7 @@ jobs:
           install-deps: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
           test-runner: xvfb-run --auto-servernum
         - os: windows-latest
-          install-deps: choco install protoc cmake
+          install-deps: choco install protoc
         - os: macos-13
           install-deps: brew install protobuf coreutils
     runs-on: ${{ matrix.os }}
@@ -160,7 +160,7 @@ jobs:
         - os: macos-13
           install-deps: brew install protobuf coreutils
         - os: windows-latest
-          install-deps: choco install protoc cmake
+          install-deps: choco install protoc
     runs-on: ${{ matrix.os }}
     defaults:
       run:
