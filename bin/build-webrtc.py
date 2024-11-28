@@ -37,6 +37,9 @@ def parse_args():
     parser.add_argument('--target',
                         required=True,
                         help='build target: ' + ', '.join(TARGET_PLATFORMS))
+    parser.add_argument('--build-for-simulator',
+                        action='store_true',
+                        help='Also build simulator version. Only for Desktop platforms. Default is only non-simulator version')
     parser.add_argument('--release',
                         action='store_true',
                         help='Build a release version. Default is both')
@@ -95,10 +98,17 @@ def main() -> None:
         build_types.append("debug")
         build_types.append("release")
 
+    sim_targets = [[]]
+    if args.target in ['android', 'ios'] and args.build_for_simulator:
+        raise Exception('Simulator builds are only supported for Desktop platforms')
+    elif args.build_for_simulator:
+        sim_targets = [["--build-for-simulator"], []]
+
     logging.info('''
 Target platform : {}
 Build type      : {}
-    '''.format(args.target, build_types))
+Sim targets     : {}
+    '''.format(args.target, build_types, sim_targets))
 
     verify_build_host_platform(args.target)
 
@@ -141,9 +151,10 @@ Build type      : {}
             # Build WebRTC for x86_64
             env['TARGET_ARCH'] = "x64"
             for build_type in build_types:
-                run_cmd(args.dry_run,
-                        ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
-                        env=env)
+                for sim_target in sim_targets:
+                    run_cmd(args.dry_run,
+                            ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type] + sim_target,
+                            env=env)
 
             # Build WebRTC for arm64
             run_cmd(args.dry_run,
@@ -152,9 +163,10 @@ Build type      : {}
             env['TARGET_ARCH'] = "arm64"
             env['OUTPUT_DIR'] = "out_arm"
             for build_type in build_types:
-                run_cmd(args.dry_run,
-                        ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
-                        env=env)
+                for sim_target in sim_targets:
+                    run_cmd(args.dry_run,
+                            ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type] + sim_target,
+                            env=env)
 
     elif args.target == 'ios' or args.target == 'mac':
         # Get grealpath
@@ -188,16 +200,18 @@ Build type      : {}
 
             env['TARGET_ARCH'] = "x64"
             for build_type in build_types:
-                run_cmd(args.dry_run,
-                        ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
-                        env=env)
+                for sim_target in sim_targets:
+                    run_cmd(args.dry_run,
+                            ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type] + sim_target,
+                            env=env)
 
             env['TARGET_ARCH'] = "arm64"
             env['OUTPUT_DIR'] = "out_arm"
             for build_type in build_types:
-                run_cmd(args.dry_run,
-                        ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
-                        env=env)
+                for sim_target in sim_targets:
+                    run_cmd(args.dry_run,
+                            ['bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type] + sim_target,
+                            env=env)
 
     elif args.target == 'windows':
         bash = 'C:\\Program Files\\Git\\bin\\bash.exe'
@@ -207,9 +221,10 @@ Build type      : {}
 
         env['TARGET_ARCH'] = "x64"
         for build_type in build_types:
-            run_cmd(args.dry_run,
-                    [bash, 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
-                    env=env)
+            for sim_target in sim_targets:
+                run_cmd(args.dry_run,
+                        [bash, 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type] + sim_target,
+                        env=env)
 
         # Prepare workspace for arm
         env['OUTPUT_DIR'] = "out_arm"
@@ -217,9 +232,10 @@ Build type      : {}
 
         env['TARGET_ARCH'] = "arm64"
         for build_type in build_types:
-            run_cmd(args.dry_run,
-                    [bash, 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type],
-                    env=env)
+            for sim_target in sim_targets:
+                run_cmd(args.dry_run,
+                        [bash, 'bin/build-electron', '--webrtc-only', '--archive-webrtc', '--' + build_type] + sim_target,
+                        env=env)
 
 
 if __name__ == '__main__':

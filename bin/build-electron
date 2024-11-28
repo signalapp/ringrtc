@@ -15,7 +15,7 @@ TARGET_ARCH=${TARGET_ARCH:-$(uname -m)}
 
 usage()
 {
-    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--archive-webrtc]
+    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--archive-webrtc] [--build-for-simulator]
     where:
         -d to create a debug build (default)
         -r to create a release build
@@ -25,6 +25,7 @@ usage()
         --ringrtc-only builds libringrtc-ARCH.node only
         --webrtc-tests also builds webrtc tests
         --test-ringrtc-adm also tests the ringrtc ADM.
+        --build-for-simulator also builds extra test tools used in simulators
 
         --archive-webrtc generates an archive suitable for later --ringrtc-only builds'
 }
@@ -42,6 +43,7 @@ BUILD_TYPE=debug
 BUILD_WHAT=all
 ARCHIVE_WEBRTC=
 TEST_RINGRTC_ADM=
+BUILD_FOR_SIMULATOR=
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -65,6 +67,9 @@ while [ "$1" != "" ]; do
             ;;
         --test-ringrtc-adm )
             TEST_RINGRTC_ADM=yes
+            ;;
+        --build-for-simulator )
+            BUILD_FOR_SIMULATOR=yes
             ;;
         -c | --clean )
             clean
@@ -110,6 +115,12 @@ then
     echo "Building WebRTC for ${GN_ARCH}"
 
     WEBRTC_ARGS="target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_include_ilbc=false rtc_disable_metrics=true rtc_disable_trace_events=true"
+
+    if [ -n "${BUILD_FOR_SIMULATOR}" ]
+    then
+      WEBRTC_ARGS="${WEBRTC_ARGS} rtc_use_dummy_audio_file_devices=true"
+    fi
+
     if [ -n "${BUILD_WEBRTC_TESTS}" ]
     then
       WEBRTC_ARGS="${WEBRTC_ARGS} rtc_include_tests=true rtc_enable_protobuf=true"
@@ -143,7 +154,12 @@ then
         if [ ! -e "${OUTPUT_DIR}/${STATIC_LIB_PATH}" ]; then
             STATIC_LIB_PATH="${BUILD_TYPE}"/obj/libwebrtc.a
         fi
-        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-${BUILD_TYPE}.tar.bz2 -C "${OUTPUT_DIR}" "${STATIC_LIB_PATH}" "${BUILD_TYPE}/LICENSE.md"
+        ARCHIVE_NAME=webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-"${BUILD_TYPE}"
+        if [ -n "${BUILD_FOR_SIMULATOR}" ]
+        then
+          ARCHIVE_NAME="${ARCHIVE_NAME}"-sim
+        fi
+        tar -c --auto-compress --dereference -f "${OUTPUT_DIR}"/"${ARCHIVE_NAME}".tar.bz2 -C "${OUTPUT_DIR}" "${STATIC_LIB_PATH}" "${BUILD_TYPE}/LICENSE.md"
     fi
 fi
 
@@ -175,7 +191,7 @@ then
             exit 1
     esac
 
-    echo "Building for platform ${DEFAULT_PLATFORM}, TARGET_ARCH=${TARGET_ARCH}, CARGO_TARGET=${CARGO_TARGET}"
+    echo "Building for platform ${DEFAULT_PLATFORM}, TARGET_ARCH=${TARGET_ARCH}, CARGO_TARGET=${CARGO_TARGET}, BUILD_FOR_SIMULATOR=${BUILD_FOR_SIMULATOR}"
 
     # Build and link the final RingRTC library.
     (

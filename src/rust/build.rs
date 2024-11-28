@@ -54,17 +54,28 @@ fn main() {
     // Explicitly state that by depending on build.rs itself, as recommended.
     println!("cargo:rerun-if-changed=build.rs");
 
+    if cfg!(feature = "prebuilt_webrtc") && cfg!(feature = "prebuilt_webrtc_sim") {
+        panic!("Cannot enable both prebuilt_webrtc and prebuilt_webrtc_sim features");
+    }
+
     if cfg!(feature = "native") {
-        let webrtc_dir = if cfg!(feature = "prebuilt_webrtc") {
-            if let Err(e) = fs::create_dir_all(&out_dir) {
-                panic!("Failed to create webrtc out directory: {:?}", e);
-            }
-            fetch_webrtc_artifact(&target_os, &target_arch, &out_dir).unwrap();
-            // Ignore build type since we only have release prebuilts
-            format!("{}/release/obj/", out_dir)
-        } else {
-            format!("{}/{}/obj", out_dir, build_type)
-        };
+        let webrtc_dir =
+            if cfg!(feature = "prebuilt_webrtc") || cfg!(feature = "prebuilt_webrtc_sim") {
+                if let Err(e) = fs::create_dir_all(&out_dir) {
+                    panic!("Failed to create webrtc out directory: {:?}", e);
+                }
+                fetch_webrtc_artifact(
+                    &target_os,
+                    &target_arch,
+                    &out_dir,
+                    cfg!(feature = "prebuilt_webrtc_sim"),
+                )
+                .unwrap();
+                // Ignore build type since we only have release prebuilts
+                format!("{}/release/obj/", out_dir)
+            } else {
+                format!("{}/{}/obj", out_dir, build_type)
+            };
         println!("cargo:rerun-if-changed={}", webrtc_dir);
         println!("cargo:rerun-if-changed={}", config_dir());
         println!("cargo:rustc-link-search=native={}", webrtc_dir);
@@ -134,6 +145,7 @@ fn fetch_webrtc_artifact(
     target_os: &str,
     target_arch: &str,
     artifact_out_dir: &str,
+    target_sim: bool,
 ) -> Result<(), String> {
     let fetch_script = format!("{}/bin/fetch-artifact", project_dir());
     let platform = format!("{}-{}", target_os, target_arch);
@@ -142,12 +154,17 @@ fn fetch_webrtc_artifact(
         platform, artifact_out_dir
     );
 
-    let output = Command::new("bash")
+    let mut command = Command::new("bash");
+    command
         .current_dir(project_dir())
         .env("OUTPUT_DIR", artifact_out_dir)
         .arg(fetch_script)
         .arg("--platform")
-        .arg(platform)
+        .arg(platform);
+    if target_sim {
+        command.arg("--for-simulator");
+    }
+    let output = command
         .output()
         .expect("bin/fetch-artifact failed to complete");
 

@@ -92,7 +92,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
 
-      - run: ./bin/build-webrtc.py --target linux --release
+      - run: ./bin/build-webrtc.py --target linux --release --build-for-simulator
 
       - name: Output Artifact Checksum
         run: |
@@ -135,7 +135,7 @@ jobs:
       # Installs the pkg_resources python module needed to build webrtc on a mac host
       - run: pip install setuptools
 
-      - run: ./bin/build-webrtc.py --target mac --release
+      - run: ./bin/build-webrtc.py --target mac --release --build-for-simulator
 
       - name: Output Artifact Checksum
         run: |
@@ -179,7 +179,7 @@ jobs:
 
     - uses: actions/checkout@v4
 
-    - run: python bin/build-webrtc.py --target windows --release
+    - run: python bin/build-webrtc.py --target windows --release --build-for-simulator
       shell: bash
 
     - name: Output Artifact Checksum
