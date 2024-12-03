@@ -8,51 +8,85 @@
 
 use crate::webrtc;
 use anyhow::anyhow;
-use cubeb::{DeviceCollection, DeviceInfo, DeviceState};
+use cubeb::{DeviceCollection, DeviceState};
 use cubeb_core::DevicePref;
-use std::ffi::{c_uchar, CString};
+#[cfg(target_os = "linux")]
+use cubeb_core::DeviceType;
+use std::ffi::{c_uchar, c_void, CString};
+
+pub struct MinimalDeviceInfo {
+    pub devid: *const c_void,
+    pub device_id: Option<String>,
+    pub friendly_name: Option<String>,
+    #[cfg(target_os = "linux")]
+    device_type: DeviceType,
+    preferred: DevicePref,
+    state: DeviceState,
+}
 
 /// Wrapper struct for DeviceCollection that handles default devices.
-pub struct DeviceCollectionWrapper<'a> {
-    device_collection: DeviceCollection<'a>,
+///
+/// Rather than storing the DeviceCollection directly, which raises complex
+/// lifetime issues, store just the fields we need.
+///
+/// Note that, in some cases, `devid` may be a pointer to state in the cubeb ctx,
+/// so in no event should this outlive the associated ctx.
+pub struct DeviceCollectionWrapper {
+    device_collection: Vec<MinimalDeviceInfo>,
 }
 
 #[cfg(target_os = "linux")]
-fn device_is_monitor(device: &DeviceInfo) -> bool {
-    device.device_type() == cubeb::DeviceType::INPUT
+fn device_is_monitor(device: &MinimalDeviceInfo) -> bool {
+    device.device_type == DeviceType::INPUT
         && device
-            .device_id()
+            .device_id
             .as_ref()
             .map_or(false, |s| s.ends_with(".monitor"))
 }
 
-impl DeviceCollectionWrapper<'_> {
-    pub fn new(device_collection: DeviceCollection<'_>) -> DeviceCollectionWrapper<'_> {
-        DeviceCollectionWrapper { device_collection }
+impl DeviceCollectionWrapper {
+    pub fn new(device_collection: DeviceCollection<'_>) -> DeviceCollectionWrapper {
+        let mut out = Vec::new();
+        for device in device_collection.iter() {
+            out.push(MinimalDeviceInfo {
+                devid: device.devid(),
+                device_id: device.device_id().as_ref().map(|s| s.to_string()),
+                friendly_name: device.friendly_name().as_ref().map(|s| s.to_string()),
+                #[cfg(target_os = "linux")]
+                device_type: device.device_type(),
+                preferred: device.preferred(),
+                state: device.state(),
+            })
+        }
+        DeviceCollectionWrapper {
+            device_collection: out,
+        }
     }
 
     /// Iterate over all Enabled devices (those that are plugged in and not disabled by the OS)
     pub fn iter(
         &self,
-    ) -> std::iter::Filter<std::slice::Iter<'_, DeviceInfo>, fn(&&DeviceInfo) -> bool> {
+    ) -> std::iter::Filter<std::slice::Iter<'_, MinimalDeviceInfo>, fn(&&MinimalDeviceInfo) -> bool>
+    {
         self.device_collection
             .iter()
-            .filter(|d| d.state() == DeviceState::Enabled)
+            .filter(|d| d.state == DeviceState::Enabled)
     }
 
     // For linux only, a method that will ignore "monitor" devices.
     #[cfg(target_os = "linux")]
     pub fn iter_non_monitor(
         &self,
-    ) -> std::iter::Filter<std::slice::Iter<'_, DeviceInfo>, fn(&&DeviceInfo) -> bool> {
+    ) -> std::iter::Filter<std::slice::Iter<'_, MinimalDeviceInfo>, fn(&&MinimalDeviceInfo) -> bool>
+    {
         self.device_collection
             .iter()
-            .filter(|&d| d.state() == DeviceState::Enabled && !device_is_monitor(d))
+            .filter(|&d| d.state == DeviceState::Enabled && !device_is_monitor(d))
     }
 
     #[cfg(target_os = "windows")]
     /// Get a specified device index, accounting for the two default devices.
-    pub fn get(&self, idx: usize) -> Option<&DeviceInfo> {
+    pub fn get(&self, idx: usize) -> Option<&MinimalDeviceInfo> {
         // 0 should be "default device" and 1 should be "default communications device".
         // Note: On windows, CUBEB_DEVICE_PREF_VOICE will be set for default communications device,
         // and CUBEB_DEVICE_PREF_MULTIMEDIA | CUBEB_DEVICE_PREF_NOTIFICATION for default device.
@@ -64,17 +98,17 @@ impl DeviceCollectionWrapper<'_> {
         } else if idx == 1 {
             // Find a device that's preferred for VOICE -- device 1 is the "default communications"
             self.iter()
-                .find(|&device| device.preferred().contains(DevicePref::VOICE))
+                .find(|&device| device.preferred.contains(DevicePref::VOICE))
         } else {
             // Find a device that's preferred for MULTIMEDIA -- device 0 is the "default"
             self.iter()
-                .find(|&device| device.preferred().contains(DevicePref::MULTIMEDIA))
+                .find(|&device| device.preferred.contains(DevicePref::MULTIMEDIA))
         }
     }
 
     #[cfg(not(target_os = "windows"))]
     /// Get a specified device index, accounting for the default device.
-    pub fn get(&self, idx: usize) -> Option<&DeviceInfo> {
+    pub fn get(&self, idx: usize) -> Option<&MinimalDeviceInfo> {
         if self.count() == 0 {
             None
         } else if idx > 0 {
@@ -92,7 +126,7 @@ impl DeviceCollectionWrapper<'_> {
             // Even on linux, we do *NOT* filter monitor devices -- if the user specified that as
             // default, we respect it.
             self.iter()
-                .find(|&device| device.preferred().contains(DevicePref::VOICE))
+                .find(|&device| device.preferred.contains(DevicePref::VOICE))
         }
     }
 
