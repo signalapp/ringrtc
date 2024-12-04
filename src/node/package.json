@@ -1,6 +1,6 @@
 {
   "name": "@signalapp/ringrtc",
-  "version": "2.48.7",
+  "version": "2.49.0",
   "description": "Signal Messenger voice and video calling library.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
