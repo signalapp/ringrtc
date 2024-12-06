@@ -140,10 +140,6 @@ struct Args {
     #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
     tcc: bool,
 
-    /// Whether to enable redundant packets for audio.
-    #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
-    red: bool,
-
     /// Whether to enable the VP9 codec for video.
     #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
     vp9: bool,
@@ -319,7 +315,6 @@ fn main() -> Result<()> {
             enable_fec: args.fec,
         },
         enable_tcc_audio: args.tcc,
-        enable_red_audio: args.red,
         audio_jitter_buffer_config: AudioJitterBufferConfig {
             max_packets: args.audio_jitter_buffer_max_packets,
             min_delay_ms: args.audio_jitter_buffer_min_delay_ms,

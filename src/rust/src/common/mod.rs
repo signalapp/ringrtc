@@ -772,7 +772,6 @@ pub struct CallConfig {
     pub audio_config: AudioConfig,
     pub audio_encoder_config: AudioEncoderConfig,
     pub enable_tcc_audio: bool,
-    pub enable_red_audio: bool,
     pub audio_jitter_buffer_config: AudioJitterBufferConfig,
     pub audio_rtcp_report_interval_ms: i32,
 
@@ -788,7 +787,6 @@ impl Default for CallConfig {
             audio_config: Default::default(),
             audio_encoder_config: Default::default(),
             enable_tcc_audio: false,
-            enable_red_audio: false,
             audio_jitter_buffer_config: Default::default(),
             audio_rtcp_report_interval_ms: 5000,
             enable_vp9: true,

@@ -87,7 +87,6 @@ extern "C" {
         offer: bool,
         v4: webrtc::ptr::Borrowed<RffiConnectionParametersV4>,
         enable_tcc_audio: bool,
-        enable_red_audio: bool,
         enable_vp9: bool,
     ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 

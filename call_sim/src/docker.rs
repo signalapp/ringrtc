@@ -745,7 +745,6 @@ pub async fn start_cli(
     args.push(format!("--fec={}", call_config.audio.enable_fec));
 
     args.push(format!("--tcc={}", call_config.audio.enable_tcc));
-    args.push(format!("--red={}", call_config.audio.enable_red));
 
     args.push(format!("--vp9={}", call_config.video.enable_vp9));
 

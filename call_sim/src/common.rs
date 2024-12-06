@@ -379,8 +379,6 @@ pub struct AudioConfig {
     pub enable_fec: bool,
     /// Flag to enable transport-wide congestion control for audio.
     pub enable_tcc: bool,
-    /// Flag to enabled redundant packets to be sent for audio.
-    pub enable_red: bool,
     /// Flag to enable WebRTC's high pass filter.
     pub enable_high_pass_filter: bool,
     /// Flag to enable WebRTC's acoustic echo cancellation.
@@ -442,7 +440,6 @@ impl Default for AudioConfig {
             enable_dtx: true,
             enable_fec: true,
             enable_tcc: false,
-            enable_red: false,
             enable_high_pass_filter: true,
             // Default tests now disable AEC in order to prevent random timing delays
             // from causing double-talk and thus attenuating valid audio.
