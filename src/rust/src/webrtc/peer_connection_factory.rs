@@ -205,17 +205,20 @@ impl AudioConfig {
             };
 
         #[cfg(all(not(feature = "sim"), feature = "native"))]
-        let (adm_borrowed, backend_name) = {
-            let mut adm = AudioDeviceModule::new();
-            // Initialize the ADM here. This isn't strictly necessary, but allows
-            // us to log the backend name (e.g. audiounit vs audiounit-rust).
-            adm.init();
-            let backend_name = adm.backend_name();
-            (
-                webrtc::ptr::Borrowed::from_ptr(Box::into_raw(Box::new(adm))).to_void(),
-                backend_name,
-            )
-        };
+        let (adm_borrowed, backend_name) =
+            if self.audio_device_module_type == RffiAudioDeviceModuleType::RingRtc {
+                let mut adm = AudioDeviceModule::new();
+                // Initialize the ADM here. This isn't strictly necessary, but allows
+                // us to log the backend name (e.g. audiounit vs audiounit-rust).
+                adm.init();
+                let backend_name = adm.backend_name();
+                (
+                    webrtc::ptr::Borrowed::from_ptr(Box::into_raw(Box::new(adm))).to_void(),
+                    backend_name,
+                )
+            } else {
+                (webrtc::ptr::Borrowed::null(), None)
+            };
         #[cfg(any(feature = "sim", not(feature = "native")))]
         let backend_name = None;
 
