@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.49.1
+
+Desktop: Fix crash caused by new Audio Device Module
+
 ## v2.49.0
 
 - Remove support for unencrypted audio header
