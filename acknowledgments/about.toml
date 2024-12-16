@@ -6,7 +6,7 @@ accepted = [
     "BSD-3-Clause",
     "AGPL-3.0",
     "ISC",
-    "Unicode-DFS-2016",
+    "Unicode-3.0",
 ]
 
 ignore-dev-dependencies = true

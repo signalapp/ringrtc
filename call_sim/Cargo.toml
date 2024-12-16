@@ -11,26 +11,26 @@ edition = "2021"
 license = "AGPL-3.0-only"
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.94"
 base64 = "0.22.1"
-bollard = "0.17.0"
+bollard = "0.17.1"
 protobuf = { path = "../protobuf", features = ["call_sim"] }
 chrono = "0.4.38"
-clap = { version = "4.5.9", features = ["derive"] }
-futures-core = "0.3.30"
-futures-util = "0.3.30"
+clap = { version = "4.5.22", features = ["derive"] }
+futures-core = "0.3.31"
+futures-util = "0.3.31"
 hex = { version = "0.4.3", features = ["serde"] }
 hmac = "0.12.1"
 hound = "3.5.1"
-itertools = "0.12.1"
-plotly = { version = "0.9.0", features = ["kaleido"] }
-prost = "0.13.1"
-regex = "1.10.5"
+itertools = "0.13.0"
+plotly = { version = "0.9.1", features = ["kaleido"] }
+prost = "0.13.3"
+regex = "1.11.1"
 relative-path = "1.9.3"
-serde = { version = "1.0.208", features = ["derive"] }
-serde_json = "1.0.120"
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.133"
 sha2 = "0.10.8"
-tokio = { version = "1.38.1", features = ["rt-multi-thread", "macros", "time", "fs", "process"] }
-tonic = "0.12.1"
+tokio = { version = "1.42.0", features = ["rt-multi-thread", "macros", "time", "fs", "process"] }
+tonic = "0.12.3"
 tower = { version = "0.4.13", features = ["timeout"] }
-uuid = { version = "1.10.0", features = ["v4", "fast-rng"] }
+uuid = { version = "1.11.0", features = ["v4", "fast-rng"] }

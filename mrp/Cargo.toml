@@ -12,9 +12,9 @@ description = "A MRP library, a simple way to reliably send packets"
 license = "AGPL-3.0-only"
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.94"
 log = { version = "0.4.22", features = ["std", "max_level_trace", "release_max_level_info"] }
-thiserror = "1.0.62"
+thiserror = "1.0.69"
 
 [dev-dependencies]
 rand = { version = "0.8.5", features = [] }
