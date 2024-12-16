@@ -153,12 +153,31 @@ fn write_to_null_or_valid_pointer<T>(ptr: webrtc::ptr::Borrowed<T>, v: T) -> any
     }
 }
 
+static PAUSE_LOGGING: AtomicBool = AtomicBool::new(false);
+
+struct LogDisableGuard;
+impl LogDisableGuard {
+    fn new() -> Self {
+        PAUSE_LOGGING.store(true, Ordering::SeqCst);
+        LogDisableGuard
+    }
+}
+
+impl Drop for LogDisableGuard {
+    fn drop(&mut self) {
+        PAUSE_LOGGING.store(false, Ordering::SeqCst);
+    }
+}
+
 fn log_c_str(s: &CStr) {
     lazy_static! {
         static ref RE: Regex = Regex::new(r"(?<ident>[^\s]+:\d+)(?<message>.*)").unwrap();
     }
     lazy_static! {
         static ref RATE_LIMITER: RwLock<HashMap<String, Instant>> = RwLock::new(HashMap::new());
+    }
+    if PAUSE_LOGGING.load(Ordering::SeqCst) {
+        return;
     }
 
     match s.to_str() {
@@ -387,15 +406,29 @@ impl AudioDeviceModule {
             Some(ctx) => ctx,
             None => bail!("cannot refresh device cache without a ctx"),
         };
-        let devices = ctx.enumerate_devices(device_type)?;
-        for device in devices.iter() {
-            info!(
-                "{:?} device: ({})",
-                device_type,
-                AudioDeviceModule::device_str(device)
-            );
+
+        let devices = {
+            // Pause logging because enumeration is noisy
+            let _guard = LogDisableGuard::new();
+            ctx.enumerate_devices(device_type)?
+        };
+
+        let last = match device_type {
+            DeviceType::INPUT => &self.input_device_cache,
+            DeviceType::OUTPUT => &self.output_device_cache,
+            _ => bail!("Bad device type {:?}", device_type),
+        };
+        let collection = DeviceCollectionWrapper::new(&devices);
+        if Some(&collection) != last.as_ref() {
+            for device in devices.iter() {
+                info!(
+                    "{:?} device: ({})",
+                    device_type,
+                    AudioDeviceModule::device_str(device)
+                );
+            }
         }
-        let collection = DeviceCollectionWrapper::new(devices);
+
         match device_type {
             DeviceType::INPUT => self.input_device_cache = Some(collection),
             DeviceType::OUTPUT => self.output_device_cache = Some(collection),
@@ -477,6 +510,7 @@ impl AudioDeviceModule {
 
     // Device enumeration
     pub fn playout_devices(&mut self) -> i16 {
+        // No need to refresh default devices; the **count** won't change when the default changes.
         match self.enumerate_devices(DeviceType::OUTPUT) {
             Ok(device_collection) => device_collection.count().try_into().unwrap_or(-1),
             Err(e) => {
@@ -487,6 +521,7 @@ impl AudioDeviceModule {
     }
 
     pub fn recording_devices(&mut self) -> i16 {
+        // No need to refresh default devices; the **count** won't change when the default changes.
         match self.enumerate_devices(DeviceType::INPUT) {
             Ok(device_collection) => device_collection.count().try_into().unwrap_or(-1),
             Err(e) => {
@@ -537,12 +572,29 @@ impl AudioDeviceModule {
         }
     }
 
+    fn request_update_if_default_device(&mut self, index: u16, device_type: DeviceType) {
+        if index == 0 || (cfg!(target_os = "windows") && index == 1) {
+            match device_type {
+                DeviceType::INPUT => self
+                    .pending_input_device_refresh
+                    .store(true, Ordering::SeqCst),
+                DeviceType::OUTPUT => self
+                    .pending_output_device_refresh
+                    .store(true, Ordering::SeqCst),
+                _ => error!("Invalid device type {:?}", device_type),
+            }
+        }
+    }
+
     pub fn playout_device_name(
         &mut self,
         index: u16,
         name_out: webrtc::ptr::Borrowed<c_uchar>,
         guid_out: webrtc::ptr::Borrowed<c_uchar>,
     ) -> i32 {
+        // Request a refresh of the devices if this is enumerating the default; that may have changed
+        // without a notification firing.
+        self.request_update_if_default_device(index, DeviceType::OUTPUT);
         match self.enumerate_devices(DeviceType::OUTPUT) {
             Ok(devices) => {
                 match AudioDeviceModule::copy_name_and_id(index, devices, name_out, guid_out) {
@@ -566,6 +618,9 @@ impl AudioDeviceModule {
         name_out: webrtc::ptr::Borrowed<c_uchar>,
         guid_out: webrtc::ptr::Borrowed<c_uchar>,
     ) -> i32 {
+        // Request a refresh of the devices if this is enumerating the default; that may have changed
+        // without a notification firing.
+        self.request_update_if_default_device(index, DeviceType::INPUT);
         match self.enumerate_devices(DeviceType::INPUT) {
             Ok(devices) => {
                 match AudioDeviceModule::copy_name_and_id(index, devices, name_out, guid_out) {
@@ -585,6 +640,9 @@ impl AudioDeviceModule {
 
     // Device selection
     pub fn set_playout_device(&mut self, index: u16) -> i32 {
+        // Request a refresh of the devices if this is setting the default; that may have changed
+        // without a notification firing.
+        self.request_update_if_default_device(index, DeviceType::OUTPUT);
         let device = match self.enumerate_devices(DeviceType::OUTPUT) {
             Ok(devices) => match devices.get(index as usize) {
                 Some(device) => device.devid,
@@ -616,6 +674,9 @@ impl AudioDeviceModule {
     }
 
     pub fn set_recording_device(&mut self, index: u16) -> i32 {
+        // Request a refresh of the devices if this is setting the default; that may have changed
+        // without a notification firing.
+        self.request_update_if_default_device(index, DeviceType::INPUT);
         let device = match self.enumerate_devices(DeviceType::INPUT) {
             Ok(devices) => match devices.get(index as usize) {
                 Some(device) => device.devid,

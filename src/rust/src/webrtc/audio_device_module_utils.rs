@@ -14,6 +14,7 @@ use cubeb_core::DevicePref;
 use cubeb_core::DeviceType;
 use std::ffi::{c_uchar, c_void, CString};
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct MinimalDeviceInfo {
     pub devid: *const c_void,
     pub device_id: Option<String>,
@@ -31,6 +32,7 @@ pub struct MinimalDeviceInfo {
 ///
 /// Note that, in some cases, `devid` may be a pointer to state in the cubeb ctx,
 /// so in no event should this outlive the associated ctx.
+#[derive(PartialEq, Eq, Debug)]
 pub struct DeviceCollectionWrapper {
     device_collection: Vec<MinimalDeviceInfo>,
 }
@@ -45,7 +47,7 @@ fn device_is_monitor(device: &MinimalDeviceInfo) -> bool {
 }
 
 impl DeviceCollectionWrapper {
-    pub fn new(device_collection: DeviceCollection<'_>) -> DeviceCollectionWrapper {
+    pub fn new(device_collection: &DeviceCollection<'_>) -> DeviceCollectionWrapper {
         let mut out = Vec::new();
         for device in device_collection.iter() {
             out.push(MinimalDeviceInfo {
