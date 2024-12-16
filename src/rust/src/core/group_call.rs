@@ -644,7 +644,7 @@ impl HttpSfuClient {
                         Err(RingRtcError::UnexpectedResponseCodeFromSFu(http_status.code).into())
                     }
                 };
-                client.on_sfu_client_joined(join_result);
+                client.on_sfu_client_join_attempt_completed(join_result);
             }),
         );
     }
@@ -1773,13 +1773,6 @@ impl Client {
                     warn!("Already attempted to join.");
                 }
                 JoinState::NotJoined(ring_id) => {
-                    if let Some(peek_info) = &state.last_peek_info {
-                        if peek_info.device_count_including_pending_devices() >= peek_info.max_devices.unwrap_or(u32::MAX) as usize {
-                            info!("Ending group call client because there are {}/{} devices in the call.", peek_info.device_count_including_pending_devices(), peek_info.max_devices.unwrap());
-                            Self::end(state, EndReason::HasMaxDevices);
-                            return;
-                        }
-                    }
                     if Self::take_busy(state) {
                         Self::set_join_state_and_notify_observer(state, JoinState::Joining);
                         Self::accept_ring_if_needed(state, ring_id);
@@ -1788,7 +1781,8 @@ impl Client {
                             // Request group membership refresh before joining.
                             // The Join request will then proceed once SfuClient has the token.
                             state.observer.request_membership_proof(state.client_id);
-                            state.next_membership_proof_request_time = Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
+                            state.next_membership_proof_request_time =
+                                Some(Instant::now() + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
                         }
 
                         let client_secret = EphemeralSecret::random_from_rng(OsRng);
@@ -2506,150 +2500,166 @@ impl Client {
         }
     }
 
-    // This should be called by the SfuClient after it has joined.
-    pub fn on_sfu_client_joined(&self, joined: Result<Joined>) {
+    fn on_sfu_client_join_success(state: &mut State, joined: Joined) {
+        match state.connection_state {
+            ConnectionState::NotConnected => {
+                warn!("The SFU completed joining before connect() was requested.");
+            }
+            ConnectionState::Connecting => {
+                state.dhe_state.negotiate_in_place(
+                    &PublicKey::from(joined.server_dhe_pub_key),
+                    &joined.hkdf_extra_info,
+                );
+                let srtp_keys = match &state.dhe_state {
+                    DheState::Negotiated { srtp_keys } => srtp_keys,
+                    _ => {
+                        Self::end(state, EndReason::FailedToNegotiatedSrtpKeys);
+                        return;
+                    }
+                };
+
+                if Self::start_peer_connection(
+                    state,
+                    &joined.sfu_info,
+                    joined.local_demux_id,
+                    srtp_keys,
+                )
+                .is_err()
+                {
+                    Self::end(state, EndReason::FailedToStartPeerConnection);
+                    return;
+                };
+
+                // Set a low bitrate until we learn someone else is in the call.
+                Self::set_send_rates_inner(
+                    state,
+                    SendRates {
+                        max: Some(ALL_ALONE_MAX_SEND_RATE),
+                        ..SendRates::default()
+                    },
+                );
+
+                state.sfu_info = Some(joined.sfu_info);
+            }
+            ConnectionState::Connected | ConnectionState::Reconnecting => {
+                warn!("The SFU completed joining after already being connected.");
+            }
+        };
+        match state.join_state {
+            JoinState::NotJoined(_) => {
+                warn!("The SFU completed joining before join() was requested.");
+            }
+            JoinState::Joining => {
+                // We just now appeared in the participants list (unless we're pending
+                // approval) and possibly even updated the eraId. Request this before doing
+                // anything else because it'll take a while for the app to get back to us.
+                Self::request_remote_devices_as_soon_as_possible(state);
+
+                // The call to set_peek_result_inner needs the demux ID to be set in the
+                // join state. But make sure to fire observer.handle_join_state_changed
+                // after set_peek_result_inner so that state.remote_devices are filled in.
+                state.join_state = joined.join_state;
+                if let Some(peek_info) = &state.last_peek_info {
+                    // TODO: Do the same processing without making it look like we just
+                    // got an update from the server even though the update actually came
+                    // from earlier.  For now, it's close enough.
+                    let peek_info = peek_info.clone();
+                    Self::set_peek_result_inner(state, Ok(peek_info));
+                    if state.remote_devices.is_empty() {
+                        // If there are no remote devices, then Self::set_peek_result_inner
+                        // will not fire handle_remote_devices_changed and the observer can't tell the difference
+                        // between "we know we have no remote devices" and "we don't know what we have yet".
+                        // This way, the observer can.
+                        state.observer.handle_remote_devices_changed(
+                            state.client_id,
+                            &state.remote_devices,
+                            RemoteDevicesChangedReason::DemuxIdsChanged,
+                        );
+                    }
+                }
+
+                // Just in case, check if the cached peek info happened to have the local
+                // device in it already (possible if the peek raced with the join request).
+                // In that case, set_peek_info_inner will have notified the observer about
+                // the join state change already.
+                state
+                    .observer
+                    .handle_join_state_changed(state.client_id, state.join_state);
+
+                // Check state.join_state to make sure we didn't process an `end()` since receiving the response.
+                // We need to check the response's `join_state` since `peek_result_inner` can transition
+                // the call to joined and have already called `on_client_joined`
+                if matches!(joined.join_state, JoinState::Joined(_))
+                    && matches!(state.join_state, JoinState::Joined(_))
+                {
+                    Self::on_client_joined(state);
+                }
+
+                if joined.creator.is_some() {
+                    // Check if we're permitted to ring
+                    let creator_is_self = {
+                        let self_uuid_guard = state.self_uuid.lock();
+                        self_uuid_guard
+                            .map(|guarded_uuid| joined.creator == *guarded_uuid)
+                            .unwrap_or(false)
+                    };
+                    let new_ring_state = if creator_is_self {
+                        OutgoingRingState::PermittedToRing {
+                            ring_id: RingId::from_era_id(&joined.era_id),
+                        }
+                    } else {
+                        OutgoingRingState::NotPermittedToRing
+                    };
+                    debug!("updating ring state to {:?}", new_ring_state);
+                    let previous_ring_state =
+                        std::mem::replace(&mut state.outgoing_ring_state, new_ring_state);
+                    if let OutgoingRingState::WantsToRing { recipient } = previous_ring_state {
+                        Self::ring_inner(state, recipient)
+                    }
+                }
+
+                state.next_stats_time = Some(Instant::now() + STATS_INITIAL_OFFSET);
+            }
+            JoinState::Pending(_) | JoinState::Joined(_) => {
+                warn!("The SFU completed joining more than once.");
+            }
+        };
+    }
+
+    fn on_sfu_client_join_failure(state: &mut State, err: anyhow::Error) {
+        // Map the error to an appropriate end reason.
+        let end_reason = err.downcast_ref::<RingRtcError>().map_or_else(
+            || {
+                error!("Unexpected error: {}", err);
+                EndReason::SfuClientFailedToJoin
+            },
+            |err| match err {
+                RingRtcError::GroupCallFull => EndReason::HasMaxDevices,
+                _ => EndReason::SfuClientFailedToJoin,
+            },
+        );
+        Self::end(state, end_reason);
+    }
+
+    // Called by the SfuClient after a join attempt completes.
+    pub fn on_sfu_client_join_attempt_completed(&self, join_result: Result<Joined>) {
         debug!(
-            "group_call::Client(outer)::on_sfu_client_joined(client_id: {})",
+            "group_call::Client(outer)::on_sfu_client_join_attempt_completed(client_id: {})",
             self.client_id
         );
         self.actor.send(move |state| {
             debug!(
-                "group_call::Client(inner)::on_sfu_client_joined(client_id: {})",
+                "group_call::Client(inner)::on_sfu_client_join_attempt_completed(client_id: {})",
                 state.client_id
             );
-
-            if let Ok(Joined {
-                sfu_info,
-                local_demux_id,
-                server_dhe_pub_key,
-                hkdf_extra_info,
-                creator,
-                era_id,
-                join_state,
-            }) = joined
-            {
-                match state.connection_state {
-                    ConnectionState::NotConnected => {
-                        warn!("The SFU completed joining before connect() was requested.");
-                    }
-                    ConnectionState::Connecting => {
-                        state.dhe_state.negotiate_in_place(
-                            &PublicKey::from(server_dhe_pub_key),
-                            &hkdf_extra_info,
-                        );
-                        let srtp_keys = match &state.dhe_state {
-                            DheState::Negotiated { srtp_keys } => srtp_keys,
-                            _ => {
-                                Self::end(state, EndReason::FailedToNegotiatedSrtpKeys);
-                                return;
-                            }
-                        };
-
-                        if Self::start_peer_connection(state, &sfu_info, local_demux_id, srtp_keys)
-                            .is_err()
-                        {
-                            Self::end(state, EndReason::FailedToStartPeerConnection);
-                            return;
-                        };
-
-                        // Set a low bitrate until we learn someone else is in the call.
-                        Self::set_send_rates_inner(
-                            state,
-                            SendRates {
-                                max: Some(ALL_ALONE_MAX_SEND_RATE),
-                                ..SendRates::default()
-                            },
-                        );
-
-                        state.sfu_info = Some(sfu_info);
-                    }
-                    ConnectionState::Connected | ConnectionState::Reconnecting => {
-                        warn!("The SFU completed joining after already being connected.");
-                    }
-                };
-                match state.join_state {
-                    JoinState::NotJoined(_) => {
-                        warn!("The SFU completed joining before join() was requested.");
-                    }
-                    JoinState::Joining => {
-                        // We just now appeared in the participants list (unless we're pending
-                        // approval) and possibly even updated the eraId. Request this before doing
-                        // anything else because it'll take a while for the app to get back to us.
-                        Self::request_remote_devices_as_soon_as_possible(state);
-
-                        // The call to set_peek_result_inner needs the demux ID to be set in the
-                        // join state. But make sure to fire observer.handle_join_state_changed
-                        // after set_peek_result_inner so that state.remote_devices are filled in.
-                        state.join_state = join_state;
-                        if let Some(peek_info) = &state.last_peek_info {
-                            // TODO: Do the same processing without making it look like we just
-                            // got an update from the server even though the update actually came
-                            // from earlier.  For now, it's close enough.
-                            let peek_info = peek_info.clone();
-                            Self::set_peek_result_inner(state, Ok(peek_info));
-                            if state.remote_devices.is_empty() {
-                                // If there are no remote devices, then Self::set_peek_result_inner
-                                // will not fire handle_remote_devices_changed and the observer can't tell the difference
-                                // between "we know we have no remote devices" and "we don't know what we have yet".
-                                // This way, the observer can.
-                                state.observer.handle_remote_devices_changed(
-                                    state.client_id,
-                                    &state.remote_devices,
-                                    RemoteDevicesChangedReason::DemuxIdsChanged,
-                                );
-                            }
-                        }
-
-                        // Just in case, check if the cached peek info happened to have the local
-                        // device in it already (possible if the peek raced with the join request).
-                        // In that case, set_peek_info_inner will have notified the observer about
-                        // the join state change already.
-                        state
-                            .observer
-                            .handle_join_state_changed(state.client_id, state.join_state);
-
-                        // Check state.join_state to make sure we didn't process an `end()` since receiving the response.
-                        // We need to check the response's `join_state` since `peek_result_inner` can transition
-                        // the call to joined and have already called `on_client_joined`
-                        if matches!(join_state, JoinState::Joined(_))
-                            && matches!(state.join_state, JoinState::Joined(_))
-                        {
-                            Self::on_client_joined(state);
-                        }
-
-                        if creator.is_some() {
-                            // Check if we're permitted to ring
-                            let creator_is_self = {
-                                let self_uuid_guard = state.self_uuid.lock();
-                                self_uuid_guard
-                                    .map(|guarded_uuid| creator == *guarded_uuid)
-                                    .unwrap_or(false)
-                            };
-                            let new_ring_state = if creator_is_self {
-                                OutgoingRingState::PermittedToRing {
-                                    ring_id: RingId::from_era_id(&era_id),
-                                }
-                            } else {
-                                OutgoingRingState::NotPermittedToRing
-                            };
-                            debug!("updating ring state to {:?}", new_ring_state);
-                            let previous_ring_state =
-                                std::mem::replace(&mut state.outgoing_ring_state, new_ring_state);
-                            if let OutgoingRingState::WantsToRing { recipient } =
-                                previous_ring_state
-                            {
-                                Self::ring_inner(state, recipient)
-                            }
-                        }
-
-                        state.next_stats_time = Some(Instant::now() + STATS_INITIAL_OFFSET);
-                    }
-                    JoinState::Pending(_) | JoinState::Joined(_) => {
-                        warn!("The SFU completed joining more than once.");
-                    }
-                };
-            } else {
-                Self::end(state, EndReason::SfuClientFailedToJoin);
+            match join_result {
+                Ok(joined) => {
+                    Self::on_sfu_client_join_success(state, joined);
+                }
+                Err(err) => {
+                    warn!("Failed to join group call: {}", err);
+                    Self::on_sfu_client_join_failure(state, err);
+                }
             }
         });
     }
@@ -4647,7 +4657,7 @@ impl<'data> Reader<'data> {
 #[cfg(feature = "sim")]
 mod tests {
     use std::sync::{
-        atomic::{self, AtomicU64},
+        atomic::{self, AtomicI64, AtomicU64},
         mpsc, Arc, Condvar, Mutex,
     };
 
@@ -4667,10 +4677,28 @@ mod tests {
         request_count: Arc<AtomicU64>,
         era_id: String,
         response_join_state: Arc<Mutex<JoinState>>,
+        joins_remaining: Option<Arc<AtomicI64>>,
+    }
+
+    #[derive(Default)]
+    struct FakeSfuClientOptions {
+        max_joins: Option<usize>,
     }
 
     impl FakeSfuClient {
         fn new(local_demux_id: DemuxId, call_creator: Option<UserId>) -> Self {
+            Self::with_options(
+                local_demux_id,
+                call_creator,
+                FakeSfuClientOptions::default(),
+            )
+        }
+
+        fn with_options(
+            local_demux_id: DemuxId,
+            call_creator: Option<UserId>,
+            options: FakeSfuClientOptions,
+        ) -> Self {
             Self {
                 sfu_info: SfuInfo {
                     udp_addresses: Vec::new(),
@@ -4685,6 +4713,9 @@ mod tests {
                 request_count: Arc::new(AtomicU64::new(0)),
                 era_id: "1111111111111111".to_string(),
                 response_join_state: Arc::new(Mutex::new(JoinState::Joined(local_demux_id))),
+                joins_remaining: options
+                    .max_joins
+                    .map(|v| Arc::new(AtomicI64::new(v as i64))),
             }
         }
 
@@ -4706,7 +4737,16 @@ mod tests {
 
     impl SfuClient for FakeSfuClient {
         fn join(&mut self, _ice_ufrag: &str, _dhe_pub_key: [u8; 32], client: Client) {
-            client.on_sfu_client_joined(Ok(Joined {
+            if let Some(counter) = &self.joins_remaining {
+                if counter.fetch_sub(1, Ordering::SeqCst) <= 0 {
+                    // No more joins allowed. Simulate a "group full" condition.
+                    client.on_sfu_client_join_attempt_completed(Err(
+                        RingRtcError::GroupCallFull.into()
+                    ));
+                    return;
+                }
+            }
+            client.on_sfu_client_join_attempt_completed(Ok(Joined {
                 sfu_info: self.sfu_info.clone(),
                 local_demux_id: self.local_demux_id,
                 server_dhe_pub_key: [0u8; 32],
@@ -6829,40 +6869,28 @@ mod tests {
     }
 
     #[test]
-    fn full_call() {
-        let client1 = TestClient::new(vec![1], 1);
+    fn full_call_without_peeking() {
+        let sfu_options = FakeSfuClientOptions { max_joins: Some(2) };
+        let sfu_client = FakeSfuClient::with_options(1, None, sfu_options);
+
+        let client1 = TestClient::with_sfu_client(vec![1], 1, sfu_client.clone());
         client1.client.connect();
-        client1.client.set_peek_result(Ok(PeekInfo {
-            devices: vec![PeekDeviceInfo {
-                demux_id: 2,
-                user_id: None,
-            }],
-            max_devices: Some(1),
-            pending_devices: vec![],
-            creator: None,
-            era_id: None,
-            call_link_state: None,
-        }));
         client1.client.join();
+        assert!(client1.observer.joined.wait(Duration::from_secs(5)));
+
+        let client2 = TestClient::with_sfu_client(vec![2], 1, sfu_client.clone());
+        client2.client.connect();
+        client2.client.join();
+        assert!(client2.observer.joined.wait(Duration::from_secs(5)));
+
+        let client3 = TestClient::with_sfu_client(vec![3], 1, sfu_client.clone());
+        client3.client.connect();
+        client3.client.join();
+
         assert_eq!(
             Some(EndReason::HasMaxDevices),
-            client1.observer.ended.wait(Duration::from_secs(5))
+            client3.observer.ended.wait(Duration::from_secs(5))
         );
-
-        let client1 = TestClient::new(vec![1], 1);
-        client1.client.set_peek_result(Ok(PeekInfo {
-            devices: vec![PeekDeviceInfo {
-                demux_id: 2,
-                user_id: None,
-            }],
-            max_devices: Some(2),
-            pending_devices: vec![],
-            creator: None,
-            era_id: None,
-            call_link_state: None,
-        }));
-        client1.connect_join_and_wait_until_joined();
-        client1.disconnect_and_wait_until_ended();
     }
 
     #[test]

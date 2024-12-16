@@ -74,7 +74,7 @@ impl RffiPeerConnection {
 
     fn set_outgoing_media_enabled(&self, enabled: bool) {
         let mut state = self.state.lock().unwrap();
-        if !(state.local_description_set && state.remote_description_set) {
+        if enabled && !(state.local_description_set && state.remote_description_set) {
             panic!("Can't Rust_setOutgoingMediaEnabled if you haven't received an answer yet.");
         }
         state.outgoing_audio_enabled = enabled;
