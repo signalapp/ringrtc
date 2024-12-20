@@ -1175,26 +1175,44 @@ const DELAYED_BWE_CHECK: Duration = Duration::from_secs(10);
 
 const REACTION_STRING_MAX_SIZE: usize = 256;
 
+pub struct ClientStartParams {
+    pub group_id: GroupId,
+    pub client_id: ClientId,
+    pub kind: GroupCallKind,
+    pub sfu_client: Box<dyn SfuClient + Send>,
+    pub observer: Box<dyn Observer + Send>,
+    pub busy: Arc<CallMutex<bool>>,
+    pub self_uuid: Arc<CallMutex<Option<UserId>>>,
+    pub peer_connection_factory: Option<PeerConnectionFactory>,
+    pub outgoing_audio_track: AudioTrack,
+    pub outgoing_video_track: Option<VideoTrack>,
+    pub incoming_video_sink: Option<Box<dyn VideoSink>>,
+    pub ring_id: Option<RingId>,
+    pub audio_levels_interval: Option<Duration>,
+}
+
 impl Client {
-    #[allow(clippy::too_many_arguments)]
-    pub fn start(
-        group_id: GroupId,
-        client_id: ClientId,
-        kind: GroupCallKind,
-        sfu_client: Box<dyn SfuClient + Send>,
-        observer: Box<dyn Observer + Send>,
-        busy: Arc<CallMutex<bool>>,
-        self_uuid: Arc<CallMutex<Option<UserId>>>,
-        peer_connection_factory: Option<PeerConnectionFactory>,
-        outgoing_audio_track: AudioTrack,
-        outgoing_video_track: Option<VideoTrack>,
-        // This is separate from the observer so it can bypass a thread hop.
-        incoming_video_sink: Option<Box<dyn VideoSink>>,
-        ring_id: Option<RingId>,
-        audio_levels_interval: Option<Duration>,
-    ) -> Result<Self> {
+    pub fn start(params: ClientStartParams) -> Result<Self> {
+        let ClientStartParams {
+            group_id,
+            client_id,
+            kind,
+            sfu_client,
+            observer,
+            busy,
+            self_uuid,
+            peer_connection_factory,
+            outgoing_audio_track,
+            outgoing_video_track,
+            incoming_video_sink,
+            ring_id,
+            audio_levels_interval,
+        } = params;
+
         debug!("group_call::Client(outer)::new(client_id: {})", client_id);
+
         let stopper = Stopper::new();
+
         // We only send with this key until the first person joins, at which point
         // we ratchet the key forward.
         let frame_crypto_context = Arc::new(CallMutex::new(
@@ -5272,21 +5290,21 @@ mod tests {
                 }),
                 None,
             );
-            let client = Client::start(
-                b"fake group ID".to_vec(),
-                demux_id,
-                GroupCallKind::SignalGroup,
-                Box::new(sfu_client.clone()),
-                Box::new(observer.clone()),
-                fake_busy,
-                fake_self_uuid,
-                None,
-                fake_audio_track,
-                None,
-                None,
-                None,
-                Some(Duration::from_millis(200)),
-            )
+            let client = Client::start(ClientStartParams {
+                group_id: b"fake group ID".to_vec(),
+                client_id: demux_id,
+                kind: GroupCallKind::SignalGroup,
+                sfu_client: Box::new(sfu_client.clone()),
+                observer: Box::new(observer.clone()),
+                busy: fake_busy,
+                self_uuid: fake_self_uuid,
+                peer_connection_factory: None,
+                outgoing_audio_track: fake_audio_track,
+                outgoing_video_track: None,
+                incoming_video_sink: None,
+                ring_id: None,
+                audio_levels_interval: Some(Duration::from_millis(200)),
+            })
             .expect("Start Client");
             Self {
                 user_id: user_id.clone(),

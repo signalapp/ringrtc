@@ -28,7 +28,9 @@ use crate::common::{
 use crate::core::call::Call;
 use crate::core::call_mutex::CallMutex;
 use crate::core::connection::{Connection, ConnectionType};
-use crate::core::group_call::{HttpSfuClient, Observer, Reaction};
+use crate::core::group_call::{
+    Client, ClientStartParams, GroupCallKind, HttpSfuClient, Observer, Reaction,
+};
 use crate::core::platform::Platform;
 use crate::core::signaling::ReceivedOffer;
 use crate::core::util::{try_scoped, uuid_to_string};
@@ -2805,21 +2807,22 @@ where
             None,
             hkdf_extra_info,
         );
-        let client = group_call::Client::start(
+
+        let client = Client::start(ClientStartParams {
             group_id,
             client_id,
-            group_call::GroupCallKind::SignalGroup,
-            Box::new(sfu_client),
-            Box::new(self.clone()),
-            self.busy.clone(),
-            self.self_uuid.clone(),
+            kind: GroupCallKind::SignalGroup,
+            sfu_client: Box::new(sfu_client),
+            observer: Box::new(self.clone()),
+            busy: self.busy.clone(),
+            self_uuid: self.self_uuid.clone(),
             peer_connection_factory,
             outgoing_audio_track,
-            Some(outgoing_video_track),
+            outgoing_video_track: Some(outgoing_video_track),
             incoming_video_sink,
             ring_id,
             audio_levels_interval,
-        )?;
+        })?;
 
         client_by_id.insert(
             client_id,
@@ -2892,21 +2895,22 @@ where
         sfu_client.set_member_resolver(Arc::new(call_links::CallLinkMemberResolver::from(
             &root_key,
         )));
-        let client = group_call::Client::start(
-            room_id,
+
+        let client = Client::start(ClientStartParams {
+            group_id: room_id,
             client_id,
-            group_call::GroupCallKind::CallLink,
-            Box::new(sfu_client),
-            Box::new(self.clone()),
-            self.busy.clone(),
-            self.self_uuid.clone(),
+            kind: GroupCallKind::CallLink,
+            sfu_client: Box::new(sfu_client),
+            observer: Box::new(self.clone()),
+            busy: self.busy.clone(),
+            self_uuid: self.self_uuid.clone(),
             peer_connection_factory,
             outgoing_audio_track,
-            Some(outgoing_video_track),
+            outgoing_video_track: Some(outgoing_video_track),
             incoming_video_sink,
-            None,
+            ring_id: None,
             audio_levels_interval,
-        )?;
+        })?;
 
         client_by_id.insert(
             client_id,

@@ -222,21 +222,22 @@ fn main() {
         .unwrap();
     let busy = Arc::new(CallMutex::new(false, "busy"));
     let self_uuid = Arc::new(CallMutex::new(None, "self_uuid"));
-    let client = group_call::Client::start(
+
+    let client = group_call::Client::start(group_call::ClientStartParams {
         group_id,
-        1,
-        group_call::GroupCallKind::SignalGroup,
+        client_id: 1,
+        kind: group_call::GroupCallKind::SignalGroup,
         sfu_client,
-        Box::new(observer.clone()),
+        observer: Box::new(observer.clone()),
         busy,
         self_uuid,
-        None,
+        peer_connection_factory: None,
         outgoing_audio_track,
-        Some(outgoing_video_track.clone()),
-        Some(Box::new(observer.clone())),
-        None,
-        None,
-    )
+        outgoing_video_track: Some(outgoing_video_track.clone()),
+        incoming_video_sink: Some(Box::new(observer.clone())),
+        ring_id: None,
+        audio_levels_interval: None,
+    })
     .unwrap();
 
     let send_rate_override = DataRate::from_mbps(10);
