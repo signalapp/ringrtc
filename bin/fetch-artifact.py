@@ -108,14 +108,14 @@ def download_if_needed(archive_file: str, url: str, checksum: str, archive_dir: 
     archive_path = os.path.join(archive_dir, archive_file)
 
     try:
-        f = open(archive_path, 'rb')
+        f_check = open(archive_path, 'rb')
         digest = hashlib.sha256()
-        chunk = f.read1()
+        chunk = f_check.read1()
         while chunk:
             digest.update(chunk)
-            chunk = f.read1()
+            chunk = f_check.read1()
         if digest.hexdigest() == checksum.lower():
-            return f
+            return f_check
         print("existing file '{}' has non-matching checksum {}; re-downloading...".format(archive_file, digest.hexdigest()), file=sys.stderr)
     except FileNotFoundError:
         pass
@@ -125,17 +125,16 @@ def download_if_needed(archive_file: str, url: str, checksum: str, archive_dir: 
         with urllib.request.urlopen(url) as response:
             digest = hashlib.sha256()
             download_path = os.path.join(archive_dir, UNVERIFIED_DOWNLOAD_NAME)
-            f = open(download_path, 'w+b')
+            f_download = open(download_path, 'w+b')
             chunk = response.read1()
             while chunk:
                 digest.update(chunk)
-                f.write(chunk)
+                f_download.write(chunk)
                 chunk = response.read1()
             assert digest.hexdigest() == checksum.lower(), "expected {}, actual {}".format(checksum.lower(), digest.hexdigest())
-            f.close()
+            f_download.close()
             os.replace(download_path, archive_path)
-            f = open(archive_path, 'rb')
-            return f
+            return open(archive_path, 'rb')
     except urllib.error.HTTPError as e:
         print(e, e.filename, file=sys.stderr)
         sys.exit(1)
