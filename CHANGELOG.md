@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.49.2
+
+- Update to webrtc 6723c
+  - Use RE2 instead of std::regex for SDP munging
+  - Remove RED support
+  - iOS: Fix null-pointer deref if audiounit init failed
+  - For encrypted video, check for keyframe after decryption
+  - Update to oboe v1.9.3
+
+- Calling server should enforce max call size
+
+- Desktop: New Audio Device Module improvements
+  - Refresh default devices periodically
+
+- Call Sim: Update docker builds
+
+- Group Calls: Make the Client::start() function take a struct
+
+- CI: Fix mypy issue
+
+- Update Rust dependencies
+
 ## v2.49.1
 
 Desktop: Fix crash caused by new Audio Device Module
