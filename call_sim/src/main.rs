@@ -14,7 +14,7 @@ use anyhow::Result;
 use clap::Parser;
 use common::ClientProfile;
 use hex::FromHex;
-use itertools::Itertools;
+use itertools::{iproduct, Itertools};
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -80,10 +80,15 @@ fn group_auth_key_gen() -> [u8; 32] {
         .unwrap()
 }
 
-// This is an example test set. It is both a useful reference and a standard set of
-// tests we can run by default. Normally, one would modify this file and run the specific
-// test sets that are of interest.
+// This is minimal example of a test.
 async fn run_minimal_example(test: &mut Test) -> Result<()> {
+    // Optional: Pre-process sounds that you will use. This will generate a spectrogram
+    // and calculate a reference MOS for each sound. Normally, this might be useful,
+    // but sometimes you just want to run a test and don't need this information.
+    // Here we are leaving out the `silence` sound since there is no point to get a
+    // MOS value for it.
+    test.preprocess_sounds(vec!["normal_phrasing"]).await?;
+
     // Run a test with a `default` config. Here, we will use 30-second calls and specify
     // a default call configuration. The test will actually run one or more test cases,
     // each a permutation of the call configuration, sound pairs, and network profiles.
@@ -111,19 +116,13 @@ async fn run_minimal_example(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// Building on the minimal example, this example adds more control.
-async fn run_advanced_example(test: &mut Test) -> Result<()> {
-    // Optional: Pre-process sounds that you will use. This will generate a spectrogram
-    // and calculate a reference MOS for each sound. Normally, this might be useful,
-    // but sometimes you just want to run a test and don't need this information.
-    // Here we are leaving out the `silence` sound since there is no point to get a
-    // MOS value for it.
-    test.preprocess_sounds(vec!["normal_phrasing"]).await?;
-
+// This is a test set to test the "normal phrasing" audio over various network profiles. Set
+// packet time to 60ms to align with our production configuration.
+async fn run_baseline(test: &mut Test) -> Result<()> {
     test.run(
         GroupConfig {
-            group_name: "advanced_example".to_string(),
-            // We want to show all the different measurements in the summary columns.
+            group_name: "baseline".to_string(),
+            // Show all the different measurements in the summary columns. Hide video.
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: true,
                 show_visqol_mos_audio: true,
@@ -135,55 +134,14 @@ async fn run_advanced_example(test: &mut Test) -> Result<()> {
             ..Default::default()
         },
         vec![TestCaseConfig {
-            test_case_name: "default".to_string(),
-            // client_a will still have a simple configuration.
-            client_a_config: CallConfig::default().with_audio_input_name("normal_phrasing"),
-            // From client_b's perspective, we will enable all the audio analysis tools at our disposal,
-            // and just for illustration, disable dtx on any encoded audio that gets sent.
-            client_b_config: CallConfig {
-                audio: AudioConfig {
-                    input_name: "normal_phrasing".to_string(),
-                    enable_dtx: false,
-                    visqol_speech_analysis: true,
-                    visqol_audio_analysis: true,
-                    pesq_speech_analysis: true,
-                    plc_speech_analysis: true,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            // We will also iterate each test case 3 times and present averages in the summary report.
-            iterations: 3,
-            ..Default::default()
-        }],
-        vec![NetworkProfile::None],
-    )
-    .await?;
-
-    Ok(())
-}
-
-// This is a test set to test a particular sound set against various network profiles.
-async fn run_baseline_over_all_profiles(test: &mut Test) -> Result<()> {
-    test.run(
-        GroupConfig {
-            group_name: "baseline_over_all_profiles".to_string(),
-            summary_report_columns: SummaryReportColumns {
-                show_visqol_mos_speech: true,
-                show_visqol_mos_audio: true,
-                show_visqol_mos_average: true,
-                show_pesq_mos: true,
-                show_plc_mos: true,
-                show_video: false,
-            },
-            ..Default::default()
-        },
-        vec![TestCaseConfig {
-            test_case_name: "default".to_string(),
+            test_case_name: "ptime-60".to_string(),
             client_a_config: CallConfig {
                 audio: AudioConfig {
                     input_name: "normal_phrasing".to_string(),
                     initial_packet_size_ms: 60,
+                    // We don't look at analysis from client_a's point of view, so there
+                    // is no need to generate anything for it.
+                    generate_spectrogram: false,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -192,6 +150,7 @@ async fn run_baseline_over_all_profiles(test: &mut Test) -> Result<()> {
                 audio: AudioConfig {
                     input_name: "normal_phrasing".to_string(),
                     initial_packet_size_ms: 60,
+                    // Calculate all mos values for these audio tests.
                     visqol_speech_analysis: true,
                     visqol_audio_analysis: true,
                     pesq_speech_analysis: true,
@@ -200,6 +159,8 @@ async fn run_baseline_over_all_profiles(test: &mut Test) -> Result<()> {
                 },
                 ..Default::default()
             },
+            // Run 3 iterations of each test to get an average to help contain the
+            // non-deterministic behavior of the tests.
             iterations: 3,
             ..Default::default()
         }],
@@ -211,41 +172,65 @@ async fn run_baseline_over_all_profiles(test: &mut Test) -> Result<()> {
             NetworkProfile::LimitedBandwidth(100),
             NetworkProfile::LimitedBandwidth(50),
             NetworkProfile::LimitedBandwidth(25),
+            NetworkProfile::SimpleLoss(10),
+            NetworkProfile::SimpleLoss(20),
+            NetworkProfile::SimpleLoss(30),
+            NetworkProfile::SimpleLoss(40),
+            NetworkProfile::SimpleLoss(50),
         ],
     )
     .await?;
 
-    let test_cases = [10, 20, 30].map(|loss| TestCaseConfig {
-        test_case_name: format!("loss_{loss}"),
-        client_a_config: CallConfig {
-            audio: AudioConfig {
-                input_name: "normal_phrasing".to_string(),
-                initial_packet_size_ms: 60,
+    Ok(())
+}
+
+// Test 20ms and 60ms ptime over a range of deterministic loss, with and without dtx.
+// Note that deterministic loss is better than the SimpleLoss network profile, but
+// it is still not completely reliable.
+async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
+    let ptime_values = [20, 60];
+    let dtx_values = [false, true];
+    let loss_values = (0..=50).step_by(10);
+
+    let test_cases = iproduct!(dtx_values, ptime_values, loss_values)
+        .map(
+            |(enable_dtx, initial_packet_size_ms, loss)| TestCaseConfig {
+                test_case_name: format!("ptime-{initial_packet_size_ms}_dtx-{enable_dtx}_{loss}"),
+                length_seconds: 30,
+                client_a_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms,
+                        enable_dtx,
+                        generate_spectrogram: false,
+                        ..Default::default()
+                    },
+                    profile: DeterministicLoss(loss),
+                    ..Default::default()
+                },
+                client_b_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms,
+                        enable_dtx,
+                        visqol_speech_analysis: true,
+                        visqol_audio_analysis: true,
+                        pesq_speech_analysis: true,
+                        plc_speech_analysis: true,
+                        ..Default::default()
+                    },
+                    profile: DeterministicLoss(loss),
+                    ..Default::default()
+                },
+                iterations: 3,
                 ..Default::default()
             },
-            profile: DeterministicLoss(loss),
-            ..Default::default()
-        },
-        client_b_config: CallConfig {
-            audio: AudioConfig {
-                input_name: "normal_phrasing".to_string(),
-                initial_packet_size_ms: 60,
-                visqol_speech_analysis: true,
-                visqol_audio_analysis: true,
-                pesq_speech_analysis: true,
-                plc_speech_analysis: true,
-                ..Default::default()
-            },
-            profile: DeterministicLoss(loss),
-            ..Default::default()
-        },
-        iterations: 3,
-        ..Default::default()
-    });
+        )
+        .collect::<Vec<_>>();
 
     test.run(
         GroupConfig {
-            group_name: "baseline_deterministic_loss".to_string(),
+            group_name: "deterministic_loss_test".to_string(),
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: true,
                 show_visqol_mos_audio: true,
@@ -256,70 +241,8 @@ async fn run_baseline_over_all_profiles(test: &mut Test) -> Result<()> {
             },
             ..Default::default()
         },
-        test_cases.into(),
+        test_cases,
         vec![NetworkProfile::None],
-    )
-    .await?;
-
-    Ok(())
-}
-
-// Here is an example running with and without DTX across a range of loss profiles.
-async fn run_dtx_tests_with_loss(test: &mut Test) -> Result<()> {
-    test.run(
-        GroupConfig {
-            group_name: "dtx_tests_with_loss".to_string(),
-            chart_dimensions: vec![ChartDimension::MosSpeech],
-            ..Default::default()
-        },
-        vec![
-            TestCaseConfig {
-                test_case_name: "with_dtx".to_string(),
-                client_a_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                client_b_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            TestCaseConfig {
-                test_case_name: "no_dtx".to_string(),
-                client_a_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        enable_dtx: false,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                client_b_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        enable_dtx: false,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        ],
-        vec![
-            NetworkProfile::None,
-            NetworkProfile::SimpleLoss(5),
-            NetworkProfile::SimpleLoss(10),
-            NetworkProfile::SimpleLoss(20),
-            NetworkProfile::SimpleLoss(30),
-            NetworkProfile::SimpleLoss(40),
-        ],
     )
     .await?;
 
@@ -332,10 +255,15 @@ async fn run_dtx_tests_with_loss(test: &mut Test) -> Result<()> {
 //  - The default username and password are already set by default
 //  - Both clients will use the TURN server (in this test)
 //  - The `turn` domain name should resolve by Docker to the container with the name `turn`
-async fn run_example_with_relay(test: &mut Test) -> Result<()> {
+async fn run_relay_tests(test: &mut Test) -> Result<()> {
     test.run(
         GroupConfig {
-            group_name: "example_with_relay".to_string(),
+            group_name: "relay_tests".to_string(),
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_audio: false,
+                show_video: false,
+                ..Default::default()
+            },
             chart_dimensions: vec![ChartDimension::MosSpeech],
             ..Default::default()
         },
@@ -345,6 +273,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                 client_a_config: CallConfig {
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -352,6 +281,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                 client_b_config: CallConfig {
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -367,6 +297,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                     ],
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -379,6 +310,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                     ],
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -392,6 +324,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -401,6 +334,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -414,6 +348,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -423,6 +358,7 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
                         ..Default::default()
                     },
                     ..Default::default()
@@ -431,74 +367,6 @@ async fn run_example_with_relay(test: &mut Test) -> Result<()> {
             },
         ],
         vec![NetworkProfile::None],
-    )
-    .await?;
-    Ok(())
-}
-
-// Here is a test set that runs two groups of tests, each should show up in the summary report
-// and be graphed separately. Note that since all the tests cases are run within the set,
-// they should all be uniquely named. These tests compare various ptime values against different
-// losses and bandwidths.
-async fn run_ptime_analysis(test: &mut Test) -> Result<()> {
-    test.preprocess_sounds(vec!["speaker_a", "speaker_b"])
-        .await?;
-
-    let test_cases = [20, 40, 60, 120].map(|initial_packet_size_ms| TestCaseConfig {
-        test_case_name: format!("ptime_{initial_packet_size_ms}"),
-        client_a_config: CallConfig {
-            audio: AudioConfig {
-                initial_packet_size_ms,
-                ..Default::default()
-            },
-            ..Default::default()
-        }
-        .with_audio_input_name("normal_phrasing"),
-        client_b_config: CallConfig {
-            audio: AudioConfig {
-                initial_packet_size_ms,
-                ..Default::default()
-            },
-            ..Default::default()
-        }
-        .with_audio_input_name("normal_phrasing"),
-        ..Default::default()
-    });
-
-    test.run(
-        GroupConfig {
-            group_name: "ptime_over_loss".to_string(),
-            chart_dimensions: vec![ChartDimension::MosSpeech],
-            ..Default::default()
-        },
-        test_cases.clone().into(),
-        vec![
-            NetworkProfile::None,
-            NetworkProfile::SimpleLoss(10),
-            NetworkProfile::SimpleLoss(20),
-            NetworkProfile::SimpleLoss(30),
-            NetworkProfile::SimpleLoss(40),
-            NetworkProfile::SimpleLoss(50),
-        ],
-    )
-    .await?;
-
-    test.run(
-        GroupConfig {
-            group_name: "ptime_over_bandwidth".to_string(),
-            chart_dimensions: vec![ChartDimension::MosSpeech],
-            ..Default::default()
-        },
-        test_cases.into(),
-        vec![
-            NetworkProfile::None,
-            NetworkProfile::LimitedBandwidth(250),
-            NetworkProfile::LimitedBandwidth(125),
-            NetworkProfile::LimitedBandwidth(100),
-            NetworkProfile::LimitedBandwidth(75),
-            NetworkProfile::LimitedBandwidth(50),
-            NetworkProfile::LimitedBandwidth(25),
-        ],
     )
     .await?;
 
@@ -551,7 +419,7 @@ async fn run_video_send_over_bandwidth(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// Bi-directional video test comparing the vp8 and vp9 video codecs.
+// Bidirectional video test comparing the vp8 and vp9 video codecs.
 async fn run_video_compare_vp8_vs_vp9(test: &mut Test) -> Result<()> {
     test.preprocess_sounds(vec!["normal_phrasing"]).await?;
 
@@ -625,7 +493,7 @@ async fn run_video_compare_vp8_vs_vp9(test: &mut Test) -> Result<()> {
 // Test the scenario with changing bandwidth over one minute intervals:
 // 1 minute unlimited -> 1 minute 50kbps -> 1 minute 25kbps -> 1 minute unlimited
 //
-// Uses a 12 second reference audio file so that the resulting 240 second session recording
+// Uses a 12-second reference audio file so that the resulting 240-second session recording
 // can be chopped evenly and MOS calculated for each 12-second audio segment.
 async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
     let test_cases = [20, 60, 120].map(|initial_packet_size_ms| TestCaseConfig {
@@ -708,70 +576,6 @@ async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
-    let test_cases = [
-        (20, 0),
-        (20, 5),
-        (20, 10),
-        (20, 15),
-        (20, 20),
-        (20, 25),
-        (20, 30),
-        (20, 35),
-        (20, 40),
-        (20, 45),
-        (20, 50),
-        (60, 0),
-        (60, 5),
-        (60, 10),
-        (60, 15),
-        (60, 20),
-        (60, 25),
-        (60, 30),
-        (60, 35),
-        (60, 40),
-        (60, 45),
-        (60, 50),
-    ]
-    .map(|(initial_packet_size_ms, loss)| TestCaseConfig {
-        test_case_name: format!("ptime_{initial_packet_size_ms}_{loss}"),
-        length_seconds: 30,
-        client_a_config: CallConfig {
-            audio: AudioConfig {
-                input_name: "normal_phrasing".to_string(),
-                initial_packet_size_ms,
-                generate_spectrogram: false,
-                ..Default::default()
-            },
-            profile: DeterministicLoss(loss),
-            ..Default::default()
-        },
-        client_b_config: CallConfig {
-            audio: AudioConfig {
-                input_name: "normal_phrasing".to_string(),
-                initial_packet_size_ms,
-                visqol_audio_analysis: true,
-                ..Default::default()
-            },
-            profile: DeterministicLoss(loss),
-            ..Default::default()
-        },
-        ..Default::default()
-    });
-
-    test.run(
-        GroupConfig {
-            group_name: "deterministic_loss_test".to_string(),
-            ..Default::default()
-        },
-        test_cases.into(),
-        vec![NetworkProfile::None],
-    )
-    .await?;
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -809,7 +613,7 @@ async fn main() -> Result<()> {
     let mut test_sets = args.test_sets;
     if test_sets.is_empty() {
         // For quick testing, change this to the name of your test case.
-        test_sets.push("minimal_example".to_string());
+        test_sets.push("baseline".to_string());
     }
 
     let direct_call_config = CallTypeConfig::Direct;
@@ -839,15 +643,12 @@ async fn main() -> Result<()> {
         )?;
         match test_set_name.as_str() {
             "minimal_example" => run_minimal_example(test).await?,
-            "advanced_example" => run_advanced_example(test).await?,
-            "baseline_over_all_profiles" => run_baseline_over_all_profiles(test).await?,
-            "dtx_tests_with_loss" => run_dtx_tests_with_loss(test).await?,
-            "example_with_relay" => run_example_with_relay(test).await?,
-            "ptime_analysis" => run_ptime_analysis(test).await?,
+            "baseline" => run_baseline(test).await?,
+            "deterministic_loss_test" => run_deterministic_loss_test(test).await?,
+            "relay_tests" => run_relay_tests(test).await?,
             "video_send_over_bandwidth" => run_video_send_over_bandwidth(test).await?,
             "video_compare_vp8_vs_vp9" => run_video_compare_vp8_vs_vp9(test).await?,
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,
-            "deterministic_loss_test" => run_deterministic_loss_test(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
         test.report().await?;
