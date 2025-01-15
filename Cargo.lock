@@ -867,6 +867,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_more"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a9b99b9cbbe49445b21764dc0625032a89b145a2642e67603e1c936f5458d05"
+dependencies = [
+ "derive_more-impl",
+]
+
+[[package]]
+name = "derive_more-impl"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1720,9 +1740,10 @@ dependencies = [
 [[package]]
 name = "libsignal-account-keys"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.0#701895d541607b3eada37c9fdb5870fd1e7e6d01"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
 dependencies = [
  "argon2",
+ "derive_more",
  "displaydoc",
  "hkdf",
  "libsignal-core",
@@ -1738,9 +1759,10 @@ dependencies = [
 [[package]]
 name = "libsignal-core"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.0#701895d541607b3eada37c9fdb5870fd1e7e6d01"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
 dependencies = [
  "curve25519-dalek",
+ "derive_more",
  "displaydoc",
  "num_enum",
  "rand",
@@ -2110,7 +2132,7 @@ dependencies = [
 [[package]]
 name = "poksho"
 version = "0.7.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.0#701895d541607b3eada37c9fdb5870fd1e7e6d01"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
 dependencies = [
  "curve25519-dalek",
  "hmac",
@@ -2693,7 +2715,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "signal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.0#701895d541607b3eada37c9fdb5870fd1e7e6d01"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
 dependencies = [
  "aes",
  "cbc",
@@ -3898,7 +3920,7 @@ dependencies = [
 [[package]]
 name = "zkcredential"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.0#701895d541607b3eada37c9fdb5870fd1e7e6d01"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
 dependencies = [
  "cfg-if",
  "curve25519-dalek",
@@ -3917,12 +3939,13 @@ dependencies = [
 [[package]]
 name = "zkgroup"
 version = "0.9.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.0#701895d541607b3eada37c9fdb5870fd1e7e6d01"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
 dependencies = [
  "aes-gcm-siv",
  "bincode",
  "curve25519-dalek",
  "derive-where",
+ "derive_more",
  "displaydoc",
  "hex",
  "hex-literal",
