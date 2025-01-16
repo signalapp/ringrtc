@@ -84,7 +84,7 @@ export MACOSX_DEPLOYMENT_TARGET="10.15"
 (
     echo "Building WebRTC for ${BUILD_ARCH}"
 
-    WEBRTC_ARGS="target_cpu=\"${BUILD_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_include_ilbc=false rtc_disable_metrics=true rtc_disable_trace_events=true"
+    WEBRTC_ARGS="target_cpu=\"${BUILD_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_disable_metrics=true rtc_disable_trace_events=true"
     if [ "${BUILD_TYPE}" = "release" ]
     then
         WEBRTC_ARGS="${WEBRTC_ARGS} is_debug=false symbol_level=1"

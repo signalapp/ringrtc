@@ -133,7 +133,7 @@ then
   else
     ARCHS=("simulator:x64" "simulator:arm64" "device:arm64")
   fi
-  EXTRA_GN_ARGS="rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_enable_sctp=false rtc_libvpx_build_vp9=false rtc_include_ilbc=false rtc_disable_metrics=true rtc_disable_trace_events=true"
+  EXTRA_GN_ARGS="rtc_build_examples=false rtc_build_tools=false rtc_include_tests=false rtc_enable_protobuf=false rtc_enable_sctp=false rtc_libvpx_build_vp9=false rtc_disable_metrics=true rtc_disable_trace_events=true"
 
   (cd "${WEBRTC_SRC_DIR}" && ./tools_webrtc/ios/build_ios_libs.py -o "${OUTPUT_DIR}/${BUILD_TYPE}/" --build_config ${BUILD_TYPE} --arch "${ARCHS[@]}" --deployment-target "${IPHONEOS_DEPLOYMENT_TARGET}" --extra-gn-args "${EXTRA_GN_ARGS}")
 
