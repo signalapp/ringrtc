@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.49.3
+
+- Update to webrtc 6834c (m132)
+
+- Desktop: New Audio Device Module improvements
+  - Bump cubeb to 0.20.0
+
+- Update dependencies
+
 ## v2.49.2
 
 - Update to webrtc 6723c
