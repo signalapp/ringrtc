@@ -201,7 +201,7 @@ const SPEAKING_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const STOPPED_SPEAKING_DURATION: Duration = Duration::from_secs(3);
 // Amount of "continuous" speech (i.e., with gaps no longer than `STOPPED_SPEAKING_DURATION`)
 // after which we suggest lowering a raised hand.
-const MIN_SPEAKING_HAND_LOWER: Duration = Duration::from_secs(10);
+const MIN_SPEAKING_HAND_LOWER: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum SpeechEvent {
@@ -1465,7 +1465,7 @@ impl Client {
                     .duration_since(state.started_speaking.unwrap_or(now))
                     .saturating_sub(time_silent);
 
-                let event = if time_speaking > MIN_SPEAKING_HAND_LOWER {
+                let event = if time_speaking >= MIN_SPEAKING_HAND_LOWER {
                     Some(SpeechEvent::LowerHandSuggestion)
                 } else if time_speaking.is_zero() && state.last_speaking_notification.is_some() {
                     Some(SpeechEvent::StoppedSpeaking)
