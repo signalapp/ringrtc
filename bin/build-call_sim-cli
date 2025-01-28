@@ -88,7 +88,7 @@ export MACOSX_DEPLOYMENT_TARGET="10.15"
         gn gen -C "${OUTPUT_DIR}"/debug "--args=${WEBRTC_ARGS}"
         ninja -C "${OUTPUT_DIR}"/debug
     else
-        gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false"
+        gn gen -C "${OUTPUT_DIR}"/release "--args=${WEBRTC_ARGS} is_debug=false symbol_level=1"
         ninja -C "${OUTPUT_DIR}"/release
     fi
 )
@@ -100,6 +100,8 @@ export MACOSX_DEPLOYMENT_TARGET="10.15"
         OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin call_sim-cli --features=call_sim
         echo "Can run with target/debug/call_sim-cli"
     else
+        # Build with debug line tables, but not full debug info.
+        export CARGO_PROFILE_RELEASE_DEBUG=1
         OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin call_sim-cli --features=call_sim --release
         echo "Can run with target/release/call_sim-cli"
     fi

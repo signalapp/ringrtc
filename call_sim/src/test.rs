@@ -29,9 +29,9 @@ use crate::common::{
 use crate::docker::{
     analyze_video, analyze_visqol_mos, clean_network, clean_up, convert_mp4_to_yuv,
     convert_raw_to_wav, convert_wav_to_16khz_mono, convert_yuv_to_mp4, create_network,
-    emulate_network_change, emulate_network_start, generate_spectrogram, get_signaling_server_logs,
-    get_turn_server_logs, start_cli, start_client, start_signaling_server, start_tcp_dump,
-    start_turn_server, DockerStats,
+    emulate_network_change, emulate_network_start, finish_perf, generate_spectrogram,
+    get_signaling_server_logs, get_turn_server_logs, start_cli, start_client,
+    start_signaling_server, start_tcp_dump, start_turn_server, DockerStats,
 };
 use crate::report::{AnalysisReport, AnalysisReportMos, Report};
 use crate::{
@@ -154,6 +154,9 @@ pub struct Test {
     // information even if we change the reference media in the future.
     sounds: HashMap<String, Sound>,
     videos: HashMap<String, Video>,
+
+    // Whether to run `perf record` (and report)
+    profile: bool,
 }
 
 pub struct MediaFileIo {
@@ -171,6 +174,7 @@ impl Test {
         set_name: &str,
         client_profiles: Vec<ClientProfile>,
         call_type: CallTypeConfig,
+        profile: bool,
     ) -> Result<Self> {
         let time_started = chrono::Local::now();
 
@@ -205,6 +209,7 @@ impl Test {
 
             client_profiles,
             call_type,
+            profile,
         })
     }
 
@@ -284,6 +289,7 @@ impl Test {
                 &test_case_config.client_b_config,
                 &self.client_profiles[0],
                 &self.call_type,
+                self.profile,
             )
             .await?;
 
@@ -299,6 +305,7 @@ impl Test {
                 &test_case_config.client_a_config,
                 &self.client_profiles[1],
                 &self.call_type,
+                self.profile,
             )
             .await?;
 
@@ -787,6 +794,17 @@ impl Test {
             .await
         {
             Ok(_) => {
+                if self.profile {
+                    // allow perf to finish and collect reports.
+                    println!("waiting for perf... ");
+                    if let Err(e) =
+                        finish_perf(test_case.client_a.name, test_case.client_b.name).await
+                    {
+                        println!("couldn't wait for perf {:?}", e);
+                    }
+                    println!("... done");
+                }
+
                 // For debugging, dump the signaling_server logs.
                 get_signaling_server_logs(&test_case.test_path).await?;
 

@@ -12,6 +12,7 @@ use chrono::DateTime;
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::fs::OpenOptions;
 use tokio::io::{stdout, AsyncWriteExt};
 use tokio::process::Command;
@@ -678,28 +679,48 @@ pub async fn start_cli(
     remote_call_config: &CallConfig,
     client_profile: &ClientProfile,
     call_type: &CallTypeConfig,
+    profile: bool,
 ) -> Result<()> {
     println!("Starting cli for `{}`", name);
     let log_file_arg = format!("/report/{}.log", name);
     let input_file_arg = format!("/media/{}", media_io.audio_input_file);
     let output_file_arg = format!("/report/{}", media_io.audio_output_file);
 
-    let mut args = [
-        "exec",
-        "-d",
-        name,
-        "call_sim-cli",
-        "--name",
-        name,
-        "--log-file",
-        &log_file_arg,
-        "--input-file",
-        &input_file_arg,
-        "--output-file",
-        &output_file_arg,
-    ]
-    .map(String::from)
-    .to_vec();
+    let mut args = ["exec", "-d", name].map(String::from).to_vec();
+
+    if profile {
+        let perf_arg = format!("--output=/report/{}.perf", name);
+
+        args.extend_from_slice(
+            &[
+                "perf",
+                "record",
+                "-e",
+                "cycles",
+                "--call-graph=dwarf",
+                "-F",
+                "99",
+                "--user-callchains",
+                &perf_arg,
+            ]
+            .map(String::from),
+        );
+    }
+
+    args.extend_from_slice(
+        &[
+            "call_sim-cli",
+            "--name",
+            name,
+            "--log-file",
+            &log_file_arg,
+            "--input-file",
+            &input_file_arg,
+            "--output-file",
+            &output_file_arg,
+        ]
+        .map(String::from),
+    );
 
     args.push("--stats-interval-secs".to_string());
     args.push(format!("{}", call_config.stats_interval_secs));
@@ -859,6 +880,38 @@ pub async fn start_cli(
     println!("Final Client args: {}", args.join(" "));
     let _ = Command::new("docker").args(&args).spawn()?.wait().await?;
 
+    Ok(())
+}
+
+pub async fn finish_perf(a: &str, b: &str) -> Result<()> {
+    for client in [a, b] {
+        let mut exited = false;
+        for _ in 0..60 {
+            let status = Command::new("docker")
+                .args(["exec", client, "pgrep", "perf"])
+                .spawn()?
+                .wait()
+                .await?;
+            if !status.success() {
+                // if we couldn't find it, it exited; otherwise keep waiting.
+                exited = true;
+                let perf_command = format!(
+                    "perf report --percent-limit=5 --call-graph=2 -i /report/{}.perf \
+                    --addr2line=/root/.cargo/bin/addr2line > /report/{}.perf.txt 2>&1",
+                    client, client
+                );
+                let _ = Command::new("docker")
+                    .args(["exec", client, "sh", "-c", &perf_command])
+                    .spawn()?
+                    .wait()
+                    .await?;
+
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        println!("{} perf exited? {}", client, exited);
+    }
     Ok(())
 }
 

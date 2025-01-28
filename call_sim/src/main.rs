@@ -70,6 +70,10 @@ struct Args {
     /// If None, then uses the first group in the list
     #[arg(long)]
     group_name: Option<String>,
+
+    /// Run `perf record` on the clients
+    #[arg(long)]
+    profile: bool,
 }
 
 // Set these two values when running call sim group calls. The Auth Key is used to generate profiles
@@ -640,6 +644,7 @@ async fn main() -> Result<()> {
             &test_set_name,
             client_profiles.clone(),
             call_type_config,
+            args.profile,
         )?;
         match test_set_name.as_str() {
             "minimal_example" => run_minimal_example(test).await?,
