@@ -99,25 +99,17 @@ jobs:
     - name: Run rust tests
       run: cd src/rust && ./scripts/run-tests
 
-  aarch64_cross:
-    name: Cross compile Linux aarch64 (using prebuilt WebRTC)
-    runs-on: ubuntu-22.04
-    steps:
-    - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64 libpulse-dev
-    - uses: actions/checkout@v4
-    - run: rustup target add aarch64-unknown-linux-gnu
-    - run: ./bin/fetch-artifact --platform linux-arm64 --release -o out-arm
-    - run: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-electron --ringrtc-only --release
-
   electron:
     name: Electron Tests
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-13]
+        os: [ubuntu-22.04, windows-latest, macos-13, ubuntu-22.04-arm]
         include:
         - os: ubuntu-22.04
+          install-deps: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
+          test-runner: xvfb-run --auto-servernum
+        - os: ubuntu-22.04-arm
           install-deps: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
           test-runner: xvfb-run --auto-servernum
         - os: windows-latest
@@ -153,9 +145,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-latest]
+        os: [ubuntu-22.04, macos-13, windows-latest, ubuntu-22.04-arm]
         include:
         - os: ubuntu-22.04
+          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
+        - os: ubuntu-22.04-arm
           install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
         - os: macos-13
           install-deps: brew install protobuf coreutils

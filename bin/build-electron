@@ -97,9 +97,11 @@ case "$TARGET_ARCH" in
         GN_ARCH=x86
         CARGO_ARCH=i686
         ;;
-    "arm64")
+    "arm64"|"aarch64")
         GN_ARCH=arm64
         CARGO_ARCH=aarch64
+        # Normalize TARGET_ARCH to arm64
+        TARGET_ARCH=arm64
         ;;
     *)
         echo "Unsupported architecture"
