@@ -99,38 +99,33 @@ jobs:
     - name: Run rust tests
       run: cd src/rust && ./scripts/run-tests
 
-  aarch64_cross:
-    name: Cross compile Linux aarch64 (using prebuilt WebRTC)
-    runs-on: ubuntu-22.04
-    steps:
-    - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64 libpulse-dev
-    - uses: actions/checkout@v4
-    - run: rustup target add aarch64-unknown-linux-gnu
-    - run: ./bin/fetch-artifact --platform linux-arm64 --release -o out-arm
-    - run: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-electron --ringrtc-only --release
-
   electron:
     name: Electron Tests
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-13]
-        include:
-        - os: ubuntu-22.04
-          install-deps: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
-          test-runner: xvfb-run --auto-servernum
-        - os: windows-latest
-          install-deps: choco install protoc
-        - os: macos-13
-          install-deps: brew install protobuf coreutils
+        os: [ubuntu-22.04, windows-latest, macos-13, ubuntu-22.04-arm64-4-cores]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash # as opposed to PowerShell
     steps:
+    # See https://github.com/actions/partner-runner-images/issues/53
+    - name: Work around XDG_RUNTIME_DIR error on Linux arm64 larger runner
+      if: matrix.os == 'ubuntu-22.04-arm64-4-cores'
+      run: |
+        echo "UID is $UID. Setting XDG_RUNTIME_DIR to /run/user/$UID"
+        sudo systemctl start user@$UID.service
+        echo "XDG_RUNTIME_DIR=/run/user/$UID" >> $GITHUB_ENV
     - name: Install dependencies
-      run: ${{ matrix.install-deps }}
+      run: |
+        if [[ "${{ matrix.os }}" == macos-* ]]; then
+          brew install protobuf coreutils
+        elif [[ "${{ matrix.os }}" == windows-* ]]; then
+          choco install protoc
+        elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
+          sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
+        fi
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
@@ -145,7 +140,11 @@ jobs:
       working-directory: src/node
     - run: npm run build
       working-directory: src/node
-    - run: ${{ matrix.test-runner }} npm test
+    - run: xvfb-run --auto-servernum npm test
+      if: startsWith(matrix.os, 'ubuntu-')
+      working-directory: src/node
+    - run: npm test
+      if: ${{ !startsWith(matrix.os, 'ubuntu-') }}
       working-directory: src/node
 
   cargo_build_using_prebuilt:
@@ -153,21 +152,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-latest]
-        include:
-        - os: ubuntu-22.04
-          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
-        - os: macos-13
-          install-deps: brew install protobuf coreutils
-        - os: windows-latest
-          install-deps: choco install protoc
+        os: [ubuntu-22.04, macos-13, windows-latest, ubuntu-22.04-arm64-4-cores]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash # as opposed to PowerShell
     steps:
     - name: Install dependencies
-      run: ${{ matrix.install-deps }}
+      run: |
+        if [[ "${{ matrix.os }}" == macos-* ]]; then
+          brew install protobuf coreutils
+        elif [[ "${{ matrix.os }}" == windows-* ]]; then
+          choco install protoc
+        elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
+        fi
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
