@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::cmp::min;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::result::Result;
@@ -20,16 +21,29 @@ pub enum WindowError {
 pub struct BufferWindow<T: Debug> {
     left: u64,
     data: VecDeque<Option<T>>,
+    capacity_limit: usize,
 }
 
 impl<T: Debug> BufferWindow<T> {
+    const DEFAULT_SIZE: usize = 16;
+
     /// left_bounds must be greater than 0
-    pub fn new(max_size: usize, left_bounds: u64) -> Self {
+    /// capacity_limit must be greater than 0
+    pub fn with_capacity_limit(capacity_limit: usize, left_bounds: u64) -> Self {
         assert_ne!(left_bounds, 0, "Left bounds must be greater than 0");
+        assert_ne!(capacity_limit, 0, "Capacity limit must be greater than 0");
+        let initial_capacity = min(capacity_limit, Self::DEFAULT_SIZE);
+
         Self {
             left: left_bounds,
-            data: VecDeque::with_capacity(max_size),
+            data: VecDeque::with_capacity(initial_capacity),
+            capacity_limit,
         }
+    }
+
+    pub fn new(left_bounds: u64) -> Self {
+        assert_ne!(left_bounds, 0, "Left bounds must be greater than 0");
+        Self::with_capacity_limit(usize::MAX, left_bounds)
     }
 
     fn get_pos(&self, seqnum: u64) -> Result<usize, WindowError> {
@@ -43,13 +57,17 @@ impl<T: Debug> BufferWindow<T> {
         Ok((seqnum - self.left) as usize)
     }
 
-    /// Max size of the window
-    fn capacity(&self) -> usize {
-        self.data.capacity()
+    /// Max capacity of the window. Is not the current capacity
+    fn capacity_limit(&self) -> usize {
+        self.capacity_limit
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 
     pub fn is_full(&self) -> bool {
-        self.data.len() == self.capacity()
+        self.data.len() == self.capacity_limit()
     }
 
     /// the highest seqnum of an element in the window or previously processed
@@ -65,7 +83,7 @@ impl<T: Debug> BufferWindow<T> {
 
     /// Current highest valid seqnum
     pub fn right_bounds(&self) -> u64 {
-        self.left + (self.capacity() as u64) - 1
+        self.left.saturating_add(self.capacity_limit() as u64 - 1)
     }
 
     #[cfg(test)]
@@ -187,9 +205,9 @@ mod tests {
     fn window_basics() {
         let max_size = 4;
         let mut base = 1000;
-        let mut w = BufferWindow::new(max_size, 1);
+        let mut w = BufferWindow::with_capacity_limit(max_size, 1);
 
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // initializes to correct bounds
         assert_eq!(w.left_bounds(), 1);
@@ -198,14 +216,14 @@ mod tests {
         // Past bounds checking
         assert_eq!(w.put(0, 0), Err(WindowError::BeforeWindow));
         assert_eq!(w.put(5, 0), Err(WindowError::AfterWindow));
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // Fill up initial window without changing bounds
         for s in 1..=max_size as u64 {
             assert_eq!(w.put(s, base + s), Ok(()));
             assert_eq!(w.left_bounds(), 1);
             assert_eq!(w.right_bounds(), 4);
-            assert_eq!(w.capacity(), max_size);
+            assert_eq!(w.capacity_limit(), max_size);
         }
 
         assert!(w.is_full());
@@ -216,14 +234,14 @@ mod tests {
             assert_eq!(w.put(s, base + s), Ok(()));
             assert_eq!(w.left_bounds(), 1);
             assert_eq!(w.right_bounds(), 4);
-            assert_eq!(w.capacity(), max_size);
+            assert_eq!(w.capacity_limit(), max_size);
         }
 
         // drains contiguous front and updates bounds
         assert_eq!(w.drain_front(), Some((5, vec![2001, 2002, 2003, 2004])));
         assert_eq!(w.left_bounds(), 5);
         assert_eq!(w.right_bounds(), 8);
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // Past bounds checking
         assert_eq!(w.put(1, 0), Err(WindowError::BeforeWindow));
@@ -235,20 +253,20 @@ mod tests {
         assert_eq!(w.put(6, 3002), Ok(()));
         assert_eq!(w.put(8, 3004), Ok(()));
         assert!(w.is_full());
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // no drain, window does not move
         assert_eq!(w.drain_front(), None);
         assert_eq!(w.left_bounds(), 5);
         assert_eq!(w.right_bounds(), 8);
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // partial drain, window moves
         assert_eq!(w.put(5, 3001), Ok(()));
         assert_eq!(w.drain_front(), Some((7, vec![3001, 3002])));
         assert_eq!(w.left_bounds(), 7);
         assert_eq!(w.right_bounds(), 10);
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // Past bounds checking
         assert_eq!(w.put(6, 0), Err(WindowError::BeforeWindow));
@@ -261,22 +279,22 @@ mod tests {
         assert_eq!(w.drop_front(1), 8);
         assert_eq!(w.left_bounds(), 8);
         assert_eq!(w.right_bounds(), 11);
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // can now drain, advance window
         assert_eq!(w.drain_front(), Some((9, vec![3004])));
         assert_eq!(w.left_bounds(), 9);
         assert_eq!(w.right_bounds(), 12);
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // clear removes all data, and updates window
         assert_eq!(w.put(9, 5001), Ok(()));
         assert_eq!(w.put(10, 5002), Ok(()));
         assert_eq!(w.put(11, 5003), Ok(()));
         assert_eq!(w.put(12, 5004), Ok(()));
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
         w.clear(100);
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
         assert_eq!(w.left_bounds(), 100);
         assert_eq!(w.right_bounds(), 103);
         assert_eq!(w.drain_front(), None);
@@ -290,7 +308,7 @@ mod tests {
         assert_eq!(w.drop_front(9_800), 10_000);
         assert_eq!(w.left_bounds(), 10_000);
         assert_eq!(w.right_bounds(), 10_003);
-        assert_eq!(w.capacity(), max_size);
+        assert_eq!(w.capacity_limit(), max_size);
 
         // drop non-contiguous works
         assert_eq!(w.put(10_003, 4001), Ok(()));
@@ -302,7 +320,7 @@ mod tests {
 
     #[test]
     fn window_iter() {
-        let mut w: BufferWindow<u64> = BufferWindow::new(4, 1);
+        let mut w: BufferWindow<u64> = BufferWindow::with_capacity_limit(4, 1);
 
         // empty window test
         let mut iter = w.iter();
@@ -352,5 +370,29 @@ mod tests {
         assert_eq!(iter.next(), Some(Some(&2002)));
         assert_eq!(iter.next(), Some(Some(&2003)));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_growing_window() {
+        fn test_window(mut w: BufferWindow<bool>) {
+            for i in 1..(2 * w.len() as u64) {
+                assert_eq!(
+                    Ok(()),
+                    w.put(i, true),
+                    "Should grow with contiguous appends"
+                );
+            }
+
+            for i in (w.max_seen_seqnum()..(4 * w.max_seen_seqnum())).step_by(4) {
+                assert_eq!(
+                    Ok(()),
+                    w.put(i, true),
+                    "Should grow with non-contiguous appends"
+                );
+            }
+        }
+
+        test_window(BufferWindow::new(1));
+        test_window(BufferWindow::with_capacity_limit(1024, 1));
     }
 }

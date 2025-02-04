@@ -1354,7 +1354,7 @@ impl Client {
                     raised_hands: Vec::new(),
                     raise_hand_state: RaiseHandState::default(),
 
-                    sfu_reliable_stream: MrpStream::new(RELIABLE_RTP_BUFFER_SIZE),
+                    sfu_reliable_stream: MrpStream::with_capacity_limit(RELIABLE_RTP_BUFFER_SIZE),
 
                     actor,
                 })

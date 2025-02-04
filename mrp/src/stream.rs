@@ -84,6 +84,21 @@ pub enum MrpSendError {
     InnerSendFailed(anyhow::Error),
 }
 
+impl<SendData, ReceiveData> Default for MrpStream<SendData, ReceiveData>
+where
+    SendData: Clone + Debug,
+    ReceiveData: Clone + Debug,
+{
+    /// allows for unlimited buffers
+    fn default() -> Self {
+        Self {
+            should_ack: false,
+            send_buffer: BufferWindow::<PendingPacket<SendData>>::new(Self::INITIAL_SEQNUM),
+            receive_buffer: BufferWindow::<ReceiveData>::new(Self::INITIAL_ACKNUM),
+        }
+    }
+}
+
 impl<SendData, ReceiveData> MrpStream<SendData, ReceiveData>
 where
     SendData: Clone + Debug,
@@ -92,14 +107,17 @@ where
     const INITIAL_SEQNUM: u64 = 1;
     const INITIAL_ACKNUM: u64 = 1;
 
-    pub fn new(max_window_size: usize) -> Self {
+    pub fn with_capacity_limit(max_window_size: usize) -> Self {
         Self {
             should_ack: false,
-            send_buffer: BufferWindow::<PendingPacket<SendData>>::new(
+            send_buffer: BufferWindow::<PendingPacket<SendData>>::with_capacity_limit(
                 max_window_size,
                 Self::INITIAL_SEQNUM,
             ),
-            receive_buffer: BufferWindow::<ReceiveData>::new(max_window_size, Self::INITIAL_ACKNUM),
+            receive_buffer: BufferWindow::<ReceiveData>::with_capacity_limit(
+                max_window_size,
+                Self::INITIAL_ACKNUM,
+            ),
         }
     }
 
@@ -126,7 +144,7 @@ where
     /// # use mrp::*;
     /// # use std::time::{Duration, Instant};
     /// type Packet = PacketWrapper<i32>;
-    /// let mut stream = MrpStream::<Packet, Packet>::new(8);
+    /// let mut stream = MrpStream::<Packet, Packet>::with_capacity_limit(8);
     /// let mut inbox = Vec::with_capacity(8);
     ///
     /// for i in 1..=9 {
@@ -195,8 +213,8 @@ where
     /// let ack = || PacketWrapper(MrpHeader::default(), "".to_string());
     /// let (to_alice, alice_inbox) : (Sender<Packet>, Receiver<Packet>) = mpsc::channel();
     /// let (to_bob, bob_inbox) : (Sender<Packet>, Receiver<Packet>) = mpsc::channel();
-    /// let mut alice = MrpStream::<Packet, Packet>::new(8);
-    /// let mut bob = MrpStream::<Packet, Packet>::new(8);
+    /// let mut alice = MrpStream::<Packet, Packet>::with_capacity_limit(8);
+    /// let mut bob = MrpStream::<Packet, Packet>::with_capacity_limit(8);
     /// let tick = Duration::from_millis(10);
     ///
     /// thread::spawn(move ||  {
@@ -288,6 +306,14 @@ where
             // Not a valid MRP header! Ignore, immediately passback for processing
             Ok(vec![packet])
         }
+    }
+
+    pub fn send_len(&self) -> usize {
+        self.send_buffer.len()
+    }
+
+    pub fn receive_len(&self) -> usize {
+        self.receive_buffer.len()
     }
 
     fn update_send_window(
@@ -430,13 +456,13 @@ mod tests {
 
     impl TestCase {
         fn new(
-            buffer_size: usize,
+            buffer_size: Option<usize>,
             alice_schedule: PacketSchedule,
             bob_schedule: PacketSchedule,
         ) -> Self {
             TestCase {
-                alice: MrpStream::new(buffer_size),
-                bob: MrpStream::new(buffer_size),
+                alice: buffer_size.map_or_else(MrpStream::default, MrpStream::with_capacity_limit),
+                bob: buffer_size.map_or_else(MrpStream::default, MrpStream::with_capacity_limit),
                 alice_inbox: RefCell::new(vec![]),
                 bob_inbox: RefCell::new(vec![]),
                 alice_schedule,
@@ -585,11 +611,39 @@ mod tests {
     static NO_RECEIVES: Vec<u64> = vec![];
 
     #[test]
+    fn test_unlimited_buffers() {
+        // we send a large number at once so both send and receive buffers grow
+        let num_to_send = 512;
+        let mut tc = TestCase::new(
+            None,
+            Event::schedule_of((0..num_to_send).map(|_| (1, 5)).collect()),
+            Event::schedule_of((0..num_to_send).map(|_| (1, 5)).collect()),
+        );
+
+        tc.run_to(1);
+        assert_sent(tc.send_from_alice(NEVER_TIMEOUT), num_to_send);
+        assert_sent(tc.send_from_bob(NEVER_TIMEOUT), num_to_send);
+        assert_eq!(tc.recv_for_alice(), NO_RECEIVES);
+        assert_eq!(tc.recv_for_bob(), NO_RECEIVES);
+        assert_eq!(tc.updates_from_alice(), NO_UPDATES);
+        assert_eq!(tc.updates_from_bob(), NO_UPDATES);
+
+        let expected_recv = (1..=num_to_send as u64).collect::<Vec<_>>();
+        tc.run_to(5);
+        assert_sent(tc.send_from_alice(NEVER_TIMEOUT), 0);
+        assert_sent(tc.send_from_bob(NEVER_TIMEOUT), 0);
+        assert_eq!(tc.recv_for_alice(), expected_recv);
+        assert_eq!(tc.recv_for_bob(), expected_recv);
+        assert_eq!(tc.updates_from_alice(), acked(num_to_send as u64 + 1));
+        assert_eq!(tc.updates_from_bob(), acked(num_to_send as u64 + 1));
+    }
+
+    #[test]
     fn test_ping_pong_one_direction() {
         // Every tick, Alice sends a packet, Bob receives it and acks it
         // and Alice receives the ack
         let mut tc = TestCase::new(
-            16,
+            Some(16),
             Event::schedule_of((1..50).map(|i| (i, i)).collect()),
             Event::schedule_of(vec![]),
         );
@@ -609,7 +663,7 @@ mod tests {
     fn test_ping_pong_two_directions() {
         // Both Bob and Alice send, receive, ack, and receive ack in the same tick
         let mut tc = TestCase::new(
-            16,
+            Some(16),
             Event::schedule_of((1..50).map(|i| (i, i)).collect()),
             Event::schedule_of((1..50).map(|i| (i, i)).collect()),
         );
@@ -642,7 +696,7 @@ mod tests {
             (ts, ts + delay)
         };
         let mut tc = TestCase::new(
-            16,
+            Some(16),
             Event::schedule_of((10..=60).map(event).collect()),
             Event::schedule_of((10..=60).map(event).collect()),
         );
@@ -675,7 +729,7 @@ mod tests {
         // Bob sends packets with similar pattern to
         // [test_out_of_order_buffering], receiving 9 every 10th tick
         let mut tc = TestCase::new(
-            16,
+            Some(16),
             Event::schedule_of(vec![
                 (1, 1),
                 (2, 2),
@@ -807,7 +861,7 @@ mod tests {
         // Alice sends packets with timeouts that cause retransmissions.
         // Retransmissions will instantly succeed (same tick).
         let mut tc = TestCase::new(
-            16,
+            Some(16),
             Event::schedule_of(vec![
                 // Packets 1-7: Test head of line blocking. Packet 4 is resent at t=10,
                 // so Packets 4-6 are returned at t=10 resulting in ack(7) at t=10, ack(8) at t=11
@@ -956,8 +1010,8 @@ mod tests {
         delay_min: Duration,
         delay_max: Duration,
     ) {
-        let alice = MrpStream::new(64);
-        let bob = MrpStream::new(64);
+        let alice = MrpStream::with_capacity_limit(64);
+        let bob = MrpStream::with_capacity_limit(64);
         let (to_alice, alice_inbox) = mpsc::channel();
         let (to_bob, bob_inbox) = mpsc::channel();
         let alice_receiver = DelayReceiver::new(
