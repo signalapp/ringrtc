@@ -11,4 +11,6 @@ RUN apt-get update \
     &&  . ~/.cargo/env \
     && cargo install --features=bin addr2line
 
+RUN ln -s "$(find /usr/lib/linux-tools/*/perf | head -1)" /usr/local/bin/perf
+
 COPY target/release/call_sim-cli /usr/local/bin/
