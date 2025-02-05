@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.49.4
+
+- Lower time threshold for speech event notification
+
+- Update to webrtc 6834d
+  - Fix for buffer overwrite
+
+- Call Sim: Add option to sim to collect performance data
+
+- CI: Use Ubuntu 22.04 for building arm64 artifact
+
 ## v2.49.3
 
 - Update to webrtc 6834c (m132)
