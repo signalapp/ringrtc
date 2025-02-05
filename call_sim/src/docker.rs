@@ -889,6 +889,7 @@ pub async fn finish_perf(a: &str, b: &str) -> Result<()> {
         for _ in 0..60 {
             let status = Command::new("docker")
                 .args(["exec", client, "pgrep", "perf"])
+                .stdout(Stdio::null())
                 .spawn()?
                 .wait()
                 .await?;
