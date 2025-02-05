@@ -13,4 +13,6 @@ RUN apt-get update \
 
 RUN ln -s "$(find /usr/lib/linux-tools/*/perf | head -1)" /usr/local/bin/perf
 
+RUN curl https://raw.githubusercontent.com/torvalds/linux/refs/heads/master/tools/perf/perf-archive.sh > /usr/local/bin/perf-archive && chmod +x /usr/local/bin/perf-archive
+
 COPY target/release/call_sim-cli /usr/local/bin/

@@ -906,6 +906,30 @@ pub async fn finish_perf(a: &str, b: &str) -> Result<()> {
                     .wait()
                     .await?;
 
+                let _ = Command::new("docker")
+                    .args([
+                        "exec",
+                        client,
+                        "chmod",
+                        "o+r",
+                        &format!("/report/{}.perf", client),
+                    ])
+                    .spawn()?
+                    .wait()
+                    .await?;
+
+                let _ = Command::new("docker")
+                    .args([
+                        "exec",
+                        client,
+                        "perf",
+                        "archive",
+                        &format!("/report/{}.perf", client),
+                    ])
+                    .spawn()?
+                    .wait()
+                    .await?;
+
                 break;
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
