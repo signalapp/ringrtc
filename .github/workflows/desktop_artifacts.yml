@@ -11,19 +11,18 @@ on:
         type: boolean
       runner_linux:
         description: "Linux runner:"
-        default: 'ubuntu-20.04'
+        default: 'ubuntu-20.04-4-cores'
         required: true
         type: choice
         options:
-          - 'ubuntu-20.04'
           - 'ubuntu-20.04-4-cores'
       runner_linux_arm64:
         description: "ARM64 Linux runner:"
-        default: 'ubuntu-24.04-arm64-2-cores'
+        default: 'ubuntu-22.04-arm64-4-cores'
         required: true
         type: choice
         options:
-          - 'ubuntu-24.04-arm64-2-cores'
+          - 'ubuntu-22.04-arm64-4-cores'
       runner_windows:
         description: "Windows runner:"
         default: 'windows-latest'
