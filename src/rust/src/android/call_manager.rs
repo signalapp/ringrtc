@@ -288,7 +288,6 @@ pub fn received_offer(
     age_sec: u64,
     call_media_type: CallMediaType,
     receiver_device_id: DeviceId,
-    receiver_device_is_primary: bool,
     sender_identity_key: JByteArray,
     receiver_identity_key: JByteArray,
 ) -> Result<()> {
@@ -316,7 +315,6 @@ pub fn received_offer(
             age: Duration::from_secs(age_sec),
             sender_device_id,
             receiver_device_id,
-            receiver_device_is_primary,
             sender_identity_key,
             receiver_identity_key,
         },

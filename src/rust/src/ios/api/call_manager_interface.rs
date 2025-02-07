@@ -728,7 +728,6 @@ pub extern "C" fn ringrtcReceivedOffer(
     messageAgeSec: u64,
     callMediaType: i32,
     receiverDeviceId: u32,
-    receiverDeviceIsPrimary: bool,
     senderIdentityKey: AppByteSlice,
     receiverIdentityKey: AppByteSlice,
 ) -> *mut c_void {
@@ -741,7 +740,6 @@ pub extern "C" fn ringrtcReceivedOffer(
         messageAgeSec,
         CallMediaType::from_i32(callMediaType),
         receiverDeviceId as DeviceId,
-        receiverDeviceIsPrimary,
         byte_vec_from_app_slice(&senderIdentityKey),
         byte_vec_from_app_slice(&receiverIdentityKey),
     ) {

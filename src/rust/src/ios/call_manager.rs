@@ -178,7 +178,6 @@ pub fn received_offer(
     age_sec: u64,
     call_media_type: CallMediaType,
     receiver_device_id: DeviceId,
-    receiver_device_is_primary: bool,
     sender_identity_key: Option<Vec<u8>>,
     receiver_identity_key: Option<Vec<u8>>,
 ) -> Result<()> {
@@ -227,7 +226,6 @@ pub fn received_offer(
             age: Duration::from_secs(age_sec),
             sender_device_id,
             receiver_device_id,
-            receiver_device_is_primary,
             sender_identity_key,
             receiver_identity_key,
         },
@@ -651,7 +649,6 @@ pub fn validate_offer(
         age: Duration::from_secs(age_sec),
         sender_device_id: 1,
         receiver_device_id: 1,
-        receiver_device_is_primary: true,
         sender_identity_key: vec![],
         receiver_identity_key: vec![],
     })

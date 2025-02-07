@@ -449,8 +449,6 @@ pub struct ReceivedOffer {
     pub age: Duration,
     pub sender_device_id: DeviceId,
     pub receiver_device_id: DeviceId,
-    /// If true, the receiver (local) device is the primary device, otherwise a linked device
-    pub receiver_device_is_primary: bool,
     pub sender_identity_key: Vec<u8>,
     pub receiver_identity_key: Vec<u8>,
 }

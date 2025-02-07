@@ -609,7 +609,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     // MARK: - Signaling API
 
     @MainActor
-    public func receivedOffer(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, isLocalDevicePrimary: Bool, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
+    public func receivedOffer(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
         Logger.debug("receivedOffer")
 
         let opaqueSlice = allocatedAppByteSliceFromData(maybe_data: opaque)
@@ -632,7 +632,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
 
         let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaqueSlice, messageAgeSec, callMediaType.rawValue, localDevice, isLocalDevicePrimary, senderIdentityKeySlice, receiverIdentityKeySlice)
+        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaqueSlice, messageAgeSec, callMediaType.rawValue, localDevice, senderIdentityKeySlice, receiverIdentityKeySlice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedOffer() function failure")
         }

@@ -1288,10 +1288,9 @@ where
             RingBench::App,
             RingBench::Cm,
             format!(
-                "received_offer()\t{}\t{}\tprimary={}\t{}\t{}",
+                "received_offer()\t{}\t{}\t{}\t{}",
                 incoming_call_id,
                 received.sender_device_id,
-                received.receiver_device_is_primary,
                 received.offer.to_info_string(),
                 received.receiver_device_id,
             )
@@ -3064,7 +3063,6 @@ mod tests {
                 age,
                 sender_device_id: 1,
                 receiver_device_id: 1,
-                receiver_device_is_primary: true,
                 sender_identity_key: vec![],
                 receiver_identity_key: vec![],
             }
