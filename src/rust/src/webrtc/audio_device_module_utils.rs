@@ -43,7 +43,7 @@ fn device_is_monitor(device: &MinimalDeviceInfo) -> bool {
         && device
             .device_id
             .as_ref()
-            .map_or(false, |s| s.ends_with(".monitor"))
+            .is_some_and(|s| s.ends_with(".monitor"))
 }
 
 impl DeviceCollectionWrapper {

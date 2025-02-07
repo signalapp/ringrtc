@@ -672,7 +672,7 @@ fn get_client_profiles(dir_path: &str) -> Vec<ClientProfile> {
     let files = std::fs::read_dir(dir_path)
         .expect("Failed to list client profile directory")
         .map(|entry| entry.unwrap().path())
-        .filter(|p| p.extension().map_or(false, |ext| ext == "json"))
+        .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
         .sorted();
     println!("Found {} client profiles config files", files.len());
     files.map(|path| get_client_profile(&path)).collect()

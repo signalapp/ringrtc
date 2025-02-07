@@ -111,7 +111,7 @@ struct SerializedPeekDeviceInfo {
     demux_id: u32,
 }
 
-impl<'a> SerializedPeekInfo<'a> {
+impl SerializedPeekInfo<'_> {
     fn deobfuscate(
         self,
         member_resolver: &dyn MemberResolver,
@@ -125,7 +125,7 @@ impl<'a> SerializedPeekInfo<'a> {
             _ => None,
         };
 
-        return PeekInfo {
+        PeekInfo {
             devices: self
                 .devices
                 .into_iter()
@@ -143,7 +143,7 @@ impl<'a> SerializedPeekInfo<'a> {
             era_id: self.era_id,
             max_devices: self.max_devices,
             call_link_state: state,
-        };
+        }
     }
 }
 
@@ -682,7 +682,7 @@ pub mod ios {
         pub member_id: rtc_Bytes<'a>,
     }
 
-    impl<'a> rtc_sfu_GroupMember<'a> {
+    impl rtc_sfu_GroupMember<'_> {
         fn to_group_member(&self) -> GroupMember {
             GroupMember {
                 user_id: self.user_id.to_vec(),

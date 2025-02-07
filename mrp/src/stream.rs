@@ -1540,7 +1540,7 @@ mod tests {
             let is_ready = self
                 .buffer
                 .peek()
-                .map_or(false, |Delayed(_, recv_at, _)| recv_at <= &now);
+                .is_some_and(|Delayed(_, recv_at, _)| recv_at <= &now);
             if is_ready {
                 let Delayed(v, _, _) = self.buffer.pop().unwrap();
                 Ok(v)
