@@ -105,24 +105,20 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest, macos-13, ubuntu-22.04-arm64-4-cores]
-        include:
-        - os: ubuntu-22.04
-          install-deps: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
-          test-runner: xvfb-run --auto-servernum
-        - os: ubuntu-22.04-arm64-4-cores
-          install-deps: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
-          test-runner: xvfb-run --auto-servernum
-        - os: windows-latest
-          install-deps: choco install protoc
-        - os: macos-13
-          install-deps: brew install protobuf coreutils
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash # as opposed to PowerShell
     steps:
     - name: Install dependencies
-      run: ${{ matrix.install-deps }}
+      run: |
+        if [[ "${{ matrix.os }}" == macos-* ]]; then
+          brew install protobuf coreutils
+        elif [[ "${{ matrix.os }}" == windows-* ]]; then
+          choco install protoc
+        elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
+          sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
+        fi
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
@@ -137,7 +133,7 @@ jobs:
       working-directory: src/node
     - run: npm run build
       working-directory: src/node
-    - run: ${{ matrix.test-runner }} npm test
+    - run: '[[ "${{ matrix.os }}" == ubuntu-* ]] && xvfb-run --auto-servernum npm test || npm test'
       working-directory: src/node
 
   cargo_build_using_prebuilt:
@@ -146,22 +142,20 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-13, windows-latest, ubuntu-22.04-arm64-4-cores]
-        include:
-        - os: ubuntu-22.04
-          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
-        - os: ubuntu-22.04-arm64-4-cores
-          install-deps: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
-        - os: macos-13
-          install-deps: brew install protobuf coreutils
-        - os: windows-latest
-          install-deps: choco install protoc
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash # as opposed to PowerShell
     steps:
     - name: Install dependencies
-      run: ${{ matrix.install-deps }}
+      run: |
+        if [[ "${{ matrix.os }}" == macos-* ]]; then
+          brew install protobuf coreutils
+        elif [[ "${{ matrix.os }}" == windows-* ]]; then
+          choco install protoc
+        elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
+        fi
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
