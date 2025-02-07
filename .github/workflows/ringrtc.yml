@@ -133,7 +133,11 @@ jobs:
       working-directory: src/node
     - run: npm run build
       working-directory: src/node
-    - run: '[[ "${{ matrix.os }}" == ubuntu-* ]] && xvfb-run --auto-servernum npm test || npm test'
+    - run: xvfb-run --auto-servernum npm test
+      if: startsWith(matrix.os, 'ubuntu-')
+      working-directory: src/node
+    - run: npm test
+      if: ${{ !startsWith(matrix.os, 'ubuntu-') }}
       working-directory: src/node
 
   cargo_build_using_prebuilt:
