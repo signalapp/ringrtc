@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+mod merge_buffer;
 mod stream;
 mod window;
 

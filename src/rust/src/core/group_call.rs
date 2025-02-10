@@ -1111,6 +1111,7 @@ impl From<&protobuf::group_call::MrpHeader> for mrp::MrpHeader {
         Self {
             seqnum: value.seqnum,
             ack_num: value.ack_num,
+            num_packets: value.num_packets,
         }
     }
 }
@@ -1120,6 +1121,7 @@ impl From<mrp::MrpHeader> for protobuf::group_call::MrpHeader {
         Self {
             seqnum: value.seqnum,
             ack_num: value.ack_num,
+            num_packets: value.num_packets,
         }
     }
 }
@@ -3962,7 +3964,14 @@ impl Client {
                     }
                     err @ Err(MrpReceiveError::ReceiveWindowFull(_)) => {
                         warn!(
-                            "Error when receiving reliable SfuToDevice message, discarding. {:?}",
+                            "Buffer full when receiving reliable SfuToDevice message, discarding. {:?}",
+                            err
+                        );
+                    }
+
+                    Err(err) => {
+                        error!(
+                            "Error when receiving reliable SfuToDevice message, discarded all drained packets {:?}",
                             err
                         );
                     }
@@ -3987,7 +3996,19 @@ impl Client {
             removed,
             raised_hands,
             mrp_header: _,
+            content,
         } = msg;
+
+        if let Some(content) = content {
+            match SfuToDevice::decode(content.as_slice()) {
+                Ok(msg) => Self::handle_sfu_to_device_inner(actor, header, msg),
+                Err(err) => {
+                    error!("Failed to decode content buffer in SfuToDevice: {:?}", err);
+                }
+            }
+            // ignore all other fields to prevent ordering issues
+            return;
+        }
 
         if let Some(Speaker {
             demux_id: speaker_demux_id,
