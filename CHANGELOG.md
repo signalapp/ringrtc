@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.49.5
+
+- Desktop: New Audio Device Module improvements
+    Bump cubeb to 0.22.0
+
+- Update to Rust 1.84.1
+
+- Add num_packets and merge buffer support to MrpStreams
+
 ## v2.49.4
 
 - Lower time threshold for speech event notification

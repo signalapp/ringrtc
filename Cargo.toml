@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "2.49.4"
+version = "2.49.5"
 authors = ["Calling Team <callingteam@signal.org>"]
 
 [patch.crates-io]
