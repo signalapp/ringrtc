@@ -289,7 +289,7 @@ impl Test {
                 &test_case_config.client_b_config,
                 &self.client_profiles[0],
                 &self.call_type,
-                self.profile,
+                /*profile=*/ false, // Never profile client a
             )
             .await?;
 
@@ -797,9 +797,7 @@ impl Test {
                 if self.profile {
                     // allow perf to finish and collect reports.
                     println!("waiting for perf... ");
-                    if let Err(e) =
-                        finish_perf(test_case.client_a.name, test_case.client_b.name).await
-                    {
+                    if let Err(e) = finish_perf(test_case.client_b.name).await {
                         println!("couldn't wait for perf {:?}", e);
                     }
                     println!("... done");

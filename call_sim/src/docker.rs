@@ -699,8 +699,9 @@ pub async fn start_cli(
                 "cycles",
                 "--call-graph=dwarf",
                 "-F",
-                "99",
+                "1499",
                 "--user-callchains",
+                "--sample-cpu",
                 &perf_arg,
             ]
             .map(String::from),
@@ -883,60 +884,58 @@ pub async fn start_cli(
     Ok(())
 }
 
-pub async fn finish_perf(a: &str, b: &str) -> Result<()> {
-    for client in [a, b] {
-        let mut exited = false;
-        for _ in 0..60 {
-            let status = Command::new("docker")
-                .args(["exec", client, "pgrep", "perf"])
-                .stdout(Stdio::null())
+pub async fn finish_perf(client: &str) -> Result<()> {
+    let mut exited = false;
+    for _ in 0..60 {
+        let status = Command::new("docker")
+            .args(["exec", client, "pgrep", "perf"])
+            .stdout(Stdio::null())
+            .spawn()?
+            .wait()
+            .await?;
+        if !status.success() {
+            // if we couldn't find it, it exited; otherwise keep waiting.
+            exited = true;
+            let perf_command = format!(
+                "perf report -s symbol --percent-limit=5 --call-graph=2 -i /report/{}.perf \
+                --addr2line=/root/.cargo/bin/addr2line > /report/{}.perf.txt 2>&1",
+                client, client
+            );
+            let _ = Command::new("docker")
+                .args(["exec", client, "sh", "-c", &perf_command])
                 .spawn()?
                 .wait()
                 .await?;
-            if !status.success() {
-                // if we couldn't find it, it exited; otherwise keep waiting.
-                exited = true;
-                let perf_command = format!(
-                    "perf report --percent-limit=5 --call-graph=2 -i /report/{}.perf \
-                    --addr2line=/root/.cargo/bin/addr2line > /report/{}.perf.txt 2>&1",
-                    client, client
-                );
-                let _ = Command::new("docker")
-                    .args(["exec", client, "sh", "-c", &perf_command])
-                    .spawn()?
-                    .wait()
-                    .await?;
 
-                let _ = Command::new("docker")
-                    .args([
-                        "exec",
-                        client,
-                        "chmod",
-                        "o+r",
-                        &format!("/report/{}.perf", client),
-                    ])
-                    .spawn()?
-                    .wait()
-                    .await?;
+            let _ = Command::new("docker")
+                .args([
+                    "exec",
+                    client,
+                    "chmod",
+                    "o+r",
+                    &format!("/report/{}.perf", client),
+                ])
+                .spawn()?
+                .wait()
+                .await?;
 
-                let _ = Command::new("docker")
-                    .args([
-                        "exec",
-                        client,
-                        "perf",
-                        "archive",
-                        &format!("/report/{}.perf", client),
-                    ])
-                    .spawn()?
-                    .wait()
-                    .await?;
+            let _ = Command::new("docker")
+                .args([
+                    "exec",
+                    client,
+                    "perf",
+                    "archive",
+                    &format!("/report/{}.perf", client),
+                ])
+                .spawn()?
+                .wait()
+                .await?;
 
-                break;
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            break;
         }
-        println!("{} perf exited? {}", client, exited);
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
+    println!("{} perf exited? {}", client, exited);
     Ok(())
 }
 
