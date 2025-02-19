@@ -20,8 +20,6 @@ default = ["signaling"]
 signaling = []
 call_sim = ["signaling"]
 
-[dependencies]
-
 [build-dependencies]
-prost-build = { version = "0.13.3" }
+prost-build = "0.13.5"
 tonic-build = "0.12.3"

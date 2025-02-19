@@ -30,7 +30,7 @@ jobs:
       run: pip3 install flake8 mypy
     - uses: actions/checkout@v4
     - name: Cargo Cache
-      uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
       with:
         cache-targets: "false"
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
