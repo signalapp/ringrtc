@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component rustfmt
+    - run: rustup toolchain install nightly --profile minimal --component rustfmt
     - name: Check rust format
-      run: cargo fmt -- --check
+      run: cargo +nightly fmt -- --check
     - name: Install for node
       run: npm ci
       working-directory: src/node
