@@ -528,7 +528,7 @@ pub struct Reaction {
 // The callbacks from the Client to the "SFU client" for the group call.
 pub trait SfuClient {
     // This should call Client.on_sfu_client_joined when the SfuClient has joined.
-    fn join(&mut self, ice_ufrag: &str, dhe_pub_key: [u8; 32], client: Client);
+    fn join(&mut self, ice_ufrag: &str, ice_pwd: &str, dhe_pub_key: [u8; 32], client: Client);
     fn peek(&mut self, result_callback: PeekResultCallback);
 
     // Notifies the client of the new membership proof.
@@ -556,7 +556,7 @@ pub struct HttpSfuClient {
     http_client: Box<dyn http::Client + Send>,
     auth_header: Option<String>,
     member_resolver: Arc<dyn sfu::MemberResolver + Send + Sync>,
-    deferred_join: Option<(String, [u8; 32], Client)>,
+    deferred_join: Option<(String, String, [u8; 32], Client)>,
 }
 
 impl HttpSfuClient {
@@ -594,6 +594,7 @@ impl HttpSfuClient {
         &self,
         auth_header: String,
         ice_ufrag: &str,
+        ice_pwd: &str,
         dhe_pub_key: &[u8],
         client: Client,
     ) {
@@ -605,6 +606,7 @@ impl HttpSfuClient {
             auth_header,
             self.admin_passkey.as_deref(),
             ice_ufrag,
+            ice_pwd,
             dhe_pub_key,
             &self.hkdf_extra_info,
             self.member_resolver.clone(),
@@ -655,20 +657,23 @@ impl SfuClient for HttpSfuClient {
         if let Some(auth_header) = sfu::auth_header_from_membership_proof(&proof) {
             self.auth_header = Some(auth_header.clone());
             // Release any tasks that were blocked on getting the token.
-            if let Some((ice_ufrag, dhe_pub_key, client)) = self.deferred_join.take() {
+            if let Some((ice_ufrag, ice_pwd, dhe_pub_key, client)) = self.deferred_join.take() {
                 info!("membership token received, proceeding with deferred join");
-                self.join_with_header(auth_header, &ice_ufrag, &dhe_pub_key[..], client);
+                self.join_with_header(auth_header, &ice_ufrag, &ice_pwd, &dhe_pub_key[..], client);
             }
         }
     }
 
-    fn join(&mut self, ice_ufrag: &str, dhe_pub_key: [u8; 32], client: Client) {
+    fn join(&mut self, ice_ufrag: &str, ice_pwd: &str, dhe_pub_key: [u8; 32], client: Client) {
         match self.auth_header.as_ref() {
-            Some(h) => self.join_with_header(h.clone(), ice_ufrag, &dhe_pub_key[..], client),
+            Some(h) => {
+                self.join_with_header(h.clone(), ice_ufrag, ice_pwd, &dhe_pub_key[..], client)
+            }
             None => {
                 info!("join requested without membership token - deferring");
                 let ice_ufrag = ice_ufrag.to_string();
-                self.deferred_join = Some((ice_ufrag, dhe_pub_key, client));
+                let ice_pwd = ice_pwd.to_string();
+                self.deferred_join = Some((ice_ufrag, ice_pwd, dhe_pub_key, client));
             }
         }
     }
@@ -1810,6 +1815,7 @@ impl Client {
                         state.dhe_state = DheState::start(client_secret);
                         state.sfu_client.join(
                             &state.local_ice_ufrag,
+                            &state.local_ice_pwd,
                             *client_pub_key.as_bytes(),
                             callback,
                         );
@@ -4775,7 +4781,13 @@ mod tests {
     }
 
     impl SfuClient for FakeSfuClient {
-        fn join(&mut self, _ice_ufrag: &str, _dhe_pub_key: [u8; 32], client: Client) {
+        fn join(
+            &mut self,
+            _ice_ufrag: &str,
+            _ice_pwd: &str,
+            _dhe_pub_key: [u8; 32],
+            client: Client,
+        ) {
             if let Some(counter) = &self.joins_remaining {
                 if counter.fetch_sub(1, Ordering::SeqCst) <= 0 {
                     // No more joins allowed. Simulate a "group full" condition.

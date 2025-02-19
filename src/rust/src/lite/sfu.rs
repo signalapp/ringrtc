@@ -490,6 +490,7 @@ struct JoinRequest<'a> {
     admin_passkey: Option<&'a [u8]>,
 
     ice_ufrag: &'a str,
+    ice_pwd: &'a str,
 
     #[serde_as(as = "serde_with::hex::Hex")]
     dhe_public_key: &'a [u8],
@@ -506,6 +507,7 @@ pub fn join(
     auth_header: String,
     admin_passkey: Option<&[u8]>,
     client_ice_ufrag: &str,
+    client_ice_pwd: &str,
     client_dhe_pub_key: &[u8],
     hkdf_extra_info: &[u8],
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
@@ -530,6 +532,7 @@ pub fn join(
                 serde_json::to_vec(&JoinRequest {
                     admin_passkey,
                     ice_ufrag: client_ice_ufrag,
+                    ice_pwd: client_ice_pwd,
                     dhe_public_key: client_dhe_pub_key,
                     hkdf_extra_info,
                 })
