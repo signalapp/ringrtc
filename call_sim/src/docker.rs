@@ -684,7 +684,6 @@ pub async fn start_cli(
     println!("Starting cli for `{}`", name);
     let log_file_arg = format!("/report/{}.log", name);
     let input_file_arg = format!("/media/{}", media_io.audio_input_file);
-    let output_file_arg = format!("/report/{}", media_io.audio_output_file);
 
     let mut args = ["exec", "-d", name].map(String::from).to_vec();
 
@@ -717,11 +716,12 @@ pub async fn start_cli(
             &log_file_arg,
             "--input-file",
             &input_file_arg,
-            "--output-file",
-            &output_file_arg,
         ]
         .map(String::from),
     );
+    if let Some(audio_output_file) = media_io.audio_output_file {
+        args.push(format!("--output_file=/report/{}", audio_output_file));
+    }
 
     args.push("--stats-interval-secs".to_string());
     args.push(format!("{}", call_config.stats_interval_secs));

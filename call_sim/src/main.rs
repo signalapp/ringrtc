@@ -580,6 +580,108 @@ async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
+async fn run_perf_test(test: &mut Test) -> Result<()> {
+    test.run(
+        GroupConfig {
+            group_name: "perf_test".to_string(),
+            // Show all the different measurements in the summary columns. Hide video.
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: false,
+                show_visqol_mos_audio: false,
+                show_visqol_mos_average: false,
+                show_pesq_mos: false,
+                show_plc_mos: false,
+                show_video: false,
+            },
+            ..Default::default()
+        },
+        vec![
+            TestCaseConfig {
+                test_case_name: "audio".to_string(),
+                length_seconds: 60,
+                save_media_files: false,
+                client_a_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "speaker_b".to_string(),
+                        initial_packet_size_ms: 60,
+                        generate_spectrogram: false,
+                        visqol_speech_analysis: false,
+                        visqol_audio_analysis: false,
+                        pesq_speech_analysis: false,
+                        plc_speech_analysis: false,
+                        analysis_mode: AudioAnalysisMode::None,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                client_b_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
+                        enable_aec: true,
+                        generate_spectrogram: false,
+                        visqol_speech_analysis: false,
+                        visqol_audio_analysis: false,
+                        pesq_speech_analysis: false,
+                        plc_speech_analysis: false,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                iterations: 1,
+                ..Default::default()
+            },
+            TestCaseConfig {
+                test_case_name: "video".to_string(),
+                length_seconds: 60,
+                save_media_files: false,
+                client_a_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "speaker_b".to_string(),
+                        initial_packet_size_ms: 60,
+                        generate_spectrogram: false,
+                        visqol_speech_analysis: false,
+                        visqol_audio_analysis: false,
+                        pesq_speech_analysis: false,
+                        plc_speech_analysis: false,
+                        analysis_mode: AudioAnalysisMode::None,
+                        ..Default::default()
+                    },
+                    video: VideoConfig {
+                        input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                client_b_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_phrasing".to_string(),
+                        initial_packet_size_ms: 60,
+                        enable_aec: true,
+                        generate_spectrogram: false,
+                        visqol_speech_analysis: false,
+                        visqol_audio_analysis: false,
+                        pesq_speech_analysis: false,
+                        plc_speech_analysis: false,
+                        ..Default::default()
+                    },
+                    video: VideoConfig {
+                        input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                iterations: 1,
+                ..Default::default()
+            },
+        ],
+        vec![NetworkProfile::None],
+    )
+    .await?;
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -654,6 +756,7 @@ async fn main() -> Result<()> {
             "video_send_over_bandwidth" => run_video_send_over_bandwidth(test).await?,
             "video_compare_vp8_vs_vp9" => run_video_compare_vp8_vs_vp9(test).await?,
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,
+            "profiling_suite" => run_perf_test(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
         test.report().await?;
