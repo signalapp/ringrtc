@@ -533,7 +533,6 @@ public class CallManager {
    * @param messageAgeSec            approximate age of the offer message, in seconds
    * @param callMediaType            the origination type for the call, audio or video
    * @param localDeviceId            the local deviceId of the client
-   * @param isLocalDevicePrimary     if true, the local device is considered a primary device
    * @param senderIdentityKey        the identity key of the remote client
    * @param receiverIdentityKey      the identity key of the local client
    *
@@ -547,7 +546,6 @@ public class CallManager {
                                      Long          messageAgeSec,
                                      CallMediaType callMediaType,
                                      Integer       localDeviceId,
-                                     boolean       isLocalDevicePrimary,
                             @NonNull byte[]        senderIdentityKey,
                             @NonNull byte[]        receiverIdentityKey)
     throws CallException
@@ -564,7 +562,6 @@ public class CallManager {
                          messageAgeSec,
                          callMediaType.ordinal(),
                          localDeviceId,
-                         isLocalDevicePrimary,
                          senderIdentityKey,
                          receiverIdentityKey);
   }
@@ -2379,7 +2376,6 @@ public class CallManager {
                               long    messageAgeSec,
                               int     callMediaType,
                               int     localDeviceId,
-                              boolean isLocalDevicePrimary,
                               byte[]  senderIdentityKey,
                               byte[]  receiverIdentityKey)
     throws CallException;

@@ -36,23 +36,22 @@ regex-aot = { path = "regex-aot" }
 
 aes               = { version = "0.8.4"  }
 aes-gcm-siv       = { version = "0.11.1", features = ["aes"] }
-anyhow            = { version = "1.0.94"    }
+anyhow            = { version = "1.0.95"    }
 base64            = { version = "0.22.1" }
-bytes             = { version = "1.9.0"    }
+bytes             = { version = "1.10.0"    }
 ctr               = { version = "0.9.2"  }
-futures           = { version = "0.3.31"    }
 hmac              = { version = "0.12.1"   }
 lazy_static       = { version = "1.5.0"    }
-libc              = { version = "0.2.167"    }
-log               = { version = "0.4.22", features = ["std", "max_level_trace", "release_max_level_info"] }
+libc              = { version = "0.2.169"    }
+log               = { version = "0.4.25", features = ["std", "max_level_trace", "release_max_level_info"] }
 num_enum          = { version = "0.7.3"  }
-prost             = { version = "0.13.3" }
+prost             = { version = "0.13.5" }
 rand              = { version = "0.8.5", features = [] }
 regex-automata    = { version = "0.4.9", default-features = false, features = ["dfa", "perf", "std"] }
 hkdf              = { version = "0.12.4"   }
-serde_json        = { version = "1.0.133"    }
-serde             = { version = "1.0.215", features = ["derive"] }
-serde_with        = { version = "3.11.0", features = ["base64", "hex"] }
+serde_json        = { version = "1.0.138"    }
+serde             = { version = "1.0.217", features = ["derive"] }
+serde_with        = { version = "3.12.0", features = ["base64", "hex"] }
 hex               = { version = "0.4.3", features = ["serde"] }
 sha2              = { version = "0.10.8"  }
 static_assertions = { version = "1.1.0"  }
@@ -64,7 +63,7 @@ x25519-dalek      = { version = "2.0.1", features = ["static_secrets"] }
 # maintenance reasons. In particular, anything involving credentials should be left to
 # libsignal-client.
 bincode = { version = "1.3.3" }
-uuid = { version = "1.11.0", optional = true }
+uuid = { version = "1.13.1", optional = true }
 zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.65.1" }
 
 # Optional, needed by the "electron" feature
@@ -75,28 +74,28 @@ jni = { version = "0.21.1", optional = true, default-features = false }
 
 # Optional, needed by the "http" feature
 ureq = { version = "2.12.1", optional = true }
-rustls = { version = "0.23.19", optional = true, features = ["ring"] }
+rustls = { version = "0.23.23", optional = true, features = ["ring"] }
 
 # Optional, needed for call-link-test-client
 rand_chacha = { version = "0.3.1", optional = true }
 
 # Optional, needed by the "call_sim" feature
 bitvec = {version = "1.0.1", optional = true }
-clap = { version = "4.5.22", optional = true, features = ["derive"] }
+clap = { version = "4.5.29", optional = true, features = ["derive"] }
 fern = { version = "0.6.2", optional = true }
-tokio = { version = "1.42.0", optional = true, features = ["rt-multi-thread"] }
+tokio = { version = "1.43.0", optional = true, features = ["rt-multi-thread"] }
 tonic = { version = "0.12.3", optional = true }
 tower = { version = "0.4.13", optional = true, features = ["timeout"] }
 
 # Optional, needed by the "direct" and "call_sim" feature
-chrono = {version = "0.4.38", optional = true }
+chrono = {version = "0.4.39", optional = true }
 
 call_protobuf = { path = "../../protobuf", package = "protobuf"}
 mrp = { path = "../../mrp" }
 
 # Optional, needed by "native" feature
-cubeb = {  version = "0.20.0", optional = true }
-cubeb-core = {  version = "0.20.0", optional = true }
+cubeb = {  version = "0.22.0", optional = true }
+cubeb-core = {  version = "0.22.0", optional = true }
 regex = {  version = "1.11.1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
@@ -134,11 +133,7 @@ required-features = ["sim"]
 [target.'cfg(target_os="android")'.dependencies]
 jni = { version = "0.21.1", default-features = false }
 
-[build-dependencies]
-prost-build = { version = "0.13.3" }
-tonic-build = { version = "0.12.3" }
-
 [dev-dependencies]
-uuid = { version = "1.11.0" }
-env_logger = { version = "0.11.5" }
+uuid = { version = "1.13.1" }
+env_logger = { version = "0.11.6" }
 rand_chacha = { version = "0.3.1" }

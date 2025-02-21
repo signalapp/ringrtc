@@ -977,8 +977,6 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
                 age: Duration::from_secs(age_sec),
                 sender_device_id,
                 receiver_device_id,
-                // An electron client cannot be the primary device.
-                receiver_device_is_primary: false,
                 sender_identity_key,
                 receiver_identity_key,
             },

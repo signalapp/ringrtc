@@ -13,6 +13,8 @@
 //! change how data is sent on every attempt
 
 use super::window::{BufferWindow, WindowError};
+use crate::merge_buffer::MergeBuffer;
+use log::warn;
 use std::{fmt::Debug, time::Instant};
 
 #[derive(PartialEq, Debug, Default, Clone)]
@@ -23,17 +25,59 @@ pub struct MrpHeader {
     /// RECEIVER -> SENDER
     /// The next expected SEQ_NUM
     pub ack_num: Option<u64>,
+    /// SENDER -> RECEIVER
+    /// specifies the number of additional packets that should be appended to this payload
+    pub num_packets: Option<u32>,
 }
 
 impl MrpHeader {
     pub fn new(seqnum: Option<u64>, ack_num: Option<u64>) -> Self {
-        Self { seqnum, ack_num }
+        Self {
+            seqnum,
+            ack_num,
+            num_packets: None,
+        }
+    }
+
+    pub fn new_with_length(
+        seqnum: Option<u64>,
+        ack_num: Option<u64>,
+        num_packets: Option<u32>,
+    ) -> Self {
+        Self {
+            seqnum,
+            ack_num,
+            num_packets,
+        }
     }
 }
 
 /// Convenience struct for associating a Header with arbitrary data
 #[derive(PartialEq, Debug, Clone)]
 pub struct PacketWrapper<Data: Clone + Debug>(pub MrpHeader, pub Data);
+
+impl<Data> PacketWrapper<Data>
+where
+    Data: Clone + Debug,
+{
+    fn new(header: MrpHeader, data: Data) -> Self {
+        Self(header, data)
+    }
+}
+
+impl<Data, T> Extend<PacketWrapper<Data>> for PacketWrapper<Data>
+where
+    Data: Clone + Debug + Extend<T> + IntoIterator<Item = T>,
+{
+    fn extend<I: IntoIterator<Item = PacketWrapper<Data>>>(&mut self, iter: I) {
+        let iter = iter.into_iter().map(|v| v.1);
+        for data_vec in iter {
+            self.1.extend(data_vec);
+        }
+    }
+}
+
+type BufferedPacket<T> = PacketWrapper<T>;
 
 /// Tracks timeout, attempts, and whether to transmit packet at next chance
 /// [MrpStream] exposes it in Buffer type
@@ -67,13 +111,19 @@ where
     /// Packets that been sent but not yet acked or dropped.
     send_buffer: BufferWindow<PendingPacket<SendData>>,
     /// Packets that have been received out of order
-    receive_buffer: BufferWindow<ReceiveData>,
+    receive_buffer: BufferWindow<BufferedPacket<ReceiveData>>,
+    merge_buffer: Option<MergeBuffer<ReceiveData>>,
+    merge_end_seqnum: Option<u64>,
 }
 
 #[derive(thiserror::Error, PartialEq, Eq, Debug, Clone)]
 pub enum MrpReceiveError {
     #[error("Receive Window is full, cannot accept packet with seqnum")]
     ReceiveWindowFull(u64),
+    #[error("Received unexpected num packets while merge already in progress")]
+    PacketMergeConflict,
+    #[error("Unexpected error in merge")]
+    InvalidMergeState,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -93,9 +143,102 @@ where
     fn default() -> Self {
         Self {
             should_ack: false,
-            send_buffer: BufferWindow::<PendingPacket<SendData>>::new(Self::INITIAL_SEQNUM),
-            receive_buffer: BufferWindow::<ReceiveData>::new(Self::INITIAL_ACKNUM),
+            send_buffer: BufferWindow::new(Self::INITIAL_SEQNUM),
+            receive_buffer: BufferWindow::new(Self::INITIAL_ACKNUM),
+            merge_buffer: None,
+            merge_end_seqnum: None,
         }
+    }
+}
+
+impl<SendData, ReceiveData> MrpStream<SendData, ReceiveData>
+where
+    SendData: Clone + Debug,
+    ReceiveData: Extend<ReceiveData> + Clone + Debug,
+{
+    /// Receives a packet. Treats it as either an ACK or Data Packet.
+    /// We prevent piggybacking both in one packet for now.
+    ///
+    /// returns packets ready for processing
+    pub fn receive_and_merge(
+        &mut self,
+        header: &MrpHeader,
+        packet: ReceiveData,
+    ) -> std::result::Result<Vec<ReceiveData>, MrpReceiveError> {
+        if let Some(ack_num) = header.ack_num {
+            self.update_send_window(ack_num)?;
+            Ok(vec![])
+        } else if header.seqnum.is_some() {
+            let ready = self.update_receiver_window(header, packet)?;
+            self.merge_packets(ready)
+        } else {
+            // Not a valid MRP header! Ignore, immediately passback for processing
+            Ok(vec![packet])
+        }
+    }
+
+    fn merge_packets(
+        &mut self,
+        packets: Vec<BufferedPacket<ReceiveData>>,
+    ) -> Result<Vec<ReceiveData>, MrpReceiveError> {
+        let mut result: Vec<ReceiveData> = vec![];
+
+        for PacketWrapper(header, data) in packets {
+            // should never happen since we only merge packets from the buffer, and only buffer
+            // packets with a seqnum
+            let Some(seqnum) = header.seqnum else {
+                warn!("Unexpected attempt to merge packet without MRP seqnum");
+                continue;
+            };
+
+            // drop packets abandoned due to a previous merge conflict
+            if self.merge_end_seqnum.is_some() && self.merge_buffer.is_none() {
+                if self.merge_end_seqnum.unwrap() < seqnum {
+                    self.merge_buffer = None;
+                } else {
+                    continue;
+                }
+            }
+
+            if let Some(buffer) = self.merge_buffer.as_mut() {
+                if header.num_packets.is_some() && header.num_packets.unwrap() != 0 {
+                    return self.fail_merge(MrpReceiveError::PacketMergeConflict);
+                }
+                match buffer.push(data) {
+                    Ok(true) => {
+                        let Some(buffer) = self.merge_buffer.take() else {
+                            // should never happen, we were just holding a mutable reference
+                            return self.fail_merge(MrpReceiveError::InvalidMergeState);
+                        };
+                        result.push(buffer.merge());
+                    }
+                    Ok(false) => {}
+                    // should never happen, we do a merge as soon as possible
+                    Err(_) => {
+                        return self.fail_merge(MrpReceiveError::InvalidMergeState);
+                    }
+                }
+            } else if let Some(num_packets) = header.num_packets {
+                if num_packets <= 1 {
+                    // treat num_packets == 0 case the same as no num_packets
+                    result.push(data);
+                } else {
+                    let mut buffer = MergeBuffer::new(num_packets).unwrap();
+                    let _ = buffer.push(data);
+                    self.merge_buffer = Some(buffer);
+                    self.merge_end_seqnum = Some(header.seqnum.unwrap() + num_packets as u64 - 1);
+                }
+            } else {
+                result.push(data);
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn fail_merge<T>(&mut self, reason: MrpReceiveError) -> Result<T, MrpReceiveError> {
+        self.merge_buffer = None;
+        Err(reason)
     }
 }
 
@@ -110,14 +253,13 @@ where
     pub fn with_capacity_limit(max_window_size: usize) -> Self {
         Self {
             should_ack: false,
-            send_buffer: BufferWindow::<PendingPacket<SendData>>::with_capacity_limit(
-                max_window_size,
-                Self::INITIAL_SEQNUM,
-            ),
-            receive_buffer: BufferWindow::<ReceiveData>::with_capacity_limit(
+            send_buffer: BufferWindow::with_capacity_limit(max_window_size, Self::INITIAL_SEQNUM),
+            receive_buffer: BufferWindow::with_capacity_limit(
                 max_window_size,
                 Self::INITIAL_ACKNUM,
             ),
+            merge_buffer: None,
+            merge_end_seqnum: None,
         }
     }
 
@@ -301,7 +443,8 @@ where
             self.update_send_window(ack_num)?;
             Ok(vec![])
         } else if header.seqnum.is_some() {
-            self.update_receiver_window(header, packet)
+            let ready = self.update_receiver_window(header, packet)?;
+            Ok(ready.into_iter().map(|packet| packet.1).collect())
         } else {
             // Not a valid MRP header! Ignore, immediately passback for processing
             Ok(vec![packet])
@@ -347,9 +490,12 @@ where
         &mut self,
         header: &MrpHeader,
         packet: ReceiveData,
-    ) -> std::result::Result<Vec<ReceiveData>, MrpReceiveError> {
+    ) -> std::result::Result<Vec<BufferedPacket<ReceiveData>>, MrpReceiveError> {
         if let Some(seqnum) = header.seqnum {
-            return match self.receive_buffer.put(seqnum, packet) {
+            return match self
+                .receive_buffer
+                .put(seqnum, BufferedPacket::new(header.clone(), packet))
+            {
                 // we already received packet previously, so ack again
                 Err(WindowError::BeforeWindow) => {
                     self.should_ack = true;
@@ -376,11 +522,13 @@ mod tests {
     use rand::{
         distributions::{DistIter, Uniform},
         rngs::StdRng,
-        Rng, SeedableRng,
+        thread_rng, Rng, SeedableRng,
     };
     use std::sync::OnceLock;
 
     use super::*;
+    use rand::seq::SliceRandom;
+    use std::collections::VecDeque;
     use std::{
         cell::RefCell,
         collections::BinaryHeap,
@@ -391,6 +539,7 @@ mod tests {
     };
 
     type Packet = PacketWrapper<u64>;
+    type ExtendablePacket = PacketWrapper<Vec<u32>>;
 
     fn packet(data: u64) -> Packet {
         PacketWrapper(
@@ -401,8 +550,22 @@ mod tests {
         )
     }
 
+    fn extendable_packet(num_packets: Option<u32>, data: Vec<u32>) -> ExtendablePacket {
+        PacketWrapper(
+            MrpHeader {
+                num_packets,
+                ..MrpHeader::default()
+            },
+            data,
+        )
+    }
+
     fn ack(data: u64) -> Packet {
         PacketWrapper(MrpHeader::default(), data)
+    }
+
+    fn extendable_ack(data: u32) -> ExtendablePacket {
+        PacketWrapper(MrpHeader::default(), vec![data])
     }
 
     type PacketSchedule = Vec<Event>;
@@ -724,6 +887,134 @@ mod tests {
     }
 
     #[test]
+    fn test_merging() {
+        let mut rng = rand::thread_rng();
+        let mut alice: MrpStream<ExtendablePacket, ExtendablePacket> =
+            MrpStream::with_capacity_limit(16);
+
+        let packet = extendable_packet(None, vec![1]);
+        let should_be_returned = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                ..Default::default()
+            },
+            packet.clone(),
+        );
+        assert_eq!(
+            should_be_returned,
+            Ok(vec![packet]),
+            "No packets should not be buffered"
+        );
+
+        let packet = extendable_packet(None, vec![1]);
+        let should_be_returned = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                num_packets: Some(0),
+                ..Default::default()
+            },
+            packet.clone(),
+        );
+        assert_eq!(
+            should_be_returned,
+            Ok(vec![packet]),
+            "num_packets == 0 should not be buffered"
+        );
+
+        let packet = extendable_packet(None, vec![1]);
+        let should_be_returned = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                num_packets: Some(1),
+                ..Default::default()
+            },
+            packet.clone(),
+        );
+        assert_eq!(
+            should_be_returned,
+            Ok(vec![packet]),
+            "num_packets == 1 should not be buffered"
+        );
+
+        let mut packets = (0..10)
+            .map(|i| {
+                (
+                    MrpHeader {
+                        seqnum: Some(alice.ack_seqnum() + i),
+                        num_packets: if i == 0 { Some(10) } else { None },
+                        ..Default::default()
+                    },
+                    extendable_packet(None, vec![i as u32]),
+                )
+            })
+            .collect::<Vec<_>>();
+        packets.shuffle(&mut rng);
+        let mut packets = packets.into_iter();
+        for _ in 0..9 {
+            let (header, packet) = packets.next().expect("Should not be empty");
+            assert_eq!(Ok(vec![]), alice.receive_and_merge(&header, packet));
+        }
+        let (header, packet) = packets.next().expect("Should not be empty");
+        let should_be_returned = alice.receive_and_merge(&header, packet);
+        assert_eq!(
+            should_be_returned,
+            Ok(vec![extendable_packet(None, (0..10).collect::<Vec<u32>>())]),
+            "Should return merged vector of u32, 1-10"
+        );
+
+        let should_be_empty = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                num_packets: Some(3),
+                ..Default::default()
+            },
+            extendable_packet(None, vec![1]),
+        );
+        assert_eq!(
+            should_be_empty,
+            Ok(vec![]),
+            "Should be empty since packet should be buffered"
+        );
+
+        let should_be_error = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                num_packets: Some(2),
+                ..Default::default()
+            },
+            extendable_packet(None, vec![1]),
+        );
+        assert_eq!(should_be_error, Err(MrpReceiveError::PacketMergeConflict));
+
+        let should_be_empty = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                ..Default::default()
+            },
+            extendable_packet(None, vec![1]),
+        );
+        assert_eq!(
+            should_be_empty,
+            Ok(vec![]),
+            "Should be empty since we drop failed merge packets"
+        );
+
+        let packet = extendable_packet(None, vec![1]);
+        let should_be_returned = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                ..Default::default()
+            },
+            packet.clone(),
+        );
+        assert_eq!(
+            should_be_returned,
+            Ok(vec![packet]),
+            "Should have finished dropping failed packets"
+        );
+    }
+
+    #[test]
     fn test_varied_buffering() {
         // Alice sends packets that have various delay patterns.
         // Bob sends packets with similar pattern to
@@ -1010,6 +1301,31 @@ mod tests {
         delay_min: Duration,
         delay_max: Duration,
     ) {
+        fn expected_results(num_packets: usize, merge_intervals: &[(u32, u32)]) -> Vec<Vec<u32>> {
+            let num_packets = num_packets as u32;
+            let mut merge_intervals = merge_intervals.iter().peekable();
+            let mut results = vec![];
+            let mut i = 1;
+            while i <= num_packets {
+                if let Some((start, end)) = merge_intervals.peek() {
+                    if i == *start {
+                        results.push(((*start)..=(*end)).collect::<Vec<_>>());
+                        merge_intervals.next();
+                        i = end + 1;
+                        continue;
+                    }
+                }
+                results.push(vec![i]);
+                i += 1;
+            }
+
+            results
+        }
+
+        let alice_merge_intervals = generate_random_intervals(1, num_packets as u32);
+        let bob_merge_intervals = generate_random_intervals(1, num_packets as u32);
+        let bob_expected_results = expected_results(num_packets, &alice_merge_intervals);
+        let alice_expected_results = expected_results(num_packets, &bob_merge_intervals);
         let alice = MrpStream::with_capacity_limit(64);
         let bob = MrpStream::with_capacity_limit(64);
         let (to_alice, alice_inbox) = mpsc::channel();
@@ -1027,6 +1343,7 @@ mod tests {
             alice,
             to_bob,
             alice_receiver,
+            alice_merge_intervals,
             send_pace,
             timeout,
         );
@@ -1036,6 +1353,7 @@ mod tests {
             bob,
             to_alice,
             bob_receiver,
+            bob_merge_intervals,
             send_pace,
             timeout,
         );
@@ -1043,28 +1361,40 @@ mod tests {
         let alice_results: Vec<_> = alice_endpoint
             .join()
             .unwrap()
-            .iter()
+            .into_iter()
             .map(|pkt| pkt.1)
             .collect();
         let bob_results: Vec<_> = bob_endpoint
             .join()
             .unwrap()
-            .iter()
+            .into_iter()
             .map(|pkt| pkt.1)
             .collect();
 
-        assert_eq!(alice_results, bob_results);
+        let expected_flattened_results = (1..=num_packets as u32).collect::<Vec<_>>();
+        assert_eq!(alice_results, alice_expected_results);
+        assert_eq!(bob_results, bob_expected_results);
+        assert_eq!(
+            alice_results.into_iter().flatten().collect::<Vec<u32>>(),
+            expected_flattened_results
+        );
+        assert_eq!(
+            bob_results.into_iter().flatten().collect::<Vec<u32>>(),
+            expected_flattened_results
+        );
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn spawn_endpoint(
         tag: &str,
         num_packets: usize,
-        mut stream: MrpStream<Packet, Packet>,
-        sender: Sender<Packet>,
-        mut receiver: DelayReceiver<Packet>,
+        mut stream: MrpStream<ExtendablePacket, ExtendablePacket>,
+        sender: Sender<ExtendablePacket>,
+        mut receiver: DelayReceiver<ExtendablePacket>,
+        merge_intervals: Vec<(u32, u32)>,
         pace: Duration,
         timeout: Duration,
-    ) -> std::thread::JoinHandle<Vec<Packet>> {
+    ) -> std::thread::JoinHandle<Vec<ExtendablePacket>> {
         let tag = tag.to_string();
         thread::spawn(move || {
             let goal = stream.ack_seqnum() + num_packets as u64;
@@ -1074,11 +1404,36 @@ mod tests {
             let mut last_sent = Instant::now() - pace;
             let tick = Duration::from_millis(1);
 
-            while received.len() < num_packets || stream.ack_seqnum() < goal {
+            let mut merge_intervals = merge_intervals.into_iter().peekable();
+            let mut counter = 1;
+            let mut staged_messages: VecDeque<(Option<u32>, Vec<u32>)> = VecDeque::new();
+            while counter <= num_packets as u32 {
+                if let Some((start, end)) = merge_intervals.peek().cloned() {
+                    if counter == start {
+                        staged_messages.push_back((Some(end - start + 1), vec![start]));
+                        staged_messages.extend(((start + 1)..=end).map(|c| (None, vec![c])));
+                        counter = end + 1;
+                        merge_intervals.next();
+                        continue;
+                    }
+                }
+
+                staged_messages.push_back((None, vec![counter]));
+                counter += 1;
+            }
+            let mut staged_messages = staged_messages.into_iter().peekable();
+
+            while stream.ack_seqnum() < goal {
                 let now = Instant::now();
                 if now >= last_sent + pace && sent < num_packets {
-                    let mut pkt = packet(stream.next_seqnum());
-                    let res = stream.try_send(|header| {
+                    let (num_packets, data) =
+                        staged_messages.peek().cloned().unwrap_or_else(|| {
+                            panic!("should still have staged messages, sent {}", sent)
+                        });
+
+                    let mut pkt = extendable_packet(num_packets, data);
+                    let res = stream.try_send(|mut header| {
+                        header.num_packets = num_packets;
                         pkt.0 = header;
                         if let Err(err) = sender.send(pkt.clone()) {
                             Err(anyhow::anyhow!(err))
@@ -1088,16 +1443,20 @@ mod tests {
                     });
                     if res.is_ok() {
                         last_sent = now;
+                        staged_messages.next();
                         sent += 1;
                     }
                 }
 
                 if let Ok(new_pkt) = receiver.try_recv(now) {
-                    received.append(&mut stream.receive(&new_pkt.0.clone(), new_pkt).unwrap());
+                    let mut merged = stream
+                        .receive_and_merge(&new_pkt.0.clone(), new_pkt)
+                        .unwrap();
+                    received.append(&mut merged);
                 }
 
                 let _ = stream.try_send_ack(|header| {
-                    let mut a = ack(0);
+                    let mut a = extendable_ack(0);
                     a.0 = header;
                     if let Err(err) = sender.send(a) {
                         Err(anyhow::anyhow!(err))
@@ -1127,6 +1486,28 @@ mod tests {
             );
             received
         })
+    }
+
+    fn generate_random_intervals(min_seqnum: u32, max_seqnum: u32) -> Vec<(u32, u32)> {
+        if min_seqnum >= max_seqnum {
+            return vec![];
+        }
+
+        let mut rng = thread_rng();
+        let mut highest = min_seqnum;
+        let mut intervals = Vec::new();
+        while highest < max_seqnum {
+            let start = loop {
+                let v = rng.gen_range(highest..=max_seqnum);
+                if v != max_seqnum {
+                    break v;
+                }
+            };
+            let end = rng.gen_range((start + 1)..=max_seqnum);
+            intervals.push((start, end));
+            highest = end + 1;
+        }
+        intervals
     }
 
     #[derive(Debug)]
@@ -1159,7 +1540,7 @@ mod tests {
             let is_ready = self
                 .buffer
                 .peek()
-                .map_or(false, |Delayed(_, recv_at, _)| recv_at <= &now);
+                .is_some_and(|Delayed(_, recv_at, _)| recv_at <= &now);
             if is_ready {
                 let Delayed(v, _, _) = self.buffer.pop().unwrap();
                 Ok(v)

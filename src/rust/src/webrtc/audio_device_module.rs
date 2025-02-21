@@ -197,9 +197,10 @@ fn log_c_str(s: &CStr) {
 
             // Rate limit each line to 1/5 sec.
             let too_recent = if let Ok(guard) = RATE_LIMITER.read() {
-                guard.get(ident).as_ref().map_or(false, |&i| {
-                    Instant::now().duration_since(*i) < Duration::from_secs(5)
-                })
+                guard
+                    .get(ident)
+                    .as_ref()
+                    .is_some_and(|&i| Instant::now().duration_since(*i) < Duration::from_secs(5))
             } else {
                 return;
             };
@@ -218,10 +219,17 @@ fn log_c_str(s: &CStr) {
             // to *which* line in cubeb has a problem, if any.
             let to_log = if cfg!(debug_assertions) {
                 contents.to_string()
+            } else if contents.len() > 40 {
+                contents
+                    .chars()
+                    .take(20)
+                    .chain("...".chars())
+                    .chain(contents.chars().skip(contents.len() - 20))
+                    .collect::<String>()
             } else {
-                contents.chars().take(20).collect::<String>()
+                contents.to_string()
             };
-            info!("cubeb: {}{}...", ident, to_log);
+            info!("cubeb: {}{}", ident, to_log);
         }
         Err(e) => {
             warn!("cubeb log message not UTF-8: {:?}", e);

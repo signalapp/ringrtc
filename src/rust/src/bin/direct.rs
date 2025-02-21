@@ -470,7 +470,6 @@ impl CallEndpoint {
                             age: Duration::from_secs(0),
                             sender_device_id,
                             receiver_device_id: state.device_id,
-                            receiver_device_is_primary: (state.device_id == 1),
                             sender_identity_key,
                             receiver_identity_key,
                         },

@@ -161,7 +161,7 @@ pub struct Test {
 
 pub struct MediaFileIo {
     pub audio_input_file: String,
-    pub audio_output_file: String,
+    pub audio_output_file: Option<String>,
     pub video_input_file: Option<String>,
     pub video_output_file: Option<String>,
 }
@@ -281,15 +281,23 @@ impl Test {
                 test_case.client_a.name,
                 MediaFileIo {
                     audio_input_file: test_case.client_a.sound.raw(),
-                    audio_output_file: test_case.client_a.output_raw.clone(),
+                    audio_output_file: if test_case_config.save_media_files {
+                        Some(test_case.client_a.output_raw.clone())
+                    } else {
+                        None
+                    },
                     video_input_file: test_case.client_a.video.map(|v| v.raw()),
-                    video_output_file: test_case.client_a.output_yuv.clone(),
+                    video_output_file: if test_case_config.save_media_files {
+                        test_case.client_a.output_yuv.clone()
+                    } else {
+                        None
+                    },
                 },
                 &test_case_config.client_a_config,
                 &test_case_config.client_b_config,
                 &self.client_profiles[0],
                 &self.call_type,
-                self.profile,
+                /*profile=*/ false, // Never profile client a
             )
             .await?;
 
@@ -297,9 +305,17 @@ impl Test {
                 test_case.client_b.name,
                 MediaFileIo {
                     audio_input_file: test_case.client_b.sound.raw(),
-                    audio_output_file: test_case.client_b.output_raw.clone(),
+                    audio_output_file: if test_case_config.save_media_files {
+                        Some(test_case.client_b.output_raw.clone())
+                    } else {
+                        None
+                    },
                     video_input_file: test_case.client_b.video.map(|v| v.raw()),
-                    video_output_file: test_case.client_b.output_yuv.clone(),
+                    video_output_file: if test_case_config.save_media_files {
+                        test_case.client_b.output_yuv.clone()
+                    } else {
+                        None
+                    },
                 },
                 &test_case_config.client_b_config,
                 &test_case_config.client_a_config,
@@ -488,6 +504,10 @@ impl Test {
         test_case_config: &TestCaseConfig,
     ) -> Result<AudioTestResults> {
         let mut audio_test_results = AudioTestResults::default();
+
+        if !test_case_config.save_media_files {
+            return Ok(audio_test_results);
+        }
 
         // Perform conversions of audio data.
         convert_raw_to_wav(
@@ -797,9 +817,7 @@ impl Test {
                 if self.profile {
                     // allow perf to finish and collect reports.
                     println!("waiting for perf... ");
-                    if let Err(e) =
-                        finish_perf(test_case.client_a.name, test_case.client_b.name).await
-                    {
+                    if let Err(e) = finish_perf(test_case.client_b.name).await {
                         println!("couldn't wait for perf {:?}", e);
                     }
                     println!("... done");

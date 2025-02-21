@@ -279,7 +279,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
     message_age_sec: jlong,
     call_media_type: jint,
     local_device: jint,
-    jni_is_local_device_primary: jboolean,
     sender_identity_key: JByteArray,
     receiver_identity_key: JByteArray,
 ) {
@@ -293,7 +292,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedOffe
         message_age_sec as u64,
         CallMediaType::from_i32(call_media_type),
         local_device as DeviceId,
-        jni_is_local_device_primary == jni::sys::JNI_TRUE,
         sender_identity_key,
         receiver_identity_key,
     ) {

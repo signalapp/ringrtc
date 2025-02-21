@@ -340,7 +340,7 @@ impl<'a> std::ops::Deref for ExceptionCheckingJNIEnv<'a> {
     }
 }
 
-impl<'a> std::ops::DerefMut for ExceptionCheckingJNIEnv<'a> {
+impl std::ops::DerefMut for ExceptionCheckingJNIEnv<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }

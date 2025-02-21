@@ -214,6 +214,9 @@ pub struct TestCaseConfig {
     /// Whether to create charts for reports. This takes time and is sometimes not needed
     /// when running large test sets.
     pub create_charts: bool,
+    /// Whether to save media files in the output. This takes time and disk space and is sometimes
+    /// not needed.
+    pub save_media_files: bool,
 }
 
 impl Default for TestCaseConfig {
@@ -226,6 +229,7 @@ impl Default for TestCaseConfig {
             tcp_dump: false,
             iterations: 1,
             create_charts: true,
+            save_media_files: true,
         }
     }
 }

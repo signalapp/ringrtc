@@ -111,7 +111,7 @@ struct SerializedPeekDeviceInfo {
     demux_id: u32,
 }
 
-impl<'a> SerializedPeekInfo<'a> {
+impl SerializedPeekInfo<'_> {
     fn deobfuscate(
         self,
         member_resolver: &dyn MemberResolver,
@@ -125,7 +125,7 @@ impl<'a> SerializedPeekInfo<'a> {
             _ => None,
         };
 
-        return PeekInfo {
+        PeekInfo {
             devices: self
                 .devices
                 .into_iter()
@@ -143,7 +143,7 @@ impl<'a> SerializedPeekInfo<'a> {
             era_id: self.era_id,
             max_devices: self.max_devices,
             call_link_state: state,
-        };
+        }
     }
 }
 
@@ -490,6 +490,7 @@ struct JoinRequest<'a> {
     admin_passkey: Option<&'a [u8]>,
 
     ice_ufrag: &'a str,
+    ice_pwd: &'a str,
 
     #[serde_as(as = "serde_with::hex::Hex")]
     dhe_public_key: &'a [u8],
@@ -506,6 +507,7 @@ pub fn join(
     auth_header: String,
     admin_passkey: Option<&[u8]>,
     client_ice_ufrag: &str,
+    client_ice_pwd: &str,
     client_dhe_pub_key: &[u8],
     hkdf_extra_info: &[u8],
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
@@ -530,6 +532,7 @@ pub fn join(
                 serde_json::to_vec(&JoinRequest {
                     admin_passkey,
                     ice_ufrag: client_ice_ufrag,
+                    ice_pwd: client_ice_pwd,
                     dhe_public_key: client_dhe_pub_key,
                     hkdf_extra_info,
                 })
@@ -682,7 +685,7 @@ pub mod ios {
         pub member_id: rtc_Bytes<'a>,
     }
 
-    impl<'a> rtc_sfu_GroupMember<'a> {
+    impl rtc_sfu_GroupMember<'_> {
         fn to_group_member(&self) -> GroupMember {
             GroupMember {
                 user_id: self.user_id.to_vec(),

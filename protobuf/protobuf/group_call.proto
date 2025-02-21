@@ -12,6 +12,8 @@ message MRPHeader {
   optional uint64 seqnum = 1;
 
   optional uint64 ack_num = 2;
+
+  optional uint32 num_packets = 3;
 }
 
 message DeviceToDevice {
@@ -89,6 +91,12 @@ message DeviceToSfu {
   optional RaiseHand raise_hand = 7;
 
   optional MRPHeader mrp_header = 8;
+
+  // Used to pass through DeviceToSfu messages that are too large for one frame
+  // Used in conjunction with MrpHeader::content_length where first packet has content_length
+  // and the rest of the packets only have content and MrpHeader specified. Reassembled
+  // on the receiver side
+  optional bytes content = 9;
 }
 
 message SfuToDevice {
@@ -139,4 +147,10 @@ message SfuToDevice {
   optional Removed removed                          = 9;
   optional RaisedHands raised_hands                 = 10;
   optional MRPHeader mrp_header                     = 11;
+
+  // Used to pass through SfuToDevice messages that are too large for one frame
+  // Used in conjunction with MrpHeader::content_length where first packet has content_length
+  // and the rest of the packets only have content and MrpHeader specified. Reassembled
+  // on the receiver side
+  optional bytes content = 12;
 }

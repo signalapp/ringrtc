@@ -11,11 +11,11 @@ on:
         type: boolean
       runner_linux:
         description: "Linux runner:"
-        default: 'ubuntu-20.04-4-cores'
+        default: 'ubuntu-latest'
         required: true
         type: choice
         options:
-          - 'ubuntu-20.04-4-cores'
+          - 'ubuntu-latest'
       runner_linux_arm64:
         description: "ARM64 Linux runner:"
         default: 'ubuntu-22.04-arm64-4-cores'
@@ -49,13 +49,32 @@ jobs:
 
     runs-on: ${{ inputs.runner_linux }}
 
+    container:
+      image: ubuntu:20.04
+
     steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
+      run: |
+        apt-get update && \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        protobuf-compiler libpulse-dev \
+        curl build-essential git
 
-    - run: cargo install dump_syms
+    - name: Install CMake
+      run: |
+        curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-x86_64.tar.gz | tar -xz && \
+        mv cmake-3.22.1-linux-x86_64 $HOME/.cmake && \
+        echo "$HOME/.cmake/bin" >> $GITHUB_PATH
+
+    - name: Install Rust
+      run: |
+        curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH && \
+        echo "CARGO_HOME=$HOME/.cargo" >> $GITHUB_ENV && \
+        . $HOME/.cargo/env && \
+        cargo install dump_syms
 
     - uses: actions/setup-node@v4
       with:

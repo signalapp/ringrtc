@@ -287,7 +287,6 @@ pub fn random_received_offer(_prng: &Prng, age: Duration) -> signaling::Received
         age,
         sender_device_id: 1,
         receiver_device_id: 1,
-        receiver_device_is_primary: true,
         sender_identity_key: Vec::new(),
         receiver_identity_key: Vec::new(),
     }

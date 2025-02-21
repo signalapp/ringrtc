@@ -46,9 +46,7 @@ impl Log for AndroidLogger {
         if self.enabled(record.metadata()) {
             // Skip annoying jni module debug messages
             if record.level() == Level::Debug
-                && record
-                    .module_path()
-                    .map_or(false, |v| v.starts_with("jni::"))
+                && record.module_path().is_some_and(|v| v.starts_with("jni::"))
             {
                 return;
             }
