@@ -133,6 +133,15 @@ then
         WEBRTC_ARGS="${WEBRTC_ARGS} is_debug=false symbol_level=1"
     fi
 
+    # SME requires the ARMv9-A architecture, while most ARM64 devices are ARMv8. This was causing
+    # "undefined symbol: __arm_tpidr2_save" errors on such devices, including GitHub's ubuntu-22.04-arm runner.
+    # https://issuetracker.google.com/issues/359006069
+    # https://chromium.googlesource.com/libyuv/libyuv/+/61354d2671d9b5c73cc964415fe25bc76cea051a/BUILD.gn#273
+    if [ "$(uname)" = "Linux" ] && [ "${TARGET_ARCH}" = "arm64" ]
+    then
+      WEBRTC_ARGS="${WEBRTC_ARGS} libyuv_use_sme=false"
+    fi
+
     (
         cd src/webrtc/src
         gn gen -C "${OUTPUT_DIR}/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
