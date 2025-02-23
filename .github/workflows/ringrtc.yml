@@ -110,6 +110,13 @@ jobs:
       run:
         shell: bash # as opposed to PowerShell
     steps:
+    # https://github.com/actions/partner-runner-images/issues/53
+    - name: Work around XDG_RUNTIME_DIR error on Linux arm64 larger runner
+      if: matrix.os == 'ubuntu-22.04-arm64-4-cores'
+      run: |
+        echo "UID is $UID. Setting XDG_RUNTIME_DIR to /run/user/$UID"
+        sudo systemctl start user@$UID.service
+        echo "XDG_RUNTIME_DIR=/run/user/$UID" >> $GITHUB_ENV
     - name: Install dependencies
       run: |
         if [[ "${{ matrix.os }}" == macos-* ]]; then
