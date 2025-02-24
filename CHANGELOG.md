@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.50.1
+
+- CI: Run Linux arm64 build and tests on native CI runners and fix test logic
+
+- Fix undefined symbol error for Linux Arm64 devices
+
+- Update to webrtc 6834e
+  - Rebuild for Linux Arm64 to disable libyuv_use_sme
+
 ## v2.50.0
 
 - Remove obsolete primary device flag
