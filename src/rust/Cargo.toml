@@ -32,71 +32,71 @@ name = "call_sim-cli"
 required-features = ["call_sim", "injectable_network"]
 
 [dependencies]
-regex-aot = { path = "regex-aot" }
+regex-aot = { workspace = true }
 
-aes               = { version = "0.8.4"  }
-aes-gcm-siv       = { version = "0.11.1", features = ["aes"] }
-anyhow            = { version = "1.0.95"    }
-base64            = { version = "0.22.1" }
-bytes             = { version = "1.10.0"    }
-ctr               = { version = "0.9.2"  }
-hmac              = { version = "0.12.1"   }
-lazy_static       = { version = "1.5.0"    }
-libc              = { version = "0.2.169"    }
-log               = { version = "0.4.25", features = ["std", "max_level_trace", "release_max_level_info"] }
-num_enum          = { version = "0.7.3"  }
-prost             = { version = "0.13.5" }
-rand              = { version = "0.8.5", features = [] }
-regex-automata    = { version = "0.4.9", default-features = false, features = ["dfa", "perf", "std"] }
-hkdf              = { version = "0.12.4"   }
-serde_json        = { version = "1.0.138"    }
-serde             = { version = "1.0.217", features = ["derive"] }
-serde_with        = { version = "3.12.0", features = ["base64", "hex"] }
-hex               = { version = "0.4.3", features = ["serde"] }
-sha2              = { version = "0.10.8"  }
-static_assertions = { version = "1.1.0"  }
-subtle            = { version = "2.6.1"  }
-thiserror         = { version = "1.0.69" }
-x25519-dalek      = { version = "2.0.1", features = ["static_secrets"] }
+aes               = { workspace = true }
+aes-gcm-siv       = { workspace = true, features = ["aes"] }
+anyhow            = { workspace = true }
+base64            = { workspace = true }
+bytes             = { workspace = true }
+ctr               = { workspace = true }
+hmac              = { workspace = true }
+lazy_static       = { workspace = true }
+libc              = { workspace = true }
+log               = { workspace = true, features = ["std", "max_level_trace", "release_max_level_info"] }
+num_enum          = { workspace = true }
+prost             = { workspace = true }
+rand              = { workspace = true, features = [] }
+regex-automata    = { workspace = true, features = ["dfa", "perf", "std"] }
+hkdf              = { workspace = true }
+serde_json        = { workspace = true }
+serde             = { workspace = true, features = ["derive"] }
+serde_with        = { workspace = true, features = ["base64", "hex"] }
+hex               = { workspace = true, features = ["serde"] }
+sha2              = { workspace = true }
+static_assertions = { workspace = true }
+subtle            = { workspace = true }
+thiserror         = { workspace = true }
+x25519-dalek      = { workspace = true, features = ["static_secrets"] }
 
 # Used by call links. Be careful not to pull in more than strictly needed, for both code size and
 # maintenance reasons. In particular, anything involving credentials should be left to
 # libsignal-client.
-bincode = { version = "1.3.3" }
-uuid = { version = "1.13.1", optional = true }
-zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.65.1" }
+bincode = { workspace = true }
+uuid = { workspace = true, optional = true }
+zkgroup = { workspace = true }
 
 # Optional, needed by the "electron" feature
-neon = { version = "1.0.0", optional = true, default-features = false, features = ["napi-6"] }
+neon = { workspace = true, features = ["napi-6"], optional = true }
 
 # Optional, needed to check Android-specific code when not targeting Android
-jni = { version = "0.21.1", optional = true, default-features = false }
+jni = { workspace = true, optional = true }
 
 # Optional, needed by the "http" feature
-ureq = { version = "2.12.1", optional = true }
-rustls = { version = "0.23.23", optional = true, features = ["ring"] }
+ureq = { workspace = true, optional = true }
+rustls = { workspace = true, features = ["ring"], optional = true }
 
 # Optional, needed for call-link-test-client
-rand_chacha = { version = "0.3.1", optional = true }
+rand_chacha = { workspace = true, optional = true }
 
 # Optional, needed by the "call_sim" feature
-bitvec = {version = "1.0.1", optional = true }
-clap = { version = "4.5.29", optional = true, features = ["derive"] }
-fern = { version = "0.6.2", optional = true }
-tokio = { version = "1.43.0", optional = true, features = ["rt-multi-thread"] }
-tonic = { version = "0.12.3", optional = true }
-tower = { version = "0.4.13", optional = true, features = ["timeout"] }
+bitvec = { workspace = true, optional = true }
+clap = { workspace = true, features = ["derive"], optional = true }
+fern = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["rt-multi-thread"], optional = true }
+tonic = { workspace = true, optional = true }
+tower = { workspace = true, features = ["timeout"], optional = true }
 
 # Optional, needed by the "direct" and "call_sim" feature
-chrono = {version = "0.4.39", optional = true }
+chrono = { workspace = true, optional = true }
 
-call_protobuf = { path = "../../protobuf", package = "protobuf"}
-mrp = { path = "../../mrp" }
+call_protobuf = { workspace = true }
+mrp = { workspace = true }
 
 # Optional, needed by "native" feature
-cubeb = {  version = "0.22.0", optional = true }
-cubeb-core = {  version = "0.22.0", optional = true }
-regex = {  version = "1.11.1", optional = true }
+cubeb = { workspace = true, optional = true }
+cubeb-core = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
 # Only needed by native feature on windows
@@ -134,6 +134,6 @@ required-features = ["sim"]
 jni = { version = "0.21.1", default-features = false }
 
 [dev-dependencies]
-uuid = { version = "1.13.1" }
-env_logger = { version = "0.11.6" }
-rand_chacha = { version = "0.3.1" }
+uuid = { workspace = true }
+env_logger = { workspace = true }
+rand_chacha = { workspace = true }

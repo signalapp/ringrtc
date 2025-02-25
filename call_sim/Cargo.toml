@@ -11,25 +11,25 @@ edition = "2021"
 license = "AGPL-3.0-only"
 
 [dependencies]
-anyhow = "1.0.95"
-base64 = "0.22.1"
-bollard = "0.17.1"
-protobuf = { path = "../protobuf", features = ["call_sim"] }
-chrono = "0.4.39"
-clap = { version = "4.5.29", features = ["derive"] }
-futures-util = "0.3.31"
-hex = { version = "0.4.3", features = ["serde"] }
-hmac = "0.12.1"
-hound = "3.5.1"
-itertools = "0.13.0"
-plotly = { version = "0.9.1", features = ["kaleido"] }
-prost = "0.13.5"
-regex = "1.11.1"
-relative-path = "1.9.3"
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.138"
-sha2 = "0.10.8"
-tokio = { version = "1.43.0", features = ["rt-multi-thread", "macros", "time", "fs", "process"] }
-tonic = "0.12.3"
-tower = { version = "0.4.13", features = ["timeout"] }
-uuid = { version = "1.13.1", features = ["v4", "fast-rng"] }
+anyhow = { workspace = true }
+base64 = { workspace = true }
+bollard = { workspace = true }
+protobuf = { workspace = true, features = ["call_sim"] }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+futures-util = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
+hmac = { workspace = true }
+hound = { workspace = true }
+itertools = { workspace = true }
+plotly = { workspace = true, features = ["kaleido"] }
+prost = { workspace = true }
+regex = { workspace = true }
+relative-path = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "fs", "process"] }
+tonic = { workspace = true }
+tower = { workspace = true, features = ["timeout"] }
+uuid = { workspace = true, features = ["v4", "fast-rng"] }
