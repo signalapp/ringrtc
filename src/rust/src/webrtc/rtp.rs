@@ -15,3 +15,21 @@ pub struct Header {
     pub timestamp: Timestamp,
     pub ssrc: Ssrc,
 }
+
+impl Extend<Header> for Header {
+    fn extend<T: IntoIterator<Item = Header>>(&mut self, iter: T) {
+        for header in iter {
+            if header.pt != self.pt {
+                warn!("Tried to extend header with mismatched payload type");
+                continue;
+            }
+            if self.ssrc != header.ssrc {
+                warn!("Tried to extend header with mismatched ssrc");
+                continue;
+            }
+
+            self.timestamp = header.timestamp;
+            self.seqnum = header.seqnum;
+        }
+    }
+}

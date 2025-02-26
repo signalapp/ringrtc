@@ -21,13 +21,18 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sha2::{Digest, Sha256};
 
-use crate::lite::{
-    call_links::{CallLinkResponse, CallLinkRootKey, CallLinkState},
-    http,
+use crate::{
+    lite::{
+        call_links::{CallLinkResponse, CallLinkRootKey, CallLinkState},
+        http,
+    },
+    protobuf::group_call::sfu_to_device::{
+        peek_info::PeekDeviceInfo as ProtoPeekDeviceInfo, PeekInfo as ProtoPeekInfo,
+    },
 };
 
 /// The state that can be observed by "peeking".
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct PeekInfo {
     /// All currently participating devices
     pub devices: Vec<PeekDeviceInfo>,
@@ -75,10 +80,53 @@ impl PeekInfo {
     pub fn device_count_including_pending_devices(&self) -> usize {
         self.devices.len() + self.pending_devices.len()
     }
+
+    pub fn deobfuscate_proto(
+        proto: ProtoPeekInfo,
+        obfuscated_resolver: &ObfuscatedResolver,
+    ) -> Result<Self, String> {
+        let expected_devices = proto.devices.len();
+        let expected_pending_devices = proto.pending_devices.len();
+        let expect_call_link = proto.call_link_state.is_some();
+        let serialized_peek: SerializedPeekInfo = SerializedPeekInfo {
+            era_id: proto.era_id,
+            max_devices: proto.max_devices,
+            devices: proto
+                .devices
+                .into_iter()
+                .flat_map(TryInto::try_into)
+                .collect(),
+            creator: proto.creator,
+            pending_clients: proto
+                .pending_devices
+                .into_iter()
+                .flat_map(TryInto::try_into)
+                .collect(),
+            call_link_state: proto
+                .call_link_state
+                .as_ref()
+                .map(TryInto::try_into)
+                .transpose()
+                .ok()
+                .flatten(),
+        };
+
+        if serialized_peek.devices.len() != expected_devices
+            || serialized_peek.pending_clients.len() != expected_pending_devices
+            || serialized_peek.call_link_state.is_some() != expect_call_link
+        {
+            return Err("Invalid PeekInfo proto".to_string());
+        }
+
+        Ok(serialized_peek.deobfuscate(
+            obfuscated_resolver,
+            obfuscated_resolver.call_link_root_key.as_ref(),
+        ))
+    }
 }
 
 /// The per-device state observed by "peeking".
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PeekDeviceInfo {
     pub demux_id: DemuxId,
     pub user_id: Option<UserId>,
@@ -115,11 +163,11 @@ impl SerializedPeekInfo<'_> {
     fn deobfuscate(
         self,
         member_resolver: &dyn MemberResolver,
-        root_key: Option<CallLinkRootKey>,
+        root_key: Option<&CallLinkRootKey>,
     ) -> PeekInfo {
         let state: Option<CallLinkState> = match (self.call_link_state, root_key) {
             (Some(s), Some(r)) => {
-                let s = CallLinkState::from(s, &r);
+                let s = CallLinkState::from_serialized(s, r);
                 Some(s)
             }
             _ => None,
@@ -155,6 +203,25 @@ impl SerializedPeekDeviceInfo {
                 .opaque_user_id
                 .and_then(|user_id| member_resolver.resolve(&user_id)),
         }
+    }
+}
+
+impl TryFrom<ProtoPeekDeviceInfo> for SerializedPeekDeviceInfo {
+    type Error = String;
+    fn try_from(
+        ProtoPeekDeviceInfo {
+            demux_id,
+            opaque_user_id,
+        }: ProtoPeekDeviceInfo,
+    ) -> Result<Self, Self::Error> {
+        if demux_id.is_none() {
+            return Err("Missing required fields in PeekDeviceInfo".to_string());
+        }
+
+        Ok(Self {
+            opaque_user_id: opaque_user_id.map(OpaqueUserId::from),
+            demux_id: demux_id.unwrap(),
+        })
     }
 }
 
@@ -298,6 +365,55 @@ pub type DemuxId = u32;
 
 pub trait MemberResolver {
     fn resolve(&self, opaque_user_id: &str) -> Option<UserId>;
+}
+
+pub struct ObfuscatedResolver {
+    member_resolver: Arc<dyn MemberResolver + Send + Sync>,
+    call_link_root_key: Option<CallLinkRootKey>,
+}
+
+impl ObfuscatedResolver {
+    pub fn new(
+        member_resolver: Arc<dyn MemberResolver + Send + Sync>,
+        call_link_root_key: Option<CallLinkRootKey>,
+    ) -> Self {
+        Self {
+            member_resolver,
+            call_link_root_key,
+        }
+    }
+
+    pub fn resolve_user_id(&self, opaque_user_id: &str) -> Option<UserId> {
+        self.member_resolver.resolve(opaque_user_id)
+    }
+
+    pub fn resolve_call_link_name(&self, opaque_call_link_name: &str) -> Option<String> {
+        self.call_link_root_key.as_ref().map(|root_key| {
+            base64
+                .decode(opaque_call_link_name)
+                .ok()
+                .and_then(|encrypted_bytes| root_key.decrypt(&encrypted_bytes).ok())
+                .and_then(|name_bytes| String::from_utf8(name_bytes).ok())
+                .unwrap_or_else(|| {
+                    warn!("encrypted name of call failed to decrypt to a valid string");
+                    Default::default()
+                })
+        })
+    }
+
+    pub fn set_member_resolver(&mut self, member_resolver: Arc<dyn MemberResolver + Send + Sync>) {
+        self.member_resolver = member_resolver;
+    }
+
+    pub fn get_call_link_root_key(&self) -> Option<&CallLinkRootKey> {
+        self.call_link_root_key.as_ref()
+    }
+}
+
+impl MemberResolver for ObfuscatedResolver {
+    fn resolve(&self, user_id: &str) -> Option<UserId> {
+        self.resolve_user_id(user_id)
+    }
 }
 
 /// Associates a group member's UserId with their GroupMemberId.
@@ -451,7 +567,7 @@ pub fn peek(
                         deserialized.devices.len(),
                         deserialized.pending_clients.len(),
                     );
-                    Ok(deserialized.deobfuscate(&*member_resolver, call_link_root_key))
+                    Ok(deserialized.deobfuscate(&*member_resolver, call_link_root_key.as_ref()))
                 }
                 Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
                     if let Some(body) = http_response
@@ -877,6 +993,165 @@ mod tests {
         );
     }
 
+    #[test]
+    fn deobfuscate_proto_peek_info() {
+        let mut members = vec![
+            OpaqueUserIdMapping {
+                user_id: vec![1u8; 4],
+                opaque_user_id: "u1".to_string(),
+            },
+            OpaqueUserIdMapping {
+                user_id: vec![2u8; 4],
+                opaque_user_id: "u2".to_string(),
+            },
+            OpaqueUserIdMapping {
+                user_id: vec![3u8; 4],
+                opaque_user_id: "u3".to_string(),
+            },
+            OpaqueUserIdMapping {
+                user_id: vec![4u8; 4],
+                opaque_user_id: "u4".to_string(),
+            },
+        ];
+
+        let mut obfuscated_resolver = ObfuscatedResolver::new(
+            Arc::new(MemberMap {
+                members: members.clone(),
+            }),
+            None,
+        );
+
+        let proto_peek = ProtoPeekInfo {
+            era_id: Some("paleozoic".to_string()),
+            max_devices: Some(16),
+            devices: vec![
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u1".to_string()),
+                    demux_id: Some(0x11111110),
+                },
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u2".to_string()),
+                    demux_id: Some(0x22222220),
+                },
+            ],
+            pending_devices: vec![
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u3".to_string()),
+                    demux_id: Some(0x33333330),
+                },
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u4".to_string()),
+                    demux_id: Some(0x44444440),
+                },
+            ],
+            creator: Some("u1".to_string()),
+            call_link_state: None,
+        };
+
+        let peek_info = PeekInfo::deobfuscate_proto(proto_peek, &obfuscated_resolver);
+        assert_eq!(
+            peek_info,
+            Ok(PeekInfo {
+                devices: vec![
+                    PeekDeviceInfo {
+                        demux_id: 0x11111110,
+                        user_id: Some(vec![1u8; 4]),
+                    },
+                    PeekDeviceInfo {
+                        demux_id: 0x22222220,
+                        user_id: Some(vec![2u8; 4]),
+                    },
+                ],
+                pending_devices: vec![
+                    PeekDeviceInfo {
+                        demux_id: 0x33333330,
+                        user_id: Some(vec![3u8; 4]),
+                    },
+                    PeekDeviceInfo {
+                        demux_id: 0x44444440,
+                        user_id: Some(vec![4u8; 4]),
+                    },
+                ],
+                creator: Some(vec![1u8; 4]),
+                era_id: Some("paleozoic".to_string()),
+                max_devices: Some(16),
+                call_link_state: None,
+            })
+        );
+
+        members.push(OpaqueUserIdMapping {
+            user_id: vec![5u8; 4],
+            opaque_user_id: "u5".to_string(),
+        });
+        obfuscated_resolver.set_member_resolver(Arc::new(MemberMap { members }));
+
+        let proto_peek = ProtoPeekInfo {
+            era_id: Some("paleozoic".to_string()),
+            max_devices: Some(16),
+            devices: vec![
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u1".to_string()),
+                    demux_id: Some(0x11111110),
+                },
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u2".to_string()),
+                    demux_id: Some(0x22222220),
+                },
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u5".to_string()),
+                    demux_id: Some(0x55555550),
+                },
+            ],
+            pending_devices: vec![
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u3".to_string()),
+                    demux_id: Some(0x33333330),
+                },
+                ProtoPeekDeviceInfo {
+                    opaque_user_id: Some("u4".to_string()),
+                    demux_id: Some(0x44444440),
+                },
+            ],
+            creator: Some("u1".to_string()),
+            call_link_state: None,
+        };
+
+        let peek_info = PeekInfo::deobfuscate_proto(proto_peek, &obfuscated_resolver);
+        assert_eq!(
+            peek_info,
+            Ok(PeekInfo {
+                devices: vec![
+                    PeekDeviceInfo {
+                        demux_id: 0x11111110,
+                        user_id: Some(vec![1u8; 4]),
+                    },
+                    PeekDeviceInfo {
+                        demux_id: 0x22222220,
+                        user_id: Some(vec![2u8; 4]),
+                    },
+                    PeekDeviceInfo {
+                        demux_id: 0x55555550,
+                        user_id: Some(vec![5u8; 4]),
+                    },
+                ],
+                pending_devices: vec![
+                    PeekDeviceInfo {
+                        demux_id: 0x33333330,
+                        user_id: Some(vec![3u8; 4]),
+                    },
+                    PeekDeviceInfo {
+                        demux_id: 0x44444440,
+                        user_id: Some(vec![4u8; 4]),
+                    },
+                ],
+                creator: Some(vec![1u8; 4]),
+                era_id: Some("paleozoic".to_string()),
+                max_devices: Some(16),
+                call_link_state: None,
+            })
+        );
+    }
+
     #[allow(clippy::unusual_byte_groupings)]
     #[test]
     fn endpoint_ids_to_user_ids_by_zk_encryption() {
@@ -919,7 +1194,7 @@ mod tests {
                 call_link_state: None,
             };
 
-            let peek_info = peek_response.deobfuscate(&resolver, Some(root_key.clone()));
+            let peek_info = peek_response.deobfuscate(&resolver, Some(&root_key));
             assert_eq!(
                 peek_info
                     .devices

@@ -36,10 +36,13 @@ use crate::core::signaling::ReceivedOffer;
 use crate::core::util::{try_scoped, uuid_to_string};
 use crate::core::{group_call, signaling};
 use crate::error::RingRtcError;
-use crate::lite::call_links::{self, CallLinkRootKey};
 use crate::lite::{
-    http, sfu,
-    sfu::{DemuxId, GroupMember, MembershipProof, PeekInfo, UserId},
+    call_links::{self, CallLinkMemberResolver, CallLinkRootKey},
+    http,
+    sfu::{
+        self, DemuxId, GroupMember, MemberMap, MembershipProof, ObfuscatedResolver, PeekInfo,
+        UserId,
+    },
 };
 use crate::protobuf;
 use crate::webrtc::media::{AudioTrack, MediaStream, VideoSink, VideoTrack};
@@ -2807,12 +2810,15 @@ where
             hkdf_extra_info,
         );
 
+        let obfuscated_resolver = ObfuscatedResolver::new(Arc::new(MemberMap::new(&[])), None);
+
         let client = Client::start(ClientStartParams {
             group_id,
             client_id,
             kind: GroupCallKind::SignalGroup,
             sfu_client: Box::new(sfu_client),
             observer: Box::new(self.clone()),
+            obfuscated_resolver,
             busy: self.busy.clone(),
             self_uuid: self.self_uuid.clone(),
             peer_connection_factory,
@@ -2881,6 +2887,8 @@ where
             client_id
         };
 
+        let member_resolver = Arc::new(CallLinkMemberResolver::from(&root_key));
+
         let mut sfu_client = HttpSfuClient::new(
             Box::new(self.http_client.clone()),
             sfu_url,
@@ -2891,9 +2899,9 @@ where
         sfu_client.set_auth_header(call_links::auth_header_from_auth_credential(
             auth_presentation,
         ));
-        sfu_client.set_member_resolver(Arc::new(call_links::CallLinkMemberResolver::from(
-            &root_key,
-        )));
+        sfu_client.set_member_resolver(member_resolver.clone());
+
+        let obfuscated_resolver = ObfuscatedResolver::new(member_resolver, Some(root_key));
 
         let client = Client::start(ClientStartParams {
             group_id: room_id,
@@ -2901,6 +2909,7 @@ where
             kind: GroupCallKind::CallLink,
             sfu_client: Box::new(sfu_client),
             observer: Box::new(self.clone()),
+            obfuscated_resolver,
             busy: self.busy.clone(),
             self_uuid: self.self_uuid.clone(),
             peer_connection_factory,

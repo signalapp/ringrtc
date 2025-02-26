@@ -17,8 +17,7 @@ use base64::Engine;
 use serde::{self, Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::lite::http;
-
+use crate::{lite::http, protobuf::group_call::sfu_to_device};
 pub use member_resolver::CallLinkMemberResolver;
 pub use root_key::CallLinkRootKey;
 
@@ -31,17 +30,49 @@ pub enum CallLinkRestrictions {
     Unknown,
 }
 
+impl From<sfu_to_device::peek_info::CallLinkRestrictions> for CallLinkRestrictions {
+    fn from(value: sfu_to_device::peek_info::CallLinkRestrictions) -> Self {
+        use sfu_to_device::peek_info::CallLinkRestrictions as ProtoCallLinkRestrictions;
+
+        match value {
+            ProtoCallLinkRestrictions::AdminApproval => Self::AdminApproval,
+            ProtoCallLinkRestrictions::None => Self::None,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct CallLinkResponse<'a> {
     #[serde(rename = "name")]
-    encrypted_name: &'a [u8],
-    restrictions: CallLinkRestrictions,
-    revoked: bool,
+    pub encrypted_name: &'a [u8],
+    pub restrictions: CallLinkRestrictions,
+    pub revoked: bool,
     #[serde(rename = "expiration")]
-    expiration_unix_timestamp: u64,
+    pub expiration_unix_timestamp: u64,
 }
 
-#[derive(Clone, Debug)]
+impl<'a> TryFrom<&'a sfu_to_device::peek_info::CallLinkState> for CallLinkResponse<'a> {
+    type Error = String;
+
+    fn try_from(value: &'a sfu_to_device::peek_info::CallLinkState) -> Result<Self, Self::Error> {
+        if value.encrypted_name.is_none()
+            || value.restrictions.is_none()
+            || value.revoked.is_none()
+            || value.expiration_unix_timestamp.is_none()
+        {
+            return Err("Missing required fields in CallLinkState".to_string());
+        }
+
+        Ok(Self {
+            encrypted_name: value.encrypted_name().as_bytes(),
+            restrictions: value.restrictions().into(),
+            revoked: value.revoked(),
+            expiration_unix_timestamp: value.expiration_unix_timestamp(),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct CallLinkState {
     pub name: String,
     pub restrictions: CallLinkRestrictions,
@@ -50,7 +81,7 @@ pub struct CallLinkState {
 }
 
 impl CallLinkState {
-    pub fn from(deserialized: CallLinkResponse<'_>, root_key: &CallLinkRootKey) -> Self {
+    pub fn from_serialized(deserialized: CallLinkResponse<'_>, root_key: &CallLinkRootKey) -> Self {
         let name = if deserialized.encrypted_name.is_empty() {
             "".to_string()
         } else {
@@ -116,7 +147,7 @@ pub fn read_call_link(
         },
         Box::new(move |http_response| {
             let result = http::parse_json_response::<CallLinkResponse>(http_response.as_ref())
-                .map(|deserialized| CallLinkState::from(deserialized, &root_key));
+                .map(|response| CallLinkState::from_serialized(response, &root_key));
             result_callback(result);
         }),
     )
@@ -199,7 +230,7 @@ pub fn create_call_link(
         },
         Box::new(move |http_response| {
             let result = http::parse_json_response::<CallLinkResponse>(http_response.as_ref())
-                .map(|deserialized| CallLinkState::from(deserialized, &root_key));
+                .map(|response| CallLinkState::from_serialized(response, &root_key));
             result_callback(result);
         }),
     )
@@ -232,7 +263,7 @@ pub fn update_call_link(
         },
         Box::new(move |http_response| {
             let result = http::parse_json_response::<CallLinkResponse>(http_response.as_ref())
-                .map(|deserialized| CallLinkState::from(deserialized, &root_key));
+                .map(|response| CallLinkState::from_serialized(response, &root_key));
             result_callback(result);
         }),
     )

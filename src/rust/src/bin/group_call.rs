@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use ringrtc::core::group_call::{Reaction, SpeechEvent};
+use ringrtc::lite::sfu::{MemberMap, ObfuscatedResolver};
 use ringrtc::{
     common::units::DataRate,
     core::{
@@ -222,12 +223,14 @@ fn main() {
         .unwrap();
     let busy = Arc::new(CallMutex::new(false, "busy"));
     let self_uuid = Arc::new(CallMutex::new(None, "self_uuid"));
+    let obfuscated_resolver = ObfuscatedResolver::new(Arc::new(MemberMap::new(&[])), None);
 
     let client = group_call::Client::start(group_call::ClientStartParams {
         group_id,
         client_id: 1,
         kind: group_call::GroupCallKind::SignalGroup,
         sfu_client,
+        obfuscated_resolver,
         observer: Box::new(observer.clone()),
         busy,
         self_uuid,
