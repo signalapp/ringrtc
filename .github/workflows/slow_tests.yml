@@ -149,3 +149,43 @@ jobs:
             commit_sha: context.sha,
             body: 'Failed Slow Tests: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}>'
           })
+
+  sim_profile:
+    name: Run simulator profiling
+    permissions:
+      # Needed for google-github-actions/auth.
+      id-token: 'write'
+      contents: read
+    runs-on: ubuntu-22.04-4-cores
+    steps:
+      - name: Install dependencies
+        run: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
+      - uses: actions/checkout@v4
+      - name: gcloud auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+          service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+      - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+      - name: Install depot tools
+        run: mkdir -p out && git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git out/depot_tools
+      - name: Build call sim
+        run: make call_sim-cli PLATFORM=unix PATH="${PWD}/out/depot_tools:${PATH}"
+      - name: Get media files
+        run: mkdir media && gcloud storage cp gs://calling-ci-resources.signal.org/* media
+        working-directory: call_sim/
+      - name: Run call sim
+        run: cargo run --release -- profiling_suite -b -c --profile
+        working-directory: call_sim/
+      - name: Remove media files
+        run: find test_results \( -name '*.yuv' -o -name '*.wav' -o -name '*.raw' -o -name '*.mp4' \) -exec rm -f {} \;
+        working-directory: call_sim/
+      - name: Compress
+        run: tar czf test_results.tgz test_results/
+        working-directory: call_sim/
+      - name: Upload Perf artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: call_sim/test_results.tgz
+          retention-days: 30

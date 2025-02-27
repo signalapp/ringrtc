@@ -506,7 +506,7 @@ impl Test {
         let mut audio_test_results = AudioTestResults::default();
 
         if !test_case_config.save_media_files {
-            return Ok(audio_test_results);
+            anyhow::bail!("Skipping artifacts");
         }
 
         // Perform conversions of audio data.

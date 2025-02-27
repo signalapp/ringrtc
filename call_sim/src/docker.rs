@@ -720,7 +720,7 @@ pub async fn start_cli(
         .map(String::from),
     );
     if let Some(audio_output_file) = media_io.audio_output_file {
-        args.push(format!("--output_file=/report/{}", audio_output_file));
+        args.push(format!("--output-file=/report/{}", audio_output_file));
     }
 
     args.push("--stats-interval-secs".to_string());
