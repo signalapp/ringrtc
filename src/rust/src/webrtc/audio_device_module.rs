@@ -74,8 +74,6 @@ pub struct AudioDeviceModule {
     // Note that the streams must not outlive the cubeb_ctx.
     output_stream: Option<Stream<Frame>>,
     input_stream: Option<Stream<Frame>>,
-    playing: bool,
-    recording: bool,
     // Note that the caches must not outlive the cubeb_ctx.
     input_device_cache: Option<DeviceCollectionWrapper>,
     output_device_cache: Option<DeviceCollectionWrapper>,
@@ -84,6 +82,16 @@ pub struct AudioDeviceModule {
     // and never free them.
     pending_input_device_refresh: &'static AtomicBool,
     pending_output_device_refresh: &'static AtomicBool,
+    // Tracker flags to indicate whether we have **attempted** init_playout and
+    // friends. Cleared on stop_playout and stop_recording.
+    // We use these because some code, e.g. SetAudioRecordingDevice in
+    // ringrtc/rffi/src/peer_connection_factory.cc, assumes that we should
+    // only restart playout if playout was initialized **and** started.
+    // We thus use these flags to answer questions like, "recording_is_initialized".
+    attempted_playout_init: bool,
+    attempted_recording_init: bool,
+    attempted_playout_start: bool,
+    attempted_recording_start: bool,
 }
 
 impl Default for AudioDeviceModule {
@@ -98,14 +106,16 @@ impl Default for AudioDeviceModule {
             recording_device: None,
             output_stream: None,
             input_stream: None,
-            playing: false,
-            recording: false,
             input_device_cache: None,
             output_device_cache: None,
             // Start these both as true to request a cache refresh, and leak them for reasons
             // mentioned at the struct declaration site.
             pending_input_device_refresh: Box::leak(Box::new(AtomicBool::new(true))),
             pending_output_device_refresh: Box::leak(Box::new(AtomicBool::new(true))),
+            attempted_playout_init: false,
+            attempted_recording_init: false,
+            attempted_playout_start: false,
+            attempted_recording_start: false,
         }
     }
 }
@@ -356,10 +366,10 @@ impl AudioDeviceModule {
     }
 
     pub fn terminate(&mut self) -> i32 {
-        if self.recording {
+        if self.recording() {
             self.stop_recording();
         }
-        if self.playing {
+        if self.playing() {
             self.stop_playout();
         }
         // Cause these to Drop.
@@ -732,17 +742,18 @@ impl AudioDeviceModule {
             error!("Tried to init playout without initializing ADM");
             return -1;
         }
+        self.attempted_playout_init = true;
         let out_device = if let Some(device) = self.playout_device {
             device
         } else {
             error!("Tried to init playout without a playout device");
-            return -1;
+            return 0;
         };
         let ctx = if let Some(c) = &self.cubeb_ctx {
             c
         } else {
             error!("Tried to init playout without a ctx");
-            return -1;
+            return 0;
         };
         let params = cubeb::StreamParamsBuilder::new()
             .format(STREAM_FORMAT)
@@ -840,13 +851,13 @@ impl AudioDeviceModule {
             }
             Err(e) => {
                 error!("Couldn't initialize output stream: {}", e);
-                -1
+                0
             }
         }
     }
 
     pub fn playout_is_initialized(&self) -> bool {
-        self.output_stream.is_some()
+        self.attempted_playout_init
     }
 
     pub fn recording_is_available(&self, available_out: webrtc::ptr::Borrowed<bool>) -> i32 {
@@ -865,17 +876,18 @@ impl AudioDeviceModule {
             error!("Tried to init recording without initializing ADM");
             return -1;
         }
+        self.attempted_recording_init = true;
         let recording_device = if let Some(device) = self.recording_device {
             device
         } else {
             error!("Tried to init recording without a recording device");
-            return -1;
+            return 0;
         };
         let ctx = if let Some(c) = &self.cubeb_ctx {
             c
         } else {
             error!("Tried to init recording without a ctx");
-            return -1;
+            return 0;
         };
         let builder = cubeb::StreamParamsBuilder::new()
             .format(STREAM_FORMAT)
@@ -954,78 +966,80 @@ impl AudioDeviceModule {
             }
             Err(e) => {
                 error!("Couldn't initialize input stream: {}", e);
-                -1
+                0
             }
         }
     }
 
     pub fn recording_is_initialized(&self) -> bool {
-        self.input_stream.is_some()
+        self.attempted_recording_init
     }
 
     // Audio transport control
     pub fn start_playout(&mut self) -> i32 {
+        self.attempted_playout_start = true;
         if let Some(output_stream) = &self.output_stream {
             if let Err(e) = output_stream.start() {
                 error!("Failed to start playout: {}", e);
-                return -1;
+                return 0;
             }
-            self.playing = true;
             0
         } else {
             error!("Cannot start playout without an output stream -- did you forget init_playout?");
-            -1
+            0
         }
     }
 
     pub fn stop_playout(&mut self) -> i32 {
+        self.attempted_playout_init = false;
+        self.attempted_playout_start = false;
         if let Some(output_stream) = &self.output_stream {
             if let Err(e) = output_stream.stop() {
                 error!("Failed to stop playout: {}", e);
-                return -1;
+                return 0;
             }
             // Drop the stream so that it isn't reused on future calls.
             self.output_stream = None;
-            self.playing = false;
         }
         0
     }
 
     pub fn playing(&self) -> bool {
-        self.playing
+        self.attempted_playout_start
     }
 
     pub fn start_recording(&mut self) -> i32 {
+        self.attempted_recording_start = true;
         if let Some(input_stream) = &self.input_stream {
             if let Err(e) = input_stream.start() {
                 error!("Failed to start recording: {}", e);
-                return -1;
+                return 0;
             }
-            self.recording = true;
             0
         } else {
             error!(
                 "Cannot start recording without an input stream -- did you forget init_recording?"
             );
-            -1
+            0
         }
     }
 
     pub fn stop_recording(&mut self) -> i32 {
+        self.attempted_recording_init = false;
+        self.attempted_recording_start = false;
         if let Some(input_stream) = &self.input_stream {
             if let Err(e) = input_stream.stop() {
                 error!("Failed to stop recording: {}", e);
-                return -1;
+                return 0;
             }
             // Drop the stream so that it isn't reused on future calls.
             self.input_stream = None;
-            self.recording = false;
         }
         0
     }
 
     pub fn recording(&self) -> bool {
-        self.recording
+        self.attempted_recording_start
     }
 
     // Audio mixer initialization
