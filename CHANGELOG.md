@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.50.2
+
+- Group Calls: Add receiving PeekInfo over RTP in SfuToDevice
+
+- Desktop: New Audio Device Module improvements
+  - Improve handling of failure to initialize streams
+
+- Update to webrtc 6834f
+  - Rebuild since tag 6834e was not pointing to the latest commit
+
+- CI: Set up runner for call sim profiling
+
 ## v2.50.1
 
 - CI: Run Linux arm64 build and tests on native CI runners and fix test logic
