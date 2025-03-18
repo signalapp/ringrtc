@@ -8,23 +8,23 @@
 //! Native JNI interfaces, called by
 //! org.signal.ringrtc.CallManager objects.
 
-use jni::objects::{JByteArray, JClass, JObject, JString};
-use jni::strings::JavaStr;
-use jni::sys::{jboolean, jint, jlong, jobject};
-use jni::JNIEnv;
+use std::{borrow::Cow, time::Duration};
 
-use crate::android::android_platform::AndroidPlatform;
-use crate::android::call_manager;
-use crate::android::call_manager::AndroidCallManager;
-use crate::android::error;
-use crate::common::{CallConfig, CallMediaType, DataMode, DeviceId};
-use crate::core::connection::Connection;
-use crate::core::util::try_scoped;
-use crate::core::{group_call, signaling};
-use crate::webrtc;
+use jni::{
+    objects::{JByteArray, JClass, JObject, JString},
+    strings::JavaStr,
+    sys::{jboolean, jint, jlong, jobject},
+    JNIEnv,
+};
 
-use std::borrow::Cow;
-use std::time::Duration;
+use crate::{
+    android::{
+        android_platform::AndroidPlatform, call_manager, call_manager::AndroidCallManager, error,
+    },
+    common::{CallConfig, CallMediaType, DataMode, DeviceId},
+    core::{connection::Connection, group_call, signaling, util::try_scoped},
+    webrtc,
+};
 
 #[no_mangle]
 #[allow(non_snake_case)]

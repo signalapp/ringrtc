@@ -3,17 +3,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use crate::webrtc;
-use crate::webrtc::ffi::media::{RffiAudioTrack, RffiVideoSource, RffiVideoTrack};
-use crate::webrtc::ffi::peer_connection::RffiPeerConnection;
-use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
-#[cfg(feature = "injectable_network")]
-use crate::webrtc::injectable_network::RffiInjectableNetwork;
-use crate::webrtc::peer_connection_factory::{
-    RffiAudioConfig, RffiAudioJitterBufferConfig, RffiIceServers, RffiPeerConnectionKind,
-};
 #[cfg(feature = "native")]
 use std::os::raw::c_char;
+
+#[cfg(feature = "injectable_network")]
+use crate::webrtc::injectable_network::RffiInjectableNetwork;
+use crate::{
+    webrtc,
+    webrtc::{
+        ffi::{
+            media::{RffiAudioTrack, RffiVideoSource, RffiVideoTrack},
+            peer_connection::RffiPeerConnection,
+            peer_connection_observer::RffiPeerConnectionObserver,
+        },
+        peer_connection_factory::{
+            RffiAudioConfig, RffiAudioJitterBufferConfig, RffiIceServers, RffiPeerConnectionKind,
+        },
+    },
+};
 
 /// Incomplete type for C++ PeerConnectionFactoryOwner.
 #[repr(C)]

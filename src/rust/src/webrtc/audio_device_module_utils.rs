@@ -6,13 +6,15 @@
 //! Utility functions for audio_device_module.rs
 //! Nothing in here should depend on webrtc directly.
 
-use crate::webrtc;
+use std::ffi::{c_uchar, c_void, CString};
+
 use anyhow::anyhow;
 use cubeb::{DeviceCollection, DeviceState};
 use cubeb_core::DevicePref;
 #[cfg(target_os = "linux")]
 use cubeb_core::DeviceType;
-use std::ffi::{c_uchar, c_void, CString};
+
+use crate::webrtc;
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct MinimalDeviceInfo {

@@ -3,19 +3,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use crate::webrtc;
-use crate::webrtc::peer_connection_factory::{
-    RffiAudioConfig, RffiAudioJitterBufferConfig, RffiIceServers, RffiPeerConnectionKind,
+use std::{ffi::CString, os::raw::c_char, ptr::copy_nonoverlapping};
+
+use crate::{
+    webrtc,
+    webrtc::{
+        peer_connection_factory::{
+            RffiAudioConfig, RffiAudioJitterBufferConfig, RffiIceServers, RffiPeerConnectionKind,
+        },
+        sim::{
+            media::{
+                RffiAudioTrack, RffiVideoSource, RffiVideoTrack, FAKE_AUDIO_TRACK,
+                FAKE_VIDEO_SOURCE, FAKE_VIDEO_TRACK,
+            },
+            peer_connection::RffiPeerConnection,
+            peer_connection_observer::RffiPeerConnectionObserver,
+        },
+    },
 };
-use crate::webrtc::sim::media::{
-    RffiAudioTrack, RffiVideoSource, RffiVideoTrack, FAKE_AUDIO_TRACK, FAKE_VIDEO_SOURCE,
-    FAKE_VIDEO_TRACK,
-};
-use crate::webrtc::sim::peer_connection::RffiPeerConnection;
-use crate::webrtc::sim::peer_connection_observer::RffiPeerConnectionObserver;
-use std::ffi::CString;
-use std::os::raw::c_char;
-use std::ptr::copy_nonoverlapping;
 
 pub type RffiPeerConnectionFactoryOwner = u32;
 

@@ -5,23 +5,30 @@
 
 //! WebRTC Simulation Peer Connection Interface
 
-use std::net::SocketAddr;
-use std::os::raw::c_char;
-use std::sync::{Arc, Mutex};
+use std::{
+    net::SocketAddr,
+    os::raw::c_char,
+    sync::{Arc, Mutex},
+};
 
 use prost::Message;
 
-use crate::core::platform::PlatformItem;
-use crate::webrtc;
-use crate::webrtc::media::RffiAudioEncoderConfig;
-use crate::webrtc::network::RffiIpPort;
-use crate::webrtc::peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel};
-use crate::webrtc::rtp;
-use crate::webrtc::sdp_observer::{
-    RffiCreateSessionDescriptionObserver, RffiSessionDescription, RffiSetSessionDescriptionObserver,
+use crate::{
+    core::platform::PlatformItem,
+    webrtc,
+    webrtc::{
+        media::RffiAudioEncoderConfig,
+        network::RffiIpPort,
+        peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel},
+        rtp,
+        sdp_observer::{
+            RffiCreateSessionDescriptionObserver, RffiSessionDescription,
+            RffiSetSessionDescriptionObserver,
+        },
+        sim::ice_gatherer::{RffiIceGatherer, FAKE_ICE_GATHERER},
+        stats_observer::RffiStatsObserver,
+    },
 };
-use crate::webrtc::sim::ice_gatherer::{RffiIceGatherer, FAKE_ICE_GATHERER};
-use crate::webrtc::stats_observer::RffiStatsObserver;
 
 /// Simulation type for PeerConnection.
 #[derive(Clone)]

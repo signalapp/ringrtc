@@ -10,23 +10,28 @@ mod docker;
 mod report;
 mod test;
 
+use std::{
+    env,
+    fs::File,
+    path::Path,
+    time::{Duration, SystemTime},
+};
+
 use anyhow::Result;
 use clap::Parser;
 use common::ClientProfile;
 use hex::FromHex;
 use itertools::{iproduct, Itertools};
-use std::env;
-use std::fs::File;
-use std::path::Path;
-use std::time::{Duration, SystemTime};
 
-use crate::common::{
-    AudioAnalysisMode, AudioConfig, CallConfig, CallProfile::DeterministicLoss, ChartDimension,
-    GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile, SummaryReportColumns,
-    TestCaseConfig, VideoConfig,
+use crate::{
+    common::{
+        AudioAnalysisMode, AudioConfig, CallConfig, CallProfile::DeterministicLoss, ChartDimension,
+        GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile, SummaryReportColumns,
+        TestCaseConfig, VideoConfig,
+    },
+    docker::{build_images, clean_network, clean_up},
+    test::{CallTypeConfig, Test},
 };
-use crate::docker::{build_images, clean_network, clean_up};
-use crate::test::{CallTypeConfig, Test};
 
 fn compile_time_root_directory() -> &'static std::ffi::OsStr {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -7,16 +7,21 @@
 
 use std::os::raw::c_char;
 
-use crate::webrtc;
-use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
-use crate::webrtc::media::RffiAudioEncoderConfig;
-use crate::webrtc::network::{RffiIp, RffiIpPort};
-use crate::webrtc::peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel};
-use crate::webrtc::rtp;
-use crate::webrtc::sdp_observer::{
-    RffiCreateSessionDescriptionObserver, RffiSessionDescription, RffiSetSessionDescriptionObserver,
+use crate::{
+    webrtc,
+    webrtc::{
+        ffi::ice_gatherer::RffiIceGatherer,
+        media::RffiAudioEncoderConfig,
+        network::{RffiIp, RffiIpPort},
+        peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel},
+        rtp,
+        sdp_observer::{
+            RffiCreateSessionDescriptionObserver, RffiSessionDescription,
+            RffiSetSessionDescriptionObserver,
+        },
+        stats_observer::RffiStatsObserver,
+    },
 };
-use crate::webrtc::stats_observer::RffiStatsObserver;
 
 /// Incomplete type for C++ PeerConnection.
 #[repr(C)]

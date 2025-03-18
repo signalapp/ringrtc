@@ -5,15 +5,19 @@
 
 //! webrtc::jni::JavaMediaStream Interface.
 
-use jni::objects::{GlobalRef, JObject};
-use jni::sys::jobject;
-use jni::JNIEnv;
+use jni::{
+    objects::{GlobalRef, JObject},
+    sys::jobject,
+    JNIEnv,
+};
 
-use crate::android::error::AndroidError;
-use crate::common::Result;
-use crate::webrtc::{
-    self,
-    media::{MediaStream, RffiMediaStream},
+use crate::{
+    android::error::AndroidError,
+    common::Result,
+    webrtc::{
+        self,
+        media::{MediaStream, RffiMediaStream},
+    },
 };
 
 /// Incomplete type for C++ JavaMediaStream.

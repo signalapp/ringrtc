@@ -43,24 +43,28 @@
 //! - CallTimeout
 //! - InternalError
 
-use std::fmt;
-use std::sync::{mpsc, Arc, Condvar, Mutex};
-use std::thread;
-use std::time::Duration;
-
-use crate::error::RingRtcError;
-
-use crate::common::actor::{Actor, Stopper};
-use crate::common::{
-    ApplicationEvent, CallConfig, CallDirection, CallState, ConnectionState, DeviceId, Result,
+use std::{
+    fmt,
+    sync::{mpsc, Arc, Condvar, Mutex},
+    thread,
+    time::Duration,
 };
-use crate::core::call::{Call, EventStream};
-use crate::core::connection::ConnectionObserverEvent;
-use crate::core::platform::Platform;
-use crate::core::signaling;
-use crate::core::util::try_scoped;
-use crate::webrtc::peer_connection::AudioLevel;
-use crate::webrtc::peer_connection_observer::NetworkRoute;
+
+use crate::{
+    common::{
+        actor::{Actor, Stopper},
+        ApplicationEvent, CallConfig, CallDirection, CallState, ConnectionState, DeviceId, Result,
+    },
+    core::{
+        call::{Call, EventStream},
+        connection::ConnectionObserverEvent,
+        platform::Platform,
+        signaling,
+        util::try_scoped,
+    },
+    error::RingRtcError,
+    webrtc::{peer_connection::AudioLevel, peer_connection_observer::NetworkRoute},
+};
 
 /// The different types of CallEvents.
 pub enum CallEvent {

@@ -6,23 +6,29 @@
 //! Platform trait describing the interface an operating system platform must
 /// implement for calling.
 use std::collections::HashSet;
-use std::fmt;
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
-use crate::common::{
-    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+use crate::{
+    common::{
+        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+    },
+    core::{
+        call::Call,
+        connection::{Connection, ConnectionType},
+        group_call,
+        group_call::Reaction,
+        signaling,
+    },
+    lite::{
+        sfu,
+        sfu::{DemuxId, PeekInfo, UserId},
+    },
+    webrtc::{
+        media::{MediaStream, VideoTrack},
+        peer_connection::{AudioLevel, ReceivedAudioLevel},
+        peer_connection_observer::NetworkRoute,
+    },
 };
-use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionType};
-use crate::core::group_call::Reaction;
-use crate::core::{group_call, signaling};
-use crate::lite::{
-    sfu,
-    sfu::{DemuxId, PeekInfo, UserId},
-};
-use crate::webrtc::media::{MediaStream, VideoTrack};
-use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
-use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// A trait encompassing the traits the platform associated types must
 /// implement.

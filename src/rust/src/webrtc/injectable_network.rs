@@ -3,14 +3,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::ffi::CString;
-use std::fmt::Debug;
-use std::net::{IpAddr, SocketAddr};
-use std::os::raw::c_char;
+use std::{
+    ffi::CString,
+    fmt::Debug,
+    net::{IpAddr, SocketAddr},
+    os::raw::c_char,
+};
 
-use crate::webrtc;
-use crate::webrtc::network::{NetworkInterfaceType, RffiIp, RffiIpPort};
-use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
+use crate::{
+    webrtc,
+    webrtc::{
+        network::{NetworkInterfaceType, RffiIp, RffiIpPort},
+        peer_connection_factory::RffiPeerConnectionFactoryOwner,
+    },
+};
 
 #[derive(Debug)]
 pub struct Packet {

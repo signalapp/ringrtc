@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::{collections::HashMap, mem::size_of};
+
 use aes::Aes256;
 use ctr::cipher::{KeyIvInit, StreamCipher};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac as _};
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
-use std::collections::HashMap;
-use std::mem::size_of;
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
@@ -361,8 +361,9 @@ impl Context {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rand::prelude::*;
+
+    use super::*;
 
     #[test]
     fn test_sender_state() {

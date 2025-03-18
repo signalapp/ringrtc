@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::{process::Stdio, time::Duration};
+
 use anyhow::Result;
 use bollard::{
     container::{MemoryStatsStats, Stats, StatsOptions},
@@ -11,11 +13,11 @@ use bollard::{
 use chrono::DateTime;
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
-use std::process::Stdio;
-use std::time::Duration;
-use tokio::fs::OpenOptions;
-use tokio::io::{stdout, AsyncWriteExt};
-use tokio::process::Command;
+use tokio::{
+    fs::OpenOptions,
+    io::{stdout, AsyncWriteExt},
+    process::Command,
+};
 
 use crate::{
     common::{

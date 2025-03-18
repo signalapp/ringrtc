@@ -5,23 +5,17 @@
 
 //! iOS Call Manager Interface
 
-use std::convert::TryFrom;
-use std::ffi::c_void;
-use std::time::Duration;
-use std::{fmt, ptr, slice};
+use std::{convert::TryFrom, ffi::c_void, fmt, ptr, slice, time::Duration};
 
 use libc::size_t;
 
-use crate::ios::call_manager;
-use crate::ios::call_manager::IosCallManager;
-
-use crate::common::{CallConfig, CallMediaType, DataMode, DeviceId};
-use crate::core::group_call;
-use crate::core::signaling;
-use crate::lite::call_links::CallLinkRootKey;
-use crate::lite::{http, sfu, sfu::DemuxId};
-use crate::webrtc::peer_connection::AudioLevel;
-use crate::webrtc::{self, media, peer_connection_factory as pcf};
+use crate::{
+    common::{CallConfig, CallMediaType, DataMode, DeviceId},
+    core::{group_call, signaling},
+    ios::{call_manager, call_manager::IosCallManager},
+    lite::{call_links::CallLinkRootKey, http, sfu, sfu::DemuxId},
+    webrtc::{self, media, peer_connection::AudioLevel, peer_connection_factory as pcf},
+};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]

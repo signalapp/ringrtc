@@ -3,24 +3,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use ringrtc::lite::http::sim as sim_http;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 
 use log::info;
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
-
-use ringrtc::core::group_call::{Reaction, SpeechEvent};
-use ringrtc::lite::sfu::{MemberMap, ObfuscatedResolver};
 use ringrtc::{
     common::units::DataRate,
     core::{
         call_mutex::CallMutex,
         group_call::{
-            self, ClientId, ConnectionState, EndReason, HttpSfuClient, JoinState,
-            RemoteDeviceState, RemoteDevicesChangedReason,
+            self, ClientId, ConnectionState, EndReason, HttpSfuClient, JoinState, Reaction,
+            RemoteDeviceState, RemoteDevicesChangedReason, SpeechEvent,
         },
     },
-    lite::sfu::{DemuxId, PeekInfo, UserId},
+    lite::{
+        http::sim as sim_http,
+        sfu::{DemuxId, MemberMap, ObfuscatedResolver, PeekInfo, UserId},
+    },
     protobuf,
     webrtc::{
         media::{VideoFrame, VideoFrameMetadata, VideoPixelFormat, VideoSink, VideoTrack},

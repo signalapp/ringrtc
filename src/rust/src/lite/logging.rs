@@ -7,8 +7,9 @@
 
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
-    use crate::lite::ffi::ios::{rtc_OptionalU32, rtc_String, FromOrDefault};
     use std::ffi::c_void;
+
+    use crate::lite::ffi::ios::{rtc_OptionalU32, rtc_String, FromOrDefault};
 
     #[repr(C)]
     pub struct rtc_log_Record<'a> {

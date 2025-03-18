@@ -14,8 +14,7 @@ use std::{
     sync::Arc,
 };
 
-use base64::engine::general_purpose::STANDARD as base64;
-use base64::Engine;
+use base64::{engine::general_purpose::STANDARD as base64, Engine};
 use hex::ToHex;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -671,13 +670,14 @@ pub mod ios {
         sync::Arc,
     };
 
+    use libc::{c_void, size_t};
+
     use crate::lite::{
         call_links::{self, CallLinkMemberResolver, CallLinkRootKey},
         ffi::ios::{rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32, rtc_String, FromOrDefault},
         http,
         sfu::{self, Delegate, GroupMember, PeekInfo, PeekResult},
     };
-    use libc::{c_void, size_t};
 
     /// # Safety
     ///
@@ -900,10 +900,10 @@ pub mod ios {
 
 #[cfg(test)]
 mod tests {
-    use crate::lite::call_links::{CallLinkMemberResolver, CallLinkRootKey};
     use uuid::Uuid;
 
     use super::*;
+    use crate::lite::call_links::{CallLinkMemberResolver, CallLinkRootKey};
 
     #[test]
     fn endpoint_ids_to_user_ids_by_map() {

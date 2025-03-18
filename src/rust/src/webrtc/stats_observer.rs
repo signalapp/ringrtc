@@ -13,17 +13,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{common::CallId, webrtc};
-
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::stats_observer as stats;
 #[cfg(not(feature = "sim"))]
 pub use crate::webrtc::ffi::stats_observer::RffiStatsObserver;
-
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::stats_observer as stats;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::stats_observer::RffiStatsObserver;
+use crate::{common::CallId, webrtc};
 
 /// How often to clean up old stats.
 const CLEAN_UP_STATS_TICKS: u32 = 60;

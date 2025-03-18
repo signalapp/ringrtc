@@ -14,8 +14,10 @@ use std::{
 use bytes::{Bytes, BytesMut};
 use prost::Message as _;
 
-use crate::common::{CallMediaType, DeviceId, Result};
-use crate::protobuf;
+use crate::{
+    common::{CallMediaType, DeviceId, Result},
+    protobuf,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {

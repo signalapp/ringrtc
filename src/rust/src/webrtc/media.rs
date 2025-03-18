@@ -5,17 +5,14 @@
 
 use std::slice;
 
-use crate::{lite::sfu::DemuxId, webrtc};
-
-pub use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
+pub use media::{RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer, RffiVideoTrack};
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::media;
-
+pub use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::media;
-
-pub use media::{RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer, RffiVideoTrack};
+use crate::{lite::sfu::DemuxId, webrtc};
 
 /// Rust wrapper around WebRTC C++ MediaStream object.
 #[derive(Clone, Debug)]

@@ -5,31 +5,40 @@
 
 //! A peer-to-peer call connection interface.
 
-use std::collections::{hash_map, HashMap};
-use std::fmt;
-use std::sync::{
-    atomic::AtomicBool, atomic::Ordering, mpsc::SyncSender, Arc, Condvar, Mutex, MutexGuard,
+use std::{
+    collections::{hash_map, HashMap},
+    fmt,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::SyncSender,
+        Arc, Condvar, Mutex, MutexGuard,
+    },
+    thread,
+    time::Duration,
 };
-use std::thread;
-use std::time::Duration;
 
 use x25519_dalek::StaticSecret;
 
-use crate::common::actor::{Actor, Stopper};
-use crate::common::{
-    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DeviceId, Result,
+use crate::{
+    common::{
+        actor::{Actor, Stopper},
+        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DeviceId,
+        Result,
+    },
+    core::{
+        call_fsm::{CallEvent, CallStateMachine},
+        call_manager::CallManager,
+        call_mutex::CallMutex,
+        connection::{Connection, ConnectionObserverEvent, ConnectionType},
+        platform::Platform,
+        signaling,
+    },
+    error::RingRtcError,
+    webrtc::{
+        ice_gatherer::IceGatherer, media::MediaStream, peer_connection::AudioLevel,
+        peer_connection_observer::NetworkRoute,
+    },
 };
-use crate::core::call_fsm::{CallEvent, CallStateMachine};
-use crate::core::call_manager::CallManager;
-use crate::core::call_mutex::CallMutex;
-use crate::core::connection::{Connection, ConnectionObserverEvent, ConnectionType};
-use crate::core::platform::Platform;
-use crate::core::signaling;
-use crate::error::RingRtcError;
-use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::MediaStream;
-use crate::webrtc::peer_connection::AudioLevel;
-use crate::webrtc::peer_connection_observer::NetworkRoute;
 
 /// Container for incoming call data, retained briefly while an
 /// underlying Connection object is created and initialized.

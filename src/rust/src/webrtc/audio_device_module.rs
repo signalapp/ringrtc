@@ -3,23 +3,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use crate::webrtc;
-use crate::webrtc::audio_device_module_utils::{copy_and_truncate_string, DeviceCollectionWrapper};
-use crate::webrtc::ffi::audio_device_module::RffiAudioTransport;
+use std::{
+    collections::{HashMap, VecDeque},
+    ffi::{c_uchar, c_void, CStr},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
+    },
+    time::{Duration, Instant},
+};
+
 use anyhow::{anyhow, bail};
 use cubeb::{Context, DeviceId, DeviceType, MonoFrame, Stream, StreamPrefs};
 use cubeb_core::{log_enabled, set_logging, LogLevel};
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::collections::{HashMap, VecDeque};
-use std::ffi::{c_uchar, c_void, CStr};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex, RwLock,
-};
-use std::time::{Duration, Instant};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Com;
+
+use crate::{
+    webrtc,
+    webrtc::{
+        audio_device_module_utils::{copy_and_truncate_string, DeviceCollectionWrapper},
+        ffi::audio_device_module::RffiAudioTransport,
+    },
+};
 
 // Stays in sync with AudioLayer in webrtc
 #[repr(C)]

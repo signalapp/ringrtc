@@ -5,10 +5,14 @@
 
 //! WebRTC FFI ADM interface.
 
-use crate::webrtc;
-use crate::webrtc::audio_device_module::{AudioDeviceModule, AudioLayer, WindowsDeviceType};
-use libc::size_t;
 use std::ffi::{c_uchar, c_void};
+
+use libc::size_t;
+
+use crate::{
+    webrtc,
+    webrtc::audio_device_module::{AudioDeviceModule, AudioLayer, WindowsDeviceType},
+};
 
 /// Wrapper type for C++ AudioTransport.
 #[derive(Copy, Clone)]

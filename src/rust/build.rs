@@ -4,9 +4,11 @@
 //
 
 use core::panic;
-use std::env::{self, VarError};
-use std::fs;
-use std::process::Command;
+use std::{
+    env::{self, VarError},
+    fs,
+    process::Command,
+};
 
 // corresponds to PROJECT_DIR in bin/env.sh
 fn project_dir() -> String {

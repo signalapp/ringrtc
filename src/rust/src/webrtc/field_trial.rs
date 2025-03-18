@@ -7,12 +7,11 @@ use std::ffi::CString;
 
 use libc::strdup;
 
-use crate::common::Result;
-use crate::webrtc;
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::field_trial;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::field_trial;
+use crate::{common::Result, webrtc};
 
 pub fn init(field_trials_string: &str) -> Result<()> {
     let c_str = CString::new(field_trials_string)?;

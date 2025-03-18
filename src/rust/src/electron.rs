@@ -3,47 +3,55 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use lazy_static::lazy_static;
-use neon::types::JsBigInt;
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
-use crate::common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result};
-use crate::core::call_manager::CallManager;
-use crate::core::group_call;
-use crate::core::group_call::{GroupId, SignalingMessageUrgency};
-use crate::core::signaling;
-use crate::core::util::minmax;
-use crate::lite::sfu;
-use crate::lite::{
-    call_links::{
-        self, CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkState,
-        CallLinkUpdateRequest, Empty,
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    sync::{
+        atomic::AtomicBool,
+        mpsc::{channel, Receiver, Sender},
+        Arc, Mutex,
     },
-    http,
-    sfu::{DemuxId, GroupMember, PeekInfo, UserId},
+    time::Duration,
 };
-use crate::native::{
-    CallState, CallStateHandler, EndReason, GroupUpdate, GroupUpdateHandler, NativeCallContext,
-    NativePlatform, PeerId, SignalingSender,
-};
-use crate::webrtc::field_trial;
-use crate::webrtc::media::{
-    AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack,
-};
-use crate::webrtc::peer_connection::AudioLevel;
-use crate::webrtc::peer_connection_factory::{
-    self as pcf, AudioDevice, IceServer, PeerConnectionFactory, RffiAudioDeviceModuleType,
-};
-use crate::webrtc::peer_connection_observer::NetworkRoute;
-use neon::types::buffer::TypedArray;
 
-use neon::prelude::*;
+use lazy_static::lazy_static;
+use neon::{
+    prelude::*,
+    types::{buffer::TypedArray, JsBigInt},
+};
+
+use crate::{
+    common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result},
+    core::{
+        call_manager::CallManager,
+        group_call,
+        group_call::{GroupId, SignalingMessageUrgency},
+        signaling,
+        util::minmax,
+    },
+    lite::{
+        call_links::{
+            self, CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkState,
+            CallLinkUpdateRequest, Empty,
+        },
+        http, sfu,
+        sfu::{DemuxId, GroupMember, PeekInfo, UserId},
+    },
+    native::{
+        CallState, CallStateHandler, EndReason, GroupUpdate, GroupUpdateHandler, NativeCallContext,
+        NativePlatform, PeerId, SignalingSender,
+    },
+    webrtc::{
+        field_trial,
+        media::{AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack},
+        peer_connection::AudioLevel,
+        peer_connection_factory::{
+            self as pcf, AudioDevice, IceServer, PeerConnectionFactory, RffiAudioDeviceModuleType,
+        },
+        peer_connection_observer::NetworkRoute,
+    },
+};
 
 const ENABLE_LOGGING: bool = true;
 

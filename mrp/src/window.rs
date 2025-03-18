@@ -3,10 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::cmp::min;
-use std::collections::VecDeque;
-use std::fmt::Debug;
-use std::result::Result;
+use std::{cmp::min, collections::VecDeque, fmt::Debug, result::Result};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum WindowError {

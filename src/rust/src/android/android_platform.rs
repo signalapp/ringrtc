@@ -5,33 +5,42 @@
 
 //! Android Platform Interface.
 
-use std::collections::HashSet;
-use std::fmt;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-
-use jni::objects::{AutoLocal, GlobalRef, JObject, JValue};
-use jni::sys::{jint, jlong, jshort};
-use jni::{JNIEnv, JavaVM};
-
-use crate::android::error::AndroidError;
-use crate::android::jni_util::*;
-use crate::android::webrtc_java_media_stream::JavaMediaStream;
-use crate::common::{
-    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+use std::{
+    collections::HashSet,
+    fmt,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
-use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionType};
-use crate::core::platform::{Platform, PlatformItem};
-use crate::core::{group_call, signaling};
-use crate::lite::call_links::{CallLinkRestrictions, CallLinkState, Empty};
-use crate::lite::{
-    http, sfu,
-    sfu::{DemuxId, PeekInfo, PeekResult, UserId},
+
+use jni::{
+    objects::{AutoLocal, GlobalRef, JObject, JValue},
+    sys::{jint, jlong, jshort},
+    JNIEnv, JavaVM,
 };
-use crate::webrtc::media::{MediaStream, VideoTrack};
-use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
-use crate::webrtc::peer_connection_observer::NetworkRoute;
+
+use crate::{
+    android::{error::AndroidError, jni_util::*, webrtc_java_media_stream::JavaMediaStream},
+    common::{
+        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+    },
+    core::{
+        call::Call,
+        connection::{Connection, ConnectionType},
+        group_call,
+        platform::{Platform, PlatformItem},
+        signaling,
+    },
+    lite::{
+        call_links::{CallLinkRestrictions, CallLinkState, Empty},
+        http, sfu,
+        sfu::{DemuxId, PeekInfo, PeekResult, UserId},
+    },
+    webrtc::{
+        media::{MediaStream, VideoTrack},
+        peer_connection::{AudioLevel, ReceivedAudioLevel},
+        peer_connection_observer::NetworkRoute,
+    },
+};
 
 const RINGRTC_PACKAGE: &str = jni_class_name!(org.signal.ringrtc);
 const CALL_LINK_STATE_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkState);

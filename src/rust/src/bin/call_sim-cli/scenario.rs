@@ -3,16 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use anyhow::Result;
-use log::*;
-
-use ringrtc::{
-    common::{actor::Stopper, CallConfig, CallId, CallMediaType, DeviceId},
-    core::group_call::GroupId,
-    lite::sfu::{GroupMember, MembershipProof, UserId},
-    native::PeerId,
-    webrtc::{media::VideoSink, peer_connection_factory::IceServer},
-};
 use std::{
     collections::HashMap,
     fs::File,
@@ -20,6 +10,16 @@ use std::{
     sync::mpsc::{channel, Receiver},
     thread,
     time::Duration,
+};
+
+use anyhow::Result;
+use log::*;
+use ringrtc::{
+    common::{actor::Stopper, CallConfig, CallId, CallMediaType, DeviceId},
+    core::group_call::GroupId,
+    lite::sfu::{GroupMember, MembershipProof, UserId},
+    native::PeerId,
+    webrtc::{media::VideoSink, peer_connection_factory::IceServer},
 };
 use tokio::runtime::{Builder, Runtime};
 use tonic::transport::Channel;
@@ -36,8 +36,10 @@ pub mod calling {
     #![allow(clippy::derive_partial_eq_without_eq, clippy::enum_variant_names)]
     call_protobuf::include_call_sim_proto!();
 }
-use calling::{command_message::Command, Registration};
-use calling::{test_management_client::TestManagementClient, CommandMessage};
+use calling::{
+    command_message::Command, test_management_client::TestManagementClient, CommandMessage,
+    Registration,
+};
 
 struct ClientSync {
     registered: Receiver<i32>,

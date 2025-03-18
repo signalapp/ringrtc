@@ -240,11 +240,12 @@ impl ResponseCallbacks {
 
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
+    use libc::{c_void, size_t};
+
     use crate::lite::{
         ffi::ios::{rtc_Bytes, rtc_String, FromOrDefault},
         http,
     };
-    use libc::{c_void, size_t};
 
     pub type Client = http::DelegatingClient;
 

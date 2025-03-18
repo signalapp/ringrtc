@@ -3,6 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::{
+    sync::mpsc::Sender,
+    time::{Duration, Instant},
+};
+
 use log::*;
 use ringrtc::{
     common::{
@@ -11,10 +16,6 @@ use ringrtc::{
     },
     core::signaling::{self, HangupType, Ice, IceCandidate, Message},
     native::PeerId,
-};
-use std::{
-    sync::mpsc::Sender,
-    time::{Duration, Instant},
 };
 use tokio::runtime::{Builder, Runtime};
 use tonic::transport::Channel;
@@ -27,8 +28,10 @@ pub mod calling {
     #![allow(clippy::derive_partial_eq_without_eq, clippy::enum_variant_names)]
     call_protobuf::include_call_sim_proto!();
 }
-use calling::signaling_relay_client::SignalingRelayClient;
-use calling::{call_message, CallMessage, Registration, RelayMessage};
+use calling::{
+    call_message, signaling_relay_client::SignalingRelayClient, CallMessage, Registration,
+    RelayMessage,
+};
 
 /// A 'server' is any server that can relay signaling messages between clients.
 pub trait SignalingRelay {

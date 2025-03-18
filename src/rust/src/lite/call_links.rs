@@ -12,14 +12,13 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use base64::engine::general_purpose::STANDARD as base64;
-use base64::Engine;
+use base64::{engine::general_purpose::STANDARD as base64, Engine};
+pub use member_resolver::CallLinkMemberResolver;
+pub use root_key::CallLinkRootKey;
 use serde::{self, Deserialize, Serialize};
 use serde_with::serde_as;
 
 use crate::{lite::http, protobuf::group_call::sfu_to_device};
-pub use member_resolver::CallLinkMemberResolver;
-pub use root_key::CallLinkRootKey;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -303,10 +302,9 @@ pub fn delete_call_link(
 
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
-    use super::*;
-
     use std::ffi::{c_char, c_void, CStr};
 
+    use super::*;
     use crate::lite::{
         ffi::ios::{cstr, rtc_Bytes, rtc_OptionalU16, rtc_String},
         http,

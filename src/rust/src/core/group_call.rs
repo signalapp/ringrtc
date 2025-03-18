@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use anyhow;
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
@@ -16,7 +15,9 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
+use anyhow;
 use hkdf::Hkdf;
+use mrp::{MrpReceiveError, MrpSendError, MrpStream};
 use num_enum::TryFromPrimitive;
 use prost::Message;
 use rand::{rngs::OsRng, Rng};
@@ -24,26 +25,22 @@ use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 use crate::{
-    common::CallId,
-    core::util::uuid_to_string,
-    protobuf::group_call::{DeviceToSfu, SfuToDevice},
-};
-use crate::{
     common::{
         actor::{Actor, Stopper},
         units::DataRate,
-        DataMode, Result,
+        CallId, DataMode, Result,
     },
-    core::{call_mutex::CallMutex, crypto as frame_crypto, signaling},
+    core::{call_mutex::CallMutex, crypto as frame_crypto, signaling, util::uuid_to_string},
     error::RingRtcError,
     lite::{
         http, sfu,
         sfu::{
-            ClientStatus, DemuxId, GroupMember, MembershipProof, PeekInfo, PeekResult,
-            PeekResultCallback, UserId,
+            ClientStatus, DemuxId, GroupMember, MemberMap, MembershipProof, ObfuscatedResolver,
+            PeekInfo, PeekResult, PeekResultCallback, UserId,
         },
     },
     protobuf,
+    protobuf::group_call::{DeviceToSfu, SfuToDevice},
     webrtc::{
         self,
         media::{
@@ -61,9 +58,6 @@ use crate::{
         stats_observer::{create_stats_observer, StatsObserver},
     },
 };
-
-use crate::lite::sfu::{MemberMap, ObfuscatedResolver};
-use mrp::{MrpReceiveError, MrpSendError, MrpStream};
 
 // Each instance of a group_call::Client has an ID for logging and passing events
 // around (such as callbacks to the Observer).  It's just very convenient to have.
@@ -2212,10 +2206,11 @@ impl Client {
     }
 
     fn send_video_requests_to_sfu(state: &mut State) {
+        use std::cmp::min;
+
         use protobuf::group_call::device_to_sfu::{
             video_request_message::VideoRequest as VideoRequestProto, VideoRequestMessage,
         };
-        use std::cmp::min;
 
         if let Some(video_requests) = &state.video_requests {
             let requests: Vec<_> = video_requests
@@ -4725,17 +4720,15 @@ impl<'data> Reader<'data> {
 #[cfg(feature = "sim")]
 mod tests {
     use std::sync::{
-        atomic::{self, AtomicI64, AtomicU64},
+        atomic::{self, AtomicI64, AtomicU64, Ordering},
         mpsc, Arc, Condvar, Mutex,
     };
 
+    use super::*;
     use crate::{
         lite::sfu::PeekDeviceInfo, protobuf::group_call::MrpHeader,
         webrtc::sim::media::FAKE_AUDIO_TRACK,
     };
-
-    use super::*;
-    use std::sync::atomic::Ordering;
 
     #[derive(Clone)]
     struct FakeSfuClient {

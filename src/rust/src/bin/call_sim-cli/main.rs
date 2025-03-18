@@ -10,6 +10,8 @@ mod scenario;
 mod util;
 mod video;
 
+use std::ffi::CString;
+
 use anyhow::Result;
 use base64::prelude::*;
 use clap::Parser;
@@ -28,7 +30,6 @@ use ringrtc::{
     },
 };
 use scenario::ScenarioCallTypeConfig;
-use std::ffi::CString;
 
 use crate::scenario::ScenarioManager;
 

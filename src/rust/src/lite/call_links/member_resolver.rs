@@ -7,12 +7,11 @@ use std::collections::VecDeque;
 
 use hex::FromHex;
 
+use super::CallLinkRootKey;
 use crate::{
     core::call_mutex::CallMutex,
     lite::sfu::{MemberResolver, OpaqueUserIdMapping, UserId},
 };
-
-use super::CallLinkRootKey;
 
 pub struct CallLinkMemberResolver {
     zkparams: zkgroup::call_links::CallLinkSecretParams,

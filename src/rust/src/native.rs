@@ -3,28 +3,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::collections::HashSet;
-use std::fmt;
-use std::time::Duration;
+use std::{collections::HashSet, fmt, time::Duration};
 
-use crate::common::{
-    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+use crate::{
+    common::{
+        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+    },
+    core::{
+        call::Call,
+        connection::{Connection, ConnectionType},
+        group_call,
+        platform::{Platform, PlatformItem},
+        signaling,
+    },
+    lite::{
+        sfu,
+        sfu::{DemuxId, PeekInfo, PeekResult, UserId},
+    },
+    webrtc::{
+        media::{AudioTrack, MediaStream, VideoSink, VideoTrack},
+        peer_connection::{AudioLevel, ReceivedAudioLevel},
+        peer_connection_factory::{IceServer, PeerConnectionFactory, RffiPeerConnectionKind},
+        peer_connection_observer::{NetworkRoute, PeerConnectionObserver},
+    },
 };
-use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionType};
-use crate::core::platform::{Platform, PlatformItem};
-use crate::core::{group_call, signaling};
-use crate::lite::{
-    sfu,
-    sfu::{DemuxId, PeekInfo, PeekResult, UserId},
-};
-use crate::webrtc::media::MediaStream;
-use crate::webrtc::media::{AudioTrack, VideoSink, VideoTrack};
-use crate::webrtc::peer_connection::{AudioLevel, ReceivedAudioLevel};
-use crate::webrtc::peer_connection_factory::{
-    IceServer, PeerConnectionFactory, RffiPeerConnectionKind,
-};
-use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
 // This serves as the Platform::AppCallContext
 // Users of the native platform must provide these things

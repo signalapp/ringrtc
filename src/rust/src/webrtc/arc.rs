@@ -12,7 +12,6 @@ use std::{
 };
 
 use crate::webrtc;
-
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::ref_count;
 #[cfg(feature = "sim")]

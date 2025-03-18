@@ -10,22 +10,22 @@ extern crate ringrtc;
 #[macro_use]
 extern crate log;
 
-use std::net::SocketAddr;
-use std::thread;
-use std::time::Duration;
+use std::{net::SocketAddr, thread, time::Duration};
 
 use prost::Message;
-use ringrtc::common::{
-    units::DataRate, ApplicationEvent, CallConfig, CallId, CallMediaType, CallState,
-    ConnectionState, DataMode, DeviceId,
-};
-use ringrtc::core::{group_call, signaling};
-use ringrtc::protobuf;
-use ringrtc::sim::error::SimError;
-use ringrtc::webrtc;
-use ringrtc::webrtc::media::MediaStream;
-use ringrtc::webrtc::peer_connection_observer::{
-    NetworkAdapterType, NetworkRoute, TransportProtocol,
+use ringrtc::{
+    common::{
+        units::DataRate, ApplicationEvent, CallConfig, CallId, CallMediaType, CallState,
+        ConnectionState, DataMode, DeviceId,
+    },
+    core::{group_call, signaling},
+    protobuf,
+    sim::error::SimError,
+    webrtc,
+    webrtc::{
+        media::MediaStream,
+        peer_connection_observer::{NetworkAdapterType, NetworkRoute, TransportProtocol},
+    },
 };
 
 #[macro_use]

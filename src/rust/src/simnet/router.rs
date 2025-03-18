@@ -3,18 +3,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use crate::common::{
-    actor::{Actor, Stopper},
-    units::{DataRate, DataSize},
-    Result,
-};
-use rand::{distributions, distributions::Distribution, rngs::ThreadRng, thread_rng, Rng};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
     sync::{atomic, atomic::AtomicU64, Arc},
     thread,
     time::Duration,
+};
+
+use rand::{distributions, distributions::Distribution, rngs::ThreadRng, thread_rng, Rng};
+
+use crate::common::{
+    actor::{Actor, Stopper},
+    units::{DataRate, DataSize},
+    Result,
 };
 
 const OVERHEAD_IN_BYTES_IPV4: u64 = 20;

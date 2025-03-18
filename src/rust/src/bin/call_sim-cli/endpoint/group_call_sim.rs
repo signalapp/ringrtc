@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use log::*;
 use ringrtc::{
     common::Result,
     core::group_call::{
@@ -17,8 +18,6 @@ use ringrtc::{
     native::{GroupUpdate, GroupUpdateHandler},
     webrtc::peer_connection_observer::NetworkRoute,
 };
-
-use log::*;
 
 use super::CallEndpoint;
 

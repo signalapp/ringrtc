@@ -5,26 +5,27 @@
 
 //! WebRTC Peer Connection Observer
 
-use libc::size_t;
-use std::ffi::CStr;
-use std::marker::PhantomData;
-use std::net::SocketAddr;
-use std::os::raw::c_char;
-use std::slice;
-use std::time::SystemTime;
-
-use crate::common::{Result, RingBench};
-use crate::core::signaling;
-use crate::core::util::redact_string;
-use crate::error::RingRtcError;
-use crate::lite::sfu::DemuxId;
-use crate::webrtc;
-use crate::webrtc::media::{
-    AudioTrack, MediaStream, RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer, RffiVideoTrack,
-    VideoFrame, VideoFrameMetadata, VideoTrack,
+use std::{
+    ffi::CStr, marker::PhantomData, net::SocketAddr, os::raw::c_char, slice, time::SystemTime,
 };
-use crate::webrtc::network::RffiIpPort;
-use crate::webrtc::rtp;
+
+use libc::size_t;
+
+use crate::{
+    common::{Result, RingBench},
+    core::{signaling, util::redact_string},
+    error::RingRtcError,
+    lite::sfu::DemuxId,
+    webrtc,
+    webrtc::{
+        media::{
+            AudioTrack, MediaStream, RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer,
+            RffiVideoTrack, VideoFrame, VideoFrameMetadata, VideoTrack,
+        },
+        network::RffiIpPort,
+        rtp,
+    },
+};
 
 /// Rust version of WebRTC RTCIceConnectionState enum
 ///
@@ -667,7 +668,6 @@ where
 use crate::webrtc::ffi::peer_connection_observer as pc_observer;
 #[cfg(not(feature = "sim"))]
 pub use crate::webrtc::ffi::peer_connection_observer::RffiPeerConnectionObserver;
-
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection_observer as pc_observer;
 #[cfg(feature = "sim")]

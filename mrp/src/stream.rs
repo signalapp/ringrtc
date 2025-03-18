@@ -12,10 +12,12 @@
 //! retransmitting. Meant for low volumes of packets. Generic means you can
 //! change how data is sent on every attempt
 
+use std::{fmt::Debug, time::Instant};
+
+use log::warn;
+
 use super::window::{BufferWindow, WindowError};
 use crate::merge_buffer::MergeBuffer;
-use log::warn;
-use std::{fmt::Debug, time::Instant};
 
 #[derive(PartialEq, Debug, Default, Clone)]
 pub struct MrpHeader {
@@ -519,24 +521,26 @@ where
 
 #[cfg(test)]
 mod tests {
-    use rand::{
-        distributions::{DistIter, Uniform},
-        rngs::StdRng,
-        thread_rng, Rng, SeedableRng,
-    };
-    use std::sync::OnceLock;
-
-    use super::*;
-    use rand::seq::SliceRandom;
-    use std::collections::VecDeque;
     use std::{
         cell::RefCell,
-        collections::BinaryHeap,
+        collections::{BinaryHeap, VecDeque},
         rc::Rc,
-        sync::mpsc::{self, Receiver, Sender, TryRecvError},
+        sync::{
+            mpsc::{self, Receiver, Sender, TryRecvError},
+            OnceLock,
+        },
         thread,
         time::{Duration, Instant},
     };
+
+    use rand::{
+        distributions::{DistIter, Uniform},
+        rngs::StdRng,
+        seq::SliceRandom,
+        thread_rng, Rng, SeedableRng,
+    };
+
+    use super::*;
 
     type Packet = PacketWrapper<u64>;
     type ExtendablePacket = PacketWrapper<Vec<u32>>;

@@ -7,24 +7,26 @@
 
 // Requires the 'sim' feature
 
-use std::cell::RefCell;
-use std::env;
-use std::time::{Duration, SystemTime};
+use std::{
+    cell::RefCell,
+    env,
+    time::{Duration, SystemTime},
+};
 
 use lazy_static::lazy_static;
-use rand::distributions::{Distribution, Standard};
-use rand::{Rng, SeedableRng};
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng, SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
-
-use ringrtc::common::{ApplicationEvent, CallMediaType, DeviceId};
-use ringrtc::core::call::Call;
-use ringrtc::core::call_manager::CallManager;
-use ringrtc::core::connection::Connection;
-use ringrtc::core::{group_call, signaling};
-use ringrtc::lite::http;
-use ringrtc::protobuf;
-use ringrtc::sim::sim_platform::SimPlatform;
-use ringrtc::webrtc;
+use ringrtc::{
+    common::{ApplicationEvent, CallMediaType, DeviceId},
+    core::{call::Call, call_manager::CallManager, connection::Connection, group_call, signaling},
+    lite::http,
+    protobuf,
+    sim::sim_platform::SimPlatform,
+    webrtc,
+};
 /*
 use ringrtc::common::{CallDirection, CallId};
 

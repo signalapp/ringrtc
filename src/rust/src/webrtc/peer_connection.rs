@@ -4,33 +4,34 @@
 //
 
 //! WebRTC Peer Connection Interface
-use std::ffi::CString;
-use std::net::SocketAddr;
+use std::{ffi::CString, net::SocketAddr};
 
-use crate::common::{units::DataRate, Result};
-use crate::core::util::redact_string;
-use crate::error::RingRtcError;
-use crate::webrtc;
-use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::AudioEncoderConfig;
-use crate::webrtc::network::RffiIpPort;
-use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
-use crate::webrtc::peer_connection_observer::RffiPeerConnectionObserver;
-use crate::webrtc::rtp;
-use crate::webrtc::sdp_observer::{
-    CreateSessionDescriptionObserver, SessionDescription, SetSessionDescriptionObserver,
-};
-use crate::webrtc::stats_observer::StatsObserver;
+pub use pc::RffiPeerConnection;
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection as pc;
-
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection as pc;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::peer_connection::BoxedRtpPacketSink;
-
-pub use pc::RffiPeerConnection;
+use crate::{
+    common::{units::DataRate, Result},
+    core::util::redact_string,
+    error::RingRtcError,
+    webrtc,
+    webrtc::{
+        ice_gatherer::IceGatherer,
+        media::AudioEncoderConfig,
+        network::RffiIpPort,
+        peer_connection_factory::RffiPeerConnectionFactoryOwner,
+        peer_connection_observer::RffiPeerConnectionObserver,
+        rtp,
+        sdp_observer::{
+            CreateSessionDescriptionObserver, SessionDescription, SetSessionDescriptionObserver,
+        },
+        stats_observer::StatsObserver,
+    },
+};
 
 /// Rust wrapper around WebRTC C++ PeerConnection object.
 #[derive(Debug)]

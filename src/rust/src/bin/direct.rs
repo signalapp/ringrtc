@@ -3,10 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::{
+    collections::{HashMap, HashSet},
+    thread,
+    time::Duration,
+};
+
 use chrono;
 use clap::Parser;
 use log::{debug, info};
-
 use ringrtc::{
     common::{
         actor::{Actor, Stopper},
@@ -37,11 +42,6 @@ use ringrtc::{
         },
         peer_connection_observer::NetworkRoute,
     },
-};
-use std::{
-    collections::{HashMap, HashSet},
-    thread,
-    time::Duration,
 };
 
 #[derive(Debug, Parser)]

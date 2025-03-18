@@ -6,7 +6,6 @@
 //! WebRTC IceGatherer Interface.
 
 use crate::webrtc;
-
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::ice_gatherer::RffiIceGatherer;
 #[cfg(feature = "sim")]

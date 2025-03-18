@@ -5,50 +5,57 @@
 
 //! A peer-to-peer connection interface.
 
-use std::fmt;
-use std::net::SocketAddr;
-use std::sync::mpsc::{Receiver, SyncSender};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::thread;
-use std::time::{Duration, SystemTime};
+use std::{
+    fmt,
+    net::SocketAddr,
+    sync::{
+        mpsc::{Receiver, SyncSender},
+        Arc, Condvar, Mutex, MutexGuard,
+    },
+    thread,
+    time::{Duration, SystemTime},
+};
 
 use bytes::{BufMut, BytesMut};
-
-use prost::Message;
-
 use hkdf::Hkdf;
+use prost::Message;
 use rand::rngs::OsRng;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crate::common::actor::{Actor, Stopper};
-use crate::common::{
-    units::DataRate, CallConfig, CallDirection, CallId, CallMediaType, ConnectionState, DataMode,
-    DeviceId, Result, RingBench,
+use crate::{
+    common::{
+        actor::{Actor, Stopper},
+        units::DataRate,
+        CallConfig, CallDirection, CallId, CallMediaType, ConnectionState, DataMode, DeviceId,
+        Result, RingBench,
+    },
+    core::{
+        call::Call,
+        call_mutex::CallMutex,
+        connection_fsm::{ConnectionEvent, ConnectionStateMachine},
+        platform::Platform,
+        signaling,
+        util::{ptr_as_box, redact_string},
+    },
+    error::RingRtcError,
+    lite::sfu::DemuxId,
+    protobuf, webrtc,
+    webrtc::{
+        ice_gatherer::IceGatherer,
+        media::{MediaStream, VideoFrame, VideoFrameMetadata, VideoSink},
+        peer_connection::{AudioLevel, PeerConnection, SendRates},
+        peer_connection_observer::{
+            IceConnectionState, NetworkAdapterType, NetworkRoute, PeerConnectionObserverTrait,
+            TransportProtocol,
+        },
+        rtp,
+        sdp_observer::{
+            create_csd_observer, create_ssd_observer, SessionDescription, SrtpCryptoSuite, SrtpKey,
+        },
+        stats_observer::{create_stats_observer, StatsObserver},
+    },
 };
-use crate::core::call::Call;
-use crate::core::call_mutex::CallMutex;
-use crate::core::connection_fsm::{ConnectionEvent, ConnectionStateMachine};
-use crate::core::platform::Platform;
-use crate::core::signaling;
-use crate::core::util::{ptr_as_box, redact_string};
-use crate::error::RingRtcError;
-use crate::lite::sfu::DemuxId;
-use crate::protobuf;
-
-use crate::webrtc;
-use crate::webrtc::ice_gatherer::IceGatherer;
-use crate::webrtc::media::{MediaStream, VideoFrame, VideoFrameMetadata, VideoSink};
-use crate::webrtc::peer_connection::{AudioLevel, PeerConnection, SendRates};
-use crate::webrtc::peer_connection_observer::{
-    IceConnectionState, NetworkAdapterType, NetworkRoute, PeerConnectionObserverTrait,
-    TransportProtocol,
-};
-use crate::webrtc::rtp;
-use crate::webrtc::sdp_observer::{
-    create_csd_observer, create_ssd_observer, SessionDescription, SrtpCryptoSuite, SrtpKey,
-};
-use crate::webrtc::stats_observer::{create_stats_observer, StatsObserver};
 
 /// Used to generate stats, to retransmit RTP messages, and to get audio levels.
 const TICK_INTERVAL_MILLIS: u64 = 200;

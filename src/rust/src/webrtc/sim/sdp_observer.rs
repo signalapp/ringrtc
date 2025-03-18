@@ -5,16 +5,17 @@
 
 //! WebRTC Simulation Create/Set SessionDescription
 
-use libc::{size_t, strdup};
-use std::ffi::CString;
-use std::os::raw::c_char;
-use std::ptr::addr_of;
+use std::{ffi::CString, os::raw::c_char, ptr::addr_of};
 
-use crate::webrtc;
-use crate::webrtc::sdp_observer::{
-    CreateSessionDescriptionObserver, CreateSessionDescriptionObserverCallbacks,
-    RffiConnectionParametersV4, RffiSrtpKey, SetSessionDescriptionObserver,
-    SetSessionDescriptionObserverCallbacks, SrtpCryptoSuite,
+use libc::{size_t, strdup};
+
+use crate::{
+    webrtc,
+    webrtc::sdp_observer::{
+        CreateSessionDescriptionObserver, CreateSessionDescriptionObserverCallbacks,
+        RffiConnectionParametersV4, RffiSrtpKey, SetSessionDescriptionObserver,
+        SetSessionDescriptionObserverCallbacks, SrtpCryptoSuite,
+    },
 };
 
 /// Simulation type for SessionDescription.

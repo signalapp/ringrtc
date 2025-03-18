@@ -6,13 +6,10 @@
 //! Android Error Codes and Utilities.
 
 use anyhow::Error;
-use jni::errors;
-use jni::objects::JThrowable;
-use jni::JNIEnv;
+use jni::{errors, objects::JThrowable, JNIEnv};
 use thiserror::Error;
 
-use crate::android::jni_util::*;
-use crate::core::util::try_scoped;
+use crate::{android::jni_util::*, core::util::try_scoped};
 
 const CALL_EXCEPTION_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallException);
 

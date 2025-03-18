@@ -5,15 +5,13 @@
 
 //! iOS wrapper around an RTCMediaStream
 
-use std::ffi::c_void;
-use std::fmt;
+use std::{ffi::c_void, fmt};
 
-use crate::ios::api::call_manager_interface::AppMediaStreamInterface;
-use crate::ios::error::IosError;
-
-use crate::common::Result;
-
-use crate::webrtc::{self, media::MediaStream};
+use crate::{
+    common::Result,
+    ios::{api::call_manager_interface::AppMediaStreamInterface, error::IosError},
+    webrtc::{self, media::MediaStream},
+};
 
 /// Rust wrapper around application stream interface and RTCMediaStream object.
 // IosMediaStream (Rust) wraps an AppMediaStreamInterface (Rust)

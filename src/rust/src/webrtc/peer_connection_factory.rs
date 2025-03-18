@@ -5,36 +5,35 @@
 
 //! WebRTC Peer Connection
 
-use anyhow::anyhow;
 #[cfg(all(not(feature = "sim"), feature = "native"))]
 use std::ffi::c_void;
 #[cfg(feature = "native")]
 use std::ffi::CStr;
-use std::ffi::CString;
-use std::os::raw::c_char;
+use std::{ffi::CString, os::raw::c_char};
 
-use crate::common::Result;
-use crate::error::RingRtcError;
-use crate::webrtc;
+use anyhow::anyhow;
+pub use pcf::{RffiPeerConnectionFactoryInterface, RffiPeerConnectionFactoryOwner};
+
 #[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::audio_device_module::AudioDeviceModule;
 #[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::ffi::audio_device_module::AUDIO_DEVICE_CBS_PTR;
-#[cfg(feature = "injectable_network")]
-use crate::webrtc::injectable_network::InjectableNetwork;
-use crate::webrtc::media::{AudioTrack, VideoSource, VideoTrack};
-use crate::webrtc::peer_connection::PeerConnection;
-use crate::webrtc::peer_connection_observer::{
-    PeerConnectionObserver, PeerConnectionObserverTrait,
-};
-
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection_factory as pcf;
-
+#[cfg(feature = "injectable_network")]
+use crate::webrtc::injectable_network::InjectableNetwork;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::peer_connection_factory as pcf;
-
-pub use pcf::{RffiPeerConnectionFactoryInterface, RffiPeerConnectionFactoryOwner};
+use crate::{
+    common::Result,
+    error::RingRtcError,
+    webrtc,
+    webrtc::{
+        media::{AudioTrack, VideoSource, VideoTrack},
+        peer_connection::PeerConnection,
+        peer_connection_observer::{PeerConnectionObserver, PeerConnectionObserverTrait},
+    },
+};
 
 #[cfg(feature = "native")]
 const ADM_MAX_DEVICE_NAME_SIZE: usize = 128;

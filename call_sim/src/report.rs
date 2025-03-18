@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::{collections::HashMap, fmt::Write, str::FromStr};
+
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use plotly::{
@@ -12,17 +14,18 @@ use plotly::{
     Bar, ImageFormat, Layout, Plot, Scatter,
 };
 use regex::Regex;
-use std::{collections::HashMap, fmt::Write, str::FromStr};
 use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     task::JoinSet,
 };
 
-use crate::common::{
-    ChartDimension, GroupConfig, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig,
+use crate::{
+    common::{
+        ChartDimension, GroupConfig, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig,
+    },
+    test::{AudioTestResults, GroupRun, Sound, TestCase},
 };
-use crate::test::{AudioTestResults, GroupRun, Sound, TestCase};
 
 type ChartPoint = (f32, f32);
 

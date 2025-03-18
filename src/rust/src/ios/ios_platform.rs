@@ -5,37 +5,41 @@
 
 //! iOS Platform
 
-use std::collections::HashSet;
-use std::fmt;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashSet, fmt, sync::Arc, time::Duration};
 
-use crate::common::{
-    ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+use crate::{
+    common::{
+        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+    },
+    core::{
+        call::Call,
+        connection::{Connection, ConnectionType},
+        group_call,
+        group_call::Reaction,
+        platform::{Platform, PlatformItem},
+        signaling,
+    },
+    ios::{
+        api::call_manager_interface::{
+            AppByteSlice, AppCallContext, AppConnectionInterface, AppIceCandidateArray,
+            AppInterface, AppObject, AppOptionalBool, AppOptionalUInt32, AppRaisedHandsArray,
+            AppReaction, AppReactionsArray, AppReceivedAudioLevel, AppReceivedAudioLevelArray,
+            AppRemoteDeviceState, AppRemoteDeviceStateArray, AppUuidArray,
+        },
+        error::IosError,
+        ios_media_stream::IosMediaStream,
+    },
+    lite::{
+        sfu,
+        sfu::{DemuxId, PeekInfo, PeekResult, UserId},
+    },
+    webrtc,
+    webrtc::{
+        media::{MediaStream, VideoTrack},
+        peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, RffiPeerConnection},
+        peer_connection_observer::{NetworkRoute, PeerConnectionObserver},
+    },
 };
-use crate::core::call::Call;
-use crate::core::connection::{Connection, ConnectionType};
-use crate::core::group_call::Reaction;
-use crate::core::platform::{Platform, PlatformItem};
-use crate::core::{group_call, signaling};
-use crate::ios::api::call_manager_interface::{
-    AppByteSlice, AppCallContext, AppConnectionInterface, AppIceCandidateArray, AppInterface,
-    AppObject, AppOptionalBool, AppOptionalUInt32, AppRaisedHandsArray, AppReaction,
-    AppReactionsArray, AppReceivedAudioLevel, AppReceivedAudioLevelArray, AppRemoteDeviceState,
-    AppRemoteDeviceStateArray, AppUuidArray,
-};
-use crate::ios::error::IosError;
-use crate::ios::ios_media_stream::IosMediaStream;
-use crate::lite::{
-    sfu,
-    sfu::{DemuxId, PeekInfo, PeekResult, UserId},
-};
-use crate::webrtc;
-use crate::webrtc::media::{MediaStream, VideoTrack};
-use crate::webrtc::peer_connection::{
-    AudioLevel, PeerConnection, ReceivedAudioLevel, RffiPeerConnection,
-};
-use crate::webrtc::peer_connection_observer::{NetworkRoute, PeerConnectionObserver};
 
 /// Concrete type for iOS AppIncomingMedia objects.
 impl PlatformItem for IosMediaStream {}

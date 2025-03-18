@@ -5,25 +5,26 @@
 
 //! WebRTC Create Session Description Interface.
 
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-use std::sync::{Arc, Condvar, Mutex};
-
-use crate::common::{CallConfig, DataMode, Result};
-use crate::core::util::FutureResult;
-use crate::error::RingRtcError;
-use crate::protobuf;
-use crate::webrtc;
+use std::{
+    ffi::{CStr, CString},
+    os::raw::c_char,
+    sync::{Arc, Condvar, Mutex},
+};
 
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::sdp_observer as sdp;
 #[cfg(not(feature = "sim"))]
 pub use crate::webrtc::ffi::sdp_observer::RffiSessionDescription;
-
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::sdp_observer as sdp;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::sdp_observer::RffiSessionDescription;
+use crate::{
+    common::{CallConfig, DataMode, Result},
+    core::util::FutureResult,
+    error::RingRtcError,
+    protobuf, webrtc,
+};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -366,7 +367,6 @@ fn from_cstr(c: *const c_char) -> String {
 
 #[cfg(not(feature = "sim"))]
 pub use crate::webrtc::ffi::sdp_observer::RffiCreateSessionDescriptionObserver;
-
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::sdp_observer::RffiCreateSessionDescriptionObserver;
 
@@ -569,7 +569,6 @@ pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
 
 #[cfg(not(feature = "sim"))]
 pub use crate::webrtc::ffi::sdp_observer::RffiSetSessionDescriptionObserver;
-
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::sdp_observer::RffiSetSessionDescriptionObserver;
 

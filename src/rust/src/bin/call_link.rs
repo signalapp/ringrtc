@@ -3,20 +3,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use ringrtc::lite::http::sim as sim_http;
-
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::io::Write;
-use std::time::{Duration, SystemTime};
-
-use base64::engine::general_purpose::STANDARD as base64;
-use base64::Engine;
-use rand::SeedableRng;
-use ringrtc::lite::call_links::{
-    CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkUpdateRequest,
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+    io::Write,
+    time::{Duration, SystemTime},
 };
-use ringrtc::lite::http::{self, Client};
+
+use base64::{engine::general_purpose::STANDARD as base64, Engine};
+use rand::SeedableRng;
+use ringrtc::lite::{
+    call_links::{
+        CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkUpdateRequest,
+    },
+    http::{self, sim as sim_http, Client},
+};
 use uuid::Uuid;
 use zkgroup::call_links::CallLinkSecretParams;
 

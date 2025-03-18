@@ -7,12 +7,6 @@ pub mod calling {
     #![allow(clippy::derive_partial_eq_without_eq, clippy::enum_variant_names)]
     protobuf::include_call_sim_proto!();
 }
-use anyhow::Result;
-use calling::{
-    command_message::Command, test_management_client::TestManagementClient, CommandMessage, Empty,
-};
-use chrono::{DateTime, Local};
-use relative_path::RelativePath;
 use std::{
     collections::HashMap,
     fs,
@@ -20,23 +14,30 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+use anyhow::Result;
+use calling::{
+    command_message::Command, test_management_client::TestManagementClient, CommandMessage, Empty,
+};
+use chrono::{DateTime, Local};
+use relative_path::RelativePath;
 use tonic::transport::Channel;
 use tower::timeout::Timeout;
 
-use crate::common::{
-    AudioAnalysisMode, GroupConfig, NetworkConfigWithOffset, NetworkProfile, TestCaseConfig,
-};
-use crate::docker::{
-    analyze_video, analyze_visqol_mos, clean_network, clean_up, convert_mp4_to_yuv,
-    convert_raw_to_wav, convert_wav_to_16khz_mono, convert_yuv_to_mp4, create_network,
-    emulate_network_change, emulate_network_start, finish_perf, generate_spectrogram,
-    get_signaling_server_logs, get_turn_server_logs, start_cli, start_client,
-    start_signaling_server, start_tcp_dump, start_turn_server, DockerStats,
-};
-use crate::report::{AnalysisReport, AnalysisReportMos, Report};
 use crate::{
     audio::{chop_audio_and_analyze, get_audio_and_analyze, AudioFiles},
-    common::ClientProfile,
+    common::{
+        AudioAnalysisMode, ClientProfile, GroupConfig, NetworkConfigWithOffset, NetworkProfile,
+        TestCaseConfig,
+    },
+    docker::{
+        analyze_video, analyze_visqol_mos, clean_network, clean_up, convert_mp4_to_yuv,
+        convert_raw_to_wav, convert_wav_to_16khz_mono, convert_yuv_to_mp4, create_network,
+        emulate_network_change, emulate_network_start, finish_perf, generate_spectrogram,
+        get_signaling_server_logs, get_turn_server_logs, start_cli, start_client,
+        start_signaling_server, start_tcp_dump, start_turn_server, DockerStats,
+    },
+    report::{AnalysisReport, AnalysisReportMos, Report},
 };
 
 pub struct Client<'a> {

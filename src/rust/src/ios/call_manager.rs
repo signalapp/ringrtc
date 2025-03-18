@@ -5,29 +5,34 @@
 
 //! iOS Call Manager
 
-use std::ffi::c_void;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{ffi::c_void, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 
-use crate::ios::api::call_manager_interface::{AppCallContext, AppInterface, AppObject};
-use crate::ios::ios_platform::IosPlatform;
-
-use crate::common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result};
-use crate::core::call_manager::CallManager;
-use crate::core::util::{ptr_as_box, ptr_as_mut};
-use crate::core::{call_manager, group_call, signaling};
-use crate::error::RingRtcError;
-use crate::lite::call_links::CallLinkRootKey;
-use crate::lite::{
-    http,
-    sfu::{DemuxId, GroupMember, UserId},
+use crate::{
+    common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result},
+    core::{
+        call_manager,
+        call_manager::CallManager,
+        group_call, signaling,
+        util::{ptr_as_box, ptr_as_mut},
+    },
+    error::RingRtcError,
+    ios::{
+        api::call_manager_interface::{AppCallContext, AppInterface, AppObject},
+        ios_platform::IosPlatform,
+    },
+    lite::{
+        call_links::CallLinkRootKey,
+        http,
+        sfu::{DemuxId, GroupMember, UserId},
+    },
+    protobuf, webrtc,
+    webrtc::{
+        media,
+        peer_connection_factory::{self as pcf, PeerConnectionFactory},
+    },
 };
-use crate::protobuf;
-use crate::webrtc;
-use crate::webrtc::media;
-use crate::webrtc::peer_connection_factory::{self as pcf, PeerConnectionFactory};
 
 /// Public type for iOS CallManager
 pub type IosCallManager = CallManager<IosPlatform>;

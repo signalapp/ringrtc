@@ -4,7 +4,6 @@
 //
 
 use crate::webrtc;
-
 pub use crate::webrtc::media::VideoRotation;
 
 pub type RffiMediaStream = u32;

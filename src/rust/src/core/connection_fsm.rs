@@ -44,22 +44,28 @@
 //! - [ConnectionObserverEvents](../connection/enum.ConnectionObserverEvent.html)
 //! - ObserverErrors
 
-use std::fmt;
-use std::sync::{mpsc, Arc, Condvar, Mutex};
-use std::thread;
-use std::time::{Duration, SystemTime};
-
-use crate::common::actor::{Actor, Stopper};
-use crate::common::{
-    units::DataRate, CallDirection, CallId, ConnectionState, DataMode, Result, RingBench,
+use std::{
+    fmt,
+    sync::{mpsc, Arc, Condvar, Mutex},
+    thread,
+    time::{Duration, SystemTime},
 };
-use crate::core::connection::{Connection, ConnectionObserverEvent, EventStream};
-use crate::core::platform::Platform;
-use crate::core::signaling;
-use crate::core::util::try_scoped;
-use crate::error::RingRtcError;
-use crate::webrtc::media::MediaStream;
-use crate::webrtc::peer_connection_observer::NetworkRoute;
+
+use crate::{
+    common::{
+        actor::{Actor, Stopper},
+        units::DataRate,
+        CallDirection, CallId, ConnectionState, DataMode, Result, RingBench,
+    },
+    core::{
+        connection::{Connection, ConnectionObserverEvent, EventStream},
+        platform::Platform,
+        signaling,
+        util::try_scoped,
+    },
+    error::RingRtcError,
+    webrtc::{media::MediaStream, peer_connection_observer::NetworkRoute},
+};
 
 /// The different types of Connection Events.
 pub enum ConnectionEvent {

@@ -6,6 +6,12 @@
 mod direct_call_sim;
 mod group_call_sim;
 
+use std::{
+    collections::{HashMap, HashSet},
+    sync::mpsc::Sender,
+    time::{Duration, Instant},
+};
+
 use direct_call_sim::DirectCall;
 use group_call_sim::GroupCall;
 use log::*;
@@ -29,11 +35,6 @@ use ringrtc::{
         media::{AudioTrack, VideoSink, VideoSource, VideoTrack},
         peer_connection_factory::{AudioConfig, IceServer, PeerConnectionFactory},
     },
-};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::mpsc::Sender,
-    time::{Duration, Instant},
 };
 
 use crate::{

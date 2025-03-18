@@ -16,8 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::common::Result;
-use crate::error::RingRtcError;
+use crate::{common::Result, error::RingRtcError};
 
 pub struct Actor<State> {
     sender: Sender<Task<State>>,

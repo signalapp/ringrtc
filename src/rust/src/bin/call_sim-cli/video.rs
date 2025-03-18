@@ -3,13 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use log::info;
-use ringrtc::{
-    lite::sfu::DemuxId,
-    native::PeerId,
-    webrtc::media::{VideoFrame, VideoPixelFormat, VideoSink},
-};
-
 use std::{
     convert::TryInto,
     io::{Read, Seek, SeekFrom, Write},
@@ -18,6 +11,13 @@ use std::{
         Arc,
     },
     time::{Duration, Instant},
+};
+
+use log::info;
+use ringrtc::{
+    lite::sfu::DemuxId,
+    native::PeerId,
+    webrtc::media::{VideoFrame, VideoPixelFormat, VideoSink},
 };
 
 pub const FRAME_INTERVAL_30FPS: Duration = Duration::from_millis(33);

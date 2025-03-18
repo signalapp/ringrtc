@@ -5,14 +5,14 @@
 
 //! Foreign Function Interface utility helpers and types.
 
-use std::borrow::Cow;
-use std::collections::VecDeque;
-use std::mem;
-use std::sync::mpsc::Receiver;
-use std::sync::{Arc, Condvar, Mutex};
+use std::{
+    borrow::Cow,
+    collections::VecDeque,
+    mem,
+    sync::{mpsc::Receiver, Arc, Condvar, Mutex},
+};
 
-use crate::common::Result;
-use crate::error::RingRtcError;
+use crate::{common::Result, error::RingRtcError};
 
 /// Generic Mutex/Condvar pair for signaling async event completion.
 pub type FutureResult<T> = Arc<(Mutex<(bool, T)>, Condvar)>;
