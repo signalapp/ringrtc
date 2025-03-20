@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.50.3
+
+- Android: Add SpeechEvent to the ClassCache
+
+- Update to webrtc 6834g
+  - Revert "Mark audio packets as having an encrypted TOC byte"
+
+- Update Rust code formatting
+
 ## v2.50.2
 
 - Group Calls: Add receiving PeekInfo over RTP in SfuToDevice
