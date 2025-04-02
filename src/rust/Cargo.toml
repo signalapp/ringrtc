@@ -94,8 +94,8 @@ call_protobuf = { path = "../../protobuf", package = "protobuf"}
 mrp = { path = "../../mrp" }
 
 # Optional, needed by "native" feature
-cubeb = {  version = "0.22.0", optional = true }
-cubeb-core = {  version = "0.22.0", optional = true }
+cubeb = {  version = "0.27.0", optional = true }
+cubeb-core = {  version = "0.27.0", optional = true }
 regex = {  version = "1.11.1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
