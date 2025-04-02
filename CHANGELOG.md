@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.50.4
+
+- Desktop: New Audio Device Module improvements
+  - Bump cubeb version
+
+- Node: Allow options override in enableCapture()
+
 ## v2.50.3
 
 - Android: Add SpeechEvent to the ClassCache
