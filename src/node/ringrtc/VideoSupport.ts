@@ -147,8 +147,8 @@ export class GumVideoCapturer {
     );
   }
 
-  async enableCapture(): Promise<void> {
-    return this.startCapturing(this.defaultCaptureOptions);
+  async enableCapture(options?: GumVideoCaptureOptions): Promise<void> {
+    return this.startCapturing(options ?? this.defaultCaptureOptions);
   }
 
   async enableCaptureAndSend(
