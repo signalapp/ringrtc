@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.50.5
+
+- Update to webrtc 6998a (m134)
+
+- Android: Support 16KB pages for Arm64
+
 ## v2.50.4
 
 - Desktop: New Audio Device Module improvements
