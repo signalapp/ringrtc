@@ -276,8 +276,8 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             '-L', 'native=' + output_dir,
         ]
 
-        # Use 16KB pages for Arm64
-        if arch == 'arm64':
+        # Use 16KB pages for 64-bit platforms
+        if arch in ['arm64', 'x64']:
             cargo_args += ['-C', 'link-arg=-Wl,-z,max-page-size=16384']
 
         RunCmd(dry_run, cargo_args)
