@@ -81,6 +81,15 @@ fi
 
 export MACOSX_DEPLOYMENT_TARGET="10.15"
 
+# Ensure that experimental compact relocation is disabled until upstream projects properly set it.
+# https://issues.webrtc.org/issues/407797634
+# https://chromium-review.googlesource.com/c/chromium/src/+/5938657
+if [ "$(uname)" = "Linux" ]
+then
+  # Comment out the line that enables experimental crel.
+  sed -i '/^[^#].*--allow-experimental-crel/ s/^/#/' src/webrtc/src/build/config/compiler/BUILD.gn
+fi
+
 # Build WebRTC.
 (
     cd src/webrtc/src
