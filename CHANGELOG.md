@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.50.6
+
+- Update to webrtc 6998b
+  - Android: Enable 16KB page size for any 64-bit platform
+
+- Build improvements
+
 ## v2.50.5
 
 - Update to webrtc 6998a (m134)
