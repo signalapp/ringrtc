@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.51.0
+
+- Desktop: Move VideoSupport.ts to Client
+
 ## v2.50.6
 
 - Update to webrtc 6998b
