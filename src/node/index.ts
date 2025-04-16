@@ -45,22 +45,14 @@ export {
   RingUpdate,
   SpeechEvent,
   UserId,
-  VideoCapturer,
-  VideoRenderer,
+  VideoFrameSender,
+  VideoFrameSource,
+  VideoPixelFormatEnum,
+  videoPixelFormatToEnum,
   VideoRequest,
   callIdFromEra,
   callIdFromRingId,
 } from './ringrtc/Service';
-
-export {
-  CanvasVideoRenderer,
-  GumVideoCapturer,
-  VideoFrameSource,
-  MAX_VIDEO_CAPTURE_AREA,
-  MAX_VIDEO_CAPTURE_BUFFER_SIZE,
-  MAX_VIDEO_CAPTURE_HEIGHT,
-  MAX_VIDEO_CAPTURE_WIDTH,
-} from './ringrtc/VideoSupport';
 
 export {
   CallLinkRootKey,

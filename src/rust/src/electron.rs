@@ -1190,7 +1190,7 @@ fn httpRequestFailed(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn setOutgoingAudioEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-    info!("#outgoing_audio_enabled: {}", enabled);
+    info!("setOutgoingAudioEnabled({})", enabled);
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_audio_track.set_enabled(enabled);
@@ -1210,7 +1210,7 @@ fn setOutgoingAudioEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn setOutgoingVideoEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-    debug!("JsCallManager.setOutgoingVideoEnabled({})", enabled);
+    info!("setOutgoingVideoEnabled({})", enabled);
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_video_track.set_enabled(enabled);
@@ -1228,10 +1228,7 @@ fn setOutgoingVideoEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
     let is_screenshare = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-    debug!(
-        "JsCallManager.setOutgoingVideoIsScreenShare({})",
-        is_screenshare
-    );
+    info!("setOutgoingVideoIsScreenShare({})", is_screenshare);
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint

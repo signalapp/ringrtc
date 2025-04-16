@@ -268,7 +268,7 @@ export class CallingClass {
 
     log(`Outgoing callId ${Long.fromValue(call.callId)}`);
 
-    RingRTC.setOutgoingAudio(call.callId, true);
+    call.setOutgoingAudioMuted(false);
 
     this._call = call;
 

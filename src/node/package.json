@@ -36,11 +36,9 @@
   "devDependencies": {
     "@types/chai": "4.3.16",
     "@types/chai-as-promised": "^7.1.4",
-    "@types/dom-mediacapture-transform": "0.1.10",
     "@types/lodash": "^4.14.106",
     "@types/mocha": "10.0.9",
     "@types/node": "20.17.6",
-    "@types/offscreencanvas": "^2019.7.3",
     "@types/sinon-chai": "^3.2.12",
     "chai": "4.4.1",
     "chai-as-promised": "^7.1.1",
