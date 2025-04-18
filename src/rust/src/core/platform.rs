@@ -282,4 +282,13 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
     fn handle_rtc_stats_report(&self, _report_json: String) {}
 
     fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason);
+
+    fn handle_remote_mute_request(&self, client_id: group_call::ClientId, mute_source: DemuxId);
+
+    fn handle_observed_remote_mute(
+        &self,
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    );
 }

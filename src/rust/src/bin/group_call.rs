@@ -151,6 +151,19 @@ impl group_call::Observer for Observer {
     fn handle_rtc_stats_report(&self, _report_json: String) {
         // ignore
     }
+
+    fn handle_remote_mute_request(&self, _client_id: ClientId, _mute_source: DemuxId) {
+        // ignore
+    }
+
+    fn handle_observed_remote_mute(
+        &self,
+        _client_id: ClientId,
+        _mute_source: DemuxId,
+        _mute_target: DemuxId,
+    ) {
+        // ignore
+    }
 }
 
 impl VideoSink for Observer {

@@ -259,6 +259,15 @@ pub enum GroupUpdate {
         report_json: String,
     },
     SpeechEvent(group_call::ClientId, group_call::SpeechEvent),
+    RemoteMute {
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+    },
+    ObservedRemoteMute {
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    },
 }
 
 impl fmt::Display for GroupUpdate {
@@ -291,6 +300,22 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::RtcStatsReportComplete { .. } => "RtcStatsReportComplete".to_string(),
             GroupUpdate::SpeechEvent(_, event) => {
                 format!("SpeechEvent({:?}", event)
+            }
+            GroupUpdate::RemoteMute {
+                client_id,
+                mute_source,
+            } => {
+                format!("RemoteMute({}, {})", client_id, mute_source)
+            }
+            GroupUpdate::ObservedRemoteMute {
+                client_id,
+                mute_source,
+                mute_target,
+            } => {
+                format!(
+                    "ObservedRemoteMute({}, {}, {})",
+                    client_id, mute_source, mute_target
+                )
             }
         };
         write!(f, "({})", display)
@@ -1020,6 +1045,42 @@ impl Platform for NativePlatform {
             client_id,
             peek_info: peek_info.clone(),
         });
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_remote_mute_request(&self, client_id: group_call::ClientId, mute_source: DemuxId) {
+        info!(
+            "NativePlatform::remote_mute_request(): id: {}, source: {}",
+            client_id, mute_source
+        );
+        let result = self.send_group_update(GroupUpdate::RemoteMute {
+            client_id,
+            mute_source,
+        });
+
+        if result.is_err() {
+            error!("{:?}", result.err());
+        }
+    }
+
+    fn handle_observed_remote_mute(
+        &self,
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    ) {
+        info!(
+            "NativePlatform::handle_observed_remote_mute(): id: {}, source: {}, target: {}",
+            client_id, mute_source, mute_target
+        );
+        let result = self.send_group_update(GroupUpdate::ObservedRemoteMute {
+            client_id,
+            mute_source,
+            mute_target,
+        });
+
         if result.is_err() {
             error!("{:?}", result.err());
         }

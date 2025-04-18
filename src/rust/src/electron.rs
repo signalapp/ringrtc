@@ -1545,6 +1545,37 @@ fn setOutgoingAudioMuted(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn setOutgoingAudioMutedRemotely(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let mute_source = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint.outgoing_audio_track.set_enabled(false);
+        endpoint
+            .call_manager
+            .set_outgoing_audio_muted_remotely(client_id, mute_source);
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn sendRemoteMuteRequest(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
+    let mute_target = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .call_manager
+            .send_remote_mute_request(client_id, mute_target);
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn setOutgoingVideoMuted(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let muted = cx.argument::<JsBoolean>(1)?.value(&mut cx);
@@ -2865,6 +2896,32 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
+            Event::GroupUpdate(GroupUpdate::RemoteMute {
+                client_id,
+                mute_source,
+            }) => {
+                let method_name = "onRemoteMute";
+                let args = [
+                    cx.number(client_id).upcast(),
+                    cx.number(mute_source).upcast(),
+                ];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
+            Event::GroupUpdate(GroupUpdate::ObservedRemoteMute {
+                client_id,
+                mute_source,
+                mute_target,
+            }) => {
+                let method_name = "onObservedRemoteMute";
+                let args = [
+                    cx.number(client_id).upcast(),
+                    cx.number(mute_source).upcast(),
+                    cx.number(mute_target).upcast(),
+                ];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
         }
     }
     Ok(cx.undefined().upcast())
@@ -2997,6 +3054,11 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_leave", leave)?;
     cx.export_function("cm_disconnect", disconnect)?;
     cx.export_function("cm_setOutgoingAudioMuted", setOutgoingAudioMuted)?;
+    cx.export_function(
+        "cm_setOutgoingAudioMutedRemotely",
+        setOutgoingAudioMutedRemotely,
+    )?;
+    cx.export_function("cm_sendRemoteMuteRequest", sendRemoteMuteRequest)?;
     cx.export_function("cm_setOutgoingVideoMuted", setOutgoingVideoMuted)?;
     cx.export_function("cm_setPresenting", setPresenting)?;
     cx.export_function(

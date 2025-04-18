@@ -1244,6 +1244,34 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             groupCall.handleSpeakingNotification(event: event)
         }
     }
+
+    func handleRemoteMuteRequest(clientId: UInt32, muteSource: UInt32) {
+        Logger.debug("handleRemoteMuteRequest")
+
+        Task { @MainActor in
+            Logger.debug( "handleRemoteMuteRequest - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleRemoteMuteRequest(muteSource: muteSource)
+        }
+    }
+
+    func handleObservedRemoteMute(clientId: UInt32, muteSource: UInt32, muteTarget: UInt32) {
+        Logger.debug("handleObservedRemoteMute")
+
+        Task { @MainActor in
+            Logger.debug("handleObservedRemoteMute - main.async")
+
+            guard let groupCall = self.groupCallByClientId[clientId] else {
+                return
+            }
+
+            groupCall.handleObservedRemoteMute(muteSource: muteSource, muteTarget: muteTarget)
+        }
+    }
 }
 
 @available(iOSApplicationExtension, unavailable)

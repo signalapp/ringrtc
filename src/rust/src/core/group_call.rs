@@ -306,6 +306,15 @@ pub trait Observer {
 
     fn handle_raised_hands(&self, client_id: ClientId, raised_hands: Vec<DemuxId>);
 
+    fn handle_remote_mute_request(&self, client_id: ClientId, mute_source: DemuxId);
+
+    fn handle_observed_remote_mute(
+        &self,
+        client_id: ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    );
+
     fn handle_rtc_stats_report(&self, report_json: String);
 
     // This will be the last callback.
@@ -702,6 +711,7 @@ pub struct HeartbeatState {
     pub video_muted: Option<bool>,
     pub presenting: Option<bool>,
     pub sharing_screen: Option<bool>,
+    pub muted_by_demux_id: Option<u32>,
 }
 
 impl From<protobuf::group_call::device_to_device::Heartbeat> for HeartbeatState {
@@ -711,6 +721,7 @@ impl From<protobuf::group_call::device_to_device::Heartbeat> for HeartbeatState 
             video_muted: proto.video_muted,
             presenting: proto.presenting,
             sharing_screen: proto.sharing_screen,
+            muted_by_demux_id: proto.muted_by_demux_id,
         }
     }
 }
@@ -1099,6 +1110,7 @@ struct State {
     reactions: Vec<Reaction>,
     raised_hands: Vec<DemuxId>,
     raise_hand_state: RaiseHandState,
+    mute_request: Option<DemuxId>,
 
     sfu_reliable_stream: MrpStream<Vec<u8>, (rtp::Header, SfuToDevice)>,
     actor: Actor<State>,
@@ -1359,6 +1371,7 @@ impl Client {
                     reactions: Vec::new(),
                     raised_hands: Vec::new(),
                     raise_hand_state: RaiseHandState::default(),
+                    mute_request: None,
 
                     sfu_reliable_stream: MrpStream::with_capacity_limit(RELIABLE_RTP_BUFFER_SIZE),
 
@@ -1572,6 +1585,13 @@ impl Client {
                 state.next_raise_hand_time = Some(now + RAISE_HAND_INTERVAL);
                 Self::send_raise_hand(state);
             }
+        }
+
+        if let Some(source) = state.mute_request {
+            state
+                .observer
+                .handle_remote_mute_request(state.client_id, source);
+            state.mute_request = None;
         }
 
         let State {
@@ -1994,25 +2014,88 @@ impl Client {
         }
     }
 
+    fn set_outgoing_audio_muted_inner(
+        state: &mut State,
+        muted: bool,
+        muted_by_demux_id: Option<DemuxId>,
+    ) {
+        debug!(
+            "group_call::Client(inner)::set_audio_muted(client_id: {}, muted: {})",
+            state.client_id, muted
+        );
+        match (state.outgoing_heartbeat_state.audio_muted, muted) {
+            (Some(false) | None, true) => {
+                // Only pay attention to the |muted_by_demux_id| if we're moving from an unmuted
+                // state to a muted state
+                state.outgoing_heartbeat_state.muted_by_demux_id = muted_by_demux_id;
+            }
+            // Do nothing if transitioning from muted -> muted -- keep the attribution.
+            (Some(true), true) => {}
+            // If unmuting, clear the "muted by" attribution
+            (_, false) => {
+                state.outgoing_heartbeat_state.muted_by_demux_id = None;
+            }
+        }
+        // We don't modify the outgoing audio track.  We expect the app to handle that.
+        state.outgoing_heartbeat_state.audio_muted = Some(muted);
+        if let Err(err) = Self::send_heartbeat(state) {
+            warn!(
+                "Failed to send heartbeat after updating audio mute state: {:?}",
+                err
+            );
+        }
+    }
+
     pub fn set_outgoing_audio_muted(&self, muted: bool) {
         debug!(
             "group_call::Client(outer)::set_audio_muted(client_id: {}, muted: {})",
             self.client_id, muted
         );
         self.actor.send(move |state| {
-            debug!(
-                "group_call::Client(inner)::set_audio_muted(client_id: {}, muted: {})",
-                state.client_id, muted
-            );
-            // We don't modify the outgoing audio track.  We expect the app to handle that.
-            state.outgoing_heartbeat_state.audio_muted = Some(muted);
-            if let Err(err) = Self::send_heartbeat(state) {
-                warn!(
-                    "Failed to send heartbeat after updating audio mute state: {:?}",
-                    err
-                );
-            }
+            Self::set_outgoing_audio_muted_inner(state, muted, None);
         });
+    }
+
+    pub fn set_outgoing_audio_muted_remotely(&self, source: DemuxId) {
+        debug!(
+            "group_call::Client(outer)::set_audio_muted_remotely(client_id: {}, source: {})",
+            self.client_id, source
+        );
+        self.actor.send(move |state| {
+            Self::set_outgoing_audio_muted_inner(state, true, Some(source));
+        });
+    }
+
+    pub fn send_remote_mute_request(&self, target: DemuxId) {
+        debug!(
+            "group_call::Client(outer)::send_remote_mute_request(client_id: {}, target: {})",
+            self.client_id, target
+        );
+        use crate::protobuf::group_call::{DeviceToDevice, RemoteMuteRequest};
+        let msg = DeviceToDevice {
+            remote_mute_request: Some(RemoteMuteRequest {
+                target_demux_id: Some(target),
+            }),
+            ..Default::default()
+        };
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::send_remote_mute_request(client_id: {}, target:{}",
+                state.client_id, target
+            );
+            match state.join_state {
+                JoinState::Pending(our_demux_id) | JoinState::Joined(our_demux_id) => {
+                    if our_demux_id == target {
+                        error!("Refusing to send remote mute request to self");
+                        return;
+                    }
+                }
+                _ => {}
+            }
+            if let Err(err) = Self::broadcast_data_through_sfu(state, &msg.encode_to_vec()) {
+                warn!("Failed to send remote mute request: {:?}", err);
+            }
+        })
     }
 
     pub fn set_outgoing_video_muted(&self, muted: bool) {
@@ -3640,6 +3723,7 @@ impl Client {
                     video_muted: state.outgoing_heartbeat_state.video_muted,
                     presenting: state.outgoing_heartbeat_state.presenting,
                     sharing_screen: state.outgoing_heartbeat_state.sharing_screen,
+                    muted_by_demux_id: state.outgoing_heartbeat_state.muted_by_demux_id,
                 })
             },
             ..Default::default()
@@ -3922,6 +4006,9 @@ impl Client {
                         if let Some(reaction) = msg.reaction {
                             self.handle_reaction(demux_id, reaction);
                         }
+                        if let Some(remote_mute_request) = msg.remote_mute_request {
+                            self.handle_remote_mute_request(demux_id, remote_mute_request);
+                        }
                     } else {
                         warn!(
                             "Ignoring received RTP data because decoding failed. demux_id: {}",
@@ -4198,6 +4285,27 @@ impl Client {
                             remote_device.recalculate_higher_resolution_pending();
                         }
 
+                        // Ignore heartbeats that do not have changes in the state.
+                        let new_source = if heartbeat_state.muted_by_demux_id
+                            != remote_device.heartbeat_state.muted_by_demux_id
+                        {
+                            heartbeat_state.muted_by_demux_id
+                        } else {
+                            None
+                        };
+
+                        if let Some(new_source_demux_id) = new_source {
+                            if heartbeat_state.audio_muted == Some(true)
+                                && remote_device.heartbeat_state.audio_muted == Some(false)
+                            {
+                                state.observer.handle_observed_remote_mute(
+                                    state.client_id,
+                                    new_source_demux_id,
+                                    demux_id,
+                                );
+                            }
+                        }
+
                         remote_device.heartbeat_state = heartbeat_state;
 
                         state.observer.handle_remote_devices_changed(
@@ -4261,6 +4369,37 @@ impl Client {
                 state.reactions.push(Reaction { demux_id, value });
             });
         }
+    }
+
+    fn handle_remote_mute_request(
+        &self,
+        source_demux_id: DemuxId,
+        remote_mute_request: protobuf::group_call::RemoteMuteRequest,
+    ) {
+        debug!(
+            "handle_remote_mute_request(): demux_id = {}, target = {:?}",
+            source_demux_id, remote_mute_request.target_demux_id,
+        );
+
+        let target = if let Some(target_demux) = remote_mute_request.target_demux_id {
+            target_demux
+        } else {
+            warn!("group_call::handle_remote_mute_request target value is empty");
+            return;
+        };
+
+        self.actor.send(move |state| match state.join_state {
+            JoinState::Pending(our_demux_id) | JoinState::Joined(our_demux_id) => {
+                if our_demux_id == target
+                    && state.mute_request.is_none()
+                    && source_demux_id != our_demux_id
+                {
+                    // Only bother with the first mute request in a tick; more would be redundant.
+                    state.mute_request = Some(source_demux_id);
+                }
+            }
+            _ => {}
+        })
     }
 
     fn handle_raised_hands(actor: &Actor<State>, raised_hands: Vec<DemuxId>, server_seqnum: u32) {
@@ -4920,6 +5059,9 @@ mod tests {
         send_signaling_message_invocation_count: Arc<AtomicU64>,
         send_signaling_message_to_group_invocation_count: Arc<AtomicU64>,
         multi_recipient_count: Arc<AtomicU64>,
+
+        remote_muted_by: Arc<CallMutex<Option<DemuxId>>>,
+        observed_remote_mutes: Arc<CallMutex<Vec<(DemuxId, DemuxId)>>>,
     }
 
     impl FakeObserver {
@@ -4962,6 +5104,11 @@ mod tests {
                 send_signaling_message_invocation_count: Default::default(),
                 send_signaling_message_to_group_invocation_count: Default::default(),
                 multi_recipient_count: Default::default(),
+                remote_muted_by: Arc::new(CallMutex::new(None, "Most recent remote mute received")),
+                observed_remote_mutes: Arc::new(CallMutex::new(
+                    Vec::new(),
+                    "FakeObserver-observed remote mutes",
+                )),
             }
         }
 
@@ -5311,6 +5458,22 @@ mod tests {
         fn handle_ended(&self, _client_id: ClientId, reason: EndReason) {
             self.ended.set(reason);
         }
+
+        fn handle_remote_mute_request(&self, _client_id: ClientId, mute_source: DemuxId) {
+            *self.remote_muted_by.lock().unwrap() = Some(mute_source);
+        }
+
+        fn handle_observed_remote_mute(
+            &self,
+            _client_id: ClientId,
+            mute_source: DemuxId,
+            mute_target: DemuxId,
+        ) {
+            self.observed_remote_mutes
+                .lock()
+                .unwrap()
+                .push((mute_source, mute_target));
+        }
     }
 
     #[derive(Clone)]
@@ -5453,6 +5616,17 @@ mod tests {
             self.client.actor.send(move |_state| {
                 cloned.set();
             });
+            event.wait(Duration::from_secs(5));
+        }
+
+        fn wait_for_client_to_process_and_tick(&self) {
+            let event = Event::default();
+            let cloned = event.clone();
+            self.client
+                .actor
+                .send_delayed(TICK_INTERVAL * 2, move |_state| {
+                    cloned.set();
+                });
             event.wait(Duration::from_secs(5));
         }
 
@@ -6137,6 +6311,174 @@ mod tests {
         assert_eq!(
             Some(true),
             remote_devices2[0].heartbeat_state.sharing_screen
+        );
+    }
+
+    #[test]
+    fn remote_mute_call_observer() {
+        let client1 = TestClient::new(vec![1], 1);
+        client1.connect_join_and_wait_until_joined();
+
+        let client2 = TestClient::new(vec![2], 2);
+        client2.connect_join_and_wait_until_joined();
+
+        set_group_and_wait_until_applied(&[&client1, &client2]);
+
+        client1.client.set_outgoing_audio_muted(false);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        // Should ignore this request due to the wrong demux ID.
+        client1.client.handle_remote_mute_request(
+            client2.demux_id,
+            protobuf::group_call::RemoteMuteRequest {
+                target_demux_id: Some(client2.demux_id),
+            },
+        );
+        client1.wait_for_client_to_process_and_tick();
+        client2.wait_for_client_to_process();
+
+        // Should not invoke the client callback.
+        assert_eq!(*client1.observer.remote_muted_by.lock().unwrap(), None);
+
+        // Should ignore this request due coming from the wrong demux ID.
+        client1.client.handle_remote_mute_request(
+            client1.demux_id,
+            protobuf::group_call::RemoteMuteRequest {
+                target_demux_id: Some(client1.demux_id),
+            },
+        );
+        client1.wait_for_client_to_process_and_tick();
+        client2.wait_for_client_to_process();
+
+        // Should not invoke the client callback.
+        assert_eq!(*client1.observer.remote_muted_by.lock().unwrap(), None);
+
+        client1.client.handle_remote_mute_request(
+            client2.demux_id,
+            protobuf::group_call::RemoteMuteRequest {
+                target_demux_id: Some(client1.demux_id),
+            },
+        );
+        client1.wait_for_client_to_process_and_tick();
+        client2.wait_for_client_to_process();
+        // Should invoke the client callback
+        assert_eq!(
+            *client1.observer.remote_muted_by.lock().unwrap(),
+            Some(client2.demux_id)
+        );
+
+        // Should not have modified heartbeat--that's the client's job.
+        assert_eq!(
+            client2.observer.observed_remote_mutes.lock().unwrap().len(),
+            0
+        );
+    }
+
+    #[test]
+    fn remote_mute_client_response() {
+        let client1 = TestClient::new(vec![1], 1);
+        client1.connect_join_and_wait_until_joined();
+
+        let client2 = TestClient::new(vec![2], 2);
+        client2.connect_join_and_wait_until_joined();
+
+        set_group_and_wait_until_applied(&[&client1, &client2]);
+
+        // Muted before the request, so should still be muted but not attribute it to the
+        // remote request.
+        client1.client.set_outgoing_audio_muted(true);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        let remote_devices2 = client2.observer.remote_devices();
+        assert_eq!(1, remote_devices2.len());
+        assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.muted_by_demux_id);
+
+        client1
+            .client
+            .set_outgoing_audio_muted_remotely(client2.demux_id);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        let remote_devices2 = client2.observer.remote_devices();
+        assert_eq!(1, remote_devices2.len());
+        assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
+        // Should be muted still!
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        assert_eq!(None, remote_devices2[0].heartbeat_state.muted_by_demux_id);
+
+        // Unmuted before the request, so should mute and attribute it to the
+        // remote request.
+        client1.client.set_outgoing_audio_muted(false);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        client1
+            .client
+            .set_outgoing_audio_muted_remotely(client2.demux_id);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        let remote_devices2 = client2.observer.remote_devices();
+        assert_eq!(1, remote_devices2.len());
+        assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
+        // Should be muted now!
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        // Should attribute the mute correctly.
+        assert_eq!(
+            Some(client2.demux_id),
+            remote_devices2[0].heartbeat_state.muted_by_demux_id
+        );
+
+        let client2_observed_mutes = client2
+            .observer
+            .observed_remote_mutes
+            .lock()
+            .unwrap()
+            .clone();
+        assert_eq!(1, client2_observed_mutes.len());
+        assert_eq!(
+            client2_observed_mutes[0],
+            (client2.demux_id, client1.demux_id)
+        );
+
+        // Unmute should clear mute attribution.
+        client1.client.set_outgoing_audio_muted(false);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        let remote_devices2 = client2.observer.remote_devices();
+        assert_eq!(1, remote_devices2.len());
+        assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
+        // Should be muted now!
+        assert_eq!(Some(false), remote_devices2[0].heartbeat_state.audio_muted);
+        // Should attribute the mute correctly.
+        assert_eq!(None, remote_devices2[0].heartbeat_state.muted_by_demux_id);
+    }
+
+    #[test]
+    fn send_remote_mute() {
+        let client1 = TestClient::new(vec![1], 1);
+        client1.connect_join_and_wait_until_joined();
+
+        let client2 = TestClient::new(vec![2], 2);
+        client2.connect_join_and_wait_until_joined();
+
+        set_group_and_wait_until_applied(&[&client1, &client2]);
+
+        client2.client.set_outgoing_audio_muted(false);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        client1.client.send_remote_mute_request(client2.demux_id);
+        client2.wait_for_client_to_process_and_tick();
+
+        assert_eq!(
+            *client2.observer.remote_muted_by.lock().unwrap(),
+            Some(client1.demux_id)
         );
     }
 

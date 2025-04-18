@@ -497,6 +497,14 @@ pub struct AppInterface {
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, reason: i32),
     pub handleSpeakingNotification:
         extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, event: i32),
+    pub handleRemoteMuteRequest:
+        extern "C" fn(object: *mut c_void, clientId: group_call::ClientId, mute_source: u32),
+    pub handleObservedRemoteMute: extern "C" fn(
+        object: *mut c_void,
+        clientId: group_call::ClientId,
+        mute_source: u32,
+        mute_target: u32,
+    ),
 }
 
 // Add an empty Send trait to allow transfer of ownership between threads.
@@ -1186,6 +1194,39 @@ pub extern "C" fn ringrtcSetOutgoingAudioMuted(
     }
 }
 
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcSetOutgoingAudioMutedRemotely(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    source: DemuxId,
+) {
+    let result = call_manager::set_outgoing_audio_muted_remotely(
+        callManager as *mut IosCallManager,
+        clientId,
+        source,
+    );
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "C" fn ringrtcSendRemoteMuteRequest(
+    callManager: *mut c_void,
+    clientId: group_call::ClientId,
+    target: DemuxId,
+) {
+    let result = call_manager::send_remote_mute_request(
+        callManager as *mut IosCallManager,
+        clientId,
+        target,
+    );
+    if result.is_err() {
+        error!("{:?}", result.err());
+    }
+}
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetOutgoingVideoMuted(

@@ -503,6 +503,26 @@ pub fn set_outgoing_audio_muted(
     Ok(())
 }
 
+pub fn set_outgoing_audio_muted_remotely(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    source: DemuxId,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_outgoing_audio_muted_remotely(client_id, source);
+    Ok(())
+}
+
+pub fn send_remote_mute_request(
+    call_manager: *mut IosCallManager,
+    client_id: group_call::ClientId,
+    target: DemuxId,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.send_remote_mute_request(client_id, target);
+    Ok(())
+}
+
 pub fn set_outgoing_video_muted(
     call_manager: *mut IosCallManager,
     client_id: group_call::ClientId,

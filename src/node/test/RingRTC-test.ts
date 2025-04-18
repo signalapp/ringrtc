@@ -909,6 +909,12 @@ describe('RingRTC', () => {
       onPeekChanged(_call: GroupCall) {}
       onEnded(_call: GroupCall, _reason: GroupCallEndReason) {}
       onSpeechEvent(_call: GroupCall, _event: SpeechEvent) {}
+      onRemoteMute(_call: GroupCall, _demuxId: number) {}
+      onObservedRemoteMute(
+        _call: GroupCall,
+        _sourceDemuxId: number,
+        _targetDemuxId: number
+      ) {}
       /* eslint-enable @typescript-eslint/no-empty-function */
     }
 

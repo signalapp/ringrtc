@@ -794,6 +794,28 @@ impl Platform for IosPlatform {
             event as i32,
         );
     }
+
+    fn handle_remote_mute_request(&self, client_id: group_call::ClientId, mute_source: DemuxId) {
+        (self.app_interface.handleRemoteMuteRequest)(
+            self.app_interface.object,
+            client_id,
+            mute_source,
+        );
+    }
+
+    fn handle_observed_remote_mute(
+        &self,
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    ) {
+        (self.app_interface.handleObservedRemoteMute)(
+            self.app_interface.object,
+            client_id,
+            mute_source,
+            mute_target,
+        );
+    }
 }
 
 impl sfu::Delegate for IosPlatform {

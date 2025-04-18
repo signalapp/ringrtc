@@ -20,6 +20,9 @@ class TestGroupCallDelegate: GroupCallDelegate {
     var onSpeakingCount = 0
     var lastOnEndedReason: GroupCallEndReason? = nil
     var lastOnSpeakingEvent: SpeechEvent? = nil
+    var remoteMuteCount = 0
+    var lastRemoteMuteSource: UInt32 = 0
+    var lastObservedRemoteMute: (UInt32, UInt32) = (0, 0)
 
     func groupCall(requestMembershipProof groupCall: GroupCall) {
         requestMembershipProofCount += 1
@@ -65,5 +68,14 @@ class TestGroupCallDelegate: GroupCallDelegate {
     func groupCall(onSpeakingNotification groupCall: GroupCall, event: SpeechEvent) {
         onSpeakingCount += 1
         lastOnSpeakingEvent = event
+    }
+
+    func groupCall(onRemoteMuteRequest groupCall: GroupCall, muteSource: UInt32) {
+        remoteMuteCount += 1
+        lastRemoteMuteSource = muteSource
+    }
+
+    func groupCall(onObservedRemoteMute groupCall: GroupCall, muteSource: UInt32, muteTarget: UInt32) {
+        lastObservedRemoteMute = (muteSource, muteTarget)
     }
 }

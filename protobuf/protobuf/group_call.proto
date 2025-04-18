@@ -16,6 +16,11 @@ message MRPHeader {
   optional uint32 num_packets = 3;
 }
 
+// Sent over RTP data.
+ message RemoteMuteRequest {
+   optional uint32 target_demux_id = 1;
+ }
+
 message DeviceToDevice {
   // Sent over signaling
   message MediaKey {
@@ -30,8 +35,9 @@ message DeviceToDevice {
     optional bool video_muted = 2;
     optional bool presenting = 3;
     optional bool sharing_screen = 4;
+    optional uint32 muted_by_demux_id = 5;
   }
- 
+
   // Sent over RTP data *and* signaling
   message Leaving {
     // When sent over signaling, you must indicate which device is leaving.
@@ -48,6 +54,7 @@ message DeviceToDevice {
   optional Heartbeat heartbeat = 3;
   optional Leaving leaving = 4;
   optional Reaction reaction = 5;
+  optional RemoteMuteRequest remote_mute_request = 6;
 }
 
 message DeviceToSfu {
@@ -56,13 +63,13 @@ message DeviceToSfu {
       optional uint32 height = 2;
       optional fixed32 demux_id = 3;
     }
-   
+
     repeated VideoRequest requests = 1;
     reserved 2; // tag 2 was previously "max_count", which is no longer used
     optional uint32 max_kbps = 3;
     optional uint32 active_speaker_height = 4;
   }
- 
+
   message LeaveMessage {}
 
   // A generic message type for any action that only needs a "target". Protobuf's encoding doesn't

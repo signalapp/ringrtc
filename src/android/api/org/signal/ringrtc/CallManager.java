@@ -1786,6 +1786,32 @@ public class CallManager {
   }
 
   @CalledByNative
+  private void handleRemoteMuteRequest(long clientId, long sourceDemuxId) {
+    Log.i(TAG, "handleRemoteMuteRequest():");
+
+    GroupCall groupCall = this.groupCallByClientId.get(clientId);
+    if (groupCall == null) {
+      Log.w(TAG, "groupCall not found by clientId: " + clientId);
+      return;
+    }
+
+    groupCall.handleRemoteMuteRequest(sourceDemuxId);
+  }
+
+  @CalledByNative
+  private void handleObservedRemoteMute(long clientId, long sourceDemuxId, long targetDemuxId) {
+    Log.i(TAG, "handleRemoteMuteRequest():");
+
+    GroupCall groupCall = this.groupCallByClientId.get(clientId);
+    if (groupCall == null) {
+      Log.w(TAG, "groupCall not found by clientId: " + clientId);
+      return;
+    }
+
+    groupCall.handleObservedRemoteMute(sourceDemuxId, targetDemuxId);
+  }
+
+  @CalledByNative
   private void handleSpeakingNotification(long clientId, GroupCall.SpeechEvent event) {
     Log.i(TAG, "handleSpeakingNotification():");
 

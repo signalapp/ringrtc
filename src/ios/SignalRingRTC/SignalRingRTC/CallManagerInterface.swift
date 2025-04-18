@@ -43,6 +43,8 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo)
     func handleEnded(clientId: UInt32, reason: GroupCallEndReason)
     func handleSpeakingNotification(clientId: UInt32, event: SpeechEvent)
+    func handleRemoteMuteRequest(clientId: UInt32, muteSource: UInt32)
+    func handleObservedRemoteMute(clientId: UInt32, muteSource: UInt32, muteTarget: UInt32)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -101,7 +103,9 @@ class CallManagerInterface {
             handleIncomingVideoTrack: callManagerInterfaceHandleIncomingVideoTrack,
             handlePeekChanged: callManagerInterfaceHandlePeekChanged,
             handleEnded: callManagerInterfaceHandleEnded,
-            handleSpeakingNotification: callManagerInterfaceHandleSpeakingNotification
+            handleSpeakingNotification: callManagerInterfaceHandleSpeakingNotification,
+            handleRemoteMuteRequest: callManagerInterfaceHandleRemoteMuteRequest,
+            handleObservedRemoteMute: callManagerInterfaceHandleObservedRemoteMute
         )
     }
 
@@ -365,6 +369,22 @@ class CallManagerInterface {
         }
 
         delegate.handleSpeakingNotification(clientId: clientId, event: event)
+    }
+
+    func handleRemoteMuteRequest(clientId: UInt32, muteSource: UInt32) {
+        guard let delegate = self.callManagerObserverDelegate else {
+             return
+        }
+
+        delegate.handleRemoteMuteRequest(clientId: clientId, muteSource: muteSource)
+    }
+
+    func handleObservedRemoteMute(clientId: UInt32, muteSource: UInt32, muteTarget: UInt32) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.handleObservedRemoteMute(clientId: clientId, muteSource: muteSource, muteTarget: muteTarget)
     }
 }
 
@@ -1138,4 +1158,26 @@ func callManagerInterfaceHandleSpeakingNotification(object: UnsafeMutableRawPoin
     }
 
     obj.handleSpeakingNotification(clientId: clientId, event: _event)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceHandleRemoteMuteRequest(object: UnsafeMutableRawPointer?, clientId: UInt32, muteSource: UInt32) {
+    guard let object = object else {
+        failDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    obj.handleRemoteMuteRequest(clientId: clientId, muteSource: muteSource)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceHandleObservedRemoteMute(object: UnsafeMutableRawPointer?, clientId: UInt32, muteSource: UInt32, muteTarget: UInt32) {
+    guard let object = object else {
+        failDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    obj.handleObservedRemoteMute(clientId: clientId, muteSource: muteSource, muteTarget: muteTarget)
 }

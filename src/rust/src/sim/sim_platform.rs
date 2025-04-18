@@ -631,6 +631,22 @@ impl Platform for SimPlatform {
                 update,
             });
     }
+
+    fn handle_remote_mute_request(&self, client_id: group_call::ClientId, mute_source: DemuxId) {
+        info!("handle_remote_mute_request({}, {})", client_id, mute_source);
+    }
+
+    fn handle_observed_remote_mute(
+        &self,
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    ) {
+        info!(
+            "handle_observed_remote_mute({}, {}, {})",
+            client_id, mute_source, mute_target
+        );
+    }
 }
 
 impl sfu::Delegate for SimPlatform {

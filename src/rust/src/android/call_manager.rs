@@ -965,6 +965,26 @@ pub fn set_outgoing_audio_muted(
     Ok(())
 }
 
+pub fn set_outgoing_audio_muted_remotely(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    source_demux_id: jlong,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_outgoing_audio_muted_remotely(client_id, source_demux_id as u32);
+    Ok(())
+}
+
+pub fn send_remote_mute_request(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    target_demux_id: jlong,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.send_remote_mute_request(client_id, target_demux_id as u32);
+    Ok(())
+}
+
 pub fn set_outgoing_video_muted(
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,

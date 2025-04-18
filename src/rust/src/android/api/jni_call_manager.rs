@@ -953,6 +953,48 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingAud
 
 #[no_mangle]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingAudioMutedRemotely(
+    mut env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    source_demux_id: jlong,
+) {
+    match call_manager::set_outgoing_audio_muted_remotely(
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        source_demux_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&mut env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSendRemoteMuteRequest(
+    mut env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    target_demux_id: jlong,
+) {
+    match call_manager::send_remote_mute_request(
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        target_demux_id,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&mut env, e);
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingVideoMuted(
     mut env: JNIEnv,
     _object: JObject,

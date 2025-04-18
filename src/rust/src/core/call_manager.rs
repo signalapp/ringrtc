@@ -2656,6 +2656,30 @@ where
         platform_handler!(self, handle_raised_hands, client_id, raised_hands);
     }
 
+    fn handle_remote_mute_request(&self, client_id: group_call::ClientId, mute_source: DemuxId) {
+        info!("handle_remote_mute_request() {}", mute_source);
+        platform_handler!(self, handle_remote_mute_request, client_id, mute_source);
+    }
+
+    fn handle_observed_remote_mute(
+        &self,
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    ) {
+        info!(
+            "handle_observed_remote_mute() {} muted {}",
+            mute_source, mute_target
+        );
+        platform_handler!(
+            self,
+            handle_observed_remote_mute,
+            client_id,
+            mute_source,
+            mute_target
+        );
+    }
+
     fn handle_rtc_stats_report(&self, report_json: String) {
         platform_handler!(self, handle_rtc_stats_report, report_json);
     }
@@ -3018,6 +3042,8 @@ where
     forward_group_call_api!(raise_hand(raise: bool));
     forward_group_call_api!(group_ring => ring(recipient: Option<UserId>));
     forward_group_call_api!(set_outgoing_audio_muted(muted: bool));
+    forward_group_call_api!(set_outgoing_audio_muted_remotely(source: DemuxId));
+    forward_group_call_api!(send_remote_mute_request(target: DemuxId));
     forward_group_call_api!(set_outgoing_video_muted(muted: bool));
     forward_group_call_api!(set_presenting(presenting: bool));
     forward_group_call_api!(set_sharing_screen(sharing_screen: bool));

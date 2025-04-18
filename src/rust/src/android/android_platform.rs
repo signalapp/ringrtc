@@ -1541,6 +1541,63 @@ impl Platform for AndroidPlatform {
             }
         }
     }
+
+    fn handle_remote_mute_request(&self, client_id: group_call::ClientId, mute_source: DemuxId) {
+        info!(
+            "handle_remote_mute_request(): client_id: {}, mute_source: {}",
+            client_id, mute_source,
+        );
+
+        if let Ok(env) = &mut self.java_env() {
+            let jni_client_id = client_id as jlong;
+            let jni_mute_source = mute_source as jlong;
+
+            let result = jni_call_method(
+                env,
+                self.jni_call_manager.as_obj(),
+                "handleRemoteMuteRequest",
+                jni_args!((
+                    jni_client_id => long,
+                    jni_mute_source => long,
+                ) -> void),
+            );
+            if result.is_err() {
+                error!("jni_call_method: {:?}", result.err());
+            }
+        }
+    }
+
+    fn handle_observed_remote_mute(
+        &self,
+        client_id: group_call::ClientId,
+        mute_source: DemuxId,
+        mute_target: DemuxId,
+    ) {
+        info!(
+            "handle_observed_remote_mute(): client_id: {}, mute_source: {}, mute_target: {}",
+            client_id, mute_source, mute_target
+        );
+
+        if let Ok(env) = &mut self.java_env() {
+            let jni_client_id = client_id as jlong;
+            let jni_mute_source = mute_source as jlong;
+            let jni_mute_target = mute_target as jlong;
+
+            let result = jni_call_method(
+                env,
+                self.jni_call_manager.as_obj(),
+                "handleObservedRemoteMute",
+                jni_args!((
+                    jni_client_id => long,
+                    jni_mute_source => long,
+                    jni_mute_target => long,
+                ) -> void),
+            );
+            if result.is_err() {
+                error!("jni_call_method: {:?}", result.err());
+            }
+        }
+    }
 }
 
 impl AndroidPlatform {

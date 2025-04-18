@@ -257,6 +257,19 @@ public protocol GroupCallDelegate: AnyObject {
      */
     @MainActor
     func groupCall(onSpeakingNotification groupCall: GroupCall, event: SpeechEvent)
+
+    /**
+     * Indication that the user has been remotely muted by the `muteSource` demuxId
+     */
+    @MainActor
+    func groupCall(onRemoteMuteRequest groupCall: GroupCall, muteSource: UInt32)
+
+    /**
+     * Indication that the user has observed demuxId `muteSource` issue a remote mute to `muteTarget`, who is not the local user.
+     * (`muteSource`, on the other hand, might be the local user)
+     */
+    @MainActor
+    func groupCall(onObservedRemoteMute groupCall: GroupCall, muteSource: UInt32, muteTarget: UInt32)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -530,6 +543,33 @@ public class GroupCall {
 
             ringrtcSetOutgoingAudioMuted(self.ringRtcCallManager, clientId, newValue)
         }
+    }
+
+    @MainActor
+    public func setOutgoingAudioRemotelyMuted(_ source: DemuxId) {
+        Logger.debug("setOutgoingAudioRemotelyMuted")
+
+        _isOutgoingAudioMuted = true
+        self.audioTrack?.isEnabled = false
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        ringrtcSetOutgoingAudioMutedRemotely(self.ringRtcCallManager, clientId, source)
+    }
+
+    @MainActor
+    public func sendRemoteMuteRequest(_ target: DemuxId) {
+        Logger.debug("sendRemoteMuteRequest")
+
+        guard let clientId = self.clientId else {
+            Logger.warn("no clientId defined for groupCall")
+            return
+        }
+
+        ringrtcSendRemoteMuteRequest(self.ringRtcCallManager, clientId, target)
     }
 
     private var _isOutgoingVideoMuted = false
@@ -876,5 +916,15 @@ public class GroupCall {
     @MainActor
     func handleSpeakingNotification(event: SpeechEvent) {
         self.delegate?.groupCall(onSpeakingNotification: self, event: event)
+    }
+
+    @MainActor
+    func handleRemoteMuteRequest(muteSource: UInt32) {
+        self.delegate?.groupCall(onRemoteMuteRequest: self, muteSource: muteSource)
+    }
+
+    @MainActor
+    func handleObservedRemoteMute(muteSource: UInt32, muteTarget: UInt32) {
+        self.delegate?.groupCall(onObservedRemoteMute: self, muteSource: muteSource, muteTarget: muteTarget)
     }
 }

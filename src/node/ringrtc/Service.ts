@@ -136,6 +136,10 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).groupRaiseHand = Native.cm_groupRaiseHand;
 (NativeCallManager.prototype as any).setOutgoingAudioMuted =
   Native.cm_setOutgoingAudioMuted;
+(NativeCallManager.prototype as any).setOutgoingAudioMutedRemotely =
+  Native.cm_setOutgoingAudioMutedRemotely;
+(NativeCallManager.prototype as any).sendRemoteMuteRequest =
+  Native.cm_sendRemoteMuteRequest;
 (NativeCallManager.prototype as any).setOutgoingVideoMuted =
   Native.cm_setOutgoingVideoMuted;
 (NativeCallManager.prototype as any).setOutgoingGroupCallVideoIsScreenShare =
@@ -1537,6 +1541,30 @@ export class RingRTCType {
   }
 
   // Called by Rust
+  onRemoteMute(clientId: GroupCallClientId, demuxId: number): void {
+    sillyDeadlockProtection(() => {
+      const groupCall = this._groupCallByClientId.get(clientId);
+      if (groupCall) {
+        groupCall.onRemoteMute(demuxId);
+      }
+    });
+  }
+
+  // Called by Rust.
+  onObservedRemoteMute(
+    clientId: GroupCallClientId,
+    sourceDemuxId: number,
+    targetDemuxId: number
+  ): void {
+    sillyDeadlockProtection(() => {
+      const groupCall = this._groupCallByClientId.get(clientId);
+      if (groupCall) {
+        groupCall.onObservedRemoteMute(sourceDemuxId, targetDemuxId);
+      }
+    });
+  }
+
+  // Called by Rust
   onLogMessage(
     level: number,
     fileName: string,
@@ -2363,6 +2391,12 @@ export interface GroupCallObserver {
   onPeekChanged(groupCall: GroupCall): void;
   onEnded(groupCall: GroupCall, reason: GroupCallEndReason): void;
   onSpeechEvent(groupCall: GroupCall, event: SpeechEvent): void;
+  onRemoteMute(groupCall: GroupCall, demuxId: number): void;
+  onObservedRemoteMute(
+    groupCall: GroupCall,
+    sourceDemuxId: number,
+    targetDemuxId: number
+  ): void;
 }
 
 export class GroupCall {
@@ -2450,6 +2484,18 @@ export class GroupCall {
     this._localDeviceState.audioMuted = muted;
     this._callManager.setOutgoingAudioMuted(this._clientId, muted);
     this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by UI
+  setOutgoingAudioMutedRemotely(source: number): void {
+    this._localDeviceState.audioMuted = true;
+    this._callManager.setOutgoingAudioMutedRemotely(this._clientId, source);
+    this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Called by UI
+  sendRemoteMuteRequest(target: number): void {
+    this._callManager.sendRemoteMuteRequest(this._clientId, target);
   }
 
   // Called by UI
@@ -2680,6 +2726,14 @@ export class GroupCall {
 
   handleSpeechEvent(event: SpeechEvent): void {
     this._observer.onSpeechEvent(this, event);
+  }
+
+  onRemoteMute(demuxId: number): void {
+    this._observer.onRemoteMute(this, demuxId);
+  }
+
+  onObservedRemoteMute(sourceDemuxId: number, targetDemuxId: number): void {
+    this._observer.onObservedRemoteMute(this, sourceDemuxId, targetDemuxId);
   }
 }
 
@@ -2947,6 +3001,11 @@ export interface CallManager {
   leave(clientId: GroupCallClientId): void;
   disconnect(clientId: GroupCallClientId): void;
   setOutgoingAudioMuted(clientId: GroupCallClientId, muted: boolean): void;
+  setOutgoingAudioMutedRemotely(
+    clientId: GroupCallClientId,
+    source: number
+  ): void;
+  sendRemoteMuteRequest(clientId: GroupCallClientId, target: number): void;
   setOutgoingVideoMuted(clientId: GroupCallClientId, muted: boolean): void;
   setPresenting(clientId: GroupCallClientId, presenting: boolean): void;
   setOutgoingGroupCallVideoIsScreenShare(

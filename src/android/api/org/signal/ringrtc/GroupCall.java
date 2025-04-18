@@ -381,6 +381,44 @@ public final class GroupCall {
 
     /**
      *
+     * Mute outgoing audio due to a request from another user.
+     * This adjusts the outgoing audio track and sends the status to the SFU.
+     *
+     * @param sourceDemuxId      the demux ID of the user that sent the request
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void setOutgoingAudioMutedRemotely(long sourceDemuxId)
+            throws CallException
+    {
+        Log.i(TAG, "setOutgoingAudioMutedRemotely():");
+
+        this.localDeviceState.audioMuted = true;
+        this.outgoingAudioTrack.setEnabled(false);
+
+        ringrtcSetOutgoingAudioMutedRemotely(nativeCallManager, this.clientId, sourceDemuxId);
+    }
+
+    /**
+     *
+     * Request that the given user mute their audio.
+     *
+     * @param targetDemuxId      the demux ID of the user we want to mute.
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void sendRemoteMuteRequest(long targetDemuxId)
+            throws CallException
+    {
+        Log.i(TAG, "sendRemoteMuteRequest():");
+
+        ringrtcSendRemoteMuteRequest(nativeCallManager, this.clientId, targetDemuxId);
+    }
+
+    /**
+     *
      * Mute (or unmute) outgoing video. This adjusts the outgoing video
      * track and sends the status to the SFU. The camera capture state
      * is not affected and should be set accordingly by the application.
@@ -855,6 +893,29 @@ public final class GroupCall {
     }
 
     /**
+     * Callback from RingRTC when we receive a remote mute request. Called via
+     * the CallManager.
+     *
+     * @param sourceDemuxId the demux ID from which the mute request originated.
+     */
+    void handleRemoteMuteRequest(long sourceDemuxId) {
+        Log.i(TAG, "handleRemoteMuteRequest():");
+        this.observer.onRemoteMuteRequest(this, sourceDemuxId);
+    }
+
+    /**
+     * Callback from RingRTC when we observe a remote mute request from `sourceDemuxId` to
+     * `targetDemuxId`. Called via the CallManager.
+     *
+     * @param sourceDemuxId the demux ID from which the mute request originated.
+     * @param targetDemuxId the demux ID to which the mute request went.
+     */
+    void handleObservedRemoteMute(long sourceDemuxId, long targetDemuxId) {
+        Log.i(TAG, "handleObservedRemoteMute():");
+        this.observer.onObservedRemoteMute(this, sourceDemuxId, targetDemuxId);
+    }
+
+    /**
      * The connection states of a device connecting to a group call.
      */
     public enum ConnectionState {
@@ -1280,6 +1341,16 @@ public final class GroupCall {
          * Notification that the group call has ended.
          */
         void onEnded(GroupCall groupCall, GroupCallEndReason reason);
+
+        /**
+         * Notification that the local client received a remote mute request.
+         */
+        void onRemoteMuteRequest(GroupCall groupCall, long sourceDemuxId);
+
+        /**
+         * Notification that the local client observed one client remotely mute another.
+         */
+        void onObservedRemoteMute(GroupCall groupCall, long sourceDemuxId, long targetDemuxId);
     }
 
     /* Native methods below here. */
@@ -1337,6 +1408,18 @@ public final class GroupCall {
         void ringrtcSetOutgoingAudioMuted(long nativeCallManager,
                                           long clientId,
                                           boolean muted)
+        throws CallException;
+
+    private native
+    void ringrtcSetOutgoingAudioMutedRemotely(long nativeCallManager,
+                                              long clientId,
+                                              long sourceDemuxId)
+            throws CallException;
+
+    private native
+    void ringrtcSendRemoteMuteRequest(long nativeCallManager,
+                                      long clientId,
+                                      long targetDemuxId)
         throws CallException;
 
     private native
