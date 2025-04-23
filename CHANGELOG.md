@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.52.0
+
+- Add support for remote mute
+
+- Update to webrtc 6998c
+  - Revert video delay changes
+
 ## v2.51.0
 
 - Desktop: Move VideoSupport.ts to Client
