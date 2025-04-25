@@ -15,7 +15,7 @@ TARGET_ARCH=${TARGET_ARCH:-$(uname -m)}
 
 usage()
 {
-    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only] [--archive-webrtc] [--build-for-simulator]
+    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only|--call-sim-cli-only] [--no-electron] [--no-call-sim-cli] [--archive-webrtc] [--build-for-simulator] [--test-ringrtc-adm]
     where:
         -d to create a debug build (default)
         -r to create a release build
@@ -41,6 +41,8 @@ clean()
 
 BUILD_TYPE=debug
 BUILD_WHAT=all
+SKIP_CALL_SIM_CLI=
+SKIP_ELECTRON=
 ARCHIVE_WEBRTC=
 TEST_RINGRTC_ADM=
 BUILD_FOR_SIMULATOR=
@@ -61,6 +63,15 @@ while [ "$1" != "" ]; do
             ;;
         --ringrtc-only )
             BUILD_WHAT=ringrtc
+            ;;
+        --call-sim-cli-only )
+            BUILD_WHAT=call_sim-cli
+            ;;
+        --no-electron )
+            SKIP_ELECTRON=yes
+            ;;
+        --no-call-sim-cli )
+            SKIP_CALL_SIM_CLI=yes
             ;;
         --archive-webrtc )
             ARCHIVE_WEBRTC=yes
@@ -183,7 +194,7 @@ then
     fi
 fi
 
-if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
+if [ -z "${SKIP_ELECTRON}" ] && [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "ringrtc" ]
 then
     hash rustup 2>/dev/null || { echo >&2 "Make sure you have rustup installed and properly configured! Aborting."; exit 1; }
 
@@ -280,4 +291,17 @@ then
           dump_syms "target/${CARGO_TARGET}/${BUILD_TYPE}/${DEBUG_PACKAGE}" -o "${OUTPUT_DIR}"/${BUILD_TYPE}/libringrtc-"${PROJECT_VERSION}"-${DEFAULT_PLATFORM}-"${TARGET_ARCH}"-debuginfo.sym
         fi
     )
+fi
+
+if [ -z "${SKIP_CALL_SIM_CLI}" ] && [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "call_sim-cli" ]
+then
+    if [ "${BUILD_TYPE}" = "debug" ]
+    then
+        OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin call_sim-cli --features=call_sim
+        echo "Can run with target/debug/call_sim-cli"
+    else
+        # Build with debug line tables, but not full debug info.
+        CARGO_PROFILE_RELEASE_DEBUG=1 OUTPUT_DIR="${OUTPUT_DIR}" cargo build --package ringrtc --bin call_sim-cli --features=call_sim --release
+        echo "Can run with target/release/call_sim-cli"
+    fi
 fi

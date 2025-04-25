@@ -167,10 +167,9 @@ jobs:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
       - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
-      - name: Install depot tools
-        run: mkdir -p out && git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git out/depot_tools
+      - run: bin/fetch-artifact -p linux-x64 --for-simulator
       - name: Build call sim
-        run: make call_sim-cli PLATFORM=unix PATH="${PWD}/out/depot_tools:${PATH}"
+        run: bin/build-electron --call-sim-cli-only --release
       - name: Get media files
         run: mkdir media && gcloud storage cp gs://calling-ci-resources.signal.org/* media
         working-directory: call_sim/
