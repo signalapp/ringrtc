@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.52.1
+
+- Android: Add AudioConfig class and configure ADMs properly
+
+- Update to webrtc 6998d
+  - Add new configuration options for the Oboe ADM
+
+- CI: Use prebuilt for profiling run
+
 ## v2.52.0
 
 - Add support for remote mute
