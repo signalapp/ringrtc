@@ -15,7 +15,7 @@ TARGET_ARCH=${TARGET_ARCH:-$(uname -m)}
 
 usage()
 {
-    echo 'usage: build-electron [-d|-r|-c] [--webrtc-only|--ringrtc-only|--call-sim-cli-only] [--no-electron] [--no-call-sim-cli] [--archive-webrtc] [--build-for-simulator] [--test-ringrtc-adm]
+    echo 'usage: build-desktop [-d|-r|-c] [--webrtc-only|--ringrtc-only|--call-sim-cli-only] [--no-electron] [--no-call-sim-cli] [--archive-webrtc] [--build-for-simulator] [--test-ringrtc-adm]
     where:
         -d to create a debug build (default)
         -r to create a release build

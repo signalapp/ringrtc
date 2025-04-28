@@ -81,7 +81,7 @@ jobs:
         node-version-file: 'src/node/.nvmrc'
 
     - run: ./bin/fetch-artifact --platform linux-x64 --release
-    - run: ./bin/build-electron --ringrtc-only --release
+    - run: ./bin/build-desktop --ringrtc-only --release
 
     - name: Upload Desktop Artifacts
       uses: actions/upload-artifact@v4
@@ -121,7 +121,7 @@ jobs:
         node-version-file: 'src/node/.nvmrc'
 
     - run: ./bin/fetch-artifact --platform linux-arm64 --release
-    - run: TARGET_ARCH=arm64 ./bin/build-electron --ringrtc-only --release
+    - run: TARGET_ARCH=arm64 ./bin/build-desktop --ringrtc-only --release
 
     - name: Upload Desktop Artifacts
       uses: actions/upload-artifact@v4
@@ -164,12 +164,12 @@ jobs:
         node-version-file: 'src/node/.nvmrc'
 
     - run: sh ./bin/fetch-artifact --platform windows-x64 --release
-    - run: sh ./bin/build-electron --ringrtc-only --release
+    - run: sh ./bin/build-desktop --ringrtc-only --release
 
     - run: sh ./bin/fetch-artifact --platform windows-arm64 --release -o out-arm
     - run: echo "TARGET_ARCH=arm64" >> $env:GITHUB_ENV
     - run: echo "OUTPUT_DIR=out-arm" >> $env:GITHUB_ENV
-    - run: sh ./bin/build-electron --ringrtc-only --release
+    - run: sh ./bin/build-desktop --ringrtc-only --release
 
     - name: Upload Desktop Artifacts
       uses: actions/upload-artifact@v4
@@ -219,10 +219,10 @@ jobs:
         node-version-file: 'src/node/.nvmrc'
 
     - run: ./bin/fetch-artifact --platform mac-x64 --release
-    - run: ./bin/build-electron --ringrtc-only --release
+    - run: ./bin/build-desktop --ringrtc-only --release
 
     - run: ./bin/fetch-artifact --platform mac-arm64 --release -o out-arm
-    - run: TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-electron --ringrtc-only --release
+    - run: TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-desktop --ringrtc-only --release
 
     - name: Upload Desktop Artifacts
       uses: actions/upload-artifact@v4

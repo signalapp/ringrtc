@@ -36,7 +36,7 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
     - name: Install extra Rust tools
       run: cargo +stable install --version 0.6.2 --locked cargo-about
-    - run: shellcheck **/*.sh bin/build-aar bin/build-direct bin/build-electron bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-artifact bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check bin/set-up-for-cocoapods src/rust/scripts/run-tests
+    - run: shellcheck **/*.sh bin/build-aar bin/build-direct bin/build-desktop bin/build-gctc bin/build-ios bin/build-javadoc bin/build-rustdoc bin/build-target bin/fetch-artifact bin/gsync-webrtc bin/prepare-workspace bin/rust-lint-check bin/set-up-for-cocoapods src/rust/scripts/run-tests
     # Skip the Python scripts not written with flake8 style. (Try not to add more.)
     - run: cd bin && python3 -m flake8 . --exclude measure-cpu.py
     - name: Set up mypy types
@@ -132,9 +132,9 @@ jobs:
         node-version-file: 'src/node/.nvmrc'
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - run: bin/fetch-artifact -p desktop
-    - run: bin/build-electron --release --ringrtc-only --test-ringrtc-adm
+    - run: bin/build-desktop --release --ringrtc-only --test-ringrtc-adm
       if: ${{ matrix.os != 'windows-latest' }}
-    - run: bin/build-electron --release --ringrtc-only
+    - run: bin/build-desktop --release --ringrtc-only
       if: ${{ matrix.os == 'windows-latest' }}
     - run: npm ci
       working-directory: src/node

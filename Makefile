@@ -80,10 +80,10 @@ electron:
 	fi
 	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
 		echo "Electron: Debug build" ; \
-		TARGET_ARCH=$(NODEJS_ARCH) BUILD_WHAT=$(BUILD_WHAT) BUILD_WEBRTC_TESTS=$(BUILD_WEBRTC_TESTS) ./bin/build-electron -d --no-call-sim-cli ; \
+		TARGET_ARCH=$(NODEJS_ARCH) BUILD_WHAT=$(BUILD_WHAT) BUILD_WEBRTC_TESTS=$(BUILD_WEBRTC_TESTS) ./bin/build-desktop -d --no-call-sim-cli ; \
 	else \
 		echo "Electron: Release build" ; \
-		TARGET_ARCH=$(NODEJS_ARCH) BUILD_WHAT=$(BUILD_WHAT) BUILD_WEBRTC_TESTS=$(BUILD_WEBRTC_TESTS) ./bin/build-electron -r --no-call-sim-cli ; \
+		TARGET_ARCH=$(NODEJS_ARCH) BUILD_WHAT=$(BUILD_WHAT) BUILD_WEBRTC_TESTS=$(BUILD_WEBRTC_TESTS) ./bin/build-desktop -r --no-call-sim-cli ; \
 	fi
 	$(Q) (cd src/node && npm install && npm run build)
 
@@ -120,17 +120,17 @@ call_sim-cli:
 	fi
 	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
 		echo "call_sim-cli: Debug build" ; \
-		./bin/build-electron --build-for-simulator --no-electron -d ; \
+		./bin/build-desktop --build-for-simulator --no-electron -d ; \
 	else \
 		echo "call_sim-cli: Release build" ; \
-		./bin/build-electron --build-for-simulator --no-electron -r ; \
+		./bin/build-desktop --build-for-simulator --no-electron -r ; \
 	fi
 
 PHONY += clean
 clean:
 	$(Q) ./bin/build-aar --clean
 	$(Q) ./bin/build-ios --clean
-	$(Q) ./bin/build-electron --clean
+	$(Q) ./bin/build-desktop --clean
 	$(Q) ./bin/build-direct --clean
 	$(Q) ./bin/build-gctc --clean
 	$(Q) rm -rf ./src/webrtc/src/out
