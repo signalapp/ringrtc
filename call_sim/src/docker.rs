@@ -28,11 +28,12 @@ use crate::{
 };
 
 /// This function builds all docker images that we need.
-pub async fn build_images() -> Result<()> {
+pub async fn build_images(build_visqol_mos: bool) -> Result<()> {
     println!("\nBuilding images:");
 
     println!("cli:");
     stdout().flush().await?;
+    let mut now = std::time::Instant::now();
     let _ = Command::new("docker")
         .args([
             "build",
@@ -47,8 +48,11 @@ pub async fn build_images() -> Result<()> {
         .wait()
         .await?;
 
+    println!("... took {:.2?}", now.elapsed());
+
     println!("signaling-server:");
     stdout().flush().await?;
+    now = std::time::Instant::now();
     let _ = Command::new("docker")
         .args([
             "build",
@@ -63,32 +67,44 @@ pub async fn build_images() -> Result<()> {
         .wait()
         .await?;
 
-    println!("visqol_mos:");
-    stdout().flush().await?;
-    let _ = Command::new("docker")
-        .current_dir("call_sim/docker/visqol_mos")
-        .args(["build", "-t", "visqol_mos", "-q", "."])
-        .spawn()?
-        .wait()
-        .await?;
+    println!("... took {:.2?}", now.elapsed());
+
+    if build_visqol_mos {
+        println!("visqol_mos:");
+        stdout().flush().await?;
+        now = std::time::Instant::now();
+        let _ = Command::new("docker")
+            .current_dir("call_sim/docker/visqol_mos")
+            .args(["build", "-t", "visqol_mos", "-q", "."])
+            .spawn()?
+            .wait()
+            .await?;
+        println!("... took {:.2?}", now.elapsed());
+    } else {
+        println!("skip visqol_mos");
+    }
 
     println!("pesq_mos:");
     stdout().flush().await?;
+    now = std::time::Instant::now();
     let _ = Command::new("docker")
         .current_dir("call_sim/docker/pesq_mos")
         .args(["build", "-t", "pesq_mos", "-q", "."])
         .spawn()?
         .wait()
         .await?;
+    println!("... took {:.2?}", now.elapsed());
 
     println!("plc_mos:");
     stdout().flush().await?;
+    now = std::time::Instant::now();
     let _ = Command::new("docker")
         .current_dir("call_sim/docker/plc_mos")
         .args(["build", "-t", "plc_mos", "-q", "."])
         .spawn()?
         .wait()
         .await?;
+    println!("... took {:.2?}", now.elapsed());
 
     Ok(())
 }

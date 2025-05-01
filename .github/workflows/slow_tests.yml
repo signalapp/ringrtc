@@ -174,7 +174,7 @@ jobs:
         run: mkdir media && gcloud storage cp gs://calling-ci-resources.signal.org/* media
         working-directory: call_sim/
       - name: Run call sim
-        run: cargo run --release -- profiling_suite -b -c --profile
+        run: cargo run --release -- profiling_suite -b -c --profile --skip-visqol-mos-build
         working-directory: call_sim/
       - name: Remove media files
         run: find test_results \( -name '*.yuv' -o -name '*.wav' -o -name '*.raw' -o -name '*.mp4' \) -exec rm -f {} \;

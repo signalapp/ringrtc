@@ -79,6 +79,11 @@ struct Args {
     /// Run `perf record` on the clients
     #[arg(long)]
     profile: bool,
+
+    /// Skip building the visqol_mos container. This build can be slow, and it's only needed for
+    /// certain analyses.
+    #[arg(long)]
+    skip_visqol_mos_build: bool,
 }
 
 // Set these two values when running call sim group calls. The Auth Key is used to generate profiles
@@ -699,7 +704,7 @@ async fn main() -> Result<()> {
     env::set_current_dir(&root_path)?;
 
     if args.build {
-        build_images().await?;
+        build_images(!args.skip_visqol_mos_build).await?;
     }
 
     if args.clean {
