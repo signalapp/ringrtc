@@ -131,7 +131,7 @@ jobs:
   report_failures:
     name: Report Failures
     runs-on: ubuntu-22.04
-    needs: [android, android-emulator-tests, ios]
+    needs: [android, android-emulator-tests, ios, sim_profile]
     if: ${{ failure() && github.event_name == 'schedule' }}
 
     permissions:
@@ -157,6 +157,8 @@ jobs:
       id-token: 'write'
       contents: read
     runs-on: ubuntu-22.04-4-cores
+    needs: [check-up-to-date]
+    if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
     steps:
       - name: Install dependencies
         run: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
