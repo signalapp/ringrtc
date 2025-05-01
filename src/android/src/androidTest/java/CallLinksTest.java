@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import org.signal.ringrtc.AudioConfig;
 import org.signal.ringrtc.CallException;
 import org.signal.ringrtc.CallLinkState;
 import org.signal.ringrtc.CallLinkRootKey;
@@ -292,7 +293,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         GroupCall.Observer callObserver = mock();
-        GroupCall call = callManager.createCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, new byte[] {}, null, CallManager.AudioProcessingMethod.Default, false, callObserver);
+        GroupCall call = callManager.createCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, new byte[] {}, null, new AudioConfig(), callObserver);
         assertEquals(call.getKind(), GroupCall.Kind.CALL_LINK);
 
         call.connect();
