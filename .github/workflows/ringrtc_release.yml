@@ -1,0 +1,18 @@
+name: RingRTC Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "When true, don't publish artifacts"
+        default: true
+        required: false
+        type: boolean
+
+jobs:
+  stub:
+    name: Stub, please ignore
+    runs-on: ubuntu-22.04
+    steps:
+      - run: true
+
