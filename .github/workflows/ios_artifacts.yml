@@ -18,6 +18,19 @@ on:
           - 'macos-13'
           - 'macos-13-large'
 
+  workflow_call:
+    inputs:
+      dry_run:
+        description: "When true, don't upload to GCS"
+        default: true
+        required: true
+        type: boolean
+      runner:
+        description: "Mac runner:"
+        default: 'macos-13'
+        required: true
+        type: string
+
 env:
   CARGO_TERM_COLOR: always
 

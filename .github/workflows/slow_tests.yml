@@ -9,6 +9,7 @@ on:
     # "earlier than ADT/UTC-3 morning work".
     - cron: '25 8 * * *'
   workflow_dispatch: {} # no parameters
+  workflow_call: {} # no parameters
 
 jobs:
   check-up-to-date:

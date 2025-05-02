@@ -18,6 +18,18 @@ on:
           - 'ubuntu-22.04'
           - 'ubuntu-22.04-4-cores'
           - 'ubuntu-22.04-8-cores'
+  workflow_call:
+    inputs:
+      dry_run:
+        description: "When true, don't upload to Sonatype"
+        default: true
+        required: true
+        type: boolean
+      runner:
+        description: "Linux runner:"
+        default: 'ubuntu-22.04-4-cores'
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always

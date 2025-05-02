@@ -40,6 +40,34 @@ on:
           - 'macos-13'
           - 'macos-13-large'
 
+  workflow_call:
+    inputs:
+      dry_run:
+        description: "When true, don't upload to GCS or publish to npm"
+        default: true
+        required: true
+        type: boolean
+      runner_linux:
+        description: "Linux runner:"
+        default: 'ubuntu-latest'
+        required: true
+        type: string
+      runner_linux_arm64:
+        description: "ARM64 Linux runner:"
+        default: 'ubuntu-22.04-arm64-4-cores'
+        required: true
+        type: string
+      runner_windows:
+        description: "Windows runner:"
+        default: 'windows-latest'
+        required: true
+        type: string
+      runner_mac:
+        description: "Mac runner:"
+        default: 'macos-13'
+        required: true
+        type: string
+
 env:
   CARGO_TERM_COLOR: always
 
