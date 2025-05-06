@@ -179,6 +179,42 @@ jobs:
       - name: Run call sim
         run: cargo run --release -- profiling_suite -b -c --profile --skip-visqol-mos-build
         working-directory: call_sim/
+      - name: Get comparison points from BigTable
+        run: gcloud storage cp gs://calling-ci-profiling.signal.org/baseline_*.folded $(gcloud storage ls gs://calling-ci-profiling.signal.org/daily_audio* | head -n1) $(gcloud storage ls gs://calling-ci-profiling.signal.org/daily_video* | head -n1)  test_results/profiling_suite-*/perf_test
+        working-directory: call_sim/
+      - run: cargo install inferno
+      - name: Generate baseline comparisons
+        run: |
+          cd test_results/profiling_suite-*/perf_test
+          inferno-diff-folded baseline_video.folded video-speaker_b-none/client_b.stacks.folded | inferno-flamegraph > video-speaker_b-none/baseline_diff.svg
+          inferno-diff-folded video-speaker_b-none/client_b.stacks.folded baseline_video.folded | inferno-flamegraph --negate > video-speaker_b-none/baseline_diff_inverted.svg
+          inferno-diff-folded baseline_audio.folded audio-speaker_b-none/client_b.stacks.folded | inferno-flamegraph > audio-speaker_b-none/baseline_diff.svg
+          inferno-diff-folded audio-speaker_b-none/client_b.stacks.folded baseline_audio.folded | inferno-flamegraph --negate > audio-speaker_b-none/baseline_diff_inverted.svg
+        working-directory: call_sim/
+      - name: Generate latest comparisons
+        run: |
+          cd test_results/profiling_suite-*/perf_test
+          inferno-diff-folded daily_video_*.folded video-speaker_b-none/client_b.stacks.folded | inferno-flamegraph > video-speaker_b-none/daily_diff.svg
+          inferno-diff-folded video-speaker_b-none/client_b.stacks.folded daily_video_*.folded | inferno-flamegraph --negate > video-speaker_b-none/daily_diff_inverted.svg
+          inferno-diff-folded daily_audio_*.folded audio-speaker_b-none/client_b.stacks.folded | inferno-flamegraph > audio-speaker_b-none/daily_diff.svg
+          inferno-diff-folded audio-speaker_b-none/client_b.stacks.folded daily_audio_*.folded | inferno-flamegraph --negate > audio-speaker_b-none/daily_diff_inverted.svg
+        working-directory: call_sim/
+      - name: Upload new folded stack files
+        if: ${{ github.event_name == 'schedule' && github.repository_owner == 'signalapp' && endsWith(github.repository, '-private') }}
+        run: |
+          cd test_results/profiling_suite-*/perf_test
+          cp video-speaker_b-none/client_b.stacks.folded daily_video_$(date -I).folded
+          cp audio-speaker_b-none/client_b.stacks.folded daily_audio_$(date -I).folded
+          rm daily_video_latest.folded daily_audio_latest.folded
+          ln -s daily_video_$(date -I).folded daily_video_latest.folded
+          ln -s daily_audio_$(date -I).folded daily_video_latest.folded
+          gsutil storage cp --preserve-symlinks daily_video_*.folded daily_audio_*.folded gs://calling-ci-profiling.signal.org/
+        working-directory: call_sim/
+      - name: Clean up downloaded folded stacks
+        run: |
+          cd test_results/profiling_suite-*/perf_test
+          rm *.folded
+        working-directory: call_sim/
       - name: Remove media files
         run: find test_results \( -name '*.yuv' -o -name '*.wav' -o -name '*.raw' -o -name '*.mp4' \) -exec rm -f {} \;
         working-directory: call_sim/

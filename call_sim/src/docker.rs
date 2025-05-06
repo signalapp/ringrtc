@@ -914,6 +914,27 @@ pub async fn finish_perf(client: &str) -> Result<()> {
         if !status.success() {
             // if we couldn't find it, it exited; otherwise keep waiting.
             exited = true;
+
+            let collapse_cmd = format!(
+                "PATH=/root/.cargo/bin:$PATH perf script -i /report/{}.perf | /root/.cargo/bin/inferno-collapse-perf > /report/{}.stacks.folded",
+                client, client
+            );
+            let _ = Command::new("docker")
+                .args(["exec", client, "sh", "-c", &collapse_cmd])
+                .spawn()?
+                .wait()
+                .await?;
+
+            let svg_command = format!(
+                "cat /report/{}.stacks.folded | /root/.cargo/bin/inferno-flamegraph > /report/{}.profile.svg",
+                client, client
+            );
+            let _ = Command::new("docker")
+                .args(["exec", client, "sh", "-c", &svg_command])
+                .spawn()?
+                .wait()
+                .await?;
+
             let perf_command = format!(
                 "perf report -s symbol --percent-limit=5 --call-graph=2 -i /report/{}.perf \
                 --addr2line=/root/.cargo/bin/addr2line > /report/{}.perf.txt 2>&1",
@@ -926,13 +947,7 @@ pub async fn finish_perf(client: &str) -> Result<()> {
                 .await?;
 
             let _ = Command::new("docker")
-                .args([
-                    "exec",
-                    client,
-                    "chmod",
-                    "o+r",
-                    &format!("/report/{}.perf", client),
-                ])
+                .args(["exec", client, "chmod", "-R", "o+r", "/report/"])
                 .spawn()?
                 .wait()
                 .await?;

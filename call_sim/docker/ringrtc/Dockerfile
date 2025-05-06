@@ -9,7 +9,7 @@ RUN apt-get update \
     && apt-get install -y curl iproute2 iperf iptables iputils-ping protobuf-compiler libpulse-dev linux-tools-generic linux-tools-common build-essential \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     &&  . ~/.cargo/env \
-    && cargo install --features=bin addr2line
+    && cargo install --features=bin addr2line && cargo install inferno
 
 RUN ln -s "$(find /usr/lib/linux-tools/*/perf | head -1)" /usr/local/bin/perf
 
