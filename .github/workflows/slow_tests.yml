@@ -205,7 +205,7 @@ jobs:
           cd test_results/profiling_suite-*/perf_test
           cp video-speaker_b-none/client_b.stacks.folded daily_video_$(date -I).folded
           cp audio-speaker_b-none/client_b.stacks.folded daily_audio_$(date -I).folded
-          gsutil storage cp daily_video_*.folded daily_audio_*.folded gs://calling-ci-profiling.signal.org/
+          gcloud storage cp daily_video_*.folded daily_audio_*.folded gs://calling-ci-profiling.signal.org/
         working-directory: call_sim/
       - name: Clean up downloaded folded stacks
         run: |
