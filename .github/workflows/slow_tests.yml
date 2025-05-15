@@ -179,7 +179,7 @@ jobs:
       - name: Run call sim
         run: cargo run --release -- profiling_suite -b -c --profile --skip-visqol-mos-build
         working-directory: call_sim/
-      - name: Get comparison points from BigTable
+      - name: Get comparison points
         run: gcloud storage cp gs://calling-ci-profiling.signal.org/baseline_*.folded $(gcloud storage ls gs://calling-ci-profiling.signal.org/daily_audio* | head -n1) $(gcloud storage ls gs://calling-ci-profiling.signal.org/daily_video* | head -n1)  test_results/profiling_suite-*/perf_test
         working-directory: call_sim/
       - run: cargo install inferno
@@ -202,8 +202,8 @@ jobs:
       - name: Upload new folded stack files
         if: ${{ github.event_name == 'schedule' && github.repository_owner == 'signalapp' && endsWith(github.repository, '-private') }}
         run: |
-          rm daily_*.folded  # Don't try to reupload what we just downloaded
           cd test_results/profiling_suite-*/perf_test
+          rm daily_*.folded  # Don't try to reupload what we just downloaded
           cp video-speaker_b-none/client_b.stacks.folded daily_video_$(date -I).folded
           cp audio-speaker_b-none/client_b.stacks.folded daily_audio_$(date -I).folded
           gcloud storage cp daily_video_*.folded daily_audio_*.folded gs://calling-ci-profiling.signal.org/
