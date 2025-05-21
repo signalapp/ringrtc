@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.52.2
+
+- Update to webrtc 7103b
+  - Update to WebRTC 7103 (m136)
+  - Disable perfetto linking
+
+- CI: Update slow tests and add profiling reports
+
+- Rename `build-electron` to `build-desktop`
+
 ## v2.52.1
 
 - Android: Add AudioConfig class and configure ADMs properly
