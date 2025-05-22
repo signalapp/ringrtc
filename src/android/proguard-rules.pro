@@ -14,3 +14,4 @@
 -dontwarn android.support.v4.media.AudioAttributesImplBase
 -keep class org.webrtc.** { *; }
 -keep class org.signal.ringrtc.** { *; }
+-keep class org.jni_zero.** { *; }
