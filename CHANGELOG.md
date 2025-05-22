@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.52.3
+
+- Android: Tell proguard to keep the jni_zero classes
+
 ## v2.52.2
 
 - Update to webrtc 7103b
