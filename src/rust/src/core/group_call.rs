@@ -33,6 +33,7 @@ use crate::{
     core::{call_mutex::CallMutex, crypto as frame_crypto, signaling, util::uuid_to_string},
     error::RingRtcError,
     lite::{
+        call_links::CallLinkEpoch,
         http, sfu,
         sfu::{
             ClientStatus, DemuxId, GroupMember, MemberMap, MembershipProof, ObfuscatedResolver,
@@ -554,6 +555,7 @@ pub struct Joined {
 pub struct HttpSfuClient {
     sfu_url: String,
     room_id_header: Option<String>,
+    epoch_header: Option<String>,
     admin_passkey: Option<Vec<u8>>,
     // For use post-DHE
     hkdf_extra_info: Vec<u8>,
@@ -568,12 +570,14 @@ impl HttpSfuClient {
         http_client: Box<dyn http::Client + Send>,
         url: String,
         room_id_for_header: Option<&[u8]>,
+        epoch_for_header: Option<CallLinkEpoch>,
         admin_passkey: Option<Vec<u8>>,
         hkdf_extra_info: Vec<u8>,
     ) -> Self {
         Self {
             sfu_url: url,
             room_id_header: room_id_for_header.map(hex::encode),
+            epoch_header: epoch_for_header.map(|epoch| epoch.to_string()),
             admin_passkey,
             hkdf_extra_info,
             http_client,
@@ -607,6 +611,7 @@ impl HttpSfuClient {
             self.http_client.as_ref(),
             &self.sfu_url,
             self.room_id_header.clone(),
+            self.epoch_header.clone(),
             auth_header,
             self.admin_passkey.as_deref(),
             ice_ufrag,
@@ -688,6 +693,7 @@ impl SfuClient for HttpSfuClient {
                 self.http_client.as_ref(),
                 &self.sfu_url,
                 self.room_id_header.clone(),
+                self.epoch_header.clone(),
                 auth_header,
                 self.member_resolver.clone(),
                 None,

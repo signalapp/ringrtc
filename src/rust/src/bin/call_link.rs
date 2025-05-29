@@ -14,7 +14,8 @@ use base64::{engine::general_purpose::STANDARD as base64, Engine};
 use rand::SeedableRng;
 use ringrtc::lite::{
     call_links::{
-        CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkUpdateRequest,
+        CallLinkDeleteRequest, CallLinkEpoch, CallLinkRestrictions, CallLinkRootKey,
+        CallLinkUpdateRequest,
     },
     http::{self, sim as sim_http, Client},
 };
@@ -65,6 +66,19 @@ fn start_of_today_in_epoch_seconds() -> zkgroup::Timestamp {
     zkgroup::Timestamp::from_epoch_seconds(now.as_secs() - remainder)
 }
 
+#[derive(Debug)]
+struct ParseEpochError;
+
+fn parse_epoch(epoch: &str) -> Result<Option<CallLinkEpoch>, ParseEpochError> {
+    match epoch {
+        "-" => Ok(None),
+        _ => match epoch.parse::<u32>() {
+            Ok(value) => Ok(Some(value.into())),
+            _ => Err(ParseEpochError),
+        },
+    }
+}
+
 fn issue_and_present_auth_credential(
     server_zkparams: &zkgroup::generic_server_params::GenericServerSecretParams,
     public_zkparams: &zkgroup::generic_server_params::GenericServerPublicParams,
@@ -90,8 +104,10 @@ fn issue_and_present_auth_credential(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn make_testing_request(
     id: &str,
+    epoch: Option<CallLinkEpoch>,
     server_zkparams: &zkgroup::generic_server_params::GenericServerSecretParams,
     public_zkparams: &zkgroup::generic_server_params::GenericServerPublicParams,
     http_client: &sim_http::HttpClient,
@@ -118,6 +134,7 @@ fn make_testing_request(
                     "X-Room-Id".to_string(),
                     hex::encode(root_key.derive_room_id()),
                 ),
+                ("X-Epoch".to_string(), epoch.unwrap().to_string()),
             ]),
             body: None,
         },
@@ -130,6 +147,7 @@ fn make_testing_request(
                     &http_client_inner,
                     url,
                     root_key,
+                    None,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     Box::new(show_result),
                 )
@@ -180,9 +198,6 @@ fn main() {
     for line in std::io::stdin().lines() {
         let words: Vec<&str> = line.as_ref().unwrap().split_ascii_whitespace().collect();
         match &words[..] {
-            [] => {
-                prompt("> ");
-            }
             ["help"] => {
                 println!(
                     "
@@ -202,7 +217,6 @@ exit                         - quit
 The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
 "
                 );
-                prompt("> ");
             }
             ["create", id] => {
                 let root_key = root_key_from_id(id);
@@ -242,7 +256,15 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     Box::new(show_result),
                 );
             }
-            ["read", id] => {
+            ["read", id, epoch] => {
+                let epoch = {
+                    if let Ok(result) = parse_epoch(epoch) {
+                        result
+                    } else {
+                        println!("Couldn't parse the epoch value");
+                        continue;
+                    }
+                };
                 let root_key = root_key_from_id(id);
                 let auth_credential_presentation = issue_and_present_auth_credential(
                     &server_zkparams,
@@ -253,11 +275,20 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
+                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     Box::new(show_result),
                 );
             }
-            ["delete", id] => {
+            ["delete", id, epoch] => {
+                let epoch = {
+                    if let Ok(result) = parse_epoch(epoch) {
+                        result
+                    } else {
+                        println!("Couldn't parse the epoch value");
+                        continue;
+                    }
+                };
                 let root_key = root_key_from_id(id);
                 let auth_credential_presentation = issue_and_present_auth_credential(
                     &server_zkparams,
@@ -268,6 +299,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
+                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     &CallLinkDeleteRequest {
                         admin_passkey: ADMIN_PASSKEY,
@@ -275,7 +307,15 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     Box::new(show_result),
                 );
             }
-            ["set-title", id, new_title] => {
+            ["set-title", id, epoch, new_title] => {
+                let epoch = {
+                    if let Ok(result) = parse_epoch(epoch) {
+                        result
+                    } else {
+                        println!("Couldn't parse the epoch value");
+                        continue;
+                    }
+                };
                 let root_key = root_key_from_id(id);
                 let encrypted_name = root_key.encrypt(new_title.as_bytes(), rand::thread_rng());
                 let auth_credential_presentation = issue_and_present_auth_credential(
@@ -287,6 +327,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
+                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     &CallLinkUpdateRequest {
                         admin_passkey: ADMIN_PASSKEY,
@@ -296,7 +337,15 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     Box::new(show_result),
                 );
             }
-            ["admin-approval", id, on_or_off @ ("on" | "off")] => {
+            ["admin-approval", id, epoch, on_or_off @ ("on" | "off")] => {
+                let epoch = {
+                    if let Ok(result) = parse_epoch(epoch) {
+                        result
+                    } else {
+                        println!("Couldn't parse the epoch value");
+                        continue;
+                    }
+                };
                 let root_key = root_key_from_id(id);
                 let auth_credential_presentation = issue_and_present_auth_credential(
                     &server_zkparams,
@@ -312,6 +361,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
+                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     &CallLinkUpdateRequest {
                         admin_passkey: ADMIN_PASSKEY,
@@ -324,6 +374,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
             ["reset-approvals", id] => {
                 make_testing_request(
                     id,
+                    None,
                     &server_zkparams,
                     &public_zkparams,
                     &http_client,
@@ -335,6 +386,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
             ["reset-expiration", id] => {
                 make_testing_request(
                     id,
+                    None,
                     &server_zkparams,
                     &public_zkparams,
                     &http_client,
@@ -351,10 +403,12 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
             ["exit" | "quit"] => {
                 break;
             }
+            [] => {}
             _ => {
                 println!("Couldn't parse that.\n");
-                prompt("> ");
             }
         }
+
+        prompt("> ");
     }
 }

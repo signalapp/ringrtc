@@ -557,7 +557,8 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.readCallLink(
         'sfu.example',
         Buffer.of(1, 2, 3),
-        EXAMPLE_KEY
+        EXAMPLE_KEY,
+        undefined
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
@@ -597,7 +598,8 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.readCallLink(
         'sfu.example',
         Buffer.of(1, 2, 3),
-        EXAMPLE_KEY
+        EXAMPLE_KEY,
+        undefined
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(requestId, 404, Buffer.of());
@@ -631,6 +633,7 @@ describe('RingRTC', () => {
         'sfu.example',
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
+        undefined,
         CallLinkRootKey.generateAdminPassKey(),
         'Secret Hideout'
       );
@@ -667,6 +670,7 @@ describe('RingRTC', () => {
         'sfu.example',
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
+        undefined,
         CallLinkRootKey.generateAdminPassKey(),
         'Secret Hideout'
       );
@@ -702,6 +706,7 @@ describe('RingRTC', () => {
         'sfu.example',
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
+        undefined,
         CallLinkRootKey.generateAdminPassKey(),
         ''
       );
@@ -738,6 +743,7 @@ describe('RingRTC', () => {
         'sfu.example',
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
+        undefined,
         CallLinkRootKey.generateAdminPassKey(),
         CallLinkRestrictions.AdminApproval
       );
@@ -774,6 +780,7 @@ describe('RingRTC', () => {
         'sfu.example',
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
+        undefined,
         CallLinkRootKey.generateAdminPassKey()
       );
       const requestId = await requestIdPromise;
@@ -808,7 +815,8 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.peekCallLinkCall(
         'sfu.example',
         Buffer.of(1, 2, 3),
-        EXAMPLE_KEY
+        EXAMPLE_KEY,
+        undefined
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(requestId, 404, Buffer.from([]));
@@ -843,7 +851,8 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.peekCallLinkCall(
         'sfu.example',
         Buffer.of(1, 2, 3),
-        EXAMPLE_KEY
+        EXAMPLE_KEY,
+        undefined
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
@@ -880,7 +889,8 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.peekCallLinkCall(
         'sfu.example',
         Buffer.of(1, 2, 3),
-        EXAMPLE_KEY
+        EXAMPLE_KEY,
+        undefined
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
@@ -925,6 +935,7 @@ describe('RingRTC', () => {
         'sfu.example',
         Buffer.of(1, 2, 3),
         EXAMPLE_KEY,
+        undefined,
         undefined,
         Buffer.of(),
         undefined,

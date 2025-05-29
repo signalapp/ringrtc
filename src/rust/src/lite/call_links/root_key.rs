@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::fmt::Display;
+
 use aes_gcm_siv::{
     aead::{generic_array::typenum::Unsigned, Aead, AeadCore, AeadInPlace},
     Aes256GcmSiv, Key, KeyInit,
@@ -10,6 +12,7 @@ use aes_gcm_siv::{
 use anyhow::{anyhow, bail};
 use hkdf::Hkdf;
 use rand::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 use super::base16;
@@ -165,6 +168,50 @@ impl TryFrom<&[u8]> for CallLinkRootKey {
         }
 
         Ok(Self { bytes })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename = "camelCase")]
+pub struct CallLinkEpoch(u32);
+
+impl CallLinkEpoch {
+    pub fn to_formatted_string(&self) -> String {
+        format!(
+            "{:-^.2}",
+            base16::ConsonantBase16::from(self.0.to_be_bytes().as_slice())
+        )
+    }
+}
+
+impl Display for CallLinkEpoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u32> for CallLinkEpoch {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+impl From<CallLinkEpoch> for u32 {
+    fn from(value: CallLinkEpoch) -> Self {
+        value.0
+    }
+}
+
+impl TryFrom<&str> for CallLinkEpoch {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let parsed_bytes = base16::ConsonantBase16::parse_with_separators(value, 2)
+            .map_err(|_| anyhow!("invalid epoch string"))?;
+        parsed_bytes
+            .try_into()
+            .map(|bytes| u32::from_be_bytes(bytes).into())
+            .map_err(|_| anyhow!("invalid epoch size"))
     }
 }
 

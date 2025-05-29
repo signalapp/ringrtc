@@ -13,7 +13,12 @@ use crate::{
     common::{CallConfig, CallMediaType, DataMode, DeviceId},
     core::{group_call, signaling},
     ios::{call_manager, call_manager::IosCallManager},
-    lite::{call_links::CallLinkRootKey, http, sfu, sfu::DemuxId},
+    lite::{
+        call_links::{ios::from_optional_u32_to_epoch, CallLinkRootKey},
+        ffi::ios::rtc_OptionalU32,
+        http, sfu,
+        sfu::DemuxId,
+    },
     webrtc::{self, media, peer_connection::AudioLevel, peer_connection_factory as pcf},
 };
 
@@ -1051,6 +1056,7 @@ pub extern "C" fn ringrtcCreateCallLinkCallClient(
     sfuUrl: AppByteSlice,
     authCredentialPresentation: AppByteSlice,
     rootKeyBytes: AppByteSlice,
+    epoch: rtc_OptionalU32,
     adminPasskey: AppByteSlice,
     hkdfExtraInfo: AppByteSlice,
     audioLevelsIntervalMillis: u64,
@@ -1091,11 +1097,14 @@ pub extern "C" fn ringrtcCreateCallLinkCallClient(
         Some(Duration::from_millis(audioLevelsIntervalMillis))
     };
 
+    let epoch = from_optional_u32_to_epoch(epoch);
+
     match call_manager::create_call_link_call_client(
         callManager as *mut IosCallManager,
         sfu_url.unwrap(),
         auth_presentation.unwrap(),
         root_key.unwrap(),
+        epoch,
         admin_passkey,
         hkdf_extra_info.unwrap(),
         audio_levels_interval,

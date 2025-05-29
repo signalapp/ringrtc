@@ -5,6 +5,7 @@
 
 import org.signal.ringrtc.AudioConfig;
 import org.signal.ringrtc.CallException;
+import org.signal.ringrtc.CallLinkEpoch;
 import org.signal.ringrtc.CallLinkState;
 import org.signal.ringrtc.CallLinkRootKey;
 import org.signal.ringrtc.CallManager;
@@ -38,7 +39,9 @@ public class CallLinksTest extends CallTestBase {
         }
     }
     private static final long EXPIRATION_EPOCH_SECONDS = 4133980800L; // 2101-01-01
-    private static final String EXAMPLE_STATE_JSON = "{\"restrictions\": \"none\",\"name\":\"\",\"revoked\":false,\"expiration\":" + EXPIRATION_EPOCH_SECONDS + "}";
+    private static final CallLinkEpoch EPOCH = CallLinkEpoch.fromBytes(new byte[] { 0x00, 0x40, 0x00, 0x40 });
+    private static final int EPOCH_INT_VALUE = 0x40004000;
+    private static final String EXAMPLE_STATE_JSON = "{\"restrictions\": \"none\", \"epoch\":" + EPOCH_INT_VALUE + ",\"name\":\"\",\"revoked\":false,\"expiration\":" + EXPIRATION_EPOCH_SECONDS + "}";
     private static final String EXAMPLE_EMPTY_JSON = "{}";
 
     @Rule
@@ -56,6 +59,29 @@ public class CallLinksTest extends CallTestBase {
     @Test
     public void testFormatting() throws Exception {
         assertEquals("bcdf-ghkm-npqr-stxz-bcdf-ghkm-npqr-stxz", EXAMPLE_KEY.toString());
+    }
+
+    @Test
+    public void testEpochFormatting() throws Exception {
+        CallLinkEpoch epoch = new CallLinkEpoch("bcdf-gkhm");
+        assertEquals("bcdf-gkhm", epoch.toString());
+    }
+
+    @Test
+    public void testCallLinkEpochSerialization() throws Exception {
+        byte[] bytes = new byte[] { 1, 2, 3, 4 };
+        CallLinkEpoch epoch = CallLinkEpoch.fromBytes(bytes);
+        assertArrayEquals(bytes, epoch.getBytes());
+    }
+
+    @Test
+    public void testCallLinkEpochComparison() throws Exception {
+        CallLinkEpoch epoch0 = CallLinkEpoch.fromBytes(new byte[] { 1, 2, 3, 4 });
+        CallLinkEpoch epoch1 = CallLinkEpoch.fromBytes(new byte[] { 4, 3, 2, 1 });
+        CallLinkEpoch epoch2 = CallLinkEpoch.fromBytes(new byte[] { 1, 2, 3, 4 });
+        assertEquals(epoch0, epoch2);
+        assertNotEquals(epoch0, epoch1);
+        assertNotEquals(epoch1, epoch2);
     }
 
     @Test
@@ -104,10 +130,31 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.readCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+        callManager.readCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, result -> {
             errors.checkThat(result.getStatus(), is((short)200));
             errors.checkThat(result.isSuccess(), is(true));
             errors.checkThat(result.getValue().getExpiration().getEpochSecond(), is(EXPIRATION_EPOCH_SECONDS));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.GET), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 200, EXAMPLE_STATE_JSON.getBytes("UTF-8"));
+        latch.await();
+    }
+
+    @Test
+    public void testReadSuccessWithEpoch() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.readCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, EPOCH, result -> {
+            errors.checkThat(result.getStatus(), is((short)200));
+            errors.checkThat(result.isSuccess(), is(true));
+            errors.checkThat(result.getValue().getExpiration().getEpochSecond(), is(EXPIRATION_EPOCH_SECONDS));
+            errors.checkThat(result.getValue().getEpoch(), is(EPOCH));
             latch.countDown();
         });
 
@@ -124,7 +171,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.readCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+        callManager.readCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, result -> {
             errors.checkThat(result.getStatus(), is((short)404));
             errors.checkThat(result.isSuccess(), is(false));
             errors.checkThat(result.getValue(), is((CallLinkState)null));
@@ -144,8 +191,27 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.updateCallLinkName("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), "Secret Hideout", result -> {
+        callManager.updateCallLinkName("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, CallLinkRootKey.generateAdminPasskey(), "Secret Hideout", result -> {
             errors.checkThat(result.isSuccess(), is(true));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.PUT), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 200, EXAMPLE_STATE_JSON.getBytes("UTF-8"));
+        latch.await();
+    }
+
+    @Test
+    public void testUpdateNameSuccessWithEpoch() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.updateCallLinkName("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, EPOCH, CallLinkRootKey.generateAdminPasskey(), "Secret Hideout", result -> {
+            errors.checkThat(result.isSuccess(), is(true));
+            errors.checkThat(result.getValue().getEpoch(), is(EPOCH));
             latch.countDown();
         });
 
@@ -162,7 +228,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.updateCallLinkName("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), "Secret Hideout", result -> {
+        callManager.updateCallLinkName("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, CallLinkRootKey.generateAdminPasskey(), "Secret Hideout", result -> {
             errors.checkThat(result.isSuccess(), is(false));
             latch.countDown();
         });
@@ -180,7 +246,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.updateCallLinkName("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), "", result -> {
+        callManager.updateCallLinkName("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, CallLinkRootKey.generateAdminPasskey(), "", result -> {
             errors.checkThat(result.isSuccess(), is(true));
             latch.countDown();
         });
@@ -198,7 +264,8 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.updateCallLinkRestrictions("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), CallLinkState.Restrictions.ADMIN_APPROVAL, result -> {
+        CallLinkEpoch epoch = CallLinkEpoch.fromBytes(new byte[] { 1, 2, 3, 4 });
+        callManager.updateCallLinkRestrictions("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, epoch, CallLinkRootKey.generateAdminPasskey(), CallLinkState.Restrictions.ADMIN_APPROVAL, result -> {
             errors.checkThat(result.isSuccess(), is(true));
             latch.countDown();
         });
@@ -216,7 +283,25 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.deleteCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, CallLinkRootKey.generateAdminPasskey(), result -> {
+        callManager.deleteCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, CallLinkRootKey.generateAdminPasskey(), result -> {
+            errors.checkThat(result.isSuccess(), is(true));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.DELETE), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 200, EXAMPLE_EMPTY_JSON.getBytes("UTF-8"));
+        latch.await();
+    }
+
+    @Test
+    public void testDeleteSuccessWithEpoch() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.deleteCallLink("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, EPOCH, CallLinkRootKey.generateAdminPasskey(), result -> {
             errors.checkThat(result.isSuccess(), is(true));
             latch.countDown();
         });
@@ -234,7 +319,28 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, result -> {
+            errors.checkThat(result.getStatus(), is((short)200));
+            errors.checkThat(result.getValue().getEraId(), is((String)null));
+            errors.checkThat(result.getValue().getDeviceCountIncludingPendingDevices(), is(0L));
+            errors.checkThat(result.getValue().getDeviceCountExcludingPendingDevices(), is(0L));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.GET), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 404, new byte[] {});
+        latch.await();
+    }
+
+    @Test
+    public void testPeekNoActiveCallWithEpoch() throws Exception {
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, EPOCH, result -> {
             errors.checkThat(result.getStatus(), is((short)200));
             errors.checkThat(result.getValue().getEraId(), is((String)null));
             errors.checkThat(result.getValue().getDeviceCountIncludingPendingDevices(), is(0L));
@@ -255,7 +361,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, result -> {
             errors.checkThat(result.getStatus(), is(PeekInfo.EXPIRED_CALL_LINK_STATUS));
             errors.checkThat(result.getValue(), is((PeekInfo)null));
             latch.countDown();
@@ -274,7 +380,7 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         CountDownLatch latch = new CountDownLatch(1);
-        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, result -> {
+        callManager.peekCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, result -> {
             errors.checkThat(result.getStatus(), is(PeekInfo.INVALID_CALL_LINK_STATUS));
             errors.checkThat(result.getValue(), is((PeekInfo)null));
             latch.countDown();
@@ -293,7 +399,8 @@ public class CallLinksTest extends CallTestBase {
         CallManager callManager = CallManager.createCallManager(observer);
 
         GroupCall.Observer callObserver = mock();
-        GroupCall call = callManager.createCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, null, new byte[] {}, null, new AudioConfig(), callObserver);
+        CallLinkEpoch epoch = CallLinkEpoch.fromBytes(new byte[] { 1, 2, 3, 4 });
+        GroupCall call = callManager.createCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, epoch, null, new byte[] {}, null, new AudioConfig(), callObserver);
         assertEquals(call.getKind(), GroupCall.Kind.CALL_LINK);
 
         call.connect();

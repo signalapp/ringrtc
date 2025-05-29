@@ -6,6 +6,7 @@
 package org.signal.ringrtc;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import java.time.Instant;
 
 public class CallLinkState {
@@ -23,17 +24,20 @@ public class CallLinkState {
   private final boolean revoked;
   @NonNull
   private final Instant expiration;
+  @Nullable
+  private final CallLinkEpoch epoch;
 
   /** Should only be used for testing. */
-  public CallLinkState(@NonNull String name, @NonNull Restrictions restrictions, boolean revoked, @NonNull Instant expiration) {
+  public CallLinkState(@NonNull String name, @NonNull Restrictions restrictions, boolean revoked, @NonNull Instant expiration, @Nullable CallLinkEpoch epoch) {
     this.name = name;
     this.restrictions = restrictions;
     this.revoked = revoked;
     this.expiration = expiration;
+    this.epoch = epoch;
   }
 
   @CalledByNative
-  private CallLinkState(@NonNull String name, int rawRestrictions, boolean revoked, long expirationEpochSecond) {
+  private CallLinkState(@NonNull String name, int rawRestrictions, boolean revoked, long expirationEpochSecond, @Nullable CallLinkEpoch epoch) {
     this.name = name;
     switch (rawRestrictions) {
     case 0:
@@ -47,6 +51,7 @@ public class CallLinkState {
     }
     this.revoked = revoked;
     this.expiration = Instant.ofEpochSecond(expirationEpochSecond);
+    this.epoch = epoch;
   }
 
   /** Is never null, but may be empty. */
@@ -67,5 +72,10 @@ public class CallLinkState {
   @NonNull
   public Instant getExpiration() {
     return expiration;
+  }
+
+  @Nullable
+  public CallLinkEpoch getEpoch() {
+    return epoch;
   }
 }

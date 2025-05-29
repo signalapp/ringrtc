@@ -8,7 +8,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    iter::FromIterator,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::Arc,
@@ -532,13 +531,35 @@ fn classify_not_found(body: &[u8]) -> Option<http::ResponseStatus> {
     }
 }
 
+fn http_request_headers(
+    authorization: String,
+    room_id: Option<String>,
+    epoch: Option<String>,
+    content_type: Option<String>,
+) -> HashMap<String, String> {
+    let mut headers = HashMap::new();
+    headers.insert("Authorization".to_string(), authorization);
+    if let Some(room_id) = room_id {
+        headers.insert("X-Room-Id".to_string(), room_id);
+    }
+    if let Some(epoch) = epoch {
+        headers.insert("X-Epoch".to_string(), epoch);
+    }
+    if let Some(content_type) = content_type {
+        headers.insert("Content-Type".to_string(), content_type);
+    }
+    headers
+}
+
 pub type PeekResult = Result<PeekInfo, http::ResponseStatus>;
 pub type PeekResultCallback = Box<dyn FnOnce(PeekResult) + Send>;
 
+#[allow(clippy::too_many_arguments)]
 pub fn peek(
     http_client: &dyn http::Client,
     sfu_url: &str,
     room_id_header: Option<String>,
+    epoch_header: Option<String>,
     auth_header: String,
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
     call_link_root_key: Option<CallLinkRootKey>,
@@ -548,12 +569,7 @@ pub fn peek(
         http::Request {
             method: http::Method::Get,
             url: participants_url_from_sfu_url(sfu_url),
-            headers: HashMap::from_iter(
-                room_id_header
-                    .into_iter()
-                    .map(|room_id| ("X-Room-Id".to_string(), room_id))
-                    .chain([("Authorization".to_string(), auth_header)]),
-            ),
+            headers: http_request_headers(auth_header, room_id_header, epoch_header, None),
             body: None,
         },
         Box::new(move |http_response| {
@@ -619,6 +635,7 @@ pub fn join(
     http_client: &dyn http::Client,
     sfu_url: &str,
     room_id_header: Option<String>,
+    epoch_header: Option<String>,
     auth_header: String,
     admin_passkey: Option<&[u8]>,
     client_ice_ufrag: &str,
@@ -634,14 +651,11 @@ pub fn join(
         http::Request {
             method: http::Method::Put,
             url: participants_url_from_sfu_url(sfu_url),
-            headers: HashMap::from_iter(
-                room_id_header
-                    .into_iter()
-                    .map(|room_id| ("X-Room-Id".to_string(), room_id))
-                    .chain([
-                        ("Authorization".to_string(), auth_header),
-                        ("Content-Type".to_string(), "application/json".to_string()),
-                    ]),
+            headers: http_request_headers(
+                auth_header,
+                room_id_header,
+                epoch_header,
+                Some("application/json".to_string()),
             ),
             body: Some(
                 serde_json::to_vec(&JoinRequest {
@@ -673,7 +687,9 @@ pub mod ios {
     use libc::{c_void, size_t};
 
     use crate::lite::{
-        call_links::{self, CallLinkMemberResolver, CallLinkRootKey},
+        call_links::{
+            self, ios::from_optional_u32_to_epoch, CallLinkMemberResolver, CallLinkRootKey,
+        },
         ffi::ios::{rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32, rtc_String, FromOrDefault},
         http,
         sfu::{self, Delegate, GroupMember, PeekInfo, PeekResult},
@@ -701,6 +717,7 @@ pub mod ios {
                     super::peek(
                         http_client,
                         &sfu_url,
+                        None,
                         None,
                         auth_header,
                         Arc::new(opaque_user_id_mappings),
@@ -731,6 +748,7 @@ pub mod ios {
         sfu_url: *const c_char,
         auth_credential_presentation: rtc_Bytes,
         link_root_key: rtc_Bytes,
+        epoch: rtc_OptionalU32,
         delegate: rtc_sfu_Delegate,
     ) {
         info!("rtc_sfu_peekCallLink():");
@@ -738,10 +756,12 @@ pub mod ios {
         if let Some(http_client) = http_client.as_ref() {
             if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
                 if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
+                    let epoch = from_optional_u32_to_epoch(epoch).map(|e| e.to_string());
                     super::peek(
                         http_client,
                         sfu_url,
                         Some(hex::encode(link_root_key.derive_room_id())),
+                        epoch,
                         call_links::auth_header_from_auth_credential(
                             auth_credential_presentation.as_slice(),
                         ),

@@ -46,7 +46,8 @@ export class CallLinkState {
     public name: string,
     public restrictions: CallLinkRestrictions,
     public revoked: boolean,
-    public expiration: Date
+    public expiration: Date,
+    public epoch?: CallLinkEpoch
   ) {}
 }
 
@@ -54,4 +55,44 @@ export enum CallLinkRestrictions {
   None,
   AdminApproval,
   Unknown,
+}
+
+export class CallLinkEpoch {
+  /** @internal */
+  value: number;
+
+  /** @internal */
+  constructor(value: number) {
+    this.value = value;
+  }
+
+  /** @internal */
+  asNumber(): number {
+    return this.value;
+  }
+
+  static parse(str: string): CallLinkEpoch {
+    return new CallLinkEpoch(Native.CallLinkEpoch_parse(str));
+  }
+
+  toString(): string {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return Native.CallLinkEpoch_toFormattedString(this.value);
+  }
+
+  get bytes(): Uint8Array {
+    const value = this.value & 0xffffffff;
+    const bytes = new Uint8Array(4);
+    bytes[0] = value & 0x000000ff;
+    bytes[1] = (value & 0x0000ff00) >> 8;
+    bytes[2] = (value & 0x00ff0000) >> 16;
+    bytes[3] = (value & 0xff000000) >> 24;
+    return bytes;
+  }
+
+  static fromBytes(bytes: Uint8Array): CallLinkEpoch {
+    const value =
+      bytes[0] + bytes[1] * 0x100 + 0x10000 * (bytes[2] + bytes[3] * 0x100);
+    return new CallLinkEpoch(value);
+  }
 }

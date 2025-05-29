@@ -58,6 +58,7 @@ export {
   CallLinkRootKey,
   CallLinkRestrictions,
   CallLinkState,
+  CallLinkEpoch,
 } from './ringrtc/CallLinks';
 
 export const RingRTC = new RingRTCType();
