@@ -1196,6 +1196,9 @@ const DELAYED_BWE_CHECK: Duration = Duration::from_secs(10);
 
 const REACTION_STRING_MAX_SIZE: usize = 256;
 
+/// How long to wait before ending the client and cleaning up.
+const CLIENT_END_DELAY: Duration = Duration::from_millis(20);
+
 pub struct ClientStartParams {
     pub group_id: GroupId,
     pub client_id: ClientId,
@@ -2607,13 +2610,19 @@ impl Client {
             ConnectionState::Connecting
             | ConnectionState::Connected
             | ConnectionState::Reconnecting => {
-                state.peer_connection.close();
-                Self::set_connection_state_and_notify_observer(
-                    state,
-                    ConnectionState::NotConnected,
-                );
-                let _join_handles = state.actor.stopper().stop_all_without_joining();
-                state.observer.handle_ended(state.client_id, reason);
+                // We need to finish the disconnection, but we might have sent out RTP
+                // packets for the leave signal. Wait for a short delay before closing
+                // the peer connection and cleaning up.
+                let actor = state.actor.clone();
+                actor.send_delayed(CLIENT_END_DELAY, move |state| {
+                    state.peer_connection.close();
+                    Self::set_connection_state_and_notify_observer(
+                        state,
+                        ConnectionState::NotConnected,
+                    );
+                    let _join_handles = state.actor.stopper().stop_all_without_joining();
+                    state.observer.handle_ended(state.client_id, reason);
+                });
             }
         }
     }
