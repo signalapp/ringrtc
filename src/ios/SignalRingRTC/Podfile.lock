@@ -8,12 +8,12 @@ PODS:
     - CwlCatchException (~> 2.2.1)
     - CwlMachBadInstructionHandler (~> 2.2.2)
     - CwlPosixPreconditionTesting (~> 2.2.2)
-  - Nimble (13.5.0):
+  - Nimble (13.7.1):
     - CwlPreconditionTesting (~> 2.2.0)
   - WebRTCForTesting (0.0.1)
 
 DEPENDENCIES:
-  - Nimble (~> 13.5.0)
+  - Nimble (~> 13.7.1)
   - WebRTCForTesting (from `../../../out/`)
 
 SPEC REPOS:
@@ -35,9 +35,9 @@ SPEC CHECKSUMS:
   CwlMachBadInstructionHandler: dae4fdd124d45c9910ac240287cc7b898f4502a1
   CwlPosixPreconditionTesting: ecd095aa2129e740b44301c34571e8d85906fb88
   CwlPreconditionTesting: 67a0047dd4de4382b93442c0e3f25207f984f35a
-  Nimble: cc0469644d253140c6bab7e88d4ee3bbed59a25c
+  Nimble: 317d713c30c3336dd8571da1889f7ec3afc626e8
   WebRTCForTesting: 576c1235b642e5d767e2d13e25ababad3ca20718
 
-PODFILE CHECKSUM: d2ed6b0d162f729e8eb59b23d2d6eb99a2e6952d
+PODFILE CHECKSUM: 2d92f7584bb8f8f2a3f2f917bed1726530529d4a
 
 COCOAPODS: 1.16.2

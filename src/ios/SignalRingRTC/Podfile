@@ -7,5 +7,5 @@ target 'SignalRingRTC' do
 end
 
 target 'SignalRingRTCTests' do
-  pod 'Nimble', '~> 13.5.0'
+  pod 'Nimble', '~> 13.7.1'
 end

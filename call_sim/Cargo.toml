@@ -5,18 +5,18 @@
 
 [package]
 name = "call_sim"
-version = "0.1.0"
-authors = ["Calling Team <callingteam@signal.org>"]
+version.workspace = true
+authors.workspace = true
 edition = "2021"
 license = "AGPL-3.0-only"
 
 [dependencies]
-anyhow = "1.0.95"
+anyhow = "1.0.98"
 base64 = "0.22.1"
 bollard = "0.17.1"
 protobuf = { path = "../protobuf", features = ["call_sim"] }
-chrono = "0.4.39"
-clap = { version = "4.5.29", features = ["derive"] }
+chrono = "0.4.41"
+clap = { version = "4.5.38", features = ["derive"] }
 futures-util = "0.3.31"
 hex = { version = "0.4.3", features = ["serde"] }
 hmac = "0.12.1"
@@ -26,10 +26,10 @@ plotly = { version = "0.9.1", features = ["kaleido"] }
 prost = "0.13.5"
 regex = "1.11.1"
 relative-path = "1.9.3"
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.138"
-sha2 = "0.10.8"
-tokio = { version = "1.43.0", features = ["rt-multi-thread", "macros", "time", "fs", "process"] }
-tonic = "0.12.3"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+sha2 = "0.10.9"
+tokio = { version = "1.45.0", features = ["rt-multi-thread", "macros", "time", "fs", "process"] }
+tonic = "0.13.1"
 tower = { version = "0.4.13", features = ["timeout"] }
-uuid = { version = "1.13.1", features = ["v4", "fast-rng"] }
+uuid = { version = "1.17.0", features = ["v4", "fast-rng"] }
