@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.53.0
+
+- Call links: Add support for epoch id
+
+- Update to webrtc 7103d
+  - Revert changes to initial bitrate (set default back to 300kbps)
+  - Start checking source code formatting
+  - Avoid logging delay warnings
+  - Fix test hangs
+  - Remove obsolete sdp string munging
+
+- Group Calls: Delay ending to ensure leaving
+
+- Update dependencies
+
 ## v2.52.3
 
 - Android: Tell proguard to keep the jni_zero classes
