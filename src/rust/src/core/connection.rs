@@ -16,7 +16,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::BytesMut;
 use hkdf::Hkdf;
 use prost::Message;
 use rand::rngs::OsRng;
@@ -1471,19 +1471,14 @@ where
         webrtc_data: &mut std::sync::MutexGuard<WebRtcData<T>>,
         data: &protobuf::rtp_data::Message,
     ) -> Result<()> {
-        let mut bytes = BytesMut::with_capacity(OLD_RTP_DATA_RESERVED.len() + data.encoded_len());
-        bytes.put_slice(&OLD_RTP_DATA_RESERVED);
+        let mut bytes = BytesMut::with_capacity(data.encoded_len());
         data.encode(&mut bytes)?;
 
         // At 1hz, this would take 136 years to roll over.
         webrtc_data.last_sent_rtp_data_timestamp += 1;
         let header = rtp::Header {
             pt: RTP_DATA_PAYLOAD_TYPE,
-            // TODO: Once all clients are updated to accept the NEW_RTP_DATA_SSRC, use that.
-            ssrc: match self.direction {
-                CallDirection::Incoming => OLD_RTP_DATA_SSRC_FOR_INCOMING,
-                CallDirection::Outgoing => OLD_RTP_DATA_SSRC_FOR_OUTGOING,
-            },
+            ssrc: NEW_RTP_DATA_SSRC,
             // This has to be incremented to make sure SRTP functions properly, but rollovers are OK.
             seqnum: webrtc_data.last_sent_rtp_data_timestamp as rtp::SequenceNumber,
             // Just imagine the clock is the number of heartbeat ticks :).

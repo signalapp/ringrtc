@@ -123,7 +123,7 @@ impl RffiPeerConnection {
     pub fn last_sent_rtp_message(&self) -> Option<crate::protobuf::rtp_data::Message> {
         let state = self.state.lock().unwrap();
         Some(
-            crate::protobuf::rtp_data::Message::decode(&state.last_sent_rtp_data.as_deref()?[4..])
+            crate::protobuf::rtp_data::Message::decode(state.last_sent_rtp_data.as_deref()?)
                 .unwrap(),
         )
     }
