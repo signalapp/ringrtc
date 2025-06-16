@@ -131,12 +131,11 @@ pub struct AudioDevice {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RffiAudioDeviceModuleType {
-    /// Use the default ADM provided by WebRTC for the platform.
-    #[default]
-    Default,
+    // 0 used to represent webrtc's default ADM, but this is no longer used.
     /// Use a file-based ADM for testing and simulation.
-    File,
+    File = 1,
     /// Use RingRTC's ADM implementation.
+    #[default]
     RingRtc,
 }
 

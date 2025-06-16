@@ -46,9 +46,7 @@ use crate::{
         field_trial,
         media::{AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack},
         peer_connection::AudioLevel,
-        peer_connection_factory::{
-            self as pcf, AudioDevice, IceServer, PeerConnectionFactory, RffiAudioDeviceModuleType,
-        },
+        peer_connection_factory::{self as pcf, AudioDevice, IceServer, PeerConnectionFactory},
         peer_connection_observer::NetworkRoute,
     },
 };
@@ -378,18 +376,11 @@ pub struct CallEndpoint {
 }
 
 impl CallEndpoint {
-    fn new<'a>(
-        cx: &mut impl Context<'a>,
-        js_object: Handle<'a, JsObject>,
-        use_ringrtc_adm: bool,
-    ) -> Result<Self> {
+    fn new<'a>(cx: &mut impl Context<'a>, js_object: Handle<'a, JsObject>) -> Result<Self> {
         // Relevant for both group calls and 1:1 calls
         let (events_sender, events_receiver) = channel::<Event>();
-        let mut audio_config = pcf::AudioConfig::default();
-        if use_ringrtc_adm {
-            audio_config.audio_device_module_type = RffiAudioDeviceModuleType::RingRtc;
-        }
-        let peer_connection_factory = PeerConnectionFactory::new(&audio_config, false)?;
+        let peer_connection_factory =
+            PeerConnectionFactory::new(&pcf::AudioConfig::default(), false)?;
         let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
         outgoing_audio_track.set_enabled(false);
         let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;
@@ -453,11 +444,9 @@ impl CallEndpoint {
             *event_reporter_for_logging = Some(event_reporter.clone());
         }
 
-        if use_ringrtc_adm {
-            // After initializing logs, log the backend in use.
-            let backend = peer_connection_factory.audio_backend();
-            info!("audio_device_module using cubeb backend {:?}", backend);
-        }
+        // After initializing logs, log the backend in use.
+        let backend = peer_connection_factory.audio_backend();
+        info!("audio_device_module using cubeb backend {:?}", backend);
 
         // Only relevant for 1:1 calls
         let signaling_sender = Box::new(event_reporter.clone());
@@ -696,7 +685,6 @@ impl Finalize for CallEndpoint {
 fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     let js_call_manager = cx.argument::<JsObject>(0)?;
     let field_trial_string = cx.argument::<JsString>(1)?.value(&mut cx);
-    let use_ringrtc_adm = cx.argument::<JsBoolean>(2)?.value(&mut cx);
 
     if ENABLE_LOGGING {
         let is_first_time_initializing_logger = log::set_logger(&LOG).is_ok();
@@ -721,7 +709,7 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
     let _ = field_trial::init(&field_trial_string);
     info!("initialized field trials with {}", field_trial_string);
 
-    let endpoint = CallEndpoint::new(&mut cx, js_call_manager, use_ringrtc_adm)
+    let endpoint = CallEndpoint::new(&mut cx, js_call_manager)
         .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.boxed(RefCell::new(endpoint)).upcast())
 }
