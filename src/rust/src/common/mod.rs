@@ -222,6 +222,23 @@ impl CallState {
         }
     }
 
+    pub fn accepted(self) -> bool {
+        match self {
+            CallState::NotYetStarted => false,
+
+            CallState::WaitingToProceed => false,
+            CallState::ConnectingBeforeAccepted => false,
+            CallState::ConnectedBeforeAccepted => false,
+
+            CallState::ConnectingAfterAccepted => true,
+            CallState::ConnectedAndAccepted => true,
+            CallState::ReconnectingAfterAccepted => true,
+
+            CallState::Terminating => false,
+            CallState::Terminated => false,
+        }
+    }
+
     pub fn can_send_hangup_via_rtp(self) -> bool {
         match self {
             CallState::NotYetStarted => false,

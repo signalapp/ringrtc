@@ -148,9 +148,9 @@ impl TestContext {
         platform.force_internal_fault(enable);
     }
 
-    pub fn force_signaling_fault(&self, enable: bool) {
+    pub fn force_signaling_failure(&self, enable: bool) {
         let mut platform = self.call_manager.platform().unwrap();
-        platform.force_signaling_fault(enable);
+        platform.force_signaling_failure(enable);
     }
 
     pub fn no_auto_message_sent_for_ice(&self, enable: bool) {

@@ -47,23 +47,23 @@ impl PlatformItem for SimPlatformItem {}
 
 #[derive(Default)]
 struct SimStats {
-    /// Number of offers sent
+    /// Number of offers sent to the client
     offers_sent: AtomicUsize,
-    /// Number of answers sent
+    /// Number of answers sent to the client
     answers_sent: AtomicUsize,
-    /// Number of ICE candidates sent
+    /// Number of ICE candidates sent to the client
     ice_candidates_sent: AtomicUsize,
-    /// Number of normal hangups sent
+    /// Number of normal hangups sent to the client
     normal_hangups_sent: AtomicUsize,
-    /// Number of accepted hangups sent
+    /// Number of accepted hangups sent to the client
     accepted_hangups_sent: AtomicUsize,
-    /// Number of declined hangups sent
+    /// Number of declined hangups sent to the client
     declined_hangups_sent: AtomicUsize,
-    /// Number of busy hangups sent
+    /// Number of busy hangups sent to the client
     busy_hangups_sent: AtomicUsize,
-    /// Number of need permission hangups sent
+    /// Number of need permission hangups sent to the client
     need_permission_hangups_sent: AtomicUsize,
-    /// Number of busy messages sent
+    /// Number of busy messages sent to the client
     busys_sent: AtomicUsize,
     /// Number of start outgoing call events
     start_outgoing: AtomicUsize,
@@ -101,7 +101,7 @@ pub struct SimPlatform {
     force_internal_fault: Arc<AtomicBool>,
     /// True if the signaling functions should indicate a signaling
     /// failure to the call manager.
-    force_signaling_fault: Arc<AtomicBool>,
+    force_signaling_failure: Arc<AtomicBool>,
     /// Track event frequencies
     event_map: Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
     /// Track whether disconnecting of incoming media happened
@@ -260,7 +260,7 @@ impl Platform for SimPlatform {
             Err(SimError::SendOfferError.into())
         } else {
             let _ = self.stats.offers_sent.fetch_add(1, Ordering::AcqRel);
-            if self.force_internal_fault.load(Ordering::Acquire) {
+            if self.force_signaling_failure.load(Ordering::Acquire) {
                 self.message_send_failure(call_id).unwrap();
             } else {
                 self.message_sent(call_id).unwrap();
@@ -287,7 +287,7 @@ impl Platform for SimPlatform {
             Err(SimError::SendAnswerError.into())
         } else {
             let _ = self.stats.answers_sent.fetch_add(1, Ordering::AcqRel);
-            if self.force_internal_fault.load(Ordering::Acquire) {
+            if self.force_signaling_failure.load(Ordering::Acquire) {
                 self.message_send_failure(call_id).unwrap();
             } else {
                 self.message_sent(call_id).unwrap();
@@ -322,7 +322,7 @@ impl Platform for SimPlatform {
                 .stats
                 .ice_candidates_sent
                 .fetch_add(send.ice.candidates.len(), Ordering::AcqRel);
-            if self.force_internal_fault.load(Ordering::Acquire) {
+            if self.force_signaling_failure.load(Ordering::Acquire) {
                 if !self.no_auto_message_sent_for_ice.load(Ordering::Acquire) {
                     self.message_send_failure(call_id).unwrap();
                 }
@@ -376,7 +376,7 @@ impl Platform for SimPlatform {
                         .fetch_add(1, Ordering::AcqRel);
                 }
             }
-            if self.force_internal_fault.load(Ordering::Acquire) {
+            if self.force_signaling_failure.load(Ordering::Acquire) {
                 self.message_send_failure(call_id).unwrap();
             } else {
                 self.message_sent(call_id).unwrap();
@@ -395,7 +395,7 @@ impl Platform for SimPlatform {
             Err(SimError::SendBusyError.into())
         } else {
             let _ = self.stats.busys_sent.fetch_add(1, Ordering::AcqRel);
-            if self.force_internal_fault.load(Ordering::Acquire) {
+            if self.force_signaling_failure.load(Ordering::Acquire) {
                 self.message_send_failure(call_id).unwrap();
             } else {
                 self.message_sent(call_id).unwrap();
@@ -688,8 +688,9 @@ impl SimPlatform {
         self.force_internal_fault.store(enable, Ordering::Release);
     }
 
-    pub fn force_signaling_fault(&mut self, enable: bool) {
-        self.force_signaling_fault.store(enable, Ordering::Release);
+    pub fn force_signaling_failure(&mut self, enable: bool) {
+        self.force_signaling_failure
+            .store(enable, Ordering::Release);
     }
 
     pub fn no_auto_message_sent_for_ice(&mut self, enable: bool) {

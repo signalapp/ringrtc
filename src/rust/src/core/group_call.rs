@@ -7679,7 +7679,6 @@ mod tests {
 
     #[test]
     fn send_rates() {
-        init_logging();
         let client1 = TestClient::new(b"1".to_vec(), 1);
         client1.connect_join_and_wait_until_joined();
         assert_eq!(

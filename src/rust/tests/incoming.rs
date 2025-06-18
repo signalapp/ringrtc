@@ -18,7 +18,9 @@ use ringrtc::{
         units::DataRate, ApplicationEvent, CallConfig, CallId, CallState, ConnectionState, DataMode,
     },
     core::{call_manager::MAX_MESSAGE_AGE, group_call, signaling},
-    protobuf, webrtc,
+    protobuf,
+    sim::error::SimError,
+    webrtc,
     webrtc::{
         media::MediaStream,
         peer_connection_observer::{NetworkAdapterType, NetworkRoute, TransportProtocol},
@@ -27,7 +29,10 @@ use ringrtc::{
 
 #[macro_use]
 mod common;
-use common::{random_received_ice_candidate, random_received_offer, test_init, TestContext};
+use common::{
+    random_ice_candidate, random_received_ice_candidate, random_received_offer, test_init,
+    TestContext,
+};
 
 // Create an inbound call session up to the ConnectingBeforeAccepted state.
 //
@@ -114,9 +119,8 @@ fn inbound_ice_connecting() {
 //
 // 1. receive an offer
 // 2. ice connected
-// 3. local accept call
 //
-// Now in the ConnectedAndAccepted state.
+// Now in the ConnectedBeforeAccepted state.
 fn connect_inbound_call() -> TestContext {
     let context = start_inbound_call();
     let mut cm = context.cm();
@@ -126,6 +130,13 @@ fn connect_inbound_call() -> TestContext {
     info!("test: injecting ice connected");
     active_connection
         .inject_ice_connected()
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    info!("test: add media stream");
+    active_connection
+        .handle_received_incoming_media(MediaStream::new(webrtc::Arc::null()))
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
@@ -146,10 +157,23 @@ fn connect_inbound_call() -> TestContext {
         .unwrap()
         .outgoing_audio_enabled(),);
 
-    info!("test: add media stream");
-    active_connection
-        .handle_received_incoming_media(MediaStream::new(webrtc::Arc::null()))
-        .expect(error_line!());
+    assert!(cm.busy());
+
+    context
+}
+
+// Create an inbound call session up to the ConnectedAndAccepted state.
+//
+// 1. receive an offer
+// 2. ice connected
+// 3. local accept call
+//
+// Now in the ConnectedAndAccepted state.
+fn connect_and_accept_inbound_call() -> TestContext {
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let active_connection = context.active_connection();
 
     info!("test: accepting call");
     cm.accept_call(active_call.call_id()).expect(error_line!());
@@ -181,14 +205,14 @@ fn connect_inbound_call() -> TestContext {
 fn inbound_call_connected() {
     test_init();
 
-    let _ = connect_inbound_call();
+    let _ = connect_and_accept_inbound_call();
 }
 
 #[test]
 fn inbound_call_hangup_accepted() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -215,7 +239,7 @@ fn inbound_call_hangup_accepted() {
 fn inbound_call_hangup_declined() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -242,7 +266,7 @@ fn inbound_call_hangup_declined() {
 fn inbound_call_hangup_busy() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -438,7 +462,7 @@ fn inbound_call_drop_connected() {
 fn inbound_call_drop_accepted() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
     let active_call = context.active_call();
 
@@ -463,7 +487,7 @@ fn inbound_call_drop_accepted() {
 fn update_data_mode_default() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
     let active_connection = context.active_connection();
 
@@ -504,7 +528,7 @@ fn update_data_mode_default() {
 fn update_data_mode_low() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
     let active_connection = context.active_connection();
 
@@ -536,7 +560,7 @@ fn update_data_mode_low() {
 fn update_data_mode_when_relayed() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
@@ -644,7 +668,7 @@ fn update_data_mode_when_relayed() {
 }
 
 #[test]
-fn start_inbound_call_with_error() {
+fn start_inbound_call_with_fault() {
     test_init();
 
     let context = TestContext::new();
@@ -671,7 +695,6 @@ fn start_inbound_call_with_error() {
         CallState::WaitingToProceed
     );
 
-    // cause the sending of the answer to fail.
     context.force_internal_fault(true);
 
     cm.proceed(
@@ -697,10 +720,374 @@ fn start_inbound_call_with_error() {
 }
 
 #[test]
-fn receive_offer_while_active() {
+fn answer_send_failure() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    let call_id = CallId::new(context.prng.gen::<u64>());
+    cm.received_offer(
+        remote_peer,
+        call_id,
+        random_received_offer(&context.prng, Duration::from_secs(0)),
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert!(cm.active_call().is_ok());
+    assert_eq!(context.start_outgoing_count(), 0);
+    assert_eq!(context.start_incoming_count(), 1);
+
+    let active_call = context.active_call();
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::WaitingToProceed
+    );
+
+    // Cause sending the answer to fail.
+    context.force_signaling_failure(true);
+
+    cm.proceed(
+        active_call.call_id(),
+        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        CallConfig::default().with_data_mode(DataMode::Normal),
+        None,
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    active_call.get_connection(1).expect_err(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    assert_eq!(context.ice_candidates_sent(), 0);
+    // Hangups shouldn't be sent before the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn ice_send_failure_before_connect() {
+    test_init();
+
+    let context = start_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    cm.synchronize().expect(error_line!());
+
+    // Cause sending the ice candidate to fail.
+    context.force_signaling_failure(true);
+
+    let ice_candidate = random_ice_candidate(&context.prng);
+    let force_send = true;
+    active_connection
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    active_call.get_connection(1).expect_err(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    assert_eq!(context.ice_candidates_sent(), 1);
+    // Hangups shouldn't be sent before the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn ice_send_failure_after_connect() {
     test_init();
 
     let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    cm.synchronize().expect(error_line!());
+
+    // Cause sending the ice candidate to fail.
+    context.force_signaling_failure(true);
+
+    let ice_candidate = random_ice_candidate(&context.prng);
+    let force_send = true;
+    active_connection
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 0);
+    assert_eq!(context.answers_sent(), 1);
+    // We artificially connected; this count reflects the ice sent to the client that failed.
+    assert_eq!(context.ice_candidates_sent(), 1);
+    // No hangups should be sent since we are still connected.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        0
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::ConnectedBeforeAccepted
+    );
+    assert!(cm.busy());
+}
+
+#[test]
+fn ice_send_failure_after_accepted() {
+    test_init();
+
+    let context = connect_and_accept_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    cm.synchronize().expect(error_line!());
+
+    // Cause sending the ice candidate to fail.
+    context.force_signaling_failure(true);
+
+    let ice_candidate = random_ice_candidate(&context.prng);
+    let force_send = true;
+    active_connection
+        .inject_local_ice_candidate(ice_candidate, force_send, "", None)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 0);
+    assert_eq!(context.answers_sent(), 1);
+    // We artificially connected; this count reflects the ice sent to the client that failed.
+    assert_eq!(context.ice_candidates_sent(), 1);
+    // No hangups should be sent since we are still connected.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedSignalingFailure),
+        0
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::ConnectedAndAccepted
+    );
+    assert!(cm.busy());
+}
+
+#[test]
+fn internal_failure_before_connect() {
+    test_init();
+
+    let context = start_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    active_connection.inject_internal_error(
+        SimError::TestError("fake_error".to_string()).into(),
+        "testing internal error injection",
+    );
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 1);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    // Hangups shouldn't be sent before the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedInternalFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn internal_failure_after_connect() {
+    test_init();
+
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    active_connection.inject_internal_error(
+        SimError::TestError("fake_error".to_string()).into(),
+        "testing internal error injection",
+    );
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 1);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    // Hangups shouldn't be sent before the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedInternalFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn internal_failure_after_accept() {
+    test_init();
+
+    let context = connect_and_accept_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    active_connection.inject_internal_error(
+        SimError::TestError("fake_error".to_string()).into(),
+        "testing internal error injection",
+    );
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 1);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    // Hangup should be sent after the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 1);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedInternalFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn connection_failure_before_connect() {
+    test_init();
+
+    let context = start_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    let _ = active_connection.inject_ice_failed();
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    // Hangups shouldn't be sent before the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn connection_failure_after_connect() {
+    test_init();
+
+    let context = connect_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    let _ = active_connection.inject_ice_failed();
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    // Hangups shouldn't be sent before the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 0);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn connection_failure_after_accept() {
+    test_init();
+
+    let context = connect_and_accept_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+    let mut active_connection = context.active_connection();
+
+    let _ = active_connection.inject_ice_failed();
+
+    cm.synchronize().expect(error_line!());
+
+    assert_eq!(context.error_count(), 0);
+    assert_eq!(context.ended_count(), 1);
+    assert_eq!(context.answers_sent(), 1);
+    // Hangup should be sent after the call is accepted.
+    assert_eq!(context.normal_hangups_sent(), 1);
+    assert_eq!(
+        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        1
+    );
+    assert_eq!(
+        active_call.state().expect(error_line!()),
+        CallState::Terminated
+    );
+    assert!(!cm.busy());
+}
+
+#[test]
+fn receive_offer_while_active() {
+    test_init();
+
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
 
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
@@ -1308,7 +1695,7 @@ fn offer_after_ice_with_previous_ice_for_other_call() {
 fn recall_when_connected() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
 
     // Verify that one incoming call was started so far.
@@ -1454,7 +1841,7 @@ fn group_call_ring_expired() {
 fn group_call_ring_busy_in_direct_call() {
     test_init();
 
-    let context = connect_inbound_call();
+    let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
 
     let self_uuid = vec![1, 0, 1];

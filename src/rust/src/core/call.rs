@@ -698,16 +698,28 @@ where
         }
     }
 
-    /// Return true if at least one offer has been sent for the outgoing
-    /// call or if the call is incoming.
+    /// Return true if a hangup should be sent to the remote peer.
     pub fn should_send_hangup(&self) -> bool {
         match self.direction {
+            CallDirection::Incoming => true,
             CallDirection::Outgoing => {
-                // If the call is outgoing, only send hangup message if an
+                // If the call is outgoing, only send a hangup message if an
                 // offer was actually sent out.
                 self.did_send_offer.load(Ordering::Acquire)
             }
-            _ => true,
+        }
+    }
+
+    /// Return true if a hangup should be sent to the remote peer for a failure condition.
+    pub fn should_send_hangup_on_failure(&self) -> bool {
+        match self.direction {
+            CallDirection::Incoming => {
+                // For any failure, only send a hangup message if the user has
+                // accepted the incoming call, to avoid stopping ringing on other
+                // devices.
+                self.state().is_ok_and(|state| state.accepted())
+            }
+            CallDirection::Outgoing => true,
         }
     }
 
