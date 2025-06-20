@@ -14,7 +14,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail};
-use cubeb::{Context, DeviceId, DeviceType, MonoFrame, Stream, StreamPrefs};
+use cubeb::{Context, DeviceId, DeviceType, MonoFrame, StereoFrame, Stream, StreamPrefs};
 use cubeb_core::{log_enabled, set_logging, LogLevel};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -71,6 +71,7 @@ struct PlayData {
 }
 
 type Frame = MonoFrame<i16>;
+type OutFrame = StereoFrame<i16>;
 
 pub struct AudioDeviceModule {
     audio_transport: Arc<Mutex<RffiAudioTransport>>,
@@ -80,7 +81,7 @@ pub struct AudioDeviceModule {
     playout_device: Option<DeviceId>,
     recording_device: Option<DeviceId>,
     // Note that the streams must not outlive the cubeb_ctx.
-    output_stream: Option<Stream<Frame>>,
+    output_stream: Option<Stream<OutFrame>>,
     input_stream: Option<Stream<Frame>>,
     // Note that the caches must not outlive the cubeb_ctx.
     input_device_cache: Option<DeviceCollectionWrapper>,
@@ -766,11 +767,11 @@ impl AudioDeviceModule {
         let params = cubeb::StreamParamsBuilder::new()
             .format(STREAM_FORMAT)
             .rate(SAMPLE_FREQUENCY)
-            .channels(NUM_CHANNELS)
-            .layout(cubeb::ChannelLayout::MONO)
+            .channels(2)
+            .layout(cubeb::ChannelLayout::STEREO)
             .prefs(StreamPrefs::VOICE)
             .take();
-        let mut builder = cubeb::StreamBuilder::<Frame>::new();
+        let mut builder = cubeb::StreamBuilder::<OutFrame>::new();
         let transport = Arc::clone(&self.audio_transport);
         let min_latency = ctx.min_latency(&params).unwrap_or_else(|e| {
             error!(
@@ -803,7 +804,7 @@ impl AudioDeviceModule {
                 // First, copy any leftover data from prior invocations.
                 let mut written = 0;
                 while let Some(data) = buffer.pop_front() {
-                    output[written] = Frame { m: data };
+                    output[written] = OutFrame { l: data, r: data };
                     written += 1;
                     if written >= output.len() {
                         // Short-circuit; we already have enough data.
@@ -832,7 +833,7 @@ impl AudioDeviceModule {
                     // buffer for the next invocation of the callback.
                     for data in play_data.data.iter() {
                         if written < output.len() {
-                            output[written] = Frame { m: *data };
+                            output[written] = OutFrame { l: *data, r: *data };
                             written += 1;
                         } else {
                             buffer.push_back(*data);
