@@ -23,6 +23,10 @@ use prost::Message;
 use rand::{rngs::OsRng, Rng};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey};
+use zkgroup::{
+    groups::{GroupSendEndorsementsResponse, UuidCiphertext},
+    Timestamp,
+};
 
 use crate::{
     common::{
@@ -30,18 +34,29 @@ use crate::{
         units::DataRate,
         CallId, DataMode, Result,
     },
-    core::{call_mutex::CallMutex, crypto as frame_crypto, signaling, util::uuid_to_string},
+    core::{
+        call_mutex::CallMutex,
+        crypto as frame_crypto,
+        endorsements::{EndorsementUpdateError, EndorsementUpdateResultRef, EndorsementsCache},
+        signaling,
+        util::uuid_to_string,
+    },
     error::RingRtcError,
     lite::{
         call_links::CallLinkEpoch,
         http, sfu,
         sfu::{
-            ClientStatus, DemuxId, GroupMember, MemberMap, MembershipProof, ObfuscatedResolver,
-            PeekInfo, PeekResult, PeekResultCallback, UserId,
+            ClientStatus, DemuxId, GroupMember, MemberMap, MemberResolver, MembershipProof,
+            ObfuscatedResolver, PeekInfo, PeekResult, PeekResultCallback, UserId,
         },
     },
-    protobuf,
-    protobuf::group_call::{DeviceToSfu, SfuToDevice},
+    protobuf::{
+        self,
+        group_call::{
+            sfu_to_device::{DeviceJoinedOrLeft, SendEndorsementsResponse},
+            DeviceToSfu, SfuToDevice,
+        },
+    },
     webrtc::{
         self,
         media::{
@@ -321,6 +336,10 @@ pub trait Observer {
     // This will be the last callback.
     // The observer can assume the Call is completely shut down and can be deleted.
     fn handle_ended(&self, client_id: ClientId, reason: EndReason);
+
+    // This is called with the result of validating endorsements from the server. The errors contain
+    // a reason and indicate any previous endorsements may be incomplete
+    fn handle_endorsements_update(&self, client_id: ClientId, update: EndorsementUpdateResultRef);
 }
 
 // The connection states of a device connecting to a group call.
@@ -1071,6 +1090,9 @@ struct State {
 
     bwe_check_state: BweCheckState,
 
+    // We stage group endorsements in RingRTC, and duplicate it into app during tick
+    group_send_endorsement_cache: EndorsementsCache,
+
     // We have to put this inside the actor state also because
     // we change the keys from within the actor.
     frame_crypto_context: Arc<CallMutex<frame_crypto::Context>>,
@@ -1359,6 +1381,8 @@ impl Client {
 
                     bwe_check_state: BweCheckState::Disabled,
 
+                    group_send_endorsement_cache: Default::default(),
+
                     frame_crypto_context,
                     pending_media_receive_keys: Vec::new(),
                     media_send_key_rotation_state: KeyRotationState::Applied,
@@ -1601,6 +1625,12 @@ impl Client {
                 .observer
                 .handle_remote_mute_request(state.client_id, source);
             state.mute_request = None;
+        }
+
+        if let Some(endorsement_update) = state.group_send_endorsement_cache.get_latest() {
+            state
+                .observer
+                .handle_endorsements_update(state.client_id, Ok(endorsement_update))
         }
 
         let State {
@@ -3273,6 +3303,17 @@ impl Client {
         }
     }
 
+    fn mark_group_send_endorsements_invalid(
+        state: &mut State,
+        expiration: Option<zkgroup::Timestamp>,
+        reason: String,
+    ) {
+        error!("Could not process latest endorsements: {}", reason);
+        state
+            .group_send_endorsement_cache
+            .set_invalid(expiration, reason);
+    }
+
     // Returns (min, start, max)
     fn compute_send_rates(joined_member_count: usize, sharing_screen: bool) -> SendRates {
         match (joined_member_count, sharing_screen) {
@@ -4094,9 +4135,8 @@ impl Client {
     }
 
     fn handle_sfu_to_device_inner(actor: &Actor<State>, header: rtp::Header, msg: SfuToDevice) {
-        use protobuf::group_call::sfu_to_device::{
-            CurrentDevices, DeviceJoinedOrLeft, RaisedHands, Removed, Speaker,
-        };
+        use protobuf::group_call::sfu_to_device::{CurrentDevices, RaisedHands, Removed, Speaker};
+        let sys_now = SystemTime::now();
         // TODO: Use video_request to throttle down how much we send when it's not needed.
         let SfuToDevice {
             speaker,
@@ -4108,6 +4148,7 @@ impl Client {
             raised_hands,
             mrp_header: _,
             content,
+            endorsements,
         } = msg;
 
         if let Some(content) = content {
@@ -4148,6 +4189,9 @@ impl Client {
             } else {
                 Self::handle_remote_device_joined_or_left(actor);
             }
+        }
+        if let Some(endorsements) = endorsements {
+            Self::handle_send_endorsements_response(actor, sys_now, endorsements);
         }
         // TODO: Use all_demux_ids to avoid polling
         if let Some(CurrentDevices {
@@ -4240,6 +4284,124 @@ impl Client {
             info!("SFU notified that a remote device has joined or left, requesting update");
             Self::request_remote_devices_as_soon_as_possible(state);
         })
+    }
+
+    fn handle_send_endorsements_response(
+        actor: &Actor<State>,
+        sys_now: SystemTime,
+        SendEndorsementsResponse {
+            serialized,
+            member_ciphertexts,
+        }: SendEndorsementsResponse,
+    ) {
+        actor.send(move |state| {
+            let Some(serialized) = serialized else {
+                state.observer.handle_endorsements_update(
+                    state.client_id,
+                    Err(EndorsementUpdateError::MissingField("serialized")),
+                );
+                return;
+            };
+            if member_ciphertexts.is_empty() {
+                state.observer.handle_endorsements_update(
+                    state.client_id,
+                    Err(EndorsementUpdateError::MissingField("member_ciphertexts")),
+                );
+                return;
+            }
+            let response = match zkgroup::deserialize::<GroupSendEndorsementsResponse>(
+                serialized.as_slice(),
+            ) {
+                Ok(response) => response,
+                Err(_) => {
+                    state.observer.handle_endorsements_update(
+                        state.client_id,
+                        Err(EndorsementUpdateError::InvalidEndorsementResponseFormat),
+                    );
+                    return;
+                }
+            };
+            let now = Timestamp::from_epoch_seconds(
+                sys_now
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            );
+            if response.expiration() < now {
+                state.observer.handle_endorsements_update(
+                    state.client_id,
+                    Err(EndorsementUpdateError::ExpiredEndorsements(
+                        response.expiration(),
+                    )),
+                );
+                return;
+            }
+
+            Self::handle_send_endorsements_response_inner(state, response, member_ciphertexts, now);
+        });
+    }
+
+    fn handle_send_endorsements_response_inner(
+        state: &mut State,
+        response: GroupSendEndorsementsResponse,
+        member_ciphertexts: Vec<Vec<u8>>,
+        now: Timestamp,
+    ) {
+        let Some(endorsement_public_key) = state.obfuscated_resolver.get_endorsement_public_key()
+        else {
+            error!("Cannot process SendEndorsementsResponse because call was not initialized with endorsement public key");
+            return;
+        };
+        let expiration = response.expiration();
+        let member_uuid_ciphertexts: Vec<UuidCiphertext> = member_ciphertexts
+            .iter()
+            .flat_map(|opaque_user_id| zkgroup::deserialize(opaque_user_id).ok())
+            .collect();
+        let member_ids: Vec<UserId> = member_ciphertexts
+            .iter()
+            .flat_map(|ciphertext| state.obfuscated_resolver.resolve(&hex::encode(ciphertext)))
+            .collect();
+        if member_ids.len() != member_ciphertexts.len()
+            || member_uuid_ciphertexts.len() != member_ciphertexts.len()
+        {
+            Self::mark_group_send_endorsements_invalid(
+                state,
+                Some(expiration),
+                "Received endorsements with invalid member ciphertexts".to_string(),
+            );
+            state.observer.handle_endorsements_update(
+                state.client_id,
+                Err(EndorsementUpdateError::InvalidMemberCiphertexts),
+            );
+            return;
+        }
+
+        match response.receive_with_ciphertexts(
+            member_uuid_ciphertexts,
+            now,
+            endorsement_public_key,
+        ) {
+            Ok(endorsements) => {
+                let endorsements = member_ids
+                    .into_iter()
+                    .zip(endorsements.into_iter().map(|e| e.decompressed))
+                    .collect::<HashMap<_, _>>();
+                state
+                    .group_send_endorsement_cache
+                    .insert(expiration, endorsements);
+            }
+            Err(_) => {
+                Self::mark_group_send_endorsements_invalid(
+                    state,
+                    Some(expiration),
+                    "Failed to verify group send endorsement".to_string(),
+                );
+                state.observer.handle_endorsements_update(
+                    state.client_id,
+                    Err(EndorsementUpdateError::InvalidEndorsementResponse),
+                );
+            }
+        }
     }
 
     fn handle_forwarding_video_received(
@@ -4875,14 +5037,51 @@ impl<'data> Reader<'data> {
 mod tests {
     use std::sync::{
         atomic::{self, AtomicI64, AtomicU64, Ordering},
-        mpsc, Arc, Condvar, Mutex,
+        mpsc, Arc, Condvar, LazyLock, Mutex,
+    };
+
+    use libsignal_core::Aci;
+    use rand::random;
+    use zkgroup::{
+        call_links::CallLinkSecretParams, EndorsementPublicKey, EndorsementServerRootKeyPair,
+        RandomnessBytes, ServerPublicParams, ServerSecretParams, RANDOMNESS_LEN, UUID_LEN,
     };
 
     use super::*;
     use crate::{
-        lite::sfu::PeekDeviceInfo, protobuf::group_call::MrpHeader,
+        core::endorsements::EndorsementUpdateResult,
+        lite::{
+            call_links::{CallLinkMemberResolver, CallLinkRootKey},
+            sfu::PeekDeviceInfo,
+        },
+        protobuf::group_call::MrpHeader,
         webrtc::sim::media::FAKE_AUDIO_TRACK,
     };
+
+    static RANDOMNESS: LazyLock<RandomnessBytes> = LazyLock::new(|| [0x44u8; RANDOMNESS_LEN]);
+    static SERVER_SECRET_PARAMS: LazyLock<ServerSecretParams> =
+        LazyLock::new(|| ServerSecretParams::generate(*RANDOMNESS));
+    static ENDORSEMENT_SERVER_ROOT_KEY: LazyLock<EndorsementServerRootKeyPair> =
+        LazyLock::new(|| SERVER_SECRET_PARAMS.get_endorsement_root_key_pair());
+    static SERVER_PUBLIC_PARAMS: LazyLock<ServerPublicParams> =
+        LazyLock::new(|| SERVER_SECRET_PARAMS.get_public_params());
+    static ENDORSEMENT_PUBLIC_ROOT_KEY: LazyLock<EndorsementPublicKey> =
+        LazyLock::new(|| SERVER_PUBLIC_PARAMS.get_endorsement_public_key());
+    static MEMBER_IDS: LazyLock<Vec<Aci>> = LazyLock::new(|| {
+        (1..=3)
+            .map(|i| Aci::from_uuid_bytes([i; UUID_LEN]))
+            .collect()
+    });
+    static CALL_LINK_ROOT_KEY: LazyLock<CallLinkRootKey> =
+        LazyLock::new(|| CallLinkRootKey::try_from([0x43u8; 16].as_ref()).unwrap());
+    static CALL_LINK_SECRET_PARAMS: LazyLock<CallLinkSecretParams> =
+        LazyLock::new(|| CallLinkSecretParams::derive_from_root_key(&CALL_LINK_ROOT_KEY.bytes()));
+    static MEMBER_CIPHERTEXTS: LazyLock<Vec<UuidCiphertext>> = LazyLock::new(|| {
+        MEMBER_IDS
+            .iter()
+            .map(|id| CALL_LINK_SECRET_PARAMS.encrypt_uid(*id))
+            .collect::<Vec<_>>()
+    });
 
     #[derive(Clone)]
     struct FakeSfuClient {
@@ -5053,6 +5252,7 @@ mod tests {
         sent_group_signaling_messages: Arc<CallMutex<Vec<protobuf::signaling::CallMessage>>>,
 
         connecting: Event,
+        endorsement_update_event: Event,
         joined: Event,
         peek_changed: Event,
         reactions_called: Event,
@@ -5063,6 +5263,7 @@ mod tests {
         send_rates: Arc<CallMutex<Option<SendRates>>>,
         ended: Waitable<EndReason>,
         reactions: Arc<CallMutex<Vec<Reaction>>>,
+        endorsement_update: Arc<CallMutex<Option<EndorsementUpdateResult>>>,
 
         request_membership_proof_invocation_count: Arc<AtomicU64>,
         request_group_members_invocation_count: Arc<AtomicU64>,
@@ -5093,6 +5294,7 @@ mod tests {
                     "FakeObserver sent group messages",
                 )),
                 connecting: Event::default(),
+                endorsement_update_event: Event::default(),
                 joined: Event::default(),
                 peek_changed: Event::default(),
                 reactions_called: Event::default(),
@@ -5107,6 +5309,10 @@ mod tests {
                     "FakeObserver peek state",
                 )),
                 send_rates: Arc::new(CallMutex::new(None, "FakeObserver send rates")),
+                endorsement_update: Arc::new(CallMutex::new(
+                    None,
+                    "FakeObserver endorsement update",
+                )),
                 ended: Waitable::default(),
                 reactions: Arc::new(CallMutex::new(Default::default(), "FakeObserver reactions")),
                 request_membership_proof_invocation_count: Default::default(),
@@ -5489,6 +5695,22 @@ mod tests {
                 .unwrap()
                 .push((mute_source, mute_target));
         }
+
+        fn handle_endorsements_update(
+            &self,
+            _client_id: ClientId,
+            update: EndorsementUpdateResultRef,
+        ) {
+            let mut owned = self
+                .endorsement_update
+                .lock()
+                .expect("Lock endorsement_update to handle update");
+
+            info!("Observer handling endorsement update: {:?}", update);
+            *owned =
+                Some(update.map(|(expiration, endorsements)| (expiration, endorsements.clone())));
+            self.endorsement_update_event.set();
+        }
     }
 
     #[derive(Clone)]
@@ -5517,7 +5739,11 @@ mod tests {
                 }),
                 None,
             );
-            let obfuscated_resolver = ObfuscatedResolver::new(Arc::new(MemberMap::new(&[])), None);
+            let obfuscated_resolver = ObfuscatedResolver::new(
+                Arc::new(CallLinkMemberResolver::from(&*CALL_LINK_ROOT_KEY)),
+                Some(CALL_LINK_ROOT_KEY.clone()),
+                Some(ENDORSEMENT_PUBLIC_ROOT_KEY.clone()),
+            );
             let client = Client::start(ClientStartParams {
                 group_id: b"fake group ID".to_vec(),
                 client_id: demux_id,
@@ -8252,6 +8478,241 @@ mod tests {
                 .expect("finished processing"),
         );
         assert_eq!(&sent_messages, &[]);
+    }
+
+    fn endorsements_for(
+        member_ciphertexts: &[UuidCiphertext],
+        expiration: zkgroup::Timestamp,
+        now: Timestamp,
+    ) -> (
+        GroupSendEndorsementsResponse,
+        Vec<Vec<u8>>,
+        HashMap<UserId, zkgroup::groups::GroupSendEndorsement>,
+    ) {
+        let todays_key = zkgroup::groups::GroupSendDerivedKeyPair::for_expiration(
+            expiration,
+            &*ENDORSEMENT_SERVER_ROOT_KEY,
+        );
+        let member_resolver = CallLinkMemberResolver::from(&*CALL_LINK_ROOT_KEY);
+        let endorsements = GroupSendEndorsementsResponse::issue(
+            member_ciphertexts.to_vec(),
+            &todays_key,
+            random(),
+        );
+        let endorsements_result = GroupSendEndorsementsResponse::issue(
+            member_ciphertexts.to_vec(),
+            &todays_key,
+            random(),
+        )
+        .receive_with_ciphertexts(
+            member_ciphertexts.to_vec(),
+            now,
+            &*ENDORSEMENT_PUBLIC_ROOT_KEY,
+        )
+        .unwrap()
+        .into_iter()
+        .map(|p| p.decompressed);
+        let serialized_member_ciphertexts = member_ciphertexts
+            .iter()
+            .map(zkgroup::serialize)
+            .collect::<Vec<_>>();
+        let member_ids = serialized_member_ciphertexts
+            .iter()
+            .map(|ciphertext| member_resolver.resolve_bytes(ciphertext).unwrap());
+        let endorsements_result = member_ids.zip(endorsements_result).collect();
+
+        (
+            endorsements,
+            serialized_member_ciphertexts,
+            endorsements_result,
+        )
+    }
+
+    #[test]
+    fn test_handle_send_endorsements_response() {
+        let user_id = vec![1];
+        let demux_id = 1;
+        let client1 = TestClient::with_sfu_client(
+            user_id.clone(),
+            demux_id,
+            FakeSfuClient::new(demux_id, Some(user_id)),
+        );
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[&client1]);
+        let sys_at = |epoch_secs| SystemTime::UNIX_EPOCH + Duration::from_secs(epoch_secs);
+        let one_day_secs = 86400;
+        let now = sys_at(10);
+        let now_ts = Timestamp::from_epoch_seconds(
+            now.duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
+        let expected_expiration = Timestamp::from_epoch_seconds(one_day_secs);
+        let (response, serialized_member_ciphertexts, expected_endorsements_map) =
+            endorsements_for(&MEMBER_CIPHERTEXTS, expected_expiration, now_ts);
+
+        // missing serialized GroupSendEndorsementResponse
+        {
+            let msg = SendEndorsementsResponse {
+                serialized: None,
+                member_ciphertexts: serialized_member_ciphertexts.clone(),
+            };
+            Client::handle_send_endorsements_response(&client1.client.actor, now, msg);
+            client1
+                .observer
+                .endorsement_update_event
+                .wait(Duration::from_secs(5));
+            let update = client1
+                .observer
+                .endorsement_update
+                .lock()
+                .unwrap()
+                .as_ref()
+                .cloned()
+                .unwrap();
+            assert_eq!(
+                update,
+                Err(EndorsementUpdateError::MissingField("serialized")),
+            );
+        }
+
+        // missing member ciphertexts
+        {
+            let msg = SendEndorsementsResponse {
+                serialized: Some(zkgroup::serialize(&response)),
+                member_ciphertexts: vec![],
+            };
+            Client::handle_send_endorsements_response(&client1.client.actor, now, msg);
+            client1
+                .observer
+                .endorsement_update_event
+                .wait(Duration::from_secs(5));
+            let update = client1
+                .observer
+                .endorsement_update
+                .lock()
+                .unwrap()
+                .as_ref()
+                .cloned()
+                .unwrap();
+            assert_eq!(
+                update,
+                Err(EndorsementUpdateError::MissingField("member_ciphertexts")),
+            );
+        }
+
+        // partial member ciphertexts is bad response
+        {
+            let msg = SendEndorsementsResponse {
+                serialized: Some(zkgroup::serialize(&response)),
+                member_ciphertexts: serialized_member_ciphertexts[..1].to_vec(),
+            };
+            Client::handle_send_endorsements_response(&client1.client.actor, now, msg);
+            client1
+                .observer
+                .endorsement_update_event
+                .wait(Duration::from_secs(5));
+            let update = client1
+                .observer
+                .endorsement_update
+                .lock()
+                .unwrap()
+                .as_ref()
+                .cloned()
+                .unwrap();
+            assert_eq!(
+                update,
+                Err(EndorsementUpdateError::InvalidEndorsementResponse),
+            );
+        }
+
+        // invalid member ciphertexts format
+        {
+            let msg = SendEndorsementsResponse {
+                serialized: Some(zkgroup::serialize(&response)),
+                member_ciphertexts: serialized_member_ciphertexts
+                    .iter()
+                    .map(|b| b[1..].to_vec())
+                    .collect(),
+            };
+            Client::handle_send_endorsements_response(&client1.client.actor, now, msg);
+            client1
+                .observer
+                .endorsement_update_event
+                .wait(Duration::from_secs(5));
+            let update = client1
+                .observer
+                .endorsement_update
+                .lock()
+                .unwrap()
+                .as_ref()
+                .cloned()
+                .unwrap();
+            assert_eq!(
+                update,
+                Err(EndorsementUpdateError::InvalidMemberCiphertexts),
+            );
+        }
+
+        // invalid member ciphertexts secret
+        {
+            let bad_params = CallLinkSecretParams::derive_from_root_key(&[0x42u8; 16]);
+            let wrong_key_ciphertexts = MEMBER_IDS
+                .iter()
+                .map(|id| bad_params.encrypt_uid(*id))
+                .map(|ciphertext| zkgroup::serialize(&ciphertext))
+                .collect::<Vec<_>>();
+            let msg = SendEndorsementsResponse {
+                serialized: Some(zkgroup::serialize(&response)),
+                member_ciphertexts: wrong_key_ciphertexts,
+            };
+            Client::handle_send_endorsements_response(&client1.client.actor, now, msg);
+            client1
+                .observer
+                .endorsement_update_event
+                .wait(Duration::from_secs(5));
+            let update = client1
+                .observer
+                .endorsement_update
+                .lock()
+                .unwrap()
+                .as_ref()
+                .cloned()
+                .unwrap();
+            assert_eq!(
+                update,
+                Err(EndorsementUpdateError::InvalidMemberCiphertexts),
+            );
+        }
+
+        // successful endorsement update
+        {
+            let msg = SendEndorsementsResponse {
+                serialized: Some(zkgroup::serialize(&response)),
+                member_ciphertexts: serialized_member_ciphertexts.clone(),
+            };
+            Client::handle_send_endorsements_response(&client1.client.actor, now, msg);
+            client1
+                .observer
+                .endorsement_update_event
+                .wait(Duration::from_secs(5));
+            let update = client1
+                .observer
+                .endorsement_update
+                .lock()
+                .unwrap()
+                .as_ref()
+                .cloned();
+            assert!(
+                update.is_some(),
+                "should have processed an update and called observer"
+            );
+            assert_eq!(
+                update.unwrap(),
+                Ok((expected_expiration, expected_endorsements_map)),
+                "Successful endorsements are only updated during client tick()"
+            );
+        }
     }
 }
 

@@ -417,6 +417,7 @@ pub fn create_group_call_client(
 pub fn create_call_link_call_client(
     call_manager: *mut IosCallManager,
     sfu_url: String,
+    endorsement_public_key: Vec<u8>,
     auth_credential_presentation: Vec<u8>,
     root_key: CallLinkRootKey,
     epoch: Option<CallLinkEpoch>,
@@ -446,6 +447,7 @@ pub fn create_call_link_call_client(
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.create_call_link_call_client(
         sfu_url,
+        &endorsement_public_key,
         &auth_credential_presentation,
         root_key,
         epoch,

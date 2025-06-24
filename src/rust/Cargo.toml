@@ -64,7 +64,7 @@ x25519-dalek      = { version = "2.0.1", features = ["static_secrets"] }
 # libsignal-client.
 bincode = { version = "1.3.3" }
 uuid = { version = "1.17.0", optional = true }
-zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.65.1" }
+zkgroup = { git = "https://github.com/signalapp/libsignal", tag = "v0.73.3" }
 
 # Optional, needed by the "electron" feature
 neon = { version = "1.1.1", optional = true, default-features = false, features = ["napi-6"] }
@@ -137,3 +137,4 @@ jni = { version = "0.21.1", default-features = false }
 uuid = { version = "1.17.0" }
 env_logger = { version = "0.11.8" }
 rand_chacha = { version = "0.3.1" }
+libsignal-core = { git = "https://github.com/signalapp/libsignal", tag = "v0.73.3" }

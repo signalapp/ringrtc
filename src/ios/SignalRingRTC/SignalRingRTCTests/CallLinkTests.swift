@@ -12,7 +12,8 @@ final class CallLinkTests: XCTestCase {
     private static let EXAMPLE_STATE_JSON = #"{"restrictions": "none","name":"","revoked":false,"expiration":\#(UInt64(EXPIRATION_EPOCH_SECONDS))}"#
     private static let EXAMPLE_EMPTY_JSON = #"{}"#
     private static let EXAMPLE_EPOCH = try! CallLinkEpoch("bcdf-ghkm")
-    
+    private static let EXAMPLE_ENDORSEMENT_PUBLIC_KEY = Data([0x00, 0x56, 0x23, 0xec, 0x30, 0x93, 0x21, 0x42, 0xa8, 0xd0, 0xd7, 0xcf, 0xfa, 0xb1, 0x97, 0x58, 0x00, 0x9e, 0xdb, 0x82, 0x26, 0xd4, 0x9f, 0xab, 0xd3, 0x82, 0xdc, 0xd9, 0x1d, 0x85, 0x09, 0x60, 0x61])
+
     func testKeyAccessors() throws {
         let anotherKey = CallLinkRootKey.generate()
         XCTAssertNotEqual(Self.EXAMPLE_KEY.bytes, anotherKey.bytes)
@@ -493,7 +494,7 @@ final class CallLinkTests: XCTestCase {
     func testConnectWithNoResponse() throws {
         let delegate = TestDelegate()
         let callManager = createCallManager(delegate)!
-        let call = try XCTUnwrap(callManager.createCallLinkCall(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, epoch: nil, adminPasskey: nil, hkdfExtraInfo: Data(), audioLevelsIntervalMillis: nil, videoCaptureController: VideoCaptureController()))
+        let call = try XCTUnwrap(callManager.createCallLinkCall(sfuUrl: "sfu.example", endorsementPublicKey: Self.EXAMPLE_ENDORSEMENT_PUBLIC_KEY, authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, epoch: nil, adminPasskey: nil, hkdfExtraInfo: Data(), audioLevelsIntervalMillis: nil, videoCaptureController: VideoCaptureController()))
         XCTAssertEqual(call.kind, .callLink)
 
         let callDelegate = TestGroupCallDelegate()
@@ -508,7 +509,7 @@ final class CallLinkTests: XCTestCase {
     func testConnectWithNoResponseWithEpoch() throws {
         let delegate = TestDelegate()
         let callManager = createCallManager(delegate)!
-        let call = try XCTUnwrap(callManager.createCallLinkCall(sfuUrl: "sfu.example", authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, epoch: Self.EXAMPLE_EPOCH, adminPasskey: nil, hkdfExtraInfo: Data(), audioLevelsIntervalMillis: nil, videoCaptureController: VideoCaptureController()))
+        let call = try XCTUnwrap(callManager.createCallLinkCall(sfuUrl: "sfu.example", endorsementPublicKey: Self.EXAMPLE_ENDORSEMENT_PUBLIC_KEY, authCredentialPresentation: [1, 2, 3], linkRootKey: Self.EXAMPLE_KEY, epoch: Self.EXAMPLE_EPOCH, adminPasskey: nil, hkdfExtraInfo: Data(), audioLevelsIntervalMillis: nil, videoCaptureController: VideoCaptureController()))
         XCTAssertEqual(call.kind, .callLink)
 
         let callDelegate = TestGroupCallDelegate()

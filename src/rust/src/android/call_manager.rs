@@ -859,6 +859,7 @@ pub fn create_call_link_call_client(
     env: &mut JNIEnv,
     call_manager: *mut AndroidCallManager,
     sfu_url: JString,
+    endorsement_public_key: JByteArray,
     auth_presentation: JByteArray,
     root_key: JByteArray,
     epoch: JObject,
@@ -870,6 +871,7 @@ pub fn create_call_link_call_client(
     native_video_track_borrowed_rc: jlong,
 ) -> Result<group_call::ClientId> {
     let sfu_url = env.get_string(&sfu_url)?.into();
+    let endorsement_public_key = env.convert_byte_array(endorsement_public_key)?;
     let auth_presentation = env.convert_byte_array(auth_presentation)?;
     let root_key =
         call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
@@ -918,6 +920,7 @@ pub fn create_call_link_call_client(
     let epoch = jobject_to_call_link_epoch(env, epoch)?;
     call_manager.create_call_link_call_client(
         sfu_url,
+        &endorsement_public_key,
         &auth_presentation,
         root_key,
         epoch,

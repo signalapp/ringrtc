@@ -5,14 +5,16 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 
+use base64::Engine;
 use log::info;
 use ringrtc::{
     common::units::DataRate,
     core::{
         call_mutex::CallMutex,
+        endorsements::EndorsementUpdateResultRef,
         group_call::{
             self, ClientId, ConnectionState, EndReason, HttpSfuClient, JoinState, Reaction,
             RemoteDeviceState, RemoteDevicesChangedReason, SpeechEvent,
@@ -29,6 +31,7 @@ use ringrtc::{
         peer_connection_factory::{self, PeerConnectionFactory},
     },
 };
+use zkgroup::ServerPublicParams;
 
 #[derive(Clone, Default)]
 struct Observer {
@@ -164,6 +167,10 @@ impl group_call::Observer for Observer {
     ) {
         // ignore
     }
+
+    fn handle_endorsements_update(&self, _client_id: ClientId, update: EndorsementUpdateResultRef) {
+        info!("Received Endorsement Update {:?}", update);
+    }
 }
 
 impl VideoSink for Observer {
@@ -197,6 +204,14 @@ impl log::Log for Log {
     fn flush(&self) {}
 }
 
+static SERVER_PUBLIC_PARAMS: LazyLock<ServerPublicParams> = LazyLock::new(|| {
+    zkgroup::deserialize(
+        &base64::engine::general_purpose::STANDARD.decode(
+            "AMhf5ywVwITZMsff/eCyudZx9JDmkkkbV6PInzG4p8x3VqVJSFiMvnvlEKWuRob/1eaIetR31IYeAbm0NdOuHH8Qi+Rexi1wLlpzIo1gstHWBfZzy1+qHRV5A4TqPp15YzBPm0WSggW6PbSn+F4lf57VCnHF7p8SvzAA2ZZJPYJURt8X7bbg+H3i+PEjH9DXItNEqs2sNcug37xZQDLm7X36nOoGPs54XsEGzPdEV+itQNGUFEjY6X9Uv+Acuks7NpyGvCoKxGwgKgE5XyJ+nNKlyHHOLb6N1NuHyBrZrgtY/JYJHRooo5CEqYKBqdFnmbTVGEkCvJKxLnjwKWf+fEPoWeQFj5ObDjcKMZf2Jm2Ae69x+ikU5gBXsRmoF94GXTLfN0/vLt98KDPnxwAQL9j5V1jGOY8jQl6MLxEs56cwXN0dqCnImzVH3TZT1cJ8SW1BRX6qIVxEzjsSGx3yxF3suAilPMqGRp4ffyopjMD1JXiKR2RwLKzizUe5e8XyGOy9fplzhw3jVzTRyUZTRSZKkMLWcQ/gv0E4aONNqs4P+NameAZYOD12qRkxosQQP5uux6B2nRyZ7sAV54DgFyLiRcq1FvwKw2EPQdk4HDoePrO/RNUbyNddnM/mMgj4FW65xCoT1LmjrIjsv/Ggdlx46ueczhMgtBunx1/w8k8V+l8LVZ8gAT6wkU5J+DPQalQguMg12Jzug3q4TbdHiGCmD9EunCwOmsLuLJkz6EcSYXtrlDEnAM+hicw7iergYLLlMXpfTdGxJCWJmP4zqUFeTTmsmhsjGBt7NiEB/9pFFEB3pSbf4iiUukw63Eo8Aqnf4iwob6X1QviCWuc8t0LUlT9vALgh/f2DPVOOmR0RW6bgRvc7DSF20V/omg+YBw=="
+        ).unwrap()
+    ).unwrap()
+});
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let url = args
@@ -208,6 +223,12 @@ fn main() {
         .map(String::as_str)
         .unwrap_or("757365725f6964:67726f75705f6964:1:"); // Hex of "user_id:group_id:timestamp:" with empty MAC
     let hkdf_extra_info = vec![1, 2, 3];
+    let server_public_params = args
+        .get(3)
+        .map(hex::decode)
+        .map(Result::unwrap)
+        .map(|b| zkgroup::deserialize::<zkgroup::EndorsementPublicKey>(&b).unwrap())
+        .unwrap_or(SERVER_PUBLIC_PARAMS.get_endorsement_public_key().clone());
 
     log::set_logger(&LOG).expect("set logger");
     log::set_max_level(log::LevelFilter::Info);
@@ -238,7 +259,11 @@ fn main() {
         .unwrap();
     let busy = Arc::new(CallMutex::new(false, "busy"));
     let self_uuid = Arc::new(CallMutex::new(None, "self_uuid"));
-    let obfuscated_resolver = ObfuscatedResolver::new(Arc::new(MemberMap::new(&[])), None);
+    let obfuscated_resolver = ObfuscatedResolver::new(
+        Arc::new(MemberMap::new(&[])),
+        None,
+        Some(server_public_params),
+    );
 
     let client = group_call::Client::start(group_call::ClientStartParams {
         group_id,

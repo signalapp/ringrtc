@@ -18,6 +18,7 @@ use hex::ToHex;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sha2::{Digest, Sha256};
+use zkgroup::EndorsementPublicKey;
 
 use crate::{
     lite::{
@@ -363,26 +364,34 @@ pub type DemuxId = u32;
 
 pub trait MemberResolver {
     fn resolve(&self, opaque_user_id: &str) -> Option<UserId>;
+    fn resolve_bytes(&self, opaque_user_id: &[u8]) -> Option<UserId>;
 }
 
 pub struct ObfuscatedResolver {
     member_resolver: Arc<dyn MemberResolver + Send + Sync>,
     call_link_root_key: Option<CallLinkRootKey>,
+    endorsement_public_key: Option<EndorsementPublicKey>,
 }
 
 impl ObfuscatedResolver {
     pub fn new(
         member_resolver: Arc<dyn MemberResolver + Send + Sync>,
         call_link_root_key: Option<CallLinkRootKey>,
+        endorsement_public_root_key: Option<EndorsementPublicKey>,
     ) -> Self {
         Self {
             member_resolver,
             call_link_root_key,
+            endorsement_public_key: endorsement_public_root_key,
         }
     }
 
     pub fn resolve_user_id(&self, opaque_user_id: &str) -> Option<UserId> {
         self.member_resolver.resolve(opaque_user_id)
+    }
+
+    pub fn resolve_user_id_bytes(&self, opaque_user_id: &[u8]) -> Option<UserId> {
+        self.member_resolver.resolve_bytes(opaque_user_id)
     }
 
     pub fn resolve_call_link_name(&self, opaque_call_link_name: &str) -> Option<String> {
@@ -406,11 +415,19 @@ impl ObfuscatedResolver {
     pub fn get_call_link_root_key(&self) -> Option<&CallLinkRootKey> {
         self.call_link_root_key.as_ref()
     }
+
+    pub fn get_endorsement_public_key(&self) -> Option<&EndorsementPublicKey> {
+        self.endorsement_public_key.as_ref()
+    }
 }
 
 impl MemberResolver for ObfuscatedResolver {
     fn resolve(&self, user_id: &str) -> Option<UserId> {
         self.resolve_user_id(user_id)
+    }
+
+    fn resolve_bytes(&self, opaque_user_id: &[u8]) -> Option<UserId> {
+        self.resolve_user_id_bytes(opaque_user_id)
     }
 }
 
@@ -447,6 +464,10 @@ impl MemberResolver for MemberMap {
                 None
             }
         })
+    }
+
+    fn resolve_bytes(&self, opaque_user_id: &[u8]) -> Option<UserId> {
+        self.resolve(&hex::encode(opaque_user_id))
     }
 }
 
@@ -920,10 +941,21 @@ pub mod ios {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use uuid::Uuid;
+    use zkgroup::{RandomnessBytes, ServerPublicParams, ServerSecretParams, RANDOMNESS_LEN};
 
     use super::*;
     use crate::lite::call_links::{CallLinkMemberResolver, CallLinkRootKey};
+
+    static RANDOMNESS: LazyLock<RandomnessBytes> = LazyLock::new(|| [0x44u8; RANDOMNESS_LEN]);
+    static SERVER_SECRET_PARAMS: LazyLock<ServerSecretParams> =
+        LazyLock::new(|| ServerSecretParams::generate(*RANDOMNESS));
+    static SERVER_PUBLIC_PARAMS: LazyLock<ServerPublicParams> =
+        LazyLock::new(|| SERVER_SECRET_PARAMS.get_public_params());
+    static ENDORSEMENT_PUBLIC_ROOT_KEY: LazyLock<EndorsementPublicKey> =
+        LazyLock::new(|| SERVER_PUBLIC_PARAMS.get_endorsement_public_key());
 
     #[test]
     fn endpoint_ids_to_user_ids_by_map() {
@@ -1039,6 +1071,7 @@ mod tests {
                 members: members.clone(),
             }),
             None,
+            Some(ENDORSEMENT_PUBLIC_ROOT_KEY.clone()),
         );
 
         let proto_peek = ProtoPeekInfo {

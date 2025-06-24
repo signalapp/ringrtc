@@ -291,6 +291,7 @@ public class GroupCall {
     var groupCallByClientId: GroupCallByClientId
     private let connectInfo: ConnectInfo
     let sfuUrl: String
+    let endorsementPublicKey: Data?
     let hkdfExtraInfo: Data
     let audioLevelsIntervalMillis: UInt64?
 
@@ -319,6 +320,7 @@ public class GroupCall {
         self.hkdfExtraInfo = hkdfExtraInfo
         self.audioLevelsIntervalMillis = audioLevelsIntervalMillis
 
+        self.endorsementPublicKey = nil
         self.localDeviceState = LocalDeviceState()
         self.remoteDeviceStates = [:]
 
@@ -328,12 +330,13 @@ public class GroupCall {
     }
 
     @MainActor
-    internal init(ringRtcCallManager: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, groupCallByClientId: GroupCallByClientId, sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, epoch: CallLinkEpoch?, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) {
+    internal init(ringRtcCallManager: UnsafeMutableRawPointer, factory: RTCPeerConnectionFactory, groupCallByClientId: GroupCallByClientId, sfuUrl: String, endorsementPublicKey: Data, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, epoch: CallLinkEpoch?, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) {
         self.ringRtcCallManager = ringRtcCallManager
         self.factory = factory
         self.groupCallByClientId = groupCallByClientId
         self.connectInfo = .callLink(authCredentialPresentation: authCredentialPresentation, rootKey: linkRootKey, epoch: epoch, adminPasskey: adminPasskey)
         self.sfuUrl = sfuUrl
+        self.endorsementPublicKey = endorsementPublicKey;
         self.hkdfExtraInfo = hkdfExtraInfo
         self.audioLevelsIntervalMillis = audioLevelsIntervalMillis
 
@@ -419,15 +422,17 @@ public class GroupCall {
                 let authCredentialPresentationSlice = allocatedAppByteSliceFromArray(maybe_bytes: authCredentialPresentation)
                 let rootKeySlice = allocatedAppByteSliceFromData(maybe_data: rootKey.bytes)
                 let adminPasskeySlice = allocatedAppByteSliceFromData(maybe_data: adminPasskey)
+                let endorsementPublicKeySlice = allocatedAppByteSliceFromData(maybe_data: self.endorsementPublicKey)
                 defer {
                     authCredentialPresentationSlice.bytes?.deallocate()
                     rootKeySlice.bytes?.deallocate()
                     adminPasskeySlice.bytes?.deallocate()
+                    endorsementPublicKeySlice.bytes?.deallocate()
                 }
                 // Note: getOwnedNativeAudioTrack/getOwnedNativeVideoTrack/getOwnedNativeFactory
                 // return owned RCs the first time they are called, and null after that.
                 // TODO: Consider renaming getOwnedNativeX to takeNative.
-                clientId = ringrtcCreateCallLinkCallClient(self.ringRtcCallManager, sfuUrlSlice, authCredentialPresentationSlice, rootKeySlice, CallLinkEpoch.toOptionalU32(epoch), adminPasskeySlice, hkdfExtraInfoSlice, audioLevelsIntervalMillis, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
+                clientId = ringrtcCreateCallLinkCallClient(self.ringRtcCallManager, sfuUrlSlice, endorsementPublicKeySlice, authCredentialPresentationSlice, rootKeySlice, CallLinkEpoch.toOptionalU32(epoch), adminPasskeySlice, hkdfExtraInfoSlice, audioLevelsIntervalMillis, self.factory.getOwnedNativeFactory(), audioTrack.getOwnedNativeTrack(), videoTrack.getOwnedNativeTrack())
             }
             if clientId != GroupCall.invalidClientId {
                 // Add this instance to the shared dictionary.

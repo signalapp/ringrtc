@@ -134,6 +134,12 @@ message SfuToDevice {
     optional CallLinkState call_link_state = 6;
   }
 
+  message SendEndorsementsResponse {
+    // The GroupSendEndorsementResponse serialized by libsignal
+    optional bytes serialized = 1;
+    repeated bytes member_ciphertexts = 2;
+  }
+
   message DeviceJoinedOrLeft {
     optional PeekInfo peek_info = 1;
   }
@@ -187,5 +193,7 @@ message SfuToDevice {
   // Used in conjunction with MrpHeader::content_length where first packet has content_length
   // and the rest of the packets only have content and MrpHeader specified. Reassembled
   // on the receiver side
-  optional bytes content = 12;
+  optional bytes content                            = 12;
+
+  optional SendEndorsementsResponse endorsements    = 13;
 }

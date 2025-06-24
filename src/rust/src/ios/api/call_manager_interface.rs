@@ -1003,21 +1003,18 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
     // Note that failing these checks will result in the native objects being leaked.
     // So...don't do that!
 
-    let group_id = byte_vec_from_app_slice(&groupId);
-    if group_id.is_none() {
+    let Some(group_id) = byte_vec_from_app_slice(&groupId) else {
         error!("Invalid groupId");
         return group_call::INVALID_CLIENT_ID;
-    }
-    let sfu_url = string_from_app_slice(&sfuUrl);
-    if sfu_url.is_none() {
+    };
+    let Some(sfu_url) = string_from_app_slice(&sfuUrl) else {
         error!("Invalid sfuUrl");
         return group_call::INVALID_CLIENT_ID;
-    }
-    let hkdf_extra_info = byte_vec_from_app_slice(&hkdfExtraInfo);
-    if hkdf_extra_info.is_none() {
+    };
+    let Some(hkdf_extra_info) = byte_vec_from_app_slice(&hkdfExtraInfo) else {
         error!("Invalid HKDF extra info");
         return group_call::INVALID_CLIENT_ID;
-    }
+    };
 
     let audio_levels_interval = if audio_levels_interval_millis == 0 {
         None
@@ -1027,9 +1024,9 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
 
     match call_manager::create_group_call_client(
         callManager as *mut IosCallManager,
-        group_id.unwrap(),
-        sfu_url.unwrap(),
-        hkdf_extra_info.unwrap(),
+        group_id,
+        sfu_url,
+        hkdf_extra_info,
         audio_levels_interval,
         unsafe {
             webrtc::ptr::OwnedRc::from_ptr(
@@ -1054,6 +1051,7 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
 pub extern "C" fn ringrtcCreateCallLinkCallClient(
     callManager: *mut c_void,
     sfuUrl: AppByteSlice,
+    endorsementPublicKey: AppByteSlice,
     authCredentialPresentation: AppByteSlice,
     rootKeyBytes: AppByteSlice,
     epoch: rtc_OptionalU32,
@@ -1067,29 +1065,31 @@ pub extern "C" fn ringrtcCreateCallLinkCallClient(
     // Note that failing these checks will result in the native objects being leaked.
     // So...don't do that!
 
-    let sfu_url = string_from_app_slice(&sfuUrl);
-    if sfu_url.is_none() {
+    let Some(sfu_url) = string_from_app_slice(&sfuUrl) else {
         error!("Invalid sfuUrl");
         return group_call::INVALID_CLIENT_ID;
-    }
-    let auth_presentation = byte_vec_from_app_slice(&authCredentialPresentation);
-    if auth_presentation.is_none() {
+    };
+    let Some(endorsement_server_public_params) = byte_vec_from_app_slice(&endorsementPublicKey)
+    else {
+        error!("Invalid endorsementPublicKey");
+        return group_call::INVALID_CLIENT_ID;
+    };
+    let Some(auth_presentation) = byte_vec_from_app_slice(&authCredentialPresentation) else {
         error!("Invalid authCredentialPresentation");
         return group_call::INVALID_CLIENT_ID;
-    }
-    let root_key = rootKeyBytes
+    };
+    let Some(root_key) = rootKeyBytes
         .as_slice()
-        .and_then(|bytes| CallLinkRootKey::try_from(bytes).ok());
-    if root_key.is_none() {
+        .and_then(|bytes| CallLinkRootKey::try_from(bytes).ok())
+    else {
         error!("Invalid rootKey");
         return group_call::INVALID_CLIENT_ID;
-    }
+    };
     let admin_passkey = byte_vec_from_app_slice(&adminPasskey);
-    let hkdf_extra_info = byte_vec_from_app_slice(&hkdfExtraInfo);
-    if hkdf_extra_info.is_none() {
+    let Some(hkdf_extra_info) = byte_vec_from_app_slice(&hkdfExtraInfo) else {
         error!("Invalid HKDF extra info");
         return group_call::INVALID_CLIENT_ID;
-    }
+    };
 
     let audio_levels_interval = if audioLevelsIntervalMillis == 0 {
         None
@@ -1101,12 +1101,13 @@ pub extern "C" fn ringrtcCreateCallLinkCallClient(
 
     match call_manager::create_call_link_call_client(
         callManager as *mut IosCallManager,
-        sfu_url.unwrap(),
-        auth_presentation.unwrap(),
-        root_key.unwrap(),
+        sfu_url,
+        endorsement_server_public_params,
+        auth_presentation,
+        root_key,
         epoch,
         admin_passkey,
-        hkdf_extra_info.unwrap(),
+        hkdf_extra_info,
         audio_levels_interval,
         unsafe {
             webrtc::ptr::OwnedRc::from_ptr(

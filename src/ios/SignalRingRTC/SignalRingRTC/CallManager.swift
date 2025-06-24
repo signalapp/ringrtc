@@ -760,7 +760,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 
     @MainActor
-    public func createCallLinkCall(sfuUrl: String, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, epoch: CallLinkEpoch? = nil, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) -> GroupCall? {
+    public func createCallLinkCall(sfuUrl: String, endorsementPublicKey: Data, authCredentialPresentation: [UInt8], linkRootKey: CallLinkRootKey, epoch: CallLinkEpoch? = nil, adminPasskey: Data?, hkdfExtraInfo: Data, audioLevelsIntervalMillis: UInt64?, videoCaptureController: VideoCaptureController) -> GroupCall? {
         Logger.debug("createCallLinkCall")
 
         guard let factory = self.factory else {
@@ -768,7 +768,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             return nil
         }
 
-        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, sfuUrl: sfuUrl, authCredentialPresentation: authCredentialPresentation, linkRootKey: linkRootKey, epoch: epoch, adminPasskey: adminPasskey, hkdfExtraInfo: hkdfExtraInfo, audioLevelsIntervalMillis: audioLevelsIntervalMillis, videoCaptureController: videoCaptureController)
+        let groupCall = GroupCall(ringRtcCallManager: ringRtcCallManager, factory: factory, groupCallByClientId: self.groupCallByClientId, sfuUrl: sfuUrl, endorsementPublicKey: endorsementPublicKey, authCredentialPresentation: authCredentialPresentation, linkRootKey: linkRootKey, epoch: epoch, adminPasskey: adminPasskey, hkdfExtraInfo: hkdfExtraInfo, audioLevelsIntervalMillis: audioLevelsIntervalMillis, videoCaptureController: videoCaptureController)
         return groupCall
     }
 

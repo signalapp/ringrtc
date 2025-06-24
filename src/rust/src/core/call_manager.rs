@@ -30,8 +30,11 @@ use crate::{
         call::Call,
         call_mutex::CallMutex,
         connection::{Connection, ConnectionType},
+        endorsements::EndorsementUpdateResultRef,
         group_call,
-        group_call::{Client, ClientStartParams, GroupCallKind, HttpSfuClient, Observer, Reaction},
+        group_call::{
+            Client, ClientId, ClientStartParams, GroupCallKind, HttpSfuClient, Observer, Reaction,
+        },
         platform::Platform,
         signaling,
         signaling::ReceivedOffer,
@@ -2653,6 +2656,21 @@ where
         );
     }
 
+    fn handle_endorsements_update(&self, client_id: ClientId, update: EndorsementUpdateResultRef) {
+        debug!("handle_endorsements_update(client_id={}):", client_id);
+        match update {
+            Ok((_expiration, endorsements)) => {
+                info!(
+                    "Received endorsements update with {} new endorsements",
+                    endorsements.len()
+                );
+            }
+            Err(e) => {
+                error!("Endorsements update error: {:?}", e);
+            }
+        }
+    }
+
     fn handle_low_bandwidth_for_video(&self, client_id: group_call::ClientId, recovered: bool) {
         info!("handle_low_bandwidth_for_video(): {}", recovered);
         platform_handler!(self, handle_low_bandwidth_for_video, client_id, recovered);
@@ -2853,7 +2871,8 @@ where
             hkdf_extra_info,
         );
 
-        let obfuscated_resolver = ObfuscatedResolver::new(Arc::new(MemberMap::new(&[])), None);
+        let obfuscated_resolver =
+            ObfuscatedResolver::new(Arc::new(MemberMap::new(&[])), None, None);
 
         let client = Client::start(ClientStartParams {
             group_id,
@@ -2889,6 +2908,7 @@ where
     pub fn create_call_link_call_client(
         &mut self,
         sfu_url: String,
+        endorsement_public_key: &[u8],
         auth_presentation: &[u8],
         root_key: CallLinkRootKey,
         epoch: Option<CallLinkEpoch>,
@@ -2946,7 +2966,13 @@ where
         ));
         sfu_client.set_member_resolver(member_resolver.clone());
 
-        let obfuscated_resolver = ObfuscatedResolver::new(member_resolver, Some(root_key));
+        let endorsements_public_key: zkgroup::EndorsementPublicKey =
+            zkgroup::deserialize(endorsement_public_key)?;
+        let obfuscated_resolver = ObfuscatedResolver::new(
+            member_resolver,
+            Some(root_key),
+            Some(endorsements_public_key),
+        );
 
         let client = Client::start(ClientStartParams {
             group_id: room_id,

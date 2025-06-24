@@ -619,6 +619,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const-str"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e991226a70654b49d34de5ed064885f0bef0348a8e70018b8ff1ac80aa984a2"
+
+[[package]]
 name = "constant_time_eq"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -839,18 +845,18 @@ dependencies = [
 
 [[package]]
 name = "derive_more"
-version = "1.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a9b99b9cbbe49445b21764dc0625032a89b145a2642e67603e1c936f5458d05"
+checksum = "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
 dependencies = [
  "derive_more-impl",
 ]
 
 [[package]]
 name = "derive_more-impl"
-version = "1.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
+checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1186,12 +1192,6 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 dependencies = [
  "serde",
 ]
-
-[[package]]
-name = "hex-literal"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
 
 [[package]]
 name = "hkdf"
@@ -1686,7 +1686,7 @@ dependencies = [
 [[package]]
 name = "libsignal-account-keys"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.73.3#7cce36e9d71e7c98883c38f2357084b5bcaf2b43"
 dependencies = [
  "argon2",
  "derive_more",
@@ -1694,24 +1694,23 @@ dependencies = [
  "hkdf",
  "libsignal-core",
  "partial-default",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand 0.9.1",
+ "rand_core 0.9.3",
  "serde",
  "sha2",
  "static_assertions",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
 name = "libsignal-core"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.73.3#7cce36e9d71e7c98883c38f2357084b5bcaf2b43"
 dependencies = [
  "curve25519-dalek",
  "derive_more",
  "displaydoc",
- "num_enum",
- "rand 0.8.5",
+ "rand 0.9.1",
  "sha2",
  "subtle",
  "uuid",
@@ -2111,7 +2110,7 @@ dependencies = [
 [[package]]
 name = "poksho"
 version = "0.7.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.73.3#7cce36e9d71e7c98883c38f2357084b5bcaf2b43"
 dependencies = [
  "curve25519-dalek",
  "hmac",
@@ -2451,6 +2450,7 @@ dependencies = [
  "jni",
  "lazy_static",
  "libc",
+ "libsignal-core",
  "log",
  "mrp",
  "neon",
@@ -2763,7 +2763,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "signal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.73.3#7cce36e9d71e7c98883c38f2357084b5bcaf2b43"
 dependencies = [
  "aes",
  "cbc",
@@ -2774,7 +2774,7 @@ dependencies = [
  "sha1",
  "sha2",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -4096,49 +4096,46 @@ dependencies = [
 [[package]]
 name = "zkcredential"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.73.3#7cce36e9d71e7c98883c38f2357084b5bcaf2b43"
 dependencies = [
  "cfg-if",
  "curve25519-dalek",
  "derive-where",
  "displaydoc",
- "lazy_static",
  "partial-default",
  "poksho",
  "rayon",
  "serde",
  "sha2",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
 name = "zkgroup"
 version = "0.9.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.65.1#908fa98ee4b976e52c39c935f2f0fd0bf7bb7d30"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.73.3#7cce36e9d71e7c98883c38f2357084b5bcaf2b43"
 dependencies = [
  "aes-gcm-siv",
  "bincode",
+ "const-str",
  "curve25519-dalek",
  "derive-where",
  "derive_more",
  "displaydoc",
  "hex",
- "hex-literal",
  "hkdf",
- "lazy_static",
  "libsignal-account-keys",
  "libsignal-core",
- "num_enum",
  "partial-default",
  "poksho",
- "rand 0.8.5",
+ "rand 0.9.1",
  "rayon",
  "serde",
  "sha2",
  "signal-crypto",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "uuid",
  "zkcredential",
 ]

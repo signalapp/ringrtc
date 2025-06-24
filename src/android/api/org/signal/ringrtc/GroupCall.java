@@ -169,6 +169,7 @@ public final class GroupCall {
      */
     static GroupCall create(          long                  nativeCallManager,
                             @NonNull  String                sfuUrl,
+                            @NonNull  byte[]                endorsementPublicKey,
                             @NonNull  byte[]                authCredentialPresentation,
                             @NonNull  CallLinkRootKey       rootKey,
                             @Nullable CallLinkEpoch         epoch,
@@ -186,6 +187,7 @@ public final class GroupCall {
             call.clientId = ringrtcCreateCallLinkCallClient(
                 nativeCallManager,
                 sfuUrl,
+                endorsementPublicKey,
                 authCredentialPresentation,
                 rootKey.getKeyBytes(),
                 epoch,
@@ -1371,6 +1373,7 @@ public final class GroupCall {
     private static native
         long ringrtcCreateCallLinkCallClient(long nativeCallManager,
                                              String sfuUrl,
+                                             byte[] endorsementPublicKey,
                                              byte[] authCredentialPresentation,
                                              byte[] rootKeyBytes,
                                              CallLinkEpoch epoch,

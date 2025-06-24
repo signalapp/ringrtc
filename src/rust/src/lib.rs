@@ -40,6 +40,7 @@ pub mod core {
     pub mod connection;
     pub mod connection_fsm;
     pub mod crypto;
+    pub mod endorsements;
     pub mod group_call;
     pub mod platform;
     pub mod signaling;

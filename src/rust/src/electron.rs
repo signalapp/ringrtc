@@ -1398,18 +1398,20 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sfu_url = cx.argument::<JsString>(0)?.value(&mut cx);
+    let endorsement_public_key = cx.argument::<JsBuffer>(1)?;
+    let endorsement_public_key = endorsement_public_key.as_slice(&cx).to_vec();
 
-    let auth_presentation = cx.argument::<JsBuffer>(1)?;
+    let auth_presentation = cx.argument::<JsBuffer>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
 
-    let root_key_bytes = cx.argument::<JsBuffer>(2)?;
+    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
 
-    let epoch = cx.argument::<JsValue>(3)?;
+    let epoch = cx.argument::<JsValue>(4)?;
     let epoch = jsvalue_to_epoch(epoch, &mut cx)?;
 
-    let admin_passkey = cx.argument::<JsValue>(4)?;
+    let admin_passkey = cx.argument::<JsValue>(5)?;
     let admin_passkey = if admin_passkey.is_a::<JsUndefined, _>(&mut cx) {
         None
     } else {
@@ -1417,10 +1419,10 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
         Some(admin_passkey.as_slice(&cx).to_vec())
     };
 
-    let hkdf_extra_info = cx.argument::<JsBuffer>(5)?;
+    let hkdf_extra_info = cx.argument::<JsBuffer>(6)?;
     let hkdf_extra_info = hkdf_extra_info.as_slice(&cx).to_vec();
 
-    let audio_levels_interval_millis = cx.argument::<JsNumber>(6)?.value(&mut cx) as u64;
+    let audio_levels_interval_millis = cx.argument::<JsNumber>(7)?.value(&mut cx) as u64;
     let audio_levels_interval = if audio_levels_interval_millis == 0 {
         None
     } else {
@@ -1436,6 +1438,7 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
         let incoming_video_sink = endpoint.incoming_video_sink.clone();
         let result = endpoint.call_manager.create_call_link_call_client(
             sfu_url,
+            &endorsement_public_key,
             &auth_presentation,
             root_key,
             epoch,
