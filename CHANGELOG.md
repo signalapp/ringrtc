@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.54.0
+
+- Support receiving SendEndorsements over RTP in SfuToDevice
+
+- Desktop: New Audio Device Module improvements
+  - Always use ringrtc ADM
+  - Output in stereo
+
+- Update to webrtc 7103e
+  - Always use the ringrtc ADM
+  - Avoid creating and converting session descriptions
+
+- Avoid auto-declining calls on failure
+
+- Send data rtp with new ssrc
+
+- Call Sim: Bump version of plotly
+
 ## v2.53.0
 
 - Call links: Add support for epoch id
