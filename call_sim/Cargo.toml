@@ -22,7 +22,7 @@ hex = { version = "0.4.3", features = ["serde"] }
 hmac = "0.12.1"
 hound = "3.5.1"
 itertools = "0.13.0"
-plotly = { version = "0.9.1", features = ["kaleido"] }
+plotly = { version = "0.12.1", features = ["kaleido", "kaleido_download"] }
 prost = "0.13.5"
 regex = "1.11.1"
 relative-path = "1.9.3"

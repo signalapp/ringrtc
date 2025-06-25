@@ -2064,9 +2064,9 @@ checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
 name = "plotly"
-version = "0.9.1"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d944e5f68193cb484fa63cfff0b22e5d1c2773221ff242f30d18645873fbdbfa"
+checksum = "0746e9faf2b051db76470fd428cbc0db792db05346dedaae4a75b16d7be503b5"
 dependencies = [
  "dyn-clone",
  "erased-serde",
@@ -2083,9 +2083,9 @@ dependencies = [
 
 [[package]]
 name = "plotly_derive"
-version = "0.9.1"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd8a29f91d6bfbba26a2ad35baecd507f59b87dacfdf90c21c04404e621e5d78"
+checksum = "2d683930282f098b9f524e2596e3e63483507ac499231c96127fcb166bc05d26"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -2095,9 +2095,9 @@ dependencies = [
 
 [[package]]
 name = "plotly_kaleido"
-version = "0.9.1"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f86f4cda3745624eebc1db532e6dddfef07bf3cdda4b1d1a1de53a1b92f4003"
+checksum = "ec916f0654966c15100c4a49a1630ab12d2cdcebfb623cdcf3ba63a58b04b24b"
 dependencies = [
  "base64",
  "directories",
