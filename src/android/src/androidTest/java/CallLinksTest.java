@@ -31,6 +31,41 @@ import static org.mockito.Mockito.*;
 
 public class CallLinksTest extends CallTestBase {
     private static final CallLinkRootKey EXAMPLE_KEY;
+    private static final byte[] ENDORSEMENT_PUBLIC_KEY = {
+            (byte) 0,
+            (byte) 86,
+            (byte) 35,
+            (byte) 236,
+            (byte) 48,
+            (byte) 147,
+            (byte) 33,
+            (byte) 66,
+            (byte) 168,
+            (byte) 208,
+            (byte) 215,
+            (byte) 207,
+            (byte) 250,
+            (byte) 177,
+            (byte) 151,
+            (byte) 88,
+            (byte) 0,
+            (byte) 158,
+            (byte) 219,
+            (byte) 130,
+            (byte) 38,
+            (byte) 212,
+            (byte) 159,
+            (byte) 171,
+            (byte) 211,
+            (byte) 130,
+            (byte) 220,
+            (byte) 217,
+            (byte) 29,
+            (byte) 133,
+            (byte) 9,
+            (byte) 96,
+            (byte) 97
+    };
     static {
         try {
             EXAMPLE_KEY = new CallLinkRootKey("bcdf-ghkm-npqr-stxz-bcdf-ghkm-npqr-stxz");
@@ -400,7 +435,7 @@ public class CallLinksTest extends CallTestBase {
 
         GroupCall.Observer callObserver = mock();
         CallLinkEpoch epoch = CallLinkEpoch.fromBytes(new byte[] { 1, 2, 3, 4 });
-        GroupCall call = callManager.createCallLinkCall("sfu.example", new byte[] { 1, 2, 3 }, EXAMPLE_KEY, epoch, null, new byte[] {}, null, new AudioConfig(), callObserver);
+        GroupCall call = callManager.createCallLinkCall("sfu.example", ENDORSEMENT_PUBLIC_KEY, new byte[] { 1, 2, 3 }, EXAMPLE_KEY, epoch, null, new byte[] {}, null, new AudioConfig(), callObserver);
         assertEquals(call.getKind(), GroupCall.Kind.CALL_LINK);
 
         call.connect();
