@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.54.1
+
+- Desktop: Remove endorsementPublicKey from createGroupCallClient
+
 ## v2.54.0
 
 - Support receiving SendEndorsements over RTP in SfuToDevice
