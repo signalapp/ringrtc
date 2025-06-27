@@ -1160,7 +1160,6 @@ export class RingRTCType {
   getGroupCall(
     groupId: Buffer,
     sfuUrl: string,
-    endorsementPublicKey: Buffer,
     hkdfExtraInfo: Buffer,
     audioLevelsIntervalMillis: number | undefined,
     observer: GroupCallObserver
@@ -1168,7 +1167,6 @@ export class RingRTCType {
     const clientId = this.callManager.createGroupCallClient(
       groupId,
       sfuUrl,
-      endorsementPublicKey,
       hkdfExtraInfo,
       audioLevelsIntervalMillis || 0
     );
@@ -3004,7 +3002,6 @@ export interface CallManager {
   createGroupCallClient(
     groupId: Buffer,
     sfuUrl: string,
-    endorsementPublicKey: Buffer,
     hkdfExtraInfo: Buffer,
     audioLevelsIntervalMillis: number
   ): GroupCallClientId;
