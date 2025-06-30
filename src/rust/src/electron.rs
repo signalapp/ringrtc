@@ -1404,7 +1404,7 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let auth_presentation = cx.argument::<JsBuffer>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
 
-    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
 
@@ -1415,7 +1415,7 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let admin_passkey = if admin_passkey.is_a::<JsUndefined, _>(&mut cx) {
         None
     } else {
-        let admin_passkey = admin_passkey.downcast_or_throw::<JsBuffer, _>(&mut cx)?;
+        let admin_passkey = admin_passkey.downcast_or_throw::<JsUint8Array, _>(&mut cx)?;
         Some(admin_passkey.as_slice(&cx).to_vec())
     };
 
@@ -1916,7 +1916,7 @@ fn peekCallLinkCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     let auth_presentation = cx.argument::<JsBuffer>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
 
-    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
 
@@ -1951,7 +1951,7 @@ fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
     let auth_presentation = cx.argument::<JsBuffer>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
-    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
     let epoch = cx.argument::<JsValue>(4)?;
@@ -2016,10 +2016,10 @@ fn createCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
     let create_presentation = cx.argument::<JsBuffer>(2)?;
     let create_presentation = create_presentation.as_slice(&cx).to_vec();
-    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
-    let admin_passkey = cx.argument::<JsBuffer>(4)?;
+    let admin_passkey = cx.argument::<JsUint8Array>(4)?;
     let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
     let public_zkparams = cx.argument::<JsBuffer>(5)?;
     let public_zkparams = public_zkparams.as_slice(&cx).to_vec();
@@ -2053,12 +2053,12 @@ fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
     let create_presentation = cx.argument::<JsBuffer>(2)?;
     let create_presentation = create_presentation.as_slice(&cx).to_vec();
-    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
     let epoch = cx.argument::<JsValue>(4)?;
     let epoch = jsvalue_to_epoch(epoch, &mut cx)?;
-    let admin_passkey = cx.argument::<JsBuffer>(5)?;
+    let admin_passkey = cx.argument::<JsUint8Array>(5)?;
     let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
 
     let new_name = cx.argument::<JsValue>(6)?;
@@ -2120,12 +2120,12 @@ fn deleteCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
     let auth_presentation = cx.argument::<JsBuffer>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
-    let root_key_bytes = cx.argument::<JsBuffer>(3)?;
+    let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
     let epoch = cx.argument::<JsValue>(4)?;
     let epoch = jsvalue_to_epoch(epoch, &mut cx)?;
-    let admin_passkey = cx.argument::<JsBuffer>(5)?;
+    let admin_passkey = cx.argument::<JsUint8Array>(5)?;
     let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
 
     with_call_endpoint(&mut cx, |endpoint| {
@@ -2999,22 +2999,18 @@ fn CallLinkRootKey_generate(mut cx: FunctionContext) -> JsResult<JsBuffer> {
 }
 
 #[allow(non_snake_case)]
-fn CallLinkRootKey_generateAdminPasskey(mut cx: FunctionContext) -> JsResult<JsBuffer> {
+fn CallLinkRootKey_generateAdminPasskey(mut cx: FunctionContext) -> JsResult<JsUint8Array> {
     let passkey = CallLinkRootKey::generate_admin_passkey(rand::rngs::OsRng);
-    let mut buffer = cx.buffer(passkey.len())?;
-    buffer.as_mut_slice(&mut cx).copy_from_slice(&passkey);
-    Ok(buffer)
+    JsUint8Array::from_slice(&mut cx, passkey.as_slice())
 }
 
 #[allow(non_snake_case)]
-fn CallLinkRootKey_deriveRoomId(mut cx: FunctionContext) -> JsResult<JsBuffer> {
-    let bytes = cx.argument::<JsBuffer>(0)?;
+fn CallLinkRootKey_deriveRoomId(mut cx: FunctionContext) -> JsResult<JsUint8Array> {
+    let bytes = cx.argument::<JsUint8Array>(0)?;
     match CallLinkRootKey::try_from(bytes.as_slice(&cx)) {
         Ok(key) => {
             let room_id = key.derive_room_id();
-            let mut buffer = cx.buffer(room_id.len())?;
-            buffer.as_mut_slice(&mut cx).copy_from_slice(&room_id);
-            Ok(buffer)
+            JsUint8Array::from_slice(&mut cx, room_id.as_slice())
         }
         Err(e) => cx.throw_error(e.to_string()),
     }

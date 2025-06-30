@@ -6,9 +6,9 @@
 import Native from './Native';
 
 export class CallLinkRootKey {
-  readonly bytes: Buffer;
+  readonly bytes: Uint8Array;
 
-  private constructor(bytes: Buffer) {
+  private constructor(bytes: Uint8Array) {
     this.bytes = bytes;
   }
 
@@ -16,7 +16,7 @@ export class CallLinkRootKey {
     return new CallLinkRootKey(Native.CallLinkRootKey_parse(str));
   }
 
-  static fromBytes(bytes: Buffer): CallLinkRootKey {
+  static fromBytes(bytes: Uint8Array): CallLinkRootKey {
     Native.CallLinkRootKey_validate(bytes);
     return new CallLinkRootKey(bytes);
   }
@@ -25,12 +25,12 @@ export class CallLinkRootKey {
     return new CallLinkRootKey(Native.CallLinkRootKey_generate());
   }
 
-  static generateAdminPassKey(): Buffer {
+  static generateAdminPassKey(): Uint8Array {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return Native.CallLinkRootKey_generateAdminPasskey();
   }
 
-  deriveRoomId(): Buffer {
+  deriveRoomId(): Uint8Array {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return Native.CallLinkRootKey_deriveRoomId(this.bytes);
   }

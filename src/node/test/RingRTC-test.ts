@@ -478,17 +478,15 @@ describe('RingRTC', () => {
 
     it('has accessors', () => {
       const anotherKey = CallLinkRootKey.generate();
-      assert.isFalse(EXAMPLE_CALL_LINK_ROOT_KEY.bytes.equals(anotherKey.bytes));
+      assert.notDeepEqual(EXAMPLE_CALL_LINK_ROOT_KEY.bytes, anotherKey.bytes);
 
-      assert.isTrue(
-        EXAMPLE_CALL_LINK_ROOT_KEY.deriveRoomId().equals(
-          EXAMPLE_CALL_LINK_ROOT_KEY.deriveRoomId()
-        )
+      assert.deepEqual(
+        EXAMPLE_CALL_LINK_ROOT_KEY.deriveRoomId(),
+        EXAMPLE_CALL_LINK_ROOT_KEY.deriveRoomId()
       );
-      assert.isFalse(
-        EXAMPLE_CALL_LINK_ROOT_KEY.deriveRoomId().equals(
-          anotherKey.deriveRoomId()
-        )
+      assert.notDeepEqual(
+        EXAMPLE_CALL_LINK_ROOT_KEY.deriveRoomId(),
+        anotherKey.deriveRoomId()
       );
     });
 
