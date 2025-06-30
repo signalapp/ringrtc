@@ -13,6 +13,7 @@ use cubeb::{DeviceCollection, DeviceState};
 use cubeb_core::DevicePref;
 #[cfg(target_os = "linux")]
 use cubeb_core::DeviceType;
+use regex::Regex;
 
 use crate::webrtc;
 
@@ -187,8 +188,52 @@ pub fn copy_and_truncate_string(
     Ok(())
 }
 
+/// Redact the given string |s| by retaining only a prefix, which is 4 characters
+/// if the string is all ASCII and 1 otherwise.
+pub fn redact_for_logging(s: &str) -> String {
+    if cfg!(debug_assertions) && !cfg!(test) {
+        // For debug testing/local builds only, allow the full string.
+        s.to_string()
+    } else {
+        // Take a small number of characters, but fewer if they are non-ascii unicode, as
+        // unicode provides a substantially higher amount of information per char.
+        // (e.g. four mandarin characters could be a full name)
+        let mut out: String = if s.is_ascii() {
+            s.chars().take(4).collect()
+        } else {
+            s.chars().take(1).collect()
+        };
+        if out != s {
+            out.push_str("...");
+        }
+        out
+    }
+}
+
+/// Redact all capturing groups (except group 0) with |redact_for_logging|
+/// if the regex matches. Otherwise, return None.
+pub fn redact_by_regex(re: &Regex, s: &str) -> Option<String> {
+    if re.is_match(s) {
+        Some(
+            re.replace(s, |caps: &regex::Captures| {
+                let mut out = s.to_string();
+                // Skip group 0 (the entire match)
+                for group in caps.iter().skip(1).flatten() {
+                    out = out.replace(group.as_str(), &redact_for_logging(group.as_str()));
+                }
+                out
+            })
+            .to_string(),
+        )
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod audio_device_module_tests {
+    use lazy_static::lazy_static;
+
     use super::*;
     #[test]
     // Verify that extremely long strings are properly truncated and
@@ -270,5 +315,49 @@ mod audio_device_module_tests {
         let src = "AA";
         let out = webrtc::ptr::Borrowed::null();
         assert!(copy_and_truncate_string(src, out, 5).is_err());
+    }
+
+    #[test]
+    fn redaction_tests() {
+        assert_eq!(redact_for_logging("0123456789"), "0123...");
+        assert_eq!(redact_for_logging("0123"), "0123");
+        assert_eq!(redact_for_logging("0"), "0");
+        assert_eq!(redact_for_logging("你好"), "你..."); // ni hao (hello)
+        assert_eq!(redact_for_logging("你"), "你");
+    }
+
+    #[test]
+    fn redaction_regex_tests() {
+        lazy_static! {
+            static ref ONE_RE: Regex =
+                Regex::new(r"Device \d+ \((.*)\) has \d+.*channels").unwrap();
+            static ref TWO_RE: Regex = Regex::new(r"Found matching device for (.*): (.*)").unwrap();
+        }
+        assert_eq!(
+            redact_by_regex(
+                &ONE_RE,
+                "Device 12345 (My Super Sensitive Name) has 2 INPUT-channels"
+            ),
+            Some("Device 12345 (My S...) has 2 INPUT-channels".to_string())
+        );
+        // Should only redact matching strings
+        assert_eq!(
+            redact_by_regex(&ONE_RE, "Some other string with My Super Sensitive Name"),
+            None
+        );
+        assert_eq!(
+            redact_by_regex(
+                &TWO_RE,
+                "Found matching device for My Super Sensitive Name: My Super Sensitive Name"
+            ),
+            Some("Found matching device for My S...: My S...".to_string())
+        );
+        assert_eq!(
+            redact_by_regex(
+                &TWO_RE,
+                "Found matching device for My Super Sensitive Name: My Other Sensitive Name"
+            ),
+            Some("Found matching device for My S...: My O...".to_string())
+        );
     }
 }

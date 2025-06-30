@@ -4,13 +4,13 @@
 //
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     ffi::{c_uchar, c_void, CStr},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex, RwLock,
+        Arc, Mutex,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use anyhow::{anyhow, bail};
@@ -24,7 +24,9 @@ use windows::Win32::System::Com;
 use crate::{
     webrtc,
     webrtc::{
-        audio_device_module_utils::{copy_and_truncate_string, DeviceCollectionWrapper},
+        audio_device_module_utils::{
+            copy_and_truncate_string, redact_by_regex, redact_for_logging, DeviceCollectionWrapper,
+        },
         ffi::audio_device_module::RffiAudioTransport,
     },
 };
@@ -190,10 +192,33 @@ impl Drop for LogDisableGuard {
 
 fn log_c_str(s: &CStr) {
     lazy_static! {
-        static ref RE: Regex = Regex::new(r"(?<ident>[^\s]+:\d+)(?<message>.*)").unwrap();
+        static ref LINE_RE: Regex = Regex::new(r"(?<ident>[^\s]+:\d+)(?<message>.*)").unwrap();
     }
+    // These patterns describe the places friendly_name, device_id, and group_id are logged,
+    // for the backends where those are potentially sensitive.
+    //
+    // The capture groups will be redacted.
+    //
+    // Note that there's another one that isn't here: cubeb.c logs something like:
+    //   LOG("DeviceID: \"%s\"%s\n"
+    //       "\tName:\t\"%s\"\n"
+    //       ...
+    // But we just ignore this line altogether.
     lazy_static! {
-        static ref RATE_LIMITER: RwLock<HashMap<String, Instant>> = RwLock::new(HashMap::new());
+        static ref REDACTION_RES: Vec<Regex> = vec![
+            // cubeb_wasapi.cpp: wasapi_find_bt_handsfree_output_device
+            Regex::new(r"Found matching device for (.*): (.*)").unwrap(),
+            // cubeb_wasapi.cpp: wasapi_collection_notification_client::OnDefaultDeviceChanged
+            Regex::new(r"collection: Audio device default changed, id = (.*)\.").unwrap(),
+            // cubeb_wasapi.cpp: wasapi_collection_notification_client::OnDeviceStateChanged
+            Regex::new(r"collection: Audio device state changed, id = (.*), state = .*\.").unwrap(),
+            // cubeb_wasapi.cpp: wasapi_endpoint_notification_client::OnDefaultDeviceChanged
+            Regex::new(r"endpoint: Audio device default changed flow=.* role=.* new_device_id=(.*)\.").unwrap(),
+            // cubeb-coreaudio-rs src/backend/mod.rs audiounit_get_devices_of_type
+            Regex::new(r"Device \d+ \((.*)\) has \d+.*channels").unwrap(),
+            // cubeb-coreaudio-rs src/backend/mod.rs should_block_vpio_for_device_pair
+            Regex::new(r#".* uid="(.*)", model_uid="(.*)", transport_type=.*, source=.*, source_name="(.*)", name="(.*)", manufacturer=".*""#).unwrap(),
+        ];
     }
     if PAUSE_LOGGING.load(Ordering::SeqCst) {
         return;
@@ -203,50 +228,30 @@ fn log_c_str(s: &CStr) {
         Ok(msg) => {
             if msg.contains("DeviceID") && msg.contains("Name") {
                 // Shortcut:
-                // Suppress spammy lines that log all devices (we already do this)
+                // Entirely suppress spammy lines that log all devices (we already do this)
                 // See `log_device` in cubeb.c
                 return;
             }
 
             // Assume valid lines are formatted "file:lineno" and ignore anything
             // not matching
-            let Some(caps) = RE.captures(msg) else { return };
+            let Some(caps) = LINE_RE.captures(msg) else {
+                return;
+            };
             let ident = &caps["ident"];
             let contents = &caps["message"];
 
-            // Rate limit each line to 1/5 sec.
-            let too_recent = if let Ok(guard) = RATE_LIMITER.read() {
-                guard
-                    .get(ident)
-                    .as_ref()
-                    .is_some_and(|&i| Instant::now().duration_since(*i) < Duration::from_secs(5))
-            } else {
-                return;
-            };
-
-            if too_recent {
-                return;
-            }
-
-            if let Ok(mut guard) = RATE_LIMITER.write() {
-                guard.insert(ident.to_string(), Instant::now());
-            } else {
-                return;
-            }
-            // To minimize sensitive data in logs, only take first few characters.
-            // This impairs debuggability but at least will give a good pointer
-            // to *which* line in cubeb has a problem, if any.
             let to_log = if cfg!(debug_assertions) {
                 contents.to_string()
-            } else if contents.len() > 40 {
-                contents
-                    .chars()
-                    .take(20)
-                    .chain("...".chars())
-                    .chain(contents.chars().skip(contents.len() - 20))
-                    .collect::<String>()
             } else {
-                contents.to_string()
+                let mut out = contents.to_string();
+                for re in REDACTION_RES.iter() {
+                    if let Some(new) = redact_by_regex(re, contents) {
+                        out = new;
+                        break;
+                    }
+                }
+                out
             };
             info!("cubeb: {}{}", ident, to_log);
         }
@@ -491,24 +496,6 @@ impl AudioDeviceModule {
         }
     }
 
-    fn redact_for_logging(opt: Option<&str>) -> Option<String> {
-        if cfg!(debug_assertions) {
-            // For debug testing/local builds only, allow the full string.
-            opt.map(|s| s.to_string())
-        } else {
-            // Take a small number of characters, but fewer if they are non-ascii unicode, as
-            // unicode provides a substantially higher amount of information per char.
-            // (e.g. four mandarin characters could be a full name)
-            opt.map(|s| {
-                if s.is_ascii() {
-                    s.chars().take(4).collect()
-                } else {
-                    s.chars().take(1).collect()
-                }
-            })
-        }
-    }
-
     fn device_str(device: &cubeb::DeviceInfo) -> String {
         format!(
             concat!("dev id: {:?}, device_id: {:?}, friendly_name: {:?}, group_id: {:?}, ",
@@ -517,9 +504,9 @@ impl AudioDeviceModule {
             "min_rate: {:?}, latency_lo: {:?}, latency_hi: {:?})"),
             device.devid(),
             // Truncate these fields, as they can contain e.g. mac addresses or user-specified names.
-            Self::redact_for_logging(device.device_id()),
-            Self::redact_for_logging(device.friendly_name()),
-            Self::redact_for_logging(device.group_id()),
+            device.device_id().map(redact_for_logging),
+            device.friendly_name().map(redact_for_logging),
+            device.group_id().map(redact_for_logging),
             device.vendor_name(),
             device.device_type(),
             device.state(),
