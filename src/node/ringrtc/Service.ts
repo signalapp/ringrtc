@@ -930,7 +930,7 @@ export class RingRTCType {
    */
   readCallLink(
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
     epoch: CallLinkEpoch | undefined
   ): Promise<HttpResult<CallLinkState>> {
@@ -986,10 +986,10 @@ export class RingRTCType {
    */
   createCallLink(
     sfuUrl: string,
-    createCredentialPresentation: Buffer,
+    createCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
     adminPasskey: Uint8Array,
-    callLinkPublicParams: Buffer,
+    callLinkPublicParams: Uint8Array,
     restrictions: Exclude<CallLinkRestrictions, CallLinkRestrictions.Unknown>
   ): Promise<HttpResult<CallLinkState>> {
     const [requestId, promise] = this._callLinkRequests.add();
@@ -1026,7 +1026,7 @@ export class RingRTCType {
    */
   updateCallLinkName(
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
     epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array,
@@ -1069,7 +1069,7 @@ export class RingRTCType {
    */
   updateCallLinkRestrictions(
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
     epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array,
@@ -1110,7 +1110,7 @@ export class RingRTCType {
    */
   deleteCallLink(
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
     epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array
@@ -1160,7 +1160,7 @@ export class RingRTCType {
   getGroupCall(
     groupId: Buffer,
     sfuUrl: string,
-    hkdfExtraInfo: Buffer,
+    hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number | undefined,
     observer: GroupCallObserver
   ): GroupCall | undefined {
@@ -1190,12 +1190,12 @@ export class RingRTCType {
   // Called by UX
   getCallLinkCall(
     sfuUrl: string,
-    endorsementPublicKey: Buffer,
-    authCredentialPresentation: Buffer,
+    endorsementPublicKey: Uint8Array,
+    authCredentialPresentation: Uint8Array,
     rootKey: CallLinkRootKey,
     epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array | undefined,
-    hkdfExtraInfo: Buffer,
+    hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number | undefined,
     observer: GroupCallObserver
   ): GroupCall | undefined {
@@ -1261,7 +1261,7 @@ export class RingRTCType {
   // Called by UX
   peekCallLinkCall(
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     rootKey: CallLinkRootKey,
     epoch: CallLinkEpoch | undefined
   ): Promise<HttpResult<PeekInfo>> {
@@ -3002,17 +3002,17 @@ export interface CallManager {
   createGroupCallClient(
     groupId: Buffer,
     sfuUrl: string,
-    hkdfExtraInfo: Buffer,
+    hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number
   ): GroupCallClientId;
   createCallLinkCallClient(
     sfuUrl: string,
-    endorsementPublicKey: Buffer,
-    authCredentialPresentation: Buffer,
+    endorsementPublicKey: Uint8Array,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
     epoch: number | undefined,
     adminPasskey: Uint8Array | undefined,
-    hkdfExtraInfo: Buffer,
+    hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number
   ): GroupCallClientId;
   deleteGroupCallClient(clientId: GroupCallClientId): void;
@@ -3067,23 +3067,23 @@ export interface CallManager {
   readCallLink(
     requestId: number,
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
     epoch: number | undefined
   ): void;
   createCallLink(
     requestId: number,
     sfuUrl: string,
-    createCredentialPresentation: Buffer,
+    createCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
     adminPasskey: Uint8Array,
-    callLinkPublicParams: Buffer,
+    callLinkPublicParams: Uint8Array,
     restrictions: number | undefined
   ): void;
   updateCallLink(
     requestId: number,
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
     epoch: number | undefined,
     adminPasskey: Uint8Array,
@@ -3094,7 +3094,7 @@ export interface CallManager {
   deleteCallLink(
     requestId: number,
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
     epoch: number | undefined,
     adminPasskey: Uint8Array
@@ -3110,7 +3110,7 @@ export interface CallManager {
   peekCallLinkCall(
     requestId: number,
     sfuUrl: string,
-    authCredentialPresentation: Buffer,
+    authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
     epoch: number | undefined
   ): void;

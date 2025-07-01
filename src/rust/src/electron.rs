@@ -1350,13 +1350,13 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
             return Ok(cx.number(client_id).upcast());
         }
     };
-    let hkdf_extra_info: std::vec::Vec<u8> = match hkdf_extra_info.downcast::<JsBuffer, _>(&mut cx)
-    {
-        Ok(handle) => handle.as_slice(&cx).to_vec(),
-        Err(_) => {
-            return Ok(cx.number(client_id).upcast());
-        }
-    };
+    let hkdf_extra_info: std::vec::Vec<u8> =
+        match hkdf_extra_info.downcast::<JsUint8Array, _>(&mut cx) {
+            Ok(handle) => handle.as_slice(&cx).to_vec(),
+            Err(_) => {
+                return Ok(cx.number(client_id).upcast());
+            }
+        };
 
     let audio_levels_interval = if audio_levels_interval_millis == 0 {
         None
@@ -1398,10 +1398,10 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sfu_url = cx.argument::<JsString>(0)?.value(&mut cx);
-    let endorsement_public_key = cx.argument::<JsBuffer>(1)?;
+    let endorsement_public_key = cx.argument::<JsUint8Array>(1)?;
     let endorsement_public_key = endorsement_public_key.as_slice(&cx).to_vec();
 
-    let auth_presentation = cx.argument::<JsBuffer>(2)?;
+    let auth_presentation = cx.argument::<JsUint8Array>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
 
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
@@ -1419,7 +1419,7 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
         Some(admin_passkey.as_slice(&cx).to_vec())
     };
 
-    let hkdf_extra_info = cx.argument::<JsBuffer>(6)?;
+    let hkdf_extra_info = cx.argument::<JsUint8Array>(6)?;
     let hkdf_extra_info = hkdf_extra_info.as_slice(&cx).to_vec();
 
     let audio_levels_interval_millis = cx.argument::<JsNumber>(7)?.value(&mut cx) as u64;
@@ -1913,7 +1913,7 @@ fn peekCallLinkCall(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
 
-    let auth_presentation = cx.argument::<JsBuffer>(2)?;
+    let auth_presentation = cx.argument::<JsUint8Array>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
 
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
@@ -1949,7 +1949,7 @@ fn peekCallLinkCall(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
-    let auth_presentation = cx.argument::<JsBuffer>(2)?;
+    let auth_presentation = cx.argument::<JsUint8Array>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
@@ -2014,14 +2014,14 @@ fn jsvalue_to_restrictions(
 fn createCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
-    let create_presentation = cx.argument::<JsBuffer>(2)?;
+    let create_presentation = cx.argument::<JsUint8Array>(2)?;
     let create_presentation = create_presentation.as_slice(&cx).to_vec();
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
     let admin_passkey = cx.argument::<JsUint8Array>(4)?;
     let admin_passkey = admin_passkey.as_slice(&cx).to_vec();
-    let public_zkparams = cx.argument::<JsBuffer>(5)?;
+    let public_zkparams = cx.argument::<JsUint8Array>(5)?;
     let public_zkparams = public_zkparams.as_slice(&cx).to_vec();
     let restrictions = cx.argument::<JsValue>(6)?;
     let restrictions = jsvalue_to_restrictions(restrictions, &mut cx)?;
@@ -2051,7 +2051,7 @@ fn createCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
-    let create_presentation = cx.argument::<JsBuffer>(2)?;
+    let create_presentation = cx.argument::<JsUint8Array>(2)?;
     let create_presentation = create_presentation.as_slice(&cx).to_vec();
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
@@ -2118,7 +2118,7 @@ fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn deleteCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
-    let auth_presentation = cx.argument::<JsBuffer>(2)?;
+    let auth_presentation = cx.argument::<JsUint8Array>(2)?;
     let auth_presentation = auth_presentation.as_slice(&cx).to_vec();
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
