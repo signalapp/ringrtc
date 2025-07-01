@@ -377,18 +377,8 @@ pub struct CallEndpoint {
 
 impl CallEndpoint {
     fn new<'a>(cx: &mut impl Context<'a>, js_object: Handle<'a, JsObject>) -> Result<Self> {
-        // Relevant for both group calls and 1:1 calls
+        // Set up a channel for events and logs.
         let (events_sender, events_receiver) = channel::<Event>();
-        let peer_connection_factory =
-            PeerConnectionFactory::new(&pcf::AudioConfig::default(), false)?;
-        let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
-        outgoing_audio_track.set_enabled(false);
-        let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;
-        let outgoing_video_track =
-            peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
-        outgoing_video_track.set_enabled(false);
-        let incoming_video_sink = Box::<LastFramesVideoSink>::default();
-
         let event_reported = Arc::new(AtomicBool::new(false));
         let js_object = Arc::new(Root::new(cx, &*js_object));
         let js_object_weak = Arc::downgrade(&js_object);
@@ -443,6 +433,17 @@ impl CallEndpoint {
                 .expect("lock event reporter for logging");
             *event_reporter_for_logging = Some(event_reporter.clone());
         }
+
+        // Relevant for both group calls and 1:1 calls
+        let peer_connection_factory =
+            PeerConnectionFactory::new(&pcf::AudioConfig::default(), false)?;
+        let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
+        outgoing_audio_track.set_enabled(false);
+        let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;
+        let outgoing_video_track =
+            peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
+        outgoing_video_track.set_enabled(false);
+        let incoming_video_sink = Box::<LastFramesVideoSink>::default();
 
         // After initializing logs, log the backend in use.
         let backend = peer_connection_factory.audio_backend();
