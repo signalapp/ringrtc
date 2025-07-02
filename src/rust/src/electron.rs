@@ -2970,14 +2970,10 @@ fn callIdFromEra(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
-fn CallLinkRootKey_parse(mut cx: FunctionContext) -> JsResult<JsBuffer> {
+fn CallLinkRootKey_parse(mut cx: FunctionContext) -> JsResult<JsUint8Array> {
     let string = cx.argument::<JsString>(0)?.value(&mut cx);
     match CallLinkRootKey::try_from(string.as_str()) {
-        Ok(key) => {
-            let mut buffer = cx.buffer(key.bytes().len())?;
-            buffer.as_mut_slice(&mut cx).copy_from_slice(&key.bytes());
-            Ok(buffer)
-        }
+        Ok(key) => JsUint8Array::from_slice(&mut cx, &key.bytes()),
         Err(e) => cx.throw_error(e.to_string()),
     }
 }
@@ -2992,11 +2988,9 @@ fn CallLinkRootKey_validate(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 }
 
 #[allow(non_snake_case)]
-fn CallLinkRootKey_generate(mut cx: FunctionContext) -> JsResult<JsBuffer> {
+fn CallLinkRootKey_generate(mut cx: FunctionContext) -> JsResult<JsUint8Array> {
     let key = CallLinkRootKey::generate(rand::rngs::OsRng);
-    let mut buffer = cx.buffer(key.bytes().len())?;
-    buffer.as_mut_slice(&mut cx).copy_from_slice(&key.bytes());
-    Ok(buffer)
+    JsUint8Array::from_slice(&mut cx, &key.bytes())
 }
 
 #[allow(non_snake_case)]
