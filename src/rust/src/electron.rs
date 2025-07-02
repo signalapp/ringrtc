@@ -765,7 +765,7 @@ fn createOutgoingCall(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn cancelGroupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
     debug!("JsCallManager.cancelGroupRing()");
 
-    let group_id = cx.argument::<JsBuffer>(0)?;
+    let group_id = cx.argument::<JsUint8Array>(0)?;
     let group_id = group_id.as_slice(&cx).to_vec();
     let ring_id = cx
         .argument::<JsString>(1)?
@@ -1345,7 +1345,7 @@ fn createGroupCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let mut client_id = group_call::INVALID_CLIENT_ID;
 
-    let group_id: std::vec::Vec<u8> = match group_id.downcast::<JsBuffer, _>(&mut cx) {
+    let group_id: std::vec::Vec<u8> = match group_id.downcast::<JsUint8Array, _>(&mut cx) {
         Ok(handle) => handle.as_slice(&cx).to_vec(),
         Err(_) => {
             return Ok(cx.number(client_id).upcast());
@@ -2564,7 +2564,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 recipients_override,
             } => {
                 let method_name = "sendCallMessageToGroup";
-                let group_id = to_js_buffer(&mut cx, &group_id);
+                let group_id = JsUint8Array::from_slice(&mut cx, group_id.as_slice())?.upcast();
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
                 let js_recipients = JsArray::new(&mut cx, recipients_override.len());
@@ -2834,7 +2834,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method_name = "groupCallRingUpdate";
 
                 let args = [
-                    to_js_buffer(&mut cx, &group_id).upcast::<JsValue>(),
+                    JsUint8Array::from_slice(&mut cx, group_id.as_slice())?.upcast(),
                     JsBigInt::from_i64(&mut cx, ring_id.into()).upcast(),
                     to_js_buffer(&mut cx, &sender_id).upcast(),
                     cx.number(update as i32).upcast(),

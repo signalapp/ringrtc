@@ -167,7 +167,7 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).setRtcStatsInterval =
   Native.cm_setRtcStatsInterval;
 
-type GroupId = Buffer;
+type GroupId = Uint8Array;
 type GroupCallUserId = Buffer;
 
 export interface PeekDeviceInfo {
@@ -428,7 +428,7 @@ export class RingRTCType {
 
   handleSendCallMessageToGroup:
     | ((
-        groupId: Buffer,
+        groupId: GroupId,
         message: Buffer,
         urgency: CallMessageUrgency,
         overrideRecipients: Array<Buffer>
@@ -437,7 +437,7 @@ export class RingRTCType {
 
   handleGroupCallRingUpdate:
     | ((
-        groupId: Buffer,
+        groupId: GroupId,
         ringId: bigint,
         sender: Buffer,
         update: RingUpdate
@@ -1158,7 +1158,7 @@ export class RingRTCType {
 
   // Called by UX
   getGroupCall(
-    groupId: Buffer,
+    groupId: GroupId,
     sfuUrl: string,
     hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number | undefined,
@@ -1800,7 +1800,7 @@ export class RingRTCType {
 
   // Called by Rust
   sendCallMessageToGroup(
-    groupId: Buffer,
+    groupId: GroupId,
     message: Buffer,
     urgency: CallMessageUrgency,
     overrideRecipients: Array<Buffer>
@@ -3000,7 +3000,7 @@ export interface CallManager {
   // Group Calls
 
   createGroupCallClient(
-    groupId: Buffer,
+    groupId: GroupId,
     sfuUrl: string,
     hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number
@@ -3180,7 +3180,7 @@ export interface CallManagerCallbacks {
     urgency: CallMessageUrgency
   ): void;
   sendCallMessageToGroup(
-    groupId: Buffer,
+    groupId: GroupId,
     message: Buffer,
     urgency: CallMessageUrgency,
     overrideRecipients: Array<Buffer>
