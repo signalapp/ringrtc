@@ -957,8 +957,8 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let call_id = CallId::new(get_id_arg(&mut cx, 4));
     let offer_type = cx.argument::<JsNumber>(5)?.value(&mut cx) as i32;
     let opaque = cx.argument::<JsBuffer>(6)?;
-    let sender_identity_key = cx.argument::<JsBuffer>(7)?;
-    let receiver_identity_key = cx.argument::<JsBuffer>(8)?;
+    let sender_identity_key = cx.argument::<JsUint8Array>(7)?;
+    let receiver_identity_key = cx.argument::<JsUint8Array>(8)?;
 
     let opaque = opaque.as_slice(&cx).to_vec();
     let sender_identity_key = sender_identity_key.as_slice(&cx).to_vec();
@@ -996,8 +996,8 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let sender_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let call_id = CallId::new(get_id_arg(&mut cx, 2));
     let opaque = cx.argument::<JsBuffer>(3)?;
-    let sender_identity_key = cx.argument::<JsBuffer>(4)?;
-    let receiver_identity_key = cx.argument::<JsBuffer>(5)?;
+    let sender_identity_key = cx.argument::<JsUint8Array>(4)?;
+    let receiver_identity_key = cx.argument::<JsUint8Array>(5)?;
 
     let opaque = opaque.as_slice(&cx).to_vec();
     let sender_identity_key = sender_identity_key.as_slice(&cx).to_vec();
@@ -2980,7 +2980,7 @@ fn CallLinkRootKey_parse(mut cx: FunctionContext) -> JsResult<JsUint8Array> {
 
 #[allow(non_snake_case)]
 fn CallLinkRootKey_validate(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-    let bytes = cx.argument::<JsBuffer>(0)?;
+    let bytes = cx.argument::<JsUint8Array>(0)?;
     match CallLinkRootKey::try_from(bytes.as_slice(&cx)) {
         Ok(_) => Ok(cx.undefined()),
         Err(e) => cx.throw_error(e.to_string()),
@@ -3013,7 +3013,7 @@ fn CallLinkRootKey_deriveRoomId(mut cx: FunctionContext) -> JsResult<JsUint8Arra
 
 #[allow(non_snake_case)]
 fn CallLinkRootKey_toFormattedString(mut cx: FunctionContext) -> JsResult<JsString> {
-    let bytes = cx.argument::<JsBuffer>(0)?;
+    let bytes = cx.argument::<JsUint8Array>(0)?;
     match CallLinkRootKey::try_from(bytes.as_slice(&cx)) {
         Ok(key) => {
             let result = key.to_formatted_string();

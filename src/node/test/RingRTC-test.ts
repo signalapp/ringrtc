@@ -103,8 +103,8 @@ describe('RingRTC', () => {
           ageSec: age,
           receivedAtCounter: 1,
           receivedAtDate: 100,
-          senderIdentityKey: Buffer.from([]),
-          receiverIdentityKey: Buffer.from([]),
+          senderIdentityKey: new Uint8Array(),
+          receiverIdentityKey: new Uint8Array(),
         });
       });
       assert.equal(reason, CallEndedReason.ReceivedOfferExpired);
@@ -144,8 +144,8 @@ describe('RingRTC', () => {
           ageSec: 10,
           receivedAtCounter: 2,
           receivedAtDate: 200,
-          senderIdentityKey: Buffer.from([]),
-          receiverIdentityKey: Buffer.from([]),
+          senderIdentityKey: new Uint8Array(),
+          receiverIdentityKey: new Uint8Array(),
         });
       });
       assert.equal(reason, CallEndedReason.Declined); // because we didn't set handleIncomingCall.

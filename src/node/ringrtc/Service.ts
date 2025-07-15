@@ -1620,8 +1620,8 @@ export class RingRTCType {
       ageSec: number;
       receivedAtCounter: number;
       receivedAtDate: number;
-      senderIdentityKey: Buffer;
-      receiverIdentityKey: Buffer;
+      senderIdentityKey: Uint8Array;
+      receiverIdentityKey: Uint8Array;
     }
   ): void {
     if (
@@ -2957,16 +2957,16 @@ export interface CallManager {
     callId: CallId,
     offerType: OfferType,
     opaque: Buffer,
-    senderIdentityKey: Buffer,
-    receiverIdentityKey: Buffer
+    senderIdentityKey: Uint8Array,
+    receiverIdentityKey: Uint8Array
   ): void;
   receivedAnswer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     opaque: Buffer,
-    senderIdentityKey: Buffer,
-    receiverIdentityKey: Buffer
+    senderIdentityKey: Uint8Array,
+    receiverIdentityKey: Uint8Array
   ): void;
   receivedIceCandidates(
     remoteUserId: UserId,
