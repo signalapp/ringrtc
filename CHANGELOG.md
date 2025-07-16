@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.55.0
+
+- Desktop: Improve ADM log redaction
+
+- Desktop: Convert Buffer types to Uint8Array
+
+- Desktop: Setup the event reporter first for the call endpoint
+
+- Call Links: Use correct epoch endianness for iOS
+
+- CI: Update Sonatype URL to deal with OSSRH sunset
+
+- CI: Update the python version mypy uses
+
 ## v2.54.1
 
 - Desktop: Remove endorsementPublicKey from createGroupCallClient
