@@ -10,8 +10,6 @@ mod scenario;
 mod util;
 mod video;
 
-use std::ffi::CString;
-
 use anyhow::Result;
 use base64::prelude::*;
 use clap::Parser;
@@ -24,8 +22,7 @@ use ringrtc::{
     webrtc::{
         media::{AudioBandwidth, AudioEncoderConfig},
         peer_connection_factory::{
-            AudioConfig, AudioJitterBufferConfig, FileBasedAdmConfig, IceServer,
-            RffiAudioDeviceModuleType,
+            AudioConfig, AudioJitterBufferConfig, IceServer, RffiAudioDeviceModuleType,
         },
     },
 };
@@ -50,14 +47,6 @@ struct Args {
     /// How soon to post stats to the log file before the first interval.
     #[arg(long, default_value = "2")]
     stats_initial_offset_secs: u16,
-
-    /// Specifies the file (including path) to use for audio input.
-    #[arg(long, default_value = "")]
-    input_file: String,
-
-    /// Specifies the file (including path) to use for audio output.
-    #[arg(long, default_value = "")]
-    output_file: String,
 
     /// Specifies the file (including path) to use for video input.
     ///
@@ -288,11 +277,8 @@ fn main() -> Result<()> {
         stats_interval_secs: args.stats_interval_secs,
         stats_initial_offset_secs: args.stats_initial_offset_secs,
         audio_config: AudioConfig {
-            audio_device_module_type: RffiAudioDeviceModuleType::File,
-            file_based_adm_config: Some(FileBasedAdmConfig {
-                input_file: CString::new(args.input_file).expect("CString::new failed"),
-                output_file: CString::new(args.output_file).expect("CString::new failed"),
-            }),
+            audio_device_module_type: RffiAudioDeviceModuleType::RingRtc,
+            file_based_adm_config: None,
             high_pass_filter_enabled: args.high_pass_filter,
             aec_enabled: args.aec,
             ns_enabled: args.ns,

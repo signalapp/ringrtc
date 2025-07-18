@@ -690,6 +690,180 @@ pub async fn emulate_network_clear(name: &str) -> Result<()> {
     Ok(())
 }
 
+pub async fn tear_down_virtual_audio(clients: &Vec<&str>) -> Result<()> {
+    for client in clients {
+        // Tear down the modules.
+        let _ = Command::new("docker")
+            .args(["exec", client, "pactl", "unload-module", "module-pipe-sink"])
+            .spawn()?
+            .wait()
+            .await;
+        let _ = Command::new("docker")
+            .args(["exec", client, "pactl", "unload-module", "module-null-sink"])
+            .spawn()?
+            .wait()
+            .await;
+    }
+    Ok(())
+}
+
+pub async fn start_playout(
+    name: &str,
+    input_file: &str,
+    file_duration: f64,
+    desired_duration: u16,
+) -> Result<()> {
+    println!("start playing");
+
+    // Give a bit of slack by rounding the duration up, in case the file is within a small fraction
+    // of a second of the desired time (for instance, normal_phrasing is 29.9997 seconds long),
+    // since the desired duration will always be a whole number of seconds.
+    // Also use a minimum duration of 1 second in case file_duration is 0.
+    let loops_float = desired_duration as f64 / file_duration.ceil().max(1.0);
+    let loops = if loops_float < 1.0 {
+        1
+    } else {
+        loops_float.ceil() as u64
+    };
+
+    // Start playing in to the mic.
+    let _ = Command::new("docker")
+        .args([
+            "exec",
+            "--detach",
+            name,
+            "sh",
+            "-c",
+            &format!(
+                "for i in $(seq 0 {}); do pw-cat --playback --format=s16 --rate=48000 --channels=2 --target=input_sink - < /media/{} > /report/pwplay_{}.log 2>&1; done",
+                loops,
+                input_file,
+                name
+            ),
+        ])
+        .spawn()?
+        .wait()
+        .await?;
+    Ok(())
+}
+
+pub async fn start_virtual_audio(name: &str, output_file: &Option<String>) -> Result<()> {
+    println!("start virtual audio and its dependencies");
+
+    let _ = Command::new("docker")
+        .args([
+            "exec",
+            "--detach",
+            name,
+            "sh",
+            "-c",
+            "mkdir -p /run/dbus ; nohup dbus-daemon --session --address=$DBUS_SESSION_BUS_ADDRESS --fork",
+        ])
+        .spawn()?
+        .wait()
+        .await?;
+
+    let _ = Command::new("docker")
+        .args([
+            "exec",
+            "--detach",
+            name,
+            "sh",
+            "-c",
+            "nohup pipewire & nohup wireplumber & nohup pipewire-pulse &",
+        ])
+        .spawn()?
+        .wait()
+        .await?;
+
+    // Create a virtual mic
+    let _ = Command::new("docker")
+        .args([
+            "exec",
+            name,
+            "pactl",
+            "load-module",
+            "module-null-sink",
+            "sink_name=input_sink",
+            "format=s16",
+            "rate=48000",
+            "channels=2",
+        ])
+        .spawn()?
+        .wait()
+        .await?;
+
+    let _ = Command::new("docker")
+        .args([
+            "exec",
+            name,
+            "pactl",
+            "set-default-source",
+            "input_sink.monitor",
+        ])
+        .spawn()?
+        .wait()
+        .await?;
+
+    if let Some(output) = output_file {
+        // Create a virtual speaker
+        let _ = Command::new("docker")
+            .args([
+                "exec",
+                name,
+                "pactl",
+                "load-module",
+                "module-pipe-sink",
+                "sink_name=file_speaker",
+                "file=/tmp/file_speaker",
+                "format=s16",
+                "rate=48000",
+                "channels=2",
+            ])
+            .spawn()?
+            .wait()
+            .await;
+
+        // Read from virtual speaker
+        let _ = Command::new("docker")
+            .args([
+                "exec",
+                "--detach",
+                name,
+                "sh",
+                "-c",
+                &format!("cat /tmp/file_speaker > /report/{}", output,),
+            ])
+            .spawn()?
+            .wait()
+            .await?;
+    } else {
+        let _ = Command::new("docker")
+            .args([
+                "exec",
+                name,
+                "pactl",
+                "load-module",
+                "module-null-sink",
+                "sink_name=file_speaker",
+                "format=s16",
+                "rate=48000",
+                "channels=2",
+            ])
+            .spawn()?
+            .wait()
+            .await;
+    }
+
+    let _ = Command::new("docker")
+        .args(["exec", name, "pactl", "set-default-sink", "file_speaker"])
+        .spawn()?
+        .wait()
+        .await?;
+
+    Ok(())
+}
+
 pub async fn start_cli(
     name: &str,
     media_io: MediaFileIo,
@@ -700,8 +874,10 @@ pub async fn start_cli(
     profile: bool,
 ) -> Result<()> {
     println!("Starting cli for `{}`", name);
+
+    start_virtual_audio(name, &media_io.audio_output_file).await?;
+
     let log_file_arg = format!("/report/{}.log", name);
-    let input_file_arg = format!("/media/{}", media_io.audio_input_file);
 
     let mut args = ["exec", "-d", name].map(String::from).to_vec();
 
@@ -726,20 +902,8 @@ pub async fn start_cli(
     }
 
     args.extend_from_slice(
-        &[
-            "call_sim-cli",
-            "--name",
-            name,
-            "--log-file",
-            &log_file_arg,
-            "--input-file",
-            &input_file_arg,
-        ]
-        .map(String::from),
+        &["call_sim-cli", "--name", name, "--log-file", &log_file_arg].map(String::from),
     );
-    if let Some(audio_output_file) = media_io.audio_output_file {
-        args.push(format!("--output-file=/report/{}", audio_output_file));
-    }
 
     args.push("--stats-interval-secs".to_string());
     args.push(format!("{}", call_config.stats_interval_secs));
@@ -977,7 +1141,7 @@ pub async fn convert_raw_to_wav(
     raw_file: &str,
     wav_file: &str,
     length: Option<u16>,
-) -> Result<()> {
+) -> Result<f64> {
     println!("\nConverting raw file `{}` to wav:", raw_file);
 
     let mut args = [
@@ -1017,7 +1181,23 @@ pub async fn convert_raw_to_wav(
 
     let _ = Command::new("docker").args(&args).spawn()?.wait().await?;
 
-    Ok(())
+    let output = Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            "-v",
+            &format!("{}:/work", location),
+            "bigpapoo/sox",
+            "soxi",
+            "-D",
+            &format!("/work/{}", wav_file),
+        ])
+        .output()
+        .await?;
+
+    Ok(std::str::from_utf8(output.stdout.as_slice())?
+        .trim()
+        .parse::<f64>()?)
 }
 
 pub async fn convert_wav_to_16khz_mono(

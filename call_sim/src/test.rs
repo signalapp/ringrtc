@@ -34,8 +34,9 @@ use crate::{
         analyze_video, analyze_visqol_mos, clean_network, clean_up, convert_mp4_to_yuv,
         convert_raw_to_wav, convert_wav_to_16khz_mono, convert_yuv_to_mp4, create_network,
         emulate_network_change, emulate_network_start, finish_perf, generate_spectrogram,
-        get_signaling_server_logs, get_turn_server_logs, start_cli, start_client,
-        start_signaling_server, start_tcp_dump, start_turn_server, DockerStats,
+        get_signaling_server_logs, get_turn_server_logs, start_cli, start_client, start_playout,
+        start_signaling_server, start_tcp_dump, start_turn_server, tear_down_virtual_audio,
+        DockerStats,
     },
     report::{AnalysisReport, AnalysisReportMos, Report},
 };
@@ -95,6 +96,7 @@ pub struct Sound {
     /// Optionally store the mos of the file vs. itself as a theoretical maximum.
     pub reference_mos: Option<f32>,
     pub reference_mos_16khz_mono: Option<f32>,
+    pub duration: f64,
 }
 
 impl Sound {
@@ -161,7 +163,6 @@ pub struct Test {
 }
 
 pub struct MediaFileIo {
-    pub audio_input_file: String,
     pub audio_output_file: Option<String>,
     pub video_input_file: Option<String>,
     pub video_output_file: Option<String>,
@@ -281,7 +282,6 @@ impl Test {
             start_cli(
                 test_case.client_a.name,
                 MediaFileIo {
-                    audio_input_file: test_case.client_a.sound.raw(),
                     audio_output_file: if test_case_config.save_media_files {
                         Some(test_case.client_a.output_raw.clone())
                     } else {
@@ -305,7 +305,6 @@ impl Test {
             start_cli(
                 test_case.client_b.name,
                 MediaFileIo {
-                    audio_input_file: test_case.client_b.sound.raw(),
                     audio_output_file: if test_case_config.save_media_files {
                         Some(test_case.client_b.output_raw.clone())
                     } else {
@@ -377,6 +376,21 @@ impl Test {
                                 client: test_case.client_a.name.to_string(),
                                 command: Command::StartAsCaller.into(),
                             });
+
+                            start_playout(
+                                test_case.client_a.name,
+                                &test_case.client_a.sound.raw(),
+                                test_case.client_a.sound.duration,
+                                test_case_config.length_seconds,
+                            )
+                            .await?;
+                            start_playout(
+                                test_case.client_b.name,
+                                &test_case.client_b.sound.raw(),
+                                test_case.client_b.sound.duration,
+                                test_case_config.length_seconds,
+                            )
+                            .await?;
 
                             test_manager.send_command(request).await?;
 
@@ -687,6 +701,7 @@ impl Test {
                 name: name.to_string(),
                 reference_mos: None,
                 reference_mos_16khz_mono: None,
+                duration: 0.0,
             };
 
             let raw_name = sound.raw();
@@ -700,7 +715,7 @@ impl Test {
             )?;
 
             // Make sure there is a wav version of the file available.
-            convert_raw_to_wav(&self.set_path, &raw_name, &wav_name, None).await?;
+            sound.duration = convert_raw_to_wav(&self.set_path, &raw_name, &wav_name, None).await?;
             convert_wav_to_16khz_mono(&self.set_path, &wav_name, &wav_name_speech).await?;
 
             // And a reference spectrogram. Since the speech wav files have a limited frequency
@@ -815,6 +830,12 @@ impl Test {
             .await
         {
             Ok(_) => {
+                if let Err(e) =
+                    tear_down_virtual_audio(&vec![test_case.client_a.name, test_case.client_b.name])
+                        .await
+                {
+                    println!("Couldn't tear down audio; continuing. {:?}", e);
+                }
                 if self.profile {
                     // allow perf to finish and collect reports.
                     println!("waiting for perf... ");
@@ -871,6 +892,12 @@ impl Test {
             }
             Err(err) => {
                 println!("Error running test: {}", err);
+                if let Err(e) =
+                    tear_down_virtual_audio(&vec![test_case.client_a.name, test_case.client_b.name])
+                        .await
+                {
+                    println!("Couldn't tear down audio; continuing. {:?}", e);
+                }
                 clean_up(vec![
                     test_case.client_a.name,
                     test_case.client_b.name,

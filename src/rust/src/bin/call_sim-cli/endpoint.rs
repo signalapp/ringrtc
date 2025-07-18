@@ -138,6 +138,10 @@ impl CallEndpoint {
                     "Audio recording devices: {:?}",
                     peer_connection_factory.get_audio_recording_devices()
                 );
+                peer_connection_factory.set_audio_playout_device(0).unwrap();
+                peer_connection_factory
+                    .set_audio_recording_device(0)
+                    .unwrap();
 
                 // Set up signaling/state
                 signaling_server.register(&endpoint);

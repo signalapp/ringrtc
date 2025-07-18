@@ -149,12 +149,21 @@ impl DeviceCollectionWrapper {
     pub fn count(&self) -> usize {
         #[cfg(target_os = "macos")]
         let count = self.iter().count();
-        // Whether a monitor device is default or not, there will be an additional default,
-        // so no need to do anything different.
         #[cfg(target_os = "linux")]
         let count = self.iter_non_monitor().count();
         if count == 0 {
-            0
+            #[cfg(target_os = "macos")]
+            return 0;
+            #[cfg(target_os = "linux")]
+            return
+                // edge case: if there are only monitor devices, and one is the default,
+                // allow it.
+                if self.iter()
+                    .any(|device| device.preferred.contains(DevicePref::VOICE)) {
+                        1
+                    } else {
+                        0
+                };
         } else {
             count + 1
         }
