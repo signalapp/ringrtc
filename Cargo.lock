@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "call_sim"
-version = "2.55.0"
+version = "2.56.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -1838,7 +1838,7 @@ dependencies = [
 
 [[package]]
 name = "mrp"
-version = "2.55.0"
+version = "2.56.0"
 dependencies = [
  "anyhow",
  "log",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.55.0"
+version = "2.56.0"
 dependencies = [
  "prost-build",
  "tonic-build",
@@ -2428,7 +2428,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.55.0"
+version = "2.56.0"
 dependencies = [
  "aes",
  "aes-gcm-siv",

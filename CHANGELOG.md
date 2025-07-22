@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.56.0
+
+- Check remote peer for all direct call messages
+
+- Update to webrtc 7204a (m138)
+
+- Call Sim: Use real ADM
+
 ## v2.55.0
 
 - Desktop: Improve ADM log redaction
