@@ -228,23 +228,38 @@ enum ReceivedOfferCollision {
 /// Management of 1:1 call messages that arrive before the offer for a particular call.
 ///
 /// We don't save all message kinds here, only the ones that can affect an incoming call.
-enum PendingCallMessages {
+enum PendingCallMessages<T>
+where
+    T: Platform,
+{
     None,
     IceCandidates {
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: Vec<signaling::ReceivedIce>,
     },
     Hangup {
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedHangup,
     },
 }
 
-impl PendingCallMessages {
-    fn save_ice_candidates(&mut self, new_call_id: CallId, new_received: signaling::ReceivedIce) {
+impl<T> PendingCallMessages<T>
+where
+    T: Platform,
+{
+    fn save_ice_candidates(
+        &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
+        new_call_id: CallId,
+        new_received: signaling::ReceivedIce,
+    ) {
         info!("no active call; saving ice candidates for {}", new_call_id);
         match self {
-            PendingCallMessages::IceCandidates { call_id, received } if call_id == &new_call_id => {
+            PendingCallMessages::IceCandidates {
+                call_id, received, ..
+            } if call_id == &new_call_id => {
                 // Avoid growing unbounded.
                 if received.len() >= 30 {
                     received.remove(0);
@@ -263,12 +278,18 @@ impl PendingCallMessages {
             PendingCallMessages::None => {}
         }
         *self = PendingCallMessages::IceCandidates {
+            remote_peer,
             call_id: new_call_id,
             received: vec![new_received],
         }
     }
 
-    fn save_hangup(&mut self, new_call_id: CallId, new_received: signaling::ReceivedHangup) {
+    fn save_hangup(
+        &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
+        new_call_id: CallId,
+        new_received: signaling::ReceivedHangup,
+    ) {
         info!("no active call; saving hangup for {}", new_call_id);
         match self {
             PendingCallMessages::IceCandidates { call_id, .. } if call_id == &new_call_id => {
@@ -291,13 +312,17 @@ impl PendingCallMessages {
         }
 
         *self = PendingCallMessages::Hangup {
+            remote_peer,
             call_id: new_call_id,
             received: new_received,
         }
     }
 }
 
-impl Default for PendingCallMessages {
+impl<T> Default for PendingCallMessages<T>
+where
+    T: Platform,
+{
     fn default() -> Self {
         Self::None
     }
@@ -383,7 +408,7 @@ where
     /// CallId of the active call.
     active_call_id: Arc<CallMutex<Option<CallId>>>,
     /// 1:1 call messages that arrived before the Offer for a particular call.
-    pending_call_messages: Arc<CallMutex<PendingCallMessages>>,
+    pending_call_messages: Arc<CallMutex<PendingCallMessages<T>>>,
     /// Map of all group calls.
     group_call_by_client_id: Arc<CallMutex<HashMap<group_call::ClientId, GroupCallClient>>>,
     /// Next value of the group call client id (sequential).
@@ -682,37 +707,65 @@ where
     /// Received answer from application.
     pub fn received_answer(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedAnswer,
     ) -> Result<()> {
-        handle_active_call_api!(self, CallManager::handle_received_answer, call_id, received)
+        handle_active_call_api!(
+            self,
+            CallManager::handle_received_answer,
+            remote_peer,
+            call_id,
+            received
+        )
     }
 
     /// Received ICE candidates from application.
     pub fn received_ice(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedIce,
     ) -> Result<()> {
-        handle_active_call_api!(self, CallManager::handle_received_ice, call_id, received)
+        handle_active_call_api!(
+            self,
+            CallManager::handle_received_ice,
+            remote_peer,
+            call_id,
+            received
+        )
     }
 
     /// Received hangup message from application.
     pub fn received_hangup(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedHangup,
     ) -> Result<()> {
-        handle_active_call_api!(self, CallManager::handle_received_hangup, call_id, received)
+        handle_active_call_api!(
+            self,
+            CallManager::handle_received_hangup,
+            remote_peer,
+            call_id,
+            received
+        )
     }
 
     /// Received busy message from application.
     pub fn received_busy(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedBusy,
     ) -> Result<()> {
-        handle_active_call_api!(self, CallManager::handle_received_busy, call_id, received)
+        handle_active_call_api!(
+            self,
+            CallManager::handle_received_busy,
+            remote_peer,
+            call_id,
+            received
+        )
     }
 
     /// Received a call message from the application.
@@ -1452,17 +1505,35 @@ where
 
                 match std::mem::take(&mut *self.pending_call_messages.lock()?) {
                     PendingCallMessages::None => {}
-                    PendingCallMessages::IceCandidates { call_id, received }
-                        if call_id == incoming_call_id =>
-                    {
+                    PendingCallMessages::IceCandidates {
+                        remote_peer: pending_remote_peer,
+                        call_id,
+                        received,
+                    } if call_id == incoming_call_id => {
                         for received in received {
-                            incoming_call.inject_received_ice(received)?;
+                            if self
+                                .platform
+                                .lock()?
+                                .compare_remotes(&pending_remote_peer, &remote_peer)
+                                .unwrap_or(false)
+                            {
+                                incoming_call.inject_received_ice(received)?;
+                            }
                         }
                     }
-                    PendingCallMessages::Hangup { call_id, received }
-                        if call_id == incoming_call_id =>
-                    {
-                        incoming_call.inject_received_hangup(received)?;
+                    PendingCallMessages::Hangup {
+                        remote_peer: pending_remote_peer,
+                        call_id,
+                        received,
+                    } if call_id == incoming_call_id => {
+                        if self
+                            .platform
+                            .lock()?
+                            .compare_remotes(&pending_remote_peer, &remote_peer)
+                            .unwrap_or(false)
+                        {
+                            incoming_call.inject_received_hangup(received)?;
+                        }
                     }
                     PendingCallMessages::IceCandidates { call_id, .. }
                     | PendingCallMessages::Hangup { call_id, .. } => {
@@ -1477,6 +1548,7 @@ where
     /// Handle received_answer() API from application.
     fn handle_received_answer(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedAnswer,
     ) -> Result<()> {
@@ -1497,12 +1569,24 @@ where
             return Ok(());
         }
 
-        active_call.inject_received_answer(received)
+        let active_remote_peer = active_call.remote_peer()?.clone();
+        if self
+            .platform
+            .lock()?
+            .compare_remotes(&active_remote_peer, &remote_peer)
+            .unwrap_or(false)
+        {
+            active_call.inject_received_answer(received)
+        } else {
+            warn!("Unexpected remote peer for answer, ignoring");
+            Ok(())
+        }
     }
 
     /// Handle received_ice() API from application.
     fn handle_received_ice(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedIce,
     ) -> Result<()> {
@@ -1519,14 +1603,26 @@ where
 
         match self.active_call() {
             Ok(mut active_call) if active_call.call_id() == call_id => {
-                active_call.inject_received_ice(received)?;
+                let active_remote_peer = active_call.remote_peer()?.clone();
+                if self
+                    .platform
+                    .lock()?
+                    .compare_remotes(&active_remote_peer, &remote_peer)
+                    .unwrap_or(false)
+                {
+                    active_call.inject_received_ice(received)?;
+                } else {
+                    warn!("Unexpected remote peer for ice, ignoring");
+                }
             }
             Ok(active_call) => {
                 if active_call.direction() == CallDirection::Outgoing {
                     // Save the ICE candidates anyway, in case we have a glare scenario.
-                    self.pending_call_messages
-                        .lock()?
-                        .save_ice_candidates(call_id, received);
+                    self.pending_call_messages.lock()?.save_ice_candidates(
+                        remote_peer,
+                        call_id,
+                        received,
+                    );
                 }
             }
             Err(_) => {
@@ -1534,9 +1630,11 @@ where
                     // We're in a group call. Discard the candidates.
                 } else {
                     // Save it for later in case it's arriving out-of-order.
-                    self.pending_call_messages
-                        .lock()?
-                        .save_ice_candidates(call_id, received);
+                    self.pending_call_messages.lock()?.save_ice_candidates(
+                        remote_peer,
+                        call_id,
+                        received,
+                    );
                 }
             }
         }
@@ -1547,6 +1645,7 @@ where
     /// Handle received_hangup() API from application.
     fn handle_received_hangup(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedHangup,
     ) -> Result<()> {
@@ -1561,14 +1660,24 @@ where
 
         match self.active_call() {
             Ok(mut active_call) if active_call.call_id() == call_id => {
-                active_call.inject_received_hangup(received)?;
+                let active_remote_peer = active_call.remote_peer()?.clone();
+                if self
+                    .platform
+                    .lock()?
+                    .compare_remotes(&active_remote_peer, &remote_peer)
+                    .unwrap_or(false)
+                {
+                    active_call.inject_received_hangup(received)?;
+                } else {
+                    warn!("Unexpected remote peer for hangup, ignoring");
+                }
             }
             Ok(active_call) => {
                 if active_call.direction() == CallDirection::Outgoing {
                     // Save the hangup anyway, in case we have a glare scenario.
                     self.pending_call_messages
                         .lock()?
-                        .save_hangup(call_id, received);
+                        .save_hangup(remote_peer, call_id, received);
                 }
             }
             Err(_) => {
@@ -1578,7 +1687,7 @@ where
                     // Save it for later in case it's arriving out-of-order.
                     self.pending_call_messages
                         .lock()?
-                        .save_hangup(call_id, received);
+                        .save_hangup(remote_peer, call_id, received);
                 }
             }
         }
@@ -1589,6 +1698,7 @@ where
     /// Handle received_busy() API from application.
     fn handle_received_busy(
         &mut self,
+        remote_peer: <T as Platform>::AppRemotePeer,
         call_id: CallId,
         received: signaling::ReceivedBusy,
     ) -> Result<()> {
@@ -1605,14 +1715,25 @@ where
             return Ok(());
         }
 
-        // Invoke hangup_other for the call, which will inject hangup/busy
-        // to all connections, if any.
-        let hangup = signaling::Hangup::BusyOnAnotherDevice(sender_device_id);
-        active_call
-            .send_hangup_via_rtp_data_and_signaling_to_all_except(hangup, sender_device_id)?;
+        let active_remote_peer = active_call.remote_peer()?.clone();
+        if self
+            .platform
+            .lock()?
+            .compare_remotes(&active_remote_peer, &remote_peer)
+            .unwrap_or(false)
+        {
+            // Invoke hangup_other for the call, which will inject hangup/busy
+            // to all connections, if any.
+            let hangup = signaling::Hangup::BusyOnAnotherDevice(sender_device_id);
+            active_call
+                .send_hangup_via_rtp_data_and_signaling_to_all_except(hangup, sender_device_id)?;
 
-        // Handle the normal processing of busy by concluding the call locally.
-        self.handle_terminate_active_call(active_call, None, ApplicationEvent::EndedRemoteBusy)
+            // Handle the normal processing of busy by concluding the call locally.
+            self.handle_terminate_active_call(active_call, None, ApplicationEvent::EndedRemoteBusy)
+        } else {
+            warn!("Unexpected remote peer for busy, ignoring");
+            Ok(())
+        }
     }
 
     /// Handle received_call_message() API from the application.

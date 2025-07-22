@@ -642,7 +642,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 
     @MainActor
-    public func receivedAnswer(sourceDevice: UInt32, callId: UInt64, opaque: Data, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
+    public func receivedAnswer(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
         Logger.debug("receivedAnswer")
 
         let opaqueSlice = allocatedAppByteSliceFromData(maybe_data: opaque)
@@ -664,14 +664,15 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             }
         }
 
-        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, sourceDevice, opaqueSlice, senderIdentityKeySlice, receiverIdentityKeySlice)
+        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
+        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaqueSlice, senderIdentityKeySlice, receiverIdentityKeySlice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedAnswer() function failure")
         }
     }
 
     @MainActor
-    public func receivedIceCandidates(sourceDevice: UInt32, callId: UInt64, candidates: [Data]) throws {
+    public func receivedIceCandidates(call: CallType, sourceDevice: UInt32, callId: UInt64, candidates: [Data]) throws {
         Logger.debug("receivedIceCandidates")
 
         let appIceCandidates: [AppByteSlice] = candidates.map { candidate in
@@ -696,27 +697,30 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             )
         }
 
-        let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, sourceDevice, &appIceCandidateArray)
+        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
+        let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, &appIceCandidateArray)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "ringrtcReceivedIceCandidates() function failure")
         }
     }
 
     @MainActor
-    public func receivedHangup(sourceDevice: UInt32, callId: UInt64, hangupType: HangupType, deviceId: UInt32) throws {
+    public func receivedHangup(call: CallType, sourceDevice: UInt32, callId: UInt64, hangupType: HangupType, deviceId: UInt32) throws {
         Logger.debug("receivedHangup")
 
-        let retPtr = ringrtcReceivedHangup(ringRtcCallManager, callId, sourceDevice, hangupType.rawValue, deviceId)
+        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
+        let retPtr = ringrtcReceivedHangup(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, hangupType.rawValue, deviceId)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedHangup() function failure")
         }
     }
 
     @MainActor
-    public func receivedBusy(sourceDevice: UInt32, callId: UInt64) throws {
+    public func receivedBusy(call: CallType, sourceDevice: UInt32, callId: UInt64) throws {
         Logger.debug("receivedBusy")
 
-        let retPtr = ringrtcReceivedBusy(ringRtcCallManager, callId, sourceDevice)
+        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
+        let retPtr = ringrtcReceivedBusy(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedBusy() function failure")
         }

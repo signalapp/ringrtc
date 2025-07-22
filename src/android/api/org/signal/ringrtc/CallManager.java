@@ -501,7 +501,7 @@ public class CallManager {
    * This is the beginning of an incoming call.
    *
    * @param callId                   callId for the call
-   * @param remote                   remote side fo the call
+   * @param remote                   remote side of the call
    * @param remoteDeviceId           deviceId of remote peer
    * @param opaque                   the opaque offer
    * @param messageAgeSec            approximate age of the offer message, in seconds
@@ -545,6 +545,7 @@ public class CallManager {
    * Notification from application of a received Answer
    *
    * @param callId                   callId for the call
+   * @param remote                   remote side of the call
    * @param remoteDeviceId           deviceId of remote peer
    * @param opaque                   the opaque answer
    * @param senderIdentityKey        the identity key of the remote client
@@ -554,6 +555,7 @@ public class CallManager {
    *
    */
   public void receivedAnswer(         CallId  callId,
+                                      Remote  remote,
                                       Integer remoteDeviceId,
                              @NonNull byte[]  opaque,
                              @NonNull byte[]  senderIdentityKey,
@@ -566,6 +568,7 @@ public class CallManager {
 
     ringrtcReceivedAnswer(nativeCallManager,
                           callId.longValue(),
+                          remote,
                           remoteDeviceId,
                           opaque,
                           senderIdentityKey,
@@ -577,6 +580,7 @@ public class CallManager {
    * Notification from application of received ICE candidates
    *
    * @param callId          callId for the call
+   * @param remote          remote side of the call
    * @param remoteDeviceId  deviceId of remote peer
    * @param iceCandidates   list of Ice Candidates
    *
@@ -584,6 +588,7 @@ public class CallManager {
    *
    */
   public void receivedIceCandidates(         CallId       callId,
+                                             Remote       remote,
                                              Integer      remoteDeviceId,
                                     @NonNull List<byte[]> iceCandidates)
     throws CallException
@@ -594,6 +599,7 @@ public class CallManager {
 
     ringrtcReceivedIceCandidates(nativeCallManager,
                                  callId.longValue(),
+                                 remote,
                                  remoteDeviceId,
                                  iceCandidates);
   }
@@ -603,6 +609,7 @@ public class CallManager {
    * Notification from application of received Hangup message
    *
    * @param callId          callId for the call
+   * @param remote          remote side of the call
    * @param remoteDeviceId  deviceId of remote peer
    * @param hangupType      type of hangup, normal or handled elsewhere
    * @param deviceId        if not a normal hangup, the associated deviceId
@@ -611,6 +618,7 @@ public class CallManager {
    *
    */
   public void receivedHangup(CallId     callId,
+                             Remote     remote,
                              Integer    remoteDeviceId,
                              HangupType hangupType,
                              Integer    deviceId)
@@ -622,6 +630,7 @@ public class CallManager {
 
     ringrtcReceivedHangup(nativeCallManager,
                           callId.longValue(),
+                          remote,
                           remoteDeviceId,
                           hangupType.ordinal(),
                           deviceId);
@@ -632,12 +641,13 @@ public class CallManager {
    * Notification from application of received Busy message
    *
    * @param callId          callId for the call
+   * @param remote          remote side of the call
    * @param remoteDeviceId  deviceId of remote peer
    *
    * @throws CallException for native code failures
    *
    */
-  public void receivedBusy(CallId callId, Integer remoteDeviceId)
+  public void receivedBusy(CallId callId, Remote remote, Integer remoteDeviceId)
     throws CallException
   {
     checkCallManagerExists();
@@ -646,6 +656,7 @@ public class CallManager {
 
     ringrtcReceivedBusy(nativeCallManager,
                         callId.longValue(),
+                        remote,
                         remoteDeviceId);
   }
 
@@ -2369,6 +2380,7 @@ public class CallManager {
   private native
     void ringrtcReceivedAnswer(long    nativeCallManager,
                                long    callId,
+                               Remote  remote,
                                int     remoteDeviceId,
                                byte[]  opaque,
                                byte[]  senderIdentityKey,
@@ -2391,22 +2403,25 @@ public class CallManager {
   private native
     void ringrtcReceivedIceCandidates(long         nativeCallManager,
                                       long         callId,
+                                      Remote       remote,
                                       int          remoteDeviceId,
                                       List<byte[]> iceCandidates)
     throws CallException;
 
   private native
-    void ringrtcReceivedHangup(long nativeCallManager,
-                               long callId,
-                               int  remoteDeviceId,
-                               int  hangupType,
-                               int  deviceId)
+    void ringrtcReceivedHangup(long   nativeCallManager,
+                               long   callId,
+                               Remote remote,
+                               int    remoteDeviceId,
+                               int    hangupType,
+                               int    deviceId)
     throws CallException;
 
   private native
-    void ringrtcReceivedBusy(long nativeCallManager,
-                             long callId,
-                             int  remoteDeviceId)
+    void ringrtcReceivedBusy(long   nativeCallManager,
+                             long   callId,
+                             Remote remote,
+                             int    remoteDeviceId)
     throws CallException;
 
   private native

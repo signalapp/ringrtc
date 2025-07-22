@@ -54,7 +54,7 @@ fn start_inbound_call() -> TestContext {
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
     cm.received_offer(
-        remote_peer,
+        remote_peer.clone(),
         call_id,
         random_received_offer(&context.prng, Duration::from_secs(0)),
     )
@@ -85,6 +85,7 @@ fn start_inbound_call() -> TestContext {
     let connection = active_call.get_connection(1).expect(error_line!());
 
     cm.received_ice(
+        remote_peer,
         active_call.call_id(),
         random_received_ice_candidate(&context.prng),
     )
@@ -217,6 +218,7 @@ fn inbound_call_hangup_accepted() {
     let active_call = context.active_call();
 
     cm.received_hangup(
+        active_call.remote_peer().expect(error_line!()).clone(),
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -244,6 +246,7 @@ fn inbound_call_hangup_declined() {
     let active_call = context.active_call();
 
     cm.received_hangup(
+        active_call.remote_peer().expect(error_line!()).clone(),
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -271,6 +274,7 @@ fn inbound_call_hangup_busy() {
     let active_call = context.active_call();
 
     cm.received_hangup(
+        active_call.remote_peer().expect(error_line!()).clone(),
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -323,6 +327,7 @@ fn inbound_call_drop_connecting_hangup_first() {
     let active_call = context.active_call();
 
     cm.received_hangup(
+        active_call.remote_peer().expect(error_line!()).clone(),
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -353,6 +358,7 @@ fn inbound_call_drop_connecting_hangup_second() {
 
     cm.drop_call(active_call.call_id()).expect(error_line!());
     cm.received_hangup(
+        active_call.remote_peer().expect(error_line!()).clone(),
         active_call.call_id(),
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1219,10 +1225,18 @@ fn offer_after_ice() {
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
 
-    cm.received_ice(call_id, random_received_ice_candidate(&context.prng))
-        .expect(error_line!());
-    cm.received_ice(call_id, random_received_ice_candidate(&context.prng))
-        .expect(error_line!());
+    cm.received_ice(
+        remote_peer.clone(),
+        call_id,
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
+    cm.received_ice(
+        remote_peer.clone(),
+        call_id,
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
 
     cm.received_offer(
         remote_peer,
@@ -1284,10 +1298,18 @@ fn offer_after_unrelated_ice() {
     let call_id = CallId::new(context.prng.gen::<u64>());
     let other_call_id = CallId::new(context.prng.gen::<u64>());
 
-    cm.received_ice(other_call_id, random_received_ice_candidate(&context.prng))
-        .expect(error_line!());
-    cm.received_ice(other_call_id, random_received_ice_candidate(&context.prng))
-        .expect(error_line!());
+    cm.received_ice(
+        remote_peer.clone(),
+        other_call_id,
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
+    cm.received_ice(
+        remote_peer.clone(),
+        other_call_id,
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
 
     cm.received_offer(
         remote_peer,
@@ -1347,6 +1369,7 @@ fn offer_after_hangup() {
     let call_id = CallId::new(context.prng.gen::<u64>());
 
     cm.received_hangup(
+        remote_peer.clone(),
         call_id,
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1392,6 +1415,7 @@ fn offer_after_unrelated_hangup() {
     let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
 
     cm.received_hangup(
+        remote_peer.clone(),
         unrelated_call_id,
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1435,9 +1459,14 @@ fn offer_after_ice_and_hangup() {
     let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
     let call_id = CallId::new(context.prng.gen::<u64>());
 
-    cm.received_ice(call_id, random_received_ice_candidate(&context.prng))
-        .expect(error_line!());
+    cm.received_ice(
+        remote_peer.clone(),
+        call_id,
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
     cm.received_hangup(
+        remote_peer.clone(),
         call_id,
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1482,6 +1511,7 @@ fn offer_after_hangup_and_ice() {
     let call_id = CallId::new(context.prng.gen::<u64>());
 
     cm.received_hangup(
+        remote_peer.clone(),
         call_id,
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1489,8 +1519,12 @@ fn offer_after_hangup_and_ice() {
         },
     )
     .expect(error_line!());
-    cm.received_ice(call_id, random_received_ice_candidate(&context.prng))
-        .expect(error_line!());
+    cm.received_ice(
+        remote_peer.clone(),
+        call_id,
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
 
     cm.received_offer(
         remote_peer,
@@ -1529,6 +1563,7 @@ fn offer_after_hangup_with_intervening_ice_for_other_call() {
     let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
 
     cm.received_hangup(
+        remote_peer.clone(),
         call_id,
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1537,6 +1572,7 @@ fn offer_after_hangup_with_intervening_ice_for_other_call() {
     )
     .expect(error_line!());
     cm.received_ice(
+        remote_peer.clone(),
         unrelated_call_id,
         random_received_ice_candidate(&context.prng),
     )
@@ -1579,6 +1615,7 @@ fn offer_after_hangup_with_intervening_hangup_for_other_call() {
     let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
 
     cm.received_hangup(
+        remote_peer.clone(),
         call_id,
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1587,6 +1624,7 @@ fn offer_after_hangup_with_intervening_hangup_for_other_call() {
     )
     .expect(error_line!());
     cm.received_hangup(
+        remote_peer.clone(),
         unrelated_call_id,
         signaling::ReceivedHangup {
             sender_device_id: 1,
@@ -1634,12 +1672,17 @@ fn offer_after_ice_with_previous_ice_for_other_call() {
     let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
 
     cm.received_ice(
+        remote_peer.clone(),
         unrelated_call_id,
         random_received_ice_candidate(&context.prng),
     )
     .expect(error_line!());
-    cm.received_ice(call_id, random_received_ice_candidate(&context.prng))
-        .expect(error_line!());
+    cm.received_ice(
+        remote_peer.clone(),
+        call_id,
+        random_received_ice_candidate(&context.prng),
+    )
+    .expect(error_line!());
 
     cm.received_offer(
         remote_peer,
@@ -2254,4 +2297,59 @@ fn received_status_before_accepted() {
             .unwrap()
             .max_bitrate_bps()
     );
+}
+
+#[test]
+fn received_hangup_wrong_remote_peer() {
+    test_init();
+
+    let context = connect_and_accept_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let wrong_remote_peer = format!("WRONG_PEER-{}", context.prng.gen::<u16>());
+
+    cm.received_hangup(
+        wrong_remote_peer,
+        active_call.call_id(),
+        signaling::ReceivedHangup {
+            sender_device_id: 1,
+            hangup: signaling::Hangup::Normal,
+        },
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    // If the hangup wasn't ignored, the call would end.
+    assert_eq!(context.ended_count(), 0);
+    assert_eq!(context.error_count(), 0);
+    assert!(cm.busy());
+}
+
+#[test]
+fn received_busy_wrong_remote_peer() {
+    test_init();
+
+    let context = connect_and_accept_inbound_call();
+    let mut cm = context.cm();
+    let active_call = context.active_call();
+
+    let wrong_remote_peer = format!("WRONG_PEER-{}", context.prng.gen::<u16>());
+
+    cm.received_busy(
+        wrong_remote_peer,
+        active_call.call_id(),
+        signaling::ReceivedBusy {
+            sender_device_id: 2,
+        },
+    )
+    .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    // If the busy wasn't ignored, the call would end.
+    assert_eq!(context.ended_count(), 0);
+    assert_eq!(context.error_count(), 0);
+    assert!(cm.busy());
 }

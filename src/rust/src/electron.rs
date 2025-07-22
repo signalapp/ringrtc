@@ -992,7 +992,7 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let _peer_id = cx.argument::<JsString>(0)?.value(&mut cx) as PeerId;
+    let peer_id = cx.argument::<JsString>(0)?.value(&mut cx) as PeerId;
     let sender_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let call_id = CallId::new(get_id_arg(&mut cx, 2));
     let opaque = cx.argument::<JsBuffer>(3)?;
@@ -1006,6 +1006,7 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
     with_call_endpoint(&mut cx, |endpoint| {
         let answer = signaling::Answer::new(opaque)?;
         endpoint.call_manager.received_answer(
+            peer_id,
             call_id,
             signaling::ReceivedAnswer {
                 answer,
@@ -1043,6 +1044,7 @@ fn receivedIceCandidates(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.call_manager.received_ice(
+            peer_id,
             call_id,
             signaling::ReceivedIce {
                 ice: signaling::Ice { candidates },
@@ -1086,6 +1088,7 @@ fn receivedHangup(mut cx: FunctionContext) -> JsResult<JsValue> {
         let hangup = signaling::Hangup::from_type_and_device_id(hangup_type, hangup_device_id);
 
         endpoint.call_manager.received_hangup(
+            peer_id,
             call_id,
             signaling::ReceivedHangup {
                 hangup,
@@ -1109,9 +1112,11 @@ fn receivedBusy(mut cx: FunctionContext) -> JsResult<JsValue> {
     );
 
     with_call_endpoint(&mut cx, |endpoint| {
-        endpoint
-            .call_manager
-            .received_busy(call_id, signaling::ReceivedBusy { sender_device_id })?;
+        endpoint.call_manager.received_busy(
+            peer_id,
+            call_id,
+            signaling::ReceivedBusy { sender_device_id },
+        )?;
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;

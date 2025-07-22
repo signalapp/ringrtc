@@ -120,6 +120,7 @@ pub fn cancel_group_ring(
 pub fn received_answer(
     call_manager: *mut IosCallManager,
     call_id: u64,
+    remote_peer: *const c_void,
     sender_device_id: DeviceId,
     opaque: Option<Vec<u8>>,
     sender_identity_key: Option<Vec<u8>>,
@@ -127,6 +128,7 @@ pub fn received_answer(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
+    let remote_peer = AppObject::from(remote_peer);
 
     let opaque = match opaque {
         Some(v) => v,
@@ -162,6 +164,7 @@ pub fn received_answer(
     };
 
     call_manager.received_answer(
+        remote_peer,
         call_id,
         signaling::ReceivedAnswer {
             answer: signaling::Answer::new(opaque)?,
@@ -241,24 +244,29 @@ pub fn received_offer(
 pub fn received_ice(
     call_manager: *mut IosCallManager,
     call_id: u64,
+    remote_peer: *const c_void,
     received: signaling::ReceivedIce,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    call_manager.received_ice(call_id, received)
+    let remote_peer = AppObject::from(remote_peer);
+    call_manager.received_ice(remote_peer, call_id, received)
 }
 
 /// Application notification of received Hangup message
 pub fn received_hangup(
     call_manager: *mut IosCallManager,
     call_id: u64,
+    remote_peer: *const c_void,
     sender_device_id: DeviceId,
     hangup_type: signaling::HangupType,
     hangup_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
+    let remote_peer = AppObject::from(remote_peer);
     call_manager.received_hangup(
+        remote_peer,
         call_id,
         signaling::ReceivedHangup {
             hangup: signaling::Hangup::from_type_and_device_id(hangup_type, hangup_device_id),
@@ -271,11 +279,17 @@ pub fn received_hangup(
 pub fn received_busy(
     call_manager: *mut IosCallManager,
     call_id: u64,
+    remote_peer: *const c_void,
     sender_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    call_manager.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
+    let remote_peer = AppObject::from(remote_peer);
+    call_manager.received_busy(
+        remote_peer,
+        call_id,
+        signaling::ReceivedBusy { sender_device_id },
+    )
 }
 
 pub fn received_call_message(

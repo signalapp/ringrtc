@@ -245,6 +245,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
+    jni_remote: JObject,
     remote_device: jint,
     opaque: JByteArray,
     sender_identity_key: JByteArray,
@@ -254,6 +255,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedAnsw
         &env,
         call_manager as *mut AndroidCallManager,
         call_id,
+        jni_remote,
         remote_device as DeviceId,
         opaque,
         sender_identity_key,
@@ -309,6 +311,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedIceC
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
+    jni_remote: JObject,
     remote_device: jint,
     jni_ice_candidates: JObject,
 ) {
@@ -316,6 +319,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedIceC
         &mut env,
         call_manager as *mut AndroidCallManager,
         call_id,
+        jni_remote,
         remote_device as DeviceId,
         jni_ice_candidates,
     ) {
@@ -333,13 +337,16 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedHang
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
+    jni_remote: JObject,
     remote_device: jint,
     hangup_type: jint,
     device_id: jint,
 ) {
     match call_manager::received_hangup(
+        &env,
         call_manager as *mut AndroidCallManager,
         call_id,
+        jni_remote,
         remote_device as DeviceId,
         signaling::HangupType::from_i32(hangup_type).unwrap_or(signaling::HangupType::Normal),
         device_id as DeviceId,
@@ -358,11 +365,14 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReceivedBusy
     _object: JObject,
     call_manager: jlong,
     call_id: jlong,
+    jni_remote: JObject,
     remote_device: jint,
 ) {
     match call_manager::received_busy(
+        &env,
         call_manager as *mut AndroidCallManager,
         call_id,
+        jni_remote,
         remote_device as DeviceId,
     ) {
         Ok(v) => v,

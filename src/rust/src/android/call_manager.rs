@@ -252,6 +252,7 @@ pub fn received_answer(
     env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
+    remote_peer: JObject,
     sender_device_id: DeviceId,
     opaque: JByteArray,
     sender_identity_key: JByteArray,
@@ -259,6 +260,7 @@ pub fn received_answer(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
+    let remote_peer = env.new_global_ref(remote_peer)?;
 
     let opaque = if opaque.is_null() {
         return Err(RingRtcError::OptionValueNotSet(
@@ -273,6 +275,7 @@ pub fn received_answer(
     let sender_identity_key = env.convert_byte_array(sender_identity_key)?;
     let receiver_identity_key = env.convert_byte_array(receiver_identity_key)?;
     call_manager.received_answer(
+        remote_peer,
         call_id,
         signaling::ReceivedAnswer {
             answer: signaling::Answer::new(opaque)?,
@@ -333,11 +336,13 @@ pub fn received_ice(
     env: &mut JNIEnv,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
+    remote_peer: JObject,
     sender_device_id: DeviceId,
     candidates: JObject,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
+    let remote_peer = env.new_global_ref(remote_peer)?;
 
     // Convert Java list of byte[] into Rust Vector of IceCandidate
     let jni_ice_candidates = env.get_list(&candidates)?;
@@ -350,6 +355,7 @@ pub fn received_ice(
     }
 
     call_manager.received_ice(
+        remote_peer,
         call_id,
         signaling::ReceivedIce {
             ice: signaling::Ice {
@@ -362,15 +368,20 @@ pub fn received_ice(
 
 /// Application notification of received Hangup message
 pub fn received_hangup(
+    env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
+    remote_peer: JObject,
     sender_device_id: DeviceId,
     hangup_type: signaling::HangupType,
     hangup_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
+    let remote_peer = env.new_global_ref(remote_peer)?;
+
     call_manager.received_hangup(
+        remote_peer,
         call_id,
         signaling::ReceivedHangup {
             sender_device_id,
@@ -381,13 +392,21 @@ pub fn received_hangup(
 
 /// Application notification of received Busy message
 pub fn received_busy(
+    env: &JNIEnv,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
+    remote_peer: JObject,
     sender_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    call_manager.received_busy(call_id, signaling::ReceivedBusy { sender_device_id })
+    let remote_peer = env.new_global_ref(remote_peer)?;
+
+    call_manager.received_busy(
+        remote_peer,
+        call_id,
+        signaling::ReceivedBusy { sender_device_id },
+    )
 }
 
 /// Application notification of received call message.

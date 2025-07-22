@@ -700,6 +700,7 @@ pub extern "C" fn ringrtcCancelGroupRing(
 pub extern "C" fn ringrtcReceivedAnswer(
     callManager: *mut c_void,
     callId: u64,
+    remotePeer: *const c_void,
     senderDeviceId: u32,
     opaque: AppByteSlice,
     senderIdentityKey: AppByteSlice,
@@ -708,6 +709,7 @@ pub extern "C" fn ringrtcReceivedAnswer(
     match call_manager::received_answer(
         callManager as *mut IosCallManager,
         callId,
+        remotePeer,
         senderDeviceId as DeviceId,
         byte_vec_from_app_slice(&opaque),
         byte_vec_from_app_slice(&senderIdentityKey),
@@ -766,6 +768,7 @@ pub extern "C" fn ringrtcReceivedOffer(
 pub extern "C" fn ringrtcReceivedIceCandidates(
     callManager: *mut c_void,
     callId: u64,
+    remotePeer: *const c_void,
     senderDeviceId: u32,
     appIceCandidateArray: *const AppIceCandidateArray,
 ) -> *mut c_void {
@@ -790,6 +793,7 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
     match call_manager::received_ice(
         callManager as *mut IosCallManager,
         callId,
+        remotePeer,
         signaling::ReceivedIce {
             ice: signaling::Ice {
                 candidates: ice_candidates,
@@ -810,6 +814,7 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
 pub extern "C" fn ringrtcReceivedHangup(
     callManager: *mut c_void,
     callId: u64,
+    remotePeer: *const c_void,
     remoteDevice: u32,
     hangupType: i32,
     deviceId: u32,
@@ -817,6 +822,7 @@ pub extern "C" fn ringrtcReceivedHangup(
     match call_manager::received_hangup(
         callManager as *mut IosCallManager,
         callId,
+        remotePeer,
         remoteDevice as DeviceId,
         signaling::HangupType::from_i32(hangupType).unwrap_or(signaling::HangupType::Normal),
         deviceId as DeviceId,
@@ -834,11 +840,13 @@ pub extern "C" fn ringrtcReceivedHangup(
 pub extern "C" fn ringrtcReceivedBusy(
     callManager: *mut c_void,
     callId: u64,
+    remotePeer: *const c_void,
     remoteDevice: u32,
 ) -> *mut c_void {
     match call_manager::received_busy(
         callManager as *mut IosCallManager,
         callId,
+        remotePeer,
         remoteDevice as DeviceId,
     ) {
         Ok(_v) => {
