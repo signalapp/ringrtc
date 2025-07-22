@@ -37,7 +37,7 @@ JAR_FILES = [
 WEBRTC_SO_LIBS = ['libringrtc_rffi.so']
 SO_LIBS = WEBRTC_SO_LIBS + ['libringrtc.so']
 # Android NDK used in webrtc/src/third_party/android_toolchain/README.chromium
-NDK_REVISION = '27.0.12077973'
+NDK_REVISION = '28.0.13004108'
 
 
 class Project(enum.Flag):
@@ -217,6 +217,8 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             'rtc_libvpx_build_vp9': 'false',
             'rtc_disable_metrics': 'true',
             'rtc_disable_trace_events': 'true',
+            'android_static_analysis': '"off"',
+            'use_siso': 'false',
         }
         if debug_build is True:
             gn_args['is_debug'] = 'true'
