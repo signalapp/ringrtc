@@ -88,6 +88,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     var eventRemoteRingingInvoked = false
     var eventLocalConnectedInvoked = false
     var eventRemoteConnectedInvoked = false
+    var eventEndedLocalHangup = false
     var eventEndedRemoteHangup = false
     var eventEndedRemoteHangupAccepted = false
     var eventEndedRemoteHangupDeclined = false
@@ -232,6 +233,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         case .endedLocalHangup:
             Logger.debug("TestDelegate:endedLocalHangup")
             eventGeneralEnded = true
+            eventEndedLocalHangup = true
 
         case .endedRemoteHangup:
             Logger.debug("TestDelegate:endedRemoteHangup")
@@ -825,7 +827,7 @@ class SignalRingRTCTests: XCTestCase {
         expect(delegate.startOutgoingCallInvoked).toEventually(equal(true))
         delegate.startOutgoingCallInvoked = false
 
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
 
         var callId = delegate.recentCallId
@@ -930,7 +932,7 @@ class SignalRingRTCTests: XCTestCase {
         expect(delegate.startOutgoingCallInvoked).toEventually(equal(true))
         delegate.startOutgoingCallInvoked = false
 
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
 
         let callId = delegate.recentCallId
@@ -991,7 +993,7 @@ class SignalRingRTCTests: XCTestCase {
         expect(delegate.startIncomingCallInvoked).toEventually(equal(true))
         delegate.startIncomingCallInvoked = false
 
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
 
         do {
@@ -1026,7 +1028,7 @@ class SignalRingRTCTests: XCTestCase {
             return
         }
 
-        // Try hanging up, which is essentially a "Decline Call" at this point...
+        // Try hanging up the call...
         do {
             Logger.debug("Test: Invoking hangup()...")
             try callManager?.hangup()
@@ -1034,6 +1036,8 @@ class SignalRingRTCTests: XCTestCase {
             XCTFail("Call Manager hangup() failed: \(error)")
             return
         }
+
+        expect(delegate.eventEndedLocalHangup).toEventually(equal(true))
 
         // Cleanup
         callManager = nil
@@ -1162,7 +1166,7 @@ class SignalRingRTCTests: XCTestCase {
             expect(delegate.startOutgoingCallInvoked).toEventually(equal(true))
             delegate.startOutgoingCallInvoked = false
 
-            let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+            let iceServers: [RTCIceServer] = []
             let useTurnOnly = false
 
             let callId = delegate.recentCallId
@@ -1231,7 +1235,7 @@ class SignalRingRTCTests: XCTestCase {
             expect(delegate.startOutgoingCallInvoked).toEventually(equal(true))
             delegate.startOutgoingCallInvoked = false
 
-            let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+            let iceServers: [RTCIceServer] = []
             let useTurnOnly = false
 
             let callId = delegate.recentCallId
@@ -1287,7 +1291,7 @@ class SignalRingRTCTests: XCTestCase {
         delegate.doAutomaticProceed = true
         let videoCaptureController = VideoCaptureController()
         delegate.videoCaptureController = videoCaptureController
-        delegate.iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        delegate.iceServers = []
         delegate.useTurnOnly = false
         delegate.localDevice = 1
 
@@ -1342,7 +1346,7 @@ class SignalRingRTCTests: XCTestCase {
         delegate.doAutomaticProceed = true
         let videoCaptureController = VideoCaptureController()
         delegate.videoCaptureController = videoCaptureController
-        delegate.iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        delegate.iceServers = []
         delegate.useTurnOnly = false
         delegate.localDevice = 1
 
@@ -1413,7 +1417,7 @@ class SignalRingRTCTests: XCTestCase {
         delegateCallee.canSendICE = true  // A callee is safe to send Ice whenever needed.
 
         // For now, these variables will be common to both Call Managers.
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
         let sourceDevice: UInt32 = 1
 
@@ -1586,7 +1590,7 @@ class SignalRingRTCTests: XCTestCase {
         delegateCaller.startOutgoingCallInvoked = false
 
         // For now, these variables will be common to both Call Managers.
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
 
         let callId = delegateCaller.recentCallId
@@ -1738,7 +1742,7 @@ class SignalRingRTCTests: XCTestCase {
         delegateB.doAutomaticICE = false
 
         // For now, these variables will be common to both Call Managers.
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
         let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
@@ -1937,7 +1941,7 @@ class SignalRingRTCTests: XCTestCase {
         delegateB.doAutomaticICE = true
 
         // For now, these variables will be common to both Call Managers.
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
         let localDevice: UInt32 = 1
         let sourceDevice: UInt32 = 1
@@ -2162,7 +2166,7 @@ class SignalRingRTCTests: XCTestCase {
         delegateCaller.localDevice = callerDevice
 
         // For now, these variables will be common to both Call Managers.
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
 
         // An extra Call Manager for some scenarios (such as busy).
@@ -2582,6 +2586,15 @@ class SignalRingRTCTests: XCTestCase {
                 // hungup, so we won't simulate that now.
             }
 
+            // Cleanup
+            do {
+                try callManagerCaller?.hangup()
+                try callManagerExtra?.hangup()
+            } catch {
+                XCTFail("Hangup() failed when cleaning up: \(error)")
+                return
+            }
+
             delay(interval: 1.0)
 
             Logger.debug("Test: End of test loop...")
@@ -2660,7 +2673,7 @@ class SignalRingRTCTests: XCTestCase {
         let b2Device: UInt32 = 2
 
         // For now, these variables will be common to both Call Managers.
-        let iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        let iceServers: [RTCIceServer] = []
         let useTurnOnly = false
 
         let videoCaptureController = VideoCaptureController()
