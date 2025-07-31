@@ -1234,7 +1234,7 @@ export class RingRTCType {
   // Returns a list of user IDs
   peekGroupCall(
     sfuUrl: string,
-    membershipProof: Buffer,
+    membershipProof: Uint8Array,
     groupMembers: Array<GroupMemberInfo>
   ): Promise<PeekInfo> {
     const [requestId, promise] = this._peekRequests.add();
@@ -2607,7 +2607,7 @@ export class GroupCall {
   }
 
   // Called by UI
-  setMembershipProof(proof: Buffer): void {
+  setMembershipProof(proof: Uint8Array): void {
     this._callManager.setMembershipProof(this._clientId, proof);
   }
 
@@ -3063,7 +3063,7 @@ export interface CallManager {
     clientId: GroupCallClientId,
     members: Array<GroupMemberInfo>
   ): void;
-  setMembershipProof(clientId: GroupCallClientId, proof: Buffer): void;
+  setMembershipProof(clientId: GroupCallClientId, proof: Uint8Array): void;
   // Same as receiveVideoFrame, but with a specific GroupCallClientId and remoteDemuxId.
   receiveGroupCallVideoFrame(
     clientId: GroupCallClientId,
@@ -3116,7 +3116,7 @@ export interface CallManager {
   peekGroupCall(
     requestId: number,
     sfu_url: string,
-    membership_proof: Buffer,
+    membership_proof: Uint8Array,
     group_members: Array<GroupMemberInfo>
   ): void;
   // Response comes back via handlePeekResponse

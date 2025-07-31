@@ -1851,7 +1851,7 @@ fn setMembershipProof(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let proof = cx.argument::<JsValue>(1)?.as_value(&mut cx);
 
-    let proof: std::vec::Vec<u8> = match proof.downcast::<JsBuffer, _>(&mut cx) {
+    let proof: std::vec::Vec<u8> = match proof.downcast::<JsUint8Array, _>(&mut cx) {
         Ok(handle) => handle.as_slice(&cx).to_vec(),
         Err(_) => {
             return Ok(cx.undefined().upcast());
@@ -1872,7 +1872,7 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let sfu_url = cx.argument::<JsString>(1)?.value(&mut cx);
 
-    let membership_proof = cx.argument::<JsBuffer>(2)?;
+    let membership_proof = cx.argument::<JsUint8Array>(2)?;
     let membership_proof = membership_proof.as_slice(&cx).to_vec();
 
     let js_members = cx.argument::<JsArray>(3)?;
