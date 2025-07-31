@@ -577,14 +577,14 @@ fn to_js_peek_info<'a>(
         let js_demux_id = cx.number(device.demux_id);
         js_device.set(cx, "demuxId", js_demux_id)?;
         if let Some(user_id) = &device.user_id {
-            let js_user_id = to_js_buffer(cx, user_id);
+            let js_user_id = JsUint8Array::from_slice(cx, user_id.as_slice())?;
             js_device.set(cx, "userId", js_user_id)?;
         }
         js_devices.set(cx, i as u32, js_device)?;
     }
 
     let js_creator: Handle<JsValue> = match creator {
-        Some(creator) => to_js_buffer(cx, creator).upcast(),
+        Some(creator) => JsUint8Array::from_slice(cx, creator.as_slice())?.upcast(),
         None => cx.undefined().upcast(),
     };
     let era_id: Handle<JsValue> = match era_id {
@@ -604,7 +604,7 @@ fn to_js_peek_info<'a>(
     let pending_users = peek_info.unique_pending_users();
     let js_pending_users = JsArray::new(cx, pending_users.len());
     for (i, user_id) in pending_users.iter().enumerate() {
-        let js_user_id = to_js_buffer(cx, user_id);
+        let js_user_id = JsUint8Array::from_slice(cx, user_id.as_slice())?;
         js_pending_users.set(cx, i as u32, js_user_id)?;
     }
     let js_call_link_state = to_js_call_link_state(cx, peek_info.call_link_state.as_ref())?;
@@ -719,7 +719,7 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn setSelfUuid(mut cx: FunctionContext) -> JsResult<JsValue> {
     debug!("JsCallManager.setSelfUuid()");
 
-    let uuid = cx.argument::<JsBuffer>(0)?;
+    let uuid = cx.argument::<JsUint8Array>(0)?;
     let uuid = uuid.as_slice(&cx).to_vec();
 
     with_call_endpoint(&mut cx, |endpoint| {
@@ -1125,7 +1125,7 @@ fn receivedBusy(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let remote_user_id = cx.argument::<JsBuffer>(0)?;
+    let remote_user_id = cx.argument::<JsUint8Array>(0)?;
     let remote_user_id = remote_user_id.as_slice(&cx).to_vec();
     let remote_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let local_device_id = cx.argument::<JsNumber>(2)?.value(&mut cx) as DeviceId;
@@ -1651,8 +1651,9 @@ fn groupRing(mut cx: FunctionContext) -> JsResult<JsValue> {
     let recipient = match recipient_or_undef.downcast::<JsUndefined, _>(&mut cx) {
         Ok(_) => None,
         Err(_) => {
-            // By checking 'undefined' first, we get an error message that mentions Buffer.
-            let recipient_buffer = recipient_or_undef.downcast_or_throw::<JsBuffer, _>(&mut cx)?;
+            // By checking 'undefined' first, we get an error message that mentions JsUint8Array.
+            let recipient_buffer =
+                recipient_or_undef.downcast_or_throw::<JsUint8Array, _>(&mut cx)?;
             Some(recipient_buffer.as_slice(&cx).to_vec())
         }
     };
@@ -1766,7 +1767,7 @@ fn requestVideo(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn approveUser(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
-    let other_user_id = cx.argument::<JsBuffer>(1)?.as_slice(&cx).to_vec();
+    let other_user_id = cx.argument::<JsUint8Array>(1)?.as_slice(&cx).to_vec();
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.call_manager.approve_user(client_id, other_user_id);
@@ -1779,7 +1780,7 @@ fn approveUser(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn denyUser(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
-    let other_user_id = cx.argument::<JsBuffer>(1)?.as_slice(&cx).to_vec();
+    let other_user_id = cx.argument::<JsUint8Array>(1)?.as_slice(&cx).to_vec();
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.call_manager.deny_user(client_id, other_user_id);
@@ -1828,10 +1829,10 @@ fn setGroupMembers(mut cx: FunctionContext) -> JsResult<JsValue> {
     for i in 0..js_members.len(&mut cx) {
         let js_member = js_members.get::<JsObject, _, _>(&mut cx, i)?;
         let user_id = js_member
-            .get_opt::<JsBuffer, _, _>(&mut cx, "userId")?
+            .get_opt::<JsUint8Array, _, _>(&mut cx, "userId")?
             .map(|handle| handle.as_slice(&cx).to_vec());
         let member_id = js_member
-            .get_opt::<JsBuffer, _, _>(&mut cx, "userIdCipherText")?
+            .get_opt::<JsUint8Array, _, _>(&mut cx, "userIdCipherText")?
             .map(|handle| handle.as_slice(&cx).to_vec());
 
         match (user_id, member_id) {
@@ -1886,11 +1887,11 @@ fn peekGroupCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     for i in 0..js_members.len(&mut cx) {
         let js_member = js_members.get::<JsObject, _, _>(&mut cx, i)?;
         let user_id = js_member
-            .get_opt::<JsBuffer, _, _>(&mut cx, "userId")?
+            .get_opt::<JsUint8Array, _, _>(&mut cx, "userId")?
             .map(|handle| handle.as_slice(&cx).to_vec());
 
         let member_id = js_member
-            .get_opt::<JsBuffer, _, _>(&mut cx, "userIdCipherText")?
+            .get_opt::<JsUint8Array, _, _>(&mut cx, "userIdCipherText")?
             .map(|handle| handle.as_slice(&cx).to_vec());
 
         match (user_id, member_id) {
@@ -2550,7 +2551,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 urgency,
             } => {
                 let method_name = "sendCallMessage";
-                let recipient_id = to_js_buffer(&mut cx, &recipient_id);
+                let recipient_id =
+                    JsUint8Array::from_slice(&mut cx, recipient_id.as_slice())?.upcast();
                 let message = to_js_buffer(&mut cx, &message);
                 let urgency = cx.number(urgency as i32).upcast();
                 let args = [recipient_id, message, urgency];
@@ -2570,7 +2572,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let urgency = cx.number(urgency as i32).upcast();
                 let js_recipients = JsArray::new(&mut cx, recipients_override.len());
                 for (i, recipient_id) in recipients_override.iter().enumerate() {
-                    let js_recipient_id = to_js_buffer(&mut cx, recipient_id);
+                    let js_recipient_id =
+                        JsUint8Array::from_slice(&mut cx, recipient_id.as_slice())?;
                     js_recipients.set(&mut cx, i as u32, js_recipient_id)?;
                 }
                 let args = [group_id, message, urgency, js_recipients.upcast()];
@@ -2706,7 +2709,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let js_remote_device_states = JsArray::new(&mut cx, remote_device_states.len());
                 for (i, remote_device_state) in remote_device_states.iter().enumerate() {
                     let demux_id = cx.number(remote_device_state.demux_id);
-                    let user_id = to_js_buffer(&mut cx, &remote_device_state.user_id);
+                    let user_id =
+                        JsUint8Array::from_slice(&mut cx, remote_device_state.user_id.as_slice())?;
                     let media_keys_received = cx.boolean(remote_device_state.media_keys_received);
                     let audio_muted: neon::handle::Handle<JsValue> =
                         match remote_device_state.heartbeat_state.audio_muted {
@@ -2837,7 +2841,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let args = [
                     JsUint8Array::from_slice(&mut cx, group_id.as_slice())?.upcast(),
                     JsBigInt::from_i64(&mut cx, ring_id.into()).upcast(),
-                    to_js_buffer(&mut cx, &sender_id).upcast(),
+                    JsUint8Array::from_slice(&mut cx, sender_id.as_slice())?.upcast(),
                     cx.number(update as i32).upcast(),
                 ];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;

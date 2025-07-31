@@ -207,7 +207,7 @@ describe('RingRTC', () => {
 
     RingRTC.handleCallingMessage(offerCallingMessage, {
       remoteUserId: user2_id,
-      remoteUuid: Buffer.from(uuidToBytes(user2_id)),
+      remoteUuid: uuidToBytes(user2_id),
       remoteDeviceId: user2_device_id,
       localDeviceId: user1_device_id,
       ageSec: 1,
@@ -306,7 +306,7 @@ describe('RingRTC', () => {
     // Initiate an incoming call
     RingRTC.handleCallingMessage(offerCallingMessage, {
       remoteUserId: user2_id,
-      remoteUuid: Buffer.from(uuidToBytes(user2_id)),
+      remoteUuid: uuidToBytes(user2_id),
       remoteDeviceId: user2_device_id,
       localDeviceId: user1_device_id,
       ageSec: 1,
@@ -382,16 +382,16 @@ describe('RingRTC', () => {
       Buffer.of(1, 2, 3),
       [
         new GroupMemberInfo(
-          Buffer.of(0x11, 0x11, 0x11, 0x11),
-          Buffer.from('11', 'utf-8')
+          new Uint8Array([0x11, 0x11, 0x11, 0x11]),
+          new Uint8Array(Buffer.from('11', 'utf-8'))
         ),
         new GroupMemberInfo(
-          Buffer.of(0x22, 0x22, 0x22, 0x22),
-          Buffer.from('22', 'utf-8')
+          new Uint8Array([0x22, 0x22, 0x22, 0x22]),
+          new Uint8Array(Buffer.from('22', 'utf-8'))
         ),
         new GroupMemberInfo(
-          Buffer.of(0x33, 0x33, 0x33, 0x33),
-          Buffer.from('33', 'utf-8')
+          new Uint8Array([0x33, 0x33, 0x33, 0x33]),
+          new Uint8Array(Buffer.from('33', 'utf-8'))
         ),
       ]
     );
@@ -424,53 +424,25 @@ describe('RingRTC', () => {
     assert.equal(peekInfo.deviceCountIncludingPendingDevices, 7);
     assert.equal(peekInfo.deviceCountExcludingPendingDevices, 3);
     assert.equal(peekInfo.maxDevices, 20);
-    assert.isTrue(peekInfo.creator?.equals(Buffer.of(0x11, 0x11, 0x11, 0x11)));
+    assert.deepEqual(
+      peekInfo.creator,
+      new Uint8Array([0x11, 0x11, 0x11, 0x11])
+    );
     assert.deepEqual(peekInfo.devices, [
-      { demuxId: 32 * 1, userId: Buffer.of(0x11, 0x11, 0x11, 0x11) },
-      { demuxId: 32 * 2, userId: Buffer.of(0x22, 0x22, 0x22, 0x22) },
+      { demuxId: 32 * 1, userId: new Uint8Array([0x11, 0x11, 0x11, 0x11]) },
+      { demuxId: 32 * 2, userId: new Uint8Array([0x22, 0x22, 0x22, 0x22]) },
       { demuxId: 32 * 3 },
     ]);
     assert.deepEqual(peekInfo.pendingUsers, [
-      Buffer.of(0x33, 0x33, 0x33, 0x33),
+      new Uint8Array([0x33, 0x33, 0x33, 0x33]),
     ]);
   });
 
   describe('CallLinkRootKey', () => {
-    const EXAMPLE_PUBLIC_ENDORSEMENT_KEY = Buffer.of(
-      0,
-      86,
-      35,
-      236,
-      48,
-      147,
-      33,
-      66,
-      168,
-      208,
-      215,
-      207,
-      250,
-      177,
-      151,
-      88,
-      0,
-      158,
-      219,
-      130,
-      38,
-      212,
-      159,
-      171,
-      211,
-      130,
-      220,
-      217,
-      29,
-      133,
-      9,
-      96,
-      97
-    );
+    const EXAMPLE_PUBLIC_ENDORSEMENT_KEY = new Uint8Array([
+      0, 86, 35, 236, 48, 147, 33, 66, 168, 208, 215, 207, 250, 177, 151, 88, 0,
+      158, 219, 130, 38, 212, 159, 171, 211, 130, 220, 217, 29, 133, 9, 96, 97,
+    ]);
     const EXAMPLE_CALL_LINK_ROOT_KEY = CallLinkRootKey.parse(
       'bcdf-ghkm-npqr-stxz-bcdf-ghkm-npqr-stxz'
     );

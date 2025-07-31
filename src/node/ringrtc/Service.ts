@@ -168,7 +168,7 @@ class NativeCallManager {
   Native.cm_setRtcStatsInterval;
 
 type GroupId = Uint8Array;
-type GroupCallUserId = Buffer;
+type GroupCallUserId = Uint8Array;
 
 export interface PeekDeviceInfo {
   demuxId: number;
@@ -420,7 +420,7 @@ export class RingRTCType {
 
   handleSendCallMessage:
     | ((
-        recipientUuid: Buffer,
+        recipientUuid: Uint8Array,
         message: Buffer,
         urgency: CallMessageUrgency
       ) => void)
@@ -431,7 +431,7 @@ export class RingRTCType {
         groupId: GroupId,
         message: Buffer,
         urgency: CallMessageUrgency,
-        overrideRecipients: Array<Buffer>
+        overrideRecipients: Array<Uint8Array>
       ) => void)
     | null = null;
 
@@ -439,7 +439,7 @@ export class RingRTCType {
     | ((
         groupId: GroupId,
         ringId: bigint,
-        sender: Buffer,
+        sender: GroupCallUserId,
         update: RingUpdate
       ) => void)
     | null = null;
@@ -461,7 +461,7 @@ export class RingRTCType {
   }
 
   // Called by UX
-  setSelfUuid(uuid: Buffer): void {
+  setSelfUuid(uuid: Uint8Array): void {
     this.callManager.setSelfUuid(uuid);
   }
 
@@ -1614,7 +1614,7 @@ export class RingRTCType {
     message: CallingMessage,
     options: {
       remoteUserId: UserId;
-      remoteUuid?: Buffer;
+      remoteUuid?: Uint8Array;
       remoteDeviceId: DeviceId;
       localDeviceId: DeviceId;
       ageSec: number;
@@ -1787,7 +1787,7 @@ export class RingRTCType {
 
   // Called by Rust
   sendCallMessage(
-    recipientUuid: Buffer,
+    recipientUuid: Uint8Array,
     message: Buffer,
     urgency: CallMessageUrgency
   ): void {
@@ -1803,7 +1803,7 @@ export class RingRTCType {
     groupId: GroupId,
     message: Buffer,
     urgency: CallMessageUrgency,
-    overrideRecipients: Array<Buffer>
+    overrideRecipients: Array<Uint8Array>
   ): void {
     if (this.handleSendCallMessageToGroup) {
       this.handleSendCallMessageToGroup(
@@ -2330,7 +2330,7 @@ export class LocalDeviceState {
 // All remote devices in a group call and their associated state.
 export class RemoteDeviceState {
   demuxId: number; // UInt32
-  userId: Buffer;
+  userId: Uint8Array;
   mediaKeysReceived: boolean;
   audioMuted: boolean | undefined;
   videoMuted: boolean | undefined;
@@ -2345,7 +2345,7 @@ export class RemoteDeviceState {
 
   constructor(
     demuxId: number,
-    userId: Buffer,
+    userId: Uint8Array,
     addedTime: string,
     speakerTime: string,
     mediaKeysReceived: boolean
@@ -2362,10 +2362,10 @@ export class RemoteDeviceState {
 
 // Used to communicate the group membership to RingRTC for a group call.
 export class GroupMemberInfo {
-  userId: Buffer;
-  userIdCipherText: Buffer;
+  userId: Uint8Array;
+  userIdCipherText: Uint8Array;
 
-  constructor(userId: Buffer, userIdCipherText: Buffer) {
+  constructor(userId: Uint8Array, userIdCipherText: Uint8Array) {
     this.userId = userId;
     this.userIdCipherText = userIdCipherText;
   }
@@ -2578,12 +2578,12 @@ export class GroupCall {
   }
 
   // Called by UI
-  approveUser(otherUserId: Buffer): void {
+  approveUser(otherUserId: Uint8Array): void {
     this._callManager.approveUser(this._clientId, otherUserId);
   }
 
   // Called by UI
-  denyUser(otherUserId: Buffer): void {
+  denyUser(otherUserId: Uint8Array): void {
     this._callManager.denyUser(this._clientId, otherUserId);
   }
 
@@ -2913,7 +2913,7 @@ export enum RingCancelReason {
 
 export interface CallManager {
   setConfig(config: Config): void;
-  setSelfUuid(uuid: Buffer): void;
+  setSelfUuid(uuid: Uint8Array): void;
   createOutgoingCall(
     remoteUserId: UserId,
     isVideoCall: boolean,
@@ -2989,7 +2989,7 @@ export interface CallManager {
     callId: CallId
   ): void;
   receivedCallMessage(
-    remoteUserId: Buffer,
+    remoteUserId: Uint8Array,
     remoteDeviceId: DeviceId,
     localDeviceId: DeviceId,
     data: Uint8Array,
@@ -3034,7 +3034,10 @@ export interface CallManager {
     clientId: GroupCallClientId,
     isScreenShare: boolean
   ): void;
-  groupRing(clientId: GroupCallClientId, recipient: Buffer | undefined): void;
+  groupRing(
+    clientId: GroupCallClientId,
+    recipient: Uint8Array | undefined
+  ): void;
   groupReact(clientId: GroupCallClientId, value: string): void;
   groupRaiseHand(clientId: GroupCallClientId, raise: boolean): void;
   resendMediaKeys(clientId: GroupCallClientId): void;
@@ -3044,8 +3047,8 @@ export interface CallManager {
     resolutions: Array<VideoRequest>,
     activeSpeakerHeight: number
   ): void;
-  approveUser(clientId: GroupCallClientId, otherUserId: Buffer): void;
-  denyUser(clientId: GroupCallClientId, otherUserId: Buffer): void;
+  approveUser(clientId: GroupCallClientId, otherUserId: Uint8Array): void;
+  denyUser(clientId: GroupCallClientId, otherUserId: Uint8Array): void;
   removeClient(clientId: GroupCallClientId, otherClientDemuxId: number): void;
   blockClient(clientId: GroupCallClientId, otherClientDemuxId: number): void;
   setGroupMembers(
@@ -3177,7 +3180,7 @@ export interface CallManagerCallbacks {
     broadcast: boolean
   ): void;
   sendCallMessage(
-    recipientUuid: Buffer,
+    recipientUuid: Uint8Array,
     message: Buffer,
     urgency: CallMessageUrgency
   ): void;
@@ -3185,7 +3188,7 @@ export interface CallManagerCallbacks {
     groupId: GroupId,
     message: Buffer,
     urgency: CallMessageUrgency,
-    overrideRecipients: Array<Buffer>
+    overrideRecipients: Array<Uint8Array>
   ): void;
   sendHttpRequest(
     requestId: number,

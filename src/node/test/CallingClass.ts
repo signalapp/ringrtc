@@ -173,7 +173,7 @@ export class CallingClass {
   private handleGroupCallRingUpdate(
     groupIdBytes: Uint8Array,
     ringId: bigint,
-    ringerBytes: Buffer,
+    ringerBytes: Uint8Array,
     update: RingUpdate
   ): void {
     log('handleGroupCallRingUpdate');
