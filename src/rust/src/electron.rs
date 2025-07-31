@@ -551,13 +551,6 @@ fn create_id_arg<'a>(cx: &mut FunctionContext<'a>, id: u64) -> Handle<'a, JsValu
     obj.upcast()
 }
 
-fn to_js_buffer<'a>(cx: &mut FunctionContext<'a>, data: &[u8]) -> Handle<'a, JsValue> {
-    let mut js_buffer = cx.buffer(data.len()).expect("create Buffer");
-    js_buffer.as_mut_slice(cx).copy_from_slice(data.as_ref());
-
-    js_buffer.upcast()
-}
-
 fn to_js_peek_info<'a>(
     cx: &mut FunctionContext<'a>,
     peek_info: PeekInfo,
@@ -1151,7 +1144,7 @@ fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn receivedHttpResponse(mut cx: FunctionContext) -> JsResult<JsValue> {
     let request_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let status_code = cx.argument::<JsNumber>(1)?.value(&mut cx) as u16;
-    let body = cx.argument::<JsBuffer>(2)?;
+    let body = cx.argument::<JsUint8Array>(2)?;
     let body = body.as_slice(&cx).to_vec();
     let response = http::Response {
         status: status_code.into(),
@@ -2528,11 +2521,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let http_method = method as i32;
                 let body = match body {
                     None => cx.undefined().upcast(),
-                    Some(body) => {
-                        let mut js_body = cx.buffer(body.len())?;
-                        js_body.as_mut_slice(&mut cx).copy_from_slice(&body);
-                        js_body.upcast()
-                    }
+                    Some(body) => JsUint8Array::from_slice(&mut cx, body.as_slice())?.upcast(),
                 };
                 let args = [
                     cx.number(request_id).upcast(),
@@ -2553,7 +2542,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let method_name = "sendCallMessage";
                 let recipient_id =
                     JsUint8Array::from_slice(&mut cx, recipient_id.as_slice())?.upcast();
-                let message = to_js_buffer(&mut cx, &message);
+                let message = JsUint8Array::from_slice(&mut cx, message.as_slice())?.upcast();
                 let urgency = cx.number(urgency as i32).upcast();
                 let args = [recipient_id, message, urgency];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
@@ -2568,7 +2557,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             } => {
                 let method_name = "sendCallMessageToGroup";
                 let group_id = JsUint8Array::from_slice(&mut cx, group_id.as_slice())?.upcast();
-                let message = to_js_buffer(&mut cx, &message);
+                let message = JsUint8Array::from_slice(&mut cx, message.as_slice())?.upcast();
                 let urgency = cx.number(urgency as i32).upcast();
                 let js_recipients = JsArray::new(&mut cx, recipients_override.len());
                 for (i, recipient_id) in recipients_override.iter().enumerate() {

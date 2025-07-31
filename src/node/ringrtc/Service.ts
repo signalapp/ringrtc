@@ -414,14 +414,14 @@ export class RingRTCType {
         url: string,
         method: HttpMethod,
         headers: { [name: string]: string },
-        body: Buffer | undefined
+        body: Uint8Array | undefined
       ) => void)
     | null = null;
 
   handleSendCallMessage:
     | ((
         recipientUuid: Uint8Array,
-        message: Buffer,
+        message: Uint8Array,
         urgency: CallMessageUrgency
       ) => void)
     | null = null;
@@ -429,7 +429,7 @@ export class RingRTCType {
   handleSendCallMessageToGroup:
     | ((
         groupId: GroupId,
-        message: Buffer,
+        message: Uint8Array,
         urgency: CallMessageUrgency,
         overrideRecipients: Array<Uint8Array>
       ) => void)
@@ -1132,7 +1132,11 @@ export class RingRTCType {
 
   // HTTP callbacks
 
-  receivedHttpResponse(requestId: number, status: number, body: Buffer): void {
+  receivedHttpResponse(
+    requestId: number,
+    status: number,
+    body: Uint8Array
+  ): void {
     sillyDeadlockProtection(() => {
       try {
         this.callManager.receivedHttpResponse(requestId, status, body);
@@ -1776,7 +1780,7 @@ export class RingRTCType {
     url: string,
     method: HttpMethod,
     headers: { [name: string]: string },
-    body: Buffer | undefined
+    body: Uint8Array | undefined
   ): void {
     if (this.handleSendHttpRequest) {
       this.handleSendHttpRequest(requestId, url, method, headers, body);
@@ -1788,7 +1792,7 @@ export class RingRTCType {
   // Called by Rust
   sendCallMessage(
     recipientUuid: Uint8Array,
-    message: Buffer,
+    message: Uint8Array,
     urgency: CallMessageUrgency
   ): void {
     if (this.handleSendCallMessage) {
@@ -1801,7 +1805,7 @@ export class RingRTCType {
   // Called by Rust
   sendCallMessageToGroup(
     groupId: GroupId,
-    message: Buffer,
+    message: Uint8Array,
     urgency: CallMessageUrgency,
     overrideRecipients: Array<Uint8Array>
   ): void {
@@ -2996,7 +3000,11 @@ export interface CallManager {
     messageAgeSec: number
   ): void;
 
-  receivedHttpResponse(requestId: number, status: number, body: Buffer): void;
+  receivedHttpResponse(
+    requestId: number,
+    status: number,
+    body: Uint8Array
+  ): void;
   httpRequestFailed(requestId: number, debugInfo: string | undefined): void;
 
   // Group Calls
@@ -3181,12 +3189,12 @@ export interface CallManagerCallbacks {
   ): void;
   sendCallMessage(
     recipientUuid: Uint8Array,
-    message: Buffer,
+    message: Uint8Array,
     urgency: CallMessageUrgency
   ): void;
   sendCallMessageToGroup(
     groupId: GroupId,
-    message: Buffer,
+    message: Uint8Array,
     urgency: CallMessageUrgency,
     overrideRecipients: Array<Uint8Array>
   ): void;
@@ -3195,7 +3203,7 @@ export interface CallManagerCallbacks {
     url: string,
     method: HttpMethod,
     headers: { [name: string]: string },
-    body: Buffer | undefined
+    body: Uint8Array | undefined
   ): void;
 
   // Group Calls
