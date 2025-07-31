@@ -40,9 +40,11 @@ use(sinonChai);
 
 function generateOfferCallingMessage(callId: Long): CallingMessage {
   // Audio-only hex based SDP generated from a direct client call
-  const audioOnlySdp = Buffer.from(
-    '22560a204b18bc751315cb718c643db7b3a65aaabe826c7094932afaf5aebc86d36bb6491204484b6b481a18524b3041496f63334245514e5670424b57786f38787051712204082e1034220408281034220208082880897a',
-    'hex'
+  const audioOnlySdp = new Uint8Array(
+    Buffer.from(
+      '22560a204b18bc751315cb718c643db7b3a65aaabe826c7094932afaf5aebc86d36bb6491204484b6b481a18524b3041496f63334245514e5670424b57786f38787051712204082e1034220408281034220208082880897a',
+      'hex'
+    )
   );
   return {
     offer: {
@@ -77,7 +79,7 @@ describe('RingRTC', () => {
       offer: {
         callId: { high: 0, low: 123, unsigned: true },
         type: OfferType.AudioCall,
-        opaque: Buffer.from([]),
+        opaque: new Uint8Array(),
       },
     };
     const age = 60 * 60;
@@ -119,7 +121,7 @@ describe('RingRTC', () => {
       offer: {
         callId: { high: 0, low: 123, unsigned: true },
         type: OfferType.AudioCall,
-        opaque: Buffer.from([]),
+        opaque: new Uint8Array(),
       },
     };
     try {

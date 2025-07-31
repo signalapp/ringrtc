@@ -794,7 +794,7 @@ export class RingRTCType {
     callId: CallId,
     broadcast: boolean,
     offerType: OfferType,
-    opaque: Buffer
+    opaque: Uint8Array
   ): void {
     const message = new CallingMessage();
     message.offer = new OfferMessage(callId, offerType, opaque);
@@ -813,7 +813,7 @@ export class RingRTCType {
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    opaque: Buffer
+    opaque: Uint8Array
   ): void {
     const message = new CallingMessage();
     message.answer = new AnswerMessage(callId, opaque);
@@ -832,7 +832,7 @@ export class RingRTCType {
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    candidates: Array<Buffer>
+    candidates: Array<Uint8Array>
   ): void {
     const message = new CallingMessage();
     message.iceCandidates = [];
@@ -1634,7 +1634,7 @@ export class RingRTCType {
 
     if (message.offer?.callId) {
       const callId = message.offer.callId;
-      const opaque = toBuffer(message.offer.opaque);
+      const opaque = toUint8Array(message.offer.opaque);
 
       // opaque is required. sdp is obsolete, but it might still come with opaque.
       if (!opaque) {
@@ -1669,7 +1669,7 @@ export class RingRTCType {
     }
     if (message.answer?.callId) {
       const callId = message.answer.callId;
-      const opaque = toBuffer(message.answer.opaque);
+      const opaque = toUint8Array(message.answer.opaque);
 
       // opaque is required. sdp is obsolete, but it might still come with opaque.
       if (!opaque) {
@@ -1693,9 +1693,9 @@ export class RingRTCType {
       // We assume they all have the same .callId
       const callId = message.iceCandidates[0].callId;
       // We have to copy them to do the .toArrayBuffer() thing.
-      const candidates: Array<Buffer> = [];
+      const candidates: Array<Uint8Array> = [];
       for (const candidate of message.iceCandidates) {
-        const copy = toBuffer(candidate.opaque);
+        const copy = toUint8Array(candidate.opaque);
         if (copy) {
           candidates.push(copy);
         } else {
@@ -1753,7 +1753,7 @@ export class RingRTCType {
         );
         return;
       }
-      const data = toBuffer(message.opaque.data);
+      const data = toUint8Array(message.opaque.data);
       if (data == undefined) {
         this.logError(
           'handleCallingMessage(): opaque message received without data!'
@@ -2790,18 +2790,20 @@ class GroupCallVideoFrameSource {
   }
 }
 
-// When sending, we just set an Buffer.
+// When sending, we just set a Uint8Array.
 // When receiving, we call .toArrayBuffer().
-type ProtobufBuffer = Buffer | { toArrayBuffer: () => ArrayBuffer };
+type ProtobufBuffer = Uint8Array | { toArrayBuffer: () => ArrayBuffer };
 
-function toBuffer(pbab: ProtobufBuffer | undefined): Buffer | undefined {
+function toUint8Array(
+  pbab: ProtobufBuffer | undefined
+): Uint8Array | undefined {
   if (!pbab) {
     return pbab;
   }
-  if (pbab instanceof Buffer) {
+  if (pbab instanceof Uint8Array) {
     return pbab;
   }
-  return Buffer.from(pbab.toArrayBuffer());
+  return new Uint8Array(pbab.toArrayBuffer());
 }
 
 export type UserId = string;
@@ -2956,7 +2958,7 @@ export interface CallManager {
     messageAgeSec: number,
     callId: CallId,
     offerType: OfferType,
-    opaque: Buffer,
+    opaque: Uint8Array,
     senderIdentityKey: Uint8Array,
     receiverIdentityKey: Uint8Array
   ): void;
@@ -2964,7 +2966,7 @@ export interface CallManager {
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
-    opaque: Buffer,
+    opaque: Uint8Array,
     senderIdentityKey: Uint8Array,
     receiverIdentityKey: Uint8Array
   ): void;
@@ -2972,7 +2974,7 @@ export interface CallManager {
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
-    candidates: Array<Buffer>
+    candidates: Array<Uint8Array>
   ): void;
   receivedHangup(
     remoteUserId: UserId,
@@ -2990,7 +2992,7 @@ export interface CallManager {
     remoteUserId: Buffer,
     remoteDeviceId: DeviceId,
     localDeviceId: DeviceId,
-    data: Buffer,
+    data: Uint8Array,
     messageAgeSec: number
   ): void;
 
@@ -3144,21 +3146,21 @@ export interface CallManagerCallbacks {
     callId: CallId,
     broadcast: boolean,
     mediaType: number,
-    opaque: Buffer
+    opaque: Uint8Array
   ): void;
   onSendAnswer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    opaque: Buffer
+    opaque: Uint8Array
   ): void;
   onSendIceCandidates(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,
     callId: CallId,
     broadcast: boolean,
-    candidates: Array<Buffer>
+    candidates: Array<Uint8Array>
   ): void;
   onSendHangup(
     remoteUserId: UserId,

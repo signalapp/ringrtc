@@ -956,7 +956,7 @@ fn receivedOffer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let age_sec = cx.argument::<JsNumber>(3)?.value(&mut cx) as u64;
     let call_id = CallId::new(get_id_arg(&mut cx, 4));
     let offer_type = cx.argument::<JsNumber>(5)?.value(&mut cx) as i32;
-    let opaque = cx.argument::<JsBuffer>(6)?;
+    let opaque = cx.argument::<JsUint8Array>(6)?;
     let sender_identity_key = cx.argument::<JsUint8Array>(7)?;
     let receiver_identity_key = cx.argument::<JsUint8Array>(8)?;
 
@@ -995,7 +995,7 @@ fn receivedAnswer(mut cx: FunctionContext) -> JsResult<JsValue> {
     let peer_id = cx.argument::<JsString>(0)?.value(&mut cx) as PeerId;
     let sender_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let call_id = CallId::new(get_id_arg(&mut cx, 2));
-    let opaque = cx.argument::<JsBuffer>(3)?;
+    let opaque = cx.argument::<JsUint8Array>(3)?;
     let sender_identity_key = cx.argument::<JsUint8Array>(4)?;
     let receiver_identity_key = cx.argument::<JsUint8Array>(5)?;
 
@@ -1030,7 +1030,7 @@ fn receivedIceCandidates(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     let mut candidates = Vec::with_capacity(js_candidates.len(&mut cx) as usize);
     for i in 0..js_candidates.len(&mut cx) {
-        let js_candidate = js_candidates.get::<JsBuffer, _, _>(&mut cx, i)?;
+        let js_candidate = js_candidates.get::<JsUint8Array, _, _>(&mut cx, i)?;
         let opaque = js_candidate.as_slice(&cx).to_vec();
         candidates.push(signaling::IceCandidate::new(opaque));
     }
@@ -1129,7 +1129,7 @@ fn receivedCallMessage(mut cx: FunctionContext) -> JsResult<JsValue> {
     let remote_user_id = remote_user_id.as_slice(&cx).to_vec();
     let remote_device_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DeviceId;
     let local_device_id = cx.argument::<JsNumber>(2)?.value(&mut cx) as DeviceId;
-    let data = cx.argument::<JsBuffer>(3)?;
+    let data = cx.argument::<JsUint8Array>(3)?;
     let data = data.as_slice(&cx).to_vec();
     let message_age_sec = cx.argument::<JsNumber>(4)?.value(&mut cx) as u64;
 
@@ -2284,8 +2284,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     Handle<JsValue>,
                 ) = match signal {
                     signaling::Message::Offer(offer) => {
-                        let mut opaque = cx.buffer(offer.opaque.len())?;
-                        opaque.as_mut_slice(&mut cx).copy_from_slice(&offer.opaque);
+                        let opaque = JsUint8Array::from_slice(&mut cx, offer.opaque.as_slice())?;
 
                         (
                             "onSendOffer",
@@ -2295,8 +2294,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         )
                     }
                     signaling::Message::Answer(answer) => {
-                        let mut opaque = cx.buffer(answer.opaque.len())?;
-                        opaque.as_mut_slice(&mut cx).copy_from_slice(&answer.opaque);
+                        let opaque = JsUint8Array::from_slice(&mut cx, answer.opaque.as_slice())?;
 
                         (
                             "onSendAnswer",
@@ -2309,10 +2307,8 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                         let js_candidates = JsArray::new(&mut cx, ice.candidates.len());
                         for (i, candidate) in ice.candidates.iter().enumerate() {
                             let opaque: neon::handle::Handle<JsValue> = {
-                                let mut js_opaque = cx.buffer(candidate.opaque.len())?;
-                                js_opaque
-                                    .as_mut_slice(&mut cx)
-                                    .copy_from_slice(candidate.opaque.as_ref());
+                                let js_opaque =
+                                    JsUint8Array::from_slice(&mut cx, candidate.opaque.as_slice())?;
                                 js_opaque.upcast()
                             };
 
