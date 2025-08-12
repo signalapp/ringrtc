@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import os
 import platform
+import ssl
 import sys
 import tarfile
 import urllib.request
@@ -135,8 +136,16 @@ def download_if_needed(archive_file: str, url: str, checksum: str, archive_dir: 
             f_download.close()
             os.replace(download_path, archive_path)
             return open(archive_path, 'rb')
-    except urllib.error.HTTPError as e:
-        print(e, e.filename, file=sys.stderr)
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        if isinstance(e.reason, ssl.SSLCertVerificationError):
+            # See:
+            #
+            # - https://stackoverflow.com/questions/27835619/urllib-and-ssl-certificate-verify-failed-error
+            # - https://stackoverflow.com/a/77491061
+            print("Failed to verify SSL certificate. Do you need to `pip install pip-system-certs`?", file=sys.stderr)
+        else:
+            print(e, e.filename, file=sys.stderr)
+
         sys.exit(1)
 
 
