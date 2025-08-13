@@ -12,8 +12,11 @@
     "dist/acknowledgments.md",
     "scripts/fetch-prebuild.js"
   ],
+  "bin": {
+    "virtual_audio": "dist/bin/virtual_audio.sh"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && bash scripts/build-help.sh",
     "clean": "rimraf dist",
     "test": "electron-mocha --renderer --recursive dist/test --timeout 10000 --require source-map-support/register",
     "eslint": "eslint .",
