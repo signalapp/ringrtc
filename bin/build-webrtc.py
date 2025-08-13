@@ -172,8 +172,7 @@ Sim targets     : {}
         # Get grealpath
         run_cmd(args.dry_run, ['brew', 'install', 'coreutils'])
 
-        # Set up Xcode (https://github.com/XcodesOrg/xcodes)
-        run_cmd(args.dry_run, ['brew', 'install', 'xcodesorg/made/xcodes'])
+        # Assume xcode is already installed
         run_cmd(args.dry_run, ['sudo', 'xcodes', 'select', '15.3'])
 
         # Accept the license
