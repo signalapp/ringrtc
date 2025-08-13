@@ -218,7 +218,7 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             'rtc_disable_metrics': 'true',
             'rtc_disable_trace_events': 'true',
             'android_static_analysis': '"off"',
-            'use_siso': 'false',
+            'use_siso': 'true',
         }
         if debug_build is True:
             gn_args['is_debug'] = 'true'
@@ -227,11 +227,26 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
         gn_args_string = '--args=' + ' '.join(
             [k + '=' + v for k, v in gn_args.items()] + extra_gn_args)
 
-        gn_total_args = ['gn', 'gen', output_dir, gn_args_string] + extra_gn_flags
+        webrtc_output_dir = GetArchBuildDir(os.path.join(webrtc_src_dir, 'out'), arch, debug_build)
+        gn_total_args = ['gn', 'gen', webrtc_output_dir, gn_args_string] + extra_gn_flags
         RunCmd(dry_run, gn_total_args, cwd=webrtc_src_dir)
 
-        ninja_args = ['ninja', '-C', output_dir] + NINJA_TARGETS + ['-j', jobs] + extra_ninja_flags
+        ninja_args = ['third_party/siso/cipd/siso', 'ninja', '-C', webrtc_output_dir] + NINJA_TARGETS + extra_ninja_flags
         RunCmd(dry_run, ninja_args, cwd=webrtc_src_dir)
+
+        # for each arch we need:
+        # * JAR_FILES (which will be in a nested subdirectory,
+        #     and should stay that way!)
+        # * WEBRTC_SO_LIBS
+        shutil.copytree(webrtc_output_dir, output_dir, dirs_exist_ok=True)
+        for jar in JAR_FILES:
+            d = os.path.basename(jar)
+            os.makedirs(d, exist_ok=True)
+            shutil.copyfile(os.path.join(webrtc_output_dir, jar),
+                            os.path.join(output_dir, jar))
+        for so in WEBRTC_SO_LIBS:
+            shutil.copyfile(os.path.join(webrtc_output_dir, so),
+                            os.path.join(output_dir, so))
 
     if Project.RINGRTC in build_projects:
         ndk_dir = os.environ['ANDROID_NDK_HOME']

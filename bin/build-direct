@@ -101,9 +101,18 @@ export MACOSX_DEPLOYMENT_TARGET="10.15"
 
     (
         cd src/webrtc/src
-        gn gen -C "${OUTPUT_DIR}/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
-        ninja -C "${OUTPUT_DIR}/${BUILD_TYPE}" webrtc
+        gn gen -C "out/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
+        third_party/siso/cipd/siso ninja -C "out/${BUILD_TYPE}" webrtc
     )
+
+    mkdir -p "${OUTPUT_DIR}/${BUILD_TYPE}/obj"
+    WEBRTC_OUT_PATH="src/webrtc/src/out"
+
+    STATIC_LIB_PATH="${BUILD_TYPE}"/obj/webrtc.lib
+    if [ ! -e "${WEBRTC_OUT_PATH}/${STATIC_LIB_PATH}" ]; then
+      STATIC_LIB_PATH="${BUILD_TYPE}"/obj/libwebrtc.a
+    fi
+    cp -f "${WEBRTC_OUT_PATH}/${STATIC_LIB_PATH}" "${OUTPUT_DIR}/${BUILD_TYPE}/obj"
 )
 
 # Build and link the final RingRTC library.

@@ -127,7 +127,7 @@ if [ "${BUILD_WHAT}" = "all" ] || [ "${BUILD_WHAT}" = "webrtc" ]
 then
     echo "Building WebRTC for ${GN_ARCH}"
 
-    WEBRTC_ARGS="target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_disable_metrics=true rtc_disable_trace_events=true"
+    WEBRTC_ARGS="target_cpu=\"${GN_ARCH}\" rtc_build_examples=false rtc_build_tools=false rtc_use_x11=false rtc_enable_sctp=false rtc_libvpx_build_vp9=true rtc_disable_metrics=true rtc_disable_trace_events=true use_siso=true"
 
     if [ -n "${BUILD_FOR_SIMULATOR}" ]
     then
@@ -166,25 +166,31 @@ then
 
     (
         cd src/webrtc/src
-        gn gen -C "${OUTPUT_DIR}/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
-        ninja -C "${OUTPUT_DIR}/${BUILD_TYPE}" webrtc
+        gn gen -C "out/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
+        third_party/siso/cipd/siso ninja -C "out/${BUILD_TYPE}" webrtc
         if [ -n "${BUILD_WEBRTC_TESTS}" ]
         then
-          ninja -C "${OUTPUT_DIR}/${BUILD_TYPE}" default
+          third_party/siso/cipd/siso ninja -C "out/${BUILD_TYPE}" default
           echo "Downloading test resources"
           download_from_google_storage --directory --recursive \
                --num_threads=10 --no_auth --quiet \
                --bucket chromium-webrtc-resources resources
         fi
-        tools_webrtc/libs/generate_licenses.py --target :webrtc "${OUTPUT_DIR}/${BUILD_TYPE}" "${OUTPUT_DIR}/${BUILD_TYPE}"
+        tools_webrtc/libs/generate_licenses.py --target :webrtc "out/${BUILD_TYPE}" "out/${BUILD_TYPE}"
     )
+
+    mkdir -p "${OUTPUT_DIR}/${BUILD_TYPE}/obj"
+    WEBRTC_OUT_PATH="src/webrtc/src/out"
+
+    STATIC_LIB_PATH="${BUILD_TYPE}"/obj/webrtc.lib
+    if [ ! -e "${WEBRTC_OUT_PATH}/${STATIC_LIB_PATH}" ]; then
+      STATIC_LIB_PATH="${BUILD_TYPE}"/obj/libwebrtc.a
+    fi
+    cp -f "${WEBRTC_OUT_PATH}/${STATIC_LIB_PATH}" "${OUTPUT_DIR}/${BUILD_TYPE}/obj"
+    cp -f "${WEBRTC_OUT_PATH}/${BUILD_TYPE}/LICENSE.md" "${OUTPUT_DIR}/${BUILD_TYPE}/"
 
     if [ -n "${ARCHIVE_WEBRTC}" ]
     then
-        STATIC_LIB_PATH="${BUILD_TYPE}"/obj/webrtc.lib
-        if [ ! -e "${OUTPUT_DIR}/${STATIC_LIB_PATH}" ]; then
-            STATIC_LIB_PATH="${BUILD_TYPE}"/obj/libwebrtc.a
-        fi
         ARCHIVE_NAME=webrtc-"${WEBRTC_VERSION}"-"${HOST_PLATFORM}"-"${TARGET_ARCH}"-"${BUILD_TYPE}"
         if [ -n "${BUILD_FOR_SIMULATOR}" ]
         then
