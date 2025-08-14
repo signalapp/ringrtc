@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.57.0
+
+- Desktop: Convert Buffer types to Uint8Array and simplifications
+
+- Update to webrtc 7204c
+  - Use siso to build instead of ninja
+  - Don't pass non-owned relay_port_factory
+
+- Virtual audio setup script for linux
+
 ## v2.56.0
 
 - Check remote peer for all direct call messages

@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = "SignalRingRTC"
-  s.version          = "2.56.0"
+  s.version          = "2.57.0"
   s.summary          = "A Swift & Objective-C library used by the Signal iOS app for WebRTC interactions."
 
   s.description      = <<-DESC
