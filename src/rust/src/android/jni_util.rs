@@ -269,7 +269,7 @@ impl ClassCache {
     /// Retrieve the class object specified by `class_name` and return it.
     ///
     /// * If the class is not in the cache, return an error.
-    pub fn get_class(&self, class_name: &str) -> Result<&JClass> {
+    pub fn get_class(&self, class_name: &str) -> Result<&JClass<'_>> {
         if let Some(class_ref) = self.map.get(class_name) {
             let object = class_ref.as_obj();
             Ok(<&JClass>::from(object))

@@ -97,7 +97,7 @@ pub fn create_call_manager(env: &mut JNIEnv, jni_call_manager: JObject) -> Resul
 pub fn create_peer_connection(
     env: &mut JNIEnv,
     peer_connection_factory: jlong,
-    native_connection: webrtc::ptr::Borrowed<Connection<AndroidPlatform>>,
+    mut native_connection: webrtc::ptr::Borrowed<Connection<AndroidPlatform>>,
     jni_rtc_config: JObject,
     jni_media_constraints: JObject,
 ) -> Result<jlong> {
@@ -108,10 +108,12 @@ pub fn create_peer_connection(
         )
     })?;
 
+    let connection_ptr = connection.get_connection_ptr()?;
+
     // native_connection is an un-boxed Connection<AndroidPlatform> on the heap.
     // pass ownership of it to the PeerConnectionObserver.
     let pc_observer = PeerConnectionObserver::new(
-        native_connection,
+        connection_ptr,
         false, /* enable_frame_encryption */
         false, /* enable_video_frame_event */
         false, /* enable_video_frame_content */

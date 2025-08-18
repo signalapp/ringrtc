@@ -173,7 +173,7 @@ impl DeviceCollectionWrapper {
 /// Copy from |src| into |dest| at most |dest_size| - 1 bytes and write a nul terminator either after |src| or at the end of |dest_size|
 pub fn copy_and_truncate_string(
     src: &str,
-    dest: webrtc::ptr::Borrowed<c_uchar>,
+    mut dest: webrtc::ptr::Borrowed<c_uchar>,
     dest_size: usize,
 ) -> anyhow::Result<()> {
     // Leave room for the nul terminator.

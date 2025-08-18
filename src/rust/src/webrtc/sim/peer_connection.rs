@@ -347,10 +347,10 @@ pub unsafe fn Rust_configureAudioEncoders(
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub fn Rust_getAudioLevels(
     _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
-    captured_out: webrtc::ptr::Borrowed<RffiAudioLevel>,
+    mut captured_out: webrtc::ptr::Borrowed<RffiAudioLevel>,
     _received_out: webrtc::ptr::Borrowed<RffiReceivedAudioLevel>,
     _received_out_size: usize,
-    received_size_out: webrtc::ptr::Borrowed<usize>,
+    mut received_size_out: webrtc::ptr::Borrowed<usize>,
 ) {
     info!("Rust_getAudioLevels:");
     unsafe {

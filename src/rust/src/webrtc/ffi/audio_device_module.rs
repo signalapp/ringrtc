@@ -141,7 +141,7 @@ impl From<InternalFailure> for bool {
 macro_rules! adm_wrapper {
     () => {};
     ($f:ident($($param:ident: $arg_ty:ty),*) -> $ret:ty ; $($t:tt)*) => {
-        extern "C" fn $f(ptr: webrtc::ptr::Borrowed<AudioDeviceModule>, $($param: $arg_ty),*) -> $ret {
+        extern "C" fn $f(mut ptr: webrtc::ptr::Borrowed<AudioDeviceModule>, $($param: $arg_ty),*) -> $ret {
             if let Some(adm) = unsafe { ptr.as_mut() } {
                 adm.$f($($param),*)
             } else {

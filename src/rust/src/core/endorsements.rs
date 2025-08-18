@@ -72,7 +72,7 @@ impl EndorsementsCache {
 
     /// Gets the endorsements with the latest expirations if valid. The latest expiration should
     /// contain the latest endorsements, but this invariant is maintained by the server, not the client.
-    pub fn get_latest(&mut self) -> Option<EndorsementUpdateRef> {
+    pub fn get_latest(&mut self) -> Option<EndorsementUpdateRef<'_>> {
         if !self.latest_is_valid() {
             return None;
         }
@@ -368,7 +368,7 @@ mod tests {
         );
         assert!(!cache.has_valid_update(), "false = latest already shared");
 
-        cache.insert(expiration, endorsements.clone());
+        cache.insert(expiration, endorsements);
         assert!(
             !cache.has_valid_update(),
             "false = updated old endorsement set, not latest"

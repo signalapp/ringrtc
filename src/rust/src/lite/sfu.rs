@@ -218,7 +218,7 @@ impl TryFrom<ProtoPeekDeviceInfo> for SerializedPeekDeviceInfo {
         }
 
         Ok(Self {
-            opaque_user_id: opaque_user_id.map(OpaqueUserId::from),
+            opaque_user_id,
             demux_id: demux_id.unwrap(),
         })
     }

@@ -35,7 +35,7 @@ impl AndroidLogger {
     //   uncaught exceptions.
     // - ExceptionCheckingJNIEnv itself can log in failure cases, and we don't want an infinite
     //   loop.
-    fn get_java_env(&self) -> Result<JNIEnv> {
+    fn get_java_env(&self) -> Result<JNIEnv<'_>> {
         Ok(self.jvm.attach_current_thread_as_daemon()?)
     }
 }

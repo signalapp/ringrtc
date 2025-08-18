@@ -485,7 +485,7 @@ impl CreateSessionDescriptionObserver {
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn csd_observer_OnSuccess(
-    csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
+    mut csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
     session_description: webrtc::ptr::Owned<RffiSessionDescription>,
 ) {
     info!("csd_observer_OnSuccess()");
@@ -503,7 +503,7 @@ extern "C" fn csd_observer_OnSuccess(
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn csd_observer_OnFailure(
-    csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
+    mut csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
     err_message: webrtc::ptr::Borrowed<c_char>,
     err_type: i32,
 ) {
@@ -660,7 +660,7 @@ impl SetSessionDescriptionObserver {
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn ssd_observer_OnSuccess(
-    ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>,
+    mut ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>,
 ) {
     info!("ssd_observer_OnSuccess()");
 

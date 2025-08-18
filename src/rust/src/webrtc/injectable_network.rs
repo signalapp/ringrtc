@@ -186,7 +186,7 @@ extern "C" fn Rust_InjectableNetworkSender_SendUdp(
 
 #[allow(non_snake_case)]
 extern "C" fn Rust_InjectableNetworkSender_Delete(
-    sender: webrtc::ptr::Owned<Box<dyn PacketSender>>,
+    mut sender: webrtc::ptr::Owned<Box<dyn PacketSender>>,
 ) {
     debug!("Rust_InjectableNetworkSender_Release({:?})", sender);
 

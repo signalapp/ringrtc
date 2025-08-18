@@ -3178,7 +3178,7 @@ impl Client {
                             // previously removed demux ID) in remote_transceiver_demux_ids that can be
                             // used. If demux_id is Some, only replace it with a newly added demux ID
                             // if it is being removed now (it's not in new_demux_ids).
-                            if demux_id.map_or(true, |id| !new_demux_ids.contains(&id)) {
+                            if demux_id.is_none_or(|id| !new_demux_ids.contains(&id)) {
                                 *demux_id = added_demux_ids_iter.next();
                             }
                         }
@@ -7535,7 +7535,7 @@ mod tests {
         client2.client.join();
         assert!(client2.observer.joined.wait(Duration::from_secs(5)));
 
-        let client3 = TestClient::with_sfu_client(vec![3], 1, sfu_client.clone());
+        let client3 = TestClient::with_sfu_client(vec![3], 1, sfu_client);
         client3.client.connect();
         client3.client.join();
 
@@ -8689,7 +8689,7 @@ mod tests {
         {
             let msg = SendEndorsementsResponse {
                 serialized: Some(zkgroup::serialize(&response)),
-                member_ciphertexts: serialized_member_ciphertexts.clone(),
+                member_ciphertexts: serialized_member_ciphertexts,
             };
             Client::handle_send_endorsements_response(&client1.client.actor, now, msg);
             client1

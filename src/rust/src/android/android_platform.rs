@@ -1638,7 +1638,7 @@ impl AndroidPlatform {
     }
 
     /// Return the Java JNIEnv.
-    fn java_env(&self) -> Result<ExceptionCheckingJNIEnv> {
+    fn java_env(&self) -> Result<ExceptionCheckingJNIEnv<'_>> {
         Ok(self.jvm.attach_current_thread_as_daemon()?.into())
     }
 

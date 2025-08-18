@@ -587,7 +587,7 @@ pub struct MediaStatistics {
 #[no_mangle]
 #[allow(non_snake_case)]
 extern "C" fn stats_observer_OnStatsComplete(
-    stats_observer: webrtc::ptr::Borrowed<StatsObserver>,
+    mut stats_observer: webrtc::ptr::Borrowed<StatsObserver>,
     values: webrtc::ptr::Borrowed<MediaStatistics>,
     report_json: webrtc::ptr::Borrowed<std::os::raw::c_char>,
 ) {

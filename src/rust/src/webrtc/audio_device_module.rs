@@ -161,7 +161,10 @@ const WEBRTC_WINDOW: usize = SAMPLE_FREQUENCY as usize / 100;
 const STREAM_FORMAT: cubeb::SampleFormat = cubeb::SampleFormat::S16NE;
 const NUM_CHANNELS: u32 = 1;
 
-fn write_to_null_or_valid_pointer<T>(ptr: webrtc::ptr::Borrowed<T>, v: T) -> anyhow::Result<()> {
+fn write_to_null_or_valid_pointer<T>(
+    mut ptr: webrtc::ptr::Borrowed<T>,
+    v: T,
+) -> anyhow::Result<()> {
     // Safety: As long as the C code passes a valid or null pointer, this is safe.
     unsafe {
         match ptr.as_mut() {

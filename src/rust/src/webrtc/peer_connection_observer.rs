@@ -184,7 +184,7 @@ pub trait PeerConnectionObserverTrait {
 /// PeerConnectionObserver OnIceCandidate() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceCandidate<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     cpp_candidate: webrtc::ptr::Borrowed<CppIceCandidate>,
 ) where
     T: PeerConnectionObserverTrait,
@@ -224,7 +224,7 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
 /// PeerConnectionObserver OnIceCandidatesRemoved() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceCandidatesRemoved<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     removed_addresses: webrtc::ptr::Borrowed<RffiIpPort>,
     length: size_t,
 ) where
@@ -260,7 +260,7 @@ extern "C" fn pc_observer_OnIceCandidatesRemoved<T>(
 /// PeerConnectionObserver OnIceConnectionChange() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceConnectionChange<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     new_state: IceConnectionState,
 ) where
     T: PeerConnectionObserverTrait,
@@ -288,7 +288,7 @@ extern "C" fn pc_observer_OnIceConnectionChange<T>(
 /// PeerConnectionObserver OnIceSelectedCandidatePairChanged() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnIceNetworkRouteChange<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     network_route: NetworkRoute,
     local_description: webrtc::ptr::Borrowed<c_char>,
     remote_description: webrtc::ptr::Borrowed<c_char>,
@@ -330,7 +330,7 @@ extern "C" fn pc_observer_OnIceNetworkRouteChange<T>(
 /// PeerConnectionObserver OnAddStream() callback.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnAddStream<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     rffi_stream: webrtc::ptr::OwnedRc<RffiMediaStream>,
 ) where
     T: PeerConnectionObserverTrait,
@@ -354,7 +354,7 @@ extern "C" fn pc_observer_OnAddStream<T>(
 /// PeerConnectionObserver OnAddTrack() callback for audio tracks.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnAddAudioRtpReceiver<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     rffi_track: webrtc::ptr::OwnedRc<RffiAudioTrack>,
 ) where
     T: PeerConnectionObserverTrait,
@@ -379,7 +379,7 @@ extern "C" fn pc_observer_OnAddAudioRtpReceiver<T>(
 /// PeerConnectionObserver OnAddTrack() callback for video tracks.
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnAddVideoRtpReceiver<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     rffi_track: webrtc::ptr::OwnedRc<RffiVideoTrack>,
     demux_id: u32,
 ) where
@@ -436,7 +436,7 @@ extern "C" fn pc_observer_OnVideoFrame<T>(
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_OnRtpReceived<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     pt: u8,
     seqnum: u16,
     timestamp: u32,
@@ -467,7 +467,7 @@ extern "C" fn pc_observer_OnRtpReceived<T>(
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_GetMediaCiphertextBufferSize<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     is_audio: bool,
     plaintext_size: size_t,
 ) -> size_t
@@ -491,7 +491,7 @@ where
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_EncryptMedia<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     plaintext: webrtc::ptr::Borrowed<u8>,
     plaintext_size: size_t,
     ciphertext_out: *mut u8,
@@ -534,7 +534,7 @@ where
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_GetMediaPlaintextBufferSize<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     track_id: u32,
     is_audio: bool,
     ciphertext_size: size_t,
@@ -560,7 +560,7 @@ where
 
 #[allow(non_snake_case)]
 extern "C" fn pc_observer_DecryptMedia<T>(
-    observer: webrtc::ptr::Borrowed<T>,
+    mut observer: webrtc::ptr::Borrowed<T>,
     track_id: u32,
     ciphertext: webrtc::ptr::Borrowed<u8>,
     ciphertext_size: usize,
