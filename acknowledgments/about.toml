@@ -5,6 +5,7 @@ accepted = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "AGPL-3.0",
+    "MPL-2.0",
     "ISC",
     "Unicode-3.0",
 ]
