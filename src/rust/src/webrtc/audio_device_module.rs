@@ -486,7 +486,10 @@ impl AudioDeviceModule {
             _ => bail!("Bad device type {:?}", device_type),
         };
         if pending_update {
+            info!("Refreshing {:?} device cache", device_type);
             self.refresh_device_cache(device_type)?;
+        } else {
+            info!("Skipping refresh of {:?} device cache", device_type);
         }
         let collection = match device_type {
             DeviceType::INPUT => self.input_device_cache.as_ref(),
@@ -589,29 +592,12 @@ impl AudioDeviceModule {
         }
     }
 
-    fn request_update_if_default_device(&mut self, index: u16, device_type: DeviceType) {
-        if index == 0 || (cfg!(target_os = "windows") && index == 1) {
-            match device_type {
-                DeviceType::INPUT => self
-                    .pending_input_device_refresh
-                    .store(true, Ordering::SeqCst),
-                DeviceType::OUTPUT => self
-                    .pending_output_device_refresh
-                    .store(true, Ordering::SeqCst),
-                _ => error!("Invalid device type {:?}", device_type),
-            }
-        }
-    }
-
     pub fn playout_device_name(
         &mut self,
         index: u16,
         name_out: webrtc::ptr::Borrowed<c_uchar>,
         guid_out: webrtc::ptr::Borrowed<c_uchar>,
     ) -> i32 {
-        // Request a refresh of the devices if this is enumerating the default; that may have changed
-        // without a notification firing.
-        self.request_update_if_default_device(index, DeviceType::OUTPUT);
         match self.enumerate_devices(DeviceType::OUTPUT) {
             Ok(devices) => {
                 match AudioDeviceModule::copy_name_and_id(index, devices, name_out, guid_out) {
@@ -635,9 +621,6 @@ impl AudioDeviceModule {
         name_out: webrtc::ptr::Borrowed<c_uchar>,
         guid_out: webrtc::ptr::Borrowed<c_uchar>,
     ) -> i32 {
-        // Request a refresh of the devices if this is enumerating the default; that may have changed
-        // without a notification firing.
-        self.request_update_if_default_device(index, DeviceType::INPUT);
         match self.enumerate_devices(DeviceType::INPUT) {
             Ok(devices) => {
                 match AudioDeviceModule::copy_name_and_id(index, devices, name_out, guid_out) {
@@ -657,9 +640,6 @@ impl AudioDeviceModule {
 
     // Device selection
     pub fn set_playout_device(&mut self, index: u16) -> i32 {
-        // Request a refresh of the devices if this is setting the default; that may have changed
-        // without a notification firing.
-        self.request_update_if_default_device(index, DeviceType::OUTPUT);
         let device = match self.enumerate_devices(DeviceType::OUTPUT) {
             Ok(devices) => match devices.get(index as usize) {
                 Some(device) => device.devid,
@@ -691,9 +671,6 @@ impl AudioDeviceModule {
     }
 
     pub fn set_recording_device(&mut self, index: u16) -> i32 {
-        // Request a refresh of the devices if this is setting the default; that may have changed
-        // without a notification firing.
-        self.request_update_if_default_device(index, DeviceType::INPUT);
         let device = match self.enumerate_devices(DeviceType::INPUT) {
             Ok(devices) => match devices.get(index as usize) {
                 Some(device) => device.devid,
