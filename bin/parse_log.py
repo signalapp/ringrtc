@@ -75,7 +75,7 @@ class DataRate(NamedTuple):
     bps: int
 
     def __repr__(self):
-        return f"{self.bps/1000:.0f}kbps"
+        return f"{self.bps / 1000:.0f}kbps"
 
     def kbps(self) -> float:
         return self.bps / 1000.0

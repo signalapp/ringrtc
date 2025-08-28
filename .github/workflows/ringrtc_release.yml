@@ -25,51 +25,34 @@ on:
         type: boolean
       runner_linux:
         description: "Linux runner:"
-        default: 'ubuntu-latest'
+        default: 'ubuntu-latest-4-cores'
         required: true
-        type: choice
-        options:
-          - 'ubuntu-latest'
+        type: string
       runner_linux_arm64:
         description: "ARM64 Linux runner:"
         default: 'ubuntu-22.04-arm64-4-cores'
         required: true
-        type: choice
-        options:
-          - 'ubuntu-22.04-arm64-4-cores'
+        type: string
       runner_windows:
         description: "Windows runner:"
-        default: 'windows-latest'
+        default: 'windows-2025-4-cores'
         required: true
-        type: choice
-        options:
-          - 'windows-latest'
-          - 'windows-latest-8-cores'
+        type: string
       runner_mac:
         description: "Mac runner:"
         default: 'macos-13'
         required: true
-        type: choice
-        options:
-          - 'macos-13'
-          - 'macos-13-large'
+        type: string
       runner_ios:
         description: "Mac iOS runner:"
-        default: 'macos-13'
+        default: 'macos-14'
         required: true
-        type: choice
-        options:
-          - 'macos-13'
-          - 'macos-13-large'
+        type: string
       runner_android:
         description: "Linux android runner:"
-        default: 'ubuntu-22.04-4-cores'
+        default: 'ubuntu-24.04-4-cores'
         required: true
-        type: choice
-        options:
-          - 'ubuntu-22.04'
-          - 'ubuntu-22.04-4-cores'
-          - 'ubuntu-22.04-8-cores'
+        type: string
 
 jobs:
   slow_tests:

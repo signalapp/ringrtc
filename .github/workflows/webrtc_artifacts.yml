@@ -20,7 +20,7 @@ jobs:
   build_android:
     name: Build Android
 
-    runs-on: 'ubuntu-22.04-8-cores'
+    runs-on: 'ubuntu-24.04-8-cores'
 
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +84,7 @@ jobs:
   build_linux:
     name: Build Linux
 
-    runs-on: 'ubuntu-22.04-4-cores'
+    runs-on: 'ubuntu-24.04-4-cores'
 
     steps:
       - uses: actions/checkout@v4
@@ -168,7 +168,7 @@ jobs:
   build_windows:
     name: Build Windows
 
-    runs-on: 'windows-latest-8-cores'
+    runs-on: 'windows-2025-8-cores'
 
     steps:
     - name: Setup git to use linux line endings and keep permissions
@@ -178,6 +178,12 @@ jobs:
         git config --global core.filemode false
 
     - uses: actions/checkout@v4
+
+    - name: Install Windows SDK
+      uses: ChristopheLav/windows-sdk-install@v1
+      with:
+        version-sdk: 26100
+        features: 'OptionId.WindowsDesktopDebuggers'
 
     - run: python bin/build-webrtc.py --target windows --release --build-for-simulator
       shell: bash

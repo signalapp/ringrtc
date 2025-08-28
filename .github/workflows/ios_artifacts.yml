@@ -11,12 +11,9 @@ on:
         type: boolean
       runner:
         description: "Mac runner:"
-        default: 'macos-13'
+        default: 'macos-14'
         required: true
-        type: choice
-        options:
-          - 'macos-13'
-          - 'macos-13-large'
+        type: string
 
   workflow_call:
     inputs:
@@ -27,7 +24,7 @@ on:
         type: boolean
       runner:
         description: "Mac runner:"
-        default: 'macos-13'
+        default: 'macos-14'
         required: true
         type: string
 

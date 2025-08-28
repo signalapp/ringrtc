@@ -44,4 +44,5 @@ echo "WEBRTC_PLATFORM=$WEBRTC_PLATFORM" > "${OUTPUT_DIR}/platform.env"
 # Platform specific setup
 prepare_workspace_platform
 
+# shellcheck disable=SC2317
 echo "WEBRTC_PLATFORM=$WEBRTC_PLATFORM" > "${OUTPUT_DIR}/${WEBRTC_PLATFORM}.env"

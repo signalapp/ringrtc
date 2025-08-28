@@ -7,7 +7,7 @@ on:
 jobs:
   code_formatting:
     name: Code Formatting
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-4-cores
     steps:
     - uses: actions/checkout@v4
     - run: rustup toolchain install nightly --profile minimal --component rustfmt
@@ -22,7 +22,7 @@ jobs:
 
   lints:
     name: Lints
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-4-cores
     steps:
     - name: Install deps
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
@@ -90,7 +90,7 @@ jobs:
 
   tests:
     name: Tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-4-cores
     steps:
     - name: Install deps
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
@@ -104,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-13, ubuntu-22.04-arm64-4-cores]
+        os: [ubuntu-latest-4-cores, windows-latest-8-cores, macos-latest, ubuntu-24.04-arm64-4-cores]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -133,14 +133,14 @@ jobs:
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - run: bin/fetch-artifact -p desktop
     - run: bin/build-desktop --release --ringrtc-only --test-ringrtc-adm
-      if: ${{ matrix.os != 'windows-latest' }}
+      if: ${{ !startsWith(matrix.os, 'windows-') }}
     - run: bin/build-desktop --release --ringrtc-only
-      if: ${{ matrix.os == 'windows-latest' }}
+      if: ${{ startsWith(matrix.os, 'windows-') }}
     - run: npm ci
       working-directory: src/node
     - run: npm run build
       working-directory: src/node
-    - run: xvfb-run --auto-servernum npm test
+    - run: xvfb-run --auto-servernum npm test -- --no-sandbox
       if: startsWith(matrix.os, 'ubuntu-')
       working-directory: src/node
     - run: npm test
@@ -152,7 +152,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-latest, ubuntu-22.04-arm64-4-cores]
+        os: [ubuntu-latest-4-cores, macos-latest, windows-latest-8-cores, ubuntu-24.04-arm64-4-cores]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -176,7 +176,7 @@ jobs:
 
   android:
     name: Android Build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-4-cores
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -192,19 +192,19 @@ jobs:
 
   ios:
     name: iOS Tests
-    runs-on: macos-13-large
+    runs-on: macos-latest-xlarge
     steps:
     - uses: actions/checkout@v4
     - run: brew install protobuf coreutils # for grealpath
     - run: cargo install cbindgen
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios
-    - run: sudo xcodes select 15.2
+    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-apple-ios-sim
+    - run: sudo xcodes select 16.2
     - run: bin/fetch-artifact -p ios
     - run: bin/build-ios --release --ringrtc-only --host-sim-only
     - run: pod install
       working-directory: src/ios/SignalRingRTC
     # Pick a phone model here that's likely to work on recent Xcodes.
-    - run: xcodebuild test -workspace SignalRingRTC.xcworkspace -scheme SignalRingRTC -destination 'platform=iOS Simulator,name=iPhone 15'
+    - run: xcodebuild test -workspace SignalRingRTC.xcworkspace -scheme SignalRingRTC -destination 'platform=iOS Simulator,name=iPhone 16'
       working-directory: src/ios/SignalRingRTC
       env:
         TEST_RUNNER_RINGRTC_MAX_LOG_LEVEL: 2 # warnings only

@@ -11,34 +11,24 @@ on:
         type: boolean
       runner_linux:
         description: "Linux runner:"
-        default: 'ubuntu-latest'
+        default: 'ubuntu-latest-4-cores'
         required: true
-        type: choice
-        options:
-          - 'ubuntu-latest'
+        type: string
       runner_linux_arm64:
         description: "ARM64 Linux runner:"
         default: 'ubuntu-22.04-arm64-4-cores'
         required: true
-        type: choice
-        options:
-          - 'ubuntu-22.04-arm64-4-cores'
+        type: string
       runner_windows:
         description: "Windows runner:"
-        default: 'windows-latest'
+        default: 'windows-2025-8-cores'
         required: true
-        type: choice
-        options:
-          - 'windows-latest'
-          - 'windows-latest-8-cores'
+        type: string
       runner_mac:
         description: "Mac runner:"
         default: 'macos-13'
         required: true
-        type: choice
-        options:
-          - 'macos-13'
-          - 'macos-13-large'
+        type: string
 
   workflow_call:
     inputs:
@@ -49,7 +39,7 @@ on:
         type: boolean
       runner_linux:
         description: "Linux runner:"
-        default: 'ubuntu-latest'
+        default: 'ubuntu-latest-4-cores'
         required: true
         type: string
       runner_linux_arm64:
@@ -59,7 +49,7 @@ on:
         type: string
       runner_windows:
         description: "Windows runner:"
-        default: 'windows-latest'
+        default: 'windows-2025-8-cores'
         required: true
         type: string
       runner_mac:
@@ -247,7 +237,7 @@ jobs:
         node-version-file: 'src/node/.nvmrc'
 
     - run: ./bin/fetch-artifact --platform mac-x64 --release
-    - run: ./bin/build-desktop --ringrtc-only --release
+    - run: TARGET_ARCH=x64 OUTPUT_DIR=out ./bin/build-desktop --ringrtc-only --release
 
     - run: ./bin/fetch-artifact --platform mac-arm64 --release -o out-arm
     - run: TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-desktop --ringrtc-only --release
@@ -291,7 +281,7 @@ jobs:
       # Needed for google-github-actions/auth.
       id-token: 'write'
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-4-cores
 
     needs: [build_windows, build_mac, build_linux, build_linux_arm]
 
@@ -447,7 +437,7 @@ jobs:
 
       - run: sudo apt-get update && sudo apt-get install -y libpulse0
 
-      - run: xvfb-run --auto-servernum npm test
+      - run: xvfb-run --auto-servernum npm test -- --no-sandbox
         working-directory: src/node/
 
       # Collect RingRTC and WebRTC acknowledgments into one file.

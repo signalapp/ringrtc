@@ -57,7 +57,7 @@ def run_cmd(dry_run, cmd, cwd=None, env=os.environ.copy()):
 
 def verify_build_host_platform(target_platform):
     if target_platform == 'android' or target_platform == 'linux':
-        expected_os_major_version = 'Ubuntu 22'
+        expected_os_major_version = 'Ubuntu 24'
         actual_os = subprocess.check_output(['lsb_release', '--short', '--description']).decode('UTF-8')
         if expected_os_major_version not in actual_os:
             raise Exception(f"Invalid Host OS Major Version. Expected: {expected_os_major_version} Actual: {actual_os}")
