@@ -488,8 +488,6 @@ impl AudioDeviceModule {
         if pending_update {
             info!("Refreshing {:?} device cache", device_type);
             self.refresh_device_cache(device_type)?;
-        } else {
-            info!("Skipping refresh of {:?} device cache", device_type);
         }
         let collection = match device_type {
             DeviceType::INPUT => self.input_device_cache.as_ref(),
