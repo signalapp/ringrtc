@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.57.1
+
+- Desktop: Update to cubeb 0.30.1
+
+- Update Rust to 1.89.0
+
+- Update dependencies and runners
+
 ## v2.57.0
 
 - Desktop: Convert Buffer types to Uint8Array and simplifications
