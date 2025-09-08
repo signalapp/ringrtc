@@ -6,26 +6,32 @@
 //! Utility functions for audio_device_module.rs
 //! Nothing in here should depend on webrtc directly.
 
-use std::ffi::{c_uchar, c_void, CString};
+use std::ffi::{c_uchar, CString};
 
 use anyhow::anyhow;
 use cubeb::{DeviceCollection, DeviceState};
-use cubeb_core::DevicePref;
 #[cfg(target_os = "linux")]
 use cubeb_core::DeviceType;
+use cubeb_core::{DeviceId, DevicePref};
 use regex::Regex;
 
 use crate::webrtc;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct MinimalDeviceInfo {
-    pub devid: *const c_void,
+    pub devid: DeviceId,
     pub device_id: Option<String>,
     pub friendly_name: Option<String>,
     #[cfg(target_os = "linux")]
     device_type: DeviceType,
     preferred: DevicePref,
     state: DeviceState,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct DeviceNameInfo {
+    pub device_id: Option<String>,
+    pub friendly_name: Option<String>,
 }
 
 /// Wrapper struct for DeviceCollection that handles default devices.
@@ -35,7 +41,7 @@ pub struct MinimalDeviceInfo {
 ///
 /// Note that, in some cases, `devid` may be a pointer to state in the cubeb ctx,
 /// so in no event should this outlive the associated ctx.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Default)]
 pub struct DeviceCollectionWrapper {
     device_collection: Vec<MinimalDeviceInfo>,
 }
@@ -167,6 +173,33 @@ impl DeviceCollectionWrapper {
         } else {
             count + 1
         }
+    }
+
+    /// Extract all names and IDs, **including repetitions** for the default device(s)!
+    pub fn extract_names(&self) -> Vec<DeviceNameInfo> {
+        // On mac and windows, this is relatively simple -- we get the count and then get each reported
+        // device.
+        #[cfg(not(target_os = "windows"))]
+        let count = self.count();
+
+        // On Windows, it's different: count does not include the defaults.
+        #[cfg(target_os = "windows")]
+        let count = self.count() + 2;
+
+        let mut names = Vec::new();
+        for i in 0..count {
+            let info = if let Some(info) = self.get(i) {
+                info
+            } else {
+                error!("Internal error enumerating devices {} vs {}", i, count);
+                continue;
+            };
+            names.push(DeviceNameInfo {
+                device_id: info.device_id.clone(),
+                friendly_name: info.friendly_name.clone(),
+            });
+        }
+        names
     }
 }
 

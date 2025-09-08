@@ -5,7 +5,10 @@
 
 //! WebRTC FFI ADM interface.
 
-use std::ffi::{c_uchar, c_void};
+use std::{
+    ffi::{c_uchar, c_void},
+    sync::Mutex,
+};
 
 use libc::size_t;
 
@@ -15,7 +18,7 @@ use crate::{
 };
 
 /// Wrapper type for C++ AudioTransport.
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct RffiAudioTransport {
     pub callback: *const c_void,
 }
@@ -116,6 +119,7 @@ macro_rules! all_adm_functions {
 // Enum used to tag failures due to the adm pointer being null
 enum InternalFailure {
     NullPtr,
+    MutexPoison,
 }
 // Methods to convert rust-style errors into return types matching C/++ types
 impl From<InternalFailure> for i32 {
@@ -141,9 +145,16 @@ impl From<InternalFailure> for bool {
 macro_rules! adm_wrapper {
     () => {};
     ($f:ident($($param:ident: $arg_ty:ty),*) -> $ret:ty ; $($t:tt)*) => {
-        extern "C" fn $f(mut ptr: webrtc::ptr::Borrowed<AudioDeviceModule>, $($param: $arg_ty),*) -> $ret {
-            if let Some(adm) = unsafe { ptr.as_mut() } {
-                adm.$f($($param),*)
+        extern "C" fn $f(mut ptr: webrtc::ptr::Borrowed<Mutex<AudioDeviceModule>>, $($param: $arg_ty),*) -> $ret {
+            if let Some(mutex) = unsafe { ptr.as_mut() } {
+                match mutex.lock() {
+                    #[allow(unused_mut)]  // Some functions require mut; others don't.
+                    Ok(mut adm) => adm.$f($($param),*),
+                    Err(e) =>  {
+                        error!("Mutex was poisoned? {}", e);
+                        InternalFailure::MutexPoison.into()
+                    }
+                }
             } else {
                 error!("{} wrapper with null pointer", stringify!($f));
                 InternalFailure::NullPtr.into()
@@ -171,13 +182,13 @@ macro_rules! adm_struct_definition {
         adm_struct_definition!(struct AudioDeviceCallbacks {
             $($inner)*
             pub $f: extern "C" fn(
-              adm_borrowed: webrtc::ptr::Borrowed<AudioDeviceModule>, $($param: $arg_ty),*) -> $ret,
+              adm_borrowed: webrtc::ptr::Borrowed<Mutex<AudioDeviceModule>>, $($param: $arg_ty),*) -> $ret,
         } => $($t)*);
     };
     ($f:ident($($param:ident: $arg_ty:ty),*) -> $ret:ty ; $($t:tt)*) => {
         adm_struct_definition!(struct AudioDeviceCallbacks {
           pub $f: extern "C" fn(
-              adm_borrowed: webrtc::ptr::Borrowed<AudioDeviceModule>, $($param: $arg_ty),*) -> $ret,
+              adm_borrowed: webrtc::ptr::Borrowed<Mutex<AudioDeviceModule>>, $($param: $arg_ty),*) -> $ret,
         } => $($t)*);
     }
 }

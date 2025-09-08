@@ -3,17 +3,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use core::convert::AsRef;
 use std::{
     collections::VecDeque,
     ffi::{c_uchar, c_void, CStr},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        mpsc, Arc, Mutex,
     },
+    thread,
+    thread::JoinHandle,
     time::Duration,
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context as AnyhowContext};
 use cubeb::{Context, DeviceId, DeviceType, MonoFrame, StereoFrame, Stream, StreamPrefs};
 use cubeb_core::{log_enabled, set_logging, LogLevel};
 use lazy_static::lazy_static;
@@ -26,6 +29,7 @@ use crate::{
     webrtc::{
         audio_device_module_utils::{
             copy_and_truncate_string, redact_by_regex, redact_for_logging, DeviceCollectionWrapper,
+            DeviceNameInfo,
         },
         ffi::audio_device_module::RffiAudioTransport,
     },
@@ -75,24 +79,708 @@ struct PlayData {
 type Frame = MonoFrame<i16>;
 type OutFrame = StereoFrame<i16>;
 
-pub struct AudioDeviceModule {
-    audio_transport: Arc<Mutex<RffiAudioTransport>>,
-    cubeb_ctx: Option<Context>,
-    initialized: bool,
-    // Note that the DeviceIds must not outlive the cubeb_ctx.
+#[derive(Debug, Clone)]
+enum Event {
+    RefreshCache(DeviceType),
+    SetCallback(Arc<Mutex<RffiAudioTransport>>),
+    SetPlayoutDevice(u16),
+    SetRecordingDevice(u16),
+    InitPlayout,
+    StartPlayout,
+    StopPlayout,
+    InitRecording,
+    StartRecording,
+    StopRecording,
+    PlayoutDelay,
+    Terminate,
+}
+
+#[derive(Debug, Clone)]
+struct UpdateCallbackData {
+    device_type: DeviceType,
+    sender: mpsc::Sender<Event>,
+}
+
+struct Worker {
+    ctx: Context,
+    // We will  pass raw pointers to these to the cubeb API.
+    // These must be destroyed **after** we unregister the callbacks with cubeb.
+    input_data: UpdateCallbackData,
+    output_data: UpdateCallbackData,
+    // Note that the DeviceIds must not outlive the ctx.
     playout_device: Option<DeviceId>,
     recording_device: Option<DeviceId>,
-    // Note that the streams must not outlive the cubeb_ctx.
+    // Note that the streams must not outlive the ctx.
     output_stream: Option<Stream<OutFrame>>,
     input_stream: Option<Stream<Frame>>,
-    // Note that the caches must not outlive the cubeb_ctx.
-    input_device_cache: Option<DeviceCollectionWrapper>,
-    output_device_cache: Option<DeviceCollectionWrapper>,
-    // Flags to track whether we need to refresh caches.
-    // As these are shared with threads in cubeb, we create them once at ADM init
-    // and never free them.
-    pending_input_device_refresh: &'static AtomicBool,
-    pending_output_device_refresh: &'static AtomicBool,
+    // Note that the caches must not outlive the ctx.
+    input_device_cache: DeviceCollectionWrapper,
+    output_device_cache: DeviceCollectionWrapper,
+    // These may outlive the ctx
+    input_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+    output_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+    audio_transport: Arc<Mutex<RffiAudioTransport>>,
+}
+
+impl Worker {
+    fn refresh_device_cache(&mut self, device_type: DeviceType) -> anyhow::Result<()> {
+        info!("Refresh {:?} devices", device_type);
+        let devices = {
+            // Pause logging because enumeration is noisy
+            let _guard = LogDisableGuard::new();
+            self.ctx.enumerate_devices(device_type)?
+        };
+
+        let last = match device_type {
+            DeviceType::INPUT => &self.input_device_cache,
+            DeviceType::OUTPUT => &self.output_device_cache,
+            _ => bail!("Bad device type {:?}", device_type),
+        };
+        let collection = DeviceCollectionWrapper::new(&devices);
+        if &collection != last {
+            for device in devices.iter() {
+                info!(
+                    "{:?} device: ({})",
+                    device_type,
+                    AudioDeviceModule::device_str(device)
+                );
+            }
+        }
+
+        let names = collection.extract_names();
+
+        match device_type {
+            DeviceType::INPUT => {
+                self.input_device_cache = collection;
+                *self.input_device_names.lock().unwrap() = names;
+            }
+            DeviceType::OUTPUT => {
+                self.output_device_cache = collection;
+                *self.output_device_names.lock().unwrap() = names;
+            }
+            _ => bail!("Bad device type {:?}", device_type),
+        }
+        Ok(())
+    }
+
+    /// Safety: Must be called with a valid |data| pointer. (NULL is okay.)
+    unsafe extern "C" fn device_changed(_ctx: *mut cubeb::ffi::cubeb, data: *mut c_void) {
+        // Flag that an update is needed; this will be processed in the worker thread.
+        if let Some(d) = (data as *mut UpdateCallbackData).as_ref() {
+            if let Err(e) = d.sender.send(Event::RefreshCache(d.device_type)) {
+                error!("Failed to request {:?} cache refresh: {}", d.device_type, e);
+            }
+        }
+    }
+
+    fn register_device_collection_changed(
+        &mut self,
+        device_type: DeviceType,
+    ) -> anyhow::Result<()> {
+        unsafe {
+            // Safety: |device_changed| will remain a valid pointer for the lifetime of the program.
+            // |input_data| and |output_data| will live until after the callback is unregistered.
+            Ok(self.ctx.register_device_collection_changed(
+                device_type,
+                Some(Worker::device_changed),
+                match device_type {
+                    DeviceType::INPUT => &mut self.input_data,
+                    DeviceType::OUTPUT => &mut self.output_data,
+                    _ => bail!("Bad device type {:?}", device_type),
+                } as *mut UpdateCallbackData as *mut c_void,
+            )?)
+        }
+    }
+
+    // After calling this, data may be deallocated (but does not need to be immediately)
+    fn deregister_device_collection_changed(
+        &mut self,
+        device_type: DeviceType,
+    ) -> anyhow::Result<()> {
+        unsafe {
+            // Safety: We are calling this with None, which will unset the callback,
+            // so passing null is safe.
+            Ok(self.ctx.register_device_collection_changed(
+                device_type,
+                None,
+                std::ptr::null_mut(),
+            )?)
+        }
+    }
+
+    fn terminate(&mut self) {
+        if let Some(input) = &self.input_stream {
+            if let Err(e) = input.stop() {
+                error!("Failed to stop input: {}", e);
+            }
+        }
+        if let Some(output) = &self.output_stream {
+            if let Err(e) = output.stop() {
+                error!("Failed to stop output: {}", e);
+            }
+        }
+
+        // Cause these to Drop.
+        self.input_stream = None;
+        self.output_stream = None;
+
+        // Ensure these are not reused.
+        self.playout_device = None;
+        self.recording_device = None;
+
+        self.input_device_cache = Default::default();
+        self.output_device_cache = Default::default();
+        self.input_device_names = Arc::new(Mutex::new(Vec::new()));
+        self.output_device_names = Arc::new(Mutex::new(Vec::new()));
+
+        if let Err(e) = self.deregister_device_collection_changed(DeviceType::INPUT) {
+            warn!("failed to clear input callback: {}", e);
+        }
+        if let Err(e) = self.deregister_device_collection_changed(DeviceType::OUTPUT) {
+            warn!("failed to clear output callback: {}", e);
+        }
+        // Now safe to invalidate the ctx (note that any references to it, like `DeviceId`s,
+        // must have already been dropped).
+        #[cfg(target_os = "windows")]
+        {
+            // Safety: No parameters, was already initialized.
+            unsafe {
+                Com::CoUninitialize();
+            };
+        }
+    }
+
+    fn init_playout(&mut self) -> anyhow::Result<()> {
+        let out_device = if let Some(device) = self.playout_device {
+            device
+        } else {
+            bail!("Tried to init playout without a playout device");
+        };
+        let params = cubeb::StreamParamsBuilder::new()
+            .format(STREAM_FORMAT)
+            .rate(SAMPLE_FREQUENCY)
+            .channels(2)
+            .layout(cubeb::ChannelLayout::STEREO)
+            .prefs(StreamPrefs::VOICE)
+            .take();
+        let mut builder = cubeb::StreamBuilder::<OutFrame>::new();
+        let transport = Arc::clone(&self.audio_transport);
+        let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
+            error!(
+                "Could not get min latency for playout; using default: {:?}",
+                e
+            );
+            SAMPLE_LATENCY
+        });
+        info!("min playout latency: {}", min_latency);
+        // WebRTC can only report data in WEBRTC_WINDOW-sized chunks.
+        // This buffer tracks any extra data that would not fit in `output`,
+        // if `output.len()` is not an exact multiple of WEBRTC_WINDOW.
+        let mut buffer = VecDeque::<i16>::new();
+        buffer.reserve(WEBRTC_WINDOW);
+        builder
+            .name("ringrtc output")
+            .output(out_device, &params)
+            .latency(std::cmp::max(SAMPLE_LATENCY, min_latency))
+            .data_callback(move |_, output| {
+                if output.is_empty() {
+                    return 0;
+                }
+
+                // WebRTC cannot give data in anything other than 10ms chunks, so request
+                // these.
+                // If the data callback is invoked with an `output` length that is
+                // not a multiple of WEBRTC_WINDOW, make one "extra" call to webrtc and
+                // store "extra" data in `buffer`.
+
+                // First, copy any leftover data from prior invocations.
+                let mut written = 0;
+                while let Some(data) = buffer.pop_front() {
+                    output[written] = OutFrame { l: data, r: data };
+                    written += 1;
+                    if written >= output.len() {
+                        // Short-circuit; we already have enough data.
+                        return output.len() as isize;
+                    }
+                }
+
+                // Then, request more data from WebRTC.
+                while written < output.len() {
+                    let play_data = Worker::need_more_play_data(
+                        Arc::clone(&transport),
+                        WEBRTC_WINDOW,
+                        NUM_CHANNELS,
+                        SAMPLE_FREQUENCY,
+                    );
+                    if play_data.success < 0 {
+                        // C function failed; propagate error and don't continue.
+                        return play_data.success as isize;
+                    } else if play_data.data.len() > WEBRTC_WINDOW {
+                        error!("need_more_play_data returned too much data");
+                        return -1;
+                    }
+                    // Put data into the right format and add it to the output
+                    // array for cubeb to play.
+                    // If there's more data than was requested, add it to the
+                    // buffer for the next invocation of the callback.
+                    for data in play_data.data.iter() {
+                        if written < output.len() {
+                            output[written] = OutFrame { l: *data, r: *data };
+                            written += 1;
+                        } else {
+                            buffer.push_back(*data);
+                        }
+                    }
+                }
+
+                if written != output.len() {
+                    error!(
+                        "Got wrong amount of output data (want {} got {}), may drain.",
+                        output.len(),
+                        written
+                    );
+                }
+                written as isize
+            })
+            .state_callback(|state| {
+                warn!("Playout state: {:?}", state);
+            });
+        match builder.init(&self.ctx) {
+            Ok(stream) => {
+                self.output_stream = Some(stream);
+                Ok(())
+            }
+            Err(e) => {
+                bail!("Couldn't initialize output stream: {}", e);
+            }
+        }
+    }
+
+    fn start_playout(&mut self) -> anyhow::Result<()> {
+        if let Some(output_stream) = &self.output_stream {
+            if let Err(e) = output_stream.start() {
+                bail!("Failed to start playout: {}", e);
+            }
+            Ok(())
+        } else {
+            bail!("Cannot start playout without an output stream -- did you forget init_playout?");
+        }
+    }
+
+    fn stop_playout(&mut self) -> anyhow::Result<()> {
+        if let Some(output_stream) = &self.output_stream {
+            if let Err(e) = output_stream.stop() {
+                bail!("Failed to stop playout: {}", e);
+            }
+            // Drop the stream so that it isn't reused on future calls.
+            self.output_stream = None;
+        }
+        Ok(())
+    }
+
+    fn init_recording(&mut self) -> anyhow::Result<()> {
+        let recording_device = if let Some(device) = self.recording_device {
+            device
+        } else {
+            bail!("Tried to init recording without a recording device");
+        };
+
+        let builder = cubeb::StreamParamsBuilder::new()
+            .format(STREAM_FORMAT)
+            .rate(SAMPLE_FREQUENCY)
+            .channels(NUM_CHANNELS)
+            .layout(cubeb::ChannelLayout::MONO);
+        // On Mac, the AEC pipeline runs at 24kHz (FB15839727 tracks this). For now,
+        // disable it.
+        let params = if cfg!(not(target_os = "macos")) {
+            builder.prefs(StreamPrefs::VOICE)
+        } else {
+            builder
+        }
+        .take();
+        let mut builder = cubeb::StreamBuilder::<Frame>::new();
+        let transport = Arc::clone(&self.audio_transport);
+        let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
+            error!(
+                "Could not get min latency for recording; using default: {:?}",
+                e
+            );
+            SAMPLE_LATENCY
+        });
+        info!("min recording latency: {}", min_latency);
+        // WebRTC can only accept data in WEBRTC_WINDOW-sized chunks.
+        // This buffer tracks any extra data that would not fit in a call to WebRTC,
+        // if `input.len()` is not an exact multiple of WEBRTC_WINDOW.
+        let mut buffer = VecDeque::<i16>::new();
+        buffer.reserve(WEBRTC_WINDOW);
+        builder
+            .name("ringrtc input")
+            .input(recording_device, &params)
+            .latency(std::cmp::max(SAMPLE_LATENCY, min_latency))
+            .data_callback(move |input, _| {
+                // First add data from prior call(s).
+                let data = buffer
+                    .drain(0..)
+                    .chain(input.iter().map(|f| f.m))
+                    .collect::<Vec<_>>();
+                // WebRTC cannot accept data in anything other than 10ms chunks, so report in these.
+                // Buffer any excess data beyond a multiple of WEBRTC_WINDOW for a subsequent
+                // callback invocation.
+                let input_chunks = data.chunks(WEBRTC_WINDOW);
+                for chunk in input_chunks {
+                    if chunk.len() < WEBRTC_WINDOW {
+                        // Do not try to invoke WebRTC with a too-short chunk.
+                        buffer.extend(chunk);
+                        break;
+                    }
+                    let (ret, _new_mic_level) = Worker::recorded_data_is_available(
+                        Arc::clone(&transport),
+                        chunk.to_vec(),
+                        NUM_CHANNELS,
+                        SAMPLE_FREQUENCY,
+                        // TODO(mutexlox): do we need different values here?
+                        Duration::new(0, 0),
+                        0,
+                        0,
+                        false,
+                        None,
+                    );
+                    if ret < 0 {
+                        error!("Failed to report recorded data: {}", ret);
+                        return ret as isize;
+                    }
+                }
+                input.len() as isize
+            })
+            .state_callback(|state| {
+                warn!("recording state: {:?}", state);
+            });
+        match builder.init(&self.ctx) {
+            Ok(stream) => {
+                self.input_stream = Some(stream);
+                Ok(())
+            }
+            Err(e) => {
+                bail!("Couldn't initialize input stream: {}", e);
+            }
+        }
+    }
+
+    fn start_recording(&mut self) -> anyhow::Result<()> {
+        if let Some(input_stream) = &self.input_stream {
+            if let Err(e) = input_stream.start() {
+                bail!("Failed to start recording: {}", e);
+            }
+        } else {
+            bail!(
+                "Cannot start recording without an input stream -- did you forget init_recording?"
+            );
+        }
+        Ok(())
+    }
+
+    fn stop_recording(&mut self) -> anyhow::Result<()> {
+        if let Some(input_stream) = &self.input_stream {
+            if let Err(e) = input_stream.stop() {
+                bail!("Failed to stop recording: {}", e);
+            }
+            // Drop the stream so that it isn't reused on future calls.
+            self.input_stream = None;
+        }
+        Ok(())
+    }
+
+    // Get the playout delay, in ms.
+    fn playout_delay(&mut self) -> anyhow::Result<u16> {
+        match &self.output_stream {
+            Some(output_stream) => {
+                let latency_samples = output_stream.latency();
+                match latency_samples {
+                    Ok(latency_samples) => Ok((latency_samples / (SAMPLE_FREQUENCY / 1000)) as u16),
+                    Err(e) => bail!("Failed to get latency: {}", e),
+                }
+            }
+            None => bail!("No stream, cannot get playout delay"),
+        }
+    }
+
+    fn work(
+        &mut self,
+        receiver: mpsc::Receiver<Event>,
+        playout_delay_sender: mpsc::Sender<anyhow::Result<u16>>,
+    ) {
+        for received in receiver {
+            if let Err(e) = match received {
+                Event::RefreshCache(d) => self.refresh_device_cache(d),
+                Event::SetCallback(ref transport) => {
+                    self.audio_transport = transport.clone();
+                    Ok(())
+                }
+                Event::SetPlayoutDevice(index) => {
+                    if let Some(d) = self.output_device_cache.get(index.into()) {
+                        self.playout_device = Some(d.devid);
+                        Ok(())
+                    } else {
+                        Err(anyhow!(
+                            "Invalid playout device index {} requested (len {:?})",
+                            index,
+                            self.output_device_cache.count()
+                        ))
+                    }
+                }
+                Event::SetRecordingDevice(index) => {
+                    if let Some(d) = self.input_device_cache.get(index.into()) {
+                        self.recording_device = Some(d.devid);
+                        Ok(())
+                    } else {
+                        Err(anyhow!(
+                            "Invalid playout device index {} requested (len {:?})",
+                            index,
+                            self.input_device_cache.count()
+                        ))
+                    }
+                }
+                Event::InitPlayout => self.init_playout(),
+                Event::StartPlayout => self.start_playout(),
+                Event::StopPlayout => self.stop_playout(),
+                Event::InitRecording => self.init_recording(),
+                Event::StartRecording => self.start_recording(),
+                Event::StopRecording => self.stop_recording(),
+                Event::PlayoutDelay => {
+                    if let Err(e) = playout_delay_sender.send(self.playout_delay()) {
+                        Err(anyhow!("Failed to send playout delay: {}", e))
+                    } else {
+                        Ok(())
+                    }
+                }
+                Event::Terminate => {
+                    self.terminate();
+                    return;
+                }
+            } {
+                warn!("{:?} failed: {:?}", received, e);
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn recorded_data_is_available(
+        rffi_audio_transport: Arc<Mutex<RffiAudioTransport>>,
+        samples: Vec<i16>,
+        channels: u32,
+        samples_per_sec: u32,
+        total_delay: Duration,
+        clock_drift: i32,
+        current_mic_level: u32,
+        key_pressed: bool,
+        estimated_capture_time: Option<Duration>,
+    ) -> (i32, u32) {
+        let mut new_mic_level = 0u32;
+        let estimated_capture_time_ns = estimated_capture_time.map_or(-1, |d| d.as_nanos() as i64);
+
+        let guard = match rffi_audio_transport.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                error!("Failed to get mutex: {:?}", e);
+                return (-1, 0);
+            }
+        };
+        // Safety:
+        // * self.audio_transport is within self, and will remain valid while this function is running
+        //   because we enforce that the callback cannot change while playing or recording.
+        // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
+        //   to the C layer, which should not read beyond that bound.
+        // * The local new_mic_level pointer is valid and this function is synchronous, so it'll
+        //   remain valid while it runs.
+        let ret = unsafe {
+            crate::webrtc::ffi::audio_device_module::Rust_recordedDataIsAvailable(
+                guard.callback,
+                samples.as_ptr() as *const c_void,
+                samples.len(),
+                std::mem::size_of::<i16>(),
+                channels.try_into().unwrap(), // constant, so unwrap is safe
+                samples_per_sec,
+                total_delay.as_millis() as u32,
+                clock_drift,
+                current_mic_level,
+                key_pressed,
+                &mut new_mic_level,
+                estimated_capture_time_ns,
+            )
+        };
+        (ret, new_mic_level)
+    }
+
+    fn need_more_play_data(
+        rffi_audio_transport: Arc<Mutex<RffiAudioTransport>>,
+        samples: usize,
+        channels: u32,
+        samples_per_sec: u32,
+    ) -> PlayData {
+        let mut data = vec![0i16; samples];
+        let mut samples_out = 0usize;
+        let mut elapsed_time_ms = 0i64;
+        let mut ntp_time_ms = 0i64;
+
+        let guard = match rffi_audio_transport.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                error!("Failed to get mutex: {:?}", e);
+                return PlayData {
+                    success: -1,
+                    data: Vec::new(),
+                    elapsed_time: None,
+                    ntp_time: None,
+                };
+            }
+        };
+        // Safety:
+        // * rffi_audio_transport will remain valid while this function is running
+        //   because we enforce that the callback cannot change while playing or recording.
+        // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
+        //   to the C layer, which should not write beyond that bound.
+        // * The local variable pointers are all valid and this function is synchronous, so they'll
+        //   remain valid while it runs.
+        let ret = unsafe {
+            crate::webrtc::ffi::audio_device_module::Rust_needMorePlayData(
+                guard.callback,
+                samples,
+                std::mem::size_of::<i16>(),
+                channels.try_into().unwrap(), // constant, so unwrap is safe
+                samples_per_sec,
+                data.as_mut_ptr() as *mut c_void,
+                &mut samples_out,
+                &mut elapsed_time_ms,
+                &mut ntp_time_ms,
+            )
+        };
+
+        if ret != 0 {
+            // For safety, prevent reading any potentially invalid data if the call failed
+            // (note the truncate below).
+            error!("failed to get output data");
+            samples_out = 0;
+        }
+
+        data.truncate(samples_out);
+
+        PlayData {
+            success: ret,
+            data,
+            elapsed_time: elapsed_time_ms.try_into().ok().map(Duration::from_millis),
+            ntp_time: ntp_time_ms.try_into().ok().map(Duration::from_millis),
+        }
+    }
+
+    pub fn spawn(
+        started_signal: mpsc::Sender<Option<String>>,
+        receiver: mpsc::Receiver<Event>,
+        sender: mpsc::Sender<Event>,
+        playout_delay_sender: mpsc::Sender<anyhow::Result<u16>>,
+        input_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+        output_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+    ) -> JoinHandle<()> {
+        thread::spawn(move || {
+            #[cfg(target_os = "windows")]
+            {
+                // Safety: calling with valid parameters.
+                let res = unsafe {
+                    Com::CoInitializeEx(
+                        None,
+                        Com::COINIT_MULTITHREADED | Com::COINIT_DISABLE_OLE1DDE,
+                    )
+                };
+                if res.is_err() {
+                    error!("Failed to initialize COM: {}", res);
+                    if let Err(e) = started_signal.send(None) {
+                        error!("Further, failed to notify about start failure: {}", e);
+                    }
+                    return;
+                }
+            }
+
+            // We must initialize this here because cubeb's Context is not Send
+            let ctx = match Context::init(Some(ADM_CONTEXT), None) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    error!("Failed to initialize cubeb: {:?}", e);
+                    if let Err(e) = started_signal.send(None) {
+                        error!("Further, failed to notify about start failure: {}", e);
+                    }
+                    return;
+                }
+            };
+            let name = ctx.backend_id().to_string();
+            info!("Successfully initialized cubeb backend {}", name);
+            let mut worker = Worker {
+                ctx,
+                input_data: UpdateCallbackData {
+                    device_type: DeviceType::INPUT,
+                    sender: sender.clone(),
+                },
+                output_data: UpdateCallbackData {
+                    device_type: DeviceType::OUTPUT,
+                    sender,
+                },
+                playout_device: None,
+                recording_device: None,
+                output_stream: None,
+                input_stream: None,
+                input_device_cache: Default::default(),
+                output_device_cache: Default::default(),
+                input_device_names,
+                output_device_names,
+                audio_transport: Arc::new(Mutex::new(RffiAudioTransport {
+                    callback: std::ptr::null(),
+                })),
+            };
+            if let Err(e) = worker.register_device_collection_changed(DeviceType::INPUT) {
+                error!("Failed to register input device callback: {}", e);
+                if let Err(e) = started_signal.send(None) {
+                    error!("Further, failed to notify about start failure: {}", e);
+                }
+                return;
+            }
+            if let Err(e) = worker.register_device_collection_changed(DeviceType::OUTPUT) {
+                error!("Failed to register output device callback: {}", e);
+                if let Err(e) = started_signal.send(None) {
+                    error!("Further, failed to notify about start failure: {}", e);
+                }
+                return;
+            }
+
+            // Refresh both caches before we signal a successful start so that callers can
+            // immediately enumerate devices.
+            if let Err(e) = worker.refresh_device_cache(DeviceType::INPUT) {
+                error!("Failed to do initial input device refresh: {}", e);
+                if let Err(e) = started_signal.send(None) {
+                    error!("Further, failed to notify about start failure: {}", e);
+                }
+            }
+            if let Err(e) = worker.refresh_device_cache(DeviceType::OUTPUT) {
+                error!("Failed to do initial output device refresh: {}", e);
+                if let Err(e) = started_signal.send(None) {
+                    error!("Further, failed to notify about start failure: {}", e);
+                }
+            }
+
+            if let Err(e) = started_signal.send(Some(name)) {
+                error!(
+                    "Failed to notify of successful start; app will hang!!! Error: {}",
+                    e
+                );
+            }
+
+            worker.work(receiver, playout_delay_sender);
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct AudioDeviceModule {
+    backend_name: String,
+    input_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+    output_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
     // Tracker flags to indicate whether we have **attempted** init_playout and
     // friends. Cleared on stop_playout and stop_recording.
     // We use these because some code, e.g. SetAudioRecordingDevice in
@@ -103,41 +791,30 @@ pub struct AudioDeviceModule {
     attempted_recording_init: bool,
     attempted_playout_start: bool,
     attempted_recording_start: bool,
-}
-
-impl Default for AudioDeviceModule {
-    fn default() -> Self {
-        Self {
-            audio_transport: Arc::new(Mutex::new(RffiAudioTransport {
-                callback: std::ptr::null(),
-            })),
-            cubeb_ctx: None,
-            initialized: false,
-            playout_device: None,
-            recording_device: None,
-            output_stream: None,
-            input_stream: None,
-            input_device_cache: None,
-            output_device_cache: None,
-            // Start these both as true to request a cache refresh, and leak them for reasons
-            // mentioned at the struct declaration site.
-            pending_input_device_refresh: Box::leak(Box::new(AtomicBool::new(true))),
-            pending_output_device_refresh: Box::leak(Box::new(AtomicBool::new(true))),
-            attempted_playout_init: false,
-            attempted_recording_init: false,
-            attempted_playout_start: false,
-            attempted_recording_start: false,
-        }
-    }
+    // The next two flags are for |{playout,recording}_is_available|
+    has_playout_device: bool,
+    has_recording_device: bool,
+    // Worker thread for all direct cubeb interaction
+    // This is only an option so that we can `take` out of it.
+    cubeb_worker: Option<JoinHandle<()>>,
+    mpsc_sender: mpsc::Sender<Event>,
+    playout_delay_receiver: mpsc::Receiver<anyhow::Result<u16>>,
 }
 
 impl Drop for AudioDeviceModule {
     // Clean up in case the application exits without properly calling terminate().
     fn drop(&mut self) {
-        if self.initialized {
-            let out = self.terminate();
-            if out != 0 {
-                error!("Failed to terminate: {}", out);
+        self.input_device_names = Arc::new(Mutex::new(Vec::new()));
+        self.output_device_names = Arc::new(Mutex::new(Vec::new()));
+        self.has_playout_device = false;
+        self.has_recording_device = false;
+
+        if let Err(e) = self.mpsc_sender.send(Event::Terminate) {
+            error!("Failed to request cubeb termination: {}", e);
+        }
+        if let Some(cw) = self.cubeb_worker.take() {
+            if let Err(e) = cw.join() {
+                error!("Failed to terminate cubeb worker: {:?}", e);
             }
         }
     }
@@ -265,8 +942,50 @@ fn log_c_str(s: &CStr) {
 }
 
 impl AudioDeviceModule {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new() -> anyhow::Result<Self> {
+        if !log_enabled() {
+            if let Err(e) = set_logging(LogLevel::Normal, Some(log_c_str)) {
+                warn!("failed to set cubeb logging: {:?}", e);
+            }
+        }
+
+        let input_device_names = Arc::new(Mutex::new(Vec::new()));
+        let output_device_names = Arc::new(Mutex::new(Vec::new()));
+        let (sender, receiver) = mpsc::channel();
+        let (started_sender, started_receiver) = mpsc::channel();
+        let (playout_delay_sender, playout_delay_receiver) = mpsc::channel();
+        let cubeb_worker = Worker::spawn(
+            started_sender,
+            receiver,
+            sender.clone(),
+            playout_delay_sender,
+            input_device_names.clone(),
+            output_device_names.clone(),
+        );
+
+        // Ensure the thread started correctly
+
+        let backend_name = match started_receiver.recv().ok().flatten() {
+            Some(s) => s,
+            None => {
+                bail!("Failed to initialize");
+            }
+        };
+
+        Ok(AudioDeviceModule {
+            backend_name,
+            input_device_names,
+            output_device_names,
+            attempted_playout_init: false,
+            attempted_recording_init: false,
+            attempted_playout_start: false,
+            attempted_recording_start: false,
+            has_playout_device: false,
+            has_recording_device: false,
+            cubeb_worker: Some(cubeb_worker),
+            mpsc_sender: sender,
+            playout_delay_receiver,
+        })
     }
 
     pub fn active_audio_layer(&self, _audio_layer: webrtc::ptr::Borrowed<AudioLayer>) -> i32 {
@@ -280,224 +999,58 @@ impl AudioDeviceModule {
         if self.playing() || self.recording() {
             return -1;
         }
-        self.audio_transport = std::sync::Arc::new(Mutex::new(RffiAudioTransport {
-            callback: audio_transport,
-        }));
+        if let Err(e) = self
+            .mpsc_sender
+            .send(Event::SetCallback(std::sync::Arc::new(Mutex::new(
+                RffiAudioTransport {
+                    callback: audio_transport,
+                },
+            ))))
+        {
+            error!("Failed to request SetCallback: {}", e);
+            return -1;
+        }
         0
-    }
-
-    /// Safety: Must be called with a valid |flag| pointer. (NULL is okay.)
-    unsafe extern "C" fn device_changed(_ctx: *mut cubeb::ffi::cubeb, flag: *mut c_void) {
-        // Flag that an update is needed; this will be processed on the next enumerate_devices call.
-        if let Some(b) = (flag as *mut AtomicBool).as_ref() {
-            b.store(true, Ordering::SeqCst)
-        }
-    }
-
-    fn register_device_collection_changed(
-        &mut self,
-        device_type: DeviceType,
-        flag: &'static AtomicBool,
-    ) -> anyhow::Result<()> {
-        let ctx = match &self.cubeb_ctx {
-            Some(ctx) => ctx,
-            None => bail!("Cannot register device changed callback without a ctx"),
-        };
-        unsafe {
-            // Safety: |callback| will remain a valid pointer for the lifetime of the program,
-            // as will |flag| (since it's static)
-            Ok(ctx.register_device_collection_changed(
-                device_type,
-                Some(AudioDeviceModule::device_changed),
-                flag.as_ptr() as *mut c_void,
-            )?)
-        }
     }
 
     // Main initialization and termination
     pub fn init(&mut self) -> i32 {
-        // Don't bother re-initializing.
-        if self.initialized {
-            return 0;
-        }
-        if !log_enabled() {
-            if let Err(e) = set_logging(LogLevel::Normal, Some(log_c_str)) {
-                warn!("failed to set cubeb logging: {:?}", e);
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            // Safety: calling with valid parameters.
-            let res = unsafe {
-                Com::CoInitializeEx(
-                    None,
-                    Com::COINIT_MULTITHREADED | Com::COINIT_DISABLE_OLE1DDE,
-                )
-            };
-            if res.is_err() {
-                error!("Failed to initialize COM: {}", res);
-                return -1;
-            }
-        }
-        match Context::init(Some(ADM_CONTEXT), None) {
-            Ok(ctx) => {
-                info!(
-                    "Successfully initialized cubeb backend {}",
-                    ctx.backend_id()
-                );
-                self.cubeb_ctx = Some(ctx);
-                self.initialized = true;
-            }
-            Err(e) => {
-                error!("Failed to initialize: {}", e);
-                return -1;
-            }
-        }
-        if let Err(e) = self.register_device_collection_changed(
-            DeviceType::INPUT,
-            self.pending_input_device_refresh,
-        ) {
-            error!("Failed to register input device callback: {}", e);
-            return -1;
-        }
-        if let Err(e) = self.register_device_collection_changed(
-            DeviceType::OUTPUT,
-            self.pending_output_device_refresh,
-        ) {
-            error!("Failed to register input device callback: {}", e);
-            return -1;
-        }
-        // Caches are not set up, so request a refresh.
-        self.pending_input_device_refresh
-            .store(true, Ordering::SeqCst);
-        self.pending_output_device_refresh
-            .store(true, Ordering::SeqCst);
-        self.initialized = true;
+        // Don't bother re-initializing -- new handled it.
         0
     }
 
-    pub fn backend_name(&self) -> Option<String> {
-        self.cubeb_ctx
-            .as_ref()
-            .map(|ctx| ctx.backend_id().to_string())
+    pub fn backend_name(&self) -> String {
+        self.backend_name.clone()
     }
 
     pub fn terminate(&mut self) -> i32 {
-        if self.recording() {
-            self.stop_recording();
-        }
-        if self.playing() {
-            self.stop_playout();
-        }
-        // Cause these to Drop.
-        self.input_stream = None;
-        self.output_stream = None;
-        // Ensure these are not reused.
-        self.playout_device = None;
-        self.recording_device = None;
-        self.input_device_cache = None;
-        self.output_device_cache = None;
-        if let Some(ctx) = &self.cubeb_ctx {
-            // Clear callbacks.
-            unsafe {
-                // Safety: We are calling this with None, which will unset the callback,
-                // so passing null is safe.
-                if let Err(e) = ctx.register_device_collection_changed(
-                    DeviceType::INPUT,
-                    None,
-                    std::ptr::null_mut(),
-                ) {
-                    warn!("failed to reset input callback: {}", e);
-                }
-                if let Err(e) = ctx.register_device_collection_changed(
-                    DeviceType::OUTPUT,
-                    None,
-                    std::ptr::null_mut(),
-                ) {
-                    warn!("failed to reset output callback: {}", e);
-                }
-            }
-        }
-        // Invalidate the ctx (note that any references to it, like `DeviceId`s,
-        // must have already been dropped).
-        self.cubeb_ctx = None;
-        self.initialized = false;
-        #[cfg(target_os = "windows")]
-        {
-            // Safety: No parameters, was already initialized.
-            unsafe {
-                Com::CoUninitialize();
-            };
-        }
         0
     }
 
     pub fn initialized(&self) -> bool {
-        self.initialized
-    }
-
-    fn refresh_device_cache(&mut self, device_type: DeviceType) -> anyhow::Result<()> {
-        let ctx = match &self.cubeb_ctx {
-            Some(ctx) => ctx,
-            None => bail!("cannot refresh device cache without a ctx"),
-        };
-
-        let devices = {
-            // Pause logging because enumeration is noisy
-            let _guard = LogDisableGuard::new();
-            ctx.enumerate_devices(device_type)?
-        };
-
-        let last = match device_type {
-            DeviceType::INPUT => &self.input_device_cache,
-            DeviceType::OUTPUT => &self.output_device_cache,
-            _ => bail!("Bad device type {:?}", device_type),
-        };
-        let collection = DeviceCollectionWrapper::new(&devices);
-        if Some(&collection) != last.as_ref() {
-            for device in devices.iter() {
-                info!(
-                    "{:?} device: ({})",
-                    device_type,
-                    AudioDeviceModule::device_str(device)
-                );
-            }
-        }
-
-        match device_type {
-            DeviceType::INPUT => self.input_device_cache = Some(collection),
-            DeviceType::OUTPUT => self.output_device_cache = Some(collection),
-            _ => bail!("Bad device type {:?}", device_type),
-        }
-        Ok(())
+        true
     }
 
     fn enumerate_devices(
         &mut self,
         device_type: DeviceType,
-    ) -> anyhow::Result<&DeviceCollectionWrapper> {
-        let pending_update = match device_type {
-            DeviceType::INPUT => self
-                .pending_input_device_refresh
-                .swap(false, Ordering::SeqCst),
-            DeviceType::OUTPUT => self
-                .pending_output_device_refresh
-                .swap(false, Ordering::SeqCst),
-            _ => bail!("Bad device type {:?}", device_type),
-        };
-        if pending_update {
-            info!("Refreshing {:?} device cache", device_type);
-            self.refresh_device_cache(device_type)?;
-        }
+    ) -> anyhow::Result<Vec<DeviceNameInfo>> {
         let collection = match device_type {
-            DeviceType::INPUT => self.input_device_cache.as_ref(),
-            DeviceType::OUTPUT => self.output_device_cache.as_ref(),
+            DeviceType::INPUT => self
+                .input_device_names
+                .as_ref()
+                .lock()
+                .map_err(|_| anyhow!("failed to lock"))?
+                .clone(),
+            DeviceType::OUTPUT => self
+                .output_device_names
+                .as_ref()
+                .lock()
+                .map_err(|_| anyhow!("failed to lock"))?
+                .clone(),
             _ => bail!("Bad device type {:?}", device_type),
         };
-        match collection {
-            Some(c) => Ok(c),
-            None => Err(anyhow!("No {:?} collection found", device_type)),
-        }
+        Ok(collection)
     }
 
     fn device_str(device: &cubeb::DeviceInfo) -> String {
@@ -528,37 +1081,44 @@ impl AudioDeviceModule {
 
     // Device enumeration
     pub fn playout_devices(&mut self) -> i16 {
-        // No need to refresh default devices; the **count** won't change when the default changes.
-        match self.enumerate_devices(DeviceType::OUTPUT) {
-            Ok(device_collection) => device_collection.count().try_into().unwrap_or(-1),
+        let raw = match self.enumerate_devices(DeviceType::OUTPUT) {
+            Ok(devices) => devices.len().try_into().unwrap_or(-1),
             Err(e) => {
-                error!("Failed to get playout devices: {}", e);
+                error!("Failed to get playout device count: {}", e);
                 -1
             }
-        }
+        };
+        // Windows has special logic: it doesn't count the default devices
+        #[cfg(not(target_os = "windows"))]
+        return raw;
+        #[cfg(target_os = "windows")]
+        return raw - 2;
     }
 
     pub fn recording_devices(&mut self) -> i16 {
-        // No need to refresh default devices; the **count** won't change when the default changes.
-        match self.enumerate_devices(DeviceType::INPUT) {
-            Ok(device_collection) => device_collection.count().try_into().unwrap_or(-1),
+        let raw = match self.enumerate_devices(DeviceType::INPUT) {
+            Ok(devices) => devices.len().try_into().unwrap_or(-1),
             Err(e) => {
-                error!("Failed to get recording devices: {}", e);
+                error!("Failed to get recording device count: {}", e);
                 -1
             }
-        }
+        };
+        // Windows has special logic: it doesn't count the default devices
+        #[cfg(not(target_os = "windows"))]
+        return raw;
+        #[cfg(target_os = "windows")]
+        return raw - 2;
     }
 
     fn copy_name_and_id(
         index: u16,
-        devices: &DeviceCollectionWrapper,
+        devices: &[DeviceNameInfo],
         name_out: webrtc::ptr::Borrowed<c_uchar>,
         guid_out: webrtc::ptr::Borrowed<c_uchar>,
     ) -> anyhow::Result<()> {
-        if let Some(d) = devices.get(index.into()) {
+        if let Some(d) = devices.get(index as usize) {
             if let Some(name) = &d.friendly_name {
                 let mut name_copy = name.to_string();
-                // TODO(mutexlox): Localize these strings.
                 #[cfg(not(target_os = "windows"))]
                 if index == 0 {
                     name_copy = format!("default ({})", name);
@@ -585,7 +1145,7 @@ impl AudioDeviceModule {
             Err(anyhow!(
                 "Could not get device at index {} (len {})",
                 index,
-                devices.count()
+                devices.len()
             ))
         }
     }
@@ -598,7 +1158,7 @@ impl AudioDeviceModule {
     ) -> i32 {
         match self.enumerate_devices(DeviceType::OUTPUT) {
             Ok(devices) => {
-                match AudioDeviceModule::copy_name_and_id(index, devices, name_out, guid_out) {
+                match AudioDeviceModule::copy_name_and_id(index, &devices, name_out, guid_out) {
                     Ok(_) => 0,
                     Err(e) => {
                         error!("Failed to copy name and ID for playout device: {}", e);
@@ -621,7 +1181,7 @@ impl AudioDeviceModule {
     ) -> i32 {
         match self.enumerate_devices(DeviceType::INPUT) {
             Ok(devices) => {
-                match AudioDeviceModule::copy_name_and_id(index, devices, name_out, guid_out) {
+                match AudioDeviceModule::copy_name_and_id(index, &devices, name_out, guid_out) {
                     Ok(_) => 0,
                     Err(e) => {
                         error!("Failed to copy name and ID for recording device: {}", e);
@@ -638,14 +1198,19 @@ impl AudioDeviceModule {
 
     // Device selection
     pub fn set_playout_device(&mut self, index: u16) -> i32 {
-        let device = match self.enumerate_devices(DeviceType::OUTPUT) {
+        match self.enumerate_devices(DeviceType::OUTPUT) {
             Ok(devices) => match devices.get(index as usize) {
-                Some(device) => device.devid,
+                Some(_) => {
+                    if let Err(e) = self.mpsc_sender.send(Event::SetPlayoutDevice(index)) {
+                        error!("Failed to request SetPlayoutDevice: {}", e);
+                        return -1;
+                    }
+                }
                 None => {
                     error!(
                         "Invalid playout device index {} requested (len {})",
                         index,
-                        devices.count()
+                        devices.len()
                     );
                     return -1;
                 }
@@ -655,7 +1220,7 @@ impl AudioDeviceModule {
                 return -1;
             }
         };
-        self.playout_device = Some(device);
+        self.has_playout_device = true;
         0
     }
 
@@ -669,14 +1234,19 @@ impl AudioDeviceModule {
     }
 
     pub fn set_recording_device(&mut self, index: u16) -> i32 {
-        let device = match self.enumerate_devices(DeviceType::INPUT) {
+        match self.enumerate_devices(DeviceType::INPUT) {
             Ok(devices) => match devices.get(index as usize) {
-                Some(device) => device.devid,
+                Some(_) => {
+                    if let Err(e) = self.mpsc_sender.send(Event::SetRecordingDevice(index)) {
+                        error!("Failed to request SetRecordingDevice: {}", e);
+                        return -1;
+                    }
+                }
                 None => {
                     error!(
                         "Invalid recording device index {} requested (len {})",
                         index,
-                        devices.count()
+                        devices.len()
                     );
                     return -1;
                 }
@@ -686,7 +1256,7 @@ impl AudioDeviceModule {
                 return -1;
             }
         };
-        self.recording_device = Some(device);
+        self.has_recording_device = true;
         0
     }
 
@@ -701,7 +1271,7 @@ impl AudioDeviceModule {
 
     // Audio transport initialization
     pub fn playout_is_available(&self, available_out: webrtc::ptr::Borrowed<bool>) -> i32 {
-        let available = self.initialized && self.playout_device.is_some();
+        let available = self.has_playout_device;
         match write_to_null_or_valid_pointer(available_out, available) {
             Ok(_) => 0,
             Err(e) => {
@@ -712,122 +1282,12 @@ impl AudioDeviceModule {
     }
 
     pub fn init_playout(&mut self) -> i32 {
-        if !self.initialized {
-            error!("Tried to init playout without initializing ADM");
+        self.attempted_playout_init = true;
+        if let Err(e) = self.mpsc_sender.send(Event::InitPlayout) {
+            error!("Failed to request InitPlayout: {}", e);
             return -1;
         }
-        self.attempted_playout_init = true;
-        let out_device = if let Some(device) = self.playout_device {
-            device
-        } else {
-            error!("Tried to init playout without a playout device");
-            return 0;
-        };
-        let ctx = if let Some(c) = &self.cubeb_ctx {
-            c
-        } else {
-            error!("Tried to init playout without a ctx");
-            return 0;
-        };
-        let params = cubeb::StreamParamsBuilder::new()
-            .format(STREAM_FORMAT)
-            .rate(SAMPLE_FREQUENCY)
-            .channels(2)
-            .layout(cubeb::ChannelLayout::STEREO)
-            .prefs(StreamPrefs::VOICE)
-            .take();
-        let mut builder = cubeb::StreamBuilder::<OutFrame>::new();
-        let transport = Arc::clone(&self.audio_transport);
-        let min_latency = ctx.min_latency(&params).unwrap_or_else(|e| {
-            error!(
-                "Could not get min latency for playout; using default: {:?}",
-                e
-            );
-            SAMPLE_LATENCY
-        });
-        info!("min playout latency: {}", min_latency);
-        // WebRTC can only report data in WEBRTC_WINDOW-sized chunks.
-        // This buffer tracks any extra data that would not fit in `output`,
-        // if `output.len()` is not an exact multiple of WEBRTC_WINDOW.
-        let mut buffer = VecDeque::<i16>::new();
-        buffer.reserve(WEBRTC_WINDOW);
-        builder
-            .name("ringrtc output")
-            .output(out_device, &params)
-            .latency(std::cmp::max(SAMPLE_LATENCY, min_latency))
-            .data_callback(move |_, output| {
-                if output.is_empty() {
-                    return 0;
-                }
-
-                // WebRTC cannot give data in anything other than 10ms chunks, so request
-                // these.
-                // If the data callback is invoked with an `output` length that is
-                // not a multiple of WEBRTC_WINDOW, make one "extra" call to webrtc and
-                // store "extra" data in `buffer`.
-
-                // First, copy any leftover data from prior invocations.
-                let mut written = 0;
-                while let Some(data) = buffer.pop_front() {
-                    output[written] = OutFrame { l: data, r: data };
-                    written += 1;
-                    if written >= output.len() {
-                        // Short-circuit; we already have enough data.
-                        return output.len() as isize;
-                    }
-                }
-
-                // Then, request more data from WebRTC.
-                while written < output.len() {
-                    let play_data = AudioDeviceModule::need_more_play_data(
-                        Arc::clone(&transport),
-                        WEBRTC_WINDOW,
-                        NUM_CHANNELS,
-                        SAMPLE_FREQUENCY,
-                    );
-                    if play_data.success < 0 {
-                        // C function failed; propagate error and don't continue.
-                        return play_data.success as isize;
-                    } else if play_data.data.len() > WEBRTC_WINDOW {
-                        error!("need_more_play_data returned too much data");
-                        return -1;
-                    }
-                    // Put data into the right format and add it to the output
-                    // array for cubeb to play.
-                    // If there's more data than was requested, add it to the
-                    // buffer for the next invocation of the callback.
-                    for data in play_data.data.iter() {
-                        if written < output.len() {
-                            output[written] = OutFrame { l: *data, r: *data };
-                            written += 1;
-                        } else {
-                            buffer.push_back(*data);
-                        }
-                    }
-                }
-
-                if written != output.len() {
-                    error!(
-                        "Got wrong amount of output data (want {} got {}), may drain.",
-                        output.len(),
-                        written
-                    );
-                }
-                written as isize
-            })
-            .state_callback(|state| {
-                warn!("Playout state: {:?}", state);
-            });
-        match builder.init(ctx) {
-            Ok(stream) => {
-                self.output_stream = Some(stream);
-                0
-            }
-            Err(e) => {
-                error!("Couldn't initialize output stream: {}", e);
-                0
-            }
-        }
+        0
     }
 
     pub fn playout_is_initialized(&self) -> bool {
@@ -835,7 +1295,7 @@ impl AudioDeviceModule {
     }
 
     pub fn recording_is_available(&self, available_out: webrtc::ptr::Borrowed<bool>) -> i32 {
-        let available = self.initialized && self.recording_device.is_some();
+        let available = self.has_recording_device;
         match write_to_null_or_valid_pointer(available_out, available) {
             Ok(_) => 0,
             Err(e) => {
@@ -846,103 +1306,12 @@ impl AudioDeviceModule {
     }
 
     pub fn init_recording(&mut self) -> i32 {
-        if !self.initialized {
-            error!("Tried to init recording without initializing ADM");
+        self.attempted_recording_init = true;
+        if let Err(e) = self.mpsc_sender.send(Event::InitRecording) {
+            error!("Failed to request InitRecording: {}", e);
             return -1;
         }
-        self.attempted_recording_init = true;
-        let recording_device = if let Some(device) = self.recording_device {
-            device
-        } else {
-            error!("Tried to init recording without a recording device");
-            return 0;
-        };
-        let ctx = if let Some(c) = &self.cubeb_ctx {
-            c
-        } else {
-            error!("Tried to init recording without a ctx");
-            return 0;
-        };
-        let builder = cubeb::StreamParamsBuilder::new()
-            .format(STREAM_FORMAT)
-            .rate(SAMPLE_FREQUENCY)
-            .channels(NUM_CHANNELS)
-            .layout(cubeb::ChannelLayout::MONO);
-        // On Mac, the AEC pipeline runs at 24kHz (FB15839727 tracks this). For now,
-        // disable it.
-        let params = if cfg!(not(target_os = "macos")) {
-            builder.prefs(StreamPrefs::VOICE)
-        } else {
-            builder
-        }
-        .take();
-        let mut builder = cubeb::StreamBuilder::<Frame>::new();
-        let transport = Arc::clone(&self.audio_transport);
-        let min_latency = ctx.min_latency(&params).unwrap_or_else(|e| {
-            error!(
-                "Could not get min latency for recording; using default: {:?}",
-                e
-            );
-            SAMPLE_LATENCY
-        });
-        info!("min recording latency: {}", min_latency);
-        // WebRTC can only accept data in WEBRTC_WINDOW-sized chunks.
-        // This buffer tracks any extra data that would not fit in a call to WebRTC,
-        // if `input.len()` is not an exact multiple of WEBRTC_WINDOW.
-        let mut buffer = VecDeque::<i16>::new();
-        buffer.reserve(WEBRTC_WINDOW);
-        builder
-            .name("ringrtc input")
-            .input(recording_device, &params)
-            .latency(std::cmp::max(SAMPLE_LATENCY, min_latency))
-            .data_callback(move |input, _| {
-                // First add data from prior call(s).
-                let data = buffer
-                    .drain(0..)
-                    .chain(input.iter().map(|f| f.m))
-                    .collect::<Vec<_>>();
-                // WebRTC cannot accept data in anything other than 10ms chunks, so report in these.
-                // Buffer any excess data beyond a multiple of WEBRTC_WINDOW for a subsequent
-                // callback invocation.
-                let input_chunks = data.chunks(WEBRTC_WINDOW);
-                for chunk in input_chunks {
-                    if chunk.len() < WEBRTC_WINDOW {
-                        // Do not try to invoke WebRTC with a too-short chunk.
-                        buffer.extend(chunk);
-                        break;
-                    }
-                    let (ret, _new_mic_level) = AudioDeviceModule::recorded_data_is_available(
-                        Arc::clone(&transport),
-                        chunk.to_vec(),
-                        NUM_CHANNELS,
-                        SAMPLE_FREQUENCY,
-                        // TODO(mutexlox): do we need different values here?
-                        Duration::new(0, 0),
-                        0,
-                        0,
-                        false,
-                        None,
-                    );
-                    if ret < 0 {
-                        error!("Failed to report recorded data: {}", ret);
-                        return ret as isize;
-                    }
-                }
-                input.len() as isize
-            })
-            .state_callback(|state| {
-                warn!("recording state: {:?}", state);
-            });
-        match builder.init(ctx) {
-            Ok(stream) => {
-                self.input_stream = Some(stream);
-                0
-            }
-            Err(e) => {
-                error!("Couldn't initialize input stream: {}", e);
-                0
-            }
-        }
+        0
     }
 
     pub fn recording_is_initialized(&self) -> bool {
@@ -952,28 +1321,19 @@ impl AudioDeviceModule {
     // Audio transport control
     pub fn start_playout(&mut self) -> i32 {
         self.attempted_playout_start = true;
-        if let Some(output_stream) = &self.output_stream {
-            if let Err(e) = output_stream.start() {
-                error!("Failed to start playout: {}", e);
-                return 0;
-            }
-            0
-        } else {
-            error!("Cannot start playout without an output stream -- did you forget init_playout?");
-            0
+        if let Err(e) = self.mpsc_sender.send(Event::StartPlayout) {
+            error!("Failed to request StartPlayout: {}", e);
+            return -1;
         }
+        0
     }
 
     pub fn stop_playout(&mut self) -> i32 {
         self.attempted_playout_init = false;
         self.attempted_playout_start = false;
-        if let Some(output_stream) = &self.output_stream {
-            if let Err(e) = output_stream.stop() {
-                error!("Failed to stop playout: {}", e);
-                return 0;
-            }
-            // Drop the stream so that it isn't reused on future calls.
-            self.output_stream = None;
+        if let Err(e) = self.mpsc_sender.send(Event::StopPlayout) {
+            error!("Failed to request StopPlayout: {}", e);
+            return -1;
         }
         0
     }
@@ -984,30 +1344,19 @@ impl AudioDeviceModule {
 
     pub fn start_recording(&mut self) -> i32 {
         self.attempted_recording_start = true;
-        if let Some(input_stream) = &self.input_stream {
-            if let Err(e) = input_stream.start() {
-                error!("Failed to start recording: {}", e);
-                return 0;
-            }
-            0
-        } else {
-            error!(
-                "Cannot start recording without an input stream -- did you forget init_recording?"
-            );
-            0
+        if let Err(e) = self.mpsc_sender.send(Event::StartRecording) {
+            error!("Failed to request StartRecording: {}", e);
+            return -1;
         }
+        0
     }
 
     pub fn stop_recording(&mut self) -> i32 {
         self.attempted_recording_init = false;
         self.attempted_recording_start = false;
-        if let Some(input_stream) = &self.input_stream {
-            if let Err(e) = input_stream.stop() {
-                error!("Failed to stop recording: {}", e);
-                return 0;
-            }
-            // Drop the stream so that it isn't reused on future calls.
-            self.input_stream = None;
+        if let Err(e) = self.mpsc_sender.send(Event::StopRecording) {
+            error!("Failed to request StopRecording: {}", e);
+            return -1;
         }
         0
     }
@@ -1018,34 +1367,23 @@ impl AudioDeviceModule {
 
     // Audio mixer initialization
     pub fn init_speaker(&self) -> i32 {
-        if self.initialized {
-            0
-        } else {
-            -1
-        }
+        0
     }
 
     pub fn speaker_is_initialized(&self) -> bool {
-        self.initialized
+        true
     }
 
     pub fn init_microphone(&self) -> i32 {
-        if self.initialized {
-            0
-        } else {
-            -1
-        }
+        0
     }
 
     pub fn microphone_is_initialized(&self) -> bool {
-        self.initialized
+        true
     }
 
     // Speaker volume controls
     pub fn speaker_volume_is_available(&self, available: webrtc::ptr::Borrowed<bool>) -> i32 {
-        if !self.initialized {
-            return -1;
-        }
         match write_to_null_or_valid_pointer(available, false) {
             Ok(_) => 0,
             Err(e) => {
@@ -1074,9 +1412,6 @@ impl AudioDeviceModule {
 
     // Microphone volume controls
     pub fn microphone_volume_is_available(&self, available: webrtc::ptr::Borrowed<bool>) -> i32 {
-        if !self.initialized {
-            return -1;
-        }
         match write_to_null_or_valid_pointer(available, false) {
             Ok(_) => 0,
             Err(e) => {
@@ -1105,9 +1440,6 @@ impl AudioDeviceModule {
 
     // Speaker mute control
     pub fn speaker_mute_is_available(&self, available: webrtc::ptr::Borrowed<bool>) -> i32 {
-        if !self.initialized {
-            return -1;
-        }
         match write_to_null_or_valid_pointer(available, false) {
             Ok(_) => 0,
             Err(e) => {
@@ -1128,9 +1460,6 @@ impl AudioDeviceModule {
 
     // Microphone mute control
     pub fn microphone_mute_is_available(&self, available: webrtc::ptr::Borrowed<bool>) -> i32 {
-        if !self.initialized {
-            return -1;
-        }
         match write_to_null_or_valid_pointer(available, false) {
             Ok(_) => 0,
             Err(e) => {
@@ -1150,9 +1479,6 @@ impl AudioDeviceModule {
 
     // Stereo support
     pub fn stereo_playout_is_available(&self, available: webrtc::ptr::Borrowed<bool>) -> i32 {
-        if !self.initialized {
-            return -1;
-        }
         match write_to_null_or_valid_pointer(available, false) {
             Ok(_) => 0,
             Err(e) => {
@@ -1172,9 +1498,6 @@ impl AudioDeviceModule {
     }
 
     pub fn stereo_recording_is_available(&self, available: webrtc::ptr::Borrowed<bool>) -> i32 {
-        if !self.initialized {
-            return -1;
-        }
         match write_to_null_or_valid_pointer(available, false) {
             Ok(_) => 0,
             Err(e) => {
@@ -1194,136 +1517,28 @@ impl AudioDeviceModule {
     }
 
     pub fn playout_delay(&self, delay_ms: webrtc::ptr::Borrowed<u16>) -> i32 {
-        match &self.output_stream {
-            Some(output_stream) => {
-                let latency_samples = output_stream.latency();
-                match latency_samples {
-                    Ok(latency_samples) => {
-                        let latency_ms = latency_samples / (SAMPLE_FREQUENCY / 1000);
-                        match write_to_null_or_valid_pointer(delay_ms, latency_ms as u16) {
-                            Ok(_) => 0,
-                            Err(e) => {
-                                error!("writing delay: {:?}", e);
-                                -1
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to get latency: {}", e);
-                        -1
-                    }
+        if let Err(e) = self.mpsc_sender.send(Event::PlayoutDelay) {
+            error!("Failed to request PlayoutDelay: {}", e);
+            return -1;
+        }
+        // If we wait more than 50ms the delay probably won't be helpful anymore anyway.
+        match self
+            .playout_delay_receiver
+            .recv_timeout(Duration::from_millis(50))
+            .context("timed out trying to recv")
+            .flatten()
+        {
+            Ok(latency_ms) => match write_to_null_or_valid_pointer(delay_ms, latency_ms) {
+                Ok(_) => 0,
+                Err(e) => {
+                    error!("writing delay: {:?}", e);
+                    -1
                 }
-            }
-            None => -1,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn recorded_data_is_available(
-        rffi_audio_transport: Arc<Mutex<RffiAudioTransport>>,
-        samples: Vec<i16>,
-        channels: u32,
-        samples_per_sec: u32,
-        total_delay: Duration,
-        clock_drift: i32,
-        current_mic_level: u32,
-        key_pressed: bool,
-        estimated_capture_time: Option<Duration>,
-    ) -> (i32, u32) {
-        let mut new_mic_level = 0u32;
-        let estimated_capture_time_ns = estimated_capture_time.map_or(-1, |d| d.as_nanos() as i64);
-
-        let guard = match rffi_audio_transport.lock() {
-            Ok(g) => g,
+            },
             Err(e) => {
-                error!("Failed to get mutex: {:?}", e);
-                return (-1, 0);
+                error!("Failed to get latency: {}", e);
+                -1
             }
-        };
-        // Safety:
-        // * self.audio_transport is within self, and will remain valid while this function is running
-        //   because we enforce that the callback cannot change while playing or recording.
-        // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
-        //   to the C layer, which should not read beyond that bound.
-        // * The local new_mic_level pointer is valid and this function is synchronous, so it'll
-        //   remain valid while it runs.
-        let ret = unsafe {
-            crate::webrtc::ffi::audio_device_module::Rust_recordedDataIsAvailable(
-                guard.callback,
-                samples.as_ptr() as *const c_void,
-                samples.len(),
-                std::mem::size_of::<i16>(),
-                channels.try_into().unwrap(), // constant, so unwrap is safe
-                samples_per_sec,
-                total_delay.as_millis() as u32,
-                clock_drift,
-                current_mic_level,
-                key_pressed,
-                &mut new_mic_level,
-                estimated_capture_time_ns,
-            )
-        };
-        (ret, new_mic_level)
-    }
-
-    fn need_more_play_data(
-        rffi_audio_transport: Arc<Mutex<RffiAudioTransport>>,
-        samples: usize,
-        channels: u32,
-        samples_per_sec: u32,
-    ) -> PlayData {
-        let mut data = vec![0i16; samples];
-        let mut samples_out = 0usize;
-        let mut elapsed_time_ms = 0i64;
-        let mut ntp_time_ms = 0i64;
-
-        let guard = match rffi_audio_transport.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                error!("Failed to get mutex: {:?}", e);
-                return PlayData {
-                    success: -1,
-                    data: Vec::new(),
-                    elapsed_time: None,
-                    ntp_time: None,
-                };
-            }
-        };
-        // Safety:
-        // * rffi_audio_transport will remain valid while this function is running
-        //   because we enforce that the callback cannot change while playing or recording.
-        // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
-        //   to the C layer, which should not write beyond that bound.
-        // * The local variable pointers are all valid and this function is synchronous, so they'll
-        //   remain valid while it runs.
-        let ret = unsafe {
-            crate::webrtc::ffi::audio_device_module::Rust_needMorePlayData(
-                guard.callback,
-                samples,
-                std::mem::size_of::<i16>(),
-                channels.try_into().unwrap(), // constant, so unwrap is safe
-                samples_per_sec,
-                data.as_mut_ptr() as *mut c_void,
-                &mut samples_out,
-                &mut elapsed_time_ms,
-                &mut ntp_time_ms,
-            )
-        };
-
-        if ret != 0 {
-            // For safety, prevent reading any potentially invalid data if the call failed
-            // (note the truncate below).
-            error!("failed to get output data");
-            samples_out = 0;
-        }
-
-        data.truncate(samples_out);
-
-        PlayData {
-            success: ret,
-            data,
-            elapsed_time: elapsed_time_ms.try_into().ok().map(Duration::from_millis),
-            ntp_time: ntp_time_ms.try_into().ok().map(Duration::from_millis),
         }
     }
 }
@@ -1346,9 +1561,9 @@ mod audio_device_module_tests {
             Some(|cstr| println!("{:?}", cstr)),
         )
         .expect("failed to set logging");
-        let mut adm = AudioDeviceModule::new();
+        let mut adm = AudioDeviceModule::new().unwrap();
         assert_eq!(adm.init(), 0);
 
-        assert_eq!(adm.backend_name(), Some(expected_backend.to_string()));
+        assert_eq!(adm.backend_name(), expected_backend.to_string());
     }
 }
