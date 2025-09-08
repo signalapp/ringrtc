@@ -1322,7 +1322,9 @@ where
             )
         );
 
-        info!("Remote ICE candidates removed; ports: {:?}", removed_ports);
+        if !removed_ports.is_empty() {
+            info!("Remote ICE candidates removed; ports: {:?}", removed_ports);
+        }
 
         for added_sdp in added_sdps {
             if let Err(e) = pc.add_ice_candidate_from_sdp(&added_sdp) {
@@ -1546,6 +1548,8 @@ where
 
         #[cfg(feature = "call_sim")]
         thread::sleep(Duration::from_millis(20));
+
+        StatsObserver::print_headers();
 
         let webrtc = self.webrtc.lock()?;
         let pc = webrtc.peer_connection()?;

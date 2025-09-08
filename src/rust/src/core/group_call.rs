@@ -1310,14 +1310,6 @@ impl Client {
                         observer.handle_ended(client_id, EndReason::FailedToCreatePeerConnection);
                     })?;
                 let call_id_for_stats = CallId::from(client_id as u64);
-                info!(
-                    "ringrtc_stats!,\
-                        sfu,\
-                        recv,\
-                        target_send_rate,\
-                        ideal_send_rate,\
-                        allocated_send_rate"
-                );
                 Ok(State {
                     client_id,
                     group_id,
@@ -1857,6 +1849,16 @@ impl Client {
                 }
                 JoinState::NotJoined(ring_id) => {
                     if Self::take_busy(state) {
+                        info!(
+                            "ringrtc_stats!,\
+                                sfu,\
+                                recv,\
+                                target_send_rate,\
+                                ideal_send_rate,\
+                                allocated_send_rate"
+                        );
+                        StatsObserver::print_headers();
+
                         Self::set_join_state_and_notify_observer(state, JoinState::Joining);
                         Self::accept_ring_if_needed(state, ring_id);
 

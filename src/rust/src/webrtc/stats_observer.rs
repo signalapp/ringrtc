@@ -56,7 +56,7 @@ pub struct StatsObserver {
 }
 
 impl StatsObserver {
-    fn print_headers() {
+    pub fn print_headers() {
         info!(
             "ringrtc_stats!,\
                 connection,\
@@ -294,8 +294,6 @@ impl StatsObserver {
 
     /// Create a new StatsObserver.
     fn new(call_id: CallId, stats_initial_offset: Duration) -> Self {
-        Self::print_headers();
-
         #[cfg(not(target_os = "android"))]
         let system_stats = {
             let mut stats = sysinfo::System::new();
