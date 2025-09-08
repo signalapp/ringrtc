@@ -82,10 +82,7 @@ const DELAY_FOR_RECOVERED_BWE_CALLBACK_TICKS: u64 =
     DELAY_FOR_RECOVERED_BWE_CALLBACK_MILLIS / TICK_INTERVAL_MILLIS;
 
 pub const RTP_DATA_PAYLOAD_TYPE: rtp::PayloadType = 101;
-pub const OLD_RTP_DATA_SSRC_FOR_OUTGOING: rtp::Ssrc = 1001;
-pub const OLD_RTP_DATA_SSRC_FOR_INCOMING: rtp::Ssrc = 2001;
-pub const OLD_RTP_DATA_RESERVED: [u8; 4] = [0, 0, 0, 0];
-pub const NEW_RTP_DATA_SSRC: rtp::Ssrc = 0xD;
+pub const RTP_DATA_SSRC: rtp::Ssrc = 0xD;
 
 /// Connection observer status notification types
 /// Sent from the Connection to the parent Call object
@@ -1480,7 +1477,7 @@ where
         webrtc_data.last_sent_rtp_data_timestamp += 1;
         let header = rtp::Header {
             pt: RTP_DATA_PAYLOAD_TYPE,
-            ssrc: NEW_RTP_DATA_SSRC,
+            ssrc: RTP_DATA_SSRC,
             // This has to be incremented to make sure SRTP functions properly, but rollovers are OK.
             seqnum: webrtc_data.last_sent_rtp_data_timestamp as rtp::SequenceNumber,
             // Just imagine the clock is the number of heartbeat ticks :).
@@ -2158,13 +2155,7 @@ where
 
     fn handle_rtp_received(&mut self, header: rtp::Header, payload: &[u8]) {
         let data = match (header.pt, header.ssrc) {
-            // Old clients send with 4 bytes of reserved data.
-            (
-                RTP_DATA_PAYLOAD_TYPE,
-                OLD_RTP_DATA_SSRC_FOR_INCOMING | OLD_RTP_DATA_SSRC_FOR_OUTGOING,
-            ) => &payload[OLD_RTP_DATA_RESERVED.len()..],
-            // New clients will send without 4 bytes of reserved data.
-            (RTP_DATA_PAYLOAD_TYPE, NEW_RTP_DATA_SSRC) => payload,
+            (RTP_DATA_PAYLOAD_TYPE, RTP_DATA_SSRC) => payload,
             (pt, ssrc) => {
                 warn!(
                     "Received RTP with unexpected (PT, SSRC) = ({:?}, {:?})",
