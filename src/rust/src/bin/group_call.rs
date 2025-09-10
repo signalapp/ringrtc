@@ -6,6 +6,8 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, LazyLock, Mutex},
+    thread,
+    time::Duration,
 };
 
 use base64::Engine;
@@ -245,9 +247,31 @@ fn main() {
         hkdf_extra_info,
     ));
     let observer = Observer::default();
-    let peer_connection_factory =
-        PeerConnectionFactory::new(&peer_connection_factory::AudioConfig::default(), false)
-            .unwrap();
+    let mut peer_connection_factory = PeerConnectionFactory::new(
+        &peer_connection_factory::AudioConfig::default(),
+        false,
+        None,
+    )
+    .unwrap();
+    let mut done = false;
+    while !done {
+        // We may need to try a few times to get these; they're not necessarily
+        // populated instantly. Ideally we could use the callbacks to notify us
+        // when these are populated, but that's slightly tricky, because we might
+        // fetch the devices before callback registration, and they're device
+        // **change** callbacks.
+        thread::sleep(Duration::from_millis(100));
+        done = peer_connection_factory
+            .get_audio_playout_devices()
+            .is_ok_and(|d| !d.is_empty())
+            && peer_connection_factory
+                .get_audio_recording_devices()
+                .is_ok_and(|d| !d.is_empty())
+    }
+    peer_connection_factory.set_audio_playout_device(0).unwrap();
+    peer_connection_factory
+        .set_audio_recording_device(0)
+        .unwrap();
     let outgoing_audio_track = peer_connection_factory
         .create_outgoing_audio_track()
         .unwrap();

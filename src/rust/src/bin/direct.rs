@@ -262,7 +262,21 @@ impl CallEndpoint {
                     // Option<CallManager> thing that we have to set later.
                     let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
-                    let mut pcf = PeerConnectionFactory::new(&pcf::AudioConfig::default(), true)?; // Set up packet flow
+                    let mut pcf =
+                        PeerConnectionFactory::new(&pcf::AudioConfig::default(), true, None)?; // Set up packet flow
+                    let mut done = false;
+                    while !done {
+                        // We may need to try a few times to get these; they're not necessarily
+                        // populated instantly. Ideally we could use the callbacks to notify us
+                        // when these are populated, but that's slightly tricky, because we might
+                        // fetch the devices before callback registration, and they're device
+                        // **change** callbacks.
+                        thread::sleep(Duration::from_millis(100));
+                        done = pcf.get_audio_playout_devices().is_ok_and(|d| !d.is_empty())
+                            && pcf
+                                .get_audio_recording_devices()
+                                .is_ok_and(|d| !d.is_empty())
+                    }
                     info!(
                         "Audio playout devices: {:?}",
                         pcf.get_audio_playout_devices()
@@ -271,6 +285,8 @@ impl CallEndpoint {
                         "Audio recording devices: {:?}",
                         pcf.get_audio_recording_devices()
                     );
+                    pcf.set_audio_playout_device(0).unwrap();
+                    pcf.set_audio_recording_device(0).unwrap();
 
                     let network = pcf.injectable_network().expect("get Injectable Network");
                     let router_as_sender = router.clone();

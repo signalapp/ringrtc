@@ -29,9 +29,9 @@ use crate::{
     webrtc::{
         audio_device_module_utils::{
             copy_and_truncate_string, redact_by_regex, redact_for_logging, DeviceCollectionWrapper,
-            DeviceNameInfo,
         },
         ffi::audio_device_module::RffiAudioTransport,
+        peer_connection_factory::{AudioDevice, AudioDeviceObserver},
     },
 };
 
@@ -79,7 +79,7 @@ struct PlayData {
 type Frame = MonoFrame<i16>;
 type OutFrame = StereoFrame<i16>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum Event {
     RefreshCache(DeviceType),
     SetCallback(Arc<Mutex<RffiAudioTransport>>),
@@ -93,6 +93,7 @@ enum Event {
     StopRecording,
     PlayoutDelay,
     Terminate,
+    RegisterAudioObserver(Box<dyn AudioDeviceObserver>),
 }
 
 #[derive(Debug, Clone)]
@@ -117,9 +118,10 @@ struct Worker {
     input_device_cache: DeviceCollectionWrapper,
     output_device_cache: DeviceCollectionWrapper,
     // These may outlive the ctx
-    input_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
-    output_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+    input_device_names: Arc<Mutex<Vec<AudioDevice>>>,
+    output_device_names: Arc<Mutex<Vec<AudioDevice>>>,
     audio_transport: Arc<Mutex<RffiAudioTransport>>,
+    audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
 }
 
 impl Worker {
@@ -137,24 +139,33 @@ impl Worker {
             _ => bail!("Bad device type {:?}", device_type),
         };
         let collection = DeviceCollectionWrapper::new(&devices);
-        if &collection != last {
-            for device in devices.iter() {
-                info!(
-                    "{:?} device: ({})",
-                    device_type,
-                    AudioDeviceModule::device_str(device)
-                );
-            }
+        if &collection == last {
+            // Nothing to do; spurious wakeup
+            return Ok(());
+        }
+
+        for device in devices.iter() {
+            info!(
+                "{:?} device: ({})",
+                device_type,
+                AudioDeviceModule::device_str(device)
+            );
         }
 
         let names = collection.extract_names();
 
         match device_type {
             DeviceType::INPUT => {
+                if let Some(ado) = &self.audio_device_observer {
+                    ado.input_changed(names.clone());
+                }
                 self.input_device_cache = collection;
                 *self.input_device_names.lock().unwrap() = names;
             }
             DeviceType::OUTPUT => {
+                if let Some(ado) = &self.audio_device_observer {
+                    ado.output_changed(names.clone());
+                }
                 self.output_device_cache = collection;
                 *self.output_device_names.lock().unwrap() = names;
             }
@@ -557,6 +568,10 @@ impl Worker {
                     self.terminate();
                     return;
                 }
+                Event::RegisterAudioObserver(audio_device_observer) => {
+                    self.audio_device_observer = Some(audio_device_observer);
+                    continue;
+                }
             } {
                 warn!("{:?} failed: {:?}", received, e);
             }
@@ -677,8 +692,8 @@ impl Worker {
         receiver: mpsc::Receiver<Event>,
         sender: mpsc::Sender<Event>,
         playout_delay_sender: mpsc::Sender<anyhow::Result<u16>>,
-        input_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
-        output_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+        input_device_names: Arc<Mutex<Vec<AudioDevice>>>,
+        output_device_names: Arc<Mutex<Vec<AudioDevice>>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             #[cfg(target_os = "windows")]
@@ -720,7 +735,7 @@ impl Worker {
                 },
                 output_data: UpdateCallbackData {
                     device_type: DeviceType::OUTPUT,
-                    sender,
+                    sender: sender.clone(),
                 },
                 playout_device: None,
                 recording_device: None,
@@ -733,6 +748,7 @@ impl Worker {
                 audio_transport: Arc::new(Mutex::new(RffiAudioTransport {
                     callback: std::ptr::null(),
                 })),
+                audio_device_observer: None,
             };
             if let Err(e) = worker.register_device_collection_changed(DeviceType::INPUT) {
                 error!("Failed to register input device callback: {}", e);
@@ -751,14 +767,14 @@ impl Worker {
 
             // Refresh both caches before we signal a successful start so that callers can
             // immediately enumerate devices.
-            if let Err(e) = worker.refresh_device_cache(DeviceType::INPUT) {
-                error!("Failed to do initial input device refresh: {}", e);
+            if let Err(e) = sender.send(Event::RefreshCache(DeviceType::INPUT)) {
+                error!("Failed to request initial input device refresh: {}", e);
                 if let Err(e) = started_signal.send(None) {
                     error!("Further, failed to notify about start failure: {}", e);
                 }
             }
-            if let Err(e) = worker.refresh_device_cache(DeviceType::OUTPUT) {
-                error!("Failed to do initial output device refresh: {}", e);
+            if let Err(e) = sender.send(Event::RefreshCache(DeviceType::OUTPUT)) {
+                error!("Failed to request initial output device refresh: {}", e);
                 if let Err(e) = started_signal.send(None) {
                     error!("Further, failed to notify about start failure: {}", e);
                 }
@@ -779,8 +795,8 @@ impl Worker {
 #[derive(Debug)]
 pub struct AudioDeviceModule {
     backend_name: String,
-    input_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
-    output_device_names: Arc<Mutex<Vec<DeviceNameInfo>>>,
+    input_device_names: Arc<Mutex<Vec<AudioDevice>>>,
+    output_device_names: Arc<Mutex<Vec<AudioDevice>>>,
     // Tracker flags to indicate whether we have **attempted** init_playout and
     // friends. Cleared on stop_playout and stop_recording.
     // We use these because some code, e.g. SetAudioRecordingDevice in
@@ -1031,10 +1047,7 @@ impl AudioDeviceModule {
         true
     }
 
-    fn enumerate_devices(
-        &mut self,
-        device_type: DeviceType,
-    ) -> anyhow::Result<Vec<DeviceNameInfo>> {
+    fn enumerate_devices(&mut self, device_type: DeviceType) -> anyhow::Result<Vec<AudioDevice>> {
         let collection = match device_type {
             DeviceType::INPUT => self
                 .input_device_names
@@ -1112,34 +1125,13 @@ impl AudioDeviceModule {
 
     fn copy_name_and_id(
         index: u16,
-        devices: &[DeviceNameInfo],
+        devices: &[AudioDevice],
         name_out: webrtc::ptr::Borrowed<c_uchar>,
         guid_out: webrtc::ptr::Borrowed<c_uchar>,
     ) -> anyhow::Result<()> {
         if let Some(d) = devices.get(index as usize) {
-            if let Some(name) = &d.friendly_name {
-                let mut name_copy = name.to_string();
-                #[cfg(not(target_os = "windows"))]
-                if index == 0 {
-                    name_copy = format!("default ({})", name);
-                }
-                #[cfg(target_os = "windows")]
-                {
-                    if index == 0 {
-                        name_copy = format!("Default - {}", name);
-                    } else if index == 1 {
-                        name_copy = format!("Communication - {}", name);
-                    }
-                }
-                copy_and_truncate_string(&name_copy, name_out, ADM_MAX_DEVICE_NAME_SIZE)?;
-            } else {
-                return Err(anyhow!("Could not get device name"));
-            }
-            if let Some(id) = &d.device_id {
-                copy_and_truncate_string(id, guid_out, ADM_MAX_GUID_SIZE)?;
-            } else {
-                return Err(anyhow!("Could not get device ID"));
-            }
+            copy_and_truncate_string(&d.name, name_out, ADM_MAX_DEVICE_NAME_SIZE)?;
+            copy_and_truncate_string(&d.unique_id, guid_out, ADM_MAX_GUID_SIZE)?;
             Ok(())
         } else {
             Err(anyhow!(
@@ -1540,6 +1532,20 @@ impl AudioDeviceModule {
                 -1
             }
         }
+    }
+
+    // Register a new callback to be notified of audio device changes, **replacing any existing one**
+    pub fn register_audio_device_callback(
+        &mut self,
+        audio_device_observer: Box<dyn AudioDeviceObserver>,
+    ) -> anyhow::Result<()> {
+        if let Err(e) = self
+            .mpsc_sender
+            .send(Event::RegisterAudioObserver(audio_device_observer))
+        {
+            bail!("Failed to send RegisterAudioObserver request: {}", e);
+        }
+        Ok(())
     }
 }
 

@@ -387,6 +387,14 @@ export class RingRTCType {
 
   handleStartCall: ((call: Call) => Promise<boolean>) | null = null;
 
+  handleOutputDeviceChanged:
+    | ((devices: Array<AudioDevice>) => Promise<void>)
+    | null = null;
+
+  handleInputDeviceChanged:
+    | ((devices: Array<AudioDevice>) => Promise<void>)
+    | null = null;
+
   handleAutoEndedIncomingCallRequest:
     | ((
         callId: CallId,
@@ -1584,6 +1592,24 @@ export class RingRTCType {
         groupCall.onObservedRemoteMute(sourceDemuxId, targetDemuxId);
       }
     });
+  }
+
+  // Called by Rust
+  onOutputDeviceChanged(devices: Array<AudioDevice>): void {
+    (async () => {
+      if (this.handleOutputDeviceChanged) {
+        await this.handleOutputDeviceChanged(devices);
+      }
+    })().catch(e => this.logError(e.toString()));
+  }
+
+  // Called by Rust
+  onInputDeviceChanged(devices: Array<AudioDevice>): void {
+    (async () => {
+      if (this.handleInputDeviceChanged) {
+        await this.handleInputDeviceChanged(devices);
+      }
+    })().catch(e => this.logError(e.toString()));
   }
 
   // Called by Rust

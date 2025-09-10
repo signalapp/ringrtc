@@ -191,8 +191,26 @@ impl Default for AudioConfig {
     }
 }
 
+// An observer trait that receives notifications whenever the input or output
+// devices change.
+// These callbacks should run "quickly", as they'll be run from the cubeb worker
+// thread, and any delays will block playout_delay calls, which happen
+// constantly during calls (short blocking is OK, as is passing the
+// event to another thread; calling a client directly is not).
+// Currently only applicable on Desktop
+pub trait AudioDeviceObserver: Send + std::fmt::Debug {
+    fn output_changed(&self, devices: Vec<AudioDevice>);
+    fn input_changed(&self, devices: Vec<AudioDevice>);
+}
+
 impl AudioConfig {
-    fn rffi(&self) -> Result<RffiAudioConfigWrapper> {
+    // Return both the RffiAudioConfig as well as the name of the cubeb backend
+    // in use, if any.
+    fn rffi(
+        &self,
+        #[allow(unused_mut, unused_variables)] // iOS and Android won't use this; that's fine.
+        mut audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
+    ) -> Result<RffiAudioConfigWrapper> {
         let (input_file, output_file) =
             if self.audio_device_module_type == RffiAudioDeviceModuleType::File {
                 if let Some(file_based_adm_config) = &self.file_based_adm_config {
@@ -211,7 +229,10 @@ impl AudioConfig {
         let (adm_borrowed, adm_arc) =
             if self.audio_device_module_type == RffiAudioDeviceModuleType::RingRtc {
                 match AudioDeviceModule::new() {
-                    Ok(adm) => {
+                    Ok(mut adm) => {
+                        if let Some(observer) = audio_device_observer.take() {
+                            adm.register_audio_device_callback(observer)?;
+                        }
                         let adm_arc = Arc::new(Mutex::new(adm));
                         (
                             webrtc::ptr::Borrowed::from_ptr(
@@ -311,10 +332,14 @@ pub struct PeerConnectionFactory {
 impl PeerConnectionFactory {
     /// Create a new Rust PeerConnectionFactory object from a WebRTC C++
     /// PeerConnectionFactory object.
-    pub fn new(audio_config: &AudioConfig, use_injectable_network: bool) -> Result<Self> {
+    pub fn new(
+        audio_config: &AudioConfig,
+        use_injectable_network: bool,
+        audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
+    ) -> Result<Self> {
         debug!("PeerConnectionFactory::new()");
 
-        let audio_config_rffi = audio_config.rffi()?;
+        let audio_config_rffi = audio_config.rffi(audio_device_observer)?;
 
         let rffi = unsafe {
             webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(

@@ -15,23 +15,17 @@ use cubeb_core::DeviceType;
 use cubeb_core::{DeviceId, DevicePref};
 use regex::Regex;
 
-use crate::webrtc;
+use crate::{webrtc, webrtc::peer_connection_factory::AudioDevice};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct MinimalDeviceInfo {
     pub devid: DeviceId,
     pub device_id: Option<String>,
-    pub friendly_name: Option<String>,
+    pub friendly_name: String,
     #[cfg(target_os = "linux")]
     device_type: DeviceType,
     preferred: DevicePref,
     state: DeviceState,
-}
-
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub struct DeviceNameInfo {
-    pub device_id: Option<String>,
-    pub friendly_name: Option<String>,
 }
 
 /// Wrapper struct for DeviceCollection that handles default devices.
@@ -59,15 +53,19 @@ impl DeviceCollectionWrapper {
     pub fn new(device_collection: &DeviceCollection<'_>) -> DeviceCollectionWrapper {
         let mut out = Vec::new();
         for device in device_collection.iter() {
-            out.push(MinimalDeviceInfo {
-                devid: device.devid(),
-                device_id: device.device_id().as_ref().map(|s| s.to_string()),
-                friendly_name: device.friendly_name().as_ref().map(|s| s.to_string()),
-                #[cfg(target_os = "linux")]
-                device_type: device.device_type(),
-                preferred: device.preferred(),
-                state: device.state(),
-            })
+            if let Some(friendly) = device.friendly_name() {
+                out.push(MinimalDeviceInfo {
+                    devid: device.devid(),
+                    device_id: device.device_id().as_ref().map(|s| s.to_string()),
+                    friendly_name: friendly.to_string(),
+                    #[cfg(target_os = "linux")]
+                    device_type: device.device_type(),
+                    preferred: device.preferred(),
+                    state: device.state(),
+                })
+            } else {
+                error!("Device {:?} has no friendly name", device.devid());
+            }
         }
         DeviceCollectionWrapper {
             device_collection: out,
@@ -176,7 +174,7 @@ impl DeviceCollectionWrapper {
     }
 
     /// Extract all names and IDs, **including repetitions** for the default device(s)!
-    pub fn extract_names(&self) -> Vec<DeviceNameInfo> {
+    pub fn extract_names(&self) -> Vec<AudioDevice> {
         // On mac and windows, this is relatively simple -- we get the count and then get each reported
         // device.
         #[cfg(not(target_os = "windows"))]
@@ -194,9 +192,27 @@ impl DeviceCollectionWrapper {
                 error!("Internal error enumerating devices {} vs {}", i, count);
                 continue;
             };
-            names.push(DeviceNameInfo {
-                device_id: info.device_id.clone(),
-                friendly_name: info.friendly_name.clone(),
+            let mut name_copy = info.friendly_name.clone();
+            #[cfg(not(target_os = "windows"))]
+            if i == 0 {
+                name_copy = format!("default ({})", info.friendly_name);
+            }
+            #[cfg(target_os = "windows")]
+            {
+                if i == 0 {
+                    name_copy = format!("Default - {}", info.friendly_name);
+                } else if i == 1 {
+                    name_copy = format!("Communication - {}", info.friendly_name);
+                }
+            }
+            names.push(AudioDevice {
+                // For devices missing unique_id, populate them with name + index
+                unique_id: info
+                    .device_id
+                    .clone()
+                    .unwrap_or_else(|| format!("{}-{}", info.friendly_name, i)),
+                name: name_copy,
+                i18n_key: "".to_string(),
             });
         }
         names

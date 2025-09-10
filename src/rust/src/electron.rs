@@ -7,6 +7,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     convert::TryFrom,
+    fmt::Formatter,
     sync::{
         atomic::AtomicBool,
         mpsc::{channel, Receiver, Sender},
@@ -46,7 +47,9 @@ use crate::{
         field_trial,
         media::{AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack},
         peer_connection::AudioLevel,
-        peer_connection_factory::{self as pcf, AudioDevice, IceServer, PeerConnectionFactory},
+        peer_connection_factory::{
+            self as pcf, AudioDevice, AudioDeviceObserver, IceServer, PeerConnectionFactory,
+        },
         peer_connection_observer::NetworkRoute,
     },
 };
@@ -191,6 +194,8 @@ pub enum Event {
         peer_id: PeerId,
         recovered: bool,
     },
+    OutputDeviceChanged(Vec<AudioDevice>),
+    InputDeviceChanged(Vec<AudioDevice>),
 }
 
 /// Wraps a [`std::sync::mpsc::Sender`] with a callback to report new events.
@@ -347,6 +352,32 @@ impl GroupUpdateHandler for EventReporter {
     }
 }
 
+pub struct ElectronAudioDeviceObserver {
+    event_reporter: EventReporter,
+}
+impl AudioDeviceObserver for ElectronAudioDeviceObserver {
+    fn output_changed(&self, devices: Vec<AudioDevice>) {
+        if let Err(e) = self
+            .event_reporter
+            .send(Event::OutputDeviceChanged(devices))
+        {
+            error!("Failed to report output device change! {}", e);
+        }
+    }
+
+    fn input_changed(&self, devices: Vec<AudioDevice>) {
+        if let Err(e) = self.event_reporter.send(Event::InputDeviceChanged(devices)) {
+            error!("Failed to report input device change! {}", e);
+        }
+    }
+}
+
+impl std::fmt::Debug for ElectronAudioDeviceObserver {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ElectronAudioDeviceObserver")
+    }
+}
+
 pub struct CallEndpoint {
     call_manager: CallManager<NativePlatform>,
 
@@ -435,8 +466,13 @@ impl CallEndpoint {
         }
 
         // Relevant for both group calls and 1:1 calls
-        let peer_connection_factory =
-            PeerConnectionFactory::new(&pcf::AudioConfig::default(), false)?;
+        let peer_connection_factory = PeerConnectionFactory::new(
+            &pcf::AudioConfig::default(),
+            false,
+            Some(Box::new(ElectronAudioDeviceObserver {
+                event_reporter: event_reporter.clone(),
+            })),
+        )?;
         let outgoing_audio_track = peer_connection_factory.create_outgoing_audio_track()?;
         outgoing_audio_track.set_enabled(false);
         let outgoing_video_source = peer_connection_factory.create_outgoing_video_source()?;
@@ -2203,6 +2239,25 @@ fn setRtcStatsInterval(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
+fn devices_to_js_array<'a>(
+    cx: &mut FunctionContext<'a>,
+    devices: Vec<AudioDevice>,
+) -> JsResult<'a, JsArray> {
+    let js_devices = JsArray::new(cx, devices.len());
+    for (i, device) in devices.into_iter().enumerate() {
+        let js_info = cx.empty_object();
+        let js_name = cx.string(&device.name);
+        js_info.set(cx, "name", js_name)?;
+        let js_unique_id = cx.string(&device.unique_id);
+        js_info.set(cx, "uniqueId", js_unique_id)?;
+        let js_index = cx.number(i as f64);
+        js_info.set(cx, "index", js_index)?;
+
+        js_devices.set(cx, i as u32, js_info)?;
+    }
+    Ok(js_devices)
+}
+
 #[allow(non_snake_case)]
 fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
     let this = cx.this::<JsObject>()?;
@@ -2906,6 +2961,20 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     cx.number(mute_source).upcast(),
                     cx.number(mute_target).upcast(),
                 ];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
+            Event::OutputDeviceChanged(devices) => {
+                let method_name = "onOutputDeviceChanged";
+                let js_devices = devices_to_js_array(&mut cx, devices)?;
+                let args = [js_devices.upcast()];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
+            Event::InputDeviceChanged(devices) => {
+                let method_name = "onInputDeviceChanged";
+                let js_devices = devices_to_js_array(&mut cx, devices)?;
+                let args = [js_devices.upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }

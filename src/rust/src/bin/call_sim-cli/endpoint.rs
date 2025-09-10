@@ -9,6 +9,7 @@ mod group_call_sim;
 use std::{
     collections::{HashMap, HashSet},
     sync::mpsc::Sender,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -129,7 +130,22 @@ impl CallEndpoint {
                     Self::from_actor(name.clone(), device_id, user_id.clone(), actor.clone());
 
                 let mut peer_connection_factory =
-                    PeerConnectionFactory::new(&audio_config, use_injectable_network)?;
+                    PeerConnectionFactory::new(&audio_config, use_injectable_network, None)?;
+                let mut done = false;
+                while !done {
+                    // We may need to try a few times to get these; they're not necessarily
+                    // populated instantly. Ideally we could use the callbacks to notify us
+                    // when these are populated, but that's slightly tricky, because we might
+                    // fetch the devices before callback registration, and they're device
+                    // **change** callbacks.
+                    thread::sleep(Duration::from_millis(100));
+                    done = peer_connection_factory
+                        .get_audio_playout_devices()
+                        .is_ok_and(|d| !d.is_empty())
+                        && peer_connection_factory
+                            .get_audio_recording_devices()
+                            .is_ok_and(|d| !d.is_empty())
+                }
                 info!(
                     "Audio playout devices: {:?}",
                     peer_connection_factory.get_audio_playout_devices()
