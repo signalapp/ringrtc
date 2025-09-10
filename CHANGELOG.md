@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.58.0
+
+- Desktop: New Audio Device Module improvements
+    - Refactor ADM to use cubeb in an async manner
+    - Implement device changed callbacks
+
+- Some minor logging refinements
+
 ## v2.57.1
 
 - Desktop: Update to cubeb 0.30.1
