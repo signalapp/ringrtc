@@ -174,7 +174,7 @@ impl DeviceCollectionWrapper {
     }
 
     /// Extract all names and IDs, **including repetitions** for the default device(s)!
-    pub fn extract_names(&self) -> Vec<AudioDevice> {
+    pub fn extract_names(&self) -> Vec<Option<AudioDevice>> {
         // On mac and windows, this is relatively simple -- we get the count and then get each reported
         // device.
         #[cfg(not(target_os = "windows"))]
@@ -190,6 +190,7 @@ impl DeviceCollectionWrapper {
                 info
             } else {
                 error!("Internal error enumerating devices {} vs {}", i, count);
+                names.push(None);
                 continue;
             };
             let mut name_copy = info.friendly_name.clone();
@@ -205,7 +206,7 @@ impl DeviceCollectionWrapper {
                     name_copy = format!("Communication - {}", info.friendly_name);
                 }
             }
-            names.push(AudioDevice {
+            names.push(Some(AudioDevice {
                 // For devices missing unique_id, populate them with name + index
                 unique_id: info
                     .device_id
@@ -213,7 +214,7 @@ impl DeviceCollectionWrapper {
                     .unwrap_or_else(|| format!("{}-{}", info.friendly_name, i)),
                 name: name_copy,
                 i18n_key: "".to_string(),
-            });
+            }));
         }
         names
     }
@@ -290,6 +291,8 @@ pub fn redact_by_regex(re: &Regex, s: &str) -> Option<String> {
 
 #[cfg(test)]
 mod audio_device_module_tests {
+    #[cfg(target_os = "linux")]
+    use cubeb_core::DeviceType;
     use lazy_static::lazy_static;
 
     use super::*;
@@ -417,5 +420,128 @@ mod audio_device_module_tests {
             ),
             Some("Found matching device for My S...: My O...".to_string())
         );
+    }
+
+    #[test]
+    fn extract_names_handles_normal() {
+        let devs = DeviceCollectionWrapper {
+            device_collection: vec![
+                MinimalDeviceInfo {
+                    devid: std::ptr::null(),
+                    device_id: Some("devid1".to_string()),
+                    friendly_name: "Device 1".to_string(),
+                    #[cfg(target_os = "linux")]
+                    device_type: DeviceType::INPUT,
+                    preferred: DevicePref::all(),
+                    state: DeviceState::Enabled,
+                },
+                MinimalDeviceInfo {
+                    devid: std::ptr::null(),
+                    device_id: Some("devid2".to_string()),
+                    friendly_name: "Device 2".to_string(),
+                    #[cfg(target_os = "linux")]
+                    device_type: DeviceType::INPUT,
+                    preferred: DevicePref::empty(),
+                    state: DeviceState::Enabled,
+                },
+            ],
+        };
+        let names = DeviceCollectionWrapper::extract_names(&devs);
+
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(
+            names,
+            vec![
+                Some(AudioDevice {
+                    name: "default (Device 1)".to_string(),
+                    unique_id: "devid1".to_string(),
+                    i18n_key: "".to_string(),
+                }),
+                Some(AudioDevice {
+                    name: "Device 1".to_string(),
+                    unique_id: "devid1".to_string(),
+                    i18n_key: "".to_string(),
+                }),
+                Some(AudioDevice {
+                    name: "Device 2".to_string(),
+                    unique_id: "devid2".to_string(),
+                    i18n_key: "".to_string(),
+                })
+            ]
+        );
+
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            names,
+            vec![
+                Some(AudioDevice {
+                    name: "Default - Device 1".to_string(),
+                    unique_id: "devid1".to_string(),
+                    i18n_key: "".to_string(),
+                }),
+                Some(AudioDevice {
+                    name: "Communication - Device 1".to_string(),
+                    unique_id: "devid1".to_string(),
+                    i18n_key: "".to_string(),
+                }),
+                Some(AudioDevice {
+                    name: "Device 1".to_string(),
+                    unique_id: "devid1".to_string(),
+                    i18n_key: "".to_string(),
+                }),
+                Some(AudioDevice {
+                    name: "Device 2".to_string(),
+                    unique_id: "devid2".to_string(),
+                    i18n_key: "".to_string(),
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_names_handles_no_preferred_device() {
+        let devs = DeviceCollectionWrapper {
+            device_collection: vec![
+                MinimalDeviceInfo {
+                    devid: std::ptr::null(),
+                    device_id: Some("devid1".to_string()),
+                    friendly_name: "Device 1".to_string(),
+                    #[cfg(target_os = "linux")]
+                    device_type: DeviceType::INPUT,
+                    preferred: DevicePref::empty(),
+                    state: DeviceState::Enabled,
+                },
+                MinimalDeviceInfo {
+                    devid: std::ptr::null(),
+                    device_id: Some("devid2".to_string()),
+                    friendly_name: "Device 2".to_string(),
+                    #[cfg(target_os = "linux")]
+                    device_type: DeviceType::INPUT,
+                    preferred: DevicePref::empty(),
+                    state: DeviceState::Enabled,
+                },
+            ],
+        };
+        let names = DeviceCollectionWrapper::extract_names(&devs);
+
+        assert_eq!(
+            names,
+            vec![
+                None,
+                // Windows expects an extra communication device.
+                #[cfg(target_os = "windows")]
+                None,
+                Some(AudioDevice {
+                    name: "Device 1".to_string(),
+                    unique_id: "devid1".to_string(),
+                    i18n_key: "".to_string(),
+                }),
+                Some(AudioDevice {
+                    name: "Device 2".to_string(),
+                    unique_id: "devid2".to_string(),
+                    i18n_key: "".to_string(),
+                })
+            ]
+        )
     }
 }

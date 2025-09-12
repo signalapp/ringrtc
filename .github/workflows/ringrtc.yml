@@ -134,7 +134,7 @@ jobs:
     - run: bin/fetch-artifact -p desktop
     - run: bin/build-desktop --release --ringrtc-only --test-ringrtc-adm
       if: ${{ !startsWith(matrix.os, 'windows-') }}
-    - run: bin/build-desktop --release --ringrtc-only
+    - run: bin/build-desktop --release --ringrtc-only --test-ringrtc-adm-utils
       if: ${{ startsWith(matrix.os, 'windows-') }}
     - run: npm ci
       working-directory: src/node

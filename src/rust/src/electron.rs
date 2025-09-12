@@ -194,8 +194,8 @@ pub enum Event {
         peer_id: PeerId,
         recovered: bool,
     },
-    OutputDeviceChanged(Vec<AudioDevice>),
-    InputDeviceChanged(Vec<AudioDevice>),
+    OutputDeviceChanged(Vec<Option<AudioDevice>>),
+    InputDeviceChanged(Vec<Option<AudioDevice>>),
 }
 
 /// Wraps a [`std::sync::mpsc::Sender`] with a callback to report new events.
@@ -356,7 +356,7 @@ pub struct ElectronAudioDeviceObserver {
     event_reporter: EventReporter,
 }
 impl AudioDeviceObserver for ElectronAudioDeviceObserver {
-    fn output_changed(&self, devices: Vec<AudioDevice>) {
+    fn output_changed(&self, devices: Vec<Option<AudioDevice>>) {
         if let Err(e) = self
             .event_reporter
             .send(Event::OutputDeviceChanged(devices))
@@ -365,7 +365,7 @@ impl AudioDeviceObserver for ElectronAudioDeviceObserver {
         }
     }
 
-    fn input_changed(&self, devices: Vec<AudioDevice>) {
+    fn input_changed(&self, devices: Vec<Option<AudioDevice>>) {
         if let Err(e) = self.event_reporter.send(Event::InputDeviceChanged(devices)) {
             error!("Failed to report input device change! {}", e);
         }
@@ -2241,16 +2241,22 @@ fn setRtcStatsInterval(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 fn devices_to_js_array<'a>(
     cx: &mut FunctionContext<'a>,
-    devices: Vec<AudioDevice>,
+    devices: Vec<Option<AudioDevice>>,
 ) -> JsResult<'a, JsArray> {
-    let js_devices = JsArray::new(cx, devices.len());
-    for (i, device) in devices.into_iter().enumerate() {
+    // Maintain original indices as the ADM sees them.
+    let devices_filtered = devices
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, d)| d.map(|dev| (i, dev)))
+        .collect::<Vec<_>>();
+    let js_devices = JsArray::new(cx, devices_filtered.len());
+    for (i, (adm_index, device)) in devices_filtered.into_iter().enumerate() {
         let js_info = cx.empty_object();
         let js_name = cx.string(&device.name);
         js_info.set(cx, "name", js_name)?;
         let js_unique_id = cx.string(&device.unique_id);
         js_info.set(cx, "uniqueId", js_unique_id)?;
-        let js_index = cx.number(i as f64);
+        let js_index = cx.number(adm_index as f64);
         js_info.set(cx, "index", js_index)?;
 
         js_devices.set(cx, i as u32, js_info)?;

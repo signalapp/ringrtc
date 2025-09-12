@@ -45,6 +45,7 @@ SKIP_CALL_SIM_CLI=
 SKIP_ELECTRON=
 ARCHIVE_WEBRTC=
 TEST_RINGRTC_ADM=
+TEST_RINGRTC_ADM_UTILS=
 BUILD_FOR_SIMULATOR=
 
 while [ "$1" != "" ]; do
@@ -78,6 +79,9 @@ while [ "$1" != "" ]; do
             ;;
         --test-ringrtc-adm )
             TEST_RINGRTC_ADM=yes
+            ;;
+        --test-ringrtc-adm-utils )
+            TEST_RINGRTC_ADM_UTILS=yes
             ;;
         --build-for-simulator )
             BUILD_FOR_SIMULATOR=yes
@@ -286,6 +290,8 @@ then
 
         if [ "${TEST_RINGRTC_ADM}" = "yes" ]; then
           RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo test --package ringrtc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} -- --nocapture audio_device_module_tests
+        elif [ "${TEST_RINGRTC_ADM_UTILS}" = "yes" ]; then
+          RUSTFLAGS="${RUSTFLAGS}" OUTPUT_DIR="${OUTPUT_DIR}" cargo test --package ringrtc --target ${CARGO_TARGET} --features electron ${INCLUDE_RELEASE_FLAG:+"--release"} -- --nocapture audio_device_module_utils
         fi
 
 

@@ -199,8 +199,8 @@ impl Default for AudioConfig {
 // event to another thread; calling a client directly is not).
 // Currently only applicable on Desktop
 pub trait AudioDeviceObserver: Send + std::fmt::Debug {
-    fn output_changed(&self, devices: Vec<AudioDevice>);
-    fn input_changed(&self, devices: Vec<AudioDevice>);
+    fn output_changed(&self, devices: Vec<Option<AudioDevice>>);
+    fn input_changed(&self, devices: Vec<Option<AudioDevice>>);
 }
 
 impl AudioConfig {

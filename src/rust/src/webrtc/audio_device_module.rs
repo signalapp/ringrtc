@@ -118,8 +118,8 @@ struct Worker {
     input_device_cache: DeviceCollectionWrapper,
     output_device_cache: DeviceCollectionWrapper,
     // These may outlive the ctx
-    input_device_names: Arc<Mutex<Vec<AudioDevice>>>,
-    output_device_names: Arc<Mutex<Vec<AudioDevice>>>,
+    input_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
+    output_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
     audio_transport: Arc<Mutex<RffiAudioTransport>>,
     audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
 }
@@ -692,8 +692,8 @@ impl Worker {
         receiver: mpsc::Receiver<Event>,
         sender: mpsc::Sender<Event>,
         playout_delay_sender: mpsc::Sender<anyhow::Result<u16>>,
-        input_device_names: Arc<Mutex<Vec<AudioDevice>>>,
-        output_device_names: Arc<Mutex<Vec<AudioDevice>>>,
+        input_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
+        output_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             #[cfg(target_os = "windows")]
@@ -795,8 +795,8 @@ impl Worker {
 #[derive(Debug)]
 pub struct AudioDeviceModule {
     backend_name: String,
-    input_device_names: Arc<Mutex<Vec<AudioDevice>>>,
-    output_device_names: Arc<Mutex<Vec<AudioDevice>>>,
+    input_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
+    output_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
     // Tracker flags to indicate whether we have **attempted** init_playout and
     // friends. Cleared on stop_playout and stop_recording.
     // We use these because some code, e.g. SetAudioRecordingDevice in
@@ -1047,7 +1047,10 @@ impl AudioDeviceModule {
         true
     }
 
-    fn enumerate_devices(&mut self, device_type: DeviceType) -> anyhow::Result<Vec<AudioDevice>> {
+    fn enumerate_devices(
+        &mut self,
+        device_type: DeviceType,
+    ) -> anyhow::Result<Vec<Option<AudioDevice>>> {
         let collection = match device_type {
             DeviceType::INPUT => self
                 .input_device_names
@@ -1125,11 +1128,11 @@ impl AudioDeviceModule {
 
     fn copy_name_and_id(
         index: u16,
-        devices: &[AudioDevice],
+        devices: &[Option<AudioDevice>],
         name_out: webrtc::ptr::Borrowed<c_uchar>,
         guid_out: webrtc::ptr::Borrowed<c_uchar>,
     ) -> anyhow::Result<()> {
-        if let Some(d) = devices.get(index as usize) {
+        if let Some(Some(d)) = devices.get(index as usize) {
             copy_and_truncate_string(&d.name, name_out, ADM_MAX_DEVICE_NAME_SIZE)?;
             copy_and_truncate_string(&d.unique_id, guid_out, ADM_MAX_GUID_SIZE)?;
             Ok(())
