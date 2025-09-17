@@ -1739,7 +1739,7 @@ THIS SOFTWARE.
 
 ```
 
-## cubeb-core 0.30.1, cubeb-sys 0.30.1, cubeb 0.30.1
+## cubeb-core 0.31.2, cubeb-sys 0.31.2, cubeb 0.31.2
 
 ```
 Copyright © 2017 Mozilla Foundation
