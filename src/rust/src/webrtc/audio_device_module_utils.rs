@@ -189,7 +189,7 @@ impl DeviceCollectionWrapper {
             let info = if let Some(info) = self.get(i) {
                 info
             } else {
-                error!("Internal error enumerating devices {} vs {}", i, count);
+                warn!("Internal error enumerating devices {} vs {}", i, count);
                 names.push(None);
                 continue;
             };

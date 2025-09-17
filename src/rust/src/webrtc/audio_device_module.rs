@@ -277,7 +277,7 @@ impl Worker {
         let mut builder = cubeb::StreamBuilder::<OutFrame>::new();
         let transport = Arc::clone(&self.audio_transport);
         let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
-            error!(
+            warn!(
                 "Could not get min latency for playout; using default: {:?}",
                 e
             );
@@ -412,7 +412,7 @@ impl Worker {
         let mut builder = cubeb::StreamBuilder::<Frame>::new();
         let transport = Arc::clone(&self.audio_transport);
         let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
-            error!(
+            warn!(
                 "Could not get min latency for recording; using default: {:?}",
                 e
             );
@@ -1179,7 +1179,7 @@ impl AudioDeviceModule {
                 match AudioDeviceModule::copy_name_and_id(index, &devices, name_out, guid_out) {
                     Ok(_) => 0,
                     Err(e) => {
-                        error!("Failed to copy name and ID for recording device: {}", e);
+                        warn!("Failed to copy name and ID for recording device: {}", e);
                         -1
                     }
                 }
@@ -1202,11 +1202,15 @@ impl AudioDeviceModule {
                     }
                 }
                 None => {
-                    error!(
+                    warn!(
                         "Invalid playout device index {} requested (len {})",
                         index,
                         devices.len()
                     );
+                    if devices.is_empty() {
+                        info!("Likely failed due to benign startup race");
+                        return 0;
+                    }
                     return -1;
                 }
             },
@@ -1238,11 +1242,15 @@ impl AudioDeviceModule {
                     }
                 }
                 None => {
-                    error!(
+                    warn!(
                         "Invalid recording device index {} requested (len {})",
                         index,
                         devices.len()
                     );
+                    if devices.is_empty() {
+                        info!("Likely failed due to benign startup race");
+                        return 0;
+                    }
                     return -1;
                 }
             },
