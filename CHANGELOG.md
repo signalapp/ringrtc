@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.58.1
+
+- Desktop: New Audio Device Module improvements
+    - Reduce some error!s to warn!s in ADM
+    - Update to cubeb 0.31.2, which saves battery life
+    - handle missing default device
+
+- CI: Notify via bug on slow tests failure
+
 ## v2.58.0
 
 - Desktop: New Audio Device Module improvements
