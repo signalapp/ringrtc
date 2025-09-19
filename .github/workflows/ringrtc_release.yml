@@ -62,6 +62,7 @@ jobs:
       # createCommitComment is supposed to only need the default 'read' permissions...
       # ...but maybe it's different for private repositories.
       contents: write
+      issues: write
       # Needed for google-github-actions/auth.
       id-token: 'write'
 
