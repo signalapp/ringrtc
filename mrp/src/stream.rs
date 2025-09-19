@@ -1339,7 +1339,11 @@ mod tests {
             delay_min.as_millis() as u64,
             delay_max.as_millis() as u64,
         );
-        let bob_receiver = DelayReceiver::new(bob_inbox, 10, 11);
+        let bob_receiver = DelayReceiver::new(
+            bob_inbox,
+            delay_min.as_millis() as u64,
+            delay_max.as_millis() as u64,
+        );
 
         let alice_endpoint = spawn_endpoint(
             "alice",
@@ -1427,7 +1431,7 @@ mod tests {
             }
             let mut staged_messages = staged_messages.into_iter().peekable();
 
-            while stream.ack_seqnum() < goal {
+            while stream.ack_seqnum() < goal || sent < num_packets {
                 let now = Instant::now();
                 if now >= last_sent + pace && sent < num_packets {
                     let (num_packets, data) =
