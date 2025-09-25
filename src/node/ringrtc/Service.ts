@@ -784,7 +784,7 @@ export class RingRTCType {
     }
   }
 
-  renderVideoFrame(width: number, height: number, buffer: Buffer): void {
+  renderVideoFrame(width: number, height: number, buffer: Uint8Array): void {
     const call = this._call;
     if (!call) {
       return;
@@ -1981,13 +1981,13 @@ export interface VideoFrameSender {
    * @param width - The width of the video frame in pixels
    * @param height - The height of the video frame in pixels
    * @param format - The pixel format of the video data
-   * @param buffer - Buffer containing the raw video frame data
+   * @param buffer - The raw video frame data
    */
   sendVideoFrame(
     width: number,
     height: number,
     format: VideoPixelFormatEnum,
-    buffer: Buffer
+    buffer: Uint8Array
   ): void;
 }
 
@@ -2012,7 +2012,7 @@ export interface VideoFrameSource {
    *   Returns undefined if no new frame is available
    */
   receiveVideoFrame(
-    buffer: Buffer,
+    buffer: Uint8Array,
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined;
@@ -2063,7 +2063,11 @@ export class Call {
 
   // This callback should be set by the VideoCapturer,
   // But could also be set by the UX.
-  renderVideoFrame?: (width: number, height: number, buffer: Buffer) => void;
+  renderVideoFrame?: (
+    width: number,
+    height: number,
+    buffer: Uint8Array
+  ) => void;
 
   constructor(
     callManager: CallManager,
@@ -2224,14 +2228,14 @@ export class Call {
     width: number,
     height: number,
     format: VideoPixelFormatEnum,
-    buffer: Buffer
+    buffer: Uint8Array
   ): void {
     this._callManager.sendVideoFrame(width, height, format, buffer);
   }
 
   // With this method, a Call is a VideoFrameSource
   receiveVideoFrame(
-    buffer: Buffer,
+    buffer: Uint8Array,
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined {
@@ -2743,7 +2747,7 @@ export class GroupCall {
     width: number,
     height: number,
     format: VideoPixelFormatEnum,
-    buffer: Buffer
+    buffer: Uint8Array
   ): void {
     this._callManager.sendVideoFrame(width, height, format, buffer);
   }
@@ -2801,7 +2805,7 @@ class GroupCallVideoFrameSource {
   }
 
   receiveVideoFrame(
-    buffer: Buffer,
+    buffer: Uint8Array,
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined {
@@ -2974,10 +2978,10 @@ export interface CallManager {
     width: number,
     height: number,
     format: VideoPixelFormatEnum,
-    buffer: Buffer
+    buffer: Uint8Array
   ): void;
   receiveVideoFrame(
-    buffer: Buffer,
+    buffer: Uint8Array,
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined;
@@ -3094,7 +3098,7 @@ export interface CallManager {
   receiveGroupCallVideoFrame(
     clientId: GroupCallClientId,
     remoteDemuxId: number,
-    buffer: Buffer,
+    buffer: Uint8Array,
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined;

@@ -379,19 +379,19 @@ describe('RingRTC', () => {
     });
     const peekResponse = RingRTC.peekGroupCall(
       'sfu.example',
-      Buffer.of(1, 2, 3),
+      new Uint8Array([1, 2, 3]),
       [
         new GroupMemberInfo(
           new Uint8Array([0x11, 0x11, 0x11, 0x11]),
-          new Uint8Array(Buffer.from('11', 'utf-8'))
+          new TextEncoder().encode('11')
         ),
         new GroupMemberInfo(
           new Uint8Array([0x22, 0x22, 0x22, 0x22]),
-          new Uint8Array(Buffer.from('22', 'utf-8'))
+          new TextEncoder().encode('22')
         ),
         new GroupMemberInfo(
           new Uint8Array([0x33, 0x33, 0x33, 0x33]),
-          new Uint8Array(Buffer.from('33', 'utf-8'))
+          new TextEncoder().encode('33')
         ),
       ]
     );
@@ -399,24 +399,23 @@ describe('RingRTC', () => {
     RingRTC.receivedHttpResponse(
       requestId,
       200,
-      Buffer.from(
+      new TextEncoder().encode(
         `{
-        "conferenceId":"mesozoic",
-        "maxDevices":20,
-        "creator":"${sha256Hex('11')}",
-        "participants":[
-          {"opaqueUserId":"${sha256Hex('11')}","demuxId":${32 * 1}},
-          {"opaqueUserId":"${sha256Hex('22')}","demuxId":${32 * 2}},
-          {"opaqueUserId":"${sha256Hex('44')}","demuxId":${32 * 3}}
-        ],
-        "pendingClients":[
-          {"opaqueUserId":"${sha256Hex('33')}","demuxId":${32 * 4}},
-          {"opaqueUserId":"${sha256Hex('33')}","demuxId":${32 * 5}},
-          {"opaqueUserId":"${sha256Hex('44')}","demuxId":${32 * 6}},
-          {"demuxId":${32 * 7}}
-        ]
-      }`,
-        'utf-8'
+           "conferenceId":"mesozoic",
+           "maxDevices":20,
+           "creator":"${sha256Hex('11')}",
+           "participants":[
+             {"opaqueUserId":"${sha256Hex('11')}","demuxId":${32 * 1}},
+             {"opaqueUserId":"${sha256Hex('22')}","demuxId":${32 * 2}},
+             {"opaqueUserId":"${sha256Hex('44')}","demuxId":${32 * 3}}
+           ],
+           "pendingClients":[
+             {"opaqueUserId":"${sha256Hex('33')}","demuxId":${32 * 4}},
+             {"opaqueUserId":"${sha256Hex('33')}","demuxId":${32 * 5}},
+             {"opaqueUserId":"${sha256Hex('44')}","demuxId":${32 * 6}},
+             {"demuxId":${32 * 7}}
+           ]
+        }`
       )
     );
     const peekInfo = await peekResponse;
@@ -501,7 +500,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         200,
-        Buffer.from(EXAMPLE_STATE_JSON)
+        new TextEncoder().encode(EXAMPLE_STATE_JSON)
       );
       const state = await callLinkResponse;
       if (state.success) {
@@ -541,7 +540,7 @@ describe('RingRTC', () => {
         CallLinkRestrictions.None
       );
       const requestId = await requestIdPromise;
-      RingRTC.receivedHttpResponse(requestId, 403, Buffer.of());
+      RingRTC.receivedHttpResponse(requestId, 403, new Uint8Array());
       const state = await callLinkResponse;
       if (state.success) {
         assert.fail('should have failed');
@@ -578,7 +577,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         200,
-        Buffer.from(EXAMPLE_STATE_JSON)
+        new TextEncoder().encode(EXAMPLE_STATE_JSON)
       );
       const state = await callLinkResponse;
       if (state.success) {
@@ -616,7 +615,7 @@ describe('RingRTC', () => {
         undefined
       );
       const requestId = await requestIdPromise;
-      RingRTC.receivedHttpResponse(requestId, 404, Buffer.of());
+      RingRTC.receivedHttpResponse(requestId, 404, new Uint8Array());
       const state = await callLinkResponse;
       if (state.success) {
         assert.fail('should have failed');
@@ -655,7 +654,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         200,
-        Buffer.from(EXAMPLE_STATE_JSON)
+        new TextEncoder().encode(EXAMPLE_STATE_JSON)
       );
       const state = await callLinkResponse;
       // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
@@ -689,7 +688,7 @@ describe('RingRTC', () => {
         'Secret Hideout'
       );
       const requestId = await requestIdPromise;
-      RingRTC.receivedHttpResponse(requestId, 403, Buffer.of());
+      RingRTC.receivedHttpResponse(requestId, 403, new Uint8Array());
       const state = await callLinkResponse;
       if (state.success) {
         assert.fail('should have failed');
@@ -728,7 +727,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         200,
-        Buffer.from(EXAMPLE_STATE_JSON)
+        new TextEncoder().encode(EXAMPLE_STATE_JSON)
       );
       const state = await callLinkResponse;
       // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
@@ -765,7 +764,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         200,
-        Buffer.from(EXAMPLE_STATE_JSON)
+        new TextEncoder().encode(EXAMPLE_STATE_JSON)
       );
       const state = await callLinkResponse;
       // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
@@ -801,7 +800,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         200,
-        Buffer.from(EXAMPLE_EMPTY_RESPONSE)
+        new TextEncoder().encode(EXAMPLE_EMPTY_RESPONSE)
       );
       const state = await callLinkResponse;
       // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
@@ -833,7 +832,7 @@ describe('RingRTC', () => {
         undefined
       );
       const requestId = await requestIdPromise;
-      RingRTC.receivedHttpResponse(requestId, 404, Buffer.from([]));
+      RingRTC.receivedHttpResponse(requestId, 404, new Uint8Array());
       const state = await callLinkResponse;
       if (state.success) {
         assert.isUndefined(state.value.eraId);
@@ -872,7 +871,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         404,
-        Buffer.from('{"reason":"expired"}', 'utf-8')
+        new TextEncoder().encode('{"reason":"expired"}')
       );
       const state = await callLinkResponse;
       if (state.success) {
@@ -910,7 +909,7 @@ describe('RingRTC', () => {
       RingRTC.receivedHttpResponse(
         requestId,
         404,
-        Buffer.from('{"reason":"invalid"}', 'utf-8')
+        new TextEncoder().encode('{"reason":"invalid"}')
       );
       const state = await callLinkResponse;
       if (state.success) {

@@ -1279,7 +1279,7 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let width = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let height = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
     let pixel_format = cx.argument::<JsNumber>(2)?.value(&mut cx) as i32;
-    let buffer = cx.argument::<JsBuffer>(3)?;
+    let buffer = cx.argument::<JsUint8Array>(3)?;
 
     let pixel_format = VideoPixelFormat::from_i32(pixel_format);
     if pixel_format.is_none() {
@@ -1298,7 +1298,7 @@ fn sendVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 fn receive_video_frame<'a>(
     cx: &mut FunctionContext<'a>,
-    mut rgba_buffer: Handle<JsBuffer>,
+    mut rgba_buffer: Handle<JsUint8Array>,
     demux_id: DemuxId,
     max_width: u32,
     max_height: u32,
@@ -1341,7 +1341,7 @@ fn receive_video_frame<'a>(
 
 #[allow(non_snake_case)]
 fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let rgba_buffer = cx.argument::<JsBuffer>(0)?;
+    let rgba_buffer = cx.argument::<JsUint8Array>(0)?;
     let max_width = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32; // saturating cast
     let max_height = cx.argument::<JsNumber>(2)?.value(&mut cx) as u32; // saturating cast
     receive_video_frame(&mut cx, rgba_buffer, 0, max_width, max_height)
@@ -1353,7 +1353,7 @@ fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn receiveGroupCallVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let _client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let remote_demux_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as DemuxId;
-    let rgba_buffer = cx.argument::<JsBuffer>(2)?;
+    let rgba_buffer = cx.argument::<JsUint8Array>(2)?;
     let max_width = cx.argument::<JsNumber>(3)?.value(&mut cx) as u32; // saturating cast
     let max_height = cx.argument::<JsNumber>(4)?.value(&mut cx) as u32; // saturating cast
     receive_video_frame(&mut cx, rgba_buffer, remote_demux_id, max_width, max_height)
