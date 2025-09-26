@@ -1664,7 +1664,7 @@ export class RingRTCType {
 
     if (message.offer?.callId) {
       const callId = message.offer.callId;
-      const opaque = toUint8Array(message.offer.opaque);
+      const opaque = message.offer.opaque;
 
       // opaque is required. sdp is obsolete, but it might still come with opaque.
       if (!opaque) {
@@ -1699,7 +1699,7 @@ export class RingRTCType {
     }
     if (message.answer?.callId) {
       const callId = message.answer.callId;
-      const opaque = toUint8Array(message.answer.opaque);
+      const opaque = message.answer.opaque;
 
       // opaque is required. sdp is obsolete, but it might still come with opaque.
       if (!opaque) {
@@ -1722,10 +1722,9 @@ export class RingRTCType {
     if (message.iceCandidates && message.iceCandidates.length > 0) {
       // We assume they all have the same .callId
       const callId = message.iceCandidates[0].callId;
-      // We have to copy them to do the .toArrayBuffer() thing.
       const candidates: Array<Uint8Array> = [];
       for (const candidate of message.iceCandidates) {
-        const copy = toUint8Array(candidate.opaque);
+        const copy = candidate.opaque;
         if (copy) {
           candidates.push(copy);
         } else {
@@ -1783,7 +1782,7 @@ export class RingRTCType {
         );
         return;
       }
-      const data = toUint8Array(message.opaque.data);
+      const data = message.opaque.data;
       if (data == undefined) {
         this.logError(
           'handleCallingMessage(): opaque message received without data!'
@@ -2824,22 +2823,6 @@ class GroupCallVideoFrameSource {
   }
 }
 
-// When sending, we just set a Uint8Array.
-// When receiving, we call .toArrayBuffer().
-type ProtobufBuffer = Uint8Array | { toArrayBuffer: () => ArrayBuffer };
-
-function toUint8Array(
-  pbab: ProtobufBuffer | undefined
-): Uint8Array | undefined {
-  if (!pbab) {
-    return pbab;
-  }
-  if (pbab instanceof Uint8Array) {
-    return pbab;
-  }
-  return new Uint8Array(pbab.toArrayBuffer());
-}
-
 export type UserId = string;
 
 export type DeviceId = number;
@@ -2866,9 +2849,9 @@ export class CallingMessage {
 export class OfferMessage {
   callId: CallId;
   type: OfferType;
-  opaque: ProtobufBuffer;
+  opaque: Uint8Array;
 
-  constructor(callId: CallId, type: OfferType, opaque: ProtobufBuffer) {
+  constructor(callId: CallId, type: OfferType, opaque: Uint8Array) {
     this.callId = callId;
     this.type = type;
     this.opaque = opaque;
@@ -2882,9 +2865,9 @@ export enum OfferType {
 
 export class AnswerMessage {
   callId: CallId;
-  opaque: ProtobufBuffer;
+  opaque: Uint8Array;
 
-  constructor(callId: CallId, opaque: ProtobufBuffer) {
+  constructor(callId: CallId, opaque: Uint8Array) {
     this.callId = callId;
     this.opaque = opaque;
   }
@@ -2892,9 +2875,9 @@ export class AnswerMessage {
 
 export class IceCandidateMessage {
   callId: CallId;
-  opaque: ProtobufBuffer;
+  opaque: Uint8Array;
 
-  constructor(callId: CallId, opaque: ProtobufBuffer) {
+  constructor(callId: CallId, opaque: Uint8Array) {
     this.callId = callId;
     this.opaque = opaque;
   }
@@ -2921,7 +2904,7 @@ export class HangupMessage {
 }
 
 export class OpaqueMessage {
-  data?: ProtobufBuffer;
+  data?: Uint8Array;
 }
 
 export enum HangupType {

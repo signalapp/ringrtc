@@ -245,7 +245,7 @@ export class CallingClass {
     RingRTC.handleGroupCallRingUpdate =
       this.handleGroupCallRingUpdate.bind(this);
     RingRTC.handleRtcStatsReport = this.handleRtcStatsReport.bind(this);
-    RingRTC.setSelfUuid(Buffer.from(uuidToBytes(this._id)));
+    RingRTC.setSelfUuid(uuidToBytes(this._id));
   }
 
   static initializeLoggingOnly(): void {
