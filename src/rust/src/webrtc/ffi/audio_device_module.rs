@@ -7,7 +7,7 @@
 
 use std::{
     ffi::{c_uchar, c_void},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 use libc::size_t;
@@ -221,6 +221,25 @@ macro_rules! adm_struct_instantiation {
 
 all_adm_functions!(adm_struct_instantiation);
 pub const AUDIO_DEVICE_CBS_PTR: *const AudioDeviceCallbacks = &AUDIO_DEVICE_CBS;
+
+/// Safety: Must be called with the same pointer passed to the C++ layer when
+/// constructing the PeerConnectionFactory.
+///
+/// The purpose of this function is to reclaim a pointer to the ADM that is
+/// "leaked" to the C++ layer (via Arc::into_raw)
+///
+/// The C++ layer must only call this function when it is done using the ADM,
+/// as this function could drop the ADM
+pub unsafe extern "C" fn decrement_adm_ref_count(adm_borrowed: webrtc::ptr::Borrowed<c_void>) {
+    // Don't try to convert null to an arc
+    if adm_borrowed.is_null() {
+        return;
+    }
+    // Get types right
+    let adm_borrowed = adm_borrowed.as_ptr() as *const Mutex<AudioDeviceModule>;
+    // Only used for decrementing the reference count.
+    let _adm = Arc::from_raw(adm_borrowed);
+}
 
 extern "C" {
     pub fn Rust_recordedDataIsAvailable(

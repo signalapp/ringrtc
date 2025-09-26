@@ -19,7 +19,7 @@ pub use pcf::{RffiPeerConnectionFactoryInterface, RffiPeerConnectionFactoryOwner
 #[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::audio_device_module::AudioDeviceModule;
 #[cfg(all(not(feature = "sim"), feature = "native"))]
-use crate::webrtc::ffi::audio_device_module::AUDIO_DEVICE_CBS_PTR;
+use crate::webrtc::ffi::audio_device_module::{decrement_adm_ref_count, AUDIO_DEVICE_CBS_PTR};
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection_factory as pcf;
 #[cfg(feature = "injectable_network")]
@@ -155,6 +155,8 @@ pub struct RffiAudioConfig {
     pub adm_borrowed: webrtc::ptr::Borrowed<c_void>,
     #[cfg(all(not(feature = "sim"), feature = "native"))]
     pub rust_audio_device_callbacks: webrtc::ptr::Borrowed<c_void>,
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
+    pub free_adm_cb: unsafe extern "C" fn(webrtc::ptr::Borrowed<c_void>),
 }
 pub struct RffiAudioConfigWrapper {
     rffi: RffiAudioConfig,
@@ -235,8 +237,14 @@ impl AudioConfig {
                         }
                         let adm_arc = Arc::new(Mutex::new(adm));
                         (
+                            // This will need to be explicitly destroyed by the
+                            // C++ layer by calling decrement_adm_ref_count to
+                            // turn it back into an Arc.
+                            // We use into_raw(...clone()) here to ensure that
+                            // the ADM stays alive until the C++ layer is done
+                            // using it.
                             webrtc::ptr::Borrowed::from_ptr(
-                                Arc::<Mutex<AudioDeviceModule>>::as_ptr(&adm_arc),
+                                Arc::<Mutex<AudioDeviceModule>>::into_raw(adm_arc.clone()),
                             )
                             .to_void(),
                             Some(adm_arc),
@@ -265,6 +273,8 @@ impl AudioConfig {
                 #[cfg(all(not(feature = "sim"), feature = "native"))]
                 rust_audio_device_callbacks: webrtc::ptr::Borrowed::from_ptr(AUDIO_DEVICE_CBS_PTR)
                     .to_void(),
+                #[cfg(all(not(feature = "sim"), feature = "native"))]
+                free_adm_cb: decrement_adm_ref_count,
             },
             #[cfg(all(not(feature = "sim"), feature = "native"))]
             adm: adm_arc,
