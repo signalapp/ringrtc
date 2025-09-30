@@ -280,13 +280,6 @@ public protocol CallManagerDelegate: AnyObject {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency, overrideRecipients: [UUID])
 
     /**
-     * Two call 'remote' pointers should be compared to see if they refer to the same
-     * remote peer/contact.
-     * Invoked *synchronously*.
-     */
-    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldCompareCalls call1: CallManagerDelegateCallType, call2: CallManagerDelegateCallType) -> Bool
-
-    /**
      * The local video track has been enabled and can be connected to the
      * UI's display surface/view for the outgoing media.
      */
@@ -399,12 +392,16 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - callMediaType: The type of call to place (audio or video)
     ///   - localDevice: The local device ID of the client (must be valid for lifetime of the call)
     @MainActor
-    public func placeCall(call: CallType, callMediaType: CallMediaType, localDevice: UInt32) throws {
+    public func placeCall(call: CallType, remoteUuid: UUID, callMediaType: CallMediaType, localDevice: UInt32) throws {
         Logger.debug("call")
 
         let unmanagedCall: Unmanaged<CallType> = Unmanaged.passUnretained(call)
 
-        let retPtr = ringrtcCall(ringRtcCallManager, unmanagedCall.toOpaque(), callMediaType.rawValue, localDevice)
+        let remoteUuidSlice = allocatedAppByteSliceFromData(maybe_data: remoteUuid.data)
+
+        defer { remoteUuidSlice.bytes?.deallocate() }
+
+        let retPtr = ringrtcCall(ringRtcCallManager, unmanagedCall.toOpaque(), remoteUuidSlice, callMediaType.rawValue, localDevice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "call() function failure")
         }
@@ -562,7 +559,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 
     @MainActor
-    public func setLocalVideoEnabled(enabled: Bool, call: CallType) {
+    public func setLocalVideoEnabled(call: CallType, enabled: Bool) {
         Logger.debug("setLocalVideoEnabled(\(enabled))")
 
         let retPtr = ringrtcGetActiveCallContext(ringRtcCallManager)
@@ -609,9 +606,12 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     // MARK: - Signaling API
 
     @MainActor
-    public func receivedOffer(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
+    public func receivedOffer(call: CallType, remoteUuid: UUID, sourceDevice: UInt32, callId: UInt64, opaque: Data, messageAgeSec: UInt64, callMediaType: CallMediaType, localDevice: UInt32, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
         Logger.debug("receivedOffer")
 
+        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
+
+        let remoteUuidSlice = allocatedAppByteSliceFromData(maybe_data: remoteUuid.data)
         let opaqueSlice = allocatedAppByteSliceFromData(maybe_data: opaque)
         let senderIdentityKeySlice = allocatedAppByteSliceFromData(maybe_data: senderIdentityKey)
         let receiverIdentityKeySlice = allocatedAppByteSliceFromData(maybe_data: receiverIdentityKey)
@@ -620,19 +620,13 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // to ensure that the pointers are still valid when used in the RingRTC
         // API function.
         defer {
-            if opaqueSlice.bytes != nil {
-                 opaqueSlice.bytes.deallocate()
-            }
-            if senderIdentityKeySlice.bytes != nil {
-                 senderIdentityKeySlice.bytes.deallocate()
-            }
-            if receiverIdentityKeySlice.bytes != nil {
-                 receiverIdentityKeySlice.bytes.deallocate()
-            }
+            remoteUuidSlice.bytes?.deallocate()
+            opaqueSlice.bytes?.deallocate()
+            senderIdentityKeySlice.bytes?.deallocate()
+            receiverIdentityKeySlice.bytes?.deallocate()
         }
 
-        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaqueSlice, messageAgeSec, callMediaType.rawValue, localDevice, senderIdentityKeySlice, receiverIdentityKeySlice)
+        let retPtr = ringrtcReceivedOffer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), remoteUuidSlice, sourceDevice, opaqueSlice, messageAgeSec, callMediaType.rawValue, localDevice, senderIdentityKeySlice, receiverIdentityKeySlice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedOffer() function failure")
         }
@@ -642,9 +636,10 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     }
 
     @MainActor
-    public func receivedAnswer(call: CallType, sourceDevice: UInt32, callId: UInt64, opaque: Data, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
+    public func receivedAnswer(remoteUuid: UUID, sourceDevice: UInt32, callId: UInt64, opaque: Data, senderIdentityKey: Data, receiverIdentityKey: Data) throws {
         Logger.debug("receivedAnswer")
 
+        let remoteUuidSlice = allocatedAppByteSliceFromData(maybe_data: remoteUuid.data)
         let opaqueSlice = allocatedAppByteSliceFromData(maybe_data: opaque)
         let senderIdentityKeySlice = allocatedAppByteSliceFromData(maybe_data: senderIdentityKey)
         let receiverIdentityKeySlice = allocatedAppByteSliceFromData(maybe_data: receiverIdentityKey)
@@ -653,28 +648,23 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // to ensure that the pointers are still valid when used in the RingRTC
         // API function.
         defer {
-            if opaqueSlice.bytes != nil {
-                 opaqueSlice.bytes.deallocate()
-            }
-            if senderIdentityKeySlice.bytes != nil {
-                 senderIdentityKeySlice.bytes.deallocate()
-            }
-            if receiverIdentityKeySlice.bytes != nil {
-                 receiverIdentityKeySlice.bytes.deallocate()
-            }
+            remoteUuidSlice.bytes?.deallocate()
+            opaqueSlice.bytes?.deallocate()
+            senderIdentityKeySlice.bytes?.deallocate()
+            receiverIdentityKeySlice.bytes?.deallocate()
         }
 
-        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, opaqueSlice, senderIdentityKeySlice, receiverIdentityKeySlice)
+        let retPtr = ringrtcReceivedAnswer(ringRtcCallManager, callId, remoteUuidSlice, sourceDevice, opaqueSlice, senderIdentityKeySlice, receiverIdentityKeySlice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedAnswer() function failure")
         }
     }
 
     @MainActor
-    public func receivedIceCandidates(call: CallType, sourceDevice: UInt32, callId: UInt64, candidates: [Data]) throws {
+    public func receivedIceCandidates(remoteUuid: UUID, sourceDevice: UInt32, callId: UInt64, candidates: [Data]) throws {
         Logger.debug("receivedIceCandidates")
 
+        let remoteUuidSlice = allocatedAppByteSliceFromData(maybe_data: remoteUuid.data)
         let appIceCandidates: [AppByteSlice] = candidates.map { candidate in
             return allocatedAppByteSliceFromData(maybe_data: candidate)
         }
@@ -683,10 +673,9 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // to ensure that the pointers are still valid when used in the RingRTC
         // API function.
         defer {
+            remoteUuidSlice.bytes?.deallocate()
             for appIceCandidate in appIceCandidates {
-                if appIceCandidate.bytes != nil {
-                    appIceCandidate.bytes.deallocate()
-                }
+                appIceCandidate.bytes?.deallocate()
             }
         }
 
@@ -697,30 +686,35 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             )
         }
 
-        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, &appIceCandidateArray)
+        let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, remoteUuidSlice, sourceDevice, &appIceCandidateArray)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "ringrtcReceivedIceCandidates() function failure")
         }
     }
 
     @MainActor
-    public func receivedHangup(call: CallType, sourceDevice: UInt32, callId: UInt64, hangupType: HangupType, deviceId: UInt32) throws {
+    public func receivedHangup(remoteUuid: UUID, sourceDevice: UInt32, callId: UInt64, hangupType: HangupType, deviceId: UInt32) throws {
         Logger.debug("receivedHangup")
 
-        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedHangup(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice, hangupType.rawValue, deviceId)
+        let remoteUuidSlice = allocatedAppByteSliceFromData(maybe_data: remoteUuid.data)
+
+        defer { remoteUuidSlice.bytes?.deallocate() }
+
+        let retPtr = ringrtcReceivedHangup(ringRtcCallManager, callId, remoteUuidSlice, sourceDevice, hangupType.rawValue, deviceId)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedHangup() function failure")
         }
     }
 
     @MainActor
-    public func receivedBusy(call: CallType, sourceDevice: UInt32, callId: UInt64) throws {
+    public func receivedBusy(remoteUuid: UUID, sourceDevice: UInt32, callId: UInt64) throws {
         Logger.debug("receivedBusy")
 
-        let unmanagedRemote: Unmanaged<CallType> = Unmanaged.passUnretained(call)
-        let retPtr = ringrtcReceivedBusy(ringRtcCallManager, callId, unmanagedRemote.toOpaque(), sourceDevice)
+        let remoteUuidSlice = allocatedAppByteSliceFromData(maybe_data: remoteUuid.data)
+
+        defer { remoteUuidSlice.bytes?.deallocate() }
+
+        let retPtr = ringrtcReceivedBusy(ringRtcCallManager, callId, remoteUuidSlice, sourceDevice)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "receivedBusy() function failure")
         }
@@ -737,12 +731,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // to ensure that the pointers are still valid when used in the RingRTC
         // API function.
         defer {
-            if senderUuidSlice.bytes != nil {
-                 senderUuidSlice.bytes.deallocate()
-            }
-            if messageSlice.bytes != nil {
-                messageSlice.bytes.deallocate()
-            }
+             senderUuidSlice.bytes?.deallocate()
+             messageSlice.bytes?.deallocate()
         }
 
         ringrtcReceivedCallMessage(ringRtcCallManager, senderUuidSlice, senderDeviceId, localDeviceId, messageSlice, messageAgeSec)
@@ -1013,20 +1003,6 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
             delegate.callManager(self, onAddRemoteVideoTrack: callReference, track: stream.videoTracks[0])
         }
-    }
-
-    func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool {
-        Logger.debug("onCompareRemotes")
-
-        // Invoke the delegate function synchronously.
-
-        guard let delegate = self.delegate else {
-            return false
-        }
-
-        let callReference1: CallType = Unmanaged.fromOpaque(remote1).takeUnretainedValue()
-        let callReference2: CallType = Unmanaged.fromOpaque(remote2).takeUnretainedValue()
-        return delegate.callManager(self, shouldCompareCalls: callReference1, call2: callReference2)
     }
 
     func onCallConcluded(remote: UnsafeRawPointer) {
