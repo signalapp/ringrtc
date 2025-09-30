@@ -46,7 +46,7 @@ impl<T: webrtc::RefCounted> Arc<T> {
     /// # Safety
     /// The pointee must be alive.
     pub unsafe fn from_borrowed(borrowed: webrtc::ptr::BorrowedRc<T>) -> Self {
-        Self::from_owned(ref_count::inc(borrowed))
+        unsafe { Self::from_owned(ref_count::inc(borrowed)) }
     }
 
     pub fn as_borrowed(&self) -> webrtc::ptr::BorrowedRc<T> {

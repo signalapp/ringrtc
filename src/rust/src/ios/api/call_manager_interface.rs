@@ -534,20 +534,20 @@ pub fn string_from_app_slice(app_slice: &AppByteSlice) -> Option<String> {
     Some(std::str::from_utf8(app_slice.as_slice()?).ok()?.to_string())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn ringrtcCreateCallManager(
     appInterface: AppInterface,
     httpClient: *const http::ios::Client,
 ) -> *mut c_void {
-    if let Some(http_client) = httpClient.as_ref() {
+    if let Some(http_client) = unsafe { httpClient.as_ref() } {
         call_manager::create(appInterface, http_client.clone()).unwrap_or(std::ptr::null_mut())
     } else {
         std::ptr::null_mut()
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetSelfUuid(callManager: *mut c_void, uuid: AppByteSlice) -> *mut c_void {
     let uuid = match byte_vec_from_app_slice(&uuid) {
@@ -566,7 +566,7 @@ pub extern "C" fn ringrtcSetSelfUuid(callManager: *mut c_void, uuid: AppByteSlic
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcCall(
     callManager: *mut c_void,
@@ -588,7 +588,7 @@ pub extern "C" fn ringrtcCall(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcProceed(
     callManager: *mut c_void,
@@ -617,7 +617,7 @@ pub extern "C" fn ringrtcProceed(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcMessageSent(callManager: *mut c_void, callId: u64) -> *mut c_void {
     match call_manager::message_sent(callManager as *mut IosCallManager, callId) {
@@ -629,7 +629,7 @@ pub extern "C" fn ringrtcMessageSent(callManager: *mut c_void, callId: u64) -> *
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcMessageSendFailure(callManager: *mut c_void, callId: u64) -> *mut c_void {
     match call_manager::message_send_failure(callManager as *mut IosCallManager, callId) {
@@ -641,7 +641,7 @@ pub extern "C" fn ringrtcMessageSendFailure(callManager: *mut c_void, callId: u6
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcHangup(callManager: *mut c_void) -> *mut c_void {
     match call_manager::hangup(callManager as *mut IosCallManager) {
@@ -653,7 +653,7 @@ pub extern "C" fn ringrtcHangup(callManager: *mut c_void) -> *mut c_void {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcCancelGroupRing(
     callManager: *mut c_void,
@@ -695,7 +695,7 @@ pub extern "C" fn ringrtcCancelGroupRing(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReceivedAnswer(
     callManager: *mut c_void,
@@ -726,7 +726,7 @@ pub extern "C" fn ringrtcReceivedAnswer(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReceivedOffer(
     callManager: *mut c_void,
@@ -763,7 +763,7 @@ pub extern "C" fn ringrtcReceivedOffer(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReceivedIceCandidates(
     callManager: *mut c_void,
@@ -809,7 +809,7 @@ pub extern "C" fn ringrtcReceivedIceCandidates(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReceivedHangup(
     callManager: *mut c_void,
@@ -835,7 +835,7 @@ pub extern "C" fn ringrtcReceivedHangup(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReceivedBusy(
     callManager: *mut c_void,
@@ -857,7 +857,7 @@ pub extern "C" fn ringrtcReceivedBusy(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReceivedCallMessage(
     callManager: *mut c_void,
@@ -892,7 +892,7 @@ pub extern "C" fn ringrtcReceivedCallMessage(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcAccept(callManager: *mut c_void, callId: u64) -> *mut c_void {
     match call_manager::accept_call(callManager as *mut IosCallManager, callId) {
@@ -904,7 +904,7 @@ pub extern "C" fn ringrtcAccept(callManager: *mut c_void, callId: u64) -> *mut c
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcGetActiveConnection(callManager: *mut c_void) -> *mut c_void {
     match call_manager::get_active_connection(callManager as *mut IosCallManager) {
@@ -913,7 +913,7 @@ pub extern "C" fn ringrtcGetActiveConnection(callManager: *mut c_void) -> *mut c
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcGetActiveCallContext(callManager: *mut c_void) -> *mut c_void {
     match call_manager::get_active_call_context(callManager as *mut IosCallManager) {
@@ -922,7 +922,7 @@ pub extern "C" fn ringrtcGetActiveCallContext(callManager: *mut c_void) -> *mut 
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetAudioEnable(callManager: *mut c_void, enable: bool) -> *mut c_void {
     match call_manager::set_audio_enable(callManager as *mut IosCallManager, enable) {
@@ -934,7 +934,7 @@ pub extern "C" fn ringrtcSetAudioEnable(callManager: *mut c_void, enable: bool) 
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) -> *mut c_void {
     match call_manager::set_video_enable(callManager as *mut IosCallManager, enable) {
@@ -946,7 +946,7 @@ pub extern "C" fn ringrtcSetVideoEnable(callManager: *mut c_void, enable: bool) 
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcUpdateDataMode(callManager: *mut c_void, dataMode: i32) {
     let result = call_manager::update_data_mode(
@@ -958,7 +958,7 @@ pub extern "C" fn ringrtcUpdateDataMode(callManager: *mut c_void, dataMode: i32)
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcDrop(callManager: *mut c_void, callId: u64) -> *mut c_void {
     match call_manager::drop_call(callManager as *mut IosCallManager, callId) {
@@ -970,7 +970,7 @@ pub extern "C" fn ringrtcDrop(callManager: *mut c_void, callId: u64) -> *mut c_v
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReset(callManager: *mut c_void) -> *mut c_void {
     match call_manager::reset(callManager as *mut IosCallManager) {
@@ -982,7 +982,7 @@ pub extern "C" fn ringrtcReset(callManager: *mut c_void) -> *mut c_void {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcClose(callManager: *mut c_void) -> *mut c_void {
     match call_manager::close(callManager as *mut IosCallManager) {
@@ -996,7 +996,7 @@ pub extern "C" fn ringrtcClose(callManager: *mut c_void) -> *mut c_void {
 
 // Group Calls
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcCreateGroupCallClient(
     callManager: *mut c_void,
@@ -1054,7 +1054,7 @@ pub extern "C" fn ringrtcCreateGroupCallClient(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcCreateCallLinkCallClient(
     callManager: *mut c_void,
@@ -1135,7 +1135,7 @@ pub extern "C" fn ringrtcCreateCallLinkCallClient(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcDeleteGroupCallClient(
     callManager: *mut c_void,
@@ -1148,7 +1148,7 @@ pub extern "C" fn ringrtcDeleteGroupCallClient(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcConnect(callManager: *mut c_void, clientId: group_call::ClientId) {
     let result = call_manager::connect(callManager as *mut IosCallManager, clientId);
@@ -1157,7 +1157,7 @@ pub extern "C" fn ringrtcConnect(callManager: *mut c_void, clientId: group_call:
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcJoin(callManager: *mut c_void, clientId: group_call::ClientId) {
     let result = call_manager::join(callManager as *mut IosCallManager, clientId);
@@ -1166,7 +1166,7 @@ pub extern "C" fn ringrtcJoin(callManager: *mut c_void, clientId: group_call::Cl
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcLeave(callManager: *mut c_void, clientId: group_call::ClientId) {
     let result = call_manager::leave(callManager as *mut IosCallManager, clientId);
@@ -1175,7 +1175,7 @@ pub extern "C" fn ringrtcLeave(callManager: *mut c_void, clientId: group_call::C
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcDisconnect(callManager: *mut c_void, clientId: group_call::ClientId) {
     let result = call_manager::disconnect(callManager as *mut IosCallManager, clientId);
@@ -1184,7 +1184,7 @@ pub extern "C" fn ringrtcDisconnect(callManager: *mut c_void, clientId: group_ca
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcGroupRing(
     callManager: *mut c_void,
@@ -1198,7 +1198,7 @@ pub extern "C" fn ringrtcGroupRing(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetOutgoingAudioMuted(
     callManager: *mut c_void,
@@ -1212,7 +1212,7 @@ pub extern "C" fn ringrtcSetOutgoingAudioMuted(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetOutgoingAudioMutedRemotely(
     callManager: *mut c_void,
@@ -1229,7 +1229,7 @@ pub extern "C" fn ringrtcSetOutgoingAudioMutedRemotely(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSendRemoteMuteRequest(
     callManager: *mut c_void,
@@ -1245,7 +1245,7 @@ pub extern "C" fn ringrtcSendRemoteMuteRequest(
         error!("{:?}", result.err());
     }
 }
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetOutgoingVideoMuted(
     callManager: *mut c_void,
@@ -1259,7 +1259,7 @@ pub extern "C" fn ringrtcSetOutgoingVideoMuted(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcResendMediaKeys(callManager: *mut c_void, clientId: group_call::ClientId) {
     let result = call_manager::resend_media_keys(callManager as *mut IosCallManager, clientId);
@@ -1268,7 +1268,7 @@ pub extern "C" fn ringrtcResendMediaKeys(callManager: *mut c_void, clientId: gro
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetDataMode(
     callManager: *mut c_void,
@@ -1285,7 +1285,7 @@ pub extern "C" fn ringrtcSetDataMode(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcRequestVideo(
     callManager: *mut c_void,
@@ -1325,7 +1325,7 @@ pub extern "C" fn ringrtcRequestVideo(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcApproveUser(
     callManager: *mut c_void,
@@ -1343,7 +1343,7 @@ pub extern "C" fn ringrtcApproveUser(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcDenyUser(
     callManager: *mut c_void,
@@ -1361,7 +1361,7 @@ pub extern "C" fn ringrtcDenyUser(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcRemoveClient(
     callManager: *mut c_void,
@@ -1378,7 +1378,7 @@ pub extern "C" fn ringrtcRemoveClient(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcBlockClient(
     callManager: *mut c_void,
@@ -1395,7 +1395,7 @@ pub extern "C" fn ringrtcBlockClient(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetGroupMembers(
     callManager: *mut c_void,
@@ -1437,7 +1437,7 @@ pub extern "C" fn ringrtcSetGroupMembers(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcSetMembershipProof(
     callManager: *mut c_void,
@@ -1460,7 +1460,7 @@ pub extern "C" fn ringrtcSetMembershipProof(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcReact(
     callManager: *mut c_void,
@@ -1479,7 +1479,7 @@ pub extern "C" fn ringrtcReact(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcRaiseHand(
     callManager: *mut c_void,
@@ -1492,7 +1492,7 @@ pub extern "C" fn ringrtcRaiseHand(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcIsValidOffer(
     opaque: AppByteSlice,
@@ -1512,7 +1512,7 @@ pub extern "C" fn ringrtcIsValidOffer(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcIsCallMessageValidOpaqueRing(
     message: AppByteSlice,
@@ -1548,7 +1548,7 @@ pub extern "C" fn ringrtcIsCallMessageValidOpaqueRing(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub extern "C" fn ringrtcCallIdFromEraId(era_bytes: AppByteSlice) -> u64 {
     let Some(era) = era_bytes

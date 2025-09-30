@@ -177,7 +177,7 @@ impl Worker {
     /// Safety: Must be called with a valid |data| pointer. (NULL is okay.)
     unsafe extern "C" fn device_changed(_ctx: *mut cubeb::ffi::cubeb, data: *mut c_void) {
         // Flag that an update is needed; this will be processed in the worker thread.
-        if let Some(d) = (data as *mut UpdateCallbackData).as_ref() {
+        if let Some(d) = unsafe { (data as *mut UpdateCallbackData).as_ref() } {
             if let Err(e) = d.sender.send(Event::RefreshCache(d.device_type)) {
                 error!("Failed to request {:?} cache refresh: {}", d.device_type, e);
             }

@@ -30,7 +30,7 @@ pub mod ios {
         pub flush: extern "C" fn(ctx: *mut c_void),
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_log_init(delegate: rtc_log_Delegate, max_level: u8) -> bool {
         if log::set_boxed_logger(Box::new(delegate)).is_err() {
             warn!("Logging already initialized");

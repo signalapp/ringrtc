@@ -40,7 +40,7 @@ pub struct RffiPeerConnectionFactoryInterface {
 // in webrtc/api/peer_connection_interface.h
 impl webrtc::RefCounted for RffiPeerConnectionFactoryInterface {}
 
-extern "C" {
+unsafe extern "C" {
     pub fn Rust_createPeerConnectionFactory(
         audio_config: webrtc::ptr::Borrowed<RffiAudioConfig>,
         use_injectable_network: bool,

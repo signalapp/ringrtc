@@ -13,7 +13,7 @@ use jni::{
 
 use crate::{webrtc, webrtc::peer_connection::RffiPeerConnection};
 
-extern "C" {
+unsafe extern "C" {
     /// Export the nativeCreatePeerConnection() call from the
     /// org.webrtc.PeerConnectionFactory class.
     pub fn Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection(
@@ -28,7 +28,7 @@ extern "C" {
 }
 
 // Get the native PeerConnection inside of the Java wrapper.
-extern "C" {
+unsafe extern "C" {
     pub fn Rust_borrowPeerConnectionFromJniOwnedPeerConnection(
         jni_owned_pc: i64,
     ) -> webrtc::ptr::BorrowedRc<RffiPeerConnection>;

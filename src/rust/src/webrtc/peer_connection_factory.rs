@@ -381,9 +381,11 @@ impl PeerConnectionFactory {
     pub unsafe fn from_native_factory(
         native: webrtc::Arc<RffiPeerConnectionFactoryInterface>,
     ) -> Self {
-        let rffi = webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactoryWrapper(
-            native.as_borrowed(),
-        ));
+        let rffi = unsafe {
+            webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactoryWrapper(
+                native.as_borrowed(),
+            ))
+        };
         Self {
             rffi,
             #[cfg(feature = "native")]

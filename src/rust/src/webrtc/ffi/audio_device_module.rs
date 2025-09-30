@@ -238,10 +238,10 @@ pub unsafe extern "C" fn decrement_adm_ref_count(adm_borrowed: webrtc::ptr::Borr
     // Get types right
     let adm_borrowed = adm_borrowed.as_ptr() as *const Mutex<AudioDeviceModule>;
     // Only used for decrementing the reference count.
-    let _adm = Arc::from_raw(adm_borrowed);
+    let _adm = unsafe { Arc::from_raw(adm_borrowed) };
 }
 
-extern "C" {
+unsafe extern "C" {
     pub fn Rust_recordedDataIsAvailable(
         audio_transport: *const c_void,
         audio_samples: *const c_void,

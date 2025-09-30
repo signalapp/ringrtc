@@ -482,27 +482,23 @@ impl CreateSessionDescriptionObserver {
 }
 
 /// CreateSessionDescription observer OnSuccess() callback.
-#[no_mangle]
-#[allow(non_snake_case)]
-extern "C" fn csd_observer_OnSuccess(
+extern "C" fn csd_observer_on_success(
     mut csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
     session_description: webrtc::ptr::Owned<RffiSessionDescription>,
 ) {
-    info!("csd_observer_OnSuccess()");
+    info!("csd_observer_on_success()");
     let session_description = webrtc::ptr::Unique::from(session_description);
 
     // Safe because the observer should still be alive (it was just passed to us)
     if let Some(csd_observer) = unsafe { csd_observer.as_mut() } {
         csd_observer.on_create_success(session_description);
     } else {
-        error!("csd_observer_OnSuccess() with null observer");
+        error!("csd_observer_on_success() with null observer");
     }
 }
 
 /// CreateSessionDescription observer OnFailure() callback.
-#[no_mangle]
-#[allow(non_snake_case)]
-extern "C" fn csd_observer_OnFailure(
+extern "C" fn csd_observer_on_failure(
     mut csd_observer: webrtc::ptr::Borrowed<CreateSessionDescriptionObserver>,
     err_message: webrtc::ptr::Borrowed<c_char>,
     err_type: i32,
@@ -513,7 +509,7 @@ extern "C" fn csd_observer_OnFailure(
             .into_owned()
     };
     error!(
-        "csd_observer_OnFailure(): {}, type: {}",
+        "csd_observer_on_failure(): {}, type: {}",
         err_string, err_type
     );
 
@@ -521,7 +517,7 @@ extern "C" fn csd_observer_OnFailure(
     if let Some(csd_observer) = unsafe { csd_observer.as_mut() } {
         csd_observer.on_create_failure(err_string, err_type);
     } else {
-        error!("csd_observer_OnFailure() with null observer");
+        error!("csd_observer_on_failure() with null observer");
     }
 }
 
@@ -542,8 +538,8 @@ pub struct CreateSessionDescriptionObserverCallbacks {
 
 const CSD_OBSERVER_CBS: CreateSessionDescriptionObserverCallbacks =
     CreateSessionDescriptionObserverCallbacks {
-        onSuccess: csd_observer_OnSuccess,
-        onFailure: csd_observer_OnFailure,
+        onSuccess: csd_observer_on_success,
+        onFailure: csd_observer_on_failure,
     };
 const CSD_OBSERVER_CBS_PTR: *const CreateSessionDescriptionObserverCallbacks = &CSD_OBSERVER_CBS;
 
@@ -657,25 +653,21 @@ impl SetSessionDescriptionObserver {
 }
 
 /// SetSessionDescription observer OnSuccess() callback.
-#[no_mangle]
-#[allow(non_snake_case)]
-extern "C" fn ssd_observer_OnSuccess(
+extern "C" fn ssd_observer_on_success(
     mut ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>,
 ) {
-    info!("ssd_observer_OnSuccess()");
+    info!("ssd_observer_on_success()");
 
     // Safe because the observer should still be alive (it was just passed to us)
     if let Some(ssd_observer) = unsafe { ssd_observer.as_mut() } {
         ssd_observer.on_set_success();
     } else {
-        error!("ssd_observer_OnSuccess() with null observer");
+        error!("ssd_observer_on_success() with null observer");
     }
 }
 
 /// SetSessionDescription observer OnFailure() callback.
-#[no_mangle]
-#[allow(non_snake_case)]
-extern "C" fn ssd_observer_OnFailure(
+extern "C" fn ssd_observer_on_failure(
     ssd_observer: webrtc::ptr::Borrowed<SetSessionDescriptionObserver>,
     err_message: webrtc::ptr::Borrowed<c_char>,
     err_type: i32,
@@ -686,14 +678,14 @@ extern "C" fn ssd_observer_OnFailure(
             .into_owned()
     };
     error!(
-        "ssd_observer_OnFailure(): {}, type: {}",
+        "ssd_observer_on_failure(): {}, type: {}",
         err_string, err_type
     );
 
     if let Some(ssd_observer) = unsafe { ssd_observer.as_ref() } {
         ssd_observer.on_set_failure(err_string, err_type);
     } else {
-        error!("ssd_observer_OnFailure() with null observer");
+        error!("ssd_observer_on_failure() with null observer");
     }
 }
 
@@ -712,8 +704,8 @@ pub struct SetSessionDescriptionObserverCallbacks {
 
 const SSD_OBSERVER_CBS: SetSessionDescriptionObserverCallbacks =
     SetSessionDescriptionObserverCallbacks {
-        onSuccess: ssd_observer_OnSuccess,
-        onFailure: ssd_observer_OnFailure,
+        onSuccess: ssd_observer_on_success,
+        onFailure: ssd_observer_on_failure,
     };
 const SSD_OBSERVER_CBS_PTR: *const SetSessionDescriptionObserverCallbacks = &SSD_OBSERVER_CBS;
 

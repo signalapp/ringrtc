@@ -60,7 +60,7 @@ impl JavaMediaStream {
     }
 }
 
-extern "C" {
+unsafe extern "C" {
     fn Rust_createJavaMediaStream(
         rffi_media_stream: webrtc::ptr::OwnedRc<RffiMediaStream>,
     ) -> webrtc::ptr::Owned<RffiJavaMediaStream>;

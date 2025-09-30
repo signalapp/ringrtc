@@ -121,7 +121,7 @@ pub struct RffiInjectableNetwork {
     _private: [u8; 0],
 }
 
-extern "C" {
+unsafe extern "C" {
     pub fn Rust_InjectableNetwork_SetSender(
         network: webrtc::ptr::Borrowed<RffiInjectableNetwork>,
         sender: webrtc::ptr::Borrowed<std::ffi::c_void>,

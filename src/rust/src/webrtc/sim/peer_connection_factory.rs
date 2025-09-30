@@ -36,7 +36,7 @@ pub unsafe fn Rust_createPeerConnectionFactory(
     _use_injectable_network: bool,
 ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner> {
     info!("Rust_createPeerConnectionFactory()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_PEER_CONNECTION_FACTORY)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_PEER_CONNECTION_FACTORY) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -58,7 +58,7 @@ pub unsafe fn Rust_createPeerConnection(
     _outgoing_video_track: webrtc::ptr::BorrowedRc<RffiVideoTrack>,
 ) -> webrtc::ptr::OwnedRc<RffiPeerConnection> {
     info!("Rust_createPeerConnection()");
-    webrtc::ptr::OwnedRc::from_ptr(Box::leak(Box::new(RffiPeerConnection::new())))
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(Box::leak(Box::new(RffiPeerConnection::new()))) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -66,13 +66,13 @@ pub unsafe fn Rust_createAudioTrack(
     _factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
 ) -> webrtc::ptr::OwnedRc<RffiAudioTrack> {
     info!("Rust_createVideoSource()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_AUDIO_TRACK)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_AUDIO_TRACK) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_createVideoSource() -> webrtc::ptr::OwnedRc<RffiVideoSource> {
     info!("Rust_createVideoSource()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_SOURCE)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_SOURCE) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -81,7 +81,7 @@ pub unsafe fn Rust_createVideoTrack(
     _source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
 ) -> webrtc::ptr::OwnedRc<RffiVideoTrack> {
     info!("Rust_createVideoTrack()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_TRACK)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_TRACK) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -101,8 +101,10 @@ pub unsafe fn Rust_getAudioPlayoutDeviceName(
     if index != 0 {
         return -1;
     }
-    copy_to_c_buffer("FakeSpeaker", name_out);
-    copy_to_c_buffer("FakeSpeakerUuid", uuid_out);
+    unsafe {
+        copy_to_c_buffer("FakeSpeaker", name_out);
+        copy_to_c_buffer("FakeSpeakerUuid", uuid_out);
+    }
     0
 }
 
@@ -131,8 +133,10 @@ pub unsafe fn Rust_getAudioRecordingDeviceName(
     if index != 0 {
         return -1;
     }
-    copy_to_c_buffer("FakeMicrophone", name_out);
-    copy_to_c_buffer("FakeMicrophoneUuid", uuid_out);
+    unsafe {
+        copy_to_c_buffer("FakeMicrophone", name_out);
+        copy_to_c_buffer("FakeMicrophoneUuid", uuid_out);
+    }
     0
 }
 
@@ -146,5 +150,5 @@ pub unsafe fn Rust_setAudioRecordingDevice(
 
 unsafe fn copy_to_c_buffer(string: &str, dest: *mut c_char) {
     let bytes = CString::new(string).unwrap();
-    copy_nonoverlapping(bytes.as_ptr(), dest, string.len() + 1)
+    unsafe { copy_nonoverlapping(bytes.as_ptr(), dest, string.len() + 1) }
 }

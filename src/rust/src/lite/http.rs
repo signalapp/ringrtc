@@ -309,7 +309,7 @@ pub mod ios {
 
     // Returns an owned pointer which should be destroyed
     // with rtc_http_Client_destroy.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_http_Client_create(delegate: rtc_http_Delegate) -> *mut Client {
         Box::into_raw(Box::new(http::DelegatingClient::new(delegate)))
     }
@@ -317,16 +317,18 @@ pub mod ios {
     /// # Safety
     ///
     /// client_ptr must come from rtc_http_Client_create and not already be destroyed
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_http_Client_destroy(client_ptr: *mut Client) {
-        let client = Box::from_raw(client_ptr);
-        drop(client)
+        unsafe {
+            let client = Box::from_raw(client_ptr);
+            drop(client)
+        }
     }
 
     /// # Safety
     ///
     /// client_ptr must come from rtc_http_Client_create and not already be destroyed
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     #[allow(non_snake_case)]
     pub unsafe extern "C" fn rtc_http_Client_received_response(
         client: *const Client,
@@ -335,7 +337,7 @@ pub mod ios {
     ) {
         info!("rtc_http_Client_received_response():");
 
-        if let Some(client) = client.as_ref() {
+        if let Some(client) = unsafe { client.as_ref() } {
             let response = Some(http::Response {
                 status: response.status_code.into(),
                 body: response.body.to_vec(),
@@ -349,7 +351,7 @@ pub mod ios {
     /// # Safety
     ///
     /// client_ptr must come from rtc_http_Client_create and not already be destroyed
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     #[allow(non_snake_case)]
     pub unsafe extern "C" fn rtc_http_Client_request_failed(
         client: *const Client,
@@ -357,7 +359,7 @@ pub mod ios {
     ) {
         info!("rtc_http_Client_request_failed():");
 
-        if let Some(client) = client.as_ref() {
+        if let Some(client) = unsafe { client.as_ref() } {
             let response = None;
             client.received_response(request_id, response);
         } else {

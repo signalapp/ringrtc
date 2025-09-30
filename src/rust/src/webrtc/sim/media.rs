@@ -73,7 +73,7 @@ pub unsafe fn Rust_copyVideoFrameBufferFromI420(
     _src: webrtc::ptr::Borrowed<u8>,
 ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
     info!("Rust_copyVideoFrameBufferFromI420()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -83,7 +83,7 @@ pub unsafe fn Rust_copyVideoFrameBufferFromNv12(
     _src: webrtc::ptr::Borrowed<u8>,
 ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
     info!("Rust_copyVideoFrameBufferFromNv12()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -93,7 +93,7 @@ pub unsafe fn Rust_copyVideoFrameBufferFromRgba(
     _src: webrtc::ptr::Borrowed<u8>,
 ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
     info!("Rust_copyVideoFrameBufferFromRgba()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -119,7 +119,7 @@ pub unsafe fn Rust_scaleVideoFrameBuffer(
     _height: isize,
 ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
     info!("Rust_scaleVideoFrameBuffer()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
@@ -128,5 +128,5 @@ pub unsafe fn Rust_copyAndRotateVideoFrameBuffer(
     _rotation: VideoRotation,
 ) -> webrtc::ptr::OwnedRc<RffiVideoFrameBuffer> {
     info!("Rust_copyAndRotateVideoFrameBuffer()");
-    webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER)
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_VIDEO_FRAME_BUFFER) }
 }

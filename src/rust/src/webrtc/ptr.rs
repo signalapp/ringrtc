@@ -120,13 +120,13 @@ impl<T> Borrowed<T> {
     /// # Safety
     /// It's as safe as any pointer deref.
     pub unsafe fn as_ref(&self) -> Option<&T> {
-        self.as_ptr().as_ref()
+        unsafe { self.as_ptr().as_ref() }
     }
 
     /// # Safety
     /// It's as safe as any pointer deref.
     pub unsafe fn as_mut(&mut self) -> Option<&mut T> {
-        (self.as_ptr() as *mut T).as_mut()
+        unsafe { (self.as_ptr() as *mut T).as_mut() }
     }
 }
 
@@ -227,13 +227,13 @@ impl<T: RefCounted> BorrowedRc<T> {
     /// # Safety
     /// It's as safe as any pointer deref.
     pub unsafe fn as_ref(&self) -> Option<&T> {
-        self.as_ptr().as_ref()
+        unsafe { self.as_ptr().as_ref() }
     }
 
     /// # Safety
     /// It's as safe as any pointer deref.
     pub unsafe fn as_mut(&mut self) -> Option<&mut T> {
-        (self.as_ptr() as *mut T).as_mut()
+        unsafe { (self.as_ptr() as *mut T).as_mut() }
     }
 }
 

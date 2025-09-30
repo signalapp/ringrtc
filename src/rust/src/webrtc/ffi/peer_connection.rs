@@ -33,7 +33,7 @@ pub struct RffiPeerConnection {
 // in webrtc/api/peer_connection_interface.h
 impl webrtc::RefCounted for RffiPeerConnection {}
 
-extern "C" {
+unsafe extern "C" {
     pub fn Rust_updateTransceivers(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         remote_demux_ids_data: webrtc::ptr::Borrowed<u32>,

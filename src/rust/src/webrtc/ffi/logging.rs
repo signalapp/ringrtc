@@ -22,7 +22,7 @@ pub struct LoggerCallbacks {
     pub onLogMessage: extern "C" fn(LogSeverity, webrtc::ptr::Borrowed<std::os::raw::c_char>),
 }
 
-extern "C" {
+unsafe extern "C" {
     #[allow(dead_code)]
     pub fn Rust_setLogger(
         callbacks: webrtc::ptr::Borrowed<LoggerCallbacks>,

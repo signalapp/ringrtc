@@ -186,7 +186,7 @@ impl ScenarioManager {
 
     fn initialize_video_input(scenario_config: &ScenarioConfig) -> Option<I420Source<File>> {
         scenario_config.video_input.as_ref().map(|path| {
-            let ScenarioConfig {
+            let &ScenarioConfig {
                 mut video_width,
                 mut video_height,
                 ..

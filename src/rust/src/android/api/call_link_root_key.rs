@@ -17,7 +17,7 @@ use crate::{
     lite::call_links::{CallLinkEpoch, CallLinkRootKey},
 };
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeParseKeyString<'local>(
     mut env: JNIEnv<'local>,
@@ -35,7 +35,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeParseKeyS
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeValidateKeyBytes(
     mut env: JNIEnv,
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeValidateK
     .unwrap_or_else(|e| error::throw_error(&mut env, e))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generate<'local>(
     mut env: JNIEnv<'local>,
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generate<'local
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generateAdminPasskey<'local>(
     mut env: JNIEnv<'local>,
@@ -88,7 +88,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generateAdminPa
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeDeriveRoomId<'local>(
     mut env: JNIEnv<'local>,
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeDeriveRoo
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeToFormattedString<'local>(
     mut env: JNIEnv<'local>,
@@ -124,7 +124,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeToFormatt
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkEpoch_nativeParse(
     mut env: JNIEnv,
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkEpoch_nativeParse(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkEpoch_nativeToFormattedString<'local>(
     mut env: JNIEnv<'local>,

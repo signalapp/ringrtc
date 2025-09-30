@@ -28,7 +28,7 @@ pub unsafe fn ptr_as_arc_mutex<T>(ptr: *mut T) -> Result<Arc<Mutex<T>>> {
         )
         .into());
     }
-    let arc = Arc::from_raw(ptr as *mut Mutex<T>);
+    let arc = unsafe { Arc::from_raw(ptr as *mut Mutex<T>) };
     Ok(arc)
 }
 
@@ -48,8 +48,10 @@ impl<T> ArcPtr<T> {
     ///
     /// Creates a new ArcPtr<T>.
     pub unsafe fn new(ptr: *mut T) -> Self {
-        ArcPtr {
-            arc: Some(Arc::<Mutex<T>>::from_raw(ptr as *mut Mutex<T>)),
+        unsafe {
+            ArcPtr {
+                arc: Some(Arc::<Mutex<T>>::from_raw(ptr as *mut Mutex<T>)),
+            }
         }
     }
 
@@ -83,7 +85,7 @@ pub unsafe fn ptr_as_arc_ptr<T>(ptr: *mut T) -> Result<ArcPtr<T>> {
         )
         .into());
     }
-    Ok(ArcPtr::<T>::new(ptr))
+    unsafe { Ok(ArcPtr::<T>::new(ptr)) }
 }
 
 /// # Safety
@@ -96,7 +98,7 @@ pub unsafe fn ptr_as_mut<T>(ptr: *mut T) -> Result<&'static mut T> {
         );
     }
 
-    let object = &mut *ptr;
+    let object = unsafe { &mut *ptr };
     Ok(object)
 }
 
@@ -110,7 +112,7 @@ pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
         );
     }
 
-    let object = Box::from_raw(ptr);
+    let object = unsafe { Box::from_raw(ptr) };
     Ok(object)
 }
 

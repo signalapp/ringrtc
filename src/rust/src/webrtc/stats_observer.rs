@@ -582,9 +582,7 @@ pub struct MediaStatistics {
 }
 
 /// StatsObserver OnStatsComplete() callback.
-#[no_mangle]
-#[allow(non_snake_case)]
-extern "C" fn stats_observer_OnStatsComplete(
+extern "C" fn stats_observer_on_stats_complete(
     mut stats_observer: webrtc::ptr::Borrowed<StatsObserver>,
     values: webrtc::ptr::Borrowed<MediaStatistics>,
     report_json: webrtc::ptr::Borrowed<std::os::raw::c_char>,
@@ -600,10 +598,10 @@ extern "C" fn stats_observer_OnStatsComplete(
         if let Some(values) = unsafe { values.as_ref() } {
             stats_observer.on_stats_complete(values, report_json);
         } else {
-            error!("stats_observer_OnStatsComplete() with null values");
+            error!("stats_observer_on_stats_complete() with null values");
         }
     } else {
-        error!("stats_observer_OnStatsComplete() with null observer");
+        error!("stats_observer_on_stats_complete() with null observer");
     }
 }
 
@@ -619,7 +617,7 @@ pub struct StatsObserverCallbacks {
 }
 
 const STATS_OBSERVER_CBS: StatsObserverCallbacks = StatsObserverCallbacks {
-    onStatsComplete: stats_observer_OnStatsComplete,
+    onStatsComplete: stats_observer_on_stats_complete,
 };
 const STATS_OBSERVER_CBS_PTR: *const StatsObserverCallbacks = &STATS_OBSERVER_CBS;
 

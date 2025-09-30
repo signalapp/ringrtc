@@ -17,7 +17,7 @@ pub struct RffiStatsObserver {
 // in webrtc/api/peer_connection_interface.h.
 impl webrtc::RefCounted for RffiStatsObserver {}
 
-extern "C" {
+unsafe extern "C" {
     // The passed-in values observer must live as long as the returned value,
     // which in turn must live as long as the call to PeerConnection::getStats.
     pub fn Rust_createStatsObserver(

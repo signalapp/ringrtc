@@ -20,7 +20,7 @@ impl webrtc::ptr::Delete for RffiPeerConnectionObserver {
     }
 }
 
-extern "C" {
+unsafe extern "C" {
     // The passed-in observer must live as long as the returned value,
     // which in turn must live as long as the PeerConnections it is passed to.
     pub fn Rust_createPeerConnectionObserver(

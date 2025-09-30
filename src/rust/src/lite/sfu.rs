@@ -719,7 +719,7 @@ pub mod ios {
     /// # Safety
     ///
     /// http_client_ptr must come from rtc_http_Client_create and not already be destroyed
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_sfu_peek(
         http_client: *const http::ios::Client,
         request_id: u32,
@@ -728,7 +728,7 @@ pub mod ios {
     ) {
         info!("rtc_sfu_peek():");
 
-        if let Some(http_client) = http_client.as_ref() {
+        if let Some(http_client) = unsafe { http_client.as_ref() } {
             if let Some(sfu_url) = request.sfu_url.to_string() {
                 if let Some(auth_header) =
                     sfu::auth_header_from_membership_proof(request.membership_proof.as_slice())
@@ -762,7 +762,7 @@ pub mod ios {
     ///
     /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
     /// - `sfu_url` must be a valid, non-null C string.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_sfu_peekCallLink(
         http_client: *const http::ios::Client,
         request_id: u32,
@@ -774,8 +774,8 @@ pub mod ios {
     ) {
         info!("rtc_sfu_peekCallLink():");
 
-        if let Some(http_client) = http_client.as_ref() {
-            if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
+        if let Some(http_client) = unsafe { http_client.as_ref() } {
+            if let Ok(sfu_url) = unsafe { CStr::from_ptr(sfu_url).to_str() } {
                 if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
                     let epoch = from_optional_u32_to_epoch(epoch).map(|e| e.to_string());
                     super::peek(

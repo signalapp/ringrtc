@@ -17,5 +17,5 @@ pub unsafe fn inc<T: webrtc::ptr::RefCounted>(
     rc: webrtc::ptr::BorrowedRc<T>,
 ) -> webrtc::ptr::OwnedRc<T> {
     info!("ref_count::inc()");
-    webrtc::ptr::OwnedRc::from_ptr(rc.as_ptr())
+    unsafe { webrtc::ptr::OwnedRc::from_ptr(rc.as_ptr()) }
 }

@@ -87,7 +87,7 @@ impl EndorsementsCache {
     /// Checks whether the latest endorsements have a valid update since the last time `get_latest`
     /// was called.
     pub fn has_valid_update(&self) -> bool {
-        let Some((&expiration, _)) = &self.endorsements.iter().last() else {
+        let &Some((&expiration, _)) = &self.endorsements.iter().last() else {
             return false;
         };
 
@@ -113,7 +113,7 @@ impl EndorsementsCache {
     }
 
     fn latest_is_valid(&self) -> bool {
-        let Some((&expiration, _)) = &self.endorsements.iter().last() else {
+        let &Some((&expiration, _)) = &self.endorsements.iter().last() else {
             return false;
         };
 

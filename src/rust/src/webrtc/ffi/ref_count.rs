@@ -31,13 +31,15 @@ pub fn dec<T: webrtc::ptr::RefCounted>(rc: webrtc::ptr::OwnedRc<T>) {
 pub unsafe fn inc<T: webrtc::ptr::RefCounted>(
     rc: webrtc::ptr::BorrowedRc<T>,
 ) -> webrtc::ptr::OwnedRc<T> {
-    Rust_incRc(webrtc::ptr::BorrowedRc::from_ptr(
-        rc.as_ptr() as *const RffiRefCounted
-    ));
-    webrtc::ptr::OwnedRc::from_ptr(rc.as_ptr())
+    unsafe {
+        Rust_incRc(webrtc::ptr::BorrowedRc::from_ptr(
+            rc.as_ptr() as *const RffiRefCounted
+        ));
+        webrtc::ptr::OwnedRc::from_ptr(rc.as_ptr())
+    }
 }
 
-extern "C" {
+unsafe extern "C" {
     fn Rust_decRc(rc: webrtc::ptr::OwnedRc<RffiRefCounted>);
     fn Rust_incRc(rc: webrtc::ptr::BorrowedRc<RffiRefCounted>);
 }

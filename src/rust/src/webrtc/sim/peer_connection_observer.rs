@@ -25,7 +25,7 @@ pub unsafe fn Rust_createPeerConnectionObserver(
     _enable_video_frame_content: bool,
 ) -> webrtc::ptr::Owned<RffiPeerConnectionObserver> {
     info!("Rust_createPeerConnectionObserver():");
-    webrtc::ptr::Owned::from_ptr(&FAKE_OBSERVER)
+    unsafe { webrtc::ptr::Owned::from_ptr(&FAKE_OBSERVER) }
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

@@ -7,6 +7,6 @@ use std::os::raw::c_char;
 
 use crate::webrtc;
 
-extern "C" {
+unsafe extern "C" {
     pub fn Rust_setFieldTrials(field_trials_string: webrtc::ptr::Owned<c_char>);
 }

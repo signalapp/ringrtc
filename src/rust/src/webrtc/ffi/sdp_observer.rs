@@ -41,7 +41,7 @@ pub struct RffiSetSessionDescriptionObserver {
 // in webrtc/api/jsep.h
 impl webrtc::RefCounted for RffiSetSessionDescriptionObserver {}
 
-extern "C" {
+unsafe extern "C" {
     // The passed-in observer must live as long as the returned value,
     // which in turn must live as long as the call to PeerConnection::SetLocalDescription/SetRemoteDescription.
     pub fn Rust_createSetSessionDescriptionObserver(

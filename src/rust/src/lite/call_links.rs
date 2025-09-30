@@ -366,13 +366,13 @@ pub mod ios {
     /// # Safety
     /// - `string` must be a valid, non-null C string
     /// - `callback` must not be null.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_calllinks_CallLinkRootKey_parse(
         string: *const c_char,
         context: *mut c_void,
         callback: extern "C" fn(context: *mut c_void, result: rtc_Bytes),
     ) -> bool {
-        let string = CStr::from_ptr(string);
+        let string = unsafe { CStr::from_ptr(string) };
         let root_key = string
             .to_str()
             .ok()
@@ -386,12 +386,12 @@ pub mod ios {
         }
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_calllinks_CallLinkRootKey_validate(bytes: rtc_Bytes) -> bool {
         CallLinkRootKey::try_from(bytes.as_slice()).is_ok()
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_calllinks_CallLinkRootKey_generate(
         context: *mut c_void,
         callback: extern "C" fn(context: *mut c_void, result: rtc_Bytes),
@@ -400,7 +400,7 @@ pub mod ios {
         callback(context, rtc_Bytes::from(root_key.bytes().as_slice()));
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_calllinks_CallLinkRootKey_generateAdminPasskey(
         context: *mut c_void,
         callback: extern "C" fn(context: *mut c_void, result: rtc_Bytes),
@@ -409,7 +409,7 @@ pub mod ios {
         callback(context, rtc_Bytes::from(&passkey));
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_calllinks_CallLinkRootKey_deriveRoomId(
         root_key_bytes: rtc_Bytes,
         context: *mut c_void,
@@ -427,7 +427,7 @@ pub mod ios {
         }
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_calllinks_CallLinkRootKey_toFormattedString(
         root_key_bytes: rtc_Bytes,
         context: *mut c_void,
@@ -450,13 +450,13 @@ pub mod ios {
     /// # Safety
     /// - `string` must be a valid, non-null C string
     /// - `callback` must not be null.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_calllinks_CallLinkEpoch_parse(
         string: *const c_char,
         context: *mut c_void,
         callback: extern "C" fn(context: *mut c_void, result: rtc_OptionalU32),
     ) -> bool {
-        let string = CStr::from_ptr(string);
+        let string = unsafe { CStr::from_ptr(string) };
         let epoch = string
             .to_str()
             .ok()
@@ -474,7 +474,7 @@ pub mod ios {
         }
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rtc_calllinks_CallLinkEpoch_toFormattedString(
         epoch: u32,
         context: *mut c_void,
@@ -595,7 +595,7 @@ pub mod ios {
     ///
     /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
     /// - `sfu_url` must be a valid, non-null C string.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_sfu_readCallLink(
         http_client: *const http::ios::Client,
         request_id: u32,
@@ -607,8 +607,8 @@ pub mod ios {
     ) {
         info!("rtc_sfu_readCallLink():");
 
-        if let Some(http_client) = http_client.as_ref() {
-            if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
+        if let Some(http_client) = unsafe { http_client.as_ref() } {
+            if let Ok(sfu_url) = unsafe { CStr::from_ptr(sfu_url).to_str() } {
                 if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
                     let epoch = from_optional_u32_to_epoch(epoch);
                     read_call_link(
@@ -634,7 +634,7 @@ pub mod ios {
     ///
     /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
     /// - `sfu_url` must be a valid, non-null C string.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_sfu_createCallLink(
         http_client: *const http::ios::Client,
         request_id: u32,
@@ -649,8 +649,8 @@ pub mod ios {
         info!("rtc_sfu_createCallLink():");
 
         let restrictions = from_i8_to_restrictions(restrictions);
-        if let Some(http_client) = http_client.as_ref() {
-            if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
+        if let Some(http_client) = unsafe { http_client.as_ref() } {
+            if let Ok(sfu_url) = unsafe { CStr::from_ptr(sfu_url).to_str() } {
                 if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
                     create_call_link(
                         http_client,
@@ -677,7 +677,7 @@ pub mod ios {
     ///
     /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
     /// - `sfu_url` must be a valid, non-null C string.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_sfu_updateCallLink(
         http_client: *const http::ios::Client,
         request_id: u32,
@@ -693,13 +693,13 @@ pub mod ios {
     ) {
         info!("rtc_sfu_updateCallLink():");
 
-        if let Some(http_client) = http_client.as_ref() {
-            if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
+        if let Some(http_client) = unsafe { http_client.as_ref() } {
+            if let Ok(sfu_url) = unsafe { CStr::from_ptr(sfu_url).to_str() } {
                 if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
                     let new_name = if new_name.is_null() {
                         None
                     } else {
-                        Some(CStr::from_ptr(new_name))
+                        Some(unsafe { CStr::from_ptr(new_name) })
                     };
                     let encrypted_name = new_name.map(|name| {
                         let name_bytes = name.to_bytes();
@@ -743,7 +743,7 @@ pub mod ios {
     ///
     /// - `http_client` must come from `rtc_http_Client_create` and not already be destroyed
     /// - `sfu_url` must be a valid, non-null C string.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn rtc_sfu_deleteCallLink(
         http_client: *const http::ios::Client,
         request_id: u32,
@@ -756,8 +756,8 @@ pub mod ios {
     ) {
         info!("rtc_sfu_deleteCallLink():");
 
-        if let Some(http_client) = http_client.as_ref() {
-            if let Ok(sfu_url) = CStr::from_ptr(sfu_url).to_str() {
+        if let Some(http_client) = unsafe { http_client.as_ref() } {
+            if let Ok(sfu_url) = unsafe { CStr::from_ptr(sfu_url).to_str() } {
                 if let Ok(link_root_key) = CallLinkRootKey::try_from(link_root_key.as_slice()) {
                     let epoch = from_optional_u32_to_epoch(epoch);
                     delete_call_link(
