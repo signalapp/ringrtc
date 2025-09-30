@@ -1524,9 +1524,9 @@ impl Report {
         let audio_reports = [
             &self.analysis_report.audio_test_results.visqol_mos_speech,
             &self.analysis_report.audio_test_results.visqol_mos_audio,
-            &self.analysis_report.audio_test_results.visqol_mos_average,
             &self.analysis_report.audio_test_results.pesq_mos,
             &self.analysis_report.audio_test_results.plc_mos,
+            &self.analysis_report.audio_test_results.mos_average,
         ];
         for report in audio_reports {
             if let AnalysisReportMos::Series(stats) = report {
@@ -1586,16 +1586,16 @@ impl Report {
         {
             audio_core_stats.push(stats);
         }
-        if let AnalysisReportMos::Series(stats) =
-            &self.analysis_report.audio_test_results.visqol_mos_average
-        {
-            audio_core_stats.push(stats);
-        }
         if let AnalysisReportMos::Series(stats) = &self.analysis_report.audio_test_results.pesq_mos
         {
             audio_core_stats.push(stats);
         }
         if let AnalysisReportMos::Series(stats) = &self.analysis_report.audio_test_results.plc_mos {
+            audio_core_stats.push(stats);
+        }
+        if let AnalysisReportMos::Series(stats) =
+            &self.analysis_report.audio_test_results.mos_average
+        {
             audio_core_stats.push(stats);
         }
 
@@ -2324,9 +2324,9 @@ struct SummaryRow {
 
     pub visqol_mos_speech: Option<f32>,
     pub visqol_mos_audio: Option<f32>,
-    pub visqol_mos_average: Option<f32>,
     pub pesq_mos: Option<f32>,
     pub plc_mos: Option<f32>,
+    pub mos_average: Option<f32>,
 
     pub vmaf: Option<f32>,
 
@@ -2384,11 +2384,6 @@ impl SummaryRow {
                 .audio_test_results
                 .visqol_mos_audio
                 .get_mos_for_display(),
-            visqol_mos_average: report
-                .analysis_report
-                .audio_test_results
-                .visqol_mos_average
-                .get_mos_for_display(),
             pesq_mos: report
                 .analysis_report
                 .audio_test_results
@@ -2398,6 +2393,11 @@ impl SummaryRow {
                 .analysis_report
                 .audio_test_results
                 .plc_mos
+                .get_mos_for_display(),
+            mos_average: report
+                .analysis_report
+                .audio_test_results
+                .mos_average
                 .get_mos_for_display(),
             vmaf: report.analysis_report.vmaf,
             row_type: SummaryRowType::Single,
@@ -2449,14 +2449,14 @@ impl SummaryRow {
             if let (Some(old), Some(new)) = (self.visqol_mos_audio, new.visqol_mos_audio) {
                 self.visqol_mos_audio = Some(new_average(old, new));
             }
-            if let (Some(old), Some(new)) = (self.visqol_mos_average, new.visqol_mos_average) {
-                self.visqol_mos_average = Some(new_average(old, new));
-            }
             if let (Some(old), Some(new)) = (self.pesq_mos, new.pesq_mos) {
                 self.pesq_mos = Some(new_average(old, new));
             }
             if let (Some(old), Some(new)) = (self.plc_mos, new.plc_mos) {
                 self.plc_mos = Some(new_average(old, new));
+            }
+            if let (Some(old), Some(new)) = (self.mos_average, new.mos_average) {
+                self.mos_average = Some(new_average(old, new));
             }
             if let (Some(vmaf), Some(new_vmaf)) = (self.vmaf, new.vmaf) {
                 self.vmaf = Some(new_average(vmaf, new_vmaf));
@@ -2561,27 +2561,17 @@ impl Html {
         buf
     }
 
-    fn get_emphasis_for_mos(
-        visqol_mos_speech: Option<f32>,
-        visqol_mos_audio: Option<f32>,
-        pesq_mos: Option<f32>,
-        plc_mos: Option<f32>,
-    ) -> &'static str {
-        let weight = match (visqol_mos_speech, visqol_mos_audio, pesq_mos, plc_mos) {
-            (Some(mos_s), Some(mos_a), _, _) => (mos_s + mos_a) / 2.0,
-            (Some(mos_s), None, _, _) => mos_s,
-            (None, Some(mos_a), _, _) => mos_a,
-            (None, None, Some(pesq_mos), _) => pesq_mos,
-            (None, None, None, Some(plc_mos)) => plc_mos,
-            (None, None, None, None) => 0.0,
-        };
-
-        if weight > 4.0 {
-            "success"
-        } else if weight > 3.5 {
-            "warning"
-        } else if weight > 0.0 {
-            "danger"
+    fn get_emphasis_for_mos(mos: Option<f32>) -> &'static str {
+        if let Some(weight) = mos {
+            if weight >= 3.8 {
+                "success"
+            } else if weight >= 3.0 {
+                "warning"
+            } else if weight >= 0.0 {
+                "danger"
+            } else {
+                ""
+            }
         } else {
             ""
         }
@@ -2608,36 +2598,37 @@ impl Html {
 
         let visqol_mos_speech = audio_test_results.visqol_mos_speech.get_mos_for_display();
         let visqol_mos_audio = audio_test_results.visqol_mos_audio.get_mos_for_display();
-        let visqol_mos_average = audio_test_results.visqol_mos_average.get_mos_for_display();
         let pesq_mos = audio_test_results.pesq_mos.get_mos_for_display();
         let plc_mos = audio_test_results.plc_mos.get_mos_for_display();
+        let mos_average = audio_test_results.mos_average.get_mos_for_display();
 
-        let text_emphasis =
-            Html::get_emphasis_for_mos(visqol_mos_speech, visqol_mos_audio, pesq_mos, plc_mos);
+        let text_emphasis = Html::get_emphasis_for_mos(mos_average);
 
         if test_case_config
             .client_b_config
             .audio
             .visqol_speech_analysis
-            || test_case_config.client_b_config.audio.visqol_audio_analysis
         {
             let visqol_mos_speech_string = visqol_mos_speech
-                .map(|mos| format!("{:.3}", mos))
-                .unwrap_or_else(|| "None".to_string());
-            let visqol_mos_audio_string = visqol_mos_audio
-                .map(|mos| format!("{:.3}", mos))
-                .unwrap_or_else(|| "None".to_string());
-            let visqol_mos_average_string = visqol_mos_average
                 .map(|mos| format!("{:.3}", mos))
                 .unwrap_or_else(|| "None".to_string());
 
             let _ = writeln!(
                 buf,
-                "<h2 class=\"text-right text-{}\">Visqol Speech: {} Audio: {} Average: {}</h2>",
-                text_emphasis,
-                visqol_mos_speech_string,
-                visqol_mos_audio_string,
-                visqol_mos_average_string,
+                "<h2 class=\"text-right text-{}\">Visqol Speech: {}</h2>",
+                text_emphasis, visqol_mos_speech_string,
+            );
+        }
+
+        if test_case_config.client_b_config.audio.visqol_audio_analysis {
+            let visqol_mos_audio_string = visqol_mos_audio
+                .map(|mos| format!("{:.3}", mos))
+                .unwrap_or_else(|| "None".to_string());
+
+            let _ = writeln!(
+                buf,
+                "<h2 class=\"text-right text-{}\">Visqol Audio: {}</h2>",
+                text_emphasis, visqol_mos_audio_string,
             );
         }
 
@@ -2648,7 +2639,7 @@ impl Html {
 
             let _ = writeln!(
                 buf,
-                "<h2 class=\"text-right text-{}\">PESQ MOS: {}</h2>",
+                "<h2 class=\"text-right text-{}\">PESQ: {}</h2>",
                 text_emphasis, pesq_mos_string,
             );
         }
@@ -2660,10 +2651,20 @@ impl Html {
 
             let _ = writeln!(
                 buf,
-                "<h2 class=\"text-right text-{}\">PLC MOS: {}</h2>",
+                "<h2 class=\"text-right text-{}\">PLC: {}</h2>",
                 text_emphasis, plc_mos_string,
             );
         }
+
+        let mos_average_string = mos_average
+            .map(|mos| format!("{:.3}", mos))
+            .unwrap_or_else(|| "None".to_string());
+
+        let _ = writeln!(
+            buf,
+            "<h2 class=\"text-right text-{}\">Average MOS: {}</h2>",
+            text_emphasis, mos_average_string,
+        );
 
         buf.push_str("</div>\n");
         buf.push_str("</div>\n");
@@ -2889,12 +2890,7 @@ impl Html {
     ) -> String {
         let mut buf = String::new();
 
-        let table_emphasis = Html::get_emphasis_for_mos(
-            summary_row.visqol_mos_speech,
-            summary_row.visqol_mos_audio,
-            summary_row.pesq_mos,
-            summary_row.plc_mos,
-        );
+        let table_emphasis = Html::get_emphasis_for_mos(summary_row.mos_average);
 
         match summary_row.row_type {
             SummaryRowType::Single => {
@@ -2992,7 +2988,11 @@ impl Html {
             indent, summary_row.container_rx_bitrate
         );
 
+        // Show the mos average column if any of the mos value columns are shown.
+        let mut show_mos_average = false;
+
         if group_config.summary_report_columns.show_visqol_mos_speech {
+            show_mos_average = true;
             if let Some(mos) = summary_row.visqol_mos_speech {
                 let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
             } else {
@@ -3000,20 +3000,15 @@ impl Html {
             }
         }
         if group_config.summary_report_columns.show_visqol_mos_audio {
+            show_mos_average = true;
             if let Some(mos) = summary_row.visqol_mos_audio {
                 let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
             } else {
                 buf.push_str("<td></td>\n");
             }
         }
-        if group_config.summary_report_columns.show_visqol_mos_average {
-            if let Some(mos) = summary_row.visqol_mos_average {
-                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
-            } else {
-                buf.push_str("<td></td>\n");
-            }
-        }
         if group_config.summary_report_columns.show_pesq_mos {
+            show_mos_average = true;
             if let Some(mos) = summary_row.pesq_mos {
                 let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
             } else {
@@ -3021,7 +3016,16 @@ impl Html {
             }
         }
         if group_config.summary_report_columns.show_plc_mos {
+            show_mos_average = true;
             if let Some(mos) = summary_row.plc_mos {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
+        }
+
+        if show_mos_average {
+            if let Some(mos) = summary_row.mos_average {
                 let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
             } else {
                 buf.push_str("<td></td>\n");
@@ -3063,29 +3067,31 @@ impl Html {
         buf.push_str("<th colspan=\"3\">Client Receive Stats (average)</th>\n");
         buf.push_str("<th colspan=\"4\">Container Stats (average)</th>\n");
 
-        let mut colspan = 0;
+        let mut visqol_colspan = 0;
         if group_config.summary_report_columns.show_visqol_mos_speech {
-            colspan += 1;
+            visqol_colspan += 1;
         }
         if group_config.summary_report_columns.show_visqol_mos_audio {
-            colspan += 1;
+            visqol_colspan += 1;
         }
-        if group_config.summary_report_columns.show_visqol_mos_average {
-            colspan += 1;
-        }
-        if colspan > 0 {
-            let _ = writeln!(buf, "<th colspan=\"{}\">Visqol MOS</th>\n", colspan);
+        if visqol_colspan > 0 {
+            let _ = writeln!(buf, "<th colspan=\"{}\">Visqol MOS</th>\n", visqol_colspan);
         }
 
-        let mut colspan = 0;
+        let mut other_colspan = 0;
         if group_config.summary_report_columns.show_pesq_mos {
-            colspan += 1;
+            other_colspan += 1;
         }
         if group_config.summary_report_columns.show_plc_mos {
-            colspan += 1;
+            other_colspan += 1;
         }
-        if colspan > 0 {
-            let _ = writeln!(buf, "<th colspan=\"{}\">MOS</th>\n", colspan);
+        if other_colspan > 0 {
+            let _ = writeln!(buf, "<th colspan=\"{}\">Other MOS</th>\n", other_colspan);
+        }
+
+        if visqol_colspan + other_colspan > 0 {
+            // Show the MOS average.
+            let _ = writeln!(buf, "<th colspan=1>MOS</th>\n");
         }
 
         if group_config.summary_report_columns.show_video {
@@ -3115,15 +3121,18 @@ impl Html {
         if group_config.summary_report_columns.show_visqol_mos_audio {
             buf.push_str("<th>Audio</th>\n");
         }
-        if group_config.summary_report_columns.show_visqol_mos_average {
-            buf.push_str("<th>Average</th>\n");
-        }
         if group_config.summary_report_columns.show_pesq_mos {
             buf.push_str("<th>PESQ</th>\n");
         }
         if group_config.summary_report_columns.show_plc_mos {
             buf.push_str("<th>PLC</th>\n");
         }
+
+        if visqol_colspan + other_colspan > 0 {
+            // Show the MOS average.
+            buf.push_str("<th>Average</th>\n");
+        }
+
         buf.push_str("</tr>\n");
         buf.push_str("</thead>\n");
 

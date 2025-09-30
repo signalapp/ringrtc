@@ -62,13 +62,12 @@ pub struct AudioTestResults {
     pub visqol_mos_speech: AnalysisReportMos,
     /// MOS analysis using visqol with the audio model (fullband).
     pub visqol_mos_audio: AnalysisReportMos,
-    /// Averaging visqol audio and speech provides a useful relative metric.
-    /// This will get a value if both visqol speech and audio mos are present.
-    pub visqol_mos_average: AnalysisReportMos,
     /// MOS analysis using pesq (wideband).
     pub pesq_mos: AnalysisReportMos,
     /// MOS analysis using plc.
     pub plc_mos: AnalysisReportMos,
+    /// Average MOS across all enabled algorithms.
+    pub mos_average: AnalysisReportMos,
 }
 
 #[derive(Clone, Debug, PartialEq)]

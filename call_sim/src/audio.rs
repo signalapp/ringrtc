@@ -206,8 +206,6 @@ pub async fn chop_audio_and_analyze(
             };
 
             test_results.visqol_mos_speech = AnalysisReportMos::Series(Box::new(stats));
-
-            // TODO: Compute the average visqol series values.
         }
 
         if audio_config.pesq_speech_analysis {
@@ -300,6 +298,8 @@ pub async fn chop_audio_and_analyze(
         }
     }
 
+    // TODO: Compute the average mos series values.
+
     Ok(())
 }
 
@@ -353,12 +353,6 @@ pub async fn get_audio_and_analyze(
         .await?
         {
             test_results.visqol_mos_speech = AnalysisReportMos::Single(mos);
-
-            // If we also have a visqol mos audio result, compute the average.
-            if let AnalysisReportMos::Single(audio_mos) = test_results.visqol_mos_audio {
-                test_results.visqol_mos_average =
-                    AnalysisReportMos::Single((mos + audio_mos) / 2.0);
-            }
         }
     }
 
@@ -404,5 +398,29 @@ pub async fn get_audio_and_analyze(
         }
     }
 
+    calculate_average_mos(test_results);
+
     Ok(())
+}
+
+fn calculate_average_mos(test_results: &mut AudioTestResults) {
+    let mut mos_values = Vec::new();
+
+    if let AnalysisReportMos::Single(mos) = test_results.visqol_mos_audio {
+        mos_values.push(mos);
+    }
+    if let AnalysisReportMos::Single(mos) = test_results.visqol_mos_speech {
+        mos_values.push(mos);
+    }
+    if let AnalysisReportMos::Single(mos) = test_results.pesq_mos {
+        mos_values.push(mos);
+    }
+    if let AnalysisReportMos::Single(mos) = test_results.plc_mos {
+        mos_values.push(mos);
+    }
+
+    if !mos_values.is_empty() {
+        let average = mos_values.iter().sum::<f32>() / mos_values.len() as f32;
+        test_results.mos_average = AnalysisReportMos::Single(average);
+    }
 }

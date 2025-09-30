@@ -164,7 +164,6 @@ impl ChartDimension {
 pub struct SummaryReportColumns {
     pub show_visqol_mos_speech: bool,
     pub show_visqol_mos_audio: bool,
-    pub show_visqol_mos_average: bool,
     pub show_pesq_mos: bool,
     pub show_plc_mos: bool,
     /// A general flag to control video columns.
@@ -176,7 +175,6 @@ impl Default for SummaryReportColumns {
         Self {
             show_visqol_mos_speech: true,
             show_visqol_mos_audio: true,
-            show_visqol_mos_average: false,
             show_pesq_mos: false,
             show_plc_mos: false,
             show_video: true,

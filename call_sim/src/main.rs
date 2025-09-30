@@ -140,7 +140,6 @@ async fn run_baseline(test: &mut Test) -> Result<()> {
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: true,
                 show_visqol_mos_audio: true,
-                show_visqol_mos_average: true,
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: false,
@@ -248,7 +247,6 @@ async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: true,
                 show_visqol_mos_audio: true,
-                show_visqol_mos_average: true,
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: false,
@@ -545,7 +543,6 @@ async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: true,
                 show_visqol_mos_audio: true,
-                show_visqol_mos_average: true,
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: false,
@@ -598,7 +595,6 @@ async fn run_perf_test(test: &mut Test) -> Result<()> {
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: false,
                 show_visqol_mos_audio: false,
-                show_visqol_mos_average: false,
                 show_pesq_mos: false,
                 show_plc_mos: false,
                 show_video: false,
