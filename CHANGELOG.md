@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.59.0
+
+- Update to webrtc 7339c
+  - Update to webrtc 7339a (m140)
+  - Decrement rust ADM refcount in PCF destructor
+
+- iOS: Use UUID as RemotePeer for received messages
+
+- Desktop: Improve ADM lifecycle management
+
+- Desktop: Get rid of ProtobufBuffer type
+
+- Desktop: Drop last uses of Buffer/JsBuffer
+
+- Remove support for old data rtp ssrc
+
+- Call Sim: Average all mos values in reports
+
+- Rust 2024: Trivial fixes
+
+- Update CI and tests
+
 ## v2.58.1
 
 - Desktop: New Audio Device Module improvements
