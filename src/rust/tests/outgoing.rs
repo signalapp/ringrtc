@@ -57,7 +57,7 @@ fn start_outbound_and_proceed() -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
     cm.call(remote_peer, CallMediaType::Audio, 1)
         .expect(error_line!());
 
@@ -75,7 +75,7 @@ fn start_outbound_and_proceed() -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -115,7 +115,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
     // don't go nuts
     assert!(n_remotes < 20);
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
     cm.call(remote_peer.clone(), CallMediaType::Audio, 1)
         .expect(error_line!());
 
@@ -133,7 +133,7 @@ fn start_outbound_n_remote_call(n_remotes: u16) -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1547,7 +1547,7 @@ fn received_remote_video_status() {
     let mut disable_count = 0;
     let mut old_enable = None;
     for i in 0..20 {
-        let enable = context.prng.gen::<bool>();
+        let enable = context.prng.generate::<bool>();
         match (old_enable, enable) {
             (None | Some(false), true) => {
                 enable_count += 1;
@@ -1720,7 +1720,7 @@ fn received_remote_sharing_screen_status() {
     let mut disable_count = 0;
     let mut old_enable = None;
     for i in 0..20 {
-        let enable = context.prng.gen::<bool>();
+        let enable = context.prng.generate::<bool>();
         match (old_enable, enable) {
             (None | Some(false), true) => {
                 enable_count += 1;
@@ -1887,7 +1887,7 @@ fn received_remote_audio_status() {
     let mut disable_count = 0;
     let mut old_enable = None;
     for i in 0..20 {
-        let enable = context.prng.gen::<bool>();
+        let enable = context.prng.generate::<bool>();
         match (old_enable, enable) {
             (None | Some(false), true) => {
                 enable_count += 1;
@@ -2203,7 +2203,7 @@ fn outbound_proceed_with_error() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
     cm.call(remote_peer, CallMediaType::Audio, 1)
         .expect(error_line!());
 
@@ -2225,7 +2225,7 @@ fn outbound_proceed_with_error() {
     let active_call = context.active_call();
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -2348,7 +2348,7 @@ fn outbound_multiple_remote_devices() {
     }
 
     // connect one of the remotes
-    let active_remote = (context.prng.gen::<u16>() % n_remotes) + 1;
+    let active_remote = (context.prng.generate::<u16>() % n_remotes) + 1;
     let mut active_connection = active_call
         .get_connection(active_remote as DeviceId)
         .expect(error_line!());
@@ -2573,7 +2573,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
     let incoming_call_id = CallId::new(u64::MAX);
     cm.received_ice(
         remote_peer.clone(),
@@ -2600,7 +2600,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
     let outgoing_call_id = active_call.call_id();
     cm.proceed(
         outgoing_call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -2669,7 +2669,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
 
     cm.proceed(
         incoming_call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -2733,7 +2733,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_after_start() {
 
     cm.proceed(
         incoming_call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -2900,7 +2900,7 @@ fn recall_when_connected() {
     };
     info!("active remote_peer: {}", remote_peer);
 
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
@@ -2930,7 +2930,7 @@ fn start_outbound_receive_busy() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
     cm.call(remote_peer.clone(), CallMediaType::Audio, 1)
         .expect(error_line!());
 
@@ -2951,7 +2951,7 @@ fn start_outbound_receive_busy() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )

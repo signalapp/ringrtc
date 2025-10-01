@@ -55,11 +55,11 @@ impl Prng {
         }
     }
 
-    pub fn gen<T>(&self) -> T
+    pub fn generate<T>(&self) -> T
     where
         Standard: Distribution<T>,
     {
-        self.rng.borrow_mut().gen::<T>()
+        self.rng.borrow_mut().r#gen::<T>()
     }
 }
 
@@ -271,7 +271,7 @@ impl TestContext {
 }
 
 pub fn random_received_offer(_prng: &Prng, age: Duration) -> signaling::ReceivedOffer {
-    let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+    let local_public_key = rand::thread_rng().r#gen::<[u8; 32]>().to_vec();
     let offer = signaling::Offer::from_v4(
         CallMediaType::Audio,
         protobuf::signaling::ConnectionParametersV4 {
@@ -300,7 +300,7 @@ pub fn random_received_answer(
     _prng: &Prng,
     sender_device_id: DeviceId,
 ) -> signaling::ReceivedAnswer {
-    let local_public_key = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+    let local_public_key = rand::thread_rng().r#gen::<[u8; 32]>().to_vec();
     let answer = signaling::Answer::from_v4(protobuf::signaling::ConnectionParametersV4 {
         public_key: Some(local_public_key),
         ice_ufrag: None,
@@ -318,7 +318,7 @@ pub fn random_received_answer(
 }
 
 pub fn random_ice_candidate(prng: &Prng) -> signaling::IceCandidate {
-    let sdp = format!("ICE-CANDIDATE-{}", prng.gen::<u16>());
+    let sdp = format!("ICE-CANDIDATE-{}", prng.generate::<u16>());
     // V1 and V2 are the same for ICE candidates
     let ice_candidate = signaling::IceCandidate::from_v3_sdp(sdp).unwrap();
     signaling::IceCandidate::new(ice_candidate.opaque)

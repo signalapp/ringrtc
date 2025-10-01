@@ -51,8 +51,8 @@ fn start_inbound_call() -> TestContext {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     cm.received_offer(
         remote_peer.clone(),
         call_id,
@@ -74,7 +74,7 @@ fn start_inbound_call() -> TestContext {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -680,8 +680,8 @@ fn start_inbound_call_with_fault() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
@@ -705,7 +705,7 @@ fn start_inbound_call_with_fault() {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -732,8 +732,8 @@ fn answer_send_failure() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
@@ -758,7 +758,7 @@ fn answer_send_failure() {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1096,8 +1096,8 @@ fn receive_offer_while_active() {
     let context = connect_and_accept_inbound_call();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
@@ -1124,8 +1124,8 @@ fn receive_expired_offer() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     let age = Duration::from_secs(86400); // one whole day
     cm.received_offer(
         remote_peer,
@@ -1148,8 +1148,8 @@ fn receive_offer_before_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     let age = MAX_MESSAGE_AGE - Duration::from_secs(1);
     cm.received_offer(
         remote_peer,
@@ -1172,8 +1172,8 @@ fn receive_offer_at_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     let age = MAX_MESSAGE_AGE;
     cm.received_offer(
         remote_peer,
@@ -1196,8 +1196,8 @@ fn receive_expired_offer_after_age_limit() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     let age = MAX_MESSAGE_AGE + Duration::from_secs(1);
     cm.received_offer(
         remote_peer,
@@ -1222,8 +1222,8 @@ fn offer_after_ice() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_ice(
         remote_peer.clone(),
@@ -1259,7 +1259,7 @@ fn offer_after_ice() {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1294,9 +1294,9 @@ fn offer_after_unrelated_ice() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
-    let other_call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
+    let other_call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_ice(
         remote_peer.clone(),
@@ -1332,7 +1332,7 @@ fn offer_after_unrelated_ice() {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1365,8 +1365,8 @@ fn offer_after_hangup() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_hangup(
         remote_peer.clone(),
@@ -1389,7 +1389,7 @@ fn offer_after_hangup() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1410,9 +1410,9 @@ fn offer_after_unrelated_hangup() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
-    let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
+    let unrelated_call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_hangup(
         remote_peer.clone(),
@@ -1435,7 +1435,7 @@ fn offer_after_unrelated_hangup() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1456,8 +1456,8 @@ fn offer_after_ice_and_hangup() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_ice(
         remote_peer.clone(),
@@ -1486,7 +1486,7 @@ fn offer_after_ice_and_hangup() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1507,8 +1507,8 @@ fn offer_after_hangup_and_ice() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_hangup(
         remote_peer.clone(),
@@ -1537,7 +1537,7 @@ fn offer_after_hangup_and_ice() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1558,9 +1558,9 @@ fn offer_after_hangup_with_intervening_ice_for_other_call() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
-    let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
+    let unrelated_call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_hangup(
         remote_peer.clone(),
@@ -1589,7 +1589,7 @@ fn offer_after_hangup_with_intervening_ice_for_other_call() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1610,9 +1610,9 @@ fn offer_after_hangup_with_intervening_hangup_for_other_call() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
-    let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
+    let unrelated_call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_hangup(
         remote_peer.clone(),
@@ -1644,7 +1644,7 @@ fn offer_after_hangup_with_intervening_hangup_for_other_call() {
 
     cm.proceed(
         call_id,
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1667,9 +1667,9 @@ fn offer_after_ice_with_previous_ice_for_other_call() {
     let context = TestContext::new();
     let mut cm = context.cm();
 
-    let remote_peer = format!("REMOTE_PEER-{}", context.prng.gen::<u16>());
-    let call_id = CallId::new(context.prng.gen::<u64>());
-    let unrelated_call_id = CallId::new(context.prng.gen::<u64>());
+    let remote_peer = format!("REMOTE_PEER-{}", context.prng.generate::<u16>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
+    let unrelated_call_id = CallId::new(context.prng.generate::<u64>());
 
     cm.received_ice(
         remote_peer.clone(),
@@ -1705,7 +1705,7 @@ fn offer_after_ice_with_previous_ice_for_other_call() {
 
     cm.proceed(
         active_call.call_id(),
-        format!("CONTEXT-{}", context.prng.gen::<u16>()),
+        format!("CONTEXT-{}", context.prng.generate::<u16>()),
         CallConfig::default().with_data_mode(DataMode::Normal),
         None,
     )
@@ -1752,7 +1752,7 @@ fn recall_when_connected() {
     };
     info!("active remote_peer: {}", remote_peer);
 
-    let call_id = CallId::new(context.prng.gen::<u64>());
+    let call_id = CallId::new(context.prng.generate::<u64>());
     cm.received_offer(
         remote_peer,
         call_id,
@@ -2307,7 +2307,7 @@ fn received_hangup_wrong_remote_peer() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let wrong_remote_peer = format!("WRONG_PEER-{}", context.prng.gen::<u16>());
+    let wrong_remote_peer = format!("WRONG_PEER-{}", context.prng.generate::<u16>());
 
     cm.received_hangup(
         wrong_remote_peer,
@@ -2335,7 +2335,7 @@ fn received_busy_wrong_remote_peer() {
     let mut cm = context.cm();
     let active_call = context.active_call();
 
-    let wrong_remote_peer = format!("WRONG_PEER-{}", context.prng.gen::<u16>());
+    let wrong_remote_peer = format!("WRONG_PEER-{}", context.prng.generate::<u16>());
 
     cm.received_busy(
         wrong_remote_peer,
