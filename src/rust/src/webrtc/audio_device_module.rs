@@ -505,6 +505,8 @@ impl Worker {
     fn playout_delay(&mut self) -> anyhow::Result<u16> {
         match &self.output_stream {
             Some(output_stream) => {
+                // Pause logging because this is noisy
+                let _guard = LogDisableGuard::new();
                 let latency_samples = output_stream.latency();
                 match latency_samples {
                     Ok(latency_samples) => Ok((latency_samples / (SAMPLE_FREQUENCY / 1000)) as u16),
