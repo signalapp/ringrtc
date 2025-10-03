@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.59.1
+
+- Revert: iOS: Use UUID as RemotePeer for received messages
+
 ## v2.59.0
 
 - Update to webrtc 7339c
