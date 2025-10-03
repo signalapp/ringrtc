@@ -172,7 +172,7 @@ jobs:
     if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
     steps:
       - name: Install dependencies
-        run: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
+        run: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire libfontconfig1-dev && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
       - uses: actions/checkout@v4
       - name: gcloud auth
         uses: google-github-actions/auth@v2
