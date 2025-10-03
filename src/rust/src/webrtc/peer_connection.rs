@@ -99,9 +99,13 @@ impl PeerConnection {
 
     #[cfg(feature = "sim")]
     pub fn set_rtp_packet_sink(&self, rtp_packet_sink: BoxedRtpPacketSink) {
-        unsafe { self.rffi.as_borrowed().as_ref() }
-            .unwrap()
-            .set_rtp_packet_sink(rtp_packet_sink)
+        unsafe {
+            self.rffi
+                .as_borrowed()
+                .as_ref()
+                .unwrap()
+                .set_rtp_packet_sink(rtp_packet_sink)
+        }
     }
 
     pub fn update_transceivers(&self, remote_demux_ids: &[u32]) -> Result<()> {
