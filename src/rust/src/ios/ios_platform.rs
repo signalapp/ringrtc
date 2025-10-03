@@ -7,8 +7,6 @@
 
 use std::{collections::HashSet, fmt, sync::Arc, time::Duration};
 
-use anyhow::anyhow;
-
 use crate::{
     common::{
         ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
@@ -54,6 +52,9 @@ impl PlatformItem for IosConnection {}
 pub type IosCallContext = Arc<AppCallContext>;
 impl PlatformItem for IosCallContext {}
 
+/// Concrete type for iOS AppRemotePeer objects.
+impl PlatformItem for AppObject {}
+
 /// iOS implementation of platform::Platform.
 pub struct IosPlatform {
     app_interface: AppInterface,
@@ -87,67 +88,9 @@ impl Drop for IosPlatform {
     }
 }
 
-/// The AppRemotePeer platform type generally refers to a specific remote peer for
-/// a call, but the iOS client provides the pointer to the entire call object. However,
-/// when receiving messages, only the remote peer is known and there doesn't need to
-/// be an associated call object to handle them. `IosCallData` can work with either
-/// variant and maintains the Call Object lifetime:
-///
-/// - Either `ringrtcCall()` or `ringrtcReceivedOffer()` is invoked, and both the call object
-///   and remote uuid are stored. The call object is retained for storage in RingRTC.
-///     - When the call ends and RingRTC is done, `on_call_concluded()` is invoked and the
-///       call object can be released.
-/// - At any time, any of the other Direct Call `ringrtcReceived*` functions can be
-///   invoked and will provide just the remote uuid which is _copied_ to a Vec<u8> buffer.
-///     - When necessary, the `compare_remotes()` function can be called to compare any
-///       two remote uuid's of any variant, here in the iOS platform implementation.
-///
-/// Other clients have other considerations but generally set AppRemotePeer directly to the
-/// remote uuid.
-#[derive(Clone)]
-pub enum IosCallData {
-    Call {
-        call_object: AppObject,
-        remote_uuid: Vec<u8>,
-    },
-    RemoteUuidOnly {
-        remote_uuid: Vec<u8>,
-    },
-}
-
-impl IosCallData {
-    pub fn new_call(call_object: AppObject, remote_uuid: Vec<u8>) -> Self {
-        IosCallData::Call {
-            call_object,
-            remote_uuid,
-        }
-    }
-
-    pub fn new_remote(remote_uuid: Vec<u8>) -> Self {
-        IosCallData::RemoteUuidOnly { remote_uuid }
-    }
-
-    pub fn get_call_object(&self) -> Option<AppObject> {
-        match self {
-            IosCallData::Call { call_object, .. } => Some(*call_object),
-            IosCallData::RemoteUuidOnly { .. } => None,
-        }
-    }
-
-    pub fn get_remote_uuid(&self) -> &Vec<u8> {
-        match self {
-            IosCallData::Call { remote_uuid, .. } => remote_uuid,
-            IosCallData::RemoteUuidOnly { remote_uuid } => remote_uuid,
-        }
-    }
-}
-
-/// Concrete type for iOS AppRemotePeer objects.
-impl PlatformItem for IosCallData {}
-
 impl Platform for IosPlatform {
     type AppIncomingMedia = IosMediaStream;
-    type AppRemotePeer = IosCallData;
+    type AppRemotePeer = AppObject;
     type AppConnection = IosConnection;
     type AppCallContext = IosCallContext;
 
@@ -246,13 +189,9 @@ impl Platform for IosPlatform {
     ) -> Result<()> {
         info!("on_start_call(): id: {}, direction: {}", call_id, direction);
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         (self.app_interface.onStartCall)(
             self.app_interface.object,
-            call_object.ptr,
+            remote_peer.ptr,
             u64::from(call_id),
             direction == CallDirection::Outgoing,
             call_media_type as i32,
@@ -269,11 +208,7 @@ impl Platform for IosPlatform {
     ) -> Result<()> {
         info!("on_event(): {}", event);
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
-        (self.app_interface.onEvent)(self.app_interface.object, call_object.ptr, event as i32);
+        (self.app_interface.onEvent)(self.app_interface.object, remote_peer.ptr, event as i32);
 
         Ok(())
     }
@@ -285,13 +220,9 @@ impl Platform for IosPlatform {
     ) -> Result<()> {
         trace!("on_network_route_changed(): {:?}", network_route);
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         (self.app_interface.onNetworkRouteChanged)(
             self.app_interface.object,
-            call_object.ptr,
+            remote_peer.ptr,
             network_route.local_adapter_type as i32,
         );
 
@@ -305,14 +236,9 @@ impl Platform for IosPlatform {
         received_level: AudioLevel,
     ) -> Result<()> {
         trace!("on_audio_levels(): {}, {}", captured_level, received_level);
-
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         (self.app_interface.onAudioLevels)(
             self.app_interface.object,
-            call_object.ptr,
+            remote_peer.ptr,
             captured_level,
             received_level,
         );
@@ -326,17 +252,11 @@ impl Platform for IosPlatform {
         recovered: bool,
     ) -> Result<()> {
         info!("on_low_bandwidth_for_video(): {}", recovered);
-
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         (self.app_interface.onLowBandwidthForVideo)(
             self.app_interface.object,
-            call_object.ptr,
+            remote_peer.ptr,
             recovered,
         );
-
         Ok(())
     }
 
@@ -352,14 +272,10 @@ impl Platform for IosPlatform {
 
         info!("on_send_offer(): call_id: {}", call_id);
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         (self.app_interface.onSendOffer)(
             self.app_interface.object,
             u64::from(call_id),
-            call_object.ptr,
+            remote_peer.ptr,
             receiver_device_id,
             broadcast,
             app_slice_from_bytes(Some(&offer.opaque)),
@@ -384,14 +300,10 @@ impl Platform for IosPlatform {
             call_id, receiver_device_id
         );
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         (self.app_interface.onSendAnswer)(
             self.app_interface.object,
             u64::from(call_id),
-            call_object.ptr,
+            remote_peer.ptr,
             receiver_device_id,
             broadcast,
             app_slice_from_bytes(Some(&send.answer.opaque)),
@@ -417,10 +329,6 @@ impl Platform for IosPlatform {
             call_id, receiver_device_id, broadcast
         );
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         if send.ice.candidates.is_empty() {
             return Ok(());
         }
@@ -442,7 +350,7 @@ impl Platform for IosPlatform {
         (self.app_interface.onSendIceCandidates)(
             self.app_interface.object,
             u64::from(call_id),
-            call_object.ptr,
+            remote_peer.ptr,
             receiver_device_id,
             broadcast,
             &app_ice_candidates_array,
@@ -463,10 +371,6 @@ impl Platform for IosPlatform {
 
         info!("on_send_hangup(): call_id: {}", call_id);
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         let (hangup_type, hangup_device_id) = send.hangup.to_type_and_device_id();
         // We set the device_id to 0 in case it is not defined. It will
         // only be used for hangup types other than Normal.
@@ -475,7 +379,7 @@ impl Platform for IosPlatform {
         (self.app_interface.onSendHangup)(
             self.app_interface.object,
             u64::from(call_id),
-            call_object.ptr,
+            remote_peer.ptr,
             receiver_device_id,
             broadcast,
             hangup_type as i32,
@@ -492,14 +396,10 @@ impl Platform for IosPlatform {
 
         info!("on_send_busy(): call_id: {}", call_id);
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         (self.app_interface.onSendBusy)(
             self.app_interface.object,
             u64::from(call_id),
-            call_object.ptr,
+            remote_peer.ptr,
             receiver_device_id,
             broadcast,
         );
@@ -583,16 +483,12 @@ impl Platform for IosPlatform {
     ) -> Result<()> {
         info!("connect_incoming_media():");
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
         let ios_media_stream = incoming_media as &IosMediaStream;
         let app_media_stream = ios_media_stream.get_ref()?;
 
         (self.app_interface.onConnectMedia)(
             self.app_interface.object,
-            call_object.ptr,
+            remote_peer.ptr,
             app_call_context.object,
             app_media_stream.as_ptr(),
         );
@@ -607,10 +503,13 @@ impl Platform for IosPlatform {
     ) -> Result<bool> {
         info!("compare_remotes():");
 
-        let remote_uuid_1 = remote_peer1.get_remote_uuid();
-        let remote_uuid_2 = remote_peer2.get_remote_uuid();
+        let result = (self.app_interface.onCompareRemotes)(
+            self.app_interface.object,
+            remote_peer1.ptr,
+            remote_peer2.ptr,
+        );
 
-        Ok(remote_uuid_1 == remote_uuid_2)
+        Ok(result)
     }
 
     fn on_offer_expired(
@@ -626,11 +525,7 @@ impl Platform for IosPlatform {
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer, _call_id: CallId) -> Result<()> {
         info!("on_call_concluded():");
 
-        let call_object = remote_peer
-            .get_call_object()
-            .ok_or_else(|| anyhow!("No call object available"))?;
-
-        (self.app_interface.onCallConcluded)(self.app_interface.object, call_object.ptr);
+        (self.app_interface.onCallConcluded)(self.app_interface.object, remote_peer.ptr);
 
         Ok(())
     }

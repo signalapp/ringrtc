@@ -22,6 +22,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency, overrideRecipients: [UUID])
     func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
+    func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool
     func onCallConcluded(remote: UnsafeRawPointer)
 
     // Group Calls
@@ -82,6 +83,7 @@ class CallManagerInterface {
             onCreateConnectionInterface: callManagerInterfaceOnCreateConnectionInterface,
             onCreateMediaStreamInterface: callManagerInterfaceOnCreateMediaStreamInterface,
             onConnectMedia: callManagerInterfaceOnConnectMedia,
+            onCompareRemotes: callManagerInterfaceOnCompareRemotes,
             onCallConcluded: callManagerInterfaceOnCallConcluded,
 
             // Group Calls
@@ -229,6 +231,14 @@ class CallManagerInterface {
         }
 
         delegate.onConnectMedia(remote: remote, appCallContext: appCallContext, stream: stream)
+    }
+
+    func onCompareRemotes(remote1: UnsafeRawPointer, remote2: UnsafeRawPointer) -> Bool {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return false
+        }
+
+        return delegate.onCompareRemotes(remote1: remote1, remote2: remote2)
     }
 
     func onCallConcluded(remote: UnsafeRawPointer) {
@@ -793,6 +803,27 @@ func callManagerInterfaceOnConnectMedia(object: UnsafeMutableRawPointer?, remote
     let mediaStream: RTCMediaStream = Unmanaged.fromOpaque(stream).takeUnretainedValue()
 
     obj.onConnectedMedia(remote: remote, appCallContext: appCallContext, stream: mediaStream)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceOnCompareRemotes(object: UnsafeMutableRawPointer?, remote1: UnsafeRawPointer?, remote2: UnsafeRawPointer?) -> Bool {
+    guard let object = object else {
+        failDebug("object was unexpectedly nil")
+        return false
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let remote1 = remote1 else {
+        failDebug("remote1 was unexpectedly nil")
+        return false
+    }
+
+    guard let remote2 = remote2 else {
+        failDebug("remote2 was unexpectedly nil")
+        return false
+    }
+
+    return obj.onCompareRemotes(remote1: remote1, remote2: remote2)
 }
 
 @available(iOSApplicationExtension, unavailable)
