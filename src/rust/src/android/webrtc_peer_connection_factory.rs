@@ -6,9 +6,9 @@
 //! Re-exports WebRTC JNI interfaces
 
 use jni::{
+    JNIEnv,
     objects::{JClass, JObject},
     sys::jlong,
-    JNIEnv,
 };
 
 use crate::{webrtc, webrtc::peer_connection::RffiPeerConnection};

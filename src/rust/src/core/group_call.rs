@@ -20,19 +20,19 @@ use hkdf::Hkdf;
 use mrp::{MrpReceiveError, MrpSendError, MrpStream};
 use num_enum::TryFromPrimitive;
 use prost::Message;
-use rand::{rngs::OsRng, Rng};
+use rand::{Rng, rngs::OsRng};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 use zkgroup::{
-    groups::{GroupSendEndorsementsResponse, UuidCiphertext},
     Timestamp,
+    groups::{GroupSendEndorsementsResponse, UuidCiphertext},
 };
 
 use crate::{
     common::{
+        CallId, DataMode, Result,
         actor::{Actor, Stopper},
         units::DataRate,
-        CallId, DataMode, Result,
     },
     core::{
         call_mutex::CallMutex,
@@ -53,8 +53,8 @@ use crate::{
     protobuf::{
         self,
         group_call::{
-            sfu_to_device::{DeviceJoinedOrLeft, SendEndorsementsResponse},
             DeviceToSfu, SfuToDevice,
+            sfu_to_device::{DeviceJoinedOrLeft, SendEndorsementsResponse},
         },
     },
     webrtc::{
@@ -69,9 +69,9 @@ use crate::{
         },
         rtp,
         sdp_observer::{
-            create_csd_observer, create_ssd_observer, SessionDescription, SrtpCryptoSuite, SrtpKey,
+            SessionDescription, SrtpCryptoSuite, SrtpKey, create_csd_observer, create_ssd_observer,
         },
-        stats_observer::{create_stats_observer, StatsObserver},
+        stats_observer::{StatsObserver, create_stats_observer},
     },
 };
 
@@ -88,15 +88,15 @@ pub struct RingId(i64);
 impl RingId {
     pub fn from_era_id(era_id: &str) -> Self {
         // Happy path: 16 hex digits
-        if era_id.len() == 16 {
-            if let Ok(i) = u64::from_str_radix(era_id, 16) {
-                // We reserve 0 as an invalid ring ID; treat it as the equally-unlikely -1.
-                // This does make -1 twice as likely! Out of 2^64 - 1 possibilities.
-                if i == 0 {
-                    return Self(-1);
-                }
-                return Self(i as i64);
+        if era_id.len() == 16
+            && let Ok(i) = u64::from_str_radix(era_id, 16)
+        {
+            // We reserve 0 as an invalid ring ID; treat it as the equally-unlikely -1.
+            // This does make -1 twice as likely! Out of 2^64 - 1 possibilities.
+            if i == 0 {
+                return Self(-1);
             }
+            return Self(i as i64);
         }
         // Sad path: arbitrary strings get a truncated hash as their ring ID.
         // We have no current plans to change era IDs from being 16 hex digits,
@@ -1463,16 +1463,16 @@ impl Client {
 
         Self::request_remote_devices_from_sfu_if_older_than(state, Duration::from_secs(10));
 
-        if let Some(next_heartbeat_time) = state.next_heartbeat_time {
-            if now >= next_heartbeat_time {
-                if let Err(err) = Self::send_heartbeat(state) {
-                    warn!("Failed to send regular heartbeat: {:?}", err);
-                }
-                // Also send video requests at the same rate as the heartbeat.
-                Self::send_video_requests_to_sfu(state);
-                state.on_demand_video_request_sent_since_last_heartbeat = false;
-                state.next_heartbeat_time = Some(now + HEARTBEAT_INTERVAL)
+        if let Some(next_heartbeat_time) = state.next_heartbeat_time
+            && now >= next_heartbeat_time
+        {
+            if let Err(err) = Self::send_heartbeat(state) {
+                warn!("Failed to send regular heartbeat: {:?}", err);
             }
+            // Also send video requests at the same rate as the heartbeat.
+            Self::send_video_requests_to_sfu(state);
+            state.on_demand_video_request_sent_since_last_heartbeat = false;
+            state.next_heartbeat_time = Some(now + HEARTBEAT_INTERVAL)
         }
 
         if let Some(next_stats_time) = state.next_stats_time {
@@ -1487,75 +1487,70 @@ impl Client {
             }
         }
 
-        if let Some(next_speaking_audio_levels_time) = state.next_speaking_audio_levels_time {
-            if now >= next_speaking_audio_levels_time {
-                let (captured_level, _) = state.peer_connection.get_audio_levels();
-                let mut time_silent = Duration::from_secs(0);
-                state.started_speaking = if captured_level > MIN_NON_SILENT_LEVEL
-                    && !state.outgoing_heartbeat_state.audio_muted.unwrap_or(true)
-                {
-                    state.silence_started = None;
-                    state.started_speaking.or(Some(now))
-                } else {
-                    state.silence_started = state.silence_started.or(Some(now));
-                    time_silent = state
-                        .silence_started
-                        .map_or(Duration::from_secs(0), |start| now.duration_since(start));
-                    if time_silent >= STOPPED_SPEAKING_DURATION {
-                        None
-                    } else {
-                        state.started_speaking
-                    }
-                };
-
-                let time_speaking = now
-                    .duration_since(state.started_speaking.unwrap_or(now))
-                    .saturating_sub(time_silent);
-
-                let event = if time_speaking >= MIN_SPEAKING_HAND_LOWER {
-                    Some(SpeechEvent::LowerHandSuggestion)
-                } else if time_speaking.is_zero() && state.last_speaking_notification.is_some() {
-                    Some(SpeechEvent::StoppedSpeaking)
-                } else {
+        if let Some(next_speaking_audio_levels_time) = state.next_speaking_audio_levels_time
+            && now >= next_speaking_audio_levels_time
+        {
+            let (captured_level, _) = state.peer_connection.get_audio_levels();
+            let mut time_silent = Duration::from_secs(0);
+            state.started_speaking = if captured_level > MIN_NON_SILENT_LEVEL
+                && !state.outgoing_heartbeat_state.audio_muted.unwrap_or(true)
+            {
+                state.silence_started = None;
+                state.started_speaking.or(Some(now))
+            } else {
+                state.silence_started = state.silence_started.or(Some(now));
+                time_silent = state
+                    .silence_started
+                    .map_or(Duration::from_secs(0), |start| now.duration_since(start));
+                if time_silent >= STOPPED_SPEAKING_DURATION {
                     None
-                };
-                if state.last_speaking_notification != event {
-                    if let Some(event) = event {
-                        state
-                            .observer
-                            .handle_speaking_notification(state.client_id, event);
-                        state.last_speaking_notification = Some(event);
-                    }
+                } else {
+                    state.started_speaking
                 }
+            };
 
-                state.next_speaking_audio_levels_time = Some(now + state.speaking_interval);
+            let time_speaking = now
+                .duration_since(state.started_speaking.unwrap_or(now))
+                .saturating_sub(time_silent);
+
+            let event = if time_speaking >= MIN_SPEAKING_HAND_LOWER {
+                Some(SpeechEvent::LowerHandSuggestion)
+            } else if time_speaking.is_zero() && state.last_speaking_notification.is_some() {
+                Some(SpeechEvent::StoppedSpeaking)
+            } else {
+                None
+            };
+            if state.last_speaking_notification != event
+                && let Some(event) = event
+            {
+                state
+                    .observer
+                    .handle_speaking_notification(state.client_id, event);
+                state.last_speaking_notification = Some(event);
             }
+
+            state.next_speaking_audio_levels_time = Some(now + state.speaking_interval);
         }
 
         if let (Some(audio_levels_interval), Some(next_audio_levels_time)) =
             (state.audio_levels_interval, state.next_audio_levels_time)
+            && now >= next_audio_levels_time
         {
-            if now >= next_audio_levels_time {
-                let (captured_level, received_levels) = state.peer_connection.get_audio_levels();
-                state.observer.handle_audio_levels(
-                    state.client_id,
-                    captured_level,
-                    received_levels,
-                );
-                state.next_audio_levels_time = Some(now + audio_levels_interval);
-            }
+            let (captured_level, received_levels) = state.peer_connection.get_audio_levels();
+            state
+                .observer
+                .handle_audio_levels(state.client_id, captured_level, received_levels);
+            state.next_audio_levels_time = Some(now + audio_levels_interval);
         }
 
-        if state.kind == GroupCallKind::SignalGroup {
-            if let Some(next_membership_proof_request_time) =
+        if state.kind == GroupCallKind::SignalGroup
+            && let Some(next_membership_proof_request_time) =
                 state.next_membership_proof_request_time
-            {
-                if now >= next_membership_proof_request_time {
-                    state.observer.request_membership_proof(state.client_id);
-                    state.next_membership_proof_request_time =
-                        Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
-                }
-            }
+            && now >= next_membership_proof_request_time
+        {
+            state.observer.request_membership_proof(state.client_id);
+            state.next_membership_proof_request_time =
+                Some(now + MEMBERSHIP_PROOF_REQUEST_INTERVAL);
         }
 
         match state.bwe_check_state {
@@ -1608,11 +1603,12 @@ impl Client {
                 .handle_reactions(state.client_id, std::mem::take(&mut state.reactions));
         }
 
-        if let Some(next_raise_hand_time) = state.next_raise_hand_time {
-            if now >= next_raise_hand_time && state.raise_hand_state.outstanding {
-                state.next_raise_hand_time = Some(now + RAISE_HAND_INTERVAL);
-                Self::send_raise_hand(state);
-            }
+        if let Some(next_raise_hand_time) = state.next_raise_hand_time
+            && now >= next_raise_hand_time
+            && state.raise_hand_state.outstanding
+        {
+            state.next_raise_hand_time = Some(now + RAISE_HAND_INTERVAL);
+            Self::send_raise_hand(state);
         }
 
         if let Some(source) = state.mute_request {
@@ -1919,8 +1915,7 @@ impl Client {
     fn set_join_state_and_notify_observer(state: &mut State, join_state: JoinState) {
         debug!(
             "group_call::Client(inner)::set_join_state_and_notify_observer(client_id: {}, join_state: {:?})",
-            state.client_id,
-            join_state
+            state.client_id, join_state
         );
         state.join_state = join_state;
         state
@@ -2336,7 +2331,7 @@ impl Client {
         use std::cmp::min;
 
         use protobuf::group_call::device_to_sfu::{
-            video_request_message::VideoRequest as VideoRequestProto, VideoRequestMessage,
+            VideoRequestMessage, video_request_message::VideoRequest as VideoRequestProto,
         };
 
         if let Some(video_requests) = &state.video_requests {
@@ -2437,7 +2432,9 @@ impl Client {
         {
             info!("{ADMIN_LOG_TAG}: User has already been added to call with demux ID {demux_id}");
         } else {
-            warn!("{ADMIN_LOG_TAG}: Failed to find user for {action_to_log}. They may have left or been denied by another admin.");
+            warn!(
+                "{ADMIN_LOG_TAG}: Failed to find user for {action_to_log}. They may have left or been denied by another admin."
+            );
         }
     }
 
@@ -3121,10 +3118,9 @@ impl Client {
                         // matches.
                         if let Some(existing_remote_device) =
                             old_remote_devices_by_demux_id.remove(&device.demux_id)
+                            && &existing_remote_device.user_id == user_id
                         {
-                            if &existing_remote_device.user_id == user_id {
-                                return existing_remote_device;
-                            }
+                            return existing_remote_device;
                         }
                         RemoteDeviceState::new(device.demux_id, user_id.clone(), added_time)
                     })
@@ -3147,11 +3143,11 @@ impl Client {
                 if let Some(sfu_info) = state.sfu_info.as_ref() {
                     let mut removed_demux_id = false;
                     for demux_id in &mut state.remote_transceiver_demux_ids {
-                        if let Some(id) = demux_id {
-                            if !new_demux_ids.contains(id) {
-                                *demux_id = None;
-                                removed_demux_id = true;
-                            }
+                        if let Some(id) = demux_id
+                            && !new_demux_ids.contains(id)
+                        {
+                            *demux_id = None;
+                            removed_demux_id = true;
                         }
                     }
 
@@ -3396,7 +3392,10 @@ impl Client {
     fn rotate_media_send_key_and_send_to_users_not_removed(state: &mut State) {
         match state.media_send_key_rotation_state {
             KeyRotationState::Pending { secret, .. } => {
-                info!("Waiting to generate a new media send key until after the pending one has been applied. client_id: {}", state.client_id);
+                info!(
+                    "Waiting to generate a new media send key until after the pending one has been applied. client_id: {}",
+                    state.client_id
+                );
 
                 state.media_send_key_rotation_state = KeyRotationState::Pending {
                     secret,
@@ -3404,7 +3403,10 @@ impl Client {
                 }
             }
             KeyRotationState::Applied => {
-                info!("Generating a new random media send key because a user has been removed. client_id: {}", state.client_id);
+                info!(
+                    "Generating a new random media send key because a user has been removed. client_id: {}",
+                    state.client_id
+                );
 
                 // First generate a new key, then wait some time, and then apply it.
                 let ratchet_counter: frame_crypto::RatchetCounter = 0;
@@ -3526,7 +3528,10 @@ impl Client {
                     )
                 }
             } else {
-                warn!("Ignoring received media key from user because the demux ID {} doesn't make sense", demux_id);
+                warn!(
+                    "Ignoring received media key from user because the demux ID {} doesn't make sense",
+                    demux_id
+                );
                 debug!("  user_id: {}", uuid_to_string(&user_id));
             }
         } else {
@@ -3614,20 +3619,19 @@ impl Client {
     ) {
         if let JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) =
             state.join_state
+            && let KeyRotationState::Pending { secret, .. } = state.media_send_key_rotation_state
         {
-            if let KeyRotationState::Pending { secret, .. } = state.media_send_key_rotation_state {
-                info!(
-                    "Sending pending media key to users with added devices (number of users: {})",
-                    users_with_added_devices.len()
-                );
-                Self::send_media_send_key_to_users_over_signaling(
-                    state,
-                    users_with_added_devices,
-                    local_demux_id,
-                    0,
-                    secret,
-                );
-            }
+            info!(
+                "Sending pending media key to users with added devices (number of users: {})",
+                users_with_added_devices.len()
+            );
+            Self::send_media_send_key_to_users_over_signaling(
+                state,
+                users_with_added_devices,
+                local_demux_id,
+                0,
+                secret,
+            );
         }
     }
 
@@ -3838,7 +3842,7 @@ impl Client {
     }
 
     fn send_leaving_through_sfu_and_over_signaling(state: &mut State, local_demux_id: DemuxId) {
-        use protobuf::group_call::{device_to_device::Leaving, DeviceToDevice};
+        use protobuf::group_call::{DeviceToDevice, device_to_device::Leaving};
 
         debug!(
             "group_call::Client(inner)::send_leaving_through_sfu_and_over_signaling(client_id: {}, local_demux_id: {})",
@@ -4240,15 +4244,15 @@ impl Client {
 
     fn handle_speaker_received(actor: &Actor<State>, timestamp: rtp::Timestamp, demux_id: DemuxId) {
         actor.send(move |state| {
-            if let Some(speaker_rtp_timestamp) = state.speaker_rtp_timestamp {
-                if timestamp <= speaker_rtp_timestamp {
-                    // Ignored packets received out of order
-                    debug!(
-                        "Ignoring speaker change because the timestamp is old: {}",
-                        timestamp
-                    );
-                    return;
-                }
+            if let Some(speaker_rtp_timestamp) = state.speaker_rtp_timestamp
+                && timestamp <= speaker_rtp_timestamp
+            {
+                // Ignored packets received out of order
+                debug!(
+                    "Ignoring speaker change because the timestamp is old: {}",
+                    timestamp
+                );
+                return;
             }
             state.speaker_rtp_timestamp = Some(timestamp);
 
@@ -4354,7 +4358,9 @@ impl Client {
     ) {
         let Some(endorsement_public_key) = state.obfuscated_resolver.get_endorsement_public_key()
         else {
-            error!("Cannot process SendEndorsementsResponse because call was not initialized with endorsement public key");
+            error!(
+                "Cannot process SendEndorsementsResponse because call was not initialized with endorsement public key"
+            );
             return;
         };
         let expiration = response.expiration();
@@ -4476,16 +4482,15 @@ impl Client {
                             None
                         };
 
-                        if let Some(new_source_demux_id) = new_source {
-                            if heartbeat_state.audio_muted == Some(true)
-                                && remote_device.heartbeat_state.audio_muted == Some(false)
-                            {
-                                state.observer.handle_observed_remote_mute(
-                                    state.client_id,
-                                    new_source_demux_id,
-                                    demux_id,
-                                );
-                            }
+                        if let Some(new_source_demux_id) = new_source
+                            && heartbeat_state.audio_muted == Some(true)
+                            && remote_device.heartbeat_state.audio_muted == Some(false)
+                        {
+                            state.observer.handle_observed_remote_mute(
+                                state.client_id,
+                                new_source_demux_id,
+                                demux_id,
+                            );
                         }
 
                         remote_device.heartbeat_state = heartbeat_state;
@@ -4512,20 +4517,20 @@ impl Client {
             "Request devices because we just received a leaving message from demux_id = {}",
             demux_id
         );
-        if let Some(device) = state.remote_devices.find_by_demux_id_mut(demux_id) {
-            if !device.leaving_received {
-                device.leaving_received = true;
-                Self::request_remote_devices_as_soon_as_possible(state);
+        if let Some(device) = state.remote_devices.find_by_demux_id_mut(demux_id)
+            && !device.leaving_received
+        {
+            device.leaving_received = true;
+            Self::request_remote_devices_as_soon_as_possible(state);
 
-                // It's also possible we have learned this before the SFU has, in which case the SFU may have stale data.
-                // So let's wait a little while and ask again.
-                state
+            // It's also possible we have learned this before the SFU has, in which case the SFU may have stale data.
+            // So let's wait a little while and ask again.
+            state
                     .actor
                     .send_delayed(Duration::from_secs(2), move |state| {
                         info!("Request devices because we received a leaving message from demux_id = {} a while ago", demux_id);
                         Self::request_remote_devices_as_soon_as_possible(state);
                     });
-            }
         }
     }
 
@@ -5041,15 +5046,16 @@ impl<'data> Reader<'data> {
 #[cfg(feature = "sim")]
 mod tests {
     use std::sync::{
+        Arc, Condvar, LazyLock, Mutex,
         atomic::{self, AtomicI64, AtomicU64, Ordering},
-        mpsc, Arc, Condvar, LazyLock, Mutex,
+        mpsc,
     };
 
     use libsignal_core::Aci;
     use rand::random;
     use zkgroup::{
-        call_links::CallLinkSecretParams, EndorsementPublicKey, EndorsementServerRootKeyPair,
-        RandomnessBytes, ServerPublicParams, ServerSecretParams, RANDOMNESS_LEN, UUID_LEN,
+        EndorsementPublicKey, EndorsementServerRootKeyPair, RANDOMNESS_LEN, RandomnessBytes,
+        ServerPublicParams, ServerSecretParams, UUID_LEN, call_links::CallLinkSecretParams,
     };
 
     use super::*;
@@ -5162,14 +5168,13 @@ mod tests {
             _dhe_pub_key: [u8; 32],
             client: Client,
         ) {
-            if let Some(counter) = &self.joins_remaining {
-                if counter.fetch_sub(1, Ordering::SeqCst) <= 0 {
-                    // No more joins allowed. Simulate a "group full" condition.
-                    client.on_sfu_client_join_attempt_completed(Err(
-                        RingRtcError::GroupCallFull.into()
-                    ));
-                    return;
-                }
+            if let Some(counter) = &self.joins_remaining
+                && counter.fetch_sub(1, Ordering::SeqCst) <= 0
+            {
+                // No more joins allowed. Simulate a "group full" condition.
+                client
+                    .on_sfu_client_join_attempt_completed(Err(RingRtcError::GroupCallFull.into()));
+                return;
             }
             client.on_sfu_client_join_attempt_completed(Ok(Joined {
                 sfu_info: self.sfu_info.clone(),
@@ -5975,12 +5980,16 @@ mod tests {
 
         assert_ne!(plaintext, &ciphertext1[..plaintext.len()]);
 
-        assert!(client1
-            .decrypt_media(client2.demux_id, &ciphertext2)
-            .is_err());
-        assert!(client2
-            .decrypt_media(client1.demux_id, &ciphertext1)
-            .is_err());
+        assert!(
+            client1
+                .decrypt_media(client2.demux_id, &ciphertext2)
+                .is_err()
+        );
+        assert!(
+            client2
+                .decrypt_media(client1.demux_id, &ciphertext1)
+                .is_err()
+        );
 
         client1.set_remotes_and_wait_until_applied(&[&client2]);
         // We wait until client2 has processed the key from client1
@@ -6011,9 +6020,11 @@ mod tests {
 
         // And if the unencrypted media header has been modified, it should fail (bad mac)
         ciphertext1[0] = ciphertext1[0].wrapping_add(1);
-        assert!(client2
-            .decrypt_media(client1.demux_id, &ciphertext1)
-            .is_err());
+        assert!(
+            client2
+                .decrypt_media(client1.demux_id, &ciphertext1)
+                .is_err()
+        );
 
         // Finally, let's make sure video works as well
 
@@ -6069,9 +6080,11 @@ mod tests {
                 .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
-        assert!(client4
-            .decrypt_media(client1.demux_id, &ciphertext)
-            .is_err());
+        assert!(
+            client4
+                .decrypt_media(client1.demux_id, &ciphertext)
+                .is_err()
+        );
 
         // Add client4 and remove client3
         set_group_and_wait_until_applied(&[&client1, &client2, &client4]);
@@ -6144,9 +6157,11 @@ mod tests {
                 .decrypt_media(client1.demux_id, &ciphertext)
                 .unwrap()
         );
-        assert!(client3
-            .decrypt_media(client1.demux_id, &ciphertext)
-            .is_err());
+        assert!(
+            client3
+                .decrypt_media(client1.demux_id, &ciphertext)
+                .is_err()
+        );
         assert_eq!(
             plaintext,
             client4
@@ -6165,12 +6180,16 @@ mod tests {
         // After the next key rotation is applied, now client2 cannot decrypt,
         // but client4 and client5 can.
         let ciphertext = client1.encrypt_media(plaintext).unwrap();
-        assert!(client2
-            .decrypt_media(client1.demux_id, &ciphertext)
-            .is_err());
-        assert!(client3
-            .decrypt_media(client1.demux_id, &ciphertext)
-            .is_err());
+        assert!(
+            client2
+                .decrypt_media(client1.demux_id, &ciphertext)
+                .is_err()
+        );
+        assert!(
+            client3
+                .decrypt_media(client1.demux_id, &ciphertext)
+                .is_err()
+        );
         assert_eq!(
             plaintext,
             client4
@@ -6210,9 +6229,11 @@ mod tests {
         let plaintext = &b"Fake Video is big"[..];
         let ciphertext = client1.encrypt_media(plaintext).unwrap();
         // We can't decrypt because the keys got dropped
-        assert!(client2
-            .decrypt_media(client1.demux_id, &ciphertext)
-            .is_err());
+        assert!(
+            client2
+                .decrypt_media(client1.demux_id, &ciphertext)
+                .is_err()
+        );
 
         client1.observer.set_outgoing_signaling_blocked(false);
         client1.client.resend_media_keys();
@@ -6288,9 +6309,11 @@ mod tests {
                 .unwrap()
         );
         // And you can't decrypt from the forger.
-        assert!(client2
-            .decrypt_media(client3.demux_id, &ciphertext3)
-            .is_err());
+        assert!(
+            client2
+                .decrypt_media(client3.demux_id, &ciphertext3)
+                .is_err()
+        );
 
         client1.disconnect_and_wait_until_ended();
         client2.disconnect_and_wait_until_ended();
@@ -6745,10 +6768,12 @@ mod tests {
         let value = "hello".to_string();
 
         client1.client.react(value.clone());
-        assert!(client2
-            .observer
-            .reactions_called
-            .wait(Duration::from_secs(5)));
+        assert!(
+            client2
+                .observer
+                .reactions_called
+                .wait(Duration::from_secs(5))
+        );
         assert_eq!(1, client2.observer.handle_reactions_invocation_count());
         assert_eq!(1, client2.observer.reactions_count());
         assert_eq!(1, client2.observer.reactions().len());
@@ -6813,10 +6838,12 @@ mod tests {
             call_link_state: None,
         }));
 
-        assert!(client
-            .observer
-            .remote_devices_changed
-            .wait(Duration::from_secs(5)));
+        assert!(
+            client
+                .observer
+                .remote_devices_changed
+                .wait(Duration::from_secs(5))
+        );
 
         assert_eq!(1, client.observer.peek_state().device_count);
     }
@@ -6923,28 +6950,36 @@ mod tests {
         let joiner2 = TestClient::new(vec![2], 2);
 
         peeker.set_pending_clients_and_wait_until_applied(&[&joiner1]);
-        assert!(peeker
-            .observer
-            .peek_changed
-            .wait(Duration::from_millis(200)));
+        assert!(
+            peeker
+                .observer
+                .peek_changed
+                .wait(Duration::from_millis(200))
+        );
 
         peeker.set_pending_clients_and_wait_until_applied(&[&joiner1, &joiner2]);
-        assert!(peeker
-            .observer
-            .peek_changed
-            .wait(Duration::from_millis(200)));
+        assert!(
+            peeker
+                .observer
+                .peek_changed
+                .wait(Duration::from_millis(200))
+        );
 
         peeker.set_pending_clients_and_wait_until_applied(&[&joiner2, &joiner1]);
-        assert!(!peeker
-            .observer
-            .peek_changed
-            .wait(Duration::from_millis(200)));
+        assert!(
+            !peeker
+                .observer
+                .peek_changed
+                .wait(Duration::from_millis(200))
+        );
 
         peeker.set_pending_clients_and_wait_until_applied(&[&joiner1]);
-        assert!(peeker
-            .observer
-            .peek_changed
-            .wait(Duration::from_millis(200)));
+        assert!(
+            peeker
+                .observer
+                .peek_changed
+                .wait(Duration::from_millis(200))
+        );
 
         peeker.disconnect_and_wait_until_ended();
     }
@@ -7050,10 +7085,10 @@ mod tests {
     #[ignore]
     fn request_video() {
         use protobuf::group_call::{
-            device_to_sfu::{
-                video_request_message::VideoRequest as VideoRequestProto, VideoRequestMessage,
-            },
             DeviceToSfu,
+            device_to_sfu::{
+                VideoRequestMessage, video_request_message::VideoRequest as VideoRequestProto,
+            },
         };
 
         let mut client1 = TestClient::new(vec![1], 1);
@@ -7233,7 +7268,7 @@ mod tests {
 
     #[test]
     fn device_to_sfu_leave() {
-        use protobuf::group_call::{device_to_sfu::LeaveMessage, DeviceToSfu};
+        use protobuf::group_call::{DeviceToSfu, device_to_sfu::LeaveMessage};
 
         let mut client1 = TestClient::new(vec![1], 1);
 
@@ -7259,8 +7294,8 @@ mod tests {
     #[test]
     fn device_to_sfu_remove() {
         use protobuf::group_call::{
-            device_to_sfu::{AdminAction, GenericAdminAction},
             DeviceToSfu,
+            device_to_sfu::{AdminAction, GenericAdminAction},
         };
 
         let mut client1 = TestClient::new(vec![1], 1);
@@ -7295,8 +7330,8 @@ mod tests {
     #[test]
     fn device_to_sfu_block() {
         use protobuf::group_call::{
-            device_to_sfu::{AdminAction, GenericAdminAction},
             DeviceToSfu,
+            device_to_sfu::{AdminAction, GenericAdminAction},
         };
 
         let mut client1 = TestClient::new(vec![1], 1);
@@ -7331,8 +7366,8 @@ mod tests {
     #[test]
     fn device_to_sfu_approve() {
         use protobuf::group_call::{
-            device_to_sfu::{AdminAction, GenericAdminAction},
             DeviceToSfu,
+            device_to_sfu::{AdminAction, GenericAdminAction},
         };
 
         let mut client1 = TestClient::new(vec![1], 1);
@@ -7390,8 +7425,8 @@ mod tests {
     #[test]
     fn device_to_sfu_deny() {
         use protobuf::group_call::{
-            device_to_sfu::{AdminAction, GenericAdminAction},
             DeviceToSfu,
+            device_to_sfu::{AdminAction, GenericAdminAction},
         };
 
         let mut client1 = TestClient::new(vec![1], 1);
@@ -8114,10 +8149,12 @@ mod tests {
                     .expect("finished processing"),
             );
             match &sent_messages[..] {
-                [protobuf::signaling::CallMessage {
-                    ring_intention: Some(ring),
-                    ..
-                }] => {
+                [
+                    protobuf::signaling::CallMessage {
+                        ring_intention: Some(ring),
+                        ..
+                    },
+                ] => {
                     assert_eq!(
                         Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
                         ring.r#type,
@@ -8166,13 +8203,16 @@ mod tests {
                 .expect("finished processing"),
         );
         match &sent_messages[..] {
-            [protobuf::signaling::CallMessage {
-                ring_intention: Some(ring),
-                ..
-            }, protobuf::signaling::CallMessage {
-                ring_intention: Some(cancel),
-                ..
-            }] => {
+            [
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(ring),
+                    ..
+                },
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(cancel),
+                    ..
+                },
+            ] => {
                 assert_eq!(
                     Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
                     ring.r#type,
@@ -8217,10 +8257,12 @@ mod tests {
                 .expect("finished processing"),
         );
         match &sent_messages[..] {
-            [protobuf::signaling::CallMessage {
-                ring_intention: Some(ring),
-                ..
-            }] => {
+            [
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(ring),
+                    ..
+                },
+            ] => {
                 assert_eq!(
                     Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
                     ring.r#type,
@@ -8260,10 +8302,12 @@ mod tests {
                 .expect("finished processing"),
         );
         match &sent_messages[..] {
-            [protobuf::signaling::CallMessage {
-                ring_intention: Some(ring),
-                ..
-            }] => {
+            [
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(ring),
+                    ..
+                },
+            ] => {
                 assert_eq!(
                     Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
                     ring.r#type,
@@ -8304,13 +8348,16 @@ mod tests {
                 .expect("finished processing"),
         );
         match &sent_messages[..] {
-            [protobuf::signaling::CallMessage {
-                ring_intention: Some(ring),
-                ..
-            }, protobuf::signaling::CallMessage {
-                ring_intention: Some(cancel),
-                ..
-            }] => {
+            [
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(ring),
+                    ..
+                },
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(cancel),
+                    ..
+                },
+            ] => {
                 assert_eq!(
                     Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
                     ring.r#type,
@@ -8354,13 +8401,16 @@ mod tests {
                 .expect("finished processing"),
         );
         match &sent_messages[..] {
-            [protobuf::signaling::CallMessage {
-                ring_intention: Some(ring),
-                ..
-            }, protobuf::signaling::CallMessage {
-                ring_intention: Some(cancel),
-                ..
-            }] => {
+            [
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(ring),
+                    ..
+                },
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(cancel),
+                    ..
+                },
+            ] => {
                 assert_eq!(
                     Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
                     ring.r#type,
@@ -8434,10 +8484,12 @@ mod tests {
         );
 
         match &sent_messages[..] {
-            [protobuf::signaling::CallMessage {
-                ring_intention: Some(ring),
-                ..
-            }] => {
+            [
+                protobuf::signaling::CallMessage {
+                    ring_intention: Some(ring),
+                    ..
+                },
+            ] => {
                 assert_eq!(
                     Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
                     ring.r#type,

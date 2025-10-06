@@ -15,7 +15,7 @@ use crate::webrtc::sim::peer_connection as pc;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::peer_connection::BoxedRtpPacketSink;
 use crate::{
-    common::{units::DataRate, Result},
+    common::{Result, units::DataRate},
     core::util::redact_string,
     error::RingRtcError,
     webrtc,

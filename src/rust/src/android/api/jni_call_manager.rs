@@ -11,10 +11,10 @@
 use std::{borrow::Cow, time::Duration};
 
 use jni::{
+    JNIEnv,
     objects::{JByteArray, JClass, JObject, JString},
     strings::JavaStr,
     sys::{jboolean, jint, jlong, jobject},
-    JNIEnv,
 };
 
 use crate::{

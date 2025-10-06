@@ -10,14 +10,14 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use base64::{engine::general_purpose::STANDARD as base64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as base64};
 use rand::SeedableRng;
 use ringrtc::lite::{
     call_links::{
         CallLinkDeleteRequest, CallLinkEpoch, CallLinkRestrictions, CallLinkRootKey,
         CallLinkUpdateRequest,
     },
-    http::{self, sim as sim_http, Client},
+    http::{self, Client, sim as sim_http},
 };
 use uuid::Uuid;
 use zkgroup::call_links::CallLinkSecretParams;

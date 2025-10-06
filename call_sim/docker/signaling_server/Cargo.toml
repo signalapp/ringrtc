@@ -9,7 +9,7 @@
 name = "signaling_server"
 version = "0.1.0"
 authors = ["Calling Team <callingteam@signal.org>"]
-edition = "2021"
+edition = "2024"
 license = "AGPL-3.0-only"
 
 [dependencies]

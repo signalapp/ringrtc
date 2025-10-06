@@ -13,9 +13,9 @@ use std::{
 };
 
 use jni::{
+    JNIEnv, JavaVM,
     objects::{AutoLocal, GlobalRef, JObject, JValue},
     sys::{jint, jlong, jshort},
-    JNIEnv, JavaVM,
 };
 
 use crate::{
@@ -418,8 +418,7 @@ impl Platform for AndroidPlatform {
     ) -> Result<()> {
         trace!(
             "on_audio_levels(): captured_level: {}; received_level: {}",
-            captured_level,
-            received_level
+            captured_level, received_level
         );
 
         let env = &mut self.java_env()?;
@@ -1066,9 +1065,7 @@ impl Platform for AndroidPlatform {
     ) {
         trace!(
             "handle_audio_levels(): client_id: {}, captured_level: {:?}, received_levels: {:?}",
-            client_id,
-            captured_level,
-            received_levels,
+            client_id, captured_level, received_levels,
         );
 
         if let Ok(mut env) = self.java_env() {
@@ -1154,8 +1151,7 @@ impl Platform for AndroidPlatform {
     ) {
         trace!(
             "handle_reactions(): client_id: {}, reactions: {:?}",
-            client_id,
-            reactions,
+            client_id, reactions,
         );
 
         if let Ok(mut env) = self.java_env() {
@@ -2044,8 +2040,7 @@ impl AndroidPlatform {
                     epoch => org.signal.ringrtc.CallLinkEpoch,
                 ) -> void);
 
-                let object = env.new_object(call_link_state_class, args.sig, &args.args);
-                object
+                env.new_object(call_link_state_class, args.sig, &args.args)
             }
         }
     }

@@ -46,16 +46,16 @@
 
 use std::{
     fmt,
-    sync::{mpsc, Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, mpsc},
     thread,
     time::{Duration, SystemTime},
 };
 
 use crate::{
     common::{
+        CallDirection, CallId, ConnectionState, DataMode, Result, RingBench,
         actor::{Actor, Stopper},
         units::DataRate,
-        CallDirection, CallId, ConnectionState, DataMode, Result, RingBench,
     },
     core::{
         connection::{Connection, ConnectionObserverEvent, EventStream},
@@ -345,7 +345,7 @@ where
         // side needs to be informed.
         match event {
             ConnectionEvent::SendHangupViaRtpData(hangup) => {
-                return self.handle_send_hangup_via_rtp_data(connection, state, hangup)
+                return self.handle_send_hangup_via_rtp_data(connection, state, hangup);
             }
             ConnectionEvent::Terminate => return self.handle_terminate(connection),
             ConnectionEvent::Synchronize(sync) => return self.handle_synchronize(sync),

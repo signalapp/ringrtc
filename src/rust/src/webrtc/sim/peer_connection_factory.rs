@@ -13,8 +13,8 @@ use crate::{
         },
         sim::{
             media::{
-                RffiAudioTrack, RffiVideoSource, RffiVideoTrack, FAKE_AUDIO_TRACK,
-                FAKE_VIDEO_SOURCE, FAKE_VIDEO_TRACK,
+                FAKE_AUDIO_TRACK, FAKE_VIDEO_SOURCE, FAKE_VIDEO_TRACK, RffiAudioTrack,
+                RffiVideoSource, RffiVideoTrack,
             },
             peer_connection::RffiPeerConnection,
             peer_connection_observer::RffiPeerConnectionObserver,

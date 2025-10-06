@@ -6,12 +6,12 @@
 //! A peer-to-peer call connection interface.
 
 use std::{
-    collections::{hash_map, HashMap},
+    collections::{HashMap, hash_map},
     fmt,
     sync::{
+        Arc, Condvar, Mutex, MutexGuard,
         atomic::{AtomicBool, Ordering},
         mpsc::SyncSender,
-        Arc, Condvar, Mutex, MutexGuard,
     },
     thread,
     time::Duration,
@@ -21,9 +21,9 @@ use x25519_dalek::StaticSecret;
 
 use crate::{
     common::{
-        actor::{Actor, Stopper},
         ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DeviceId,
         Result,
+        actor::{Actor, Stopper},
     },
     core::{
         call_fsm::{CallEvent, CallStateMachine},
@@ -148,10 +148,10 @@ where
 
             // This is the last call reference, so let the application
             // release the the remote object.
-            if let Ok(call_manager) = self.call_manager() {
-                if let Ok(remote_peer) = self.remote_peer() {
-                    let _ = call_manager.notify_call_concluded(&remote_peer, self.call_id);
-                }
+            if let Ok(call_manager) = self.call_manager()
+                && let Ok(remote_peer) = self.remote_peer()
+            {
+                let _ = call_manager.notify_call_concluded(&remote_peer, self.call_id);
             }
         } else {
             debug!(
@@ -317,7 +317,7 @@ where
             Some(pending) => {
                 return Err(
                     RingRtcError::PendingCallAlreadySet(pending.received.sender_device_id).into(),
-                )
+                );
             }
             None => {
                 let pending_data = PendingCall {
@@ -632,7 +632,10 @@ where
             }
             let mut maybe_forking = self.forking.lock()?;
             if let Some(forking) = maybe_forking.as_mut() {
-                info!("received_answer from device {}; forking enabled, so inject into connection_map", sender_device_id);
+                info!(
+                    "received_answer from device {}; forking enabled, so inject into connection_map",
+                    sender_device_id
+                );
                 let call_manager = self.call_manager()?;
                 let call_config = forking.parent_connection.call_config();
                 let audio_levels_interval = forking.parent_connection.audio_levels_interval();
@@ -848,27 +851,26 @@ where
         // we should continue terminating even if that individual component fails.
 
         // close any application specific resources
-        if let Ok(call_context) = self.call_context() {
-            if let Err(e) = self
+        if let Ok(call_context) = self.call_context()
+            && let Err(e) = self
                 .call_manager()?
                 .disconnect_incoming_media(&call_context)
-            {
-                error!(
-                    "terminate_connections(): call_id: {} failed to disconnect incoming media: {}",
-                    self.call_id(),
-                    e
-                );
-            }
+        {
+            error!(
+                "terminate_connections(): call_id: {} failed to disconnect incoming media: {}",
+                self.call_id(),
+                e
+            );
         }
 
-        if let Some(mut forking) = self.forking.lock()?.take() {
-            if let Err(e) = forking.parent_connection.terminate() {
-                error!(
-                    "terminate_connections(): call_id: {} failed to terminate forking parent connection: {}",
-                    self.call_id(),
-                    e
-                );
-            }
+        if let Some(mut forking) = self.forking.lock()?.take()
+            && let Err(e) = forking.parent_connection.terminate()
+        {
+            error!(
+                "terminate_connections(): call_id: {} failed to terminate forking parent connection: {}",
+                self.call_id(),
+                e
+            );
         }
         let mut connection_map = self.connection_map.lock()?;
         for (_, mut connection) in connection_map.drain() {

@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     fs::File,
     path::PathBuf,
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{Receiver, channel},
     thread,
     time::Duration,
 };
@@ -15,7 +15,7 @@ use std::{
 use anyhow::Result;
 use log::*;
 use ringrtc::{
-    common::{actor::Stopper, CallConfig, CallId, CallMediaType, DeviceId},
+    common::{CallConfig, CallId, CallMediaType, DeviceId, actor::Stopper},
     core::group_call::GroupId,
     lite::sfu::{GroupMember, MembershipProof, UserId},
     native::PeerId,
@@ -37,8 +37,8 @@ pub mod calling {
     call_protobuf::include_call_sim_proto!();
 }
 use calling::{
-    command_message::Command, test_management_client::TestManagementClient, CommandMessage,
-    Registration,
+    CommandMessage, Registration, command_message::Command,
+    test_management_client::TestManagementClient,
 };
 
 struct ClientSync {

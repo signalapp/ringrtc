@@ -6,7 +6,7 @@
 //! Android Error Codes and Utilities.
 
 use anyhow::Error;
-use jni::{errors, objects::JThrowable, JNIEnv};
+use jni::{JNIEnv, errors, objects::JThrowable};
 use thiserror::Error;
 
 use crate::{android::jni_util::*, core::util::try_scoped};

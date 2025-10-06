@@ -9,8 +9,8 @@ use std::{
     collections::{HashMap, HashSet},
     fmt,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -556,8 +556,7 @@ impl Platform for SimPlatform {
     ) {
         trace!(
             "handle_audio_levels(): {:?}, {:?}",
-            captured_level,
-            received_levels
+            captured_level, received_levels
         );
     }
 

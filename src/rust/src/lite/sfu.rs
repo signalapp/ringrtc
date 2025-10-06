@@ -13,7 +13,7 @@ use std::{
     sync::Arc,
 };
 
-use base64::{engine::general_purpose::STANDARD as base64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as base64};
 use hex::ToHex;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -26,7 +26,7 @@ use crate::{
         http,
     },
     protobuf::group_call::sfu_to_device::{
-        peek_info::PeekDeviceInfo as ProtoPeekDeviceInfo, PeekInfo as ProtoPeekInfo,
+        PeekInfo as ProtoPeekInfo, peek_info::PeekDeviceInfo as ProtoPeekDeviceInfo,
     },
 };
 
@@ -594,37 +594,41 @@ pub fn peek(
             body: None,
         },
         Box::new(move |http_response| {
-            let result = match http::parse_json_response::<SerializedPeekInfo>(
-                http_response.as_ref(),
-            ) {
-                Ok(deserialized) => {
-                    info!(
-                        "Got group call peek result with device count = {}, pending count = {}",
-                        deserialized.devices.len(),
-                        deserialized.pending_clients.len(),
-                    );
-                    Ok(deserialized.deobfuscate(&*member_resolver, call_link_root_key.as_ref()))
-                }
-                Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
-                    if let Some(body) = http_response
-                        .as_ref()
-                        .map(|r| &r.body)
-                        .filter(|body| !body.is_empty())
-                    {
-                        Err(classify_not_found(body).unwrap_or(status))
-                    } else {
-                        info!("Got group call peek result with device count = 0 (status code 404)");
-                        Ok(PeekInfo::default())
+            let result =
+                match http::parse_json_response::<SerializedPeekInfo>(http_response.as_ref()) {
+                    Ok(deserialized) => {
+                        info!(
+                            "Got group call peek result with device count = {}, pending count = {}",
+                            deserialized.devices.len(),
+                            deserialized.pending_clients.len(),
+                        );
+                        Ok(
+                            deserialized
+                                .deobfuscate(&*member_resolver, call_link_root_key.as_ref()),
+                        )
                     }
-                }
-                Err(status) => {
-                    info!(
-                        "Got group call peek result with status code = {}",
-                        status.code
-                    );
-                    Err(status)
-                }
-            };
+                    Err(status) if status == http::ResponseStatus::GROUP_CALL_NOT_STARTED => {
+                        if let Some(body) = http_response
+                            .as_ref()
+                            .map(|r| &r.body)
+                            .filter(|body| !body.is_empty())
+                        {
+                            Err(classify_not_found(body).unwrap_or(status))
+                        } else {
+                            info!(
+                                "Got group call peek result with device count = 0 (status code 404)"
+                            );
+                            Ok(PeekInfo::default())
+                        }
+                    }
+                    Err(status) => {
+                        info!(
+                            "Got group call peek result with status code = {}",
+                            status.code
+                        );
+                        Err(status)
+                    }
+                };
             result_callback(result);
         }),
     )
@@ -701,7 +705,7 @@ pub fn join(
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
     use std::{
-        ffi::{c_char, CStr},
+        ffi::{CStr, c_char},
         sync::Arc,
     };
 
@@ -709,9 +713,9 @@ pub mod ios {
 
     use crate::lite::{
         call_links::{
-            self, ios::from_optional_u32_to_epoch, CallLinkMemberResolver, CallLinkRootKey,
+            self, CallLinkMemberResolver, CallLinkRootKey, ios::from_optional_u32_to_epoch,
         },
-        ffi::ios::{rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32, rtc_String, FromOrDefault},
+        ffi::ios::{FromOrDefault, rtc_Bytes, rtc_OptionalU16, rtc_OptionalU32, rtc_String},
         http,
         sfu::{self, Delegate, GroupMember, PeekInfo, PeekResult},
     };
@@ -944,7 +948,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use uuid::Uuid;
-    use zkgroup::{RandomnessBytes, ServerPublicParams, ServerSecretParams, RANDOMNESS_LEN};
+    use zkgroup::{RANDOMNESS_LEN, RandomnessBytes, ServerPublicParams, ServerSecretParams};
 
     use super::*;
     use crate::lite::call_links::{CallLinkMemberResolver, CallLinkRootKey};

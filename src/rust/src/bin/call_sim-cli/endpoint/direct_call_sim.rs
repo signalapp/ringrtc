@@ -60,10 +60,10 @@ impl CallStateHandler for CallEndpoint {
                 if let Some(ringing_sender) = &state.event_sync.ringing {
                     let _ = ringing_sender.send(());
                 }
-            } else if let CallState::Connected = call_state {
-                if let Some(connected_sender) = &state.event_sync.connected {
-                    let _ = connected_sender.send(());
-                }
+            } else if let CallState::Connected = call_state
+                && let Some(connected_sender) = &state.event_sync.connected
+            {
+                let _ = connected_sender.send(());
             }
         });
         Ok(())

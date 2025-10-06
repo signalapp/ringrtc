@@ -6,9 +6,9 @@
 //! webrtc::jni::JavaMediaStream Interface.
 
 use jni::{
+    JNIEnv,
     objects::{GlobalRef, JObject},
     sys::jobject,
-    JNIEnv,
 };
 
 use crate::{

@@ -12,8 +12,8 @@ use std::{
 };
 
 use jni::{
-    objects::{GlobalRef, JClass, JObject, JValue, JValueOwned},
     JNIEnv,
+    objects::{GlobalRef, JClass, JObject, JValue, JValueOwned},
 };
 
 use crate::{android::error::AndroidError, common::Result, core::util::try_scoped};

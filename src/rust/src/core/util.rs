@@ -9,7 +9,7 @@ use std::{
     borrow::Cow,
     collections::VecDeque,
     mem,
-    sync::{mpsc::Receiver, Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, mpsc::Receiver},
 };
 
 use crate::{common::Result, error::RingRtcError};
@@ -118,11 +118,7 @@ pub unsafe fn ptr_as_box<T>(ptr: *mut T) -> Result<Box<T>> {
 
 /// Given two values `a` and `b`, returns them in sorted order.
 pub fn minmax<T: Ord>(a: T, b: T) -> (T, T) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 #[cfg(any(not(debug_assertions), test))]

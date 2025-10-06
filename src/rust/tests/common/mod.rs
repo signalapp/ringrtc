@@ -15,8 +15,8 @@ use std::{
 
 use lazy_static::lazy_static;
 use rand::{
-    distributions::{Distribution, Standard},
     Rng, SeedableRng,
+    distributions::{Distribution, Standard},
 };
 use rand_chacha::ChaCha20Rng;
 use ringrtc::{
@@ -80,7 +80,10 @@ lazy_static! {
 
 pub fn test_init() {
     let _ = env_logger::try_init();
-    env::set_var("INCOMING_GROUP_CALL_RING_SECS", "1");
+    // Safety: depends on having no concurrent tests running that can modify the same envp
+    unsafe {
+        env::set_var("INCOMING_GROUP_CALL_RING_SECS", "1");
+    }
 }
 
 pub struct TestContext {

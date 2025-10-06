@@ -123,7 +123,7 @@ pub trait CallStateHandler {
     fn handle_remote_video_state(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_remote_sharing_screen(&self, remote_peer_id: &str, enabled: bool) -> Result<()>;
     fn handle_network_route(&self, remote_peer_id: &str, network_route: NetworkRoute)
-        -> Result<()>;
+    -> Result<()>;
     fn handle_audio_levels(
         &self,
         remote_peer_id: &str,
@@ -787,7 +787,10 @@ impl Platform for NativePlatform {
     ) -> Result<()> {
         info!(
             "NativePlatform::on_send_ice(): remote_peer: {}, call_id: {}, receiver_device_id: {:?}, candidates: {}",
-            remote_peer, call_id, send.receiver_device_id, send.ice.candidates.len()
+            remote_peer,
+            call_id,
+            send.receiver_device_id,
+            send.ice.candidates.len()
         );
         self.send_signaling(
             remote_peer,

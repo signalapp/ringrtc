@@ -15,8 +15,8 @@ use std::{net::SocketAddr, thread, time::Duration};
 use prost::Message;
 use ringrtc::{
     common::{
-        units::DataRate, ApplicationEvent, CallConfig, CallId, CallMediaType, CallState,
-        ConnectionState, DataMode, DeviceId,
+        ApplicationEvent, CallConfig, CallId, CallMediaType, CallState, ConnectionState, DataMode,
+        DeviceId, units::DataRate,
     },
     core::{group_call, signaling},
     protobuf,
@@ -31,8 +31,8 @@ use ringrtc::{
 #[macro_use]
 mod common;
 use common::{
-    random_ice_candidate, random_received_answer, random_received_ice_candidate,
-    random_received_offer, test_init, TestContext,
+    TestContext, random_ice_candidate, random_received_answer, random_received_ice_candidate,
+    random_received_offer, test_init,
 };
 
 // Simple test that:
@@ -2357,10 +2357,12 @@ fn outbound_multiple_remote_devices() {
         "test:active_remote:{}: injecting call connected",
         active_remote
     );
-    assert!(!active_connection
-        .app_connection()
-        .unwrap()
-        .outgoing_audio_enabled(),);
+    assert!(
+        !active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled(),
+    );
     active_connection
         .inject_received_accepted_via_rtp_data(active_call.call_id())
         .expect(error_line!());
@@ -2375,10 +2377,12 @@ fn outbound_multiple_remote_devices() {
         active_call.state().expect(error_line!()),
         CallState::ConnectedAndAccepted
     );
-    assert!(active_connection
-        .app_connection()
-        .unwrap()
-        .outgoing_audio_enabled(),);
+    assert!(
+        active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled(),
+    );
 
     assert_eq!(context.event_count(ApplicationEvent::RemoteAccepted), 1);
     assert_eq!(context.stream_count(), 1);

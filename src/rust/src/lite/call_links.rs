@@ -12,7 +12,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use base64::{engine::general_purpose::STANDARD as base64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as base64};
 pub use member_resolver::CallLinkMemberResolver;
 pub use root_key::{CallLinkEpoch, CallLinkRootKey};
 use serde::{self, Deserialize, Serialize};
@@ -320,7 +320,7 @@ pub fn delete_call_link(
 
 #[cfg(any(target_os = "ios", feature = "check-all"))]
 pub mod ios {
-    use std::ffi::{c_char, c_void, CStr};
+    use std::ffi::{CStr, c_char, c_void};
 
     use super::*;
     use crate::lite::{

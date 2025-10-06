@@ -9,9 +9,9 @@ use std::{
     convert::TryFrom,
     fmt::Formatter,
     sync::{
-        atomic::AtomicBool,
-        mpsc::{channel, Receiver, Sender},
         Arc, Mutex,
+        atomic::AtomicBool,
+        mpsc::{Receiver, Sender, channel},
     },
     time::Duration,
 };
@@ -19,7 +19,7 @@ use std::{
 use lazy_static::lazy_static;
 use neon::{
     prelude::*,
-    types::{buffer::TypedArray, JsBigInt},
+    types::{JsBigInt, buffer::TypedArray},
 };
 
 use crate::{

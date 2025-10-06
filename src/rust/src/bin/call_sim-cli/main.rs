@@ -16,7 +16,7 @@ use clap::Parser;
 use fern::Dispatch;
 use log::*;
 use ringrtc::{
-    common::{units, CallConfig, DataMode, DeviceId},
+    common::{CallConfig, DataMode, DeviceId, units},
     core::group_call::GroupId,
     lite::sfu::{GroupMember, MembershipProof, UserId},
     webrtc::{

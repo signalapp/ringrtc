@@ -15,7 +15,7 @@ use std::time::Duration;
 use prost::Message;
 use ringrtc::{
     common::{
-        units::DataRate, ApplicationEvent, CallConfig, CallId, CallState, ConnectionState, DataMode,
+        ApplicationEvent, CallConfig, CallId, CallState, ConnectionState, DataMode, units::DataRate,
     },
     core::{call_manager::MAX_MESSAGE_AGE, group_call, signaling},
     protobuf,
@@ -30,8 +30,8 @@ use ringrtc::{
 #[macro_use]
 mod common;
 use common::{
-    random_ice_candidate, random_received_ice_candidate, random_received_offer, test_init,
-    TestContext,
+    TestContext, random_ice_candidate, random_received_ice_candidate, random_received_offer,
+    test_init,
 };
 
 // Create an inbound call session up to the ConnectingBeforeAccepted state.
@@ -153,10 +153,12 @@ fn connect_inbound_call() -> TestContext {
     assert_eq!(context.event_count(ApplicationEvent::LocalRinging), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
-    assert!(!active_connection
-        .app_connection()
-        .unwrap()
-        .outgoing_audio_enabled(),);
+    assert!(
+        !active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled(),
+    );
 
     assert!(cm.busy());
 
@@ -193,10 +195,12 @@ fn connect_and_accept_inbound_call() -> TestContext {
     assert_eq!(context.stream_count(), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 0);
-    assert!(active_connection
-        .app_connection()
-        .unwrap()
-        .outgoing_audio_enabled());
+    assert!(
+        active_connection
+            .app_connection()
+            .unwrap()
+            .outgoing_audio_enabled()
+    );
     assert!(cm.busy());
 
     context

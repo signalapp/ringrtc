@@ -7,7 +7,7 @@
 name = "ringrtc"
 version.workspace = true
 authors.workspace = true
-edition = "2021"
+edition = "2024"
 description = "A Rust interface for WebRTC"
 license = "AGPL-3.0-only"
 

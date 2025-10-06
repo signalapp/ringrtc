@@ -11,8 +11,8 @@ use std::{
 use log::*;
 use ringrtc::{
     common::{
-        actor::{Actor, Stopper},
         CallId, CallMediaType, DeviceId, Result,
+        actor::{Actor, Stopper},
     },
     core::signaling::{self, HangupType, Ice, IceCandidate, Message},
     native::PeerId,
@@ -29,8 +29,8 @@ pub mod calling {
     call_protobuf::include_call_sim_proto!();
 }
 use calling::{
-    call_message, signaling_relay_client::SignalingRelayClient, CallMessage, Registration,
-    RelayMessage,
+    CallMessage, Registration, RelayMessage, call_message,
+    signaling_relay_client::SignalingRelayClient,
 };
 
 /// A 'server' is any server that can relay signaling messages between clients.

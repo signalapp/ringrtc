@@ -22,9 +22,9 @@ use prost::Message;
 
 use crate::{
     common::{
-        actor::{Actor, Stopper},
         ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DataMode,
         DeviceId, Result, RingBench,
+        actor::{Actor, Stopper},
     },
     core::{
         call::Call,
@@ -632,10 +632,10 @@ where
         ring_id: group_call::RingId,
     ) -> Result<()> {
         let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
-        if let Some(ring) = outstanding_group_rings.get(group_id) {
-            if ring.ring_id == ring_id {
-                outstanding_group_rings.remove(group_id);
-            }
+        if let Some(ring) = outstanding_group_rings.get(group_id)
+            && ring.ring_id == ring_id
+        {
+            outstanding_group_rings.remove(group_id);
         }
         Ok(())
     }
@@ -1265,10 +1265,10 @@ where
             {
                 // Get the last sent message type and see if it was for ICE.
                 // Since we are in a connected state, don't handle it if so.
-                if let Ok(message_queue) = self.message_queue.lock() {
-                    if message_queue.last_sent_message_type == Some(signaling::MessageType::Ice) {
-                        should_handle = false;
-                    }
+                if let Ok(message_queue) = self.message_queue.lock()
+                    && message_queue.last_sent_message_type == Some(signaling::MessageType::Ice)
+                {
+                    should_handle = false;
                 }
             }
         });
@@ -1288,11 +1288,11 @@ where
                 // See if the associated call is in the call map.
                 let mut call = None;
                 {
-                    if let Ok(call_map) = self.call_by_call_id.lock() {
-                        if let Some(v) = call_map.get(&call_id) {
-                            call = Some(v.clone());
-                        };
-                    }
+                    if let Ok(call_map) = self.call_by_call_id.lock()
+                        && let Some(v) = call_map.get(&call_id)
+                    {
+                        call = Some(v.clone());
+                    };
                 }
 
                 match call {
@@ -2093,12 +2093,11 @@ where
         active_call: &Call<T>,
         remote_peer: &<T as Platform>::AppRemotePeer,
     ) -> bool {
-        if let Ok(active_remote_peer) = active_call.remote_peer() {
-            if let Ok(platform) = self.platform.lock() {
-                if let Ok(result) = platform.compare_remotes(&active_remote_peer, remote_peer) {
-                    return result;
-                }
-            }
+        if let Ok(active_remote_peer) = active_call.remote_peer()
+            && let Ok(platform) = self.platform.lock()
+            && let Ok(result) = platform.compare_remotes(&active_remote_peer, remote_peer)
+        {
+            return result;
         }
         false
     }
@@ -2115,13 +2114,13 @@ where
         error: anyhow::Error,
     ) {
         info!("internal_create_api_error(): error: {}", error);
-        if let Ok(active_call) = self.active_call() {
-            if self.remote_peer_equals_active(&active_call, remote_peer) {
-                // The task managed to create the active call and then
-                // hit problems.  Error out with active call clean up.
-                let _ = self.internal_api_error(error);
-                return;
-            }
+        if let Ok(active_call) = self.active_call()
+            && self.remote_peer_equals_active(&active_call, remote_peer)
+        {
+            // The task managed to create the active call and then
+            // hit problems.  Error out with active call clean up.
+            let _ = self.internal_api_error(error);
+            return;
         }
 
         // The task hit problems before creating or accessing
@@ -3254,8 +3253,8 @@ where
 #[cfg(test)]
 mod tests {
     use protobuf::signaling::{
-        call_message::{ring_intention::Type as IntentionType, RingIntention},
         CallMessage,
+        call_message::{RingIntention, ring_intention::Type as IntentionType},
     };
 
     use super::*;

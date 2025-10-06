@@ -5,10 +5,10 @@
 
 //! WebRTC Peer Connection
 
-#[cfg(all(not(feature = "sim"), feature = "native"))]
-use std::ffi::c_void;
 #[cfg(feature = "native")]
 use std::ffi::CStr;
+#[cfg(all(not(feature = "sim"), feature = "native"))]
+use std::ffi::c_void;
 #[cfg(all(not(feature = "sim"), feature = "native"))]
 use std::sync::{Arc, Mutex};
 use std::{ffi::CString, os::raw::c_char};
@@ -19,7 +19,7 @@ pub use pcf::{RffiPeerConnectionFactoryInterface, RffiPeerConnectionFactoryOwner
 #[cfg(all(not(feature = "sim"), feature = "native"))]
 use crate::webrtc::audio_device_module::AudioDeviceModule;
 #[cfg(all(not(feature = "sim"), feature = "native"))]
-use crate::webrtc::ffi::audio_device_module::{decrement_adm_ref_count, AUDIO_DEVICE_CBS_PTR};
+use crate::webrtc::ffi::audio_device_module::{AUDIO_DEVICE_CBS_PTR, decrement_adm_ref_count};
 #[cfg(not(feature = "sim"))]
 use crate::webrtc::ffi::peer_connection_factory as pcf;
 #[cfg(feature = "injectable_network")]

@@ -6,17 +6,17 @@
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
-    sync::{atomic, atomic::AtomicU64, Arc},
+    sync::{Arc, atomic, atomic::AtomicU64},
     thread,
     time::Duration,
 };
 
-use rand::{distributions, distributions::Distribution, rngs::ThreadRng, thread_rng, Rng};
+use rand::{Rng, distributions, distributions::Distribution, rngs::ThreadRng, thread_rng};
 
 use crate::common::{
+    Result,
     actor::{Actor, Stopper},
     units::{DataRate, DataSize},
-    Result,
 };
 
 const OVERHEAD_IN_BYTES_IPV4: u64 = 20;

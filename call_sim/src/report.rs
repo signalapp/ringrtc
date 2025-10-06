@@ -5,7 +5,7 @@
 
 use std::{collections::HashMap, fmt::Write, str::FromStr};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use itertools::Itertools;
 use plotters::{
     backend::SVGBackend,
@@ -14,7 +14,7 @@ use plotters::{
     element::Circle,
     prelude::IntoSegmentedCoord,
     series::{Histogram, LineSeries},
-    style::{full_palette::WHITE, Color, IntoFont, RGBColor},
+    style::{Color, IntoFont, RGBColor, full_palette::WHITE},
 };
 use regex::Regex;
 use tokio::{
@@ -2549,9 +2549,16 @@ impl Html {
                 "<h4 class=\"accordion-header\" id=\"{}-heading{}\">\n",
                 id, i
             );
-            let _ = writeln!(buf, "<button class=\"accordion-button{}\" type=\"button\" data-bs-toggle=\"collapse\" \
+            let _ = writeln!(
+                buf,
+                "<button class=\"accordion-button{}\" type=\"button\" data-bs-toggle=\"collapse\" \
                     data-bs-target=\"#{}-collapse{}\" aria-expanded=\"true\" aria-controls=\"{}-collapse{}\">\n",
-                    if item.collapsed { " collapsed" } else { "" }, id, i, id, i);
+                if item.collapsed { " collapsed" } else { "" },
+                id,
+                i,
+                id,
+                i
+            );
 
             let _ = writeln!(buf, "<h4>{}</h4>\n", item.label);
             buf.push_str("</button>\n");

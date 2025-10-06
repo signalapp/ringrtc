@@ -7,15 +7,15 @@ use std::{process::Stdio, time::Duration};
 
 use anyhow::Result;
 use bollard::{
-    container::{MemoryStatsStats, Stats, StatsOptions},
     Docker,
+    container::{MemoryStatsStats, Stats, StatsOptions},
 };
 use chrono::DateTime;
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
 use tokio::{
     fs::OpenOptions,
-    io::{stdout, AsyncWriteExt},
+    io::{AsyncWriteExt, stdout},
     process::Command,
 };
 

@@ -8,9 +8,9 @@
 use std::{borrow::Cow, convert::TryFrom, panic, sync::Arc, time::Duration};
 
 use jni::{
+    JNIEnv,
     objects::{GlobalRef, JByteArray, JClass, JObject, JString, JValueOwned},
     sys::{jint, jlong},
-    JNIEnv,
 };
 use log::Level;
 

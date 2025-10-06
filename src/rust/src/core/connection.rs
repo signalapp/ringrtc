@@ -9,8 +9,8 @@ use std::{
     fmt,
     net::SocketAddr,
     sync::{
-        mpsc::{Receiver, SyncSender},
         Arc, Condvar, Mutex, MutexGuard,
+        mpsc::{Receiver, SyncSender},
     },
     thread,
     time::{Duration, SystemTime},
@@ -25,10 +25,10 @@ use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::{
     common::{
-        actor::{Actor, Stopper},
-        units::DataRate,
         CallConfig, CallDirection, CallId, CallMediaType, ConnectionState, DataMode, DeviceId,
         Result, RingBench,
+        actor::{Actor, Stopper},
+        units::DataRate,
     },
     core::{
         call::Call,
@@ -51,9 +51,9 @@ use crate::{
         },
         rtp,
         sdp_observer::{
-            create_csd_observer, create_ssd_observer, SessionDescription, SrtpCryptoSuite, SrtpKey,
+            SessionDescription, SrtpCryptoSuite, SrtpKey, create_csd_observer, create_ssd_observer,
         },
-        stats_observer::{create_stats_observer, StatsObserver},
+        stats_observer::{StatsObserver, create_stats_observer},
     },
 };
 
@@ -679,25 +679,27 @@ where
             peer_connection.create_offer(observer.as_ref());
             let _ = observer.get_result()?;
 
-            let (mut offer, mut answer, remote_public_key) =
-                if let (Some(v4_offer), Some(v4_answer)) = (offer.to_v4(), received.answer.to_v4())
-                {
-                    // Set the remote max based on the bitrate in the answer.
-                    bandwidth_controller.remote_max =
-                        v4_answer.max_bitrate_bps.map(DataRate::from_bps);
+            let (mut offer, mut answer, remote_public_key) = if let (
+                Some(v4_offer),
+                Some(v4_answer),
+            ) =
+                (offer.to_v4(), received.answer.to_v4())
+            {
+                // Set the remote max based on the bitrate in the answer.
+                bandwidth_controller.remote_max = v4_answer.max_bitrate_bps.map(DataRate::from_bps);
 
-                    let offer = SessionDescription::offer_from_v4(&v4_offer, &self.call_config)?;
-                    let answer = SessionDescription::answer_from_v4(&v4_answer, &self.call_config)?;
+                let offer = SessionDescription::offer_from_v4(&v4_offer, &self.call_config)?;
+                let answer = SessionDescription::answer_from_v4(&v4_answer, &self.call_config)?;
 
-                    info!(
+                info!(
                     "Incoming answer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
                     v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_controller
                 );
 
-                    (offer, answer, v4_answer.public_key)
-                } else {
-                    return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
-                };
+                (offer, answer, v4_answer.public_key)
+            } else {
+                return Err(RingRtcError::UnknownSignaledProtocolVersion.into());
+            };
 
             if let Some(remote_public_key) = remote_public_key {
                 let callee_identity_key = &received.sender_identity_key;
@@ -1562,7 +1564,7 @@ where
                     String::from("enable_media()"),
                     String::from("webrtc.incoming_media"),
                 )
-                .into())
+                .into());
             }
         };
 

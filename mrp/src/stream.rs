@@ -414,18 +414,18 @@ where
         mut send_data: impl FnMut(&SendData) -> anyhow::Result<Instant>,
     ) -> std::result::Result<(), MrpSendError> {
         for seqnum in self.send_buffer.left_bounds()..=self.send_buffer.max_seen_seqnum() {
-            if let Some(ppkt) = self.send_buffer.get_mut(seqnum) {
-                if ppkt.should_transmit(now) {
-                    match send_data(&ppkt.packet) {
-                        Ok(next_send_at) => {
-                            ppkt.next_send_at = next_send_at;
-                            ppkt.try_count += 1;
-                        }
-                        Err(e) => {
-                            return Err(MrpSendError::InnerSendFailed(e));
-                        }
-                    };
-                }
+            if let Some(ppkt) = self.send_buffer.get_mut(seqnum)
+                && ppkt.should_transmit(now)
+            {
+                match send_data(&ppkt.packet) {
+                    Ok(next_send_at) => {
+                        ppkt.next_send_at = next_send_at;
+                        ppkt.try_count += 1;
+                    }
+                    Err(e) => {
+                        return Err(MrpSendError::InnerSendFailed(e));
+                    }
+                };
             }
         }
 
@@ -526,18 +526,19 @@ mod tests {
         collections::{BinaryHeap, VecDeque},
         rc::Rc,
         sync::{
-            mpsc::{self, Receiver, Sender, TryRecvError},
             OnceLock,
+            mpsc::{self, Receiver, Sender, TryRecvError},
         },
         thread,
         time::{Duration, Instant},
     };
 
     use rand::{
+        Rng, SeedableRng,
         distributions::{DistIter, Uniform},
         rngs::StdRng,
         seq::SliceRandom,
-        thread_rng, Rng, SeedableRng,
+        thread_rng,
     };
 
     use super::*;
@@ -1311,13 +1312,13 @@ mod tests {
             let mut results = vec![];
             let mut i = 1;
             while i <= num_packets {
-                if let Some((start, end)) = merge_intervals.peek() {
-                    if i == *start {
-                        results.push(((*start)..=(*end)).collect::<Vec<_>>());
-                        merge_intervals.next();
-                        i = end + 1;
-                        continue;
-                    }
+                if let Some((start, end)) = merge_intervals.peek()
+                    && i == *start
+                {
+                    results.push(((*start)..=(*end)).collect::<Vec<_>>());
+                    merge_intervals.next();
+                    i = end + 1;
+                    continue;
                 }
                 results.push(vec![i]);
                 i += 1;
@@ -1416,14 +1417,14 @@ mod tests {
             let mut counter = 1;
             let mut staged_messages: VecDeque<(Option<u32>, Vec<u32>)> = VecDeque::new();
             while counter <= num_packets as u32 {
-                if let Some((start, end)) = merge_intervals.peek().cloned() {
-                    if counter == start {
-                        staged_messages.push_back((Some(end - start + 1), vec![start]));
-                        staged_messages.extend(((start + 1)..=end).map(|c| (None, vec![c])));
-                        counter = end + 1;
-                        merge_intervals.next();
-                        continue;
-                    }
+                if let Some((start, end)) = merge_intervals.peek().cloned()
+                    && counter == start
+                {
+                    staged_messages.push_back((Some(end - start + 1), vec![start]));
+                    staged_messages.extend(((start + 1)..=end).map(|c| (None, vec![c])));
+                    counter = end + 1;
+                    merge_intervals.next();
+                    continue;
                 }
 
                 staged_messages.push_back((None, vec![counter]));

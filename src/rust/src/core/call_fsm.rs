@@ -45,15 +45,15 @@
 
 use std::{
     fmt,
-    sync::{mpsc, Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, mpsc},
     thread,
     time::Duration,
 };
 
 use crate::{
     common::{
-        actor::{Actor, Stopper},
         ApplicationEvent, CallConfig, CallDirection, CallState, ConnectionState, DeviceId, Result,
+        actor::{Actor, Stopper},
     },
     core::{
         call::{Call, EventStream},
@@ -363,7 +363,7 @@ where
         // side needs to be informed.
         match event {
             CallEvent::SendHangupViaRtpDataToAll(hangup) => {
-                return self.handle_send_hangup_via_rtp_data_to_all(call, state, hangup)
+                return self.handle_send_hangup_via_rtp_data_to_all(call, state, hangup);
             }
             CallEvent::Terminate => return self.handle_terminate(call),
             CallEvent::Synchronize(sync) => return self.handle_synchronize(call, sync),
@@ -566,11 +566,13 @@ where
         }
 
         // If already connected to device A, ignore hangup messages from device B.
-        if let Ok(active_device_id) = call.active_device_id() {
-            if sender_device_id != active_device_id {
-                info!("handle_received_hangup(): Ignoring hangup message from devices we aren't connected with");
-                return Ok(());
-            }
+        if let Ok(active_device_id) = call.active_device_id()
+            && sender_device_id != active_device_id
+        {
+            info!(
+                "handle_received_hangup(): Ignoring hangup message from devices we aren't connected with"
+            );
+            return Ok(());
         }
 
         // Setup helper tuples for common scenarios to handle.
@@ -638,15 +640,15 @@ where
         }
 
         // Only callers can propagate hangups to other callee devices.
-        if let Some(hangup_to_propagate) = hangup_to_propagate {
-            if state.should_propagate_hangup() {
-                let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
-                let excluded_remote_device_id = hangup_device_id.unwrap_or(0);
-                call.send_hangup_via_rtp_data_and_signaling_to_all_except(
-                    hangup_to_propagate,
-                    excluded_remote_device_id,
-                )?;
-            }
+        if let Some(hangup_to_propagate) = hangup_to_propagate
+            && state.should_propagate_hangup()
+        {
+            let (_hangup_type, hangup_device_id) = hangup_to_propagate.to_type_and_device_id();
+            let excluded_remote_device_id = hangup_device_id.unwrap_or(0);
+            call.send_hangup_via_rtp_data_and_signaling_to_all_except(
+                hangup_to_propagate,
+                excluded_remote_device_id,
+            )?;
         }
 
         // Send a Hangup event to the UX, if a call is being remotely hungup, the user

@@ -7,8 +7,8 @@ use std::{
     convert::TryInto,
     io::{Read, Seek, SeekFrom, Write},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };

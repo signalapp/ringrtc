@@ -7,10 +7,9 @@ use std::{
     cmp::{Ord, Ordering, PartialEq, PartialOrd},
     collections::BinaryHeap,
     sync::{
-        atomic,
+        Arc, Mutex, atomic,
         atomic::AtomicBool,
-        mpsc::{channel, RecvError, RecvTimeoutError, Sender},
-        Arc, Mutex,
+        mpsc::{RecvError, RecvTimeoutError, Sender, channel},
     },
     thread,
     time::{Duration, Instant},

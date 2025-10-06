@@ -159,9 +159,9 @@ mod tests {
     use libsignal_core::Aci;
     use rand::{random, thread_rng};
     use zkgroup::{
+        RandomnessBytes, ServerSecretParams, Timestamp, UUID_LEN,
         call_links::CallLinkSecretParams,
         groups::{GroupSendDerivedKeyPair, GroupSendEndorsementsResponse},
-        RandomnessBytes, ServerSecretParams, Timestamp, UUID_LEN,
     };
 
     use super::*;

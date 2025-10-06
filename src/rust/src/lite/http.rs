@@ -243,7 +243,7 @@ pub mod ios {
     use libc::{c_void, size_t};
 
     use crate::lite::{
-        ffi::ios::{rtc_Bytes, rtc_String, FromOrDefault},
+        ffi::ios::{FromOrDefault, rtc_Bytes, rtc_String},
         http,
     };
 

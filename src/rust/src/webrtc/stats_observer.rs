@@ -174,9 +174,14 @@ impl StatsObserver {
             "ringrtc_stats!,audio,send,{ssrc},{packets_per_second:.1},{average_packet_size:.1},{bitrate:.1}bps,{remote_packets_lost_pct:.1}%,{remote_jitter:.0}ms,{remote_round_trip_time:.0}ms,{audio_energy:.3}",
             ssrc = audio_sender.ssrc,
             packets_per_second = packets_sent as f32 / seconds_elapsed,
-            average_packet_size = if packets_sent > 0 { bytes_sent as f32 / packets_sent as f32 } else { 0.0 },
+            average_packet_size = if packets_sent > 0 {
+                bytes_sent as f32 / packets_sent as f32
+            } else {
+                0.0
+            },
             bitrate = bytes_sent as f32 * 8.0 / seconds_elapsed,
-            remote_packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_sent as i32),
+            remote_packets_lost_pct =
+                Self::compute_packets_lost_pct(packets_lost, packets_sent as i32),
             remote_jitter = audio_sender.remote_jitter * 1000.0,
             remote_round_trip_time = audio_sender.remote_round_trip_time * 1000.0,
             audio_energy = audio_sender.total_audio_energy - prev_audio_sender.total_audio_energy,
@@ -197,21 +202,44 @@ impl StatsObserver {
             "ringrtc_stats!,video,send,{ssrc},{packets_per_second:.1},{average_packet_size:.1},{bitrate:.0}bps,{framerate:.1}fps,{key_frames_encoded},{encode_time_per_frame:.1}ms,{width}x{height},{retransmitted_packets_sent},{retransmitted_bitrate:.1}bps,{send_delay_per_packet:.1}ms,{nack_count},{pli_count},{quality_limitation_reason},{quality_limitation_resolution_changes},{remote_packets_lost_pct:.1}%,{remote_jitter:.1}ms,{remote_round_trip_time:.1}ms",
             ssrc = video_sender.ssrc,
             packets_per_second = packets_sent as f32 / seconds_elapsed,
-            average_packet_size = if packets_sent > 0 { bytes_sent as f32 / packets_sent as f32 } else { 0.0 },
+            average_packet_size = if packets_sent > 0 {
+                bytes_sent as f32 / packets_sent as f32
+            } else {
+                0.0
+            },
             bitrate = bytes_sent as f32 * 8.0 / seconds_elapsed,
             framerate = frames_encoded as f32 / seconds_elapsed,
-            key_frames_encoded = video_sender.key_frames_encoded - prev_video_sender.key_frames_encoded,
-            encode_time_per_frame = if frames_encoded > 0 { (video_sender.total_encode_time - prev_video_sender.total_encode_time) * 1000.0 / frames_encoded as f64 } else { 0.0 },
+            key_frames_encoded =
+                video_sender.key_frames_encoded - prev_video_sender.key_frames_encoded,
+            encode_time_per_frame = if frames_encoded > 0 {
+                (video_sender.total_encode_time - prev_video_sender.total_encode_time) * 1000.0
+                    / frames_encoded as f64
+            } else {
+                0.0
+            },
             width = video_sender.frame_width,
             height = video_sender.frame_height,
-            retransmitted_packets_sent = video_sender.retransmitted_packets_sent - prev_video_sender.retransmitted_packets_sent,
-            retransmitted_bitrate = (video_sender.retransmitted_bytes_sent - prev_video_sender.retransmitted_bytes_sent) as f32 / seconds_elapsed,
-            send_delay_per_packet = if packets_sent > 0 { (video_sender.total_packet_send_delay - prev_video_sender.total_packet_send_delay) * 1000.0 / packets_sent as f64 } else { 0.0 },
+            retransmitted_packets_sent = video_sender.retransmitted_packets_sent
+                - prev_video_sender.retransmitted_packets_sent,
+            retransmitted_bitrate = (video_sender.retransmitted_bytes_sent
+                - prev_video_sender.retransmitted_bytes_sent)
+                as f32
+                / seconds_elapsed,
+            send_delay_per_packet = if packets_sent > 0 {
+                (video_sender.total_packet_send_delay - prev_video_sender.total_packet_send_delay)
+                    * 1000.0
+                    / packets_sent as f64
+            } else {
+                0.0
+            },
             nack_count = video_sender.nack_count - prev_video_sender.nack_count,
             pli_count = video_sender.pli_count - prev_video_sender.pli_count,
             quality_limitation_reason = video_sender.quality_limitation_reason_description(),
-            quality_limitation_resolution_changes = video_sender.quality_limitation_resolution_changes - prev_video_sender.quality_limitation_resolution_changes,
-            remote_packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_sent as i32),
+            quality_limitation_resolution_changes = video_sender
+                .quality_limitation_resolution_changes
+                - prev_video_sender.quality_limitation_resolution_changes,
+            remote_packets_lost_pct =
+                Self::compute_packets_lost_pct(packets_lost, packets_sent as i32),
             remote_jitter = video_sender.remote_jitter * 1000.0,
             remote_round_trip_time = video_sender.remote_round_trip_time * 1000.0,
         );
@@ -231,13 +259,19 @@ impl StatsObserver {
         info!(
             "ringrtc_stats!,audio,recv,{ssrc},{packets_per_second:.1},{packets_lost_pct:.1}%,{bitrate:.1}bps,{jitter:.0}ms,{audio_energy:.3},{jitter_buffer_delay:.0}ms",
             ssrc = audio_receiver.ssrc,
-            packets_per_second = (audio_receiver.packets_received - prev_audio_receiver.packets_received) as f32
+            packets_per_second = (audio_receiver.packets_received
+                - prev_audio_receiver.packets_received) as f32
                 / seconds_elapsed,
-            packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_received as i32 + packets_lost),
-            bitrate = (audio_receiver.bytes_received - prev_audio_receiver.bytes_received) as f32 * 8.0
+            packets_lost_pct = Self::compute_packets_lost_pct(
+                packets_lost,
+                packets_received as i32 + packets_lost
+            ),
+            bitrate = (audio_receiver.bytes_received - prev_audio_receiver.bytes_received) as f32
+                * 8.0
                 / seconds_elapsed,
             jitter = audio_receiver.jitter * 1000.0,
-            audio_energy = audio_receiver.total_audio_energy - prev_audio_receiver.total_audio_energy,
+            audio_energy =
+                audio_receiver.total_audio_energy - prev_audio_receiver.total_audio_energy,
             jitter_buffer_delay = if jitter_buffer_emitted_count > 0 {
                 (audio_receiver.jitter_buffer_delay - prev_audio_receiver.jitter_buffer_delay)
                     / (jitter_buffer_emitted_count as f64)
@@ -261,15 +295,22 @@ impl StatsObserver {
         info!(
             "ringrtc_stats!,video,recv,{ssrc},{packets_per_second:.1},{packets_lost_pct:.1}%,{bitrate:.0}bps,{framerate:.1}fps,{key_frames_decoded},{decode_time_per_frame:.1}ms,{width}x{height}",
             ssrc = video_receiver.ssrc,
-            packets_per_second = (video_receiver.packets_received - prev_video_receiver.packets_received) as f32
+            packets_per_second = (video_receiver.packets_received
+                - prev_video_receiver.packets_received) as f32
                 / seconds_elapsed,
-            packets_lost_pct = Self::compute_packets_lost_pct(packets_lost, packets_received as i32 + packets_lost),
-            bitrate = (video_receiver.bytes_received - prev_video_receiver.bytes_received) as f32 * 8.0
+            packets_lost_pct = Self::compute_packets_lost_pct(
+                packets_lost,
+                packets_received as i32 + packets_lost
+            ),
+            bitrate = (video_receiver.bytes_received - prev_video_receiver.bytes_received) as f32
+                * 8.0
                 / seconds_elapsed,
             framerate = frames_decoded as f32 / seconds_elapsed,
-            key_frames_decoded = video_receiver.key_frames_decoded - prev_video_receiver.key_frames_decoded,
+            key_frames_decoded =
+                video_receiver.key_frames_decoded - prev_video_receiver.key_frames_decoded,
             decode_time_per_frame = if frames_decoded > 0 {
-                (video_receiver.total_decode_time - prev_video_receiver.total_decode_time) * 1000.0 / frames_decoded as f64
+                (video_receiver.total_decode_time - prev_video_receiver.total_decode_time) * 1000.0
+                    / frames_decoded as f64
             } else {
                 0.0
             },

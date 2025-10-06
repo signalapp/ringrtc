@@ -25,7 +25,7 @@ use crate::{
             RffiCreateSessionDescriptionObserver, RffiSessionDescription,
             RffiSetSessionDescriptionObserver,
         },
-        sim::ice_gatherer::{RffiIceGatherer, FAKE_ICE_GATHERER},
+        sim::ice_gatherer::{FAKE_ICE_GATHERER, RffiIceGatherer},
         stats_observer::RffiStatsObserver,
     },
 };

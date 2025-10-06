@@ -6,19 +6,20 @@
 use core::convert::AsRef;
 use std::{
     collections::VecDeque,
-    ffi::{c_uchar, c_void, CStr},
+    ffi::{CStr, c_uchar, c_void},
     sync::{
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc,
     },
     thread,
     thread::JoinHandle,
     time::Duration,
 };
 
-use anyhow::{anyhow, bail, Context as AnyhowContext};
+use anyhow::{Context as AnyhowContext, anyhow, bail};
 use cubeb::{Context, DeviceId, DeviceType, MonoFrame, StereoFrame, Stream, StreamPrefs};
-use cubeb_core::{log_enabled, set_logging, LogLevel};
+use cubeb_core::{LogLevel, log_enabled, set_logging};
 use lazy_static::lazy_static;
 use regex::Regex;
 #[cfg(target_os = "windows")]
@@ -28,7 +29,7 @@ use crate::{
     webrtc,
     webrtc::{
         audio_device_module_utils::{
-            copy_and_truncate_string, redact_by_regex, redact_for_logging, DeviceCollectionWrapper,
+            DeviceCollectionWrapper, copy_and_truncate_string, redact_by_regex, redact_for_logging,
         },
         ffi::audio_device_module::RffiAudioTransport,
         peer_connection_factory::{AudioDevice, AudioDeviceObserver},
@@ -177,10 +178,10 @@ impl Worker {
     /// Safety: Must be called with a valid |data| pointer. (NULL is okay.)
     unsafe extern "C" fn device_changed(_ctx: *mut cubeb::ffi::cubeb, data: *mut c_void) {
         // Flag that an update is needed; this will be processed in the worker thread.
-        if let Some(d) = unsafe { (data as *mut UpdateCallbackData).as_ref() } {
-            if let Err(e) = d.sender.send(Event::RefreshCache(d.device_type)) {
-                error!("Failed to request {:?} cache refresh: {}", d.device_type, e);
-            }
+        if let Some(d) = unsafe { (data as *mut UpdateCallbackData).as_ref() }
+            && let Err(e) = d.sender.send(Event::RefreshCache(d.device_type))
+        {
+            error!("Failed to request {:?} cache refresh: {}", d.device_type, e);
         }
     }
 
@@ -220,15 +221,15 @@ impl Worker {
     }
 
     fn terminate(&mut self) {
-        if let Some(input) = &self.input_stream {
-            if let Err(e) = input.stop() {
-                error!("Failed to stop input: {}", e);
-            }
+        if let Some(input) = &self.input_stream
+            && let Err(e) = input.stop()
+        {
+            error!("Failed to stop input: {}", e);
         }
-        if let Some(output) = &self.output_stream {
-            if let Err(e) = output.stop() {
-                error!("Failed to stop output: {}", e);
-            }
+        if let Some(output) = &self.output_stream
+            && let Err(e) = output.stop()
+        {
+            error!("Failed to stop output: {}", e);
         }
 
         // Cause these to Drop.
@@ -830,10 +831,10 @@ impl Drop for AudioDeviceModule {
         if let Err(e) = self.mpsc_sender.send(Event::Terminate) {
             error!("Failed to request cubeb termination: {}", e);
         }
-        if let Some(cw) = self.cubeb_worker.take() {
-            if let Err(e) = cw.join() {
-                error!("Failed to terminate cubeb worker: {:?}", e);
-            }
+        if let Some(cw) = self.cubeb_worker.take()
+            && let Err(e) = cw.join()
+        {
+            error!("Failed to terminate cubeb worker: {:?}", e);
         }
     }
 }
@@ -961,10 +962,10 @@ fn log_c_str(s: &CStr) {
 
 impl AudioDeviceModule {
     pub fn new() -> anyhow::Result<Self> {
-        if !log_enabled() {
-            if let Err(e) = set_logging(LogLevel::Normal, Some(log_c_str)) {
-                warn!("failed to set cubeb logging: {:?}", e);
-            }
+        if !log_enabled()
+            && let Err(e) = set_logging(LogLevel::Normal, Some(log_c_str))
+        {
+            warn!("failed to set cubeb logging: {:?}", e);
         }
 
         let input_device_names = Arc::new(Mutex::new(Vec::new()));
@@ -1073,10 +1074,12 @@ impl AudioDeviceModule {
 
     fn device_str(device: &cubeb::DeviceInfo) -> String {
         format!(
-            concat!("dev id: {:?}, device_id: {:?}, friendly_name: {:?}, group_id: {:?}, ",
-            "vendor_name: {:?}, device_type: {:?}, state: {:?}, preferred: {:?}, format: {:?}, ",
-            "default_format: {:?}, max channels: {:?}, default_rate: {:?}, max_rate: {:?}, ",
-            "min_rate: {:?}, latency_lo: {:?}, latency_hi: {:?})"),
+            concat!(
+                "dev id: {:?}, device_id: {:?}, friendly_name: {:?}, group_id: {:?}, ",
+                "vendor_name: {:?}, device_type: {:?}, state: {:?}, preferred: {:?}, format: {:?}, ",
+                "default_format: {:?}, max channels: {:?}, default_rate: {:?}, max_rate: {:?}, ",
+                "min_rate: {:?}, latency_lo: {:?}, latency_hi: {:?})"
+            ),
             device.devid(),
             // Truncate these fields, as they can contain e.g. mac addresses or user-specified names.
             device.device_id().map(redact_for_logging),

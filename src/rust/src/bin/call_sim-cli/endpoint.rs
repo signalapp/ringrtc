@@ -18,8 +18,8 @@ use group_call_sim::GroupCall;
 use log::*;
 use ringrtc::{
     common::{
-        actor::{Actor, Stopper},
         CallConfig, CallId, CallMediaType, DeviceId, Result,
+        actor::{Actor, Stopper},
     },
     core::{
         call_manager::CallManager,
@@ -28,7 +28,7 @@ use ringrtc::{
         util::uuid_to_string,
     },
     lite::{
-        http::{self, sim::HttpClient, Client},
+        http::{self, Client, sim::HttpClient},
         sfu::{GroupMember, UserId},
     },
     native::{NativeCallContext, NativePlatform, PeerId, SignalingSender},

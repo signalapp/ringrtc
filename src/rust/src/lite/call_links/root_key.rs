@@ -6,8 +6,8 @@
 use std::fmt::Display;
 
 use aes_gcm_siv::{
-    aead::{generic_array::typenum::Unsigned, Aead, AeadCore, AeadInPlace},
     Aes256GcmSiv, Key, KeyInit,
+    aead::{Aead, AeadCore, AeadInPlace, generic_array::typenum::Unsigned},
 };
 use anyhow::{anyhow, bail};
 use hkdf::Hkdf;

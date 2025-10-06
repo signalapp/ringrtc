@@ -9,7 +9,7 @@
 pub mod ios {
     use std::ffi::c_void;
 
-    use crate::lite::ffi::ios::{rtc_OptionalU32, rtc_String, FromOrDefault};
+    use crate::lite::ffi::ios::{FromOrDefault, rtc_OptionalU32, rtc_String};
 
     #[repr(C)]
     pub struct rtc_log_Record<'a> {

@@ -14,7 +14,7 @@ use crate::{
     core::{group_call, signaling},
     ios::{call_manager, call_manager::IosCallManager},
     lite::{
-        call_links::{ios::from_optional_u32_to_epoch, CallLinkRootKey},
+        call_links::{CallLinkRootKey, ios::from_optional_u32_to_epoch},
         ffi::ios::rtc_OptionalU32,
         http, sfu,
         sfu::DemuxId,

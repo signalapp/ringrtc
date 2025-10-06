@@ -6,9 +6,9 @@
 use std::borrow::Cow;
 
 use jni::{
+    JNIEnv,
     objects::{JByteArray, JClass, JObject, JString},
     sys::jint,
-    JNIEnv,
 };
 
 use crate::{

@@ -5,7 +5,7 @@
 
 [package]
 name = "protobuf"
-edition = "2021"
+edition = "2024"
 version.workspace = true
 authors.workspace = true
 license = "AGPL-3.0-only"

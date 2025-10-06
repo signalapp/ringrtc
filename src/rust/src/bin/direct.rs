@@ -12,9 +12,9 @@ use std::{
 use log::{debug, info};
 use ringrtc::{
     common::{
+        CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result,
         actor::{Actor, Stopper},
         units::DataRate,
-        CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result,
     },
     core::{call_manager::CallManager, group_call, signaling},
     lite::{

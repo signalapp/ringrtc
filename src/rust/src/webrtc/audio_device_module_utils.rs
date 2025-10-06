@@ -6,7 +6,7 @@
 //! Utility functions for audio_device_module.rs
 //! Nothing in here should depend on webrtc directly.
 
-use std::ffi::{c_uchar, CString};
+use std::ffi::{CString, c_uchar};
 
 use anyhow::anyhow;
 use cubeb::{DeviceCollection, DeviceState};

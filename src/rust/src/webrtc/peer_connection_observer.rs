@@ -476,8 +476,7 @@ where
 {
     trace!(
         "pc_observer_GetMediaCiphertextBufferSize(): is_audio: {} plaintext_size: {}",
-        is_audio,
-        plaintext_size
+        is_audio, plaintext_size
     );
 
     // Safe because the observer should still be alive (it was just passed to us)
@@ -508,8 +507,7 @@ where
 
     trace!(
         "pc_observer_EncryptMedia(): plaintext_size: {}, ciphertext_out_size: {}",
-        plaintext_size,
-        ciphertext_out_size
+        plaintext_size, ciphertext_out_size
     );
 
     // Safe because the observer should still be alive (it was just passed to us)
@@ -544,9 +542,7 @@ where
 {
     trace!(
         "pc_observer_GetMediaPlaintextBufferSize(): track_id: {}, is_audio: {} ciphertext_size: {}",
-        track_id,
-        is_audio,
-        ciphertext_size
+        track_id, is_audio, ciphertext_size
     );
 
     // Safe because the observer should still be alive (it was just passed to us)
