@@ -104,6 +104,26 @@ message DeviceToSfu {
   // and the rest of the packets only have content and MrpHeader specified. Reassembled
   // on the receiver side
   optional bytes content = 9;
+
+  message ClientError {
+    message DecryptionError {
+      optional fixed32 sender_demux_id = 1;
+      optional uint32 count = 2;
+      // Unix timestamp in milliseconds of first error
+      optional uint64 start_ts = 3;
+      // Unix timestamp in milliseconds of last error
+      optional uint64 last_ts = 4;
+    }
+
+    oneof error {
+      DecryptionError decryption = 1;
+    }
+  }
+  message StatsReport {
+    repeated ClientError client_errors = 1;
+  }
+
+  optional StatsReport stats = 10;
 }
 
 message SfuToDevice {

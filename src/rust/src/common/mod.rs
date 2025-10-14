@@ -7,6 +7,7 @@
 
 pub mod actor;
 pub mod jni_signature;
+pub mod time;
 pub mod units;
 
 use std::fmt;

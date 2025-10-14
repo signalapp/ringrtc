@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::{collections::HashMap, mem::size_of};
+use std::{collections::HashMap, mem::size_of, time::SystemTime};
 
 use aes::Aes256;
 use ctr::cipher::{KeyIvInit, StreamCipher};
@@ -232,10 +232,99 @@ fn decrypt_internal(state: &ReceiverState, frame_counter: FrameCounter, data: &m
     cipher.apply_keystream(data);
 }
 
+#[derive(Debug)]
+pub struct DecryptionErrorTracker {
+    error_stats: HashMap<SenderId, DecryptionErrorStats>,
+    last_checked_time: SystemTime,
+}
+
+impl Default for DecryptionErrorTracker {
+    fn default() -> Self {
+        Self {
+            last_checked_time: SystemTime::now(),
+            error_stats: HashMap::new(),
+        }
+    }
+}
+
+impl DecryptionErrorTracker {
+    fn increment_decryption_error(&mut self, sender_id: SenderId) {
+        self.error_stats.entry(sender_id).or_default().increment();
+    }
+
+    /// Reports DecryptionErrorStats for SenderId's that have not experienced an error since the
+    /// last check.
+    pub fn get_report(&mut self) -> Option<HashMap<SenderId, DecryptionErrorStats>> {
+        let ready_for_report = self
+            .error_stats
+            .iter()
+            .filter_map(|(sender_id, stats)| {
+                if stats.last_time < self.last_checked_time {
+                    Some(*sender_id)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        self.last_checked_time = SystemTime::now();
+        if ready_for_report.is_empty() {
+            return None;
+        }
+
+        let mut report = HashMap::new();
+        for sender_id in ready_for_report {
+            report.insert(sender_id, self.error_stats.remove(&sender_id).unwrap());
+        }
+        Some(report)
+    }
+
+    pub fn get_stats(&self) -> &HashMap<SenderId, DecryptionErrorStats> {
+        &self.error_stats
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecryptionErrorStats {
+    /// Timestamp of first decryption error since tracking
+    pub start_time: SystemTime,
+    /// Timestamp of last decryption error
+    pub last_time: SystemTime,
+    /// Count of decryption errors
+    pub count: u32,
+}
+
+impl Default for DecryptionErrorStats {
+    fn default() -> Self {
+        let now = SystemTime::now();
+        Self {
+            start_time: now,
+            last_time: now,
+            count: 0,
+        }
+    }
+}
+
+impl DecryptionErrorStats {
+    fn increment(&mut self) {
+        let now = SystemTime::now();
+        if self.count == 0 {
+            self.start_time = now;
+        }
+        self.last_time = now;
+        self.count += 1;
+    }
+
+    pub fn reset(&mut self) {
+        self.count = 0;
+    }
+}
+
 pub struct Context {
     sender_state: SenderState,
     next_frame_counter: FrameCounter,
     remote_states_by_id: HashMap<SenderId, Vec<ReceiverState>>,
+    decryption_error_tracker: DecryptionErrorTracker,
 }
 
 impl Context {
@@ -246,6 +335,7 @@ impl Context {
             sender_state,
             next_frame_counter: 1,
             remote_states_by_id: HashMap::new(),
+            decryption_error_tracker: Default::default(),
         }
     }
 
@@ -311,6 +401,8 @@ impl Context {
             }
         }
 
+        self.decryption_error_tracker
+            .increment_decryption_error(sender_id);
         Err(Error::NoMatchingReceiverState)
     }
 
@@ -356,6 +448,16 @@ impl Context {
         self.remote_states_by_id
             .entry(sender_id)
             .or_insert_with(|| Vec::with_capacity(MAX_RECEIVER_STATES_TO_RETAIN))
+    }
+
+    /// Gets a report, meant to be periodically checked
+    pub fn get_error_report(&mut self) -> Option<HashMap<SenderId, DecryptionErrorStats>> {
+        self.decryption_error_tracker.get_report()
+    }
+
+    /// Gets the current error stats
+    pub fn get_error_stats(&mut self) -> &HashMap<SenderId, DecryptionErrorStats> {
+        self.decryption_error_tracker.get_stats()
     }
 }
 
@@ -622,6 +724,181 @@ mod tests {
             &mac1,
         )?;
         assert_eq!(&plaintext[..], &data1[..]);
+        Ok(())
+    }
+
+    /// Tests various properties of error reporting
+    /// - Errors accumulate and are not reported until there is an error-free interval
+    /// - Error stats are reset after being reported
+    /// - Error stats are collected per sender_id
+    #[test]
+    fn test_error_reporting() -> Result<(), Box<dyn std::error::Error>> {
+        let plaintext = b"Of which vertu engendred is the flour";
+        let mut ciphertext = plaintext.to_vec();
+        let mut rng = StdRng::from_seed([0x12; 32]);
+        let send_secret = random_secret(&mut rng);
+        let mut ctx = Context::new(send_secret);
+        let sender_id_1: SenderId = 1492;
+        let sender_id_2: SenderId = 1493;
+        ctx.add_receive_secret(sender_id_1, 0, send_secret);
+        ctx.add_receive_secret(sender_id_2, 0, send_secret);
+        let mut mac = Mac::default();
+        let (ratchet_counter, frame_counter) = ctx.encrypt(&mut ciphertext[..], &mut mac)?;
+        let good_mac = mac;
+        mac[0] = mac[0].wrapping_add(1);
+        let bad_mac = mac;
+
+        assert_eq!(
+            None,
+            ctx.get_error_report(),
+            "No error stats before encrypting/decrypting"
+        );
+        for _ in 0..5 {
+            ctx.decrypt(
+                sender_id_1,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &good_mac,
+            )
+            .expect("should decrypt");
+        }
+        assert_eq!(
+            None,
+            ctx.get_error_report(),
+            "No error stats after only successful decryption"
+        );
+
+        let before_ts = SystemTime::now();
+        for _ in 0..5 {
+            ctx.decrypt(
+                sender_id_1,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &bad_mac,
+            )
+            .expect_err("should not decrypt");
+            ctx.decrypt(
+                sender_id_1,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &good_mac,
+            )
+            .expect("sender_1 should decrypt");
+            ctx.decrypt(
+                sender_id_2,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &good_mac,
+            )
+            .expect("sender_2 should decrypt");
+        }
+        let after_ts = SystemTime::now();
+        assert_eq!(None, ctx.get_error_report(), "No report on first request");
+        let error_report = ctx
+            .get_error_report()
+            .expect("should have error report on second request");
+        assert_eq!(
+            None,
+            ctx.get_error_report(),
+            "Error report should have reset"
+        );
+        assert_eq!(error_report.len(), 1);
+        let DecryptionErrorStats {
+            count,
+            start_time,
+            last_time,
+        } = error_report
+            .get(&sender_id_1)
+            .expect("should have decryption errors");
+        assert_eq!(*count, 5);
+        assert!(
+            *start_time > before_ts
+                && *start_time < after_ts
+                && start_time < last_time
+                && *last_time < after_ts
+        );
+
+        let before_ts = SystemTime::now();
+        for _ in 0..10 {
+            ctx.decrypt(
+                sender_id_1,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &bad_mac,
+            )
+            .expect_err("should not decrypt");
+            ctx.decrypt(
+                sender_id_2,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &bad_mac,
+            )
+            .expect_err("should not decrypt");
+            ctx.decrypt(
+                sender_id_1,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &good_mac,
+            )
+            .expect("sender_1 should decrypt");
+            ctx.decrypt(
+                sender_id_2,
+                ratchet_counter,
+                frame_counter,
+                &mut ciphertext.clone(),
+                &good_mac,
+            )
+            .expect("sender_2 should decrypt");
+        }
+        let after_ts = SystemTime::now();
+        assert_eq!(None, ctx.get_error_report(), "No report on first request");
+        let error_report = ctx
+            .get_error_report()
+            .expect("should have error report on second request");
+        assert_eq!(
+            None,
+            ctx.get_error_report(),
+            "Error report should have reset"
+        );
+        assert_eq!(error_report.len(), 2);
+
+        let DecryptionErrorStats {
+            count,
+            start_time,
+            last_time,
+        } = error_report
+            .get(&sender_id_1)
+            .expect("should have decryption errors");
+        assert_eq!(*count, 10);
+        assert!(
+            *start_time > before_ts
+                && *start_time < after_ts
+                && start_time < last_time
+                && *last_time < after_ts
+        );
+
+        let DecryptionErrorStats {
+            count,
+            start_time,
+            last_time,
+        } = error_report
+            .get(&sender_id_2)
+            .expect("should have decryption errors");
+        assert_eq!(*count, 10);
+        assert!(
+            *start_time > before_ts
+                && *start_time < after_ts
+                && start_time < last_time
+                && *last_time < after_ts
+        );
+
         Ok(())
     }
 }

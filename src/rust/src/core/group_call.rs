@@ -37,6 +37,7 @@ use crate::{
     core::{
         call_mutex::CallMutex,
         crypto as frame_crypto,
+        crypto::DecryptionErrorStats,
         endorsements::{EndorsementUpdateError, EndorsementUpdateResultRef, EndorsementsCache},
         signaling,
         util::uuid_to_string,
@@ -1069,6 +1070,7 @@ struct State {
     next_stats_time: Option<Instant>,
     get_stats_interval: Duration,
     stats_observer: Box<StatsObserver>,
+    next_decryption_error_time: Option<Instant>,
 
     // Things for getting audio levels from the PeerConnection
     audio_levels_interval: Option<Duration>,
@@ -1204,6 +1206,7 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 // How often to get and log stats.
 const DEFAULT_STATS_INTERVAL: Duration = Duration::from_secs(10);
 const STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
+const DECRYPTION_ERROR_INTERVAL: Duration = Duration::from_millis(500);
 
 // How often to request an updated membership proof (24 hours).
 const MEMBERSHIP_PROOF_REQUEST_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -1360,6 +1363,7 @@ impl Client {
                         call_id_for_stats,
                         DEFAULT_STATS_INTERVAL,
                     ),
+                    next_decryption_error_time: None,
 
                     audio_levels_interval,
                     next_audio_levels_time: None,
@@ -1485,6 +1489,22 @@ impl Client {
             if let Some(report_json) = state.stats_observer.take_stats_report() {
                 state.observer.handle_rtc_stats_report(report_json)
             }
+        }
+
+        if let Some(next_decryption_error_time) = state.next_decryption_error_time
+            && now >= next_decryption_error_time
+        {
+            let decryption_errors = {
+                state
+                    .frame_crypto_context
+                    .lock()
+                    .ok()
+                    .and_then(|mut context| context.get_error_report())
+            };
+            if let Some(decryption_errors) = decryption_errors {
+                Self::send_decryption_stats(state, decryption_errors);
+            }
+            state.next_decryption_error_time = Some(now + DECRYPTION_ERROR_INTERVAL);
         }
 
         if let Some(next_speaking_audio_levels_time) = state.next_speaking_audio_levels_time
@@ -1939,6 +1959,18 @@ impl Client {
         );
 
         Self::cancel_full_group_ring_if_needed(state);
+
+        let decryption_errors = {
+            state
+                .frame_crypto_context
+                .lock()
+                .ok()
+                .map(|mut context| context.get_error_stats().clone())
+                .unwrap_or_default()
+        };
+        if !decryption_errors.is_empty() {
+            Self::send_decryption_stats(state, decryption_errors);
+        }
 
         match state.join_state {
             JoinState::NotJoined(_) => {
@@ -2778,6 +2810,7 @@ impl Client {
                 }
 
                 state.next_stats_time = Some(Instant::now() + STATS_INITIAL_OFFSET);
+                state.next_decryption_error_time = Some(Instant::now() + DECRYPTION_ERROR_INTERVAL);
             }
             JoinState::Pending(_) | JoinState::Joined(_) => {
                 warn!("The SFU completed joining more than once.");
@@ -3910,6 +3943,42 @@ impl Client {
                 call_message,
                 SignalingMessageUrgency::Droppable,
             );
+        }
+    }
+
+    fn send_decryption_stats(
+        state: &mut State,
+        decryption_errors: HashMap<DemuxId, DecryptionErrorStats>,
+    ) {
+        use protobuf::group_call::{
+            DeviceToSfu,
+            device_to_sfu::{self, StatsReport, client_error},
+        };
+
+        use crate::common::time::saturating_epoch_time;
+
+        let decryption_error_protos = decryption_errors
+            .into_iter()
+            .map(|(demux_id, stats)| device_to_sfu::ClientError {
+                error: Some(client_error::Error::Decryption(
+                    client_error::DecryptionError {
+                        sender_demux_id: Some(demux_id),
+                        count: Some(stats.count),
+                        start_ts: Some(saturating_epoch_time(stats.start_time).as_millis() as u64),
+                        last_ts: Some(saturating_epoch_time(stats.last_time).as_millis() as u64),
+                    },
+                )),
+            })
+            .collect();
+
+        let stats_msg = DeviceToSfu {
+            stats: Some(StatsReport {
+                client_errors: decryption_error_protos,
+            }),
+            ..Default::default()
+        };
+        if Self::send_data_to_sfu(state, &stats_msg.encode_to_vec()).is_err() {
+            warn!("Failed to send stats report to SFU");
         }
     }
 
