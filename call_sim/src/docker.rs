@@ -967,12 +967,24 @@ pub async fn start_cli(
 
     args.push(format!("--field-trials={}", field_trials));
 
-    for relay_server in &call_config.relay_servers {
-        args.push(format!("--relay-servers={}", relay_server));
+    args.push(format!(
+        "--relay-username={}",
+        call_config.relay_servers.username
+    ));
+    args.push(format!(
+        "--relay-password={}",
+        call_config.relay_servers.password
+    ));
+    for relay_server in &call_config.relay_servers.urls {
+        args.push(format!("--relay-urls={}", relay_server));
+    }
+    for relay_server in &call_config.relay_servers.urls_with_ips {
+        args.push(format!("--relay-ips={}", relay_server));
+    }
+    if let Some(hostname) = &call_config.relay_servers.hostname {
+        args.push(format!("--relay-hostname={}", hostname));
     }
 
-    args.push(format!("--relay-username={}", call_config.relay_username));
-    args.push(format!("--relay-password={}", call_config.relay_password));
     args.push(format!("--force-relay={}", call_config.force_relay));
 
     args.push(format!(

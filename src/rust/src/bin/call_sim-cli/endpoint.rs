@@ -38,12 +38,8 @@ use ringrtc::{
     },
 };
 
-use crate::{
-    network::DeterministicLossNetwork,
-    relay::SignalingRelay,
-    util,
-    video::{LoggingVideoSink, VideoInput},
-};
+use crate::{network::DeterministicLossNetwork, relay::SignalingRelay, util, video::VideoInput};
+
 /// Used to optionally sync operations with the user layer.
 #[derive(Default)]
 pub struct EventSync {
@@ -110,7 +106,7 @@ impl CallEndpoint {
         signaling_server: Box<dyn SignalingRelay + Send + 'static>,
         stopper: &Stopper,
         event_sync: EventSync,
-        incoming_video_sink: Option<Box<dyn VideoSink>>,
+        incoming_video_sink: Box<dyn VideoSink>,
         use_injectable_network: bool,
     ) -> Result<Self> {
         let audio_config = audio_config.clone();
@@ -185,11 +181,6 @@ impl CallEndpoint {
                     peer_connection_factory.create_outgoing_video_source()?;
                 let outgoing_video_track =
                     peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
-                let incoming_video_sink = incoming_video_sink.unwrap_or_else(|| {
-                    Box::new(LoggingVideoSink {
-                        peer_id: name.clone(),
-                    })
-                });
 
                 let network = if use_injectable_network {
                     Some(DeterministicLossNetwork::new(
@@ -256,11 +247,11 @@ impl CallEndpoint {
     pub fn init_direct_settings(
         &mut self,
         hide_ip: bool,
-        ice_server: &IceServer,
+        ice_servers: &[IceServer],
         call_config: CallConfig,
     ) {
         // To send across threads
-        let ice_servers = vec![ice_server.clone()];
+        let ice_servers = ice_servers.to_vec();
 
         self.actor.send(move |state| {
             let call_context = NativeCallContext::new(

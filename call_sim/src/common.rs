@@ -182,6 +182,18 @@ impl Default for SummaryReportColumns {
     }
 }
 
+impl SummaryReportColumns {
+    pub fn none() -> Self {
+        Self {
+            show_visqol_mos_speech: false,
+            show_visqol_mos_audio: false,
+            show_pesq_mos: false,
+            show_plc_mos: false,
+            show_video: false,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct GroupConfig {
     /// A name to distinguish this group from others.
@@ -242,6 +254,33 @@ pub enum CallProfile {
     DeterministicLoss(u8),
 }
 
+#[derive(Clone, Debug)]
+pub struct RelayServerConfig {
+    /// Relay server username. Applies to all relay servers.
+    pub username: String,
+    /// Relay server password. Applies to all relay servers.
+    pub password: String,
+    /// FQDNs for STUN and TURN servers.
+    pub urls: Vec<String>,
+    /// IP addresses of STUN and TURN servers.
+    pub urls_with_ips: Vec<String>,
+    /// Relay server hostname. Applies to all relay servers to resolve certs when using IPs.
+    pub hostname: Option<String>,
+}
+
+impl Default for RelayServerConfig {
+    fn default() -> Self {
+        Self {
+            // Set our basic credentials, they aren't used if there are no relay servers.
+            username: "".to_string(),
+            password: "".to_string(),
+            urls: vec![],
+            urls_with_ips: vec![],
+            hostname: None,
+        }
+    }
+}
+
 /// General structure for configuration settings to send to the cli.
 #[derive(Debug, Clone)]
 pub struct CallConfig {
@@ -251,15 +290,12 @@ pub struct CallConfig {
     pub audio: AudioConfig,
     /// The video-specific configuration.
     pub video: VideoConfig,
-    /// Relay server configuration, a vector of STUN/TURN server(s) that the client can use.
-    /// If this is empty, the test TURN server will not even be started.
-    pub relay_servers: Vec<String>,
-    /// Relay server username. Applies to all relay servers.
-    pub relay_username: String,
-    /// Relay server password. Applies to all relay servers.
-    pub relay_password: String,
+    /// The configuration to use if testing with relay servers.
+    pub relay_servers: RelayServerConfig,
     /// If using relay servers, whether or not to force their use.
     pub force_relay: bool,
+    /// If true, starts a local TURN server to support STUN/TURN requests.
+    pub start_turn_server: bool,
     /// The WebRTC field trial string and associated settings (i.e. "WebRTC-Something/Enabled").
     pub field_trials: Vec<String>,
     /// For quick-and-dirty testing.
@@ -291,11 +327,9 @@ impl Default for CallConfig {
             allowed_bitrate_kbps: 2000,
             audio: AudioConfig::default(),
             video: VideoConfig::default(),
-            relay_servers: vec![],
-            // Set our basic credentials, but they aren't used if there are no relay servers.
-            relay_username: "test".to_string(),
-            relay_password: "test".to_string(),
+            relay_servers: Default::default(),
             force_relay: false,
+            start_turn_server: false,
             // By default, all tests will disable the ANY port allocator setting.
             field_trials: vec![
                 "RingRTC-AnyAddressPortsKillSwitch/Enabled".to_string(),

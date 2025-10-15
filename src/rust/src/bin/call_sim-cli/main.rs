@@ -28,7 +28,7 @@ use ringrtc::{
 };
 use scenario::ScenarioCallTypeConfig;
 
-use crate::scenario::ScenarioManager;
+use crate::{scenario::ScenarioManager, util::convert_relay_config_to_ice_servers};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -156,15 +156,22 @@ struct Args {
     #[arg(long, default_value = "")]
     field_trials: String,
 
-    /// A list of relay servers to provide to WebRTC for connectivity options.
+    /// A list of relay server urls to provide to WebRTC for connectivity options.
     #[arg(long)]
-    relay_servers: Vec<String>,
+    relay_urls: Vec<String>,
+
+    /// A list of relay server ips to provide to WebRTC for connectivity options.
+    #[arg(long)]
+    relay_ips: Vec<String>,
 
     #[arg(long, default_value = "")]
     relay_username: String,
 
     #[arg(long, default_value = "")]
     relay_password: String,
+
+    #[arg(long, default_value = "")]
+    relay_hostname: Option<String>,
 
     /// Whether to force the use of relay servers or not.
     #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
@@ -250,20 +257,15 @@ fn main() -> Result<()> {
     info!("Setting field trials to {}", &args.field_trials);
     ringrtc::webrtc::field_trial::init(&args.field_trials).expect("no null characters");
 
-    let ice_server = if args.relay_servers.is_empty() {
-        IceServer::none()
+    let ice_servers = if args.relay_urls.is_empty() && args.relay_ips.is_empty() {
+        vec![IceServer::none()]
     } else {
-        info!("Setting relay servers: {:?}", args.relay_servers);
-        info!("  username: {}", args.relay_username);
-        info!("  password: {}", args.relay_password);
-        info!("     force: {}", args.force_relay);
-
-        IceServer::new(
+        convert_relay_config_to_ice_servers(
             args.relay_username,
             args.relay_password,
-            // TODO: Add support for hostname when TLS TURN is supported with the call sim
-            "".to_string(),
-            args.relay_servers,
+            args.relay_urls,
+            args.relay_ips,
+            args.relay_hostname,
         )
     };
 
@@ -326,7 +328,7 @@ fn main() -> Result<()> {
         }
     } else {
         ScenarioCallTypeConfig::DirectCallConfig {
-            ice_server,
+            ice_servers,
             force_relay: args.force_relay,
         }
     };

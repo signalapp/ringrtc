@@ -238,8 +238,8 @@ impl Test {
         create_network().await?;
         start_signaling_server().await?;
 
-        if !test_case_config.client_a_config.relay_servers.is_empty()
-            || !test_case_config.client_a_config.relay_servers.is_empty()
+        if test_case_config.client_a_config.start_turn_server
+            || test_case_config.client_b_config.start_turn_server
         {
             // We'll assume any relay server configuration should start the test turn server.
             start_turn_server().await?;
@@ -518,7 +518,8 @@ impl Test {
         let mut audio_test_results = AudioTestResults::default();
 
         if !test_case_config.save_media_files {
-            anyhow::bail!("Skipping artifacts");
+            // Return a default result if media files are not saved.
+            return Ok(audio_test_results);
         }
 
         // Perform conversions of audio data.
@@ -845,10 +846,10 @@ impl Test {
                 // For debugging, dump the signaling_server logs.
                 get_signaling_server_logs(&test_case.test_path).await?;
 
-                if !test_case_config.client_a_config.relay_servers.is_empty()
-                    || !test_case_config.client_a_config.relay_servers.is_empty()
+                if test_case_config.client_a_config.start_turn_server
+                    || test_case_config.client_b_config.start_turn_server
                 {
-                    // Also dump the turn server logs if it was used.
+                    // Also dump the turn server logs if the local one was running.
                     get_turn_server_logs(&test_case.test_path).await?;
                 }
 

@@ -13,10 +13,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::info;
 use ringrtc::{
     lite::sfu::DemuxId,
-    native::PeerId,
     webrtc::media::{VideoFrame, VideoPixelFormat, VideoSink},
 };
 
@@ -88,19 +86,11 @@ impl<T: Read + Seek + Send> VideoInput for I420Source<T> {
 }
 
 #[derive(Clone)]
-pub struct LoggingVideoSink {
-    pub peer_id: PeerId,
-}
+pub struct DefaultVideoSink;
 
-impl VideoSink for LoggingVideoSink {
-    fn on_video_frame(&self, demux_id: DemuxId, frame: VideoFrame) {
-        info!(
-            "{:?}.{} received video frame size:{}x{}",
-            self.peer_id,
-            demux_id,
-            frame.width(),
-            frame.height(),
-        );
+impl VideoSink for DefaultVideoSink {
+    fn on_video_frame(&self, _demux_id: DemuxId, _frame: VideoFrame) {
+        // Do nothing.
     }
 
     fn box_clone(&self) -> Box<dyn VideoSink> {

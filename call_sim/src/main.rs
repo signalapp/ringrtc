@@ -26,8 +26,8 @@ use itertools::{Itertools, iproduct};
 use crate::{
     common::{
         AudioAnalysisMode, AudioConfig, CallConfig, CallProfile::DeterministicLoss, ChartDimension,
-        GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile, SummaryReportColumns,
-        TestCaseConfig, VideoConfig,
+        GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile, RelayServerConfig,
+        SummaryReportColumns, TestCaseConfig, VideoConfig,
     },
     docker::{build_images, clean_network, clean_up},
     test::{CallTypeConfig, Test},
@@ -94,7 +94,7 @@ fn group_auth_key_gen() -> [u8; 32] {
         .unwrap()
 }
 
-// This is minimal example of a test.
+/// This is a minimal example of a test.
 async fn run_minimal_example(test: &mut Test) -> Result<()> {
     // Optional: Pre-process sounds that you will use. This will generate a spectrogram
     // and calculate a reference MOS for each sound. Normally, this might be useful,
@@ -130,8 +130,8 @@ async fn run_minimal_example(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// This is a test set to test the "normal phrasing" audio over various network profiles. Set
-// packet time to 60ms to align with our production configuration.
+/// This is a test set to test the "normal phrasing" audio over various network profiles. Set
+/// packet time to 60ms to align with our production configuration.
 async fn run_baseline(test: &mut Test) -> Result<()> {
     test.run(
         GroupConfig {
@@ -197,9 +197,9 @@ async fn run_baseline(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// Test 20ms and 60ms ptime over a range of deterministic loss, with and without dtx.
-// Note that deterministic loss is better than the SimpleLoss network profile, but
-// it is still not completely reliable.
+/// Test 20ms and 60ms ptime over a range of deterministic loss, with and without dtx.
+/// Note that deterministic loss is better than the SimpleLoss network profile, but
+/// it is still not completely reliable.
 async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
     let ptime_values = [20, 60];
     let dtx_values = [false, true];
@@ -261,12 +261,12 @@ async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// Here is a test to run without a TURN server, with a TURN server, and forcing the use of a
-// TURN server over UDP, and then forcing the use of a TURN server over TCP.
-// Notes:
-//  - The default username and password are already set by default
-//  - Both clients will use the TURN server (in this test)
-//  - The `turn` domain name should resolve by Docker to the container with the name `turn`
+/// Here is a test to run without a TURN server, with a TURN server, and forcing the use of a
+/// TURN server over UDP, and then forcing the use of a TURN server over TCP.
+/// Notes:
+///  - The default username and password are already set by default
+///  - Both clients will use the TURN server (in this test)
+///  - The `turn` domain name should resolve by Docker to the container with the name `turn`
 async fn run_relay_tests(test: &mut Test) -> Result<()> {
     test.run(
         GroupConfig {
@@ -303,10 +303,15 @@ async fn run_relay_tests(test: &mut Test) -> Result<()> {
             TestCaseConfig {
                 test_case_name: "with_relay".to_string(),
                 client_a_config: CallConfig {
-                    relay_servers: vec![
-                        "turn:turn".to_string(),
-                        "turn:turn:80?transport=tcp".to_string(),
-                    ],
+                    relay_servers: RelayServerConfig {
+                        urls: vec![
+                            "stun:turn".to_string(),
+                            "turn:turn".to_string(),
+                            "turn:turn:80?transport=tcp".to_string(),
+                        ],
+                        ..Default::default()
+                    },
+                    start_turn_server: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
                         initial_packet_size_ms: 60,
@@ -315,11 +320,15 @@ async fn run_relay_tests(test: &mut Test) -> Result<()> {
                     ..Default::default()
                 },
                 client_b_config: CallConfig {
-                    relay_servers: vec![
-                        "stun:turn".to_string(),
-                        "turn:turn".to_string(),
-                        "turn:turn:80?transport=tcp".to_string(),
-                    ],
+                    relay_servers: RelayServerConfig {
+                        urls: vec![
+                            "stun:turn".to_string(),
+                            "turn:turn".to_string(),
+                            "turn:turn:80?transport=tcp".to_string(),
+                        ],
+                        ..Default::default()
+                    },
+                    start_turn_server: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
                         initial_packet_size_ms: 60,
@@ -332,7 +341,11 @@ async fn run_relay_tests(test: &mut Test) -> Result<()> {
             TestCaseConfig {
                 test_case_name: "force_udp_relay".to_string(),
                 client_a_config: CallConfig {
-                    relay_servers: vec!["turn:turn".to_string()],
+                    relay_servers: RelayServerConfig {
+                        urls: vec!["turn:turn".to_string()],
+                        ..Default::default()
+                    },
+                    start_turn_server: true,
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
@@ -342,7 +355,11 @@ async fn run_relay_tests(test: &mut Test) -> Result<()> {
                     ..Default::default()
                 },
                 client_b_config: CallConfig {
-                    relay_servers: vec!["turn:turn".to_string()],
+                    relay_servers: RelayServerConfig {
+                        urls: vec!["turn:turn".to_string()],
+                        ..Default::default()
+                    },
+                    start_turn_server: true,
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
@@ -356,7 +373,11 @@ async fn run_relay_tests(test: &mut Test) -> Result<()> {
             TestCaseConfig {
                 test_case_name: "force_tcp_relay".to_string(),
                 client_a_config: CallConfig {
-                    relay_servers: vec!["turn:turn:80?transport=tcp".to_string()],
+                    relay_servers: RelayServerConfig {
+                        urls: vec!["turn:turn:80?transport=tcp".to_string()],
+                        ..Default::default()
+                    },
+                    start_turn_server: true,
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
@@ -366,7 +387,11 @@ async fn run_relay_tests(test: &mut Test) -> Result<()> {
                     ..Default::default()
                 },
                 client_b_config: CallConfig {
-                    relay_servers: vec!["turn:turn:80?transport=tcp".to_string()],
+                    relay_servers: RelayServerConfig {
+                        urls: vec!["turn:turn:80?transport=tcp".to_string()],
+                        ..Default::default()
+                    },
+                    start_turn_server: true,
                     force_relay: true,
                     audio: AudioConfig {
                         input_name: "normal_phrasing".to_string(),
@@ -385,7 +410,89 @@ async fn run_relay_tests(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// A test that sends video.
+/// Exercise TURN relay servers with a long (30-minute) test. Specify the relay server
+/// credentials to use and adjust the length and iterations to desired values. This will
+/// send both audio and video but will not save the received data nor perform any
+/// analysis on the media.
+async fn run_turn_long_tests(test: &mut Test) -> Result<()> {
+    // Define the relay server configuration asymmetrically for both clients.
+    let relay_urls = vec!["<add one or more relay servers here>".to_string()];
+    let relay_urls_with_ips = vec!["<add one or more relay servers here>".to_string()];
+    let relay_username = "<add username here>".to_string();
+    let relay_password = "<add password here>".to_string();
+    let relay_hostname = "<add hostname here>".to_string();
+
+    test.run(
+        GroupConfig {
+            group_name: "turn_long_tests".to_string(),
+            summary_report_columns: SummaryReportColumns::none(),
+            ..Default::default()
+        },
+        vec![TestCaseConfig {
+            test_case_name: "force_relay_with_video".to_string(),
+            length_seconds: 1800,
+            client_a_config: CallConfig {
+                relay_servers: RelayServerConfig {
+                    username: relay_username.clone(),
+                    password: relay_password.clone(),
+                    urls: relay_urls.clone(),
+                    urls_with_ips: relay_urls_with_ips.clone(),
+                    hostname: Some(relay_hostname.clone()),
+                },
+                force_relay: true,
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    generate_spectrogram: false,
+                    initial_packet_size_ms: 60,
+                    visqol_speech_analysis: false,
+                    visqol_audio_analysis: false,
+                    pesq_speech_analysis: false,
+                    plc_speech_analysis: false,
+                    ..Default::default()
+                },
+                video: VideoConfig {
+                    input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            client_b_config: CallConfig {
+                relay_servers: RelayServerConfig {
+                    username: relay_username,
+                    password: relay_password,
+                    urls: relay_urls,
+                    urls_with_ips: relay_urls_with_ips,
+                    hostname: Some(relay_hostname),
+                },
+                force_relay: true,
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    generate_spectrogram: false,
+                    initial_packet_size_ms: 60,
+                    visqol_speech_analysis: false,
+                    visqol_audio_analysis: false,
+                    pesq_speech_analysis: false,
+                    plc_speech_analysis: false,
+                    ..Default::default()
+                },
+                video: VideoConfig {
+                    input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            save_media_files: false,
+            iterations: 4,
+            ..Default::default()
+        }],
+        vec![NetworkProfile::None],
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// A test that sends video.
 async fn run_video_send_over_bandwidth(test: &mut Test) -> Result<()> {
     test.preprocess_sounds(vec!["normal_phrasing"]).await?;
 
@@ -431,7 +538,7 @@ async fn run_video_send_over_bandwidth(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// Bidirectional video test comparing the vp8 and vp9 video codecs.
+/// Bidirectional video test comparing the vp8 and vp9 video codecs.
 async fn run_video_compare_vp8_vs_vp9(test: &mut Test) -> Result<()> {
     test.preprocess_sounds(vec!["normal_phrasing"]).await?;
 
@@ -502,11 +609,11 @@ async fn run_video_compare_vp8_vs_vp9(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-// Test the scenario with changing bandwidth over one minute intervals:
-// 1 minute unlimited -> 1 minute 50kbps -> 1 minute 25kbps -> 1 minute unlimited
-//
-// Uses a 12-second reference audio file so that the resulting 240-second session recording
-// can be chopped evenly and MOS calculated for each 12-second audio segment.
+/// Test the scenario with changing bandwidth over one minute intervals:
+/// 1 minute unlimited -> 1 minute 50kbps -> 1 minute 25kbps -> 1 minute unlimited
+///
+/// Uses a 12-second reference audio file so that the resulting 240-second session recording
+/// can be chopped evenly and MOS calculated for each 12-second audio segment.
 async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
     let test_cases = [20, 60, 120].map(|initial_packet_size_ms| TestCaseConfig {
         test_case_name: format!("ptime_{initial_packet_size_ms}"),
@@ -759,6 +866,7 @@ async fn main() -> Result<()> {
             "baseline" => run_baseline(test).await?,
             "deterministic_loss_test" => run_deterministic_loss_test(test).await?,
             "relay_tests" => run_relay_tests(test).await?,
+            "turn_long_tests" => run_turn_long_tests(test).await?,
             "video_send_over_bandwidth" => run_video_send_over_bandwidth(test).await?,
             "video_compare_vp8_vs_vp9" => run_video_compare_vp8_vs_vp9(test).await?,
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,

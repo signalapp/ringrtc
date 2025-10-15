@@ -63,7 +63,7 @@ pub struct ScenarioConfig {
 #[derive(Clone)]
 pub enum ScenarioCallTypeConfig {
     DirectCallConfig {
-        ice_server: IceServer,
+        ice_servers: Vec<IceServer>,
         force_relay: bool,
     },
 
@@ -78,7 +78,7 @@ pub enum ScenarioCallTypeConfig {
 impl Default for ScenarioCallTypeConfig {
     fn default() -> Self {
         Self::DirectCallConfig {
-            ice_server: Default::default(),
+            ice_servers: vec![],
             force_relay: true,
         }
     }
@@ -127,13 +127,16 @@ impl ScenarioManager {
             connected: Some(connected_tx),
         };
 
-        let video_sink = scenario_config.video_output.as_ref().map(|path| {
-            Box::new(video::WriterVideoSink::new(
-                File::create(path).expect("open video output"),
-                scenario_config.output_video_width,
-                scenario_config.output_video_height,
-            )) as Box<dyn VideoSink>
-        });
+        let video_sink = scenario_config.video_output.as_ref().map_or_else(
+            || Box::new(video::DefaultVideoSink) as Box<dyn VideoSink>,
+            |path| {
+                Box::new(video::WriterVideoSink::new(
+                    File::create(path).expect("open video output"),
+                    scenario_config.output_video_width,
+                    scenario_config.output_video_height,
+                )) as Box<dyn VideoSink>
+            },
+        );
 
         let packet_size_ms = call_config.audio_encoder_config.initial_packet_size_ms;
 
@@ -163,10 +166,10 @@ impl ScenarioManager {
 
         match &scenario_config.call_type_config {
             ScenarioCallTypeConfig::DirectCallConfig {
-                ice_server,
+                ice_servers,
                 force_relay,
             } => {
-                client.init_direct_settings(*force_relay, ice_server, call_config);
+                client.init_direct_settings(*force_relay, ice_servers, call_config);
             }
             ScenarioCallTypeConfig::GroupCallConfig {
                 sfu_url: _,

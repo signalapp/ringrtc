@@ -1275,7 +1275,9 @@ pub struct Report {
     pub client_name: String,
     pub client_name_wav: String,
 
-    pub analysis_report: AnalysisReport,
+    /// Only available if there were actually media files generated.
+    pub analysis_report: Option<AnalysisReport>,
+
     pub docker_stats_report: DockerStatsReport,
     pub client_log_report: ClientLogReport,
 
@@ -1292,17 +1294,23 @@ impl Report {
         test_case_config: &TestCaseConfig,
         audio_test_results: AudioTestResults,
     ) -> Result<Self> {
-        let analysis_report = AnalysisReport::build(
-            // Note: _Move_ the audio_test_results to the report.
-            audio_test_results,
-            test_case
-                .client_b
-                .output_yuv
-                .as_ref()
-                .map(|output_yuv| format!("{}/{}.json", test_case.test_path, output_yuv))
-                .as_deref(),
-        )
-        .await?;
+        let analysis_report = if test_case_config.save_media_files {
+            Some(
+                AnalysisReport::build(
+                    // Note: _Move_ the audio_test_results to the report.
+                    audio_test_results,
+                    test_case
+                        .client_b
+                        .output_yuv
+                        .as_ref()
+                        .map(|output_yuv| format!("{}/{}.json", test_case.test_path, output_yuv))
+                        .as_deref(),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
         let docker_stats_report = DockerStatsReport::build(
             &format!(
                 "{}/{}_stats.log",
@@ -1537,17 +1545,19 @@ impl Report {
             }));
         }
 
-        // Generate charts for audio mos results if they represent a series.
-        let audio_reports = [
-            &self.analysis_report.audio_test_results.visqol_mos_speech,
-            &self.analysis_report.audio_test_results.visqol_mos_audio,
-            &self.analysis_report.audio_test_results.pesq_mos,
-            &self.analysis_report.audio_test_results.plc_mos,
-            &self.analysis_report.audio_test_results.mos_average,
-        ];
-        for report in audio_reports {
-            if let AnalysisReportMos::Series(stats) = report {
-                line_chart_stats.push(stats);
+        if let Some(analysis_report) = &self.analysis_report {
+            // Generate charts for audio mos results if they represent a series.
+            let audio_reports = [
+                &analysis_report.audio_test_results.visqol_mos_speech,
+                &analysis_report.audio_test_results.visqol_mos_audio,
+                &analysis_report.audio_test_results.pesq_mos,
+                &analysis_report.audio_test_results.plc_mos,
+                &analysis_report.audio_test_results.mos_average,
+            ];
+            for report in audio_reports {
+                if let AnalysisReportMos::Series(stats) = report {
+                    line_chart_stats.push(stats);
+                }
             }
         }
 
@@ -1585,7 +1595,7 @@ impl Report {
                 test_case_config,
                 &self.report_name,
                 &self.client_name,
-                &self.analysis_report.audio_test_results,
+                &self.analysis_report,
             )
             .as_bytes(),
         );
@@ -1595,27 +1605,28 @@ impl Report {
         // Add charts for audio mos results if they represent a series to the "Audio Core" section.
         let mut audio_core_stats: Vec<&Stats> = vec![];
 
-        if let AnalysisReportMos::Series(stats) =
-            &self.analysis_report.audio_test_results.visqol_mos_speech
-        {
-            audio_core_stats.push(stats);
-        }
-        if let AnalysisReportMos::Series(stats) =
-            &self.analysis_report.audio_test_results.visqol_mos_audio
-        {
-            audio_core_stats.push(stats);
-        }
-        if let AnalysisReportMos::Series(stats) = &self.analysis_report.audio_test_results.pesq_mos
-        {
-            audio_core_stats.push(stats);
-        }
-        if let AnalysisReportMos::Series(stats) = &self.analysis_report.audio_test_results.plc_mos {
-            audio_core_stats.push(stats);
-        }
-        if let AnalysisReportMos::Series(stats) =
-            &self.analysis_report.audio_test_results.mos_average
-        {
-            audio_core_stats.push(stats);
+        if let Some(analysis_report) = &self.analysis_report {
+            if let AnalysisReportMos::Series(stats) =
+                &analysis_report.audio_test_results.visqol_mos_speech
+            {
+                audio_core_stats.push(stats);
+            }
+            if let AnalysisReportMos::Series(stats) =
+                &analysis_report.audio_test_results.visqol_mos_audio
+            {
+                audio_core_stats.push(stats);
+            }
+            if let AnalysisReportMos::Series(stats) = &analysis_report.audio_test_results.pesq_mos {
+                audio_core_stats.push(stats);
+            }
+            if let AnalysisReportMos::Series(stats) = &analysis_report.audio_test_results.plc_mos {
+                audio_core_stats.push(stats);
+            }
+            if let AnalysisReportMos::Series(stats) =
+                &analysis_report.audio_test_results.mos_average
+            {
+                audio_core_stats.push(stats);
+            }
         }
 
         if !audio_core_stats.is_empty() {
@@ -1872,18 +1883,18 @@ impl Report {
     /// Return the stats value (the average) for the given dimension.
     fn get_stats_value_for_chart(report: &Report, chart_dimension: &ChartDimension) -> f32 {
         match chart_dimension {
-            ChartDimension::MosSpeech => report
-                .analysis_report
-                .audio_test_results
-                .visqol_mos_speech
-                .get_mos_for_display()
-                .unwrap_or(0f32),
-            ChartDimension::MosAudio => report
-                .analysis_report
-                .audio_test_results
-                .visqol_mos_audio
-                .get_mos_for_display()
-                .unwrap_or(0f32),
+            ChartDimension::MosSpeech => report.analysis_report.as_ref().map_or(0f32, |ar| {
+                ar.audio_test_results
+                    .visqol_mos_speech
+                    .get_mos_for_display()
+                    .unwrap_or(0f32)
+            }),
+            ChartDimension::MosAudio => report.analysis_report.as_ref().map_or(0f32, |ar| {
+                ar.audio_test_results
+                    .visqol_mos_audio
+                    .get_mos_for_display()
+                    .unwrap_or(0f32)
+            }),
             ChartDimension::ContainerCpuUsage => report.docker_stats_report.cpu_usage.data.ave,
             ChartDimension::ContainerMemUsage => report.docker_stats_report.mem_usage.data.ave,
             ChartDimension::ContainerTxBitrate => report.docker_stats_report.tx_bitrate.data.ave,
@@ -2395,32 +2406,28 @@ impl SummaryRow {
             container_memory: report.docker_stats_report.mem_usage.data.ave,
             container_tx_bitrate: report.docker_stats_report.tx_bitrate.data.ave,
             container_rx_bitrate: report.docker_stats_report.rx_bitrate.data.ave,
-            visqol_mos_speech: report
-                .analysis_report
-                .audio_test_results
-                .visqol_mos_speech
-                .get_mos_for_display(),
+            visqol_mos_speech: report.analysis_report.as_ref().and_then(|ar| {
+                ar.audio_test_results
+                    .visqol_mos_speech
+                    .get_mos_for_display()
+            }),
             visqol_mos_audio: report
                 .analysis_report
-                .audio_test_results
-                .visqol_mos_audio
-                .get_mos_for_display(),
+                .as_ref()
+                .and_then(|ar| ar.audio_test_results.visqol_mos_audio.get_mos_for_display()),
             pesq_mos: report
                 .analysis_report
-                .audio_test_results
-                .pesq_mos
-                .get_mos_for_display(),
+                .as_ref()
+                .and_then(|ar| ar.audio_test_results.pesq_mos.get_mos_for_display()),
             plc_mos: report
                 .analysis_report
-                .audio_test_results
-                .plc_mos
-                .get_mos_for_display(),
+                .as_ref()
+                .and_then(|ar| ar.audio_test_results.plc_mos.get_mos_for_display()),
             mos_average: report
                 .analysis_report
-                .audio_test_results
-                .mos_average
-                .get_mos_for_display(),
-            vmaf: report.analysis_report.vmaf,
+                .as_ref()
+                .and_then(|ar| ar.audio_test_results.mos_average.get_mos_for_display()),
+            vmaf: report.analysis_report.as_ref().and_then(|ar| ar.vmaf),
             row_type: SummaryRowType::Single,
             row_index: 0,
         }
@@ -2611,7 +2618,7 @@ impl Html {
         test_case_config: &TestCaseConfig,
         test_name: &str,
         client_name: &str,
-        audio_test_results: &AudioTestResults,
+        analysis_report: &Option<AnalysisReport>,
     ) -> String {
         let mut buf = String::new();
 
@@ -2624,11 +2631,33 @@ impl Html {
         buf.push_str("</div>\n");
         buf.push_str("<div class=\"col-md-6\">\n");
 
-        let visqol_mos_speech = audio_test_results.visqol_mos_speech.get_mos_for_display();
-        let visqol_mos_audio = audio_test_results.visqol_mos_audio.get_mos_for_display();
-        let pesq_mos = audio_test_results.pesq_mos.get_mos_for_display();
-        let plc_mos = audio_test_results.plc_mos.get_mos_for_display();
-        let mos_average = audio_test_results.mos_average.get_mos_for_display();
+        let (visqol_mos_speech, visqol_mos_audio, pesq_mos, plc_mos, mos_average) =
+            if let Some(analysis_report) = analysis_report {
+                (
+                    analysis_report
+                        .audio_test_results
+                        .visqol_mos_speech
+                        .get_mos_for_display(),
+                    analysis_report
+                        .audio_test_results
+                        .visqol_mos_audio
+                        .get_mos_for_display(),
+                    analysis_report
+                        .audio_test_results
+                        .pesq_mos
+                        .get_mos_for_display(),
+                    analysis_report
+                        .audio_test_results
+                        .plc_mos
+                        .get_mos_for_display(),
+                    analysis_report
+                        .audio_test_results
+                        .mos_average
+                        .get_mos_for_display(),
+                )
+            } else {
+                (None, None, None, None, None)
+            };
 
         let text_emphasis = Html::get_emphasis_for_mos(mos_average);
 
