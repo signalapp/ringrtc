@@ -1224,6 +1224,15 @@ const REACTION_STRING_MAX_SIZE: usize = 256;
 /// How long to wait before ending the client and cleaning up.
 const CLIENT_END_DELAY: Duration = Duration::from_millis(20);
 
+/// The max byte size of Rtp Packet serialized size before needing to be fragmented
+const MAX_PACKET_SERIALIZED_BYTE_SIZE: usize = 1200;
+/// The non-content byte size overhead of an MRP fragment
+/// With an MRP header with seqnum, num_packets, and content specified, the overhead is 22. We add
+/// a safety margin in case of unexpected overhead increases.
+const MRP_FRAGMENT_OVERHEAD: usize = 60;
+/// Max byte size for content in an MRP fragment
+const MAX_MRP_FRAGMENT_BYTE_SIZE: usize = MAX_PACKET_SERIALIZED_BYTE_SIZE - MRP_FRAGMENT_OVERHEAD;
+
 pub struct ClientStartParams {
     pub group_id: GroupId,
     pub client_id: ClientId,
@@ -1502,7 +1511,7 @@ impl Client {
                     .and_then(|mut context| context.get_error_report())
             };
             if let Some(decryption_errors) = decryption_errors {
-                Self::send_decryption_stats(state, decryption_errors);
+                Self::send_decryption_stats_inner(state, decryption_errors);
             }
             state.next_decryption_error_time = Some(now + DECRYPTION_ERROR_INTERVAL);
         }
@@ -1656,9 +1665,10 @@ impl Client {
                 mrp_header: Some(header.into()),
                 ..Default::default()
             };
-            *rtp_data_to_sfu_next_seqnum = Self::reliable_send_to_sfu_inner(
+            *rtp_data_to_sfu_next_seqnum = Self::unreliable_send_data_inner(
                 *join_state,
                 *client_id,
+                RTP_DATA_TO_SFU_SSRC,
                 *rtp_data_to_sfu_next_seqnum,
                 peer_connection,
                 &ack.encode_to_vec(),
@@ -1670,9 +1680,10 @@ impl Client {
 
         if let Err(err) = state.sfu_reliable_stream.try_resend(now, |payload| {
             info!("Attempting resend over mrp stream");
-            *rtp_data_to_sfu_next_seqnum = Self::reliable_send_to_sfu_inner(
+            *rtp_data_to_sfu_next_seqnum = Self::unreliable_send_data_inner(
                 *join_state,
                 *client_id,
+                RTP_DATA_TO_SFU_SSRC,
                 *rtp_data_to_sfu_next_seqnum,
                 peer_connection,
                 payload,
@@ -1969,7 +1980,7 @@ impl Client {
                 .unwrap_or_default()
         };
         if !decryption_errors.is_empty() {
-            Self::send_decryption_stats(state, decryption_errors);
+            Self::send_decryption_stats_inner(state, decryption_errors);
         }
 
         match state.join_state {
@@ -2413,7 +2424,7 @@ impl Client {
                 ..Default::default()
             };
 
-            if let Err(e) = Self::send_data_to_sfu(state, &msg.encode_to_vec()) {
+            if let Err(e) = Self::unreliable_send_data_to_sfu(state, &msg.encode_to_vec()) {
                 warn!("Failed to send video request: {:?}", e);
             }
         }
@@ -2449,7 +2460,7 @@ impl Client {
                 ..Default::default()
             };
 
-            if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
+            if let Err(e) = Self::reliable_send_device_to_sfu(state, msg) {
                 warn!(
                     "{ADMIN_LOG_TAG}: Failed to send {action_to_log} for demux {demux_id}: {e:?}"
                 );
@@ -2519,7 +2530,7 @@ impl Client {
                 ..Default::default()
             };
 
-            if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
+            if let Err(e) = Self::reliable_send_device_to_sfu(state, msg) {
                 warn!("{ADMIN_LOG_TAG}: Failed to send removal for {other_client}: {e:?}");
             } else {
                 info!("{ADMIN_LOG_TAG}: Sent removal for {other_client}.");
@@ -2550,7 +2561,7 @@ impl Client {
                 ..Default::default()
             };
 
-            if let Err(e) = Self::reliable_send_to_sfu(state, msg) {
+            if let Err(e) = Self::reliable_send_device_to_sfu(state, msg) {
                 warn!("{ADMIN_LOG_TAG}: Failed to send block for {other_client}: {e:?}");
             } else {
                 info!("{ADMIN_LOG_TAG}: Sent block for {other_client}");
@@ -3852,7 +3863,7 @@ impl Client {
         }
         .encode_to_vec();
 
-        if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+        if let Err(e) = Self::unreliable_send_data_to_sfu(state, &msg) {
             warn!("Failed to send raise hand: {:?}", e);
         }
     }
@@ -3865,11 +3876,11 @@ impl Client {
         }
         .encode_to_vec();
 
-        if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+        if let Err(e) = Self::unreliable_send_data_to_sfu(state, &msg) {
             warn!("Failed to send LeaveMessage: {:?}", e);
         }
         // Send it *again* to increase reliability just a little.
-        if let Err(e) = Self::send_data_to_sfu(state, &msg) {
+        if let Err(e) = Self::unreliable_send_data_to_sfu(state, &msg) {
             warn!("Failed to send extra redundancy LeaveMessage: {:?}", e);
         }
     }
@@ -3946,7 +3957,21 @@ impl Client {
         }
     }
 
-    fn send_decryption_stats(
+    pub fn send_decryption_stats(&self, errors: HashMap<DemuxId, DecryptionErrorStats>) {
+        debug!(
+            "group_call::Client(outer)::send_decryption_stats(client_id: {}, errors: {:?})",
+            self.client_id, errors,
+        );
+        self.actor.send(move |state| {
+            debug!(
+                "group_call::Client(inner)::send_decryption_stats(client_id: {})",
+                state.client_id
+            );
+            Self::send_decryption_stats_inner(state, errors);
+        });
+    }
+
+    fn send_decryption_stats_inner(
         state: &mut State,
         decryption_errors: HashMap<DemuxId, DecryptionErrorStats>,
     ) {
@@ -3956,8 +3981,9 @@ impl Client {
         };
 
         use crate::common::time::saturating_epoch_time;
+        error!("reporting decryption errors {:?}", decryption_errors);
 
-        let decryption_error_protos = decryption_errors
+        let decryption_error_protos: Vec<_> = decryption_errors
             .into_iter()
             .map(|(demux_id, stats)| device_to_sfu::ClientError {
                 error: Some(client_error::Error::Decryption(
@@ -4016,50 +4042,61 @@ impl Client {
         );
         if let JoinState::Joined(local_demux_id) = state.join_state {
             let message = Self::encrypt_data(state, message)?;
-            let seqnum = state.rtp_data_through_sfu_next_seqnum;
-            state.rtp_data_through_sfu_next_seqnum =
-                state.rtp_data_through_sfu_next_seqnum.wrapping_add(1);
-
-            let header = rtp::Header {
-                pt: RTP_DATA_PAYLOAD_TYPE,
-                ssrc: local_demux_id.saturating_add(RTP_DATA_THROUGH_SFU_SSRC_OFFSET),
-                // This has to be incremented to make sure SRTP functions properly.
-                seqnum: seqnum as u16,
-                // Just imagine the clock is the number of heartbeat ticks :).
-                // Plus the above sequence number is too small to be useful.
-                timestamp: seqnum,
-            };
-            state.peer_connection.send_rtp(header, &message)?;
+            let ssrc = local_demux_id.saturating_add(RTP_DATA_THROUGH_SFU_SSRC_OFFSET);
+            state.rtp_data_through_sfu_next_seqnum = Self::unreliable_send_data_inner(
+                state.join_state,
+                state.client_id,
+                ssrc,
+                state.rtp_data_through_sfu_next_seqnum,
+                &state.peer_connection,
+                &message,
+            )?;
         }
         Ok(())
     }
 
+    // If data is too large for MTU, uses reliable send to support chunking messages
+    // Use Client::unreliable_send_data_to_sfu directly if you are certain you do not want MRP semantics
     fn send_data_to_sfu(state: &mut State, message: &[u8]) -> Result<()> {
         debug!(
             "group_call::Client(inner)::send_data_to_sfu(client_id: {}, message: {:?})",
             state.client_id, message,
         );
-        if let JoinState::Pending(_) | JoinState::Joined(_) = state.join_state {
-            let seqnum = state.rtp_data_to_sfu_next_seqnum;
-            state.rtp_data_to_sfu_next_seqnum = state.rtp_data_to_sfu_next_seqnum.wrapping_add(1);
 
-            let header = rtp::Header {
-                pt: RTP_DATA_PAYLOAD_TYPE,
-                ssrc: RTP_DATA_TO_SFU_SSRC,
-                // This has to be incremented to make sure SRTP functions properly.
-                seqnum: seqnum as u16,
-                // Just imagine the clock is the number of messages :),
-                // Plus the above sequence number is too small to be useful.
-                timestamp: seqnum,
-            };
-            state.peer_connection.send_rtp(header, message)?;
+        if message.len() > MAX_MRP_FRAGMENT_BYTE_SIZE {
+            state.rtp_data_to_sfu_next_seqnum = Self::reliable_send_to_sfu_inner(
+                &mut state.sfu_reliable_stream,
+                state.join_state,
+                state.client_id,
+                state.rtp_data_to_sfu_next_seqnum,
+                &state.peer_connection,
+                message,
+            )?;
+        } else {
+            Self::unreliable_send_data_to_sfu(state, message)?
         }
         Ok(())
     }
 
-    /// Reliably sends DeviceToSfu message over RTP
+    fn unreliable_send_data_to_sfu(state: &mut State, message: &[u8]) -> Result<()> {
+        debug!(
+            "group_call::Client(inner)::unreliable_send_data_to_sfu(client_id: {}, message: {:?})",
+            state.client_id, message,
+        );
+        state.rtp_data_to_sfu_next_seqnum = Self::unreliable_send_data_inner(
+            state.join_state,
+            state.client_id,
+            RTP_DATA_TO_SFU_SSRC,
+            state.rtp_data_to_sfu_next_seqnum,
+            &state.peer_connection,
+            message,
+        )?;
+        Ok(())
+    }
+
+    /// Reliably sends DeviceToSfu message over RTP. Will NOT chunk messages if too large for MTU
     /// Only sends when join_state == Pending or Joined
-    fn reliable_send_to_sfu(
+    fn reliable_send_device_to_sfu(
         state: &mut State,
         mut message: DeviceToSfu,
     ) -> std::result::Result<(), MrpSendError> {
@@ -4067,24 +4104,26 @@ impl Client {
             message.mrp_header = Some(header.into());
             let payload = message.encode_to_vec();
 
-            let new_seqnum = Self::reliable_send_to_sfu_inner(
+            state.rtp_data_to_sfu_next_seqnum = Self::unreliable_send_data_inner(
                 state.join_state,
                 state.client_id,
+                RTP_DATA_TO_SFU_SSRC,
                 state.rtp_data_to_sfu_next_seqnum,
                 &state.peer_connection,
                 &payload,
             )?;
-            state.rtp_data_through_sfu_next_seqnum = new_seqnum;
             Ok((payload, Instant::now() + DEVICE_TO_SFU_TIMEOUT))
         })
     }
 
-    /// Should be called from within MrpStream methods like try_send, try_resend, and try_send_ack
+    /// Should not be called from within MrpStream methods `try_resend` and `try_send_ack`
     /// Only sends when join_state == Pending or Joined
+    /// Will chunk messages if they are too large
     fn reliable_send_to_sfu_inner(
+        sfu_reliable_stream: &mut MrpStream<Vec<u8>, (rtp::Header, SfuToDevice)>,
         join_state: JoinState,
         client_id: ClientId,
-        seqnum: u32,
+        mut seqnum: u32,
         peer_connection: &PeerConnection,
         message: &[u8],
     ) -> Result<u32> {
@@ -4093,9 +4132,63 @@ impl Client {
             client_id, message,
         );
         if let JoinState::Pending(_) | JoinState::Joined(_) = join_state {
+            let fragments = message
+                .chunks(MAX_MRP_FRAGMENT_BYTE_SIZE)
+                .map(|b| b.to_vec())
+                .collect();
+
+            sfu_reliable_stream.try_send_fragmented(fragments, |_, mrp_header, fragment| {
+                let rtp_header = rtp::Header {
+                    pt: RTP_DATA_PAYLOAD_TYPE,
+                    ssrc: RTP_DATA_TO_SFU_SSRC,
+                    // This has to be incremented to make sure SRTP functions properly.
+                    seqnum: seqnum as u16,
+                    // Just imagine the clock is the number of messages :),
+                    // Plus the above sequence number is too small to be useful.
+                    timestamp: seqnum,
+                };
+
+                let payload = DeviceToSfu {
+                    mrp_header: Some(mrp_header.into()),
+                    content: Some(fragment),
+                    ..Default::default()
+                }
+                .encode_to_vec();
+
+                if let Err(e) = peer_connection.send_rtp(rtp_header, &payload) {
+                    error!(
+                        "Failed to send reliable message over rtp, queuing retry: {:?}",
+                        e
+                    );
+                };
+                seqnum = seqnum.wrapping_add(1);
+                (payload, Instant::now() + DEVICE_TO_SFU_TIMEOUT)
+            })?;
+            Ok(seqnum)
+        } else {
+            Err(anyhow::anyhow!(
+                "Can't perform reliable send, invalid JoinState: {:?}",
+                join_state
+            ))
+        }
+    }
+
+    fn unreliable_send_data_inner(
+        join_state: JoinState,
+        client_id: ClientId,
+        ssrc: rtp::Ssrc,
+        seqnum: u32,
+        peer_connection: &PeerConnection,
+        message: &[u8],
+    ) -> Result<u32> {
+        debug!(
+            "group_call::Client(inner)::unreliable_send_data_inner(client_id: {}, message: {:?})",
+            client_id, message,
+        );
+        if let JoinState::Pending(_) | JoinState::Joined(_) = join_state {
             let header = rtp::Header {
                 pt: RTP_DATA_PAYLOAD_TYPE,
-                ssrc: RTP_DATA_TO_SFU_SSRC,
+                ssrc,
                 // This has to be incremented to make sure SRTP functions properly.
                 seqnum: seqnum as u16,
                 // Just imagine the clock is the number of messages :),
@@ -5129,6 +5222,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        common::time::saturating_epoch_time,
         core::endorsements::EndorsementUpdateResult,
         lite::{
             call_links::{CallLinkMemberResolver, CallLinkRootKey},
@@ -7532,6 +7626,120 @@ mod tests {
     }
 
     #[test]
+    fn device_to_sfu_test_fragmented() {
+        use protobuf::group_call::{
+            DeviceToSfu,
+            device_to_sfu::{
+                self, StatsReport,
+                client_error::{self, DecryptionError},
+            },
+        };
+
+        let mut client1 = TestClient::new(vec![1], 1);
+
+        let (sender, receiver) = mpsc::channel();
+        client1.sfu_rtp_packet_sender = Some(sender);
+        client1.connect_join_and_wait_until_joined();
+        client1.set_remotes_and_wait_until_applied(&[]);
+
+        let now = SystemTime::now();
+        let errors: HashMap<DemuxId, DecryptionErrorStats> = (0..100)
+            .map(|i| {
+                (
+                    i,
+                    DecryptionErrorStats {
+                        start_time: now,
+                        last_time: now + Duration::from_millis(1000),
+                        count: i,
+                    },
+                )
+            })
+            .collect();
+
+        let expected_proto = DeviceToSfu {
+            stats: Some(StatsReport {
+                client_errors: errors
+                    .iter()
+                    .map(|(demux_id, e)| device_to_sfu::ClientError {
+                        error: Some(client_error::Error::Decryption(DecryptionError {
+                            sender_demux_id: Some(*demux_id),
+                            count: Some(e.count),
+                            start_ts: Some(saturating_epoch_time(e.start_time).as_millis() as u64),
+                            last_ts: Some(saturating_epoch_time(e.last_time).as_millis() as u64),
+                        })),
+                    })
+                    .collect(),
+            }),
+            ..Default::default()
+        }
+        .encode_to_vec();
+        assert_eq!(2503, expected_proto.len());
+
+        let expected_packets = vec![
+            DeviceToSfu {
+                mrp_header: Some(MrpHeader {
+                    seqnum: Some(1),
+                    ack_num: None,
+                    num_packets: Some(3),
+                }),
+                content: Some(expected_proto[0..1140].to_vec()),
+                ..Default::default()
+            },
+            DeviceToSfu {
+                mrp_header: Some(MrpHeader {
+                    seqnum: Some(2),
+                    ack_num: None,
+                    num_packets: None,
+                }),
+                content: Some(expected_proto[1140..2280].to_vec()),
+                ..Default::default()
+            },
+            DeviceToSfu {
+                mrp_header: Some(MrpHeader {
+                    seqnum: Some(3),
+                    ack_num: None,
+                    num_packets: None,
+                }),
+                content: Some(expected_proto[2280..].to_vec()),
+                ..Default::default()
+            },
+        ];
+
+        client1.client.send_decryption_stats(errors);
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        let received_proto1 = DeviceToSfu::decode(&payload[..]).unwrap();
+        assert_eq!(1, header.ssrc);
+        assert_eq!(expected_packets[0], received_proto1);
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        let received_proto2 = DeviceToSfu::decode(&payload[..]).unwrap();
+        assert_eq!(1, header.ssrc);
+        assert_eq!(expected_packets[1], received_proto2);
+
+        let (header, payload) = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("Get RTP packet to SFU");
+        let received_proto3 = DeviceToSfu::decode(&payload[..]).unwrap();
+        assert_eq!(1, header.ssrc);
+        assert_eq!(expected_packets[2], received_proto3);
+
+        let combined_content = [
+            received_proto1.content.unwrap(),
+            received_proto2.content.unwrap(),
+            received_proto3.content.unwrap(),
+        ]
+        .concat();
+        assert_eq!(combined_content, expected_proto);
+
+        client1.disconnect_and_wait_until_ended();
+    }
+
+    #[test]
     fn carry_over_devices_from_peeking_to_joined() {
         let client1 = TestClient::new(vec![1], 1);
         let client2 = TestClient::new(vec![2], 2);
@@ -9027,5 +9235,28 @@ mod remote_devices_tests {
                 SrtpKeys::from_master_key_material(&server_master_key_material);
             assert_eq!(expected_srtp_keys, srtp_keys);
         };
+    }
+
+    #[test]
+    fn test_mrp_max_size_limit() {
+        let content = [5u8; MAX_MRP_FRAGMENT_BYTE_SIZE];
+        let sfu_to_device = SfuToDevice {
+            mrp_header: Some(protobuf::group_call::MrpHeader {
+                seqnum: Some(u64::MAX),
+                num_packets: Some(u32::MAX),
+                ack_num: Some(u64::MAX),
+            }),
+            content: Some(content.to_vec()),
+            video_request: None,
+            speaker: None,
+            device_joined_or_left: None,
+            current_devices: None,
+            stats: None,
+            removed: None,
+            raised_hands: None,
+            endorsements: None,
+        };
+
+        assert!(sfu_to_device.encode_to_vec().len() <= MAX_PACKET_SERIALIZED_BYTE_SIZE);
     }
 }

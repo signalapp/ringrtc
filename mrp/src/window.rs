@@ -15,13 +15,13 @@ pub enum WindowError {
 /// These bounds change as contiguous elements are removed from the structure.
 /// Wrapper around a RingBuffer to implement window's sliding indexing
 #[derive(Debug)]
-pub struct BufferWindow<T: Debug> {
+pub struct BufferWindow<T> {
     left: u64,
     data: VecDeque<Option<T>>,
     capacity_limit: usize,
 }
 
-impl<T: Debug> BufferWindow<T> {
+impl<T> BufferWindow<T> {
     const DEFAULT_SIZE: usize = 16;
 
     /// left_bounds must be greater than 0
@@ -55,7 +55,7 @@ impl<T: Debug> BufferWindow<T> {
     }
 
     /// Max capacity of the window. Is not the current capacity
-    fn capacity_limit(&self) -> usize {
+    pub fn capacity_limit(&self) -> usize {
         self.capacity_limit
     }
 

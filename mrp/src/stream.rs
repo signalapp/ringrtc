@@ -19,7 +19,7 @@ use log::warn;
 use super::window::{BufferWindow, WindowError};
 use crate::merge_buffer::MergeBuffer;
 
-#[derive(PartialEq, Debug, Default, Clone)]
+#[derive(Hash, PartialEq, Debug, Default, Clone)]
 pub struct MrpHeader {
     /// SENDER -> RECEIVER
     /// sequence number in window
@@ -56,12 +56,9 @@ impl MrpHeader {
 
 /// Convenience struct for associating a Header with arbitrary data
 #[derive(PartialEq, Debug, Clone)]
-pub struct PacketWrapper<Data: Clone + Debug>(pub MrpHeader, pub Data);
+pub struct PacketWrapper<Data>(pub MrpHeader, pub Data);
 
-impl<Data> PacketWrapper<Data>
-where
-    Data: Clone + Debug,
-{
+impl<Data> PacketWrapper<Data> {
     fn new(header: MrpHeader, data: Data) -> Self {
         Self(header, data)
     }
@@ -69,7 +66,7 @@ where
 
 impl<Data, T> Extend<PacketWrapper<Data>> for PacketWrapper<Data>
 where
-    Data: Clone + Debug + Extend<T> + IntoIterator<Item = T>,
+    Data: Extend<T> + IntoIterator<Item = T>,
 {
     fn extend<I: IntoIterator<Item = PacketWrapper<Data>>>(&mut self, iter: I) {
         let iter = iter.into_iter().map(|v| v.1);
@@ -84,17 +81,14 @@ type BufferedPacket<T> = PacketWrapper<T>;
 /// Tracks timeout, attempts, and whether to transmit packet at next chance
 /// [MrpStream] exposes it in Buffer type
 #[derive(Debug)]
-pub struct PendingPacket<Data: Clone> {
+pub struct PendingPacket<Data> {
     pub packet: Data,
     next_send_at: Instant,
     try_count: u16,
     transmit: bool,
 }
 
-impl<Data> PendingPacket<Data>
-where
-    Data: Clone,
-{
+impl<Data> PendingPacket<Data> {
     fn should_transmit(&self, now: Instant) -> bool {
         self.transmit || now >= self.next_send_at
     }
@@ -103,11 +97,7 @@ where
 /// Implements the sender and receiver state machine.
 /// Buffers the sender and receiver windows.
 #[derive(Debug)]
-pub struct MrpStream<SendData, ReceiveData>
-where
-    SendData: Clone + Debug,
-    ReceiveData: Clone + Debug,
-{
+pub struct MrpStream<SendData, ReceiveData> {
     /// Tracks whether need to send an ACK
     should_ack: bool,
     /// Packets that been sent but not yet acked or dropped.
@@ -130,17 +120,13 @@ pub enum MrpReceiveError {
 
 #[derive(thiserror::Error, Debug)]
 pub enum MrpSendError {
-    #[error("Send Window is full")]
+    #[error("Send Window is too full for send")]
     SendWindowFull,
     #[error("Inner send failed: {0:?}")]
     InnerSendFailed(anyhow::Error),
 }
 
-impl<SendData, ReceiveData> Default for MrpStream<SendData, ReceiveData>
-where
-    SendData: Clone + Debug,
-    ReceiveData: Clone + Debug,
-{
+impl<SendData, ReceiveData> Default for MrpStream<SendData, ReceiveData> {
     /// allows for unlimited buffers
     fn default() -> Self {
         Self {
@@ -155,8 +141,7 @@ where
 
 impl<SendData, ReceiveData> MrpStream<SendData, ReceiveData>
 where
-    SendData: Clone + Debug,
-    ReceiveData: Extend<ReceiveData> + Clone + Debug,
+    ReceiveData: Extend<ReceiveData>,
 {
     /// Receives a packet. Treats it as either an ACK or Data Packet.
     /// We prevent piggybacking both in one packet for now.
@@ -244,11 +229,7 @@ where
     }
 }
 
-impl<SendData, ReceiveData> MrpStream<SendData, ReceiveData>
-where
-    SendData: Clone + Debug,
-    ReceiveData: Clone + Debug,
-{
+impl<SendData, ReceiveData> MrpStream<SendData, ReceiveData> {
     const INITIAL_SEQNUM: u64 = 1;
     const INITIAL_ACKNUM: u64 = 1;
 
@@ -339,6 +320,36 @@ where
             }
             Err(e) => Err(MrpSendError::InnerSendFailed(e)),
         }
+    }
+
+    /// Sends related fragments to the receiver. The receiver should use `receive_and_merge` to
+    /// wait for all the fragments to be assembled before being released from the buffer.
+    ///
+    /// # Arguments
+    /// * `fragments` - fragments that will be assembled by receiver before returning to caller
+    /// * `send_data` - sends packet and returns the timeout per fragment. not allowed to fail to
+    ///   avoid partial failures
+    pub fn try_send_fragmented(
+        &mut self,
+        fragments: Vec<SendData>,
+        mut send_data: impl FnMut(usize, MrpHeader, SendData) -> (SendData, Instant),
+    ) -> std::result::Result<(), MrpSendError> {
+        if self.send_buffer.len() + fragments.len() >= self.send_buffer.capacity_limit() {
+            return Err(MrpSendError::SendWindowFull);
+        }
+
+        let num_packets = fragments.len() as u32;
+        for (idx, fragment) in fragments.into_iter().enumerate() {
+            self.try_send(|mut header| {
+                if idx == 0 {
+                    header.num_packets = Some(num_packets);
+                }
+                Ok(send_data(idx, header, fragment))
+            })
+            .expect("should not have been full, should not have errored");
+        }
+
+        Ok(())
     }
 
     /// Method meant to be polled. Sends ACK. Caller is responsible for providing ACK.
@@ -908,7 +919,7 @@ mod tests {
         assert_eq!(
             should_be_returned,
             Ok(vec![packet]),
-            "No packets should not be buffered"
+            "Packets should have been returned"
         );
 
         let packet = extendable_packet(None, vec![1]);
@@ -1017,6 +1028,43 @@ mod tests {
             Ok(vec![packet]),
             "Should have finished dropping failed packets"
         );
+
+        let mut returned = None;
+        let mut bob: MrpStream<ExtendablePacket, ExtendablePacket> =
+            MrpStream::with_capacity_limit(16);
+        let packets = (0..10)
+            .map(|i| extendable_packet(None, vec![i as u32]))
+            .collect::<Vec<_>>();
+        alice
+            .try_send_fragmented(packets.clone(), |_, header, packet| {
+                if let Ok(merged) = bob.receive_and_merge(&header, packet.clone())
+                    && !merged.is_empty()
+                {
+                    assert_eq!(returned, None, "should return only once");
+                    returned = Some(merged);
+                }
+                (packet, Instant::now() + Duration::from_millis(1000))
+            })
+            .expect("should not error");
+        assert_eq!(
+            returned,
+            Some(vec![extendable_packet(None, (0..10).collect::<Vec<u32>>())]),
+        );
+
+        let mut returned = None;
+        let packets = vec![extendable_packet(None, vec![1])];
+        alice
+            .try_send_fragmented(packets.clone(), |_, header, packet| {
+                if let Ok(merged) = bob.receive_and_merge(&header, packet.clone())
+                    && !merged.is_empty()
+                {
+                    assert_eq!(returned, None, "should return only once");
+                    returned = Some(merged);
+                }
+                (packet, Instant::now() + Duration::from_millis(1000))
+            })
+            .expect("should not error");
+        assert_eq!(returned, Some(packets), "Should handle single fragment")
     }
 
     #[test]
