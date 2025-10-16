@@ -35,7 +35,7 @@ use crate::{
         convert_mp4_to_yuv, convert_raw_to_wav, convert_wav_to_16khz_mono, convert_yuv_to_mp4,
         create_network, emulate_network_change, emulate_network_start, finish_perf,
         generate_spectrogram, get_signaling_server_logs, get_turn_server_logs, start_cli,
-        start_client, start_playout, start_signaling_server, start_tcp_dump, start_turn_server,
+        start_client, start_playout, start_signaling_server, start_tcpdump, start_turn_server,
         tear_down_virtual_audio,
     },
     report::{AnalysisReport, AnalysisReportMos, Report},
@@ -245,10 +245,6 @@ impl Test {
             start_turn_server().await?;
         }
 
-        if test_case_config.tcp_dump {
-            start_tcp_dump(&test_case.test_path).await?;
-        }
-
         // Sleep here to allow the server(s) to get running.
         tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -269,12 +265,21 @@ impl Test {
                 &self.set_path,
             )
             .await?;
+
+            if test_case_config.client_a_config.tcpdump {
+                start_tcpdump(test_case.client_a.name, &test_case.test_path).await?;
+            }
+
             start_client(
                 test_case.client_b.name,
                 &test_case.test_path,
                 &self.set_path,
             )
             .await?;
+
+            if test_case_config.client_b_config.tcpdump {
+                start_tcpdump(test_case.client_b.name, &test_case.test_path).await?;
+            }
 
             println!();
 

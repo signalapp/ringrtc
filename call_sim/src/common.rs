@@ -216,9 +216,6 @@ pub struct TestCaseConfig {
     pub client_a_config: CallConfig,
     /// The overall configuration specific to client B.
     pub client_b_config: CallConfig,
-    /// A flag to control recording of packet capture. Enabling this results in a `tcpdump.pcap`
-    /// file among the generated artifacts for the test.
-    pub tcp_dump: bool,
     /// The number of times to run the test case.
     pub iterations: u16,
     /// Whether to create charts for reports. This takes time and is sometimes not needed
@@ -236,7 +233,6 @@ impl Default for TestCaseConfig {
             length_seconds: 30,
             client_a_config: Default::default(),
             client_b_config: Default::default(),
-            tcp_dump: false,
             iterations: 1,
             create_charts: true,
             save_media_files: true,
@@ -306,6 +302,9 @@ pub struct CallConfig {
     pub stats_initial_offset_secs: u16,
     /// Application of a profile for the call, to be set in the client.
     pub profile: CallProfile,
+    /// A flag to control packet capture. Enabling results in a `client_x.pcap` file
+    /// among the generated artifacts for the test.
+    pub tcpdump: bool,
 }
 
 impl CallConfig {
@@ -339,6 +338,7 @@ impl Default for CallConfig {
             stats_interval_secs: 1,
             stats_initial_offset_secs: 0,
             profile: CallProfile::None,
+            tcpdump: false,
         }
     }
 }

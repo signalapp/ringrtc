@@ -244,19 +244,31 @@ pub async fn start_turn_server() -> Result<()> {
     Ok(())
 }
 
-pub async fn start_tcp_dump(report_path: &str) -> Result<()> {
-    println!("\nStarting tcpdump");
+pub async fn start_tcpdump(name: &str, report_path: &str) -> Result<()> {
+    println!("\nStarting tcpdump for `{}`", name);
 
     let _ = Command::new("docker")
         .args([
             "run",
             "--name",
-            "tcpdump",
+            &format!("tcpdump_{}", name),
             "-d",
-            "--net=host",
+            &format!("--network=container:{}", name),
             "-v",
             &format!("{}:/tcpdump", report_path),
             "kaazing/tcpdump",
+            "-i",
+            "any",
+            "-w",
+            &format!("/tcpdump/{}.pcap", name),
+            "tcp",
+            "or",
+            "udp",
+            "and",
+            "not",
+            "udp",
+            "port",
+            "5353",
         ])
         .spawn()?
         .wait()

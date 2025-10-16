@@ -816,7 +816,8 @@ async fn main() -> Result<()> {
             "client_b",
             "signaling_server",
             "turn",
-            "tcpdump",
+            "tcpdump_client_a",
+            "tcpdump_client_b",
             "visqol",
         ])
         .await?;
