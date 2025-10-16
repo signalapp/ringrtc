@@ -3981,7 +3981,6 @@ impl Client {
         };
 
         use crate::common::time::saturating_epoch_time;
-        error!("reporting decryption errors {:?}", decryption_errors);
 
         let decryption_error_protos: Vec<_> = decryption_errors
             .into_iter()
