@@ -864,7 +864,8 @@ impl Test {
                     test_case.client_b.name,
                     "signaling_server",
                     "turn",
-                    "tcpdump",
+                    &format!("tcpdump_{}", test_case.client_a.name),
+                    &format!("tcpdump_{}", test_case.client_b.name),
                 ])
                 .await?;
                 clean_network().await?;
@@ -906,7 +907,8 @@ impl Test {
                     test_case.client_b.name,
                     "signaling_server",
                     "turn",
-                    "tcpdump",
+                    &format!("tcpdump_{}", test_case.client_a.name),
+                    &format!("tcpdump_{}", test_case.client_b.name),
                 ])
                 .await?;
                 clean_network().await?;
