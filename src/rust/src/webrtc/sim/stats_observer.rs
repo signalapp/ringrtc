@@ -36,10 +36,9 @@ pub unsafe fn Rust_createStatsObserver(
         audio_receiver_statistics: ptr::null(),
         video_receiver_statistics_size: 0,
         video_receiver_statistics: ptr::null(),
-        connection_statistics: ConnectionStatistics {
-            current_round_trip_time: 0.0,
-            available_outgoing_bitrate: 0.0,
-        },
+        nominated_connection_statistics: ConnectionStatistics::default(),
+        connection_statistics: ptr::null(),
+        connection_statistics_size: 0,
     };
 
     // Hit on the onComplete() callback

@@ -40,7 +40,7 @@ struct Stats {
     video_send: HashMap<u32, VideoSenderStatistics>,
     audio_recv: HashMap<u32, (Instant, AudioReceiverStatistics)>,
     video_recv: HashMap<u32, (Instant, VideoReceiverStatistics)>,
-
+    connections: HashMap<String, (Instant, ConnectionStatistics)>,
     report_json: Mutex<String>,
 }
 /// Collector object for obtaining statistics.
@@ -63,7 +63,11 @@ impl StatsObserver {
                 call_id,\
                 timestamp_us,\
                 current_round_trip_time,\
-                available_outgoing_bitrate"
+                available_outgoing_bitrate,\
+                requests_sent,\
+                responses_received,\
+                requests_received,\
+                responses_sent"
         );
         info!(
             "ringrtc_stats!,\
@@ -135,16 +139,28 @@ impl StatsObserver {
 
     fn print_connection(&self, media_statistics: &MediaStatistics) {
         info!(
-            "ringrtc_stats!,connection,{call_id},{timestamp_us},{current_round_trip_time:.0}ms,{available_outgoing_bitrate:.0}bps",
+            "ringrtc_stats!,connection,{call_id},{timestamp_us},{current_round_trip_time:.0}ms,{available_outgoing_bitrate:.0}bps,{requests_sent},{responses_received},{requests_received},{responses_sent}",
             call_id = self.call_id,
             timestamp_us = media_statistics.timestamp_us,
             current_round_trip_time = media_statistics
-                .connection_statistics
+                .nominated_connection_statistics
                 .current_round_trip_time
                 * 1000.0,
             available_outgoing_bitrate = media_statistics
-                .connection_statistics
+                .nominated_connection_statistics
                 .available_outgoing_bitrate,
+            requests_sent = media_statistics
+                .nominated_connection_statistics
+                .requests_sent,
+            responses_received = media_statistics
+                .nominated_connection_statistics
+                .responses_received,
+            requests_received = media_statistics
+                .nominated_connection_statistics
+                .requests_received,
+            responses_sent = media_statistics
+                .nominated_connection_statistics
+                .responses_sent,
         );
     }
 
@@ -464,6 +480,28 @@ impl StatsObserver {
             }
         }
 
+        if media_statistics.connection_statistics_size > 0 {
+            let connection_stats = unsafe {
+                if media_statistics.connection_statistics.is_null() {
+                    &[]
+                } else {
+                    slice::from_raw_parts(
+                        media_statistics.connection_statistics,
+                        media_statistics.connection_statistics_size as usize,
+                    )
+                }
+            };
+
+            let now = Instant::now();
+            stats.connections = connection_stats
+                .iter()
+                .flat_map(|c| {
+                    let pair_id = c.get_candidate_pair_id()?;
+                    Some((pair_id, (now, c.clone_without_ptr())))
+                })
+                .collect();
+        }
+
         stats.timestamp_us = media_statistics.timestamp_us;
 
         self.stats_received_count += 1;
@@ -583,6 +621,8 @@ pub struct AudioReceiverStatistics {
     pub total_audio_energy: f64,
     pub jitter_buffer_delay: f64,
     pub jitter_buffer_emitted_count: u64,
+    pub jitter_buffer_flushes: u64,
+    pub estimated_playout_timestamp: f64,
 }
 
 #[repr(C)]
@@ -592,18 +632,68 @@ pub struct VideoReceiverStatistics {
     pub packets_received: u32,
     pub packets_lost: i32,
     pub bytes_received: u64,
+    pub frames_received: u32,
     pub frames_decoded: u32,
     pub key_frames_decoded: u32,
     pub total_decode_time: f64,
     pub frame_width: u32,
     pub frame_height: u32,
+    pub freeze_count: u32,
+    pub total_freezes_duration: f64,
+    pub jitter: f64,
+    pub jitter_buffer_delay: f64,
+    pub jitter_buffer_emitted_count: u64,
+    pub jitter_buffer_flushes: u64,
+    pub estimated_playout_timestamp: f64,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConnectionStatistics {
+    raw_candidate_pair_id: webrtc::ptr::Borrowed<std::os::raw::c_char>,
+
     pub current_round_trip_time: f64,
     pub available_outgoing_bitrate: f64,
+
+    // stats related to ICE connectivity checks
+    pub requests_sent: u64,
+    pub responses_received: u64,
+    pub requests_received: u64,
+    pub responses_sent: u64,
+}
+
+impl Default for ConnectionStatistics {
+    fn default() -> Self {
+        Self {
+            raw_candidate_pair_id: webrtc::ptr::Borrowed::null(),
+            current_round_trip_time: 0.0,
+            available_outgoing_bitrate: 0.0,
+            requests_sent: 0,
+            responses_received: 0,
+            requests_received: 0,
+            responses_sent: 0,
+        }
+    }
+}
+
+impl ConnectionStatistics {
+    fn get_candidate_pair_id(&self) -> Option<String> {
+        if !self.raw_candidate_pair_id.is_null() {
+            Some(unsafe {
+                std::ffi::CStr::from_ptr(self.raw_candidate_pair_id.as_ptr())
+                    .to_string_lossy()
+                    .into_owned()
+            })
+        } else {
+            None
+        }
+    }
+
+    fn clone_without_ptr(&self) -> Self {
+        let mut c = self.clone();
+        c.raw_candidate_pair_id = webrtc::ptr::Borrowed::null();
+        c
+    }
 }
 
 /// MediaStatistics struct that holds all the statistics.
@@ -619,7 +709,9 @@ pub struct MediaStatistics {
     pub audio_receiver_statistics: *const AudioReceiverStatistics,
     pub video_receiver_statistics_size: u32,
     pub video_receiver_statistics: *const VideoReceiverStatistics,
-    pub connection_statistics: ConnectionStatistics,
+    pub nominated_connection_statistics: ConnectionStatistics,
+    pub connection_statistics: *const ConnectionStatistics,
+    pub connection_statistics_size: u32,
 }
 
 /// StatsObserver OnStatsComplete() callback.
