@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.59.3
+
+- iOS: Use UUID as RemotePeer for received messages
+
+- Update to webrtc 7339d
+  - Add backup connection candidate stats and ICE check stats
+
+- Add ICE stats and connection stats for backup candidate pairs
+
+- Call Sim: Fix cleanup of tcpdump for clients
+
+- CI: Switch to macos-14 runner for Desktop builds
+
 ## v2.59.2
 
 - Add support for fragmenting large data messages to SFU
