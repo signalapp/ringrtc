@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.59.4
+
+- Desktop: Update to cubeb 0.33.0
+
+- Desktop: Use OIDC auth instead of an automation token
+
 ## v2.59.3
 
 - iOS: Use UUID as RemotePeer for received messages
