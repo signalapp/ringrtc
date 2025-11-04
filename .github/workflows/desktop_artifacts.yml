@@ -277,9 +277,9 @@ jobs:
 
     permissions:
       # Needed to clone the repo
-      contents: 'read'
-      # Needed for google-github-actions/auth.
-      id-token: 'write'
+      contents: read
+      # Needed for google-github-actions/auth and OIDC.
+      id-token: write
 
     runs-on: ubuntu-latest-4-cores
 
@@ -469,11 +469,13 @@ jobs:
       - run: bin/convert_webrtc_acknowledgments.py --format md acknowledgments/webrtc-*/*/*/LICENSE.md >> src/node/dist/acknowledgments.md
 
       # Finally, publish to NPM. Or upload a pack, for a dry run.
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
       - run: npm publish --access public
         if: ${{ !inputs.dry_run }}
         working-directory: src/node/
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - run: npm pack
         if: ${{ inputs.dry_run }}
