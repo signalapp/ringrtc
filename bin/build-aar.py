@@ -238,7 +238,7 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
         # * JAR_FILES (which will be in a nested subdirectory,
         #     and should stay that way!)
         # * WEBRTC_SO_LIBS
-        shutil.copytree(webrtc_output_dir, output_dir, dirs_exist_ok=True)
+        shutil.copytree(webrtc_output_dir, output_dir, dirs_exist_ok=True, ignore_dangling_symlinks=True)
         for jar in JAR_FILES:
             d = os.path.basename(jar)
             os.makedirs(d, exist_ok=True)
