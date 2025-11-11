@@ -50,6 +50,7 @@ use crate::{
             TransportProtocol,
         },
         rtp,
+        rtp_observer::{RffiRtpObserver, RtpObserver, RtpObserverTrait},
         sdp_observer::{
             SessionDescription, SrtpCryptoSuite, SrtpKey, create_csd_observer, create_ssd_observer,
         },
@@ -141,6 +142,8 @@ where
     last_sent_rtp_data_timestamp: rtp::Timestamp,
     /// Raw pointer to Connection object for PeerConnectionObserver
     connection_ptr: Option<webrtc::ptr::Owned<Connection<T>>>,
+    /// RTP observer for the PeerConnection
+    rtp_observer_ptr: Option<webrtc::ptr::Unique<RffiRtpObserver>>,
     /// Application-specific incoming media
     incoming_media: Option<<T as Platform>::AppIncomingMedia>,
     /// Application specific peer connection
@@ -498,6 +501,7 @@ where
             peer_connection: None,
             last_sent_rtp_data_timestamp: 0,
             connection_ptr: None,
+            rtp_observer_ptr: None,
             incoming_media: None,
             app_connection: None,
             stats_observer: None,
@@ -956,7 +960,14 @@ where
 
     /// Update the PeerConnection.
     pub fn set_peer_connection(&self, peer_connection: PeerConnection) -> Result<()> {
+        // Create the RtpObserver, set it on the PeerConnection, and store it.
+        let connection_ptr = self.get_connection_ptr()?;
+        let rtp_observer = RtpObserver::new(connection_ptr)?;
+        let rtp_observer_ptr = rtp_observer.into_rffi();
+        peer_connection.set_rtp_packet_observer(rtp_observer_ptr.borrow());
+
         let mut webrtc = self.webrtc.lock()?;
+        webrtc.rtp_observer_ptr = Some(rtp_observer_ptr);
         webrtc.peer_connection = Some(peer_connection);
         Ok(())
     }
@@ -2154,7 +2165,15 @@ where
         }
         Ok(())
     }
+}
 
+impl<T> RtpObserverTrait for Connection<T>
+where
+    T: Platform,
+{
+    /// Warning: this runs on the WebRTC network thread, so doing anything that
+    /// would block is dangerous, especially taking a lock that is also taken
+    /// while calling something that blocks on the network thread.
     fn handle_rtp_received(&mut self, header: rtp::Header, payload: &[u8]) {
         let data = match (header.pt, header.ssrc) {
             (RTP_DATA_PAYLOAD_TYPE, RTP_DATA_SSRC) => payload,

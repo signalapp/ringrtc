@@ -108,9 +108,11 @@ impl CallEndpoint {
         event_sync: EventSync,
         incoming_video_sink: Box<dyn VideoSink>,
         use_injectable_network: bool,
+        field_trials: &str,
     ) -> Result<Self> {
         let audio_config = audio_config.clone();
         let name = name.to_owned();
+        let field_trials = field_trials.to_string();
 
         Ok(Self::from_actor(
             name.clone(),
@@ -125,8 +127,12 @@ impl CallEndpoint {
                 let endpoint =
                     Self::from_actor(name.clone(), device_id, user_id.clone(), actor.clone());
 
-                let mut peer_connection_factory =
-                    PeerConnectionFactory::new(&audio_config, use_injectable_network, None)?;
+                let mut peer_connection_factory = PeerConnectionFactory::new(
+                    &audio_config,
+                    use_injectable_network,
+                    &field_trials,
+                    None,
+                )?;
                 let mut done = false;
                 while !done {
                     // We may need to try a few times to get these; they're not necessarily

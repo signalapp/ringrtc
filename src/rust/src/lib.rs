@@ -94,7 +94,6 @@ pub mod webrtc {
     pub mod audio_device_module;
     #[cfg(all(not(feature = "sim"), feature = "native"))]
     pub mod audio_device_module_utils;
-    pub mod field_trial;
     pub mod ice_gatherer;
     #[cfg(feature = "injectable_network")]
     pub mod injectable_network;
@@ -108,13 +107,13 @@ pub mod webrtc {
     pub mod ptr;
     pub use ptr::RefCounted;
     pub mod rtp;
+    pub mod rtp_observer;
     pub mod sdp_observer;
     pub mod stats_observer;
     #[cfg(not(feature = "sim"))]
     mod ffi {
         #[cfg(feature = "native")]
         pub mod audio_device_module;
-        pub mod field_trial;
         pub mod ice_gatherer;
         pub mod logging;
         pub mod media;
@@ -122,18 +121,19 @@ pub mod webrtc {
         pub mod peer_connection_factory;
         pub mod peer_connection_observer;
         pub mod ref_count;
+        pub mod rtp_observer;
         pub mod sdp_observer;
         pub mod stats_observer;
     }
     #[cfg(feature = "sim")]
     pub mod sim {
-        pub mod field_trial;
         pub mod ice_gatherer;
         pub mod media;
         pub mod peer_connection;
         pub mod peer_connection_factory;
         pub mod peer_connection_observer;
         pub mod ref_count;
+        pub mod rtp_observer;
         pub mod sdp_observer;
         pub mod stats_observer;
     }

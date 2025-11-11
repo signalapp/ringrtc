@@ -345,16 +345,20 @@ impl PeerConnectionFactory {
     pub fn new(
         audio_config: &AudioConfig,
         use_injectable_network: bool,
+        field_trials_string: &str,
         audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
     ) -> Result<Self> {
         debug!("PeerConnectionFactory::new()");
 
         let audio_config_rffi = audio_config.rffi(audio_device_observer)?;
 
+        let field_trials_cstr = CString::new(field_trials_string)?;
+
         let rffi = unsafe {
             webrtc::Arc::from_owned(pcf::Rust_createPeerConnectionFactory(
                 webrtc::ptr::Borrowed::from_ptr(&audio_config_rffi.rffi),
                 use_injectable_network,
+                field_trials_cstr.as_ptr(),
             ))
         };
         if rffi.is_null() {
@@ -424,7 +428,7 @@ impl PeerConnectionFactory {
         // the RffiPeerConnectionObserver is *not* passed as owned
         // by Rust_createPeerConnection, so we need to keep it alive
         // for as long as the native PeerConnection is alive.
-        // we do this by passing a webrtc::ptr::Unique<RffiPeerConnectionObserver> to
+        // We do this by passing a webrtc::ptr::Unique<RffiPeerConnectionObserver> to
         // the Rust-level PeerConnection and let it own it.
         let pc_observer_rffi = pc_observer.into_rffi();
         let servers: Vec<RffiIceServer> = ice_servers.iter().map(|s| s.rffi()).collect();

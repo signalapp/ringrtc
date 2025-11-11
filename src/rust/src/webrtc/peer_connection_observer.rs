@@ -23,7 +23,6 @@ use crate::{
             RffiVideoTrack, VideoFrame, VideoFrameMetadata, VideoTrack,
         },
         network::RffiIpPort,
-        rtp,
     },
 };
 
@@ -105,7 +104,6 @@ pub struct NetworkRoute {
 }
 
 /// The callbacks from C++ will ultimately go to an impl of this.
-/// I can't think of a better name :).
 pub trait PeerConnectionObserverTrait {
     fn log_id(&self) -> &dyn std::fmt::Display;
 
@@ -144,12 +142,6 @@ pub trait PeerConnectionObserverTrait {
     ) -> Result<()> {
         Ok(())
     }
-
-    // RTP data events
-    // Warning: this runs on the WebRTC network thread, so doing anything that
-    // would block is dangerous, especially taking a lock that is also taken
-    // while calling something that blocks on the network thread.
-    fn handle_rtp_received(&mut self, header: rtp::Header, data: &[u8]);
 
     // Frame encryption
     // Defaults allow an impl to not support E2EE
@@ -435,37 +427,6 @@ extern "C" fn pc_observer_OnVideoFrame<T>(
 }
 
 #[allow(non_snake_case)]
-extern "C" fn pc_observer_OnRtpReceived<T>(
-    mut observer: webrtc::ptr::Borrowed<T>,
-    pt: u8,
-    seqnum: u16,
-    timestamp: u32,
-    ssrc: u32,
-    payload_data: webrtc::ptr::Borrowed<u8>,
-    payload_size: size_t,
-) where
-    T: PeerConnectionObserverTrait,
-{
-    if payload_data.is_null() {
-        return;
-    }
-
-    // Safe because the observer should still be alive (it was just passed to us)
-    if let Some(observer) = unsafe { observer.as_mut() } {
-        let header = rtp::Header {
-            pt,
-            seqnum,
-            timestamp,
-            ssrc,
-        };
-        let payload = unsafe { slice::from_raw_parts(payload_data.as_ptr(), payload_size) };
-        observer.handle_rtp_received(header, payload)
-    } else {
-        error!("pc_observer_OnRtpReceived called with null observer");
-    }
-}
-
-#[allow(non_snake_case)]
 extern "C" fn pc_observer_GetMediaCiphertextBufferSize<T>(
     mut observer: webrtc::ptr::Borrowed<T>,
     is_audio: bool,
@@ -626,17 +587,6 @@ where
         webrtc::ptr::OwnedRc<RffiVideoFrameBuffer>,
     ),
 
-    // RTP data events
-    onRtpReceived: extern "C" fn(
-        webrtc::ptr::Borrowed<T>,
-        u8,
-        u16,
-        u32,
-        u32,
-        webrtc::ptr::Borrowed<u8>,
-        size_t,
-    ),
-
     // Frame encryption
     getMediaCiphertextBufferSize: extern "C" fn(webrtc::ptr::Borrowed<T>, bool, size_t) -> size_t,
     encryptMedia: extern "C" fn(
@@ -717,9 +667,6 @@ where
             // Used for group calls.
             onAddVideoRtpReceiver: pc_observer_OnAddVideoRtpReceiver::<T>,
             onVideoFrame: pc_observer_OnVideoFrame::<T>,
-
-            // RTP data events
-            onRtpReceived: pc_observer_OnRtpReceived::<T>,
 
             // Frame encryption
             getMediaCiphertextBufferSize: pc_observer_GetMediaCiphertextBufferSize::<T>,

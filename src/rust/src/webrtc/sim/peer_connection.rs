@@ -21,6 +21,7 @@ use crate::{
         network::RffiIpPort,
         peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel},
         rtp,
+        rtp_observer::RffiRtpObserver,
         sdp_observer::{
             RffiCreateSessionDescriptionObserver, RffiSessionDescription,
             RffiSetSessionDescriptionObserver,
@@ -379,6 +380,14 @@ pub unsafe fn Rust_getLastBandwidthEstimateBps(
 ) -> u32 {
     info!("Rust_getLastBandwidthEstimateBps");
     0
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_setRtpPacketObserver(
+    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    _rtp_observer: webrtc::ptr::Borrowed<RffiRtpObserver>,
+) {
+    info!("Rust_setRtpPacketObserver");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

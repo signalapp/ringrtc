@@ -44,7 +44,6 @@ use crate::{
         NativePlatform, PeerId, SignalingSender,
     },
     webrtc::{
-        field_trial,
         media::{AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack},
         peer_connection::AudioLevel,
         peer_connection_factory::{
@@ -407,7 +406,11 @@ pub struct CallEndpoint {
 }
 
 impl CallEndpoint {
-    fn new<'a>(cx: &mut impl Context<'a>, js_object: Handle<'a, JsObject>) -> Result<Self> {
+    fn new<'a>(
+        cx: &mut impl Context<'a>,
+        js_object: Handle<'a, JsObject>,
+        field_trial_string: &str,
+    ) -> Result<Self> {
         // Set up a channel for events and logs.
         let (events_sender, events_receiver) = channel::<Event>();
         let event_reported = Arc::new(AtomicBool::new(false));
@@ -469,6 +472,7 @@ impl CallEndpoint {
         let peer_connection_factory = PeerConnectionFactory::new(
             &pcf::AudioConfig::default(),
             false,
+            field_trial_string,
             Some(Box::new(ElectronAudioDeviceObserver {
                 event_reporter: event_reporter.clone(),
             })),
@@ -736,10 +740,7 @@ fn createCallEndpoint(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     debug!("JsCallManager()");
 
-    let _ = field_trial::init(&field_trial_string);
-    info!("initialized field trials with {}", field_trial_string);
-
-    let endpoint = CallEndpoint::new(&mut cx, js_call_manager)
+    let endpoint = CallEndpoint::new(&mut cx, js_call_manager, &field_trial_string)
         .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.boxed(RefCell::new(endpoint)).upcast())
 }

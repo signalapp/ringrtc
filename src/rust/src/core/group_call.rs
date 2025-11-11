@@ -69,6 +69,7 @@ use crate::{
             IceConnectionState, NetworkRoute, PeerConnectionObserver, PeerConnectionObserverTrait,
         },
         rtp,
+        rtp_observer::{RffiRtpObserver, RtpObserver, RtpObserverTrait},
         sdp_observer::{
             SessionDescription, SrtpCryptoSuite, SrtpKey, create_csd_observer, create_ssd_observer,
         },
@@ -1057,6 +1058,8 @@ struct State {
     sfu_info: Option<SfuInfo>,
     peer_connection: PeerConnection,
     peer_connection_observer_impl: Box<PeerConnectionObserverImpl>,
+    rtp_observer_impl: Option<Box<RtpObserverImpl>>,
+    rtp_observer_ptr: Option<webrtc::ptr::Unique<RffiRtpObserver>>,
     rtp_data_to_sfu_next_seqnum: u32,
     rtp_data_through_sfu_next_seqnum: u32,
     next_heartbeat_time: Option<Instant>,
@@ -1288,8 +1291,12 @@ impl Client {
 
                 let peer_connection_factory = match peer_connection_factory {
                     None => {
-                        match PeerConnectionFactory::new(&pcf::AudioConfig::default(), false, None)
-                        {
+                        match PeerConnectionFactory::new(
+                            &pcf::AudioConfig::default(),
+                            false,
+                            "",
+                            None,
+                        ) {
                             Ok(v) => v,
                             Err(err) => {
                                 observer.handle_ended(
@@ -1360,6 +1367,8 @@ impl Client {
 
                     sfu_info: None,
                     peer_connection_observer_impl,
+                    rtp_observer_impl: None,
+                    rtp_observer_ptr: None,
                     peer_connection,
                     rtp_data_to_sfu_next_seqnum: 1,
                     rtp_data_through_sfu_next_seqnum: 1,
@@ -1422,13 +1431,29 @@ impl Client {
             frame_crypto_context: frame_crypto_context_for_outside_actor,
         };
 
-        // After we have the actor, we can initialize the PeerConnectionObserverImpl
-        // and kick of ticking.
+        // After we have the actor, we can initialize the observer implementations,
+        // create and set the RTP observer, and kick off ticking.
         let client_clone_to_init_peer_connection_observer_impl = client.clone();
+
+        let rtp_observer_impl = Box::new(RtpObserverImpl {
+            client: client.clone(),
+        });
+
         client.actor.send(move |state| {
             state
                 .peer_connection_observer_impl
                 .initialize(client_clone_to_init_peer_connection_observer_impl);
+
+            let rtp_observer =
+                RtpObserver::new(webrtc::ptr::Borrowed::from_ptr(&*rtp_observer_impl))
+                    .expect("Failed to create RtpObserver");
+            let rtp_observer_ptr = rtp_observer.into_rffi();
+            state
+                .peer_connection
+                .set_rtp_packet_observer(rtp_observer_ptr.borrow());
+            state.rtp_observer_impl = Some(rtp_observer_impl);
+            state.rtp_observer_ptr = Some(rtp_observer_ptr);
+
             Self::request_remote_devices_as_soon_as_possible(state);
         });
         Ok(client)
@@ -4204,6 +4229,9 @@ impl Client {
         }
     }
 
+    /// Warning: this runs on the WebRTC network thread, so doing anything that
+    /// would block is dangerous, especially taking a lock that is also taken
+    /// while calling something that blocks on the network thread.
     fn handle_rtp_received(&self, header: rtp::Header, payload: &[u8]) {
         use protobuf::group_call::DeviceToDevice;
 
@@ -5045,17 +5073,6 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         Ok(())
     }
 
-    fn handle_rtp_received(&mut self, header: rtp::Header, payload: &[u8]) {
-        if let Some(client) = &self.client {
-            client.handle_rtp_received(header, payload);
-        } else {
-            warn!(
-                "Ignoring received RTP data with SSRC {} because the call isn't setup",
-                header.ssrc
-            );
-        }
-    }
-
     fn get_media_ciphertext_buffer_size(
         &mut self,
         _is_audio: bool,
@@ -5097,6 +5114,17 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
             warn!("Call isn't setup yet!  Can't decrypt");
             Err(RingRtcError::FailedToDecrypt.into())
         }
+    }
+}
+
+// Wrapper for RtpObserver to handle RTP data events received from the peer.
+struct RtpObserverImpl {
+    client: Client,
+}
+
+impl RtpObserverTrait for RtpObserverImpl {
+    fn handle_rtp_received(&mut self, header: rtp::Header, payload: &[u8]) {
+        self.client.handle_rtp_received(header, payload);
     }
 }
 

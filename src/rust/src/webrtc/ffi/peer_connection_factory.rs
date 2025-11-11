@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-#[cfg(feature = "native")]
 use std::os::raw::c_char;
 
 #[cfg(feature = "injectable_network")]
@@ -44,6 +43,7 @@ unsafe extern "C" {
     pub fn Rust_createPeerConnectionFactory(
         audio_config: webrtc::ptr::Borrowed<RffiAudioConfig>,
         use_injectable_network: bool,
+        field_trials_string: *const c_char,
     ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner>;
     pub fn Rust_createPeerConnectionFactoryWrapper(
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryInterface>,

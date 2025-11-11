@@ -34,6 +34,7 @@ pub type RffiPeerConnectionFactoryInterface = u32;
 pub unsafe fn Rust_createPeerConnectionFactory(
     _audio_config: webrtc::ptr::Borrowed<RffiAudioConfig>,
     _use_injectable_network: bool,
+    _field_trials_string: *const c_char,
 ) -> webrtc::ptr::OwnedRc<RffiPeerConnectionFactoryOwner> {
     info!("Rust_createPeerConnectionFactory()");
     unsafe { webrtc::ptr::OwnedRc::from_ptr(&FAKE_PEER_CONNECTION_FACTORY) }

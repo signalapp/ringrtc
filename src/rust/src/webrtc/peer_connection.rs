@@ -26,6 +26,7 @@ use crate::{
         peer_connection_factory::RffiPeerConnectionFactoryOwner,
         peer_connection_observer::RffiPeerConnectionObserver,
         rtp,
+        rtp_observer::RffiRtpObserver,
         sdp_observer::{
             CreateSessionDescriptionObserver, SessionDescription, SetSessionDescriptionObserver,
         },
@@ -396,6 +397,12 @@ impl PeerConnection {
         let bps = unsafe { pc::Rust_getLastBandwidthEstimateBps(self.rffi.as_borrowed()) };
 
         DataRate::from_bps(bps.into())
+    }
+
+    pub fn set_rtp_packet_observer(&self, rtp_observer: webrtc::ptr::Borrowed<RffiRtpObserver>) {
+        unsafe {
+            pc::Rust_setRtpPacketObserver(self.rffi.as_borrowed(), rtp_observer);
+        }
     }
 
     pub fn close(&self) {

@@ -58,6 +58,7 @@ pub struct ScenarioConfig {
     pub video_output: Option<PathBuf>,
     pub deterministic_loss: Option<u8>,
     pub call_type_config: ScenarioCallTypeConfig,
+    pub field_trials: String,
 }
 
 #[derive(Clone)]
@@ -150,6 +151,7 @@ impl ScenarioManager {
             event_sync,
             video_sink,
             scenario_config.deterministic_loss.is_some(),
+            &scenario_config.field_trials,
         )
         .expect("Start client");
 

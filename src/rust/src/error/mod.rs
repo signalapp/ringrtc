@@ -49,6 +49,8 @@ pub enum RingRtcError {
     // WebRTC / C++ error codes
     #[error("Unable to create C++ PeerConnectionObserver")]
     CreatePeerConnectionObserver,
+    #[error("Unable to create C++ RtpObserver")]
+    CreateRtpObserver,
     #[error("Unable to create C++ PeerConnectionFactory")]
     CreatePeerConnectionFactory,
     #[error("Unable to create C++ PeerConnection")]

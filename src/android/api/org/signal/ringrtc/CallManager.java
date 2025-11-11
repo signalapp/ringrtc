@@ -77,6 +77,9 @@ public class CallManager {
   @Nullable
   private PeerConnectionFactory               groupFactory;
 
+  @NonNull
+  private static String                       fieldTrials;
+
   static {
     Log.d(TAG, "Loading ringrtc library");
     System.loadLibrary("ringrtc");
@@ -108,9 +111,9 @@ public class CallManager {
       fieldTrialsWithDefaults.put("WebRTC-IncreaseIceCandidatePriorityHostSrflx", "Enabled");
       fieldTrialsWithDefaults.putAll(fieldTrials);
 
-      String fieldTrialsString = buildFieldTrialsString(fieldTrialsWithDefaults);
+      CallManager.fieldTrials = buildFieldTrialsString(fieldTrialsWithDefaults);
 
-      Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build, field trials = " + fieldTrialsString + ")");
+      Log.i(TAG, "CallManager.initialize(): (" + (buildInfo.debug ? "debug" : "release") + " build, field trials = " + CallManager.fieldTrials + ")");
 
       if (buildInfo.debug) {
         // Show all WebRTC logs via application Logger while debugging.
@@ -119,8 +122,6 @@ public class CallManager {
         // Show WebRTC error and warning logs via application Logger for release builds.
         builder.setInjectableLogger(new WebRtcLogger(), Severity.LS_WARNING);
       }
-
-      builder.setFieldTrials(fieldTrialsString);
 
       PeerConnectionFactory.initialize(builder.createInitializationOptions());
       ringrtcInitialize();
@@ -249,6 +250,7 @@ public class CallManager {
             .setAudioDeviceModule(adm)
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
+            .setFieldTrials(fieldTrials)
             .createPeerConnectionFactory();
     adm.release();
     return factory;

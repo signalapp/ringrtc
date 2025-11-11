@@ -250,6 +250,7 @@ fn main() {
     let mut peer_connection_factory = PeerConnectionFactory::new(
         &peer_connection_factory::AudioConfig::default(),
         false,
+        "",
         None,
     )
     .unwrap();
