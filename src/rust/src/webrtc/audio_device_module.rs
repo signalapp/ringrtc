@@ -91,6 +91,7 @@ enum Event {
     StopPlayout,
     InitRecording,
     StartRecording,
+    WarmupRecording,
     StopRecording,
     PlayoutDelay,
     Terminate,
@@ -123,6 +124,7 @@ struct Worker {
     output_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
     audio_transport: Arc<Mutex<RffiAudioTransport>>,
     audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
+    send_to_webrtc: Arc<AtomicBool>,
 }
 
 impl Worker {
@@ -391,6 +393,12 @@ impl Worker {
     }
 
     fn init_recording(&mut self) -> anyhow::Result<()> {
+        if !self.send_to_webrtc.load(Ordering::SeqCst) && self.input_stream.is_some() {
+            // Assume that this is the flow to "upgrade" from warmup to recording and do nothing
+            info!("Skipping init_recording because we seem to be in warmup mode");
+            return Ok(());
+        }
+
         let recording_device = if let Some(device) = self.recording_device {
             device
         } else {
@@ -420,16 +428,24 @@ impl Worker {
             SAMPLE_LATENCY
         });
         info!("min recording latency: {}", min_latency);
+
+        // Default this to sending to WebRTC
+        self.send_to_webrtc.store(true, Ordering::SeqCst);
         // WebRTC can only accept data in WEBRTC_WINDOW-sized chunks.
         // This buffer tracks any extra data that would not fit in a call to WebRTC,
         // if `input.len()` is not an exact multiple of WEBRTC_WINDOW.
         let mut buffer = VecDeque::<i16>::new();
+        let send_to_webrtc = self.send_to_webrtc.clone();
         buffer.reserve(WEBRTC_WINDOW);
         builder
             .name("ringrtc input")
             .input(recording_device, &params)
             .latency(std::cmp::max(SAMPLE_LATENCY, min_latency))
             .data_callback(move |input, _| {
+                if !send_to_webrtc.load(Ordering::SeqCst) {
+                    // Just drop this; we're warming the mic
+                    return input.len() as isize;
+                }
                 // First add data from prior call(s).
                 let data = buffer
                     .drain(0..)
@@ -478,7 +494,12 @@ impl Worker {
         }
     }
 
-    fn start_recording(&mut self) -> anyhow::Result<()> {
+    fn start_recording(&mut self, send_to_webrtc: bool) -> anyhow::Result<()> {
+        let was_sending = self.send_to_webrtc.swap(send_to_webrtc, Ordering::SeqCst);
+        if !was_sending {
+            // We were warming up; all we need to do is start sending to webrtc (or continue warmup).
+            return Ok(());
+        }
         if let Some(input_stream) = &self.input_stream {
             if let Err(e) = input_stream.start() {
                 bail!("Failed to start recording: {}", e);
@@ -493,7 +514,10 @@ impl Worker {
 
     fn stop_recording(&mut self) -> anyhow::Result<()> {
         if let Some(input_stream) = &self.input_stream {
-            if let Err(e) = input_stream.stop() {
+            let res = input_stream.stop();
+            // Reset **after** we stop recording to avoid sending data to webrtc incorrectly
+            self.send_to_webrtc.store(true, Ordering::SeqCst);
+            if let Err(e) = res {
                 bail!("Failed to stop recording: {}", e);
             }
             // Drop the stream so that it isn't reused on future calls.
@@ -543,6 +567,13 @@ impl Worker {
                     }
                 }
                 Event::SetRecordingDevice(index) => {
+                    if !self.send_to_webrtc.load(Ordering::SeqCst)
+                        && self.input_stream.is_some()
+                        && let Err(e) = self.stop_recording()
+                    {
+                        warn!("Failed to stop recording: {}", e);
+                    }
+
                     if let Some(d) = self.input_device_cache.get(index.into()) {
                         self.recording_device = Some(d.devid);
                         Ok(())
@@ -558,7 +589,8 @@ impl Worker {
                 Event::StartPlayout => self.start_playout(),
                 Event::StopPlayout => self.stop_playout(),
                 Event::InitRecording => self.init_recording(),
-                Event::StartRecording => self.start_recording(),
+                Event::StartRecording => self.start_recording(true),
+                Event::WarmupRecording => self.start_recording(false),
                 Event::StopRecording => self.stop_recording(),
                 Event::PlayoutDelay => {
                     if let Err(e) = playout_delay_sender.send(self.playout_delay()) {
@@ -752,6 +784,7 @@ impl Worker {
                     callback: std::ptr::null(),
                 })),
                 audio_device_observer: None,
+                send_to_webrtc: Arc::new(AtomicBool::new(true)),
             };
             if let Err(e) = worker.register_device_collection_changed(DeviceType::INPUT) {
                 error!("Failed to register input device callback: {}", e);
@@ -1357,6 +1390,14 @@ impl AudioDeviceModule {
             return -1;
         }
         0
+    }
+
+    // Not a chromium interface function
+    pub fn warmup_recording(&mut self) -> anyhow::Result<()> {
+        if let Err(e) = self.mpsc_sender.send(Event::WarmupRecording) {
+            return Err(anyhow!("Failed to request WarmupRecording: {}", e));
+        }
+        Ok(())
     }
 
     pub fn stop_recording(&mut self) -> i32 {

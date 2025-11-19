@@ -1304,6 +1304,18 @@ fn setOutgoingAudioEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn setMicrophoneWarmupEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
+    info!("setMicrophoneWarmupEnabled({})", enabled);
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint.peer_connection_factory.set_audio_warmup(enabled)
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn setOutgoingVideoEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
     info!("setOutgoingVideoEnabled({})", enabled);
@@ -3192,6 +3204,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_receivedHttpResponse", receivedHttpResponse)?;
     cx.export_function("cm_httpRequestFailed", httpRequestFailed)?;
     cx.export_function("cm_setOutgoingAudioEnabled", setOutgoingAudioEnabled)?;
+    cx.export_function("cm_setMicrophoneWarmupEnabled", setMicrophoneWarmupEnabled)?;
     cx.export_function("cm_setOutgoingVideoEnabled", setOutgoingVideoEnabled)?;
     cx.export_function(
         "cm_setOutgoingVideoIsScreenShare",

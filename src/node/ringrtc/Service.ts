@@ -107,6 +107,8 @@ class NativeCallManager {
   Native.cm_httpRequestFailed;
 (NativeCallManager.prototype as any).setOutgoingAudioEnabled =
   Native.cm_setOutgoingAudioEnabled;
+(NativeCallManager.prototype as any).setMicrophoneWarmupEnabled =
+  Native.cm_setMicrophoneWarmupEnabled;
 (NativeCallManager.prototype as any).setOutgoingVideoEnabled =
   Native.cm_setOutgoingVideoEnabled;
 (NativeCallManager.prototype as any).setOutgoingVideoIsScreenShare =
@@ -1262,6 +1264,13 @@ export class RingRTCType {
           pendingUsers: [],
         };
       }
+    });
+  }
+
+  // Called by UX
+  setMicrophoneWarmupEnabled(warmup: boolean): void {
+    sillyDeadlockProtection(() => {
+      this.callManager.setMicrophoneWarmupEnabled(warmup);
     });
   }
 
@@ -2935,6 +2944,7 @@ export interface CallManager {
   signalingMessageSent(callId: CallId): void;
   signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
+  setMicrophoneWarmupEnabled(enabled: boolean): void;
   setOutgoingVideoEnabled(enabled: boolean): void;
   setOutgoingVideoIsScreenShare(enabled: boolean): void;
   updateDataMode(dataMode: DataMode): void;

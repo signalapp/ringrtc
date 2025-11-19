@@ -746,4 +746,36 @@ impl PeerConnectionFactory {
             .and_then(|adm| adm.lock().ok())
             .map(|adm| adm.backend_name())
     }
+
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
+    pub fn set_audio_warmup(&mut self, enable: bool) -> Result<()> {
+        if self
+            .adm
+            .as_ref()
+            .and_then(|adm| adm.lock().ok())
+            .and_then(|mut adm| {
+                if enable {
+                    if adm.init_recording() != 0 {
+                        warn!("Failed to init recording for warmup");
+                        return None;
+                    }
+                    adm.warmup_recording().ok()
+                } else {
+                    if adm.stop_recording() != 0 {
+                        warn!("failed to stop recording");
+                        return None;
+                    }
+                    Some(())
+                }
+            })
+            .is_none()
+        {
+            if enable {
+                return Err(anyhow!("Failed to warm up mic"));
+            } else {
+                return Err(anyhow!("Failed to stop warming up mic"));
+            }
+        };
+        Ok(())
+    }
 }
