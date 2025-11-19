@@ -803,6 +803,7 @@ where
         connection: Connection<T>,
         state: ConnectionState,
     ) -> Result<()> {
+        self.notify_observer(connection.clone(), ConnectionObserverEvent::IceConnected);
         match state {
             ConnectionState::NotYetStarted
             | ConnectionState::Starting
@@ -856,6 +857,7 @@ where
         connection: Connection<T>,
         state: ConnectionState,
     ) -> Result<()> {
+        self.notify_observer(connection.clone(), ConnectionObserverEvent::IceDisconnected);
         match state {
             ConnectionState::NotYetStarted
             | ConnectionState::Starting

@@ -199,3 +199,7 @@ pub mod rtp_data {
 pub mod signaling {
     call_protobuf::include_signaling_proto!();
 }
+
+pub mod call_summary {
+    call_protobuf::include_call_summary_proto!();
+}

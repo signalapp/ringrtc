@@ -1461,6 +1461,12 @@ public class CallManager {
   }
 
   @CalledByNative
+  private void onCallEnded(Remote remote, CallEndReason reason, CallSummary summary) {
+    Log.i(TAG, "onCallEnded():");
+    observer.onCallEnded(remote, reason, summary);
+  }
+
+  @CalledByNative
   private void onEvent(Remote remote, CallEvent event) {
     Log.i(TAG, "onEvent():");
     observer.onCallEvent(remote, event);
@@ -1766,7 +1772,7 @@ public class CallManager {
   }
 
   @CalledByNative
-  private void handleEnded(long clientId, GroupCall.GroupCallEndReason reason) {
+  private void handleEnded(long clientId, CallEndReason reason, CallSummary summary) {
     Log.i(TAG, "handleEnded():");
 
     GroupCall groupCall = this.groupCallByClientId.get(clientId);
@@ -1777,7 +1783,7 @@ public class CallManager {
 
     this.groupCallByClientId.delete(clientId);
 
-    groupCall.handleEnded(reason);
+    groupCall.handleEnded(reason, summary);
   }
 
   @CalledByNative
@@ -1905,9 +1911,120 @@ public class CallManager {
     }
   }
 
+  //
+  // NOTE:
+  // 
+  // The ordering of CallEndReason must be kept in sync with the ordering of CallEndReason
+  // in <project-root>/src/rust/common/mod.rs.
+  // 
+  
   /**
    *
-   * Enumeration of simple call status events
+   * Enumeration of all call end reasons
+   *
+   */
+  public enum CallEndReason {
+    /** The call ended because of a local hangup. For direct calls. */
+    LOCAL_HANGUP,
+
+    /** The call ended because of a remote hangup. For direct calls. */
+    REMOTE_HANGUP,
+
+    /** The call ended because the remote needs permission. For direct calls. */
+    REMOTE_HANGUP_NEED_PERMISSION,
+
+    /** The call ended because the call was accepted by a different device. For direct calls. */
+    REMOTE_HANGUP_ACCEPTED,
+
+    /** The call ended because the call was declined by a different device. For direct calls. */
+    REMOTE_HANGUP_DECLINED,
+
+    /** The call ended because the call was declared busy by a different device. For direct calls. */
+    REMOTE_HANGUP_BUSY,
+
+    /** The call ended because of a remote busy message. For direct calls. */
+    REMOTE_BUSY,
+
+    /** The call ended because of glare, receiving an offer from the same remote
+     while calling them. For direct calls. */
+    REMOTE_GLARE,
+
+    /** The call ended because of recall, receiving an offer from the same remote
+     while still in an existing call with them. For direct calls. */
+    REMOTE_RECALL,
+
+    /** The call ended because it timed out during setup. For direct calls. */
+    TIMEOUT,
+
+    /** The call ended because of an internal error condition. For direct calls. */
+    INTERNAL_FAILURE,
+
+    /** The call ended because a signaling message couldn't be sent. For direct calls. */
+    SIGNALING_FAILURE,
+
+    /** The call ended because setting up the connection failed. For direct calls. */
+    CONNECTION_FAILURE,
+
+    /** The call ended because the application wanted to drop the call. For direct calls. */
+    APP_DROPPED_CALL,
+
+    /** The client disconnected by calling the disconnect() API. For group calls. */
+    DEVICE_EXPLICITLY_DISCONNECTED,
+
+    /** The server disconnected due to policy or some other controlled reason. For group calls. */
+    SERVER_EXPLICITLY_DISCONNECTED,
+
+    /** An admin denied your request to join the call. For group calls. */
+    DENIED_REQUEST_TO_JOIN_CALL,
+
+    /** An admin removed you from the call. For group calls. */
+    REMOVED_FROM_CALL,
+
+    /** Another direct call or group call is currently in progress and using media resources. For group calls. */
+    CALL_MANAGER_IS_BUSY,
+
+    /** Could not join the group call. For group calls. */
+    SFU_CLIENT_FAILED_TO_JOIN,
+
+    /** Could not create a usable peer connection factory for media. For group calls. */
+    FAILED_TO_CREATE_PEER_CONNECTION_FACTORY,
+
+    /** Could not negotiate SRTP keys with a DHE. For group calls. */
+    FAILED_TO_NEGOTIATE_SRTP_KEYS,
+
+    /** Could not create a peer connection for media. For group calls. */
+    FAILED_TO_CREATE_PEER_CONNECTION,
+
+    /** Could not start the peer connection for media. For group calls. */
+    FAILED_TO_START_PEER_CONNECTION,
+
+    /** Could not update the peer connection for media. For group calls. */
+    FAILED_TO_UPDATE_PEER_CONNECTION,
+
+    /** Could not set the requested bitrate for media. For group calls. */
+    FAILED_TO_SET_MAX_SEND_BITRATE,
+
+    /** Could not connect successfully. For group calls. */
+    ICE_FAILED_WHILE_CONNECTING,
+
+    /** Lost a connection and retries were unsuccessful. For group calls. */
+    ICE_FAILED_AFTER_CONNECTED,
+
+    /** Unexpected change in demuxId requiring a new group call. For group calls. */
+    SERVER_CHANGED_DEMUXID,
+
+    /** The SFU reported that the group call is full. For group calls. */
+    HAS_MAX_DEVICES;
+
+    @CalledByNative
+    static CallEndReason fromNativeIndex(int nativeIndex) {
+      return values()[nativeIndex];
+    }
+  }
+
+  /**
+   *
+   * Enumeration of call status event notifications
    *
    */
   public enum CallEvent {
@@ -1923,53 +2040,6 @@ public class CallManager {
 
     /** The remote side has accepted and connected the call. */
     REMOTE_CONNECTED,
-
-    /** The call ended because of a local hangup. */
-    ENDED_LOCAL_HANGUP,
-
-    /** The call ended because of a remote hangup. */
-    ENDED_REMOTE_HANGUP,
-
-    /** The call ended because the remote needs permission. */
-    ENDED_REMOTE_HANGUP_NEED_PERMISSION,
-
-    /** The call ended because the call was accepted by a different device. */
-    ENDED_REMOTE_HANGUP_ACCEPTED,
-
-    /** The call ended because the call was declined by a different device. */
-    ENDED_REMOTE_HANGUP_DECLINED,
-
-    /** The call ended because the call was declared busy by a different device. */
-    ENDED_REMOTE_HANGUP_BUSY,
-
-    /** The call ended because of a remote busy message. */
-    ENDED_REMOTE_BUSY,
-
-    /** The call ended because of glare, receiving an offer from same remote
-        while calling them. */
-    ENDED_REMOTE_GLARE,
-
-    /** The call ended because of recall, receiving an offer from same remote
-        while still in an existing call with them. */
-    ENDED_REMOTE_RECALL,
-
-    /** The call ended because it timed out during setup. */
-    ENDED_TIMEOUT,
-
-    /** The call ended because of an internal error condition. */
-    ENDED_INTERNAL_FAILURE,
-
-    /** The call ended because a signaling message couldn't be sent. */
-    ENDED_SIGNALING_FAILURE,
-
-    /** The call ended because there was a failure during glare handling. */
-    ENDED_GLARE_HANDLING_FAILURE,
-
-    /** The call ended because setting up the connection failed. */
-    ENDED_CONNECTION_FAILURE,
-
-    /** The call ended because the application wanted to drop the call. */
-    ENDED_APP_DROPPED_CALL,
 
     /** The remote peer indicates its audio stream is enabled. */
     REMOTE_AUDIO_ENABLE,
@@ -1994,6 +2064,9 @@ public class CallManager {
 
     /** The call dropped while connected and is now reconnected. */
     RECONNECTED,
+
+    /** The call ended because there was a failure during glare handling. */
+    GLARE_HANDLING_FAILURE,
 
     /** The received offer is expired. */
     RECEIVED_OFFER_EXPIRED,
@@ -2145,6 +2218,15 @@ public class CallManager {
      *
      */
     void onStartCall(Remote remote, CallId callId, Boolean isOutgoing, CallMediaType callMediaType);
+
+    /**
+     * Notification that the call has ended.
+     *
+     * @param remote        remote peer of the call
+     * @param reason        call end reason
+     * @param summary       call summary
+     */
+    void onCallEnded(Remote remote, @NonNull CallEndReason reason, @NonNull CallSummary summary);
 
     /**
      *

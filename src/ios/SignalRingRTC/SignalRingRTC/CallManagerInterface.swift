@@ -9,6 +9,7 @@ import WebRTC
 @available(iOSApplicationExtension, unavailable)
 protocol CallManagerInterfaceDelegate: AnyObject {
     func onStartCall(remote: UnsafeRawPointer, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
+    func onCallEnded(remote: UnsafeRawPointer, callId: UInt64, reason: CallEndReason, summary: CallSummary)
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent)
     func onNetworkRouteChangedFor(remote: UnsafeRawPointer, networkRoute: NetworkRoute)
     func onAudioLevelsFor(remote: UnsafeRawPointer, capturedLevel: UInt16, receivedLevel: UInt16)
@@ -40,7 +41,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func handleRemoteDevicesChanged(clientId: UInt32, remoteDeviceStates: [RemoteDeviceState])
     func handleIncomingVideoTrack(clientId: UInt32, remoteDemuxId: UInt32, nativeVideoTrackBorrowedRc: UnsafeMutableRawPointer?)
     func handlePeekChanged(clientId: UInt32, peekInfo: PeekInfo)
-    func handleEnded(clientId: UInt32, reason: GroupCallEndReason)
+    func handleEnded(clientId: UInt32, reason: CallEndReason, summary: CallSummary)
     func handleSpeakingNotification(clientId: UInt32, event: SpeechEvent)
     func handleRemoteMuteRequest(clientId: UInt32, muteSource: UInt32)
     func handleObservedRemoteMute(clientId: UInt32, muteSource: UInt32, muteTarget: UInt32)
@@ -68,6 +69,7 @@ class CallManagerInterface {
             object: UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque()),
             destroy: callManagerInterfaceDestroy,
             onStartCall: callManagerInterfaceOnStartCall,
+            onCallEnded: callManagerInterfaceOnCallEnded,
             onEvent: callManagerInterfaceOnCallEvent,
             onNetworkRouteChanged: callManagerInterfaceOnNetworkRouteChanged,
             onAudioLevels: callManagerInterfaceOnAudioLevels,
@@ -115,6 +117,14 @@ class CallManagerInterface {
         }
 
         delegate.onStartCall(remote: remote, callId: callId, isOutgoing: isOutgoing, callMediaType: callMediaType)
+    }
+    
+    func onCallEnded(remote: UnsafeRawPointer, callId: UInt64, reason: CallEndReason, summary: CallSummary) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+        
+        delegate.onCallEnded(remote: remote, callId: callId, reason: reason, summary: summary)
     }
 
     func onEvent(remote: UnsafeRawPointer, event: Int32) {
@@ -345,12 +355,12 @@ class CallManagerInterface {
         delegate.handlePeekChanged(clientId: clientId, peekInfo: peekInfo)
     }
 
-    func handleEnded(clientId: UInt32, reason: GroupCallEndReason) {
+    func handleEnded(clientId: UInt32, reason: CallEndReason, summary: CallSummary) {
         guard let delegate = self.callManagerObserverDelegate else {
             return
         }
 
-        delegate.handleEnded(clientId: clientId, reason: reason)
+        delegate.handleEnded(clientId: clientId, reason: reason, summary: summary)
     }
 
     func handleSpeakingNotification(clientId: UInt32, event: SpeechEvent) {
@@ -412,6 +422,33 @@ func callManagerInterfaceOnStartCall(object: UnsafeMutableRawPointer?, remote: U
     }
 
     obj.onStartCall(remote: remote, callId: callId, isOutgoing: isOutgoing, callMediaType: callMediaType)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceOnCallEnded(object: UnsafeMutableRawPointer?, remote: UnsafeRawPointer?, callId: UInt64, rawReason: Int32, rawSummary: UnsafePointer<rtc_callsummary_CallSummary>?) {
+    guard let object = object else {
+        failDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let remote = remote else {
+        failDebug("remote was unexpectedly nil")
+        return
+    }
+
+    guard let reason = CallEndReason(rawValue: rawReason) else {
+        failDebug("unexpected end reason")
+        return
+    }
+
+    guard let rawSummary = rawSummary else {
+        failDebug("call summary was unexpectedly nil")
+        return
+    }
+    let summary = CallSummary.fromRtc(rawSummary)
+
+    obj.onCallEnded(remote: remote, callId: callId, reason: reason, summary: summary)
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -1092,41 +1129,41 @@ func callManagerInterfaceHandlePeekChanged(object: UnsafeMutableRawPointer?, cli
 }
 
 @available(iOSApplicationExtension, unavailable)
-func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId: UInt32, reason: Int32) {
+func callManagerInterfaceHandleEnded(object: UnsafeMutableRawPointer?, clientId: UInt32, rawReason: Int32, rawSummary: UnsafePointer<rtc_callsummary_CallSummary>?) {
     guard let object = object else {
         failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
-    let _reason: GroupCallEndReason
-    if let validReason = GroupCallEndReason(rawValue: reason) {
-        _reason = validReason
-    } else {
+    guard let reason = CallEndReason(rawValue: rawReason) else {
         failDebug("unexpected end reason")
         return
     }
+    
+    guard let rawSummary = rawSummary else {
+        failDebug("summary was unexpectedly nil")
+        return
+    }
+    let summary = CallSummary.fromRtc(rawSummary)
 
-    obj.handleEnded(clientId: clientId, reason: _reason)
+    obj.handleEnded(clientId: clientId, reason: reason, summary: summary)
 }
 
 @available(iOSApplicationExtension, unavailable)
-func callManagerInterfaceHandleSpeakingNotification(object: UnsafeMutableRawPointer?, clientId: UInt32, event: Int32) {
+func callManagerInterfaceHandleSpeakingNotification(object: UnsafeMutableRawPointer?, clientId: UInt32, rawEvent: Int32) {
     guard let object = object else {
         failDebug("object was unexpectedly nil")
         return
     }
     let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
 
-    let _event: SpeechEvent
-    if let validEvent = SpeechEvent(rawValue: event) {
-        _event = validEvent
-    } else {
+    guard let event = SpeechEvent(rawValue: rawEvent) else {
         failDebug("unexpected speech event")
         return
     }
 
-    obj.handleSpeakingNotification(clientId: clientId, event: _event)
+    obj.handleSpeakingNotification(clientId: clientId, event: event)
 }
 
 @available(iOSApplicationExtension, unavailable)

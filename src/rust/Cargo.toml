@@ -58,6 +58,8 @@ static_assertions = { version = "1.1.0"  }
 subtle            = { version = "2.6.1"  }
 thiserror         = { version = "1.0.69" }
 x25519-dalek      = { version = "2.0.1", features = ["static_secrets"] }
+strum             = { version = "0.27.2", features = ["derive"] }
+strum_macros      = { version = "0.27.2" }
 
 # Used by call links. Be careful not to pull in more than strictly needed, for both code size and
 # maintenance reasons. In particular, anything involving credentials should be left to

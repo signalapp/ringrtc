@@ -8,7 +8,7 @@
 import {
   DataMode,
   Call,
-  CallEndedReason,
+  CallRejectReason,
   CallId,
   CallingMessage,
   CallLogLevel,
@@ -107,15 +107,16 @@ export class CallingClass {
     return true;
   }
 
-  private handleAutoEndedIncomingCallRequest(
+  private handleRejectedIncomingCallRequest(
     callId: CallId,
     remoteUserId: UserId,
-    reason: CallEndedReason,
+    reason: CallRejectReason,
     ageInSeconds: number,
     wasVideoCall: boolean,
-    receivedAtCounter: number | undefined
+    receivedAtCounter: number | undefined,
+    receivedAtDate: number | undefined
   ) {
-    log('handleAutoEndedIncomingCallRequest');
+    log('handleRejectedIncomingCallRequest');
   }
 
   static handleLogMessage(
@@ -235,8 +236,8 @@ export class CallingClass {
     RingRTC.handleOutgoingSignaling = this.handleOutgoingSignaling.bind(this);
     RingRTC.handleIncomingCall = this.handleIncomingCall.bind(this);
     RingRTC.handleStartCall = this.handleStartCall.bind(this);
-    RingRTC.handleAutoEndedIncomingCallRequest =
-      this.handleAutoEndedIncomingCallRequest.bind(this);
+    RingRTC.handleRejectedIncomingCallRequest =
+      this.handleRejectedIncomingCallRequest.bind(this);
     RingRTC.handleLogMessage = CallingClass.handleLogMessage;
     RingRTC.handleSendHttpRequest = this.handleSendHttpRequest.bind(this);
     RingRTC.handleSendCallMessage = this.handleSendCallMessage.bind(this);

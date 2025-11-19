@@ -37,6 +37,7 @@ pub mod core {
     pub mod call_fsm;
     pub mod call_manager;
     pub mod call_mutex;
+    pub mod call_summary;
     pub mod connection;
     pub mod connection_fsm;
     pub mod crypto;
@@ -73,6 +74,7 @@ mod android {
 mod ios {
     mod api {
         pub mod call_manager_interface;
+        pub mod call_summary;
     }
     mod call_manager;
     mod error;

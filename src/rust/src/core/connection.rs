@@ -40,8 +40,9 @@ use crate::{
     },
     error::RingRtcError,
     lite::sfu::DemuxId,
-    protobuf, webrtc,
+    protobuf,
     webrtc::{
+        self,
         ice_gatherer::IceGatherer,
         media::{MediaStream, VideoFrame, VideoFrameMetadata, VideoSink},
         peer_connection::{AudioLevel, PeerConnection, SendRates},
@@ -54,7 +55,7 @@ use crate::{
         sdp_observer::{
             SessionDescription, SrtpCryptoSuite, SrtpKey, create_csd_observer, create_ssd_observer,
         },
-        stats_observer::{StatsObserver, create_stats_observer},
+        stats_observer::{StatsObserver, StatsSnapshotConsumer, create_stats_observer},
     },
 };
 
@@ -101,6 +102,16 @@ pub enum ConnectionObserverEvent {
 
     /// The ICE network route changed
     IceNetworkRouteChanged(NetworkRoute),
+
+    /// ICE connection established. This event is always dispatched along with a
+    /// device ID identifying the device with which ICE connection has been
+    /// established. It is possible and likely to receive multiple IceConnected
+    /// events for each device.
+    IceConnected,
+
+    /// ICE connection lost. This event is always dispatched along with a device
+    /// ID identifying the device with which ICE connection has been lost.
+    IceDisconnected,
 
     AudioLevels {
         captured_level: AudioLevel,
@@ -581,6 +592,17 @@ where
                 "Starting Connection FSM for {} more than once",
                 self.connection_id
             );
+        }
+        Ok(())
+    }
+
+    pub fn set_stats_snapshot_consumer(
+        &mut self,
+        consumer: Box<dyn StatsSnapshotConsumer>,
+    ) -> Result<()> {
+        let mut webrtc = self.webrtc.lock()?;
+        if let Some(stats_observer) = &mut webrtc.stats_observer {
+            stats_observer.set_stats_snapshot_consumer(consumer);
         }
         Ok(())
     }

@@ -10,10 +10,12 @@ use std::{fmt, time::Duration};
 
 use crate::{
     common::{
-        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+        ApplicationEvent, CallConfig, CallDirection, CallEndReason, CallId, CallMediaType,
+        DeviceId, Result,
     },
     core::{
         call::Call,
+        call_summary::CallSummary,
         connection::{Connection, ConnectionType},
         group_call,
         group_call::Reaction,
@@ -196,6 +198,14 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
         age: Duration,
     ) -> Result<()>;
 
+    fn on_call_ended(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        call_id: CallId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) -> Result<()>;
+
     /// Notify the application that the call is completely concluded
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer, call_id: CallId) -> Result<()>;
 
@@ -281,7 +291,12 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
 
     fn handle_rtc_stats_report(&self, _report_json: String) {}
 
-    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason);
+    fn handle_ended(
+        &self,
+        client_id: group_call::ClientId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    );
 
     fn handle_remote_mute_request(&self, client_id: group_call::ClientId, mute_source: DemuxId);
 

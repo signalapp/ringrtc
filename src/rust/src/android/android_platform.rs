@@ -21,10 +21,12 @@ use jni::{
 use crate::{
     android::{error::AndroidError, jni_util::*, webrtc_java_media_stream::JavaMediaStream},
     common::{
-        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+        ApplicationEvent, CallConfig, CallDirection, CallEndReason, CallId, CallMediaType,
+        DeviceId, Result,
     },
     core::{
         call::Call,
+        call_summary::{CallSummary, MediaQualityStats, QualityStats},
         connection::{Connection, ConnectionType},
         group_call,
         platform::{Platform, PlatformItem},
@@ -32,8 +34,8 @@ use crate::{
     },
     lite::{
         call_links::{CallLinkEpoch, CallLinkRestrictions, CallLinkState, Empty},
-        http, sfu,
-        sfu::{DemuxId, PeekInfo, PeekResult, UserId},
+        http,
+        sfu::{self, DemuxId, PeekInfo, PeekResult, UserId},
     },
     webrtc::{
         media::{MediaStream, VideoTrack},
@@ -43,6 +45,11 @@ use crate::{
 };
 
 const RINGRTC_PACKAGE: &str = jni_class_name!(org.signal.ringrtc);
+const CALL_SUMMARY_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallSummary);
+const CALL_SUMMARY_QUALITY_STATS_CLASS: &str =
+    jni_class_name!(org.signal.ringrtc.CallSummary::QualityStats);
+const CALL_SUMMARY_MEDIA_QUALITY_STATS_CLASS: &str =
+    jni_class_name!(org.signal.ringrtc.CallSummary::MediaQualityStats);
 const CALL_LINK_STATE_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkState);
 const CALL_LINK_EPOCH_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkEpoch);
 const CALL_MANAGER_CLASS: &str = "CallManager";
@@ -348,6 +355,38 @@ impl Platform for AndroidPlatform {
                 call_id_jlong => long,
                 is_outgoing => boolean,
                 jni_call_media_type => org.signal.ringrtc.CallManager::CallMediaType,
+            ) -> void),
+        )?;
+
+        Ok(())
+    }
+
+    fn on_call_ended(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        _call_id: CallId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) -> Result<()> {
+        info!("on_call_ended(): {}", reason);
+
+        let env = &mut self.java_env()?;
+
+        let jni_remote = remote_peer.as_obj();
+        let jni_summary = self.make_call_summary_object(env, &summary)?;
+        let jni_reason = AutoLocal::new(
+            self.java_enum(env, CALL_MANAGER_CLASS, "CallEndReason", reason as i32)?,
+            env,
+        );
+
+        jni_call_method(
+            env,
+            self.jni_call_manager.as_obj(),
+            "onCallEnded",
+            jni_args!((
+                jni_remote => org.signal.ringrtc.Remote,
+                jni_reason => org.signal.ringrtc.CallManager::CallEndReason,
+                jni_summary => org.signal.ringrtc.CallSummary,
             ) -> void),
         )?;
 
@@ -1510,19 +1549,32 @@ impl Platform for AndroidPlatform {
         }
     }
 
-    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
+    fn handle_ended(
+        &self,
+        client_id: group_call::ClientId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) {
         info!("handle_ended():");
 
         if let Ok(env) = &mut self.java_env() {
             let jni_client_id = client_id as jlong;
-            let jni_end_reason =
-                match self.java_enum(env, GROUP_CALL_CLASS, "GroupCallEndReason", reason as i32) {
+            let jni_reason =
+                match self.java_enum(env, CALL_MANAGER_CLASS, "CallEndReason", reason as i32) {
                     Ok(v) => AutoLocal::new(v, env),
                     Err(error) => {
-                        error!("{:?}", error);
+                        error!("call_end_reason: {:?}", error);
                         return;
                     }
                 };
+
+            let jni_summary = match self.make_call_summary_object(env, &summary) {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("make_call_summary_object: {:?}", e);
+                    return;
+                }
+            };
 
             let result = jni_call_method(
                 env,
@@ -1530,7 +1582,8 @@ impl Platform for AndroidPlatform {
                 "handleEnded",
                 jni_args!((
                     jni_client_id => long,
-                    jni_end_reason => org.signal.ringrtc.GroupCall::GroupCallEndReason
+                    jni_reason => org.signal.ringrtc.CallManager::CallEndReason,
+                    jni_summary => org.signal.ringrtc.CallSummary,
                 ) -> void),
             );
             if result.is_err() {
@@ -1606,8 +1659,8 @@ impl AndroidPlatform {
             jni_class_name!(org.signal.ringrtc.CallManager::CallMediaType),
             jni_class_name!(org.signal.ringrtc.CallManager::HangupType),
             jni_class_name!(org.signal.ringrtc.CallManager::HttpMethod),
+            jni_class_name!(org.signal.ringrtc.CallManager::CallEndReason),
             jni_class_name!(org.signal.ringrtc.GroupCall::ConnectionState),
-            jni_class_name!(org.signal.ringrtc.GroupCall::GroupCallEndReason),
             jni_class_name!(org.signal.ringrtc.GroupCall::JoinState),
             jni_class_name!(org.signal.ringrtc.GroupCall::SpeechEvent),
             CALL_LINK_STATE_CLASS,
@@ -1618,6 +1671,9 @@ impl AndroidPlatform {
             REACTION_CLASS,
             REMOTE_DEVICE_STATE_CLASS,
             RECEIVED_AUDIO_LEVEL_CLASS,
+            CALL_SUMMARY_CLASS,
+            CALL_SUMMARY_QUALITY_STATS_CLASS,
+            CALL_SUMMARY_MEDIA_QUALITY_STATS_CLASS,
             jni_class_name!(java.lang.Boolean),
             jni_class_name!(java.lang.Float),
             jni_class_name!(java.lang.Integer),
@@ -1736,6 +1792,38 @@ impl AndroidPlatform {
                     }
                 };
 
+                Ok(jni_object)
+            }
+        }
+    }
+
+    // Converts Option<f32> to Java Float.
+    fn get_optional_f32_float_object<'local>(
+        &self,
+        env: &mut JNIEnv<'local>,
+        value: Option<f32>,
+    ) -> Result<JObject<'local>> {
+        match value {
+            None => Ok(JObject::null()),
+            Some(value) => {
+                let class_name = jni_class_name!(java.lang.Float);
+                let class = match self.class_cache.get_class(class_name) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return Err(
+                            AndroidError::JniGetLangClassNotFound(class_name.to_string()).into(),
+                        );
+                    }
+                };
+                let args = jni_args!((value as jni::sys::jfloat => float) -> void);
+                let jni_object = match env.new_object(class, args.sig, &args.args) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return Err(
+                            AndroidError::JniNewLangObjectFailed(class_name.to_string()).into()
+                        );
+                    }
+                };
                 Ok(jni_object)
             }
         }
@@ -1968,6 +2056,154 @@ impl AndroidPlatform {
                 error!("handleEmptyResponse: {:?}", error);
             }
         }
+    }
+
+    fn make_media_quality_stats_object<'a>(
+        &self,
+        env: &mut JNIEnv<'a>,
+        media_quality_stats: &MediaQualityStats,
+    ) -> jni::errors::Result<JObject<'a>> {
+        let media_quality_stats_class = match self
+            .class_cache
+            .get_class(CALL_SUMMARY_MEDIA_QUALITY_STATS_CLASS)
+        {
+            Ok(v) => v,
+            Err(error) => {
+                error!("media_quality_stats_class: {:?}", error);
+                return Ok(JObject::null());
+            }
+        };
+        let rtt_median =
+            match self.get_optional_f32_float_object(env, media_quality_stats.rtt_median) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("media_quality_rtt_median: {:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+        let jitter_median_send =
+            match self.get_optional_f32_float_object(env, media_quality_stats.jitter_median_send) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("media_quality_jitter_median_send: {:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+        let jitter_median_recv =
+            match self.get_optional_f32_float_object(env, media_quality_stats.jitter_median_recv) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("media_quality_jitter_median_recv: {:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+        let packet_loss_fraction_send = match self
+            .get_optional_f32_float_object(env, media_quality_stats.packet_loss_fraction_send)
+        {
+            Ok(v) => v,
+            Err(error) => {
+                error!("media_quality_packet_loss_fraction_send: {:?}", error);
+                return Ok(JObject::null());
+            }
+        };
+        let packet_loss_fraction_recv = match self
+            .get_optional_f32_float_object(env, media_quality_stats.packet_loss_fraction_recv)
+        {
+            Ok(v) => v,
+            Err(error) => {
+                error!("media_quality_packet_loss_fraction_recv: {:?}", error);
+                return Ok(JObject::null());
+            }
+        };
+
+        let args = jni_args!((
+            rtt_median => java.lang.Float,
+            jitter_median_send => java.lang.Float,
+            jitter_median_recv => java.lang.Float,
+            packet_loss_fraction_send => java.lang.Float,
+            packet_loss_fraction_recv => java.lang.Float,
+        ) -> void);
+
+        env.new_object(media_quality_stats_class, args.sig, &args.args)
+    }
+
+    fn make_quality_stats_object<'a>(
+        &self,
+        env: &mut JNIEnv<'a>,
+        quality_stats: &QualityStats,
+    ) -> jni::errors::Result<JObject<'a>> {
+        let quality_stats_class = match self.class_cache.get_class(CALL_SUMMARY_QUALITY_STATS_CLASS)
+        {
+            Ok(v) => v,
+            Err(error) => {
+                error!("quality_stats_class: {:?}", error);
+                return Ok(JObject::null());
+            }
+        };
+
+        let rtt_median_connection =
+            match self.get_optional_f32_float_object(env, quality_stats.rtt_median_connection) {
+                Ok(v) => v,
+                Err(error) => {
+                    error!("quality_stats_rtt_median_connection: {:?}", error);
+                    return Ok(JObject::null());
+                }
+            };
+        let audio_stats = self.make_media_quality_stats_object(env, &quality_stats.audio_stats)?;
+        let video_stats = self.make_media_quality_stats_object(env, &quality_stats.video_stats)?;
+
+        let args = jni_args!((
+            rtt_median_connection => java.lang.Float,
+            audio_stats => org.signal.ringrtc.CallSummary::MediaQualityStats,
+            video_stats => org.signal.ringrtc.CallSummary::MediaQualityStats
+        ) -> void);
+
+        env.new_object(quality_stats_class, args.sig, &args.args)
+    }
+
+    fn make_call_summary_object<'a>(
+        &self,
+        env: &mut JNIEnv<'a>,
+        call_summary: &CallSummary,
+    ) -> jni::errors::Result<JObject<'a>> {
+        let call_summary_class = match self.class_cache.get_class(CALL_SUMMARY_CLASS) {
+            Ok(v) => v,
+            Err(error) => {
+                error!("call_summary_class: {:?}", error);
+                return Ok(JObject::null());
+            }
+        };
+
+        let quality_stats_object =
+            self.make_quality_stats_object(env, &call_summary.quality_stats)?;
+        let start_time = u64::from(call_summary.start_time) as jlong;
+        let end_time = u64::from(call_summary.end_time) as jlong;
+        let raw_stats_object = {
+            match call_summary.raw_stats.as_ref() {
+                Some(raw_stats) => env.byte_array_from_slice(raw_stats)?.into(),
+                None => JObject::null(),
+            }
+        };
+        let raw_stats_text = {
+            match call_summary.raw_stats_text.as_ref() {
+                Some(raw_stats_text) => env.new_string(raw_stats_text)?.into(),
+                None => JObject::null(),
+            }
+        };
+        let raw_call_end_reason_text = env.new_string(call_summary.call_end_reason_text.clone())?;
+        let is_survey_candidate = call_summary.is_survey_candidate;
+
+        let args = jni_args!((
+           start_time => long,
+           end_time => long,
+           quality_stats_object => org.signal.ringrtc.CallSummary::QualityStats,
+           raw_stats_object => [byte],
+           raw_stats_text => java.lang.String,
+           raw_call_end_reason_text => java.lang.String,
+           is_survey_candidate => boolean,
+        ) -> void);
+
+        env.new_object(call_summary_class, args.sig, &args.args)
     }
 
     fn make_call_link_epoch_object<'a>(

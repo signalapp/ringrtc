@@ -18,7 +18,7 @@ class TestGroupCallDelegate: GroupCallDelegate {
     var onPeekChangedCount = 0
     var onEndedCount = 0
     var onSpeakingCount = 0
-    var lastOnEndedReason: GroupCallEndReason? = nil
+    var lastOnEndedReason: CallEndReason? = nil
     var lastOnSpeakingEvent: SpeechEvent? = nil
     var remoteMuteCount = 0
     var lastRemoteMuteSource: UInt32 = 0
@@ -60,7 +60,7 @@ class TestGroupCallDelegate: GroupCallDelegate {
         onPeekChangedCount += 1
     }
 
-    func groupCall(onEnded groupCall: GroupCall, reason: GroupCallEndReason) {
+    func groupCall(onEnded groupCall: GroupCall, reason: CallEndReason, summary: CallSummary) {
         onEndedCount += 1
         lastOnEndedReason = reason
     }

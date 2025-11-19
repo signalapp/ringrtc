@@ -12,9 +12,14 @@ fn main() {
             "protobuf/group_call.proto",
             "protobuf/rtp_data.proto",
             "protobuf/signaling.proto",
+            "protobuf/call_summary.proto",
         ];
 
-        prost_build::compile_protos(&protos, &["protobuf"]).expect("Protobufs are valid");
+        prost_build::Config::new()
+            .type_attribute(".call_summary", "#[serde_with::skip_serializing_none]")
+            .type_attribute(".call_summary", "#[derive(serde::Serialize)]")
+            .compile_protos(&protos, &["protobuf"])
+            .expect("Protobufs are valid");
 
         for proto in &protos {
             println!("cargo:rerun-if-changed={}", proto);

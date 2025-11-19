@@ -12,12 +12,16 @@ use libc::size_t;
 use crate::{
     common::{CallConfig, CallMediaType, DataMode, DeviceId},
     core::{group_call, signaling},
-    ios::{call_manager, call_manager::IosCallManager, ios_platform::IosCallData},
+    ios::{
+        api::call_summary::rtc_callsummary_CallSummary,
+        call_manager::{self, IosCallManager},
+        ios_platform::IosCallData,
+    },
     lite::{
         call_links::{CallLinkRootKey, ios::from_optional_u32_to_epoch},
         ffi::ios::rtc_OptionalU32,
-        http, sfu,
-        sfu::DemuxId,
+        http,
+        sfu::{self, DemuxId},
     },
     webrtc::{self, media, peer_connection::AudioLevel, peer_connection_factory as pcf},
 };
@@ -347,6 +351,14 @@ pub struct AppInterface {
         isOutgoing: bool,
         callMediaType: i32,
     ),
+    pub onCallEnded: extern "C" fn(
+        interfaceObject: *mut c_void,
+        appCallObject: *const c_void,
+        callId: u64,
+        reason: i32,
+        callSummary: *const rtc_callsummary_CallSummary,
+    ),
+    /// Swift event callback method.
     pub onEvent:
         extern "C" fn(interfaceObject: *mut c_void, appCallObject: *const c_void, event: i32),
     pub onNetworkRouteChanged: extern "C" fn(
@@ -509,8 +521,12 @@ pub struct AppInterface {
         deviceCountExcludingPendingDevices: u32,
         pendingUsers: AppUuidArray,
     ),
-    pub handleEnded:
-        extern "C" fn(interfaceObject: *mut c_void, clientId: group_call::ClientId, reason: i32),
+    pub handleEnded: extern "C" fn(
+        interfaceObject: *mut c_void,
+        clientId: group_call::ClientId,
+        reason: i32,
+        call_summary: *const rtc_callsummary_CallSummary,
+    ),
     pub handleSpeakingNotification:
         extern "C" fn(interfaceObject: *mut c_void, clientId: group_call::ClientId, event: i32),
     pub handleRemoteMuteRequest: extern "C" fn(

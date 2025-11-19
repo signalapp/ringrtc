@@ -12,6 +12,80 @@ public enum CallManagerError: Error {
     case apiFailed(description: String)
 }
 
+//
+// NOTE:
+// 
+// The ordering of CallEndReason must be kept in sync with the ordering of CallEndReason
+// in <project-root>/src/rust/common/mod.rs.
+// 
+
+@available(iOSApplicationExtension, unavailable)
+public enum CallEndReason: Int32 {
+    /// The call ended because of a local hangup. For direct calls.
+    case localHangup = 0
+    /// The call ended because of a remote hangup. For direct calls.
+    case remoteHangup
+    /// The call ended because the remote needs permission. For direct calls.
+    case remoteHangupNeedPermission
+    /// The call ended because the call was accepted by a different device. For direct calls.
+    case remoteHangupAccepted
+    /// The call ended because the call was declined by a different device. For direct calls.
+    case remoteHangupDeclined
+    /// The call ended because the call was declared busy by a different device. For direct calls.
+    case remoteHangupBusy
+    /// The call ended because of a remote busy message from a callee. For direct calls.
+    case remoteBusy
+    /// The call ended because of glare, receiving an offer from the same remote
+    /// while calling them. For direct calls.
+    case remoteGlare
+    /// The call ended because of recall, receiving an offer from the same remote
+    /// while still in an existing call with them. For direct calls.
+    case remoteReCall
+    /// The call ended because it timed out during setup. For direct calls.
+    case timeout
+    /// The call ended because of an internal error condition. For direct calls.
+    case internalFailure
+    /// The call ended because a signaling message couldn't be sent. For direct calls.
+    case signalingFailure
+    /// The call ended because the connection setup failed. For direct calls.
+    case connectionFailure
+    /// The call ended because the application wanted to drop the call. For direct calls.
+    case appDroppedCall
+    /// The client disconnected by calling the disconnect() API. For group calls.
+    case deviceExplicitlyDisconnected
+    /// The server disconnected due to policy or some other controlled reason. For group calls.
+    case serverExplicitlyDisconnected
+    /// An admin denied your request to join the call. For group calls.
+    case deniedRequestToJoinCall
+    /// An admin removed you from the call. For group calls.
+    case removedFromCall
+    /// Another direct call or group call is currently in progress and using media resources.
+    /// For group calls.
+    case callManagerIsBusy
+    /// Could not join the group call. For group calls.
+    case sfuClientFailedToJoin
+    /// Could not create a usable peer connection factory for media. For group calls.
+    case failedToCreatePeerConnectionFactory
+    /// Could not negotiate SRTP keys with a DHE. For group calls.
+    case failedToNegotiateSrtpKeys
+    /// Could not create a peer connection for media. For group calls.
+    case failedToCreatePeerConnection
+    /// Could not start the peer connection for media. For group calls.
+    case failedToStartPeerConnection
+    /// Could not update the peer connection for media. For group calls.
+    case failedToUpdatePeerConnection
+    /// Could not set the requested bitrate for media. For group calls.
+    case failedToSetMaxSendBitrate
+    /// Could not connect successfully. For group calls.
+    case iceFailedWhileConnecting
+    /// Lost a connection and retries were unsuccessful. For group calls.
+    case iceFailedAfterConnected
+    /// Unexpected change in demuxId requiring a new group call. For group calls.
+    case serverChangedDemuxId
+    /// The SFU reported that the group call is full. For group calls.
+    case hasMaxDevices
+}
+
 /// Primary events a Call UI can act upon.
 @available(iOSApplicationExtension, unavailable)
 public enum CallManagerEvent: Int32 {
@@ -23,38 +97,6 @@ public enum CallManagerEvent: Int32 {
     case connectedLocal
     /// The remote side has accepted and connected the call.
     case connectedRemote
-    /// The call ended because of a local hangup.
-    case endedLocalHangup
-    /// The call ended because of a remote hangup.
-    case endedRemoteHangup
-    /// The call ended because the remote needs permission.
-    case endedRemoteHangupNeedPermission
-    /// The call ended because the call was accepted by a different device.
-    case endedRemoteHangupAccepted
-    /// The call ended because the call was declined by a different device.
-    case endedRemoteHangupDeclined
-    /// The call ended because the call was declared busy by a different device.
-    case endedRemoteHangupBusy
-    /// The call ended because of a remote busy message.
-    case endedRemoteBusy
-    /// The call ended because of glare, receiving an offer from same remote
-    /// while calling them.
-    case endedRemoteGlare
-    /// The call ended because of recall, receiving an offer from same remote
-    /// while still in an existing call with them.
-    case endedRemoteReCall
-    /// The call ended because it timed out during setup.
-    case endedTimeout
-    /// The call ended because of an internal error condition.
-    case endedInternalFailure
-    /// The call ended because a signaling message couldn't be sent.
-    case endedSignalingFailure
-    /// The call ended because setting up the connection failed.
-    case endedConnectionFailure
-    /// The call ended because there was a failure during glare handling.
-    case endedGlareHandlingFailure
-    /// The call ended because the application wanted to drop the call.
-    case endedDropped
     /// The remote side has enabled audio.
     case remoteAudioEnable
     /// The remote side has disabled audio.
@@ -71,11 +113,13 @@ public enum CallManagerEvent: Int32 {
     case reconnecting
     /// The call dropped while connected and is now reconnected.
     case reconnected
+    /// The call ended because there was a failure during glare handling.
+    case glareHandlingFailure
     /// The received offer is expired.
     case receivedOfferExpired
     /// Received an offer while already handling an active call.
     case receivedOfferWhileActive
-    /// Received an offer while already handling an active call and glare was detected.
+    /// Received an offer while already handling an active call and glare detected.
     case receivedOfferWithGlare
 }
 
@@ -197,6 +241,12 @@ public protocol CallManagerDelegate: AnyObject {
      */
     @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldStartCall call: CallManagerDelegateCallType, callId: UInt64, isOutgoing: Bool, callMediaType: CallMediaType)
+    
+    /**
+     * onCallEnded will be invoked whenever a call ends.
+     */
+    @MainActor
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onCallEnded call: CallManagerDelegateCallType, callId: UInt64, reason: CallEndReason, summary: CallSummary)
 
     /**
      * onEvent will be invoked in response to Call Manager library operations.
@@ -294,12 +344,28 @@ public protocol CallManagerDelegate: AnyObject {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onAddRemoteVideoTrack call: CallManagerDelegateCallType, track: RTCVideoTrack)
 
     /**
+     * Optional: Indication that the call object retained by RingRTC is being released. This is optional and
+     * intended mainly for testing. The client does not need to handle this delegate function.
+     */
+    @MainActor
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onCallConcluded call: CallManagerDelegateCallType)
+
+    /**
      * An update from `sender` has come in for the ring in `groupId` identified by `ringId`.
      *
      * `sender` will be the current user's ID if the update came from another device.
      */
     @MainActor
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, didUpdateRingForGroup groupId: Data, ringId: Int64, sender: UUID, update: RingUpdate)
+}
+
+/// Set optional delegates.
+@available(iOSApplicationExtension, unavailable)
+extension CallManagerDelegate {
+    @MainActor
+    public func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, onCallConcluded call: CallManagerDelegateCallType) {
+        // Default implementation does nothing.
+    }
 }
 
 @available(iOSApplicationExtension, unavailable)
@@ -780,6 +846,19 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             delegate.callManager(self, shouldStartCall: callReference, callId: callId, isOutgoing: isOutgoing, callMediaType: callMediaType)
         }
     }
+    
+    func onCallEnded(remote: UnsafeRawPointer, callId: UInt64, reason: CallEndReason, summary: CallSummary) {
+        Logger.debug("onCallEnded")
+        
+        Task { @MainActor in
+            Logger.debug("onCallEnded - main.async")
+            
+            guard let delegate = self.delegate else { return }
+            
+            let callReference: CallType = Unmanaged.fromOpaque(remote).takeUnretainedValue()
+            delegate.callManager(self, onCallEnded: callReference, callId: callId, reason: reason, summary: summary)
+        }
+    }
 
     func onEvent(remote: UnsafeRawPointer, event: CallManagerEvent) {
         Logger.debug("onEvent")
@@ -1011,10 +1090,18 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         Task { @MainActor in
             Logger.debug("onCallConcluded - main.async")
 
-            let unmanagedRemote: Unmanaged<CallType> = Unmanaged.fromOpaque(remote)
+            let unmanagedRemote = Unmanaged<CallType>.fromOpaque(remote)
 
-            // rust lib has signaled that it's done with the call reference
-            unmanagedRemote.release()
+            defer {
+                // rust lib has signaled that it's done with the call reference
+                unmanagedRemote.release()
+            }
+
+            let callReference = unmanagedRemote.takeUnretainedValue()
+
+            guard let delegate = self.delegate else { return }
+
+            delegate.callManager(self, onCallConcluded: callReference)
         }
     }
 
@@ -1197,7 +1284,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
-    func handleEnded(clientId: UInt32, reason: GroupCallEndReason) {
+    func handleEnded(clientId: UInt32, reason: CallEndReason, summary: CallSummary) {
         Logger.debug("handleEnded")
 
         Task { @MainActor in
@@ -1207,7 +1294,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
                 return
             }
 
-            groupCall.handleEnded(reason: reason)
+            groupCall.handleEnded(reason: reason, summary: summary)
         }
     }
 

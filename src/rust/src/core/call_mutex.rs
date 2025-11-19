@@ -12,6 +12,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::{common::Result, error::RingRtcError};
 
+#[derive(Debug)]
 pub struct CallMutex<T: ?Sized> {
     /// Human readable label for the mutex
     label: String,

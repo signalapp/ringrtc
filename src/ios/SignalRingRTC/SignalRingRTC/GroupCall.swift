@@ -250,7 +250,7 @@ public protocol GroupCallDelegate: AnyObject {
      * to disconnect from it.
      */
     @MainActor
-    func groupCall(onEnded groupCall: GroupCall, reason: GroupCallEndReason)
+    func groupCall(onEnded groupCall: GroupCall, reason: CallEndReason, summary: CallSummary)
 
     /**
      * Indication that the user may have been speaking for a certain amount of time -- or stopped speaking.
@@ -895,7 +895,7 @@ public class GroupCall {
     }
 
     @MainActor
-    func handleEnded(reason: GroupCallEndReason) {
+    func handleEnded(reason: CallEndReason, summary: CallSummary) {
         guard let clientId = self.clientId else {
             Logger.error("no clientId defined for groupCall")
             return
@@ -915,7 +915,7 @@ public class GroupCall {
 
         ringrtcDeleteGroupCallClient(self.ringRtcCallManager, clientId)
 
-        self.delegate?.groupCall(onEnded: self, reason: reason)
+        self.delegate?.groupCall(onEnded: self, reason: reason, summary: summary)
     }
 
     @MainActor

@@ -22,22 +22,22 @@ use prost::Message;
 
 use crate::{
     common::{
-        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, CallState, DataMode,
-        DeviceId, Result, RingBench,
+        ApplicationEvent, CallConfig, CallDirection, CallEndReason, CallId, CallMediaType,
+        CallState, DataMode, DeviceId, Result, RingBench,
         actor::{Actor, Stopper},
     },
     core::{
         call::Call,
         call_mutex::CallMutex,
+        call_summary::CallSummary,
         connection::{Connection, ConnectionType},
         endorsements::EndorsementUpdateResultRef,
-        group_call,
         group_call::{
-            Client, ClientId, ClientStartParams, GroupCallKind, HttpSfuClient, Observer, Reaction,
+            self, Client, ClientId, ClientStartParams, GroupCallKind, HttpSfuClient, Observer,
+            Reaction,
         },
         platform::Platform,
-        signaling,
-        signaling::ReceivedOffer,
+        signaling::{self, ReceivedOffer},
         util::{try_scoped, uuid_to_string},
     },
     error::RingRtcError,
@@ -1057,17 +1057,18 @@ where
         &mut self,
         mut call: Call<T>,
         hangup: Option<signaling::Hangup>,
-        event: Option<ApplicationEvent>,
+        reason: Option<CallEndReason>,
     ) -> Result<()> {
         let call_id = call.call_id();
 
-        info!("conclude_call(): call_id: {}", call_id);
+        info!("terminate_call(): call_id: {}", call_id);
 
         self.trim_messages(call_id)?;
 
-        if let Some(event) = event {
+        if let Some(reason) = reason {
             let remote_peer = call.remote_peer()?;
-            self.notify_application(&remote_peer, call_id, event)?;
+            let summary = call.summary().build_call_summary(reason);
+            self.on_call_ended(&remote_peer, call_id, reason, summary)?;
         }
 
         if let Some(hangup) = hangup {
@@ -1090,10 +1091,11 @@ where
             if let Err(err) = err {
                 error!("Conclude call failed: {}", err);
                 if let Ok(remote_peer) = call.remote_peer() {
-                    let _ = call_manager.notify_application(
+                    let _ = call_manager.on_call_ended(
                         &remote_peer,
                         call_id,
-                        ApplicationEvent::EndedInternalFailure,
+                        CallEndReason::InternalFailure,
+                        CallSummary::default(),
                     );
                 }
             }
@@ -1101,7 +1103,7 @@ where
     }
 
     /// Terminates the active call.
-    fn terminate_active_call(&mut self, send_hangup: bool, event: ApplicationEvent) -> Result<()> {
+    fn terminate_active_call(&mut self, send_hangup: bool, reason: CallEndReason) -> Result<()> {
         info!("terminate_active_call():");
 
         if !self.call_active()? {
@@ -1119,7 +1121,7 @@ where
             None
         };
 
-        self.terminate_call(call, hangup, Some(event))
+        self.terminate_call(call, hangup, Some(reason))
     }
 
     /// Handle call() API from application.
@@ -1193,11 +1195,11 @@ where
         &mut self,
         active_call: Call<T>,
         hangup: Option<signaling::Hangup>,
-        event: ApplicationEvent,
+        reason: CallEndReason,
     ) -> Result<()> {
         self.clear_active_call()?;
         self.release_busy()?;
-        self.terminate_call(active_call, hangup, Some(event))
+        self.terminate_call(active_call, hangup, Some(reason))
     }
 
     /// Handle drop_call() API from application.
@@ -1214,7 +1216,7 @@ where
             return Ok(());
         }
 
-        self.handle_terminate_active_call(active_call, None, ApplicationEvent::EndedAppDroppedCall)
+        self.handle_terminate_active_call(active_call, None, CallEndReason::AppDroppedCall)
     }
 
     /// Handle proceed() API from application.
@@ -1282,7 +1284,7 @@ where
 
                 let _ = self.terminate_active_call(
                     active_call.should_send_hangup_on_failure(),
-                    ApplicationEvent::EndedSignalingFailure,
+                    CallEndReason::SignalingFailure,
                 );
             } else {
                 // See if the associated call is in the call map.
@@ -1306,11 +1308,7 @@ where
                             .should_send_hangup_on_failure()
                             .then_some(signaling::Hangup::Normal);
 
-                        self.terminate_call(
-                            call,
-                            hangup,
-                            Some(ApplicationEvent::EndedSignalingFailure),
-                        )?;
+                        self.terminate_call(call, hangup, Some(CallEndReason::SignalingFailure))?;
                     }
                     None => {
                         info!("handle_message_send_failure(): no matching call found");
@@ -1341,7 +1339,7 @@ where
         self.handle_terminate_active_call(
             active_call,
             Some(signaling::Hangup::Normal),
-            ApplicationEvent::EndedLocalHangup,
+            CallEndReason::LocalHangup,
         )
     }
 
@@ -1421,8 +1419,8 @@ where
 
         enum ActiveCallAction {
             DontTerminate,
-            TerminateAndSendHangup(ApplicationEvent),
-            TerminateWithoutSendingHangup(ApplicationEvent),
+            TerminateAndSendHangup(CallEndReason),
+            TerminateWithoutSendingHangup(CallEndReason),
         }
 
         enum IncomingCallAction {
@@ -1444,36 +1442,34 @@ where
                 IncomingCallAction::Ignore(ApplicationEvent::ReceivedOfferWithGlare),
             ),
             ReceivedOfferCollision::GlareLoser => (
-                ActiveCallAction::TerminateAndSendHangup(ApplicationEvent::EndedRemoteGlare),
+                ActiveCallAction::TerminateAndSendHangup(CallEndReason::RemoteGlare),
                 IncomingCallAction::Start,
             ),
             ReceivedOfferCollision::GlareDoubleLoser => (
-                ActiveCallAction::TerminateAndSendHangup(ApplicationEvent::EndedRemoteGlare),
-                IncomingCallAction::RejectAsBusy(ApplicationEvent::EndedGlareHandlingFailure),
+                ActiveCallAction::TerminateAndSendHangup(CallEndReason::RemoteGlare),
+                IncomingCallAction::RejectAsBusy(ApplicationEvent::GlareHandlingFailure),
             ),
             ReceivedOfferCollision::ReCall => (
-                ActiveCallAction::TerminateWithoutSendingHangup(
-                    ApplicationEvent::EndedRemoteReCall,
-                ),
+                ActiveCallAction::TerminateWithoutSendingHangup(CallEndReason::RemoteReCall),
                 IncomingCallAction::Start,
             ),
         };
 
         match active_call_action {
             ActiveCallAction::DontTerminate => {}
-            ActiveCallAction::TerminateAndSendHangup(app_event) => {
+            ActiveCallAction::TerminateAndSendHangup(reason) => {
                 self.clear_active_call()?;
                 *busy = false;
                 self.terminate_call(
                     active_call.unwrap(),
                     Some(signaling::Hangup::Normal),
-                    Some(app_event),
+                    Some(reason),
                 )?;
             }
-            ActiveCallAction::TerminateWithoutSendingHangup(app_event) => {
+            ActiveCallAction::TerminateWithoutSendingHangup(reason) => {
                 self.clear_active_call()?;
                 *busy = false;
-                self.terminate_call(active_call.unwrap(), None, Some(app_event))?;
+                self.terminate_call(active_call.unwrap(), None, Some(reason))?;
             }
         }
 
@@ -1729,7 +1725,7 @@ where
                 .send_hangup_via_rtp_data_and_signaling_to_all_except(hangup, sender_device_id)?;
 
             // Handle the normal processing of busy by concluding the call locally.
-            self.handle_terminate_active_call(active_call, None, ApplicationEvent::EndedRemoteBusy)
+            self.handle_terminate_active_call(active_call, None, CallEndReason::RemoteBusy)
         } else {
             warn!("Unexpected remote peer for busy, ignoring");
             Ok(())
@@ -2126,8 +2122,12 @@ where
         // The task hit problems before creating or accessing
         // an active call. Simply notify the application with no
         // call clean up.
-        let _ =
-            self.notify_application(remote_peer, call_id, ApplicationEvent::EndedInternalFailure);
+        let _ = self.on_call_ended(
+            remote_peer,
+            call_id,
+            CallEndReason::InternalFailure,
+            CallSummary::default(),
+        );
         let _ = self.notify_call_concluded(remote_peer, call_id);
     }
 
@@ -2296,6 +2296,23 @@ where
         platform.on_start_call(remote_peer, call_id, direction, call_media_type)
     }
 
+    pub(super) fn on_call_ended(
+        &self,
+        remote_peer: &<T as Platform>::AppRemotePeer,
+        call_id: CallId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) -> Result<()> {
+        ringbench!(
+            RingBench::Cm,
+            RingBench::App,
+            format!("on_call_ended({reason})")
+        );
+
+        let platform = self.platform.lock()?;
+        platform.on_call_ended(remote_peer, call_id, reason, summary)
+    }
+
     /// Notify application of an event.
     pub(super) fn notify_application(
         &self,
@@ -2404,14 +2421,14 @@ where
     pub(super) fn remote_hangup(
         &mut self,
         call_id: CallId,
-        app_event_override: Option<ApplicationEvent>,
+        end_reason_override: Option<CallEndReason>,
     ) -> Result<()> {
         info!("remote_hangup(): call_id: {}", call_id);
 
         if self.call_is_active(call_id)? {
-            match app_event_override {
-                Some(event) => self.terminate_active_call(false, event),
-                None => self.terminate_active_call(false, ApplicationEvent::EndedRemoteHangup),
+            match end_reason_override {
+                Some(end_reason) => self.terminate_active_call(false, end_reason),
+                None => self.terminate_active_call(false, CallEndReason::RemoteHangup),
             }
         } else {
             info!("remote_hangup(): ignoring for inactive call");
@@ -2457,7 +2474,7 @@ where
         info!("timeout(): call_id: {}", call_id);
 
         if self.call_is_active(call_id)? {
-            self.terminate_active_call(true, ApplicationEvent::EndedTimeout)
+            self.terminate_active_call(true, CallEndReason::Timeout)
         } else {
             info!("timeout(): ignoring for inactive call");
             Ok(())
@@ -2472,7 +2489,7 @@ where
             let call = self.active_call()?;
             self.terminate_active_call(
                 call.should_send_hangup_on_failure(),
-                ApplicationEvent::EndedConnectionFailure,
+                CallEndReason::ConnectionFailure,
             )
         } else {
             info!("connection_failure(): ignoring for inactive call");
@@ -2491,7 +2508,7 @@ where
             let call = self.active_call()?;
             self.terminate_active_call(
                 call.should_send_hangup_on_failure(),
-                ApplicationEvent::EndedInternalFailure,
+                CallEndReason::InternalFailure,
             )
         } else {
             info!("internal_error(): ignoring for inactive call");
@@ -2834,9 +2851,14 @@ where
         platform_handler!(self, handle_rtc_stats_report, report_json);
     }
 
-    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
+    fn handle_ended(
+        &self,
+        client_id: group_call::ClientId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) {
         info!("handle_ended({:?}):", reason);
-        platform_handler!(self, handle_ended, client_id, reason);
+        platform_handler!(self, handle_ended, client_id, reason, summary);
     }
 
     fn send_signaling_message(

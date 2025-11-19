@@ -15,13 +15,14 @@ use std::time::Duration;
 use prost::Message;
 use ringrtc::{
     common::{
-        ApplicationEvent, CallConfig, CallId, CallState, ConnectionState, DataMode, units::DataRate,
+        ApplicationEvent, CallConfig, CallEndReason, CallId, CallState, ConnectionState, DataMode,
+        units::DataRate,
     },
     core::{call_manager::MAX_MESSAGE_AGE, group_call, signaling},
     protobuf,
     sim::error::SimError,
-    webrtc,
     webrtc::{
+        self,
         media::MediaStream,
         peer_connection_observer::{NetworkAdapterType, NetworkRoute, TransportProtocol},
     },
@@ -235,7 +236,7 @@ fn inbound_call_hangup_accepted() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedRemoteHangupAccepted),
+        context.end_reason_count(CallEndReason::RemoteHangupAccepted),
         1
     );
     assert!(!cm.busy());
@@ -263,7 +264,7 @@ fn inbound_call_hangup_declined() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedRemoteHangupDeclined),
+        context.end_reason_count(CallEndReason::RemoteHangupDeclined),
         1
     );
     assert!(!cm.busy());
@@ -290,10 +291,7 @@ fn inbound_call_hangup_busy() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedRemoteHangupBusy),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteHangupBusy), 1);
     assert!(!cm.busy());
 }
 
@@ -309,10 +307,7 @@ fn inbound_call_drop_connecting() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedAppDroppedCall),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::AppDroppedCall), 1);
     assert!(!cm.busy());
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.accepted_hangups_sent(), 0);
@@ -373,10 +368,7 @@ fn inbound_call_drop_connecting_hangup_second() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedAppDroppedCall),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::AppDroppedCall), 1);
     assert!(!cm.busy());
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.accepted_hangups_sent(), 0);
@@ -423,10 +415,7 @@ fn inbound_call_drop_connecting_ice_failed_second() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedAppDroppedCall),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::AppDroppedCall), 1);
     assert!(!cm.busy());
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.accepted_hangups_sent(), 0);
@@ -455,10 +444,7 @@ fn inbound_call_drop_connected() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedAppDroppedCall),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::AppDroppedCall), 1);
     assert!(!cm.busy());
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.accepted_hangups_sent(), 0);
@@ -480,10 +466,7 @@ fn inbound_call_drop_accepted() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedAppDroppedCall),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::AppDroppedCall), 1);
     assert!(!cm.busy());
     assert_eq!(context.ended_count(), 1);
     assert_eq!(context.accepted_hangups_sent(), 0);
@@ -778,10 +761,7 @@ fn answer_send_failure() {
     assert_eq!(context.ice_candidates_sent(), 0);
     // Hangups shouldn't be sent before the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::SignalingFailure), 1);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Terminated
@@ -819,10 +799,7 @@ fn ice_send_failure_before_connect() {
     assert_eq!(context.ice_candidates_sent(), 1);
     // Hangups shouldn't be sent before the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::SignalingFailure), 1);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Terminated
@@ -859,10 +836,7 @@ fn ice_send_failure_after_connect() {
     assert_eq!(context.ice_candidates_sent(), 1);
     // No hangups should be sent since we are still connected.
     assert_eq!(context.normal_hangups_sent(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
-        0
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::SignalingFailure), 0);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::ConnectedBeforeAccepted
@@ -899,10 +873,7 @@ fn ice_send_failure_after_accepted() {
     assert_eq!(context.ice_candidates_sent(), 1);
     // No hangups should be sent since we are still connected.
     assert_eq!(context.normal_hangups_sent(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
-        0
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::SignalingFailure), 0);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::ConnectedAndAccepted
@@ -931,10 +902,7 @@ fn internal_failure_before_connect() {
     assert_eq!(context.answers_sent(), 1);
     // Hangups shouldn't be sent before the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedInternalFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::InternalFailure), 1);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Terminated
@@ -963,10 +931,7 @@ fn internal_failure_after_connect() {
     assert_eq!(context.answers_sent(), 1);
     // Hangups shouldn't be sent before the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedInternalFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::InternalFailure), 1);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Terminated
@@ -995,10 +960,7 @@ fn internal_failure_after_accept() {
     assert_eq!(context.answers_sent(), 1);
     // Hangup should be sent after the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 1);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedInternalFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::InternalFailure), 1);
     assert_eq!(
         active_call.state().expect(error_line!()),
         CallState::Terminated
@@ -1025,7 +987,7 @@ fn connection_failure_before_connect() {
     // Hangups shouldn't be sent before the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        context.end_reason_count(CallEndReason::ConnectionFailure),
         1
     );
     assert_eq!(
@@ -1054,7 +1016,7 @@ fn connection_failure_after_connect() {
     // Hangups shouldn't be sent before the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        context.end_reason_count(CallEndReason::ConnectionFailure),
         1
     );
     assert_eq!(
@@ -1083,7 +1045,7 @@ fn connection_failure_after_accept() {
     // Hangup should be sent after the call is accepted.
     assert_eq!(context.normal_hangups_sent(), 1);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        context.end_reason_count(CallEndReason::ConnectionFailure),
         1
     );
     assert_eq!(
@@ -1767,7 +1729,7 @@ fn recall_when_connected() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteReCall), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteReCall), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
     assert_eq!(context.busys_sent(), 0);
 

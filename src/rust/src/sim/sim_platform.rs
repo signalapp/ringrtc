@@ -17,20 +17,19 @@ use std::{
 
 use crate::{
     common::{
-        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+        ApplicationEvent, CallConfig, CallDirection, CallEndReason, CallId, CallMediaType,
+        DeviceId, Result,
     },
     core::{
         call::Call,
         call_manager::CallManager,
+        call_summary::CallSummary,
         connection::{Connection, ConnectionType},
         group_call,
         platform::{Platform, PlatformItem},
         signaling,
     },
-    lite::{
-        sfu,
-        sfu::{DemuxId, PeekInfo, PeekResult, UserId},
-    },
+    lite::sfu::{self, DemuxId, PeekInfo, PeekResult, UserId},
     sim::error::SimError,
     webrtc::{
         media::{MediaStream, VideoTrack},
@@ -104,6 +103,8 @@ pub struct SimPlatform {
     force_signaling_failure: Arc<AtomicBool>,
     /// Track event frequencies
     event_map: Arc<Mutex<HashMap<ApplicationEvent, usize>>>,
+    /// Track call end reason frequencies
+    call_end_reason_map: Arc<Mutex<HashMap<CallEndReason, usize>>>,
     /// Track whether disconnecting of incoming media happened
     incoming_media_disconnected: Arc<AtomicBool>,
     /// Track group call ring updates
@@ -199,6 +200,21 @@ impl Platform for SimPlatform {
             };
             Ok(())
         }
+    }
+
+    fn on_call_ended(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        _call_id: CallId,
+        reason: CallEndReason,
+        _summary: CallSummary,
+    ) -> Result<()> {
+        info!("on_call_ended(): {}, remote_peer: {}", reason, remote_peer);
+
+        let mut map = self.call_end_reason_map.lock().unwrap();
+        map.entry(reason).and_modify(|e| *e += 1).or_insert(1);
+
+        Ok(())
     }
 
     fn on_event(
@@ -609,7 +625,12 @@ impl Platform for SimPlatform {
         unimplemented!()
     }
 
-    fn handle_ended(&self, _client_id: group_call::ClientId, _reason: group_call::EndReason) {
+    fn handle_ended(
+        &self,
+        _client_id: group_call::ClientId,
+        _reason: CallEndReason,
+        _summary: CallSummary,
+    ) {
         unimplemented!()
     }
 
@@ -697,6 +718,17 @@ impl SimPlatform {
             .store(enable, Ordering::Release);
     }
 
+    pub fn end_reason_count(&self, reason: CallEndReason) -> usize {
+        let mut count = 0;
+        let map = self.call_end_reason_map.lock().unwrap();
+
+        if let Some(entry) = map.get(&reason) {
+            count += entry;
+        }
+
+        count
+    }
+
     pub fn event_count(&self, event: ApplicationEvent) -> usize {
         let mut errors = 0;
         let map = self.event_map.lock().unwrap();
@@ -709,32 +741,17 @@ impl SimPlatform {
     }
 
     pub fn error_count(&self) -> usize {
-        self.event_count(ApplicationEvent::EndedInternalFailure)
+        self.end_reason_count(CallEndReason::InternalFailure)
     }
 
     pub fn clear_error_count(&self) {
-        let mut map = self.event_map.lock().unwrap();
-        let _ = map.remove(&ApplicationEvent::EndedInternalFailure);
+        let mut map = self.call_end_reason_map.lock().unwrap();
+        let _ = map.remove(&CallEndReason::InternalFailure);
     }
 
     pub fn ended_count(&self) -> usize {
-        let mut ends = 0;
-
-        let ended_events = vec![
-            ApplicationEvent::EndedLocalHangup,
-            ApplicationEvent::EndedRemoteHangup,
-            ApplicationEvent::EndedRemoteBusy,
-            ApplicationEvent::EndedTimeout,
-            ApplicationEvent::EndedInternalFailure,
-            ApplicationEvent::EndedSignalingFailure,
-            ApplicationEvent::EndedConnectionFailure,
-            ApplicationEvent::EndedAppDroppedCall,
-        ];
-        for event in ended_events {
-            ends += self.event_count(event);
-        }
-
-        ends
+        let map = self.call_end_reason_map.lock().unwrap();
+        map.len()
     }
 
     pub fn offers_sent(&self) -> usize {

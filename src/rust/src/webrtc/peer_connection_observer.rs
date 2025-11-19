@@ -92,6 +92,19 @@ pub enum NetworkAdapterType {
     Cellular5G = 1 << 9,
 }
 
+impl NetworkAdapterType {
+    pub fn is_cellular(&self) -> bool {
+        matches!(
+            self,
+            Self::Cellular
+                | Self::Cellular2G
+                | Self::Cellular3G
+                | Self::Cellular4G
+                | Self::Cellular5G
+        )
+    }
+}
+
 /// Ice Network Route structure passed between Rust and C++.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]

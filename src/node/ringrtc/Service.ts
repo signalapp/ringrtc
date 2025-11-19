@@ -11,6 +11,7 @@ import {
   CallLinkRootKey,
   CallLinkEpoch,
 } from './CallLinks';
+import { CallSummary } from './CallSummary';
 import Native from './Native';
 
 const INVALID_CLIENT_ID = 0;
@@ -395,11 +396,11 @@ export class RingRTCType {
     | ((devices: Array<AudioDevice>) => Promise<void>)
     | null = null;
 
-  handleAutoEndedIncomingCallRequest:
+  handleRejectedIncomingCallRequest:
     | ((
         callId: CallId,
         remoteUserId: UserId,
-        reason: CallEndedReason,
+        reason: CallRejectReason,
         ageSec: number,
         wasVideoCall: boolean,
         receivedAtCounter: number | undefined,
@@ -549,8 +550,8 @@ export class RingRTCType {
     // after the outgoing call is ended. In that case, ignore it once.
     if (
       this._call &&
-      (this._call.endedReason === CallEndedReason.Glare ||
-        this._call.endedReason === CallEndedReason.ReCall)
+      (this._call.endedReason === CallEndReason.RemoteGlare ||
+        this._call.endedReason === CallEndReason.RemoteReCall)
     ) {
       this._call.endedReason = undefined;
       // EVIL HACK: We are the "loser" of a glare collision and have ended the outgoing call
@@ -632,10 +633,10 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  onCallEnded(
+  onCallRejected(
     remoteUserId: UserId,
     callId: CallId,
-    reason: CallEndedReason,
+    reason: CallRejectReason,
     ageSec: number
   ): void {
     const callInfo = this._callInfoByCallId.get(this.getCallInfoKey(callId));
@@ -644,24 +645,13 @@ export class RingRTCType {
       receivedAtCounter: undefined,
       receivedAtDate: undefined,
     };
-    this._callInfoByCallId.delete(this.getCallInfoKey(callId));
 
     const call = this._call;
-    if (call && reason == CallEndedReason.ReceivedOfferWithGlare) {
+    if (call && reason == CallRejectReason.ReceivedOfferWithGlare) {
       // The current call is the outgoing call.
-      // The ended call is the incoming call.
+      // The rejected call is the incoming call.
       // We're the "winner", so ignore the incoming call and keep going with the outgoing call.
       return;
-    }
-
-    if (
-      call &&
-      (reason === CallEndedReason.Glare || reason === CallEndedReason.ReCall)
-    ) {
-      // The current call is the outgoing call.
-      // The ended call is the outgoing call.
-      // We're the "loser", so end the outgoing/current call and wait for a new incoming call.
-      // (proceeded down to the code below)
     }
 
     // If there is no call or the remoteUserId doesn't match that of the current
@@ -673,12 +663,12 @@ export class RingRTCType {
     if (
       !call ||
       call.remoteUserId !== remoteUserId ||
-      reason === CallEndedReason.ReceivedOfferWhileActive ||
-      reason === CallEndedReason.ReceivedOfferExpired ||
+      reason === CallRejectReason.ReceivedOfferWhileActive ||
+      reason === CallRejectReason.ReceivedOfferExpired ||
       (call.state === CallState.Prering && call.isIncoming)
     ) {
-      if (this.handleAutoEndedIncomingCallRequest) {
-        this.handleAutoEndedIncomingCallRequest(
+      if (this.handleRejectedIncomingCallRequest) {
+        this.handleRejectedIncomingCallRequest(
           callId,
           remoteUserId,
           reason,
@@ -688,21 +678,26 @@ export class RingRTCType {
           receivedAtDate
         );
       }
-
-      if (call && call.state === CallState.Prering && call.isIncoming) {
-        // Set the state to Ended without triggering a state update since we
-        // already notified the client.
-        call.endedReason = reason;
-        call.setCallEnded();
-      }
-
-      return;
     }
+  }
 
-    // Send the end reason first because setting the state triggers
-    // call.handleStateChanged, which may look at call.endedReason.
-    call.endedReason = reason;
-    call.state = CallState.Ended;
+  // Called by Rust
+  onCallEnded(
+    remoteUserId: UserId,
+    callId: CallId,
+    reason: CallEndReason,
+    summary: CallSummary
+  ): void {
+    this._callInfoByCallId.delete(this.getCallInfoKey(callId));
+
+    const call = this._call;
+    if (call) {
+      // Set the end reason first because setting the state triggers
+      // call.handleStateChanged, which may look at call.endedReason.
+      call.endedReason = reason;
+      call.summary = summary;
+      call.state = CallState.Ended;
+    }
   }
 
   onRemoteAudioEnabled(remoteUserId: UserId, enabled: boolean): void {
@@ -1523,7 +1518,11 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  handleEnded(clientId: GroupCallClientId, reason: GroupCallEndReason): void {
+  handleEnded(
+    clientId: GroupCallClientId,
+    reason: CallEndReason,
+    summary: CallSummary
+  ): void {
     sillyDeadlockProtection(() => {
       const groupCall = this._groupCallByClientId.get(clientId);
       if (!groupCall) {
@@ -1533,7 +1532,7 @@ export class RingRTCType {
 
       this._groupCallByClientId.delete(clientId);
 
-      groupCall.handleEnded(reason);
+      groupCall.handleEnded(reason, summary);
     });
   }
 
@@ -2039,7 +2038,8 @@ export class Call {
   remoteAudioLevel: NormalizedAudioLevel = 0;
   remoteSharingScreen = false;
   networkRoute: NetworkRoute = new NetworkRoute();
-  endedReason?: CallEndedReason;
+  endedReason?: CallEndReason;
+  summary?: CallSummary;
 
   // These callbacks should be set by the UX code.
   handleStateChanged?: () => void;
@@ -2273,29 +2273,6 @@ export enum JoinState {
   Joined,
 }
 
-// If not ended purposely by the user, gives the reason why a group call ended.
-export enum GroupCallEndReason {
-  // Normal events
-  DeviceExplicitlyDisconnected = 0,
-  ServerExplicitlyDisconnected,
-  DeniedRequestToJoinCall,
-  RemovedFromCall,
-
-  // Things that can go wrong
-  CallManagerIsBusy,
-  SfuClientFailedToJoin,
-  FailedToCreatePeerConnectionFactory,
-  FailedToNegotiateSrtpKeys,
-  FailedToCreatePeerConnection,
-  FailedToStartPeerConnection,
-  FailedToUpdatePeerConnection,
-  FailedToSetMaxSendBitrate,
-  IceFailedWhileConnecting,
-  IceFailedAfterConnected,
-  ServerChangedDemuxId,
-  HasMaxDevices,
-}
-
 // Matches SpeechEvent in rust.
 export enum SpeechEvent {
   // User was speaking but stopped.
@@ -2440,7 +2417,11 @@ export interface GroupCallObserver {
   onReactions(groupCall: GroupCall, reactions: Array<Reaction>): void;
   onRaisedHands(groupCall: GroupCall, raisedHands: Array<number>): void;
   onPeekChanged(groupCall: GroupCall): void;
-  onEnded(groupCall: GroupCall, reason: GroupCallEndReason): void;
+  onEnded(
+    groupCall: GroupCall,
+    reason: CallEndReason,
+    summary: CallSummary
+  ): void;
   onSpeechEvent(groupCall: GroupCall, event: SpeechEvent): void;
   onRemoteMute(groupCall: GroupCall, demuxId: number): void;
   onObservedRemoteMute(
@@ -2735,10 +2716,10 @@ export class GroupCall {
   }
 
   // Called by Rust via RingRTC object
-  handleEnded(reason: GroupCallEndReason): void {
+  handleEnded(reason: CallEndReason, summary: CallSummary): void {
     this._callManager.deleteGroupCallClient(this._clientId);
 
-    this._observer.onEnded(this, reason);
+    this._observer.onEnded(this, reason, summary);
   }
 
   // With this, a GroupCall is a VideoFrameSender
@@ -3155,11 +3136,17 @@ export interface CallManagerCallbacks {
     isVideoCall: boolean
   ): void;
   onCallState(remoteUserId: UserId, state: CallState): void;
+  onCallRejected(
+    remoteUserId: UserId,
+    callId: CallId,
+    rejectReason: CallRejectReason,
+    ageSec: number
+  ): void;
   onCallEnded(
     remoteUserId: UserId,
     callId: CallId,
-    endedReason: CallEndedReason,
-    ageSec: number
+    endedReason: CallEndReason,
+    summary: CallSummary
   ): void;
   onRemoteAudioEnabled(remoteUserId: UserId, enabled: boolean): void;
   onRemoteVideoEnabled(remoteUserId: UserId, enabled: boolean): void;
@@ -3242,7 +3229,11 @@ export interface CallManagerCallbacks {
     statusCode: number,
     rawInfo: RawPeekInfo | undefined
   ): void;
-  handleEnded(clientId: GroupCallClientId, reason: GroupCallEndReason): void;
+  handleEnded(
+    clientId: GroupCallClientId,
+    reason: CallEndReason,
+    summary: CallSummary
+  ): void;
 
   onLogMessage(
     level: number,
@@ -3260,25 +3251,58 @@ export enum CallState {
   Ended = 'ended',
 }
 
-export enum CallEndedReason {
-  LocalHangup = 'LocalHangup',
-  RemoteHangup = 'RemoteHangup',
-  RemoteHangupNeedPermission = 'RemoteHangupNeedPermission',
-  Declined = 'Declined',
-  Busy = 'Busy',
-  Glare = 'Glare',
-  ReCall = 'ReCall',
-  ReceivedOfferExpired = 'ReceivedOfferExpired',
-  ReceivedOfferWhileActive = 'ReceivedOfferWhileActive',
-  ReceivedOfferWithGlare = 'ReceivedOfferWithGlare',
-  SignalingFailure = 'SignalingFailure',
-  GlareFailure = 'GlareFailure',
-  ConnectionFailure = 'ConnectionFailure',
-  InternalFailure = 'InternalFailure',
-  Timeout = 'Timeout',
-  AcceptedOnAnotherDevice = 'AcceptedOnAnotherDevice',
-  DeclinedOnAnotherDevice = 'DeclinedOnAnotherDevice',
-  BusyOnAnotherDevice = 'BusyOnAnotherDevice',
+//
+// NOTE:
+//
+// The ordering of CallEndReason must be kept in sync with the ordering of CallEndReason
+// in <project-root>/src/rust/common/mod.rs.
+//
+
+export enum CallEndReason {
+  LocalHangup = 0,
+  RemoteHangup,
+  RemoteHangupNeedPermission,
+  RemoteHangupAccepted,
+  RemoteHangupDeclined,
+  RemoteHangupBusy,
+  RemoteBusy,
+  RemoteGlare,
+  RemoteReCall,
+  Timeout,
+  InternalFailure,
+  SignalingFailure,
+  ConnectionFailure,
+  AppDroppedCall,
+  DeviceExplicitlyDisconnected,
+  ServerExplicitlyDisconnected,
+  DeniedRequestToJoinCall,
+  RemovedFromCall,
+  CallManagerIsBusy,
+  SfuClientFailedToJoin,
+  FailedToCreatePeerConnectionFactory,
+  FailedToNegotiatedSrtpKeys,
+  FailedToCreatePeerConnection,
+  FailedToStartPeerConnection,
+  FailedToUpdatePeerConnection,
+  FailedToSetMaxSendBitrate,
+  IceFailedWhileConnecting,
+  IceFailedAfterConnected,
+  ServerChangedDemuxId,
+  HasMaxDevices,
+}
+
+//
+// NOTE:
+//
+// The ordering of CallRejectReason must be kept in sync with the ordering of RejectReason
+// in <project-root>/src/rust/src/native.rs.
+//
+
+export enum CallRejectReason {
+  GlareHandlingFailure,
+  ReceivedOfferExpired,
+  ReceivedOfferWhileActive,
+  ReceivedOfferWithGlare,
 }
 
 export enum CallLogLevel {

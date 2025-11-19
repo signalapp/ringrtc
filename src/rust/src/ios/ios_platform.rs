@@ -11,32 +11,33 @@ use anyhow::anyhow;
 
 use crate::{
     common::{
-        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+        ApplicationEvent, CallConfig, CallDirection, CallEndReason, CallId, CallMediaType,
+        DeviceId, Result,
     },
     core::{
         call::Call,
+        call_summary::CallSummary,
         connection::{Connection, ConnectionType},
-        group_call,
-        group_call::Reaction,
+        group_call::{self, Reaction},
         platform::{Platform, PlatformItem},
         signaling,
     },
     ios::{
-        api::call_manager_interface::{
-            AppByteSlice, AppCallContext, AppConnectionInterface, AppIceCandidateArray,
-            AppInterface, AppObject, AppOptionalBool, AppOptionalUInt32, AppRaisedHandsArray,
-            AppReaction, AppReactionsArray, AppReceivedAudioLevel, AppReceivedAudioLevelArray,
-            AppRemoteDeviceState, AppRemoteDeviceStateArray, AppUuidArray,
+        api::{
+            call_manager_interface::{
+                AppByteSlice, AppCallContext, AppConnectionInterface, AppIceCandidateArray,
+                AppInterface, AppObject, AppOptionalBool, AppOptionalUInt32, AppRaisedHandsArray,
+                AppReaction, AppReactionsArray, AppReceivedAudioLevel, AppReceivedAudioLevelArray,
+                AppRemoteDeviceState, AppRemoteDeviceStateArray, AppUuidArray,
+            },
+            call_summary::rtc_callsummary_CallSummary,
         },
         error::IosError,
         ios_media_stream::IosMediaStream,
     },
-    lite::{
-        sfu,
-        sfu::{DemuxId, PeekInfo, PeekResult, UserId},
-    },
-    webrtc,
+    lite::sfu::{self, DemuxId, PeekInfo, PeekResult, UserId},
     webrtc::{
+        self,
         media::{MediaStream, VideoTrack},
         peer_connection::{AudioLevel, PeerConnection, ReceivedAudioLevel, RffiPeerConnection},
         peer_connection_observer::{NetworkRoute, PeerConnectionObserver},
@@ -257,6 +258,34 @@ impl Platform for IosPlatform {
             direction == CallDirection::Outgoing,
             call_media_type as i32,
         );
+
+        Ok(())
+    }
+
+    fn on_call_ended(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        call_id: CallId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) -> Result<()> {
+        info!("on_call_ended: {:?}", reason);
+
+        let call_object = remote_peer
+            .get_call_object()
+            .ok_or_else(|| anyhow!("No call object available"))?;
+
+        let summary = rtc_callsummary_CallSummary::wrap(&summary);
+
+        (self.app_interface.onCallEnded)(
+            self.app_interface.object,
+            call_object.ptr,
+            call_id.into(),
+            reason as i32,
+            &summary as *const rtc_callsummary_CallSummary,
+        );
+
+        summary.release();
 
         Ok(())
     }
@@ -605,12 +634,13 @@ impl Platform for IosPlatform {
         remote_peer1: &Self::AppRemotePeer,
         remote_peer2: &Self::AppRemotePeer,
     ) -> Result<bool> {
-        info!("compare_remotes():");
-
         let remote_uuid_1 = remote_peer1.get_remote_uuid();
         let remote_uuid_2 = remote_peer2.get_remote_uuid();
 
-        Ok(remote_uuid_1 == remote_uuid_2)
+        let result = remote_uuid_1 == remote_uuid_2;
+        info!("compare_remotes(): {}", result);
+
+        Ok(result)
     }
 
     fn on_offer_expired(
@@ -620,7 +650,8 @@ impl Platform for IosPlatform {
         _age: Duration,
     ) -> Result<()> {
         // iOS already keeps track of the offer timestamp, so no need to pass the age through.
-        self.on_event(remote_peer, call_id, ApplicationEvent::ReceivedOfferExpired)
+        self.on_event(remote_peer, call_id, ApplicationEvent::ReceivedOfferExpired)?;
+        Ok(())
     }
 
     fn on_call_concluded(&self, remote_peer: &Self::AppRemotePeer, _call_id: CallId) -> Result<()> {
@@ -884,8 +915,22 @@ impl Platform for IosPlatform {
         );
     }
 
-    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
-        (self.app_interface.handleEnded)(self.app_interface.object, client_id, reason as i32);
+    fn handle_ended(
+        &self,
+        client_id: group_call::ClientId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) {
+        let summary = rtc_callsummary_CallSummary::wrap(&summary);
+
+        (self.app_interface.handleEnded)(
+            self.app_interface.object,
+            client_id,
+            reason as i32,
+            &summary as *const rtc_callsummary_CallSummary,
+        );
+
+        summary.release();
     }
 
     fn handle_speaking_notification(

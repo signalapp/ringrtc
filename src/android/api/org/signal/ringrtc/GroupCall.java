@@ -874,7 +874,7 @@ public final class GroupCall {
      * CallManager.
      *
      */
-    void handleEnded(GroupCallEndReason reason) {
+    void handleEnded(CallManager.CallEndReason reason, CallSummary summary) {
         Log.i(TAG, "handleEnded():");
 
         // This check is not strictly necessary since RingRTC should only be
@@ -882,7 +882,7 @@ public final class GroupCall {
         if (!this.handleEndedCalled) {
             this.handleEndedCalled = true;
 
-            this.observer.onEnded(this, reason);
+            this.observer.onEnded(this, reason, summary);
 
             try {
                 if (this.disconnectCalled) {
@@ -976,70 +976,6 @@ public final class GroupCall {
 
         @CalledByNative
         static SpeechEvent fromNativeIndex(int nativeIndex) { return values()[nativeIndex]; }
-    }
-
-
-    /**
-     * A set of reasons why the group call has ended.
-     */
-    public enum GroupCallEndReason {
-
-        // Normal events
-
-        /** The client disconnected by calling the disconnect() API. */
-        DEVICE_EXPLICITLY_DISCONNECTED,
-
-        /** The server disconnected due to policy or some other controlled reason. */
-        SERVER_EXPLICITLY_DISCONNECTED,
-
-        /** An admin denied your request to join the call. */
-        DENIED_REQUEST_TO_JOIN_CALL,
-
-        /** An admin removed you from the call. */
-        REMOVED_FROM_CALL,
-
-        // Things that can go wrong
-
-        /** Another direct call or group call is currently in progress and using media resources. */
-        CALL_MANAGER_IS_BUSY,
-
-        /** Could not join the group call. */
-        SFU_CLIENT_FAILED_TO_JOIN,
-
-        /** Could not create a usable peer connection factory for media. */
-        FAILED_TO_CREATE_PEER_CONNECTION_FACTORY,
-
-        /** Could not negotiate SRTP keys with a DHE. */
-        FAILED_TO_NEGOTIATE_SRTP_KEYS,
-
-        /** Could not create a peer connection for media. */
-        FAILED_TO_CREATE_PEER_CONNECTION,
-
-        /** Could not start the peer connection for media. */
-        FAILED_TO_START_PEER_CONNECTION,
-
-        /** Could not update the peer connection for media. */
-        FAILED_TO_UPDATE_PEER_CONNECTION,
-
-        /** Could not set the requested bitrate for media. */
-        FAILED_TO_SET_MAX_SEND_BITRATE,
-
-        /** Could not connect successfully. */
-        ICE_FAILED_WHILE_CONNECTING,
-
-        /** Lost a connection and retries were unsuccessful. */
-        ICE_FAILED_AFTER_CONNECTED,
-
-        /** Unexpected change in demuxId requiring a new group call. */
-        SERVER_CHANGED_DEMUXID,
-
-        /** The SFU reported that the group call is full. */
-        HAS_MAX_DEVICES;
-
-        @CalledByNative
-        static GroupCallEndReason fromNativeIndex(int nativeIndex) {
-            return values()[nativeIndex];
-        }
     }
 
     /**
@@ -1344,7 +1280,7 @@ public final class GroupCall {
         /**
          * Notification that the group call has ended.
          */
-        void onEnded(GroupCall groupCall, GroupCallEndReason reason);
+        void onEnded(GroupCall groupCall, @NonNull CallManager.CallEndReason reason, @NonNull CallSummary summary);
 
         /**
          * Notification that the local client received a remote mute request.

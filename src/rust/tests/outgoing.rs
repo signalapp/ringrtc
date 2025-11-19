@@ -15,14 +15,14 @@ use std::{net::SocketAddr, thread, time::Duration};
 use prost::Message;
 use ringrtc::{
     common::{
-        ApplicationEvent, CallConfig, CallId, CallMediaType, CallState, ConnectionState, DataMode,
-        DeviceId, units::DataRate,
+        ApplicationEvent, CallConfig, CallEndReason, CallId, CallMediaType, CallState,
+        ConnectionState, DataMode, DeviceId, units::DataRate,
     },
     core::{group_call, signaling},
     protobuf,
     sim::error::SimError,
-    webrtc,
     webrtc::{
+        self,
         media::MediaStream,
         peer_connection_observer::{NetworkAdapterType, NetworkRoute, TransportProtocol},
     },
@@ -522,7 +522,7 @@ fn outbound_local_hang_up() {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
-    assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::LocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert!(!cm.busy());
 
@@ -554,7 +554,7 @@ fn outbound_ice_failed() {
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        context.end_reason_count(CallEndReason::ConnectionFailure),
         1
     );
     assert!(!cm.busy());
@@ -681,7 +681,7 @@ fn outbound_call_connected_ice_failed() {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedConnectionFailure),
+        context.end_reason_count(CallEndReason::ConnectionFailure),
         1
     );
     assert!(!cm.busy());
@@ -707,7 +707,7 @@ fn outbound_call_connected_local_hangup() {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
-    assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::LocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert!(!cm.busy());
 
@@ -802,7 +802,7 @@ fn outbound_ice_disconnected_after_call_connected_and_local_hangup() {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
-    assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::LocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert!(!cm.busy());
 }
@@ -1244,10 +1244,7 @@ fn ice_send_failures_cause_error_before_connection() {
     // There should be a signaling failure.
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::SignalingFailure), 1);
 
     // The active call should be terminated.
     assert_eq!(
@@ -1293,10 +1290,7 @@ fn ignore_ice_send_failures_after_connection() {
     // after we are connected.
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedSignalingFailure),
-        0
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::SignalingFailure), 0);
 
     // Check that there is still an active call.
     assert_eq!(
@@ -1328,7 +1322,7 @@ fn received_remote_hangup_before_connection() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
     // Other callees should get Hangup/Declined.
     assert_eq!(context.declined_hangups_sent(), 1);
@@ -1373,7 +1367,7 @@ fn received_remote_hangup_before_connection_with_message_in_flight() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteHangup), 1);
 
     // Now free the message queue so that the next message can fly.
     cm.message_sent(active_call.call_id()).expect(error_line!());
@@ -1411,9 +1405,9 @@ fn received_remote_hangup_before_connection_for_permission() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 0);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteHangup), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
+        context.end_reason_count(CallEndReason::RemoteHangupNeedPermission),
         1
     );
     // Other callees should get Hangup/Normal.
@@ -1461,9 +1455,9 @@ fn received_remote_hangup_before_connection_for_permission_with_message_in_fligh
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 0);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteHangup), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
+        context.end_reason_count(CallEndReason::RemoteHangupNeedPermission),
         1
     );
 
@@ -1501,7 +1495,7 @@ fn received_remote_hangup_after_connection() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
     assert!(!cm.busy());
 }
@@ -1528,7 +1522,7 @@ fn received_remote_needs_permission() {
 
     assert_eq!(context.error_count(), 0);
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedRemoteHangupNeedPermission),
+        context.end_reason_count(CallEndReason::RemoteHangupNeedPermission),
         1
     );
     assert!(!cm.busy());
@@ -2175,7 +2169,7 @@ fn call_timeout_before_connect() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedTimeout), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::Timeout), 1);
 }
 
 #[test]
@@ -2192,7 +2186,7 @@ fn call_timeout_after_connect() {
 
     // The call is already connected, so the timeout is ignored.
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedTimeout), 0);
+    assert_eq!(context.end_reason_count(CallEndReason::Timeout), 0);
     assert!(cm.busy());
 }
 
@@ -2239,10 +2233,7 @@ fn outbound_proceed_with_error() {
     );
 
     assert_eq!(context.error_count(), 1);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedInternalFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::InternalFailure), 1);
     assert_eq!(context.offers_sent(), 0);
     assert!(!cm.busy());
 
@@ -2272,11 +2263,8 @@ fn outbound_call_connected_local_hangup_with_error() {
         CallState::Terminated
     );
     assert_eq!(context.ended_count(), 1);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedInternalFailure),
-        0
-    );
-    assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::InternalFailure), 0);
+    assert_eq!(context.end_reason_count(CallEndReason::LocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
     assert!(!cm.busy());
 }
@@ -2301,10 +2289,7 @@ fn local_ice_candidate_with_error() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 1);
-    assert_eq!(
-        context.event_count(ApplicationEvent::EndedInternalFailure),
-        1
-    );
+    assert_eq!(context.end_reason_count(CallEndReason::InternalFailure), 1);
     // We should see that no ICE candidates were sent
     assert_eq!(context.ice_candidates_sent(), 0);
     assert!(!cm.busy());
@@ -2401,7 +2386,7 @@ fn outbound_multiple_remote_devices() {
     );
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.ended_count(), 1);
-    assert_eq!(context.event_count(ApplicationEvent::EndedLocalHangup), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::LocalHangup), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert!(!cm.busy());
 }
@@ -2476,7 +2461,7 @@ fn glare_before_connect_winner() {
         1
     );
     assert_eq!(context.busys_sent(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 0);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 0);
     assert_eq!(context.call_concluded_count(), 1);
 }
 
@@ -2515,7 +2500,7 @@ fn glare_before_connect_loser() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
@@ -2554,14 +2539,14 @@ fn glare_before_connect_equal() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
         0
     );
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedGlareHandlingFailure),
+        context.event_count(ApplicationEvent::GlareHandlingFailure),
         1
     );
     assert_eq!(context.busys_sent(), 1);
@@ -2662,7 +2647,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
@@ -2683,7 +2668,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_before_start() {
 
     assert_eq!(context.answers_sent(), 1);
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.ended_count(), 0);
+    assert_eq!(context.ended_count(), 1);
     assert!(cm.busy());
 }
 
@@ -2726,7 +2711,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_after_start() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
@@ -2747,7 +2732,7 @@ fn glare_before_connect_loser_with_incoming_ice_candidates_after_start() {
 
     assert_eq!(context.answers_sent(), 1);
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.ended_count(), 0);
+    assert_eq!(context.ended_count(), 1);
     assert!(cm.busy());
 }
 
@@ -2791,7 +2776,7 @@ fn glare_after_connect_winner() {
         1
     );
     assert_eq!(context.busys_sent(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 0);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 0);
     assert_eq!(context.call_concluded_count(), 1);
 }
 
@@ -2830,7 +2815,7 @@ fn glare_after_connect_loser() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
@@ -2869,14 +2854,14 @@ fn glare_after_connect_equal() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteGlare), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteGlare), 1);
     assert_eq!(context.normal_hangups_sent(), 1);
     assert_eq!(
         context.event_count(ApplicationEvent::ReceivedOfferWithGlare),
         0
     );
     assert_eq!(
-        context.event_count(ApplicationEvent::EndedGlareHandlingFailure),
+        context.event_count(ApplicationEvent::GlareHandlingFailure),
         1
     );
     assert_eq!(context.busys_sent(), 1);
@@ -2915,7 +2900,7 @@ fn recall_when_connected() {
     cm.synchronize().expect(error_line!());
 
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteReCall), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteReCall), 1);
     assert_eq!(context.normal_hangups_sent(), 0);
     assert_eq!(context.busys_sent(), 0);
 
@@ -2975,7 +2960,7 @@ fn start_outbound_receive_busy() {
 
     cm.synchronize().expect(error_line!());
 
-    assert_eq!(context.event_count(ApplicationEvent::EndedRemoteBusy), 1);
+    assert_eq!(context.end_reason_count(CallEndReason::RemoteBusy), 1);
     assert_eq!(context.error_count(), 0);
     assert_eq!(context.call_concluded_count(), 1);
     assert!(!cm.busy());

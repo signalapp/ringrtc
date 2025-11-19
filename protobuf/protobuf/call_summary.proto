@@ -1,0 +1,85 @@
+/*
+ * Copyright 2025 Signal Messenger, LLC
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+syntax = "proto2";
+
+package call_summary;
+
+// The mean, standard deviation, minimum, and maximum values will always be
+// be present. If there were no captured samples then the entire
+// DistributionSummary structure will be absent.
+message DistributionSummary {
+  optional float  mean         = 1;
+  optional float  std_dev      = 2;
+  optional float  min_val      = 3;
+  optional float  max_val      = 4;
+  optional uint32 sample_count = 5;
+}
+
+message StreamSummary {
+  optional DistributionSummary bitrate         = 1;
+  optional DistributionSummary packet_loss_pct = 2;
+  optional DistributionSummary jitter          = 3;
+}
+
+message StreamSummaries {
+  map<uint32, StreamSummary> audio_send_stream_summaries = 1;
+  map<uint32, StreamSummary> audio_recv_stream_summaries = 2;
+  map<uint32, StreamSummary> video_send_stream_summaries = 3;
+  map<uint32, StreamSummary> video_recv_stream_summaries = 4;
+}
+
+message StreamStats {
+  optional uint32 ssrc                = 1;
+  optional float  bitrate             = 2;
+  optional float  packet_loss         = 3;
+  optional float  jitter              = 4;
+  optional float  rtt                 = 5;
+  optional float  jitter_buffer_delay = 6;
+  optional float  framerate           = 7;
+}
+
+message StatsSet {
+  optional uint64      timestamp        = 1;
+  repeated StreamStats audio_recv_stats = 2;
+  repeated StreamStats audio_send_stats = 3;
+  repeated StreamStats video_recv_stats = 4;
+  repeated StreamStats video_send_stats = 5;
+  repeated Event       events           = 6;
+}
+
+enum Event {
+  ICE_CONNECTED             = 1;
+  ICE_DISCONNECTED          = 2;
+  ICE_FAILED                = 3;
+  ICE_NETWORK_ROUTE_CHANGED = 4;
+  GROUP_CALL_DISCONNECTED   = 5;
+  GROUP_CALL_CONNECTING     = 6;
+  GROUP_CALL_CONNECTED      = 7;
+  GROUP_CALL_RECONNECTING   = 8;
+}
+
+message DirectCallSummary {
+  optional StreamSummaries stream_summaries           = 1;
+  optional uint32          ice_candidate_switch_count = 2;
+  optional uint32          ice_reconnect_count        = 3;
+  optional bool            relayed                    = 4;
+}
+
+message GroupCallSummary {
+  optional StreamSummaries stream_summaries = 1;
+}
+
+message CallTelemetry {
+  required uint32             version             = 1;
+  required uint64             start_time          = 2;
+  optional uint64             connect_time        = 3;
+  required uint64             end_time            = 4;
+  optional bool               cellular            = 5;
+  optional GroupCallSummary   group_call_summary  = 6;
+  optional DirectCallSummary  direct_call_summary = 7;
+  repeated StatsSet           stats_sets          = 8;
+}
+  

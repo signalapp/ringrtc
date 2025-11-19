@@ -13,13 +13,14 @@ use std::{
 use base64::Engine;
 use log::info;
 use ringrtc::{
-    common::units::DataRate,
+    common::{CallEndReason, units::DataRate},
     core::{
         call_mutex::CallMutex,
+        call_summary::CallSummary,
         endorsements::EndorsementUpdateResultRef,
         group_call::{
-            self, ClientId, ConnectionState, EndReason, HttpSfuClient, JoinState, Reaction,
-            RemoteDeviceState, RemoteDevicesChangedReason, SpeechEvent,
+            self, ClientId, ConnectionState, HttpSfuClient, JoinState, Reaction, RemoteDeviceState,
+            RemoteDevicesChangedReason, SpeechEvent,
         },
     },
     lite::{
@@ -116,8 +117,8 @@ impl group_call::Observer for Observer {
         info!("Got a video track for {}", sender_demux_id);
     }
 
-    fn handle_ended(&self, _client_id: ClientId, reason: EndReason) {
-        info!("Ended with reason {:?}", reason);
+    fn handle_ended(&self, _client_id: ClientId, reason: CallEndReason, summary: CallSummary) {
+        info!("Ended with reason {:?}, summary: {:?}", reason, summary);
     }
 
     fn handle_network_route_changed(

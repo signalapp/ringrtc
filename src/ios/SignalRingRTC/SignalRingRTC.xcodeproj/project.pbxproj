@@ -18,6 +18,7 @@
 		383347F123AA952F00D53B63 /* CallManagerGlobal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347E923AA952F00D53B63 /* CallManagerGlobal.swift */; };
 		383347F223AA952F00D53B63 /* ConnectionMediaStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */; };
 		383347F323AA952F00D53B63 /* CallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383347EB23AA952F00D53B63 /* CallManager.swift */; };
+		383904B42EC4532400BE8EBC /* CallSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383904B32EC4532400BE8EBC /* CallSummary.swift */; };
 		387059A724EB276700916F99 /* VideoCaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387059A624EB276700916F99 /* VideoCaptureController.swift */; };
 		3877D8242BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3877D8232BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift */; };
 		388AC0D122FA8B2D00BEC609 /* SignalRingRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */; };
@@ -60,6 +61,7 @@
 		383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConnectionMediaStream.swift; sourceTree = "<group>"; };
 		383347EB23AA952F00D53B63 /* CallManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CallManager.swift; sourceTree = "<group>"; };
 		383347F423AA973300D53B63 /* Nimble.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Nimble.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		383904B32EC4532400BE8EBC /* CallSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallSummary.swift; sourceTree = "<group>"; };
 		387059A624EB276700916F99 /* VideoCaptureController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VideoCaptureController.swift; sourceTree = "<group>"; };
 		3877D8232BD9DDC3005FBF92 /* AudioDeviceModuleForTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceModuleForTests.swift; sourceTree = "<group>"; };
 		388AC0C722FA8B2D00BEC609 /* SignalRingRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SignalRingRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -139,6 +141,7 @@
 				383347E923AA952F00D53B63 /* CallManagerGlobal.swift */,
 				383347E623AA952F00D53B63 /* CallManagerInterface.swift */,
 				383347E723AA952F00D53B63 /* CallManagerUtil.swift */,
+				383904B32EC4532400BE8EBC /* CallSummary.swift */,
 				383347E823AA952F00D53B63 /* Connection.swift */,
 				383347EA23AA952F00D53B63 /* ConnectionMediaStream.swift */,
 				38C4E532251A73AC005C2ACB /* GroupCall.swift */,
@@ -313,9 +316,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-SignalRingRTCTests/Pods-SignalRingRTCTests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -379,6 +386,7 @@
 				D0A033A727DA6EF200B0BDC7 /* Logging.swift in Sources */,
 				383347EF23AA952F00D53B63 /* CallManagerUtil.swift in Sources */,
 				383347F123AA952F00D53B63 /* CallManagerGlobal.swift in Sources */,
+				383904B42EC4532400BE8EBC /* CallSummary.swift in Sources */,
 				DC1A80E82C122E1000BF2923 /* Assertions.swift in Sources */,
 				38C4E533251A73AC005C2ACB /* GroupCall.swift in Sources */,
 				383347F323AA952F00D53B63 /* CallManager.swift in Sources */,

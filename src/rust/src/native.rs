@@ -5,21 +5,22 @@
 
 use std::{collections::HashSet, fmt, time::Duration};
 
+use strum::EnumDiscriminants;
+
 use crate::{
     common::{
-        ApplicationEvent, CallConfig, CallDirection, CallId, CallMediaType, DeviceId, Result,
+        ApplicationEvent, CallConfig, CallDirection, CallEndReason, CallId, CallMediaType,
+        DeviceId, Result,
     },
     core::{
         call::Call,
+        call_summary::CallSummary,
         connection::{Connection, ConnectionType},
         group_call,
         platform::{Platform, PlatformItem},
         signaling,
     },
-    lite::{
-        sfu,
-        sfu::{DemuxId, PeekInfo, PeekResult, UserId},
-    },
+    lite::sfu::{self, DemuxId, PeekInfo, PeekResult, UserId},
     webrtc::{
         media::{AudioTrack, MediaStream, VideoSink, VideoTrack},
         peer_connection::{AudioLevel, ReceivedAudioLevel},
@@ -141,7 +142,8 @@ pub enum CallState {
     Ringing, //  connected && !accepted  (currently can be stuck here if you accept incoming before Ringing)
     Connected, //  connected &&  accepted
     Connecting, // !connected &&  accepted  (currently won't happen until after Connected)
-    Ended(EndReason),
+    Ended(CallEndReason, CallSummary),
+    Rejected(RejectReason),
     Concluded,
 }
 
@@ -157,7 +159,8 @@ impl fmt::Display for CallState {
             CallState::Connected => "Connected".to_string(),
             CallState::Connecting => "Connecting".to_string(),
             CallState::Ringing => "Ringing".to_string(),
-            CallState::Ended(reason) => format!("Ended({})", reason),
+            CallState::Ended(reason, _) => format!("Ended({:?})", reason),
+            CallState::Rejected(reason) => format!("Rejected({:?})", reason),
             CallState::Concluded => "Concluded".to_string(),
         };
         write!(f, "({})", display)
@@ -170,54 +173,15 @@ impl fmt::Debug for CallState {
     }
 }
 
-// These are the different reasons a call can end.
-// Closely tied to call_manager::ApplicationEvent.
-#[derive(Debug)]
-pub enum EndReason {
-    LocalHangup,
-    RemoteHangup,
-    RemoteHangupNeedPermission,
-    Declined,
-    Busy, // Remote side is busy
-    Glare,
-    ReCall,
+#[derive(Debug, EnumDiscriminants, strum_macros::Display)]
+#[strum_discriminants(name(RawRejectReason))]
+#[strum_discriminants(derive(strum::Display))]
+#[strum_discriminants(repr(i32))]
+pub enum RejectReason {
+    GlareHandlingFailure,
     ReceivedOfferExpired { age: Duration },
     ReceivedOfferWhileActive,
     ReceivedOfferWithGlare,
-    SignalingFailure,
-    GlareFailure,
-    ConnectionFailure,
-    InternalFailure,
-    Timeout,
-    AcceptedOnAnotherDevice,
-    DeclinedOnAnotherDevice,
-    BusyOnAnotherDevice,
-}
-
-impl fmt::Display for EndReason {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let display = match self {
-            EndReason::LocalHangup => "LocalHangup",
-            EndReason::RemoteHangup => "RemoteHangup",
-            EndReason::RemoteHangupNeedPermission => "RemoteHangupNeedPermission",
-            EndReason::Declined => "Declined",
-            EndReason::Busy => "Busy",
-            EndReason::Glare => "Glare",
-            EndReason::ReCall => "ReCall",
-            EndReason::ReceivedOfferExpired { .. } => "ReceivedOfferExpired",
-            EndReason::ReceivedOfferWhileActive => "ReceivedOfferWhileActive",
-            EndReason::ReceivedOfferWithGlare => "ReceivedOfferWithGlare",
-            EndReason::SignalingFailure => "SignalingFailure",
-            EndReason::GlareFailure => "GlareFailure",
-            EndReason::ConnectionFailure => "ConnectionFailure",
-            EndReason::InternalFailure => "InternalFailure",
-            EndReason::Timeout => "Timeout",
-            EndReason::AcceptedOnAnotherDevice => "AcceptedOnAnotherDevice",
-            EndReason::DeclinedOnAnotherDevice => "DeclinedOnAnotherDevice",
-            EndReason::BusyOnAnotherDevice => "BusyOnAnotherDevice",
-        };
-        write!(f, "({})", display)
-    }
 }
 
 // Group Calls
@@ -240,7 +204,7 @@ pub enum GroupUpdate {
         request_id: u32,
         peek_result: PeekResult,
     },
-    Ended(group_call::ClientId, group_call::EndReason),
+    Ended(group_call::ClientId, CallEndReason, CallSummary),
     Ring {
         group_id: group_call::GroupId,
         ring_id: group_call::RingId,
@@ -280,7 +244,7 @@ impl fmt::Display for GroupUpdate {
             GroupUpdate::RemoteDeviceStatesChanged(_, _) => "RemoteDeviceStatesChanged".to_string(),
             GroupUpdate::PeekChanged { .. } => "PeekChanged".to_string(),
             GroupUpdate::PeekResult { .. } => "PeekResult".to_string(),
-            GroupUpdate::Ended(_, reason) => format!("Ended({:?})", reason),
+            GroupUpdate::Ended(_, reason, _) => format!("Ended({:?})", reason),
             GroupUpdate::Ring { update, .. } => format!("Ring({:?})", update),
             GroupUpdate::NetworkRouteChanged(_, network_route) => {
                 format!("NetworkRouteChanged({:?})", network_route)
@@ -542,8 +506,17 @@ impl Platform for NativePlatform {
                 CallDirection::Outgoing => CallState::Outgoing(call_media_type),
                 CallDirection::Incoming => CallState::Incoming(call_media_type),
             },
-        )?;
-        Ok(())
+        )
+    }
+
+    fn on_call_ended(
+        &self,
+        remote_peer: &Self::AppRemotePeer,
+        call_id: CallId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) -> Result<()> {
+        self.send_state(remote_peer, call_id, CallState::Ended(reason, summary))
     }
 
     fn on_event(
@@ -569,85 +542,6 @@ impl Platform for NativePlatform {
             ApplicationEvent::Reconnecting => {
                 self.send_state(remote_peer, call_id, CallState::Connecting)
             }
-            ApplicationEvent::EndedLocalHangup => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::LocalHangup),
-            ),
-            ApplicationEvent::EndedRemoteHangup => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::RemoteHangup),
-            ),
-            ApplicationEvent::EndedRemoteHangupNeedPermission => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::RemoteHangupNeedPermission),
-            ),
-            ApplicationEvent::EndedRemoteBusy => {
-                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Busy))
-            }
-            ApplicationEvent::EndedRemoteGlare => {
-                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Glare))
-            }
-            ApplicationEvent::EndedRemoteReCall => {
-                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::ReCall))
-            }
-            ApplicationEvent::EndedTimeout => {
-                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Timeout))
-            }
-            ApplicationEvent::EndedInternalFailure => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::InternalFailure),
-            ),
-            ApplicationEvent::EndedSignalingFailure => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::SignalingFailure),
-            ),
-            ApplicationEvent::EndedGlareHandlingFailure => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::GlareFailure),
-            ),
-            ApplicationEvent::EndedConnectionFailure => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::ConnectionFailure),
-            ),
-            ApplicationEvent::EndedAppDroppedCall => {
-                self.send_state(remote_peer, call_id, CallState::Ended(EndReason::Declined))
-            }
-            ApplicationEvent::ReceivedOfferExpired => {
-                debug_assert!(false, "should use on_offer_expired instead");
-                self.on_offer_expired(remote_peer, call_id, Duration::ZERO)
-            }
-            ApplicationEvent::ReceivedOfferWhileActive => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::ReceivedOfferWhileActive),
-            ),
-            ApplicationEvent::ReceivedOfferWithGlare => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::ReceivedOfferWithGlare),
-            ),
-            ApplicationEvent::EndedRemoteHangupAccepted => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::AcceptedOnAnotherDevice),
-            ),
-            ApplicationEvent::EndedRemoteHangupDeclined => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::DeclinedOnAnotherDevice),
-            ),
-            ApplicationEvent::EndedRemoteHangupBusy => self.send_state(
-                remote_peer,
-                call_id,
-                CallState::Ended(EndReason::BusyOnAnotherDevice),
-            ),
             ApplicationEvent::RemoteAudioEnable => self.send_remote_audio_state(remote_peer, true),
             ApplicationEvent::RemoteAudioDisable => {
                 self.send_remote_audio_state(remote_peer, false)
@@ -662,6 +556,25 @@ impl Platform for NativePlatform {
             ApplicationEvent::RemoteSharingScreenDisable => {
                 self.send_remote_sharing_screen(remote_peer, false)
             }
+            ApplicationEvent::GlareHandlingFailure => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Rejected(RejectReason::GlareHandlingFailure),
+            ),
+            ApplicationEvent::ReceivedOfferExpired => {
+                debug_assert!(false, "should use on_offer_expired instead");
+                self.on_offer_expired(remote_peer, call_id, Duration::ZERO)
+            }
+            ApplicationEvent::ReceivedOfferWhileActive => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Rejected(RejectReason::ReceivedOfferWhileActive),
+            ),
+            ApplicationEvent::ReceivedOfferWithGlare => self.send_state(
+                remote_peer,
+                call_id,
+                CallState::Rejected(RejectReason::ReceivedOfferWithGlare),
+            ),
         }?;
         Ok(())
     }
@@ -721,7 +634,7 @@ impl Platform for NativePlatform {
         self.send_state(
             remote_peer,
             call_id,
-            CallState::Ended(EndReason::ReceivedOfferExpired { age }),
+            CallState::Rejected(RejectReason::ReceivedOfferExpired { age }),
         )?;
         Ok(())
     }
@@ -1097,10 +1010,15 @@ impl Platform for NativePlatform {
         }
     }
 
-    fn handle_ended(&self, client_id: group_call::ClientId, reason: group_call::EndReason) {
+    fn handle_ended(
+        &self,
+        client_id: group_call::ClientId,
+        reason: CallEndReason,
+        summary: CallSummary,
+    ) {
         info!("NativePlatform::handle_ended(): id: {}", client_id);
 
-        let result = self.send_group_update(GroupUpdate::Ended(client_id, reason));
+        let result = self.send_group_update(GroupUpdate::Ended(client_id, reason, summary));
         if result.is_err() {
             error!("{:?}", result.err());
         }

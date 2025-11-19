@@ -5,30 +5,30 @@
 
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
-import { assert, expect, use } from 'chai';
+import { assert, expect, should, use } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import { createHash, randomBytes } from 'crypto';
 import {
-  CallEndedReason,
+  CallEndReason,
+  callIdFromEra,
+  callIdFromRingId,
+  CallingMessage,
   CallLinkRestrictions,
   CallLinkRootKey,
+  CallRejectReason,
   CallState,
-  CallingMessage,
+  CallSummary,
   GroupCall,
-  GroupCallEndReason,
   GroupCallKind,
   GroupMemberInfo,
   HttpMethod,
   OfferType,
   PeekStatusCodes,
   Reaction,
-  SpeechEvent,
   RingRTC,
-  callIdFromEra,
-  callIdFromRingId,
+  SpeechEvent,
 } from '../index';
 import Long from 'long';
-import { should } from 'chai';
 import sinon, { SinonSpy } from 'sinon';
 import sinonChai from 'sinon-chai';
 import { CallingClass } from './CallingClass';
@@ -72,7 +72,11 @@ describe('RingRTC', () => {
 
   let handleOutgoingSignalingSpy: SinonSpy;
   let handleIncomingCallSpy: SinonSpy;
-  let handleAutoEndedIncomingCallRequestSpy: SinonSpy;
+
+  function initializeSpies() {
+    handleIncomingCallSpy = sinon.spy(RingRTC, 'handleIncomingCall');
+    handleOutgoingSignalingSpy = sinon.spy(RingRTC, 'handleOutgoingSignaling');
+  }
 
   it('reports an age for expired offers', async () => {
     const offer: CallingMessage = {
@@ -85,11 +89,11 @@ describe('RingRTC', () => {
     const age = 60 * 60;
     try {
       const { reason, ageSec: reportedAge } = await new Promise<{
-        reason: CallEndedReason;
+        reason: CallRejectReason;
         ageSec: number;
       }>((resolve, _reject) => {
         /* eslint-disable @typescript-eslint/no-shadow */
-        RingRTC.handleAutoEndedIncomingCallRequest = (
+        RingRTC.handleRejectedIncomingCallRequest = (
           _callId,
           _remoteUserId,
           reason,
@@ -109,14 +113,26 @@ describe('RingRTC', () => {
           receiverIdentityKey: new Uint8Array(),
         });
       });
-      assert.equal(reason, CallEndedReason.ReceivedOfferExpired);
+      assert.equal(reason, CallRejectReason.ReceivedOfferExpired);
       assert.equal(reportedAge, age);
     } finally {
-      RingRTC.handleAutoEndedIncomingCallRequest = null;
+      RingRTC.handleRejectedIncomingCallRequest = null;
     }
   });
 
-  it('reports 0 as the age of other auto-ended offers', async () => {
+  it('reports 0 as the age of other rejected offers', async () => {
+    // Get a different call going first.
+    const calling = new CallingClass(user1_name, user1_id);
+    calling.initialize();
+    initializeSpies();
+
+    await calling.startOutgoingDirectCall(user2_id);
+
+    await sleep(1000);
+
+    // An offer and at least one ICE message should have been sent.
+    expect(handleOutgoingSignalingSpy.callCount).to.be.gt(1);
+
     const offer: CallingMessage = {
       offer: {
         callId: { high: 0, low: 123, unsigned: true },
@@ -126,11 +142,11 @@ describe('RingRTC', () => {
     };
     try {
       const { reason, ageSec: reportedAge } = await new Promise<{
-        reason: CallEndedReason;
+        reason: CallRejectReason;
         ageSec: number;
       }>((resolve, _reject) => {
         /* eslint-disable @typescript-eslint/no-shadow */
-        RingRTC.handleAutoEndedIncomingCallRequest = (
+        RingRTC.handleRejectedIncomingCallRequest = (
           _callId,
           _remoteUserId,
           reason,
@@ -150,21 +166,16 @@ describe('RingRTC', () => {
           receiverIdentityKey: new Uint8Array(),
         });
       });
-      assert.equal(reason, CallEndedReason.Declined); // because we didn't set handleIncomingCall.
+      assert.equal(reason, CallRejectReason.ReceivedOfferWhileActive);
       assert.equal(reportedAge, 0);
     } finally {
-      RingRTC.handleAutoEndedIncomingCallRequest = null;
+      // Hangup call
+      expect(calling.hangup()).to.be.true;
+      await sleep(500);
+
+      RingRTC.handleRejectedIncomingCallRequest = null;
     }
   });
-
-  function initializeSpies() {
-    handleAutoEndedIncomingCallRequestSpy = sinon.spy(
-      RingRTC,
-      'handleAutoEndedIncomingCallRequest'
-    );
-    handleIncomingCallSpy = sinon.spy(RingRTC, 'handleIncomingCall');
-    handleOutgoingSignalingSpy = sinon.spy(RingRTC, 'handleOutgoingSignaling');
-  }
 
   it('can initialize RingRTC', () => {
     assert.isNotNull(RingRTC, "RingRTC didn't initialize!");
@@ -226,7 +237,6 @@ describe('RingRTC', () => {
     await sleep(500);
 
     // Validate hangup related callbacks and call state
-    handleAutoEndedIncomingCallRequestSpy.should.have.been.calledOnce;
     expect(handleOutgoingSignalingSpy.callCount).to.be.gt(1);
     assert.equal(CallState.Ended, RingRTC.call!.state);
   });
@@ -930,7 +940,11 @@ describe('RingRTC', () => {
       onReactions(_call: GroupCall, _reactions: Array<Reaction>) {}
       onRaisedHands(_call: GroupCall, _raisedHands: Array<number>) {}
       onPeekChanged(_call: GroupCall) {}
-      onEnded(_call: GroupCall, _reason: GroupCallEndReason) {}
+      onEnded(
+        _call: GroupCall,
+        _reason: CallEndReason,
+        _summary: CallSummary
+      ) {}
       onSpeechEvent(_call: GroupCall, _event: SpeechEvent) {}
       onRemoteMute(_call: GroupCall, _demuxId: number) {}
       onObservedRemoteMute(

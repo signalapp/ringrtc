@@ -46,6 +46,30 @@ pub mod ios {
         }
     }
 
+    /// Swift "Float32?"
+    #[repr(C)]
+    #[derive(Debug, Default)]
+    pub struct rtc_OptionalF32 {
+        pub value: f32,
+        pub valid: bool,
+    }
+
+    impl From<f32> for rtc_OptionalF32 {
+        fn from(value: f32) -> Self {
+            Self { value, valid: true }
+        }
+    }
+
+    impl From<Option<f32>> for rtc_OptionalF32 {
+        fn from(value: Option<f32>) -> Self {
+            if let Some(value) = value {
+                Self { value, valid: true }
+            } else {
+                Self::default()
+            }
+        }
+    }
+
     /// Swift Data/[UInt8]/UnsafeBufferPointer<UInt8>
     #[repr(C)]
     #[derive(Debug)]

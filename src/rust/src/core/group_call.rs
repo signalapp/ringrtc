@@ -30,12 +30,13 @@ use zkgroup::{
 
 use crate::{
     common::{
-        CallId, DataMode, Result,
+        CallEndReason, CallId, DataMode, Result,
         actor::{Actor, Stopper},
         units::DataRate,
     },
     core::{
         call_mutex::CallMutex,
+        call_summary::{CallSummary, GroupCallSummary},
         crypto as frame_crypto,
         crypto::DecryptionErrorStats,
         endorsements::{EndorsementUpdateError, EndorsementUpdateResultRef, EndorsementsCache},
@@ -45,9 +46,9 @@ use crate::{
     error::RingRtcError,
     lite::{
         call_links::CallLinkEpoch,
-        http, sfu,
+        http,
         sfu::{
-            ClientStatus, DemuxId, GroupMember, MemberMap, MemberResolver, MembershipProof,
+            self, ClientStatus, DemuxId, GroupMember, MemberMap, MemberResolver, MembershipProof,
             ObfuscatedResolver, PeekInfo, PeekResult, PeekResultCallback, UserId,
         },
     },
@@ -337,7 +338,7 @@ pub trait Observer {
 
     // This will be the last callback.
     // The observer can assume the Call is completely shut down and can be deleted.
-    fn handle_ended(&self, client_id: ClientId, reason: EndReason);
+    fn handle_ended(&self, client_id: ClientId, reason: CallEndReason, call_summary: CallSummary);
 
     // This is called with the result of validating endorsements from the server. The errors contain
     // a reason and indicate any previous endorsements may be incomplete
@@ -516,30 +517,6 @@ pub struct SfuInfo {
     pub hostname: Option<String>,
     pub ice_ufrag: String,
     pub ice_pwd: String,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum EndReason {
-    // Normal events
-    DeviceExplicitlyDisconnected = 0,
-    ServerExplicitlyDisconnected,
-    DeniedRequestToJoinCall,
-    RemovedFromCall,
-
-    // Things that can go wrong
-    CallManagerIsBusy,
-    SfuClientFailedToJoin,
-    FailedToCreatePeerConnectionFactory,
-    FailedToNegotiatedSrtpKeys,
-    FailedToCreatePeerConnection,
-    FailedToStartPeerConnection,
-    FailedToUpdatePeerConnection,
-    FailedToSetMaxSendBitrate,
-    IceFailedWhileConnecting,
-    IceFailedAfterConnected,
-    ServerChangedDemuxId,
-    HasMaxDevices,
 }
 
 const ADMIN_LOG_TAG: &str = "AdminAction";
@@ -1024,6 +1001,8 @@ struct State {
     sfu_client: Box<dyn SfuClient>,
     observer: Box<dyn Observer>,
 
+    call_summary: GroupCallSummary,
+
     // Shared state with the CallManager that might change
     busy: Arc<CallMutex<bool>>,
     self_uuid: Arc<CallMutex<Option<UserId>>>,
@@ -1206,6 +1185,9 @@ const TICK_INTERVAL: Duration = Duration::from_millis(200);
 // How often to send RTP data messages and video requests.
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 
+// Call summary time limit.
+const DEFAULT_CALL_SUMMARY_TIME_LIMIT: Duration = Duration::from_secs(300);
+
 // How often to get and log stats.
 const DEFAULT_STATS_INTERVAL: Duration = Duration::from_secs(10);
 const STATS_INITIAL_OFFSET: Duration = Duration::from_secs(2);
@@ -1301,7 +1283,8 @@ impl Client {
                             Err(err) => {
                                 observer.handle_ended(
                                     client_id,
-                                    EndReason::FailedToCreatePeerConnectionFactory,
+                                    CallEndReason::FailedToCreatePeerConnectionFactory,
+                                    CallSummary::default(),
                                 );
                                 return Err(err);
                             }
@@ -1329,9 +1312,18 @@ impl Client {
                         outgoing_video_track,
                     )
                     .inspect_err(|_| {
-                        observer.handle_ended(client_id, EndReason::FailedToCreatePeerConnection);
+                        observer.handle_ended(
+                            client_id,
+                            CallEndReason::FailedToCreatePeerConnection,
+                            CallSummary::default(),
+                        );
                     })?;
                 let call_id_for_stats = CallId::from(client_id as u64);
+                let mut stats_observer =
+                    create_stats_observer(call_id_for_stats, DEFAULT_STATS_INTERVAL);
+                let call_summary =
+                    GroupCallSummary::new(DEFAULT_CALL_SUMMARY_TIME_LIMIT, DEFAULT_STATS_INTERVAL)?;
+                stats_observer.set_stats_snapshot_consumer(call_summary.as_stats_consumer());
                 Ok(State {
                     client_id,
                     group_id,
@@ -1342,6 +1334,8 @@ impl Client {
                     self_uuid,
                     local_ice_ufrag,
                     local_ice_pwd,
+
+                    call_summary,
 
                     connection_state: ConnectionState::NotConnected,
                     join_state: JoinState::NotJoined(ring_id),
@@ -1377,10 +1371,9 @@ impl Client {
 
                     next_stats_time: None,
                     get_stats_interval: DEFAULT_STATS_INTERVAL,
-                    stats_observer: create_stats_observer(
-                        call_id_for_stats,
-                        DEFAULT_STATS_INTERVAL,
-                    ),
+
+                    stats_observer,
+
                     next_decryption_error_time: None,
 
                     audio_levels_interval,
@@ -1853,6 +1846,9 @@ impl Client {
         state
             .observer
             .handle_connection_state_changed(state.client_id, connection_state);
+        state
+            .call_summary
+            .on_connection_state_changed(connection_state);
     }
 
     // Pulled into a private method so we can lock/set/unlock the busy state.
@@ -1935,7 +1931,7 @@ impl Client {
                             callback,
                         );
                     } else {
-                        Self::end(state, EndReason::CallManagerIsBusy);
+                        Self::end(state, CallEndReason::CallManagerIsBusy);
                     }
                 }
             }
@@ -2044,7 +2040,7 @@ impl Client {
                 "group_call::Client(inner)::disconnect(client_id: {})",
                 state.client_id
             );
-            Self::end(state, EndReason::DeviceExplicitlyDisconnected);
+            Self::end(state, CallEndReason::DeviceExplicitlyDisconnected);
         });
     }
 
@@ -2687,7 +2683,7 @@ impl Client {
     }
 
     // Pulled into a named private method because it can be called in many places.
-    fn end(state: &mut State, reason: EndReason) {
+    fn end(state: &mut State, reason: CallEndReason) {
         debug!(
             "group_call::Client(inner)::end(client_id: {})",
             state.client_id
@@ -2721,7 +2717,11 @@ impl Client {
                         ConnectionState::NotConnected,
                     );
                     let _join_handles = state.actor.stopper().stop_all_without_joining();
-                    state.observer.handle_ended(state.client_id, reason);
+                    state.observer.handle_ended(
+                        state.client_id,
+                        reason,
+                        state.call_summary.build_call_summary(reason),
+                    );
                 });
             }
         }
@@ -2740,7 +2740,7 @@ impl Client {
                 let srtp_keys = match &state.dhe_state {
                     DheState::Negotiated { srtp_keys } => srtp_keys,
                     _ => {
-                        Self::end(state, EndReason::FailedToNegotiatedSrtpKeys);
+                        Self::end(state, CallEndReason::FailedToNegotiatedSrtpKeys);
                         return;
                     }
                 };
@@ -2753,7 +2753,7 @@ impl Client {
                 )
                 .is_err()
                 {
-                    Self::end(state, EndReason::FailedToStartPeerConnection);
+                    Self::end(state, CallEndReason::FailedToStartPeerConnection);
                     return;
                 };
 
@@ -2859,11 +2859,11 @@ impl Client {
         let end_reason = err.downcast_ref::<RingRtcError>().map_or_else(
             || {
                 error!("Unexpected error: {}", err);
-                EndReason::SfuClientFailedToJoin
+                CallEndReason::SfuClientFailedToJoin
             },
             |err| match err {
-                RingRtcError::GroupCallFull => EndReason::HasMaxDevices,
-                _ => EndReason::SfuClientFailedToJoin,
+                RingRtcError::GroupCallFull => CallEndReason::HasMaxDevices,
+                _ => CallEndReason::SfuClientFailedToJoin,
             },
         );
         Self::end(state, end_reason);
@@ -3236,7 +3236,7 @@ impl Client {
                             srtp_keys,
                         );
                         if result.is_err() {
-                            Self::end(state, EndReason::FailedToUpdatePeerConnection);
+                            Self::end(state, CallEndReason::FailedToUpdatePeerConnection);
                             return;
                         }
                     }
@@ -3265,7 +3265,7 @@ impl Client {
                             srtp_keys,
                         );
                         if result.is_err() {
-                            Self::end(state, EndReason::FailedToUpdatePeerConnection);
+                            Self::end(state, CallEndReason::FailedToUpdatePeerConnection);
                             return;
                         }
                     }
@@ -4424,9 +4424,9 @@ impl Client {
     fn handle_removed_received(actor: &Actor<State>) {
         actor.send(move |state| {
             if matches!(state.join_state, JoinState::Joined(_)) {
-                Self::end(state, EndReason::RemovedFromCall);
+                Self::end(state, CallEndReason::RemovedFromCall);
             } else {
-                Self::end(state, EndReason::DeniedRequestToJoinCall);
+                Self::end(state, CallEndReason::DeniedRequestToJoinCall);
             }
         });
     }
@@ -4928,7 +4928,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                     (ConnectionState::Connecting, IceConnectionState::Closed) |
                     (ConnectionState::Connecting, IceConnectionState::Failed) => {
                         // ICE failed before we got connected :(
-                        Client::end(state, EndReason::IceFailedWhileConnecting);
+                        Client::end(state, CallEndReason::IceFailedWhileConnecting);
                     }
                     (ConnectionState::Connecting, IceConnectionState::Checking) => {
                         // Normal.  Not much to report.
@@ -4951,7 +4951,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                     (_, IceConnectionState::Failed) |
                     (_, IceConnectionState::Closed) => {
                         // The connectivity problems persisted.  ICE has failed.
-                        Client::end(state, EndReason::IceFailedAfterConnected);
+                        Client::end(state, CallEndReason::IceFailedAfterConnected);
                     }
                     (_, _) => {
                         warn!("Could not process ICE connection state {:?} while in group call ConnectionState {:?}", ice_connection_state, state.connection_state);
@@ -4976,6 +4976,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                 state
                     .observer
                     .handle_network_route_changed(state.client_id, network_route);
+                state.call_summary.on_ice_network_route_changed(network_route);
             });
         } else {
             warn!("Call isn't setup yet!");
@@ -5461,7 +5462,7 @@ mod tests {
         remote_devices_at_join_time: Arc<CallMutex<Vec<RemoteDeviceState>>>,
         peek_state: Arc<CallMutex<FakeObserverPeekState>>,
         send_rates: Arc<CallMutex<Option<SendRates>>>,
-        ended: Waitable<EndReason>,
+        ended: Waitable<CallEndReason>,
         reactions: Arc<CallMutex<Vec<Reaction>>>,
         endorsement_update: Arc<CallMutex<Option<EndorsementUpdateResult>>>,
 
@@ -5876,7 +5877,7 @@ mod tests {
         ) {
         }
 
-        fn handle_ended(&self, _client_id: ClientId, reason: EndReason) {
+        fn handle_ended(&self, _client_id: ClientId, reason: CallEndReason, _summary: CallSummary) {
             self.ended.set(reason);
         }
 
@@ -7884,7 +7885,7 @@ mod tests {
         client3.client.join();
 
         assert_eq!(
-            Some(EndReason::HasMaxDevices),
+            Some(CallEndReason::HasMaxDevices),
             client3.observer.ended.wait(Duration::from_secs(5))
         );
     }
@@ -8227,7 +8228,7 @@ mod tests {
 
         Client::handle_removed_received(&client1.client.actor);
         assert_eq!(
-            Some(EndReason::DeniedRequestToJoinCall),
+            Some(CallEndReason::DeniedRequestToJoinCall),
             client1.observer.ended.wait(Duration::from_secs(5))
         );
     }
@@ -8242,7 +8243,7 @@ mod tests {
 
         Client::handle_removed_received(&client1.client.actor);
         assert_eq!(
-            Some(EndReason::RemovedFromCall),
+            Some(CallEndReason::RemovedFromCall),
             client1.observer.ended.wait(Duration::from_secs(5))
         );
     }

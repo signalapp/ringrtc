@@ -11,17 +11,17 @@ export {
   DataMode,
   BusyMessage,
   Call,
-  CallEndedReason,
+  CallEndReason,
   CallId,
   CallLogLevel,
   CallMessageUrgency,
+  CallRejectReason,
   CallSettings,
   CallState,
   CallingMessage,
   ConnectionState,
   DeviceId,
   GroupCall,
-  GroupCallEndReason,
   GroupCallKind,
   GroupCallObserver,
   GroupMemberInfo,
@@ -60,5 +60,7 @@ export {
   CallLinkState,
   CallLinkEpoch,
 } from './ringrtc/CallLinks';
+
+export { CallSummary, QualityStats } from './ringrtc/CallSummary';
 
 export const RingRTC = new RingRTCType();

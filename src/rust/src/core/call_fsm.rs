@@ -52,7 +52,8 @@ use std::{
 
 use crate::{
     common::{
-        ApplicationEvent, CallConfig, CallDirection, CallState, ConnectionState, DeviceId, Result,
+        ApplicationEvent, CallConfig, CallDirection, CallEndReason, CallState, ConnectionState,
+        DeviceId, Result,
         actor::{Actor, Stopper},
     },
     core::{
@@ -328,6 +329,7 @@ where
         accepted_remote_device_id: DeviceId,
     ) -> Result<()> {
         call.set_active_device_id(accepted_remote_device_id)?;
+        call.start_call_summary_stats_collection()?;
 
         let hangup = signaling::Hangup::AcceptedOnAnotherDevice(accepted_remote_device_id);
         call.send_hangup_via_rtp_data_to_all_except(hangup, accepted_remote_device_id)?;
@@ -576,47 +578,47 @@ where
         }
 
         // Setup helper tuples for common scenarios to handle.
-        let no_app_event_and_no_propagation = (true, None, None);
-        let app_event_without_propagation = |event| (true, None, Some(event));
-        let propagate_without_app_event = |hangup_to_send| (true, Some(hangup_to_send), None);
-        let propagate_with_app_event =
+        let no_end_reason_and_no_propagation = (true, None, None);
+        let end_reason_without_propagation = |event| (true, None, Some(event));
+        let propagate_without_end_reason = |hangup_to_send| (true, Some(hangup_to_send), None);
+        let propagate_with_end_reason =
             |hangup_to_send, event| (true, Some(hangup_to_send), Some(event));
         let unexpected = (false, None, None);
 
         // Find out how we will handle the current hangup scenario.
         // - expected: true if an expected scenario
         // - hangup_to_propagate: If a caller, the hangup to send to other callees
-        // - app_event_override: The event, if any, to return to the UX to override the default
-        let (expected, hangup_to_propagate, app_event_override) = match (hangup_type, direction) {
+        // - end_reason_override: The event, if any, to return to the UX to override the default
+        let (expected, hangup_to_propagate, end_reason_override) = match (hangup_type, direction) {
             // Caller gets NeedsPermission: propagate it with specific app event.
             (signaling::HangupType::NeedPermission, CallDirection::Outgoing) => {
-                propagate_with_app_event(
+                propagate_with_end_reason(
                     signaling::Hangup::NeedPermission(Some(sender_device_id)),
-                    ApplicationEvent::EndedRemoteHangupNeedPermission,
+                    CallEndReason::RemoteHangupNeedPermission,
                 )
             }
 
             // Callee gets Normal: no propagation.
             (signaling::HangupType::Normal, CallDirection::Incoming) => {
-                no_app_event_and_no_propagation
+                no_end_reason_and_no_propagation
             }
 
             // Caller gets Normal hangup: propagate it as Declined.
             (signaling::HangupType::Normal, CallDirection::Outgoing) => {
-                propagate_without_app_event(signaling::Hangup::DeclinedOnAnotherDevice(
+                propagate_without_end_reason(signaling::Hangup::DeclinedOnAnotherDevice(
                     sender_device_id,
                 ))
             }
 
             // Callee gets propagated hangup: use specific app event.
             (signaling::HangupType::AcceptedOnAnotherDevice, CallDirection::Incoming) => {
-                app_event_without_propagation(ApplicationEvent::EndedRemoteHangupAccepted)
+                end_reason_without_propagation(CallEndReason::RemoteHangupAccepted)
             }
             (signaling::HangupType::DeclinedOnAnotherDevice, CallDirection::Incoming) => {
-                app_event_without_propagation(ApplicationEvent::EndedRemoteHangupDeclined)
+                end_reason_without_propagation(CallEndReason::RemoteHangupDeclined)
             }
             (signaling::HangupType::BusyOnAnotherDevice, CallDirection::Incoming) => {
-                app_event_without_propagation(ApplicationEvent::EndedRemoteHangupBusy)
+                end_reason_without_propagation(CallEndReason::RemoteHangupBusy)
             }
 
             // Everything else is unexpected: warn, and mostly treat like normal, no propagation.
@@ -658,7 +660,7 @@ where
             "Processing remote hangup event failed",
             move |call| {
                 call.call_manager()?
-                    .remote_hangup(call.call_id(), app_event_override)
+                    .remote_hangup(call.call_id(), end_reason_override)
             },
         );
         Ok(())
@@ -961,6 +963,10 @@ where
                         call_id, remote_device_id, event
                     );
                 }
+                Ok(())
+            }
+            ConnectionObserverEvent::IceConnected | ConnectionObserverEvent::IceDisconnected => {
+                // Currently, these events are only processed by the stats collector.
                 Ok(())
             }
             ConnectionObserverEvent::IceNetworkRouteChanged(network_route) => {

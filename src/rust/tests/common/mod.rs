@@ -20,7 +20,7 @@ use rand::{
 };
 use rand_chacha::ChaCha20Rng;
 use ringrtc::{
-    common::{ApplicationEvent, CallMediaType, DeviceId},
+    common::{ApplicationEvent, CallEndReason, CallMediaType, DeviceId},
     core::{call::Call, call_manager::CallManager, connection::Connection, group_call, signaling},
     lite::http,
     protobuf,
@@ -219,6 +219,11 @@ impl TestContext {
     pub fn ended_count(&self) -> usize {
         let platform = self.call_manager.platform().unwrap();
         platform.ended_count()
+    }
+
+    pub fn end_reason_count(&self, reason: CallEndReason) -> usize {
+        let platform = self.call_manager.platform().unwrap();
+        platform.end_reason_count(reason)
     }
 
     pub fn event_count(&self, event: ApplicationEvent) -> usize {

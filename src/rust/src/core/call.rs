@@ -29,6 +29,7 @@ use crate::{
         call_fsm::{CallEvent, CallStateMachine},
         call_manager::CallManager,
         call_mutex::CallMutex,
+        call_summary::DirectCallSummary,
         connection::{Connection, ConnectionObserverEvent, ConnectionType},
         platform::Platform,
         signaling,
@@ -107,6 +108,8 @@ where
     /// ICE candidates and signaling alive.
     /// And we also need to keep around that parent's offer that it created.
     forking: Arc<CallMutex<Option<ForkingState<T>>>>,
+    /// Captures call statistics for reporting.
+    call_summary: DirectCallSummary,
 }
 
 impl<T> fmt::Display for Call<T>
@@ -188,6 +191,7 @@ where
                 &self.did_notify_application_of_remote_ringing,
             ),
             forking: Arc::clone(&self.forking),
+            call_summary: self.call_summary.clone(),
         }
     }
 }
@@ -232,6 +236,7 @@ where
             did_send_offer: Arc::new(AtomicBool::new(false)),
             did_notify_application_of_remote_ringing: Arc::new(AtomicBool::new(false)),
             forking: Arc::new(CallMutex::new(None, "forking")),
+            call_summary: DirectCallSummary::default(),
         };
 
         Ok(call)
@@ -252,6 +257,23 @@ where
         }
 
         Ok(())
+    }
+
+    /// Connects the active connection to the call survey stats collector. This
+    /// method will fail if currently there is no active connection. It is safe
+    /// to ignore any errors returned by this method as they will only impact
+    /// stats collection and not the call itself.
+    pub fn start_call_summary_stats_collection(&self) -> Result<()> {
+        self.active_connection()?
+            .set_stats_snapshot_consumer(self.call_summary.as_stats_consumer())
+    }
+
+    /// Returns the `DirectCallSummary` instance that is being used to collect
+    /// call information. The returned object can be cheaply cloned and accesses
+    /// the underlying, potentially still active, instance of the direct call
+    /// stats collector.
+    pub fn summary(&self) -> DirectCallSummary {
+        self.call_summary.clone()
     }
 
     /// Return the Call identifier.
@@ -546,6 +568,13 @@ where
     ) -> Result<()> {
         info!("proceed():");
 
+        // Update the call summary capture limits now that we have a CallConfig available.
+        // Ignore any errors here as that will only impact stats collection.
+        let _ = self.call_summary.update_limits(
+            Duration::from_secs(call_config.call_summary_time_limit_secs as u64),
+            Duration::from_secs(call_config.stats_interval_secs as u64),
+        );
+
         let mut call_manager = self.call_manager()?;
 
         match self.direction {
@@ -574,6 +603,10 @@ where
                             answer,
                         },
                     )?;
+
+                    // Attach the stats consumer to this connection
+                    connection
+                        .set_stats_snapshot_consumer(self.call_summary.as_stats_consumer())?;
 
                     let mut connection_map = self.connection_map.lock()?;
                     connection_map.insert(remote_device_id, connection);
@@ -830,6 +863,11 @@ where
     ///
     /// Using the `EventPump` send a CallEvent to the internal FSM.
     fn inject_event(&mut self, event: CallEvent) -> Result<()> {
+        if let Ok(state) = self.state()
+            && state != CallState::Terminated
+        {
+            self.call_summary.on_call_event(state, &event);
+        }
         self.fsm_sender
             .try_send((self.clone(), event))
             .or_else(|err| match &err {
