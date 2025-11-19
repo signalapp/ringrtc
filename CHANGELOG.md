@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.60.0
+
+- Add support for the calling survey feature
+
+- Desktop: Allow for "microphone warm up"
+
+- Improve usability of virtual audio for rusty and other test use cases
+
+- Update to webrtc 7339f
+  - Update field trials mechanism
+  - Add separate rtp packet observer for received data
+  - Avoid errors when unregistering sinks
+
+- Build improvements
+
 ## v2.59.4
 
 - Desktop: Update to cubeb 0.33.0
