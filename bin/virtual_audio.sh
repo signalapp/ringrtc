@@ -184,8 +184,10 @@ setup_linux()
 teardown_linux()
 {
   # safe to ignore failures here
-  pactl unload-module module-null-sink || true
-  pactl unload-module module-remap-source || true
+  # There will be two devices matching this: the INPUT_SINK and the INPUT_SOURCE
+  pactl list modules short | grep "${INPUT_SOURCE}" | cut -f1 | xargs -n 1 pactl unload-module || true
+  # There will only be one device matching this
+  pactl list modules short | grep "${OUTPUT_SINK}" | cut -f1 | xargs -n 1 pactl unload-module || true
 }
 
 play_linux()

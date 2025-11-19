@@ -88,6 +88,9 @@ pub mod electron;
 #[cfg(feature = "native")]
 pub mod native;
 
+#[cfg(all(feature = "virtual_audio", feature = "native", not(feature = "sim")))]
+pub mod virtual_audio;
+
 /// Foreign Function Interface (FFI) to WebRTC C++ library.
 pub mod webrtc {
     pub mod arc;

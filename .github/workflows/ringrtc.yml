@@ -52,7 +52,7 @@ jobs:
     - name: Clippy (Android & iOS)
       run: cargo clippy --package ringrtc --target aarch64-linux-android --target aarch64-apple-ios -- -D warnings
     - name: Clippy (Electron)
-      run: cargo clippy --package ringrtc --features electron -- -D warnings
+      run: cargo clippy --package ringrtc --features electron,virtual_audio -- -D warnings
     - name: Clippy (group_call)
       run: cargo clippy --package ringrtc --bin group_call --features native,sim_http -- -D warnings
     - name: Clippy (call_link)

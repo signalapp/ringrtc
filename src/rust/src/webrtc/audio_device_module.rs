@@ -57,7 +57,6 @@ pub enum AudioLayer {
 // Stays in sync with WindowsDeviceType in webrtc
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum WindowsDeviceType {
     DefaultCommunicationDevice = -1,
     DefaultDevice = -2,
@@ -85,7 +84,9 @@ enum Event {
     RefreshCache(DeviceType),
     SetCallback(Arc<Mutex<RffiAudioTransport>>),
     SetPlayoutDevice(u16),
+    SetPlayoutDeviceById(String),
     SetRecordingDevice(u16),
+    SetRecordingDeviceById(String),
     InitPlayout,
     StartPlayout,
     StopPlayout,
@@ -106,7 +107,7 @@ struct UpdateCallbackData {
 
 struct Worker {
     ctx: Context,
-    // We will  pass raw pointers to these to the cubeb API.
+    // We will pass raw pointers to these to the cubeb API.
     // These must be destroyed **after** we unregister the callbacks with cubeb.
     input_data: UpdateCallbackData,
     output_data: UpdateCallbackData,
@@ -566,6 +567,21 @@ impl Worker {
                         ))
                     }
                 }
+                Event::SetPlayoutDeviceById(ref id) => {
+                    if let Some(d) = self.output_device_cache.iter().find(|d| {
+                        d.device_id
+                            .as_ref()
+                            .is_some_and(|actual_id| actual_id == id)
+                    }) {
+                        self.playout_device = Some(d.devid);
+                        Ok(())
+                    } else {
+                        Err(anyhow!(
+                            "Invalid playout device id {} requested",
+                            redact_for_logging(id)
+                        ))
+                    }
+                }
                 Event::SetRecordingDevice(index) => {
                     if !self.send_to_webrtc.load(Ordering::SeqCst)
                         && self.input_stream.is_some()
@@ -582,6 +598,21 @@ impl Worker {
                             "Invalid playout device index {} requested (len {:?})",
                             index,
                             self.input_device_cache.count()
+                        ))
+                    }
+                }
+                Event::SetRecordingDeviceById(ref id) => {
+                    if let Some(d) = self.input_device_cache.iter().find(|d| {
+                        d.device_id
+                            .as_ref()
+                            .is_some_and(|actual_id| actual_id == id)
+                    }) {
+                        self.recording_device = Some(d.devid);
+                        Ok(())
+                    } else {
+                        Err(anyhow!(
+                            "Invalid recording device id {} requested",
+                            redact_for_logging(id)
                         ))
                     }
                 }
@@ -1261,6 +1292,40 @@ impl AudioDeviceModule {
         0
     }
 
+    fn set_device_by_id(
+        &mut self,
+        id: &str,
+        device_type: DeviceType,
+        event: Event,
+    ) -> anyhow::Result<()> {
+        let devices = self.enumerate_devices(device_type)?;
+        // Do a quick plausibility check to see if we know about this device.
+        // Of course, the worker will still have to check again in case the device gets unplugged,
+        // but we can fail fast in the common case.
+        if devices
+            .iter()
+            .any(|dopt| dopt.as_ref().is_some_and(|d| d.unique_id == id))
+        {
+            if let Err(e) = self.mpsc_sender.send(event) {
+                bail!("Failed to request Set*DeviceById {}", e);
+            }
+        } else {
+            if devices.is_empty() {
+                info!("Likely failed to get device due to benign startup race");
+            }
+            bail!("No device with ID {}", redact_for_logging(id));
+        }
+        Ok(())
+    }
+
+    pub fn set_playout_device_by_id(&mut self, id: &str) -> anyhow::Result<()> {
+        self.set_device_by_id(
+            id,
+            DeviceType::OUTPUT,
+            Event::SetPlayoutDeviceById(id.to_string()),
+        )
+    }
+
     pub fn set_playout_device_win(&mut self, device: WindowsDeviceType) -> i32 {
         // DefaultDevice is at index 0 and DefaultCommunicationDevice at index 1
         self.set_playout_device(if device == WindowsDeviceType::DefaultDevice {
@@ -1299,6 +1364,14 @@ impl AudioDeviceModule {
         };
         self.has_recording_device = true;
         0
+    }
+
+    pub fn set_recording_device_by_id(&mut self, id: &str) -> anyhow::Result<()> {
+        self.set_device_by_id(
+            id,
+            DeviceType::INPUT,
+            Event::SetRecordingDeviceById(id.to_string()),
+        )
     }
 
     pub fn set_recording_device_win(&mut self, device: WindowsDeviceType) -> i32 {

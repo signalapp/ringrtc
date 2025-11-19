@@ -620,6 +620,16 @@ impl PeerConnectionFactory {
         }
     }
 
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
+    pub fn set_audio_playout_device_by_id(&mut self, device_id: &str) -> Result<()> {
+        self.adm
+            .as_ref()
+            .and_then(|adm| adm.lock().ok())
+            .map_or(Err(anyhow!("couldn't access ADM")), |mut adm| {
+                adm.set_playout_device_by_id(device_id)
+            })
+    }
+
     #[cfg(feature = "native")]
     fn get_audio_recording_device(&self, index: u16) -> Result<AudioDevice> {
         let mut name_buf = [0; ADM_MAX_DEVICE_NAME_SIZE];
@@ -737,6 +747,16 @@ impl PeerConnectionFactory {
             error!("setAudioRecordingDevice({}) failed", index);
             Err(RingRtcError::SetAudioDevice.into())
         }
+    }
+
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
+    pub fn set_audio_recording_device_by_id(&mut self, device_id: &str) -> Result<()> {
+        self.adm
+            .as_ref()
+            .and_then(|adm| adm.lock().ok())
+            .map_or(Err(anyhow!("couldn't access ADM")), |mut adm| {
+                adm.set_recording_device_by_id(device_id)
+            })
     }
 
     #[cfg(all(not(feature = "sim"), feature = "native"))]
