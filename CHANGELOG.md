@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.60.1
+
+- Desktop: Retry build
+
 ## v2.60.0
 
 - Add support for the calling survey feature
