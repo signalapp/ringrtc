@@ -48,6 +48,7 @@ message StatsSet {
   repeated StreamStats video_recv_stats = 4;
   repeated StreamStats video_send_stats = 5;
   repeated Event       events           = 6;
+  repeated float       rtt_stun         = 7;
 }
 
 enum Event {

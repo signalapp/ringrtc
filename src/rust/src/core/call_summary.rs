@@ -25,9 +25,8 @@ use crate::{
     webrtc::{
         peer_connection_observer::NetworkRoute,
         stats_observer::{
-            AudioReceiverStatsSnapshot, AudioSenderStatsSnapshot, ConnectionStatsSnapshot,
-            StatsSnapshot, StatsSnapshotConsumer, VideoReceiverStatsSnapshot,
-            VideoSenderStatsSnapshot,
+            AudioReceiverStatsSnapshot, AudioSenderStatsSnapshot, StatsSnapshot,
+            StatsSnapshotConsumer, VideoReceiverStatsSnapshot, VideoSenderStatsSnapshot,
         },
     },
 };
@@ -59,19 +58,9 @@ pub struct MediaQualityStats {
     pub packet_loss_fraction_recv: Option<f32>,
 }
 
-impl From<&MediaQualityStatsRawData> for MediaQualityStats {
-    fn from(raw_data: &MediaQualityStatsRawData) -> Self {
-        Self {
-            rtt_median: get_median(&raw_data.rtt),
-            jitter_median_send: get_median(&raw_data.send_jitter),
-            jitter_median_recv: get_median(&raw_data.recv_jitter),
-            packet_loss_fraction_send: get_median(&raw_data.send_packet_loss),
-            packet_loss_fraction_recv: get_median(&raw_data.recv_packet_loss),
-        }
-    }
-}
-
 const CALL_TELEMETRY_VERSION: u32 = 1;
+const MAX_STREAM_SUMMARIES: usize = 500;
+const DEFAULT_MAX_STATS_SETS: usize = 300;
 
 /// A timestamp is represented as the number of milliseconds since January 1,
 /// 1970 0:0:0 UTC.
@@ -239,32 +228,48 @@ impl StreamSummaries {
     where
         F: FnMut(&mut StreamSummary),
     {
-        let summary = self.audio_recv_stream_summaries.entry(ssrc).or_default();
-        func(summary);
+        if self.audio_recv_stream_summaries.len() <= MAX_STREAM_SUMMARIES {
+            let summary = self.audio_recv_stream_summaries.entry(ssrc).or_default();
+            func(summary);
+        } else if let Some(summary) = self.audio_recv_stream_summaries.get_mut(&ssrc) {
+            func(summary);
+        }
     }
 
     fn update_audio_send_stream_summary<F>(&mut self, ssrc: u32, mut func: F)
     where
         F: FnMut(&mut StreamSummary),
     {
-        let summary = self.audio_send_stream_summaries.entry(ssrc).or_default();
-        func(summary);
+        if self.audio_send_stream_summaries.len() <= MAX_STREAM_SUMMARIES {
+            let summary = self.audio_send_stream_summaries.entry(ssrc).or_default();
+            func(summary);
+        } else if let Some(summary) = self.audio_send_stream_summaries.get_mut(&ssrc) {
+            func(summary);
+        }
     }
 
     fn update_video_recv_stream_summary<F>(&mut self, ssrc: u32, mut func: F)
     where
         F: FnMut(&mut StreamSummary),
     {
-        let summary = self.video_recv_stream_summaries.entry(ssrc).or_default();
-        func(summary);
+        if self.video_recv_stream_summaries.len() <= MAX_STREAM_SUMMARIES {
+            let summary = self.video_recv_stream_summaries.entry(ssrc).or_default();
+            func(summary);
+        } else if let Some(summary) = self.video_recv_stream_summaries.get_mut(&ssrc) {
+            func(summary);
+        }
     }
 
     fn update_video_send_stream_summary<F>(&mut self, ssrc: u32, mut func: F)
     where
         F: FnMut(&mut StreamSummary),
     {
-        let summary = self.video_send_stream_summaries.entry(ssrc).or_default();
-        func(summary);
+        if self.video_send_stream_summaries.len() <= MAX_STREAM_SUMMARIES {
+            let summary = self.video_send_stream_summaries.entry(ssrc).or_default();
+            func(summary);
+        } else if let Some(summary) = self.video_send_stream_summaries.get_mut(&ssrc) {
+            func(summary);
+        }
     }
 
     fn has_recv_summaries(&self) -> bool {
@@ -300,8 +305,6 @@ impl StreamSummaries {
         }
     }
 }
-
-const DEFAULT_MAX_STATS_SETS: usize = 300;
 
 /// `StatsSets` is a ring buffer used to capture stats sets. In other words,
 /// once we reach the maximum number of stats sets, the oldest set will be
@@ -389,8 +392,95 @@ impl StatsSets {
         self.stats_sets[last].events.push(event.into());
     }
 
+    fn push_stun_rtt(&mut self, rtt: f32) {
+        let last = self.stats_sets.len() - 1;
+        self.stats_sets[last].rtt_stun.push(rtt);
+    }
+
     fn to_proto(&self) -> Vec<protobuf::call_summary::StatsSet> {
         Vec::from(self.stats_sets.clone())
+    }
+
+    fn extract_stream_stats_values<F0, F1>(&self, f0: F0, f1: F1) -> Vec<f32>
+    where
+        F0: Fn(&protobuf::call_summary::StatsSet) -> &[StreamStats],
+        F1: Fn(&protobuf::call_summary::StreamStats) -> f32,
+    {
+        let mut result = Vec::new();
+        for stats_set in &self.stats_sets {
+            let stream_stats = f0(stats_set);
+            for stream_data in stream_stats {
+                result.push(f1(stream_data));
+            }
+        }
+        result
+    }
+
+    fn extract_stats_set_values<F>(&self, extractor: F) -> Vec<f32>
+    where
+        F: Fn(&protobuf::call_summary::StatsSet) -> &[f32],
+    {
+        let mut result = Vec::new();
+        for stats_set in &self.stats_sets {
+            result.extend_from_slice(extractor(stats_set));
+        }
+        result
+    }
+
+    fn derive_quality_stats(&self) -> QualityStats {
+        let video_recv_packet_loss = get_median(&self.extract_stream_stats_values(
+            |s| &s.video_recv_stats,
+            |v| v.packet_loss.unwrap_or(0.0),
+        ));
+        let audio_recv_packet_loss = get_median(&self.extract_stream_stats_values(
+            |s| &s.audio_recv_stats,
+            |v| v.packet_loss.unwrap_or(0.0),
+        ));
+        let video_recv_jitter = get_median(
+            &self.extract_stream_stats_values(|s| &s.video_recv_stats, |v| v.jitter.unwrap_or(0.0)),
+        );
+        let audio_recv_jitter = get_median(
+            &self.extract_stream_stats_values(|s| &s.audio_recv_stats, |v| v.jitter.unwrap_or(0.0)),
+        );
+        let video_send_packet_loss = get_median(&self.extract_stream_stats_values(
+            |s| &s.video_send_stats,
+            |v| v.packet_loss.unwrap_or(0.0),
+        ));
+        let audio_send_packet_loss = get_median(&self.extract_stream_stats_values(
+            |s| &s.audio_send_stats,
+            |v| v.packet_loss.unwrap_or(0.0),
+        ));
+        let video_send_jitter = get_median(
+            &self.extract_stream_stats_values(|s| &s.video_send_stats, |v| v.jitter.unwrap_or(0.0)),
+        );
+        let audio_send_jitter = get_median(
+            &self.extract_stream_stats_values(|s| &s.audio_send_stats, |v| v.jitter.unwrap_or(0.0)),
+        );
+        let video_send_rtt = get_median(
+            &self.extract_stream_stats_values(|s| &s.video_send_stats, |v| v.rtt.unwrap_or(0.0)),
+        );
+        let audio_send_rtt = get_median(
+            &self.extract_stream_stats_values(|s| &s.audio_send_stats, |v| v.rtt.unwrap_or(0.0)),
+        );
+        let stun_rtt = get_median(&self.extract_stats_set_values(|v| &v.rtt_stun));
+
+        QualityStats {
+            rtt_median_connection: stun_rtt,
+            audio_stats: MediaQualityStats {
+                rtt_median: audio_send_rtt,
+                jitter_median_send: audio_send_jitter,
+                jitter_median_recv: audio_recv_jitter,
+                packet_loss_fraction_send: audio_send_packet_loss,
+                packet_loss_fraction_recv: audio_recv_packet_loss,
+            },
+            video_stats: MediaQualityStats {
+                rtt_median: video_send_rtt,
+                jitter_median_send: video_send_jitter,
+                jitter_median_recv: video_recv_jitter,
+                packet_loss_fraction_send: video_send_packet_loss,
+                packet_loss_fraction_recv: video_recv_packet_loss,
+            },
+        }
     }
 }
 
@@ -443,84 +533,6 @@ impl From<&VideoSenderStatsSnapshot> for StreamStats {
             rtt: Some(snapshot.remote_round_trip_time as f32),
             framerate: Some(snapshot.framerate),
             ..Default::default()
-        }
-    }
-}
-/// [`QualityStatsRawData`] contains arrays of samples are used to calculate
-/// the top-level stats (RTT median, packet loss percentage mean, and the jitter
-/// median).
-#[derive(Debug, Default)]
-struct QualityStatsRawData {
-    stun_rtt: Vec<f32>,
-    audio_stats: MediaQualityStatsRawData,
-    video_stats: MediaQualityStatsRawData,
-}
-
-/// [`MediaQualityStatsRawData`] contains arrays of samples that are used to
-/// determine the top level stats for the particulr media type (audio or video).
-#[derive(Debug, Default)]
-struct MediaQualityStatsRawData {
-    rtt: Vec<f32>,
-    send_packet_loss: Vec<f32>,
-    recv_packet_loss: Vec<f32>,
-    send_jitter: Vec<f32>,
-    recv_jitter: Vec<f32>,
-}
-
-impl MediaQualityStatsRawData {
-    fn update_with_sender_stats(
-        &mut self,
-        rtt: f32,
-        remote_packets_lost_pct: f32,
-        remote_jitter: f32,
-    ) {
-        self.send_packet_loss.push(remote_packets_lost_pct);
-        self.send_jitter.push(remote_jitter);
-        self.rtt.push(rtt);
-    }
-
-    fn update_with_receiver_stats(&mut self, packets_lost_pct: f32, jitter: f32) {
-        self.recv_packet_loss.push(packets_lost_pct);
-        self.recv_jitter.push(jitter);
-    }
-}
-
-impl QualityStatsRawData {
-    fn update_with_audio_sender_stats(&mut self, snapshot: &AudioSenderStatsSnapshot) {
-        self.audio_stats.update_with_sender_stats(
-            snapshot.remote_rtt as f32,
-            snapshot.remote_packets_lost_pct,
-            snapshot.remote_jitter as f32,
-        );
-    }
-
-    fn update_with_audio_receiver_stats(&mut self, snapshot: &AudioReceiverStatsSnapshot) {
-        self.audio_stats
-            .update_with_receiver_stats(snapshot.packets_lost_pct, snapshot.jitter as f32);
-    }
-
-    fn update_with_connection_stats(&mut self, snapshot: &ConnectionStatsSnapshot) {
-        self.stun_rtt.push(snapshot.current_round_trip_time as f32);
-    }
-
-    fn update_with_video_sender_stats(&mut self, snapshot: &VideoSenderStatsSnapshot) {
-        self.video_stats.update_with_sender_stats(
-            snapshot.remote_round_trip_time as f32,
-            snapshot.remote_packets_lost_pct,
-            snapshot.remote_jitter as f32,
-        );
-    }
-
-    fn update_with_video_receiver_stats(&mut self, snapshot: &VideoReceiverStatsSnapshot) {
-        self.video_stats
-            .update_with_receiver_stats(snapshot.packets_lost_pct, snapshot.jitter as f32);
-    }
-
-    fn build_quality_stats(&self) -> QualityStats {
-        QualityStats {
-            rtt_median_connection: get_median(&self.stun_rtt),
-            audio_stats: (&self.audio_stats).into(),
-            video_stats: (&self.video_stats).into(),
         }
     }
 }
@@ -577,7 +589,6 @@ impl From<&DistributionSummary<f32>> for protobuf::call_summary::DistributionSum
 struct CallInfo {
     start_time: SystemTime,
     connect_time: Option<SystemTime>,
-    top_level_quality_stats_raw: QualityStatsRawData,
     stream_summaries: StreamSummaries,
     // This value is set to true if the data was being exchanged over the
     // cellular interface at least at one point in the call.
@@ -594,7 +605,6 @@ impl Default for CallInfo {
         Self {
             start_time: SystemTime::now(),
             connect_time: None,
-            top_level_quality_stats_raw: Default::default(),
             stream_summaries: Default::default(),
             cellular: false,
             stats_sets: Default::default(),
@@ -635,12 +645,10 @@ impl CallInfo {
                 self.needs_stats_set = true;
             }
             StatsSnapshot::Connection(snapshot) => {
-                self.top_level_quality_stats_raw
-                    .update_with_connection_stats(snapshot);
+                self.stats_sets
+                    .push_stun_rtt(snapshot.current_round_trip_time as f32);
             }
             StatsSnapshot::AudioSender(snapshot) => {
-                self.top_level_quality_stats_raw
-                    .update_with_audio_sender_stats(snapshot);
                 self.stream_summaries
                     .update_audio_send_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -651,8 +659,6 @@ impl CallInfo {
                     .push_audio_send_stream_stats(snapshot.into());
             }
             StatsSnapshot::AudioReceiver(snapshot) => {
-                self.top_level_quality_stats_raw
-                    .update_with_audio_receiver_stats(snapshot);
                 self.stream_summaries
                     .update_audio_recv_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -663,8 +669,6 @@ impl CallInfo {
                     .push_audio_recv_stream_stats(snapshot.into());
             }
             StatsSnapshot::VideoSender(snapshot) => {
-                self.top_level_quality_stats_raw
-                    .update_with_video_sender_stats(snapshot);
                 self.stream_summaries
                     .update_video_send_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -675,8 +679,6 @@ impl CallInfo {
                     .push_video_send_stream_stats(snapshot.into());
             }
             StatsSnapshot::VideoReceiver(snapshot) => {
-                self.top_level_quality_stats_raw
-                    .update_with_video_receiver_stats(snapshot);
                 self.stream_summaries
                     .update_video_recv_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -859,10 +861,7 @@ impl DirectCallSummaryInner {
 
         let (raw_stats, raw_stats_text) = telemetry.generate_blob_and_description();
 
-        let quality_stats = self
-            .call_info
-            .top_level_quality_stats_raw
-            .build_quality_stats();
+        let quality_stats = self.call_info.stats_sets.derive_quality_stats();
 
         // If the call connected then we present the connect time as the start
         // time to the upper layers since that will enable them to correctly
@@ -1078,10 +1077,7 @@ impl GroupCallSummaryInner {
 
         let (raw_stats, raw_stats_text) = telemetry.generate_blob_and_description();
 
-        let quality_stats = self
-            .call_info
-            .top_level_quality_stats_raw
-            .build_quality_stats();
+        let quality_stats = self.call_info.stats_sets.derive_quality_stats();
 
         // If the call connected then we present the connect time as the start
         // time to the upper layers since that will enable them to correctly
