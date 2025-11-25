@@ -4,7 +4,6 @@
 //
 
 use std::{
-    cmp::Ordering,
     collections::{HashMap, VecDeque},
     fmt::Debug,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
@@ -14,10 +13,14 @@ use std::{
 
 use anyhow::anyhow;
 use prost::Message;
+use sketches_ddsketch::{Config, DDSketch};
 
 use crate::{
     common::{CallEndReason, CallState, ConnectionState, Result},
-    core::{call_fsm::CallEvent, call_mutex::CallMutex, connection::ConnectionObserverEvent},
+    core::{
+        call_fsm::CallEvent, call_mutex::CallMutex, connection::ConnectionObserverEvent,
+        group_call::RemoteDeviceState,
+    },
     protobuf::{
         self,
         call_summary::{CallTelemetry, Event, StreamStats},
@@ -59,8 +62,18 @@ pub struct MediaQualityStats {
 }
 
 const CALL_TELEMETRY_VERSION: u32 = 1;
+
+/// Maximum number of stream summaries that will be captured. The number is
+/// large to accommodate summary creation for larger group calls in which
+/// participants come and go frequently.
 const MAX_STREAM_SUMMARIES: usize = 500;
-const DEFAULT_MAX_STATS_SETS: usize = 300;
+
+/// Maximum size of the encoded telemetry record.
+const MAX_TELEMETRY_ENCODED_SIZE: usize = 65536;
+
+/// Maximum number of stats sets that we capture before we start dropping them,
+/// oldest first.
+const DEFAULT_MAX_STATS_SETS: usize = 30;
 
 /// A timestamp is represented as the number of milliseconds since January 1,
 /// 1970 0:0:0 UTC.
@@ -194,16 +207,6 @@ impl<T: Sample> DistributionSummary<T> {
     }
 }
 
-fn get_median<T: Sample>(samples: &[T]) -> Option<T> {
-    if samples.is_empty() {
-        None
-    } else {
-        let mut samples = samples.to_vec();
-        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Less));
-        Some(samples[samples.len() / 2])
-    }
-}
-
 /// `StreamSummary` is converted into `protobuf::call_summary::StreamSummary`
 /// and serialized into the call telemetry blob.
 #[derive(Debug, Default)]
@@ -270,10 +273,6 @@ impl StreamSummaries {
         } else if let Some(summary) = self.video_send_stream_summaries.get_mut(&ssrc) {
             func(summary);
         }
-    }
-
-    fn has_recv_summaries(&self) -> bool {
-        !self.audio_recv_stream_summaries.is_empty() || !self.video_recv_stream_summaries.is_empty()
     }
 
     fn to_proto(&self) -> protobuf::call_summary::StreamSummaries {
@@ -400,88 +399,6 @@ impl StatsSets {
     fn to_proto(&self) -> Vec<protobuf::call_summary::StatsSet> {
         Vec::from(self.stats_sets.clone())
     }
-
-    fn extract_stream_stats_values<F0, F1>(&self, f0: F0, f1: F1) -> Vec<f32>
-    where
-        F0: Fn(&protobuf::call_summary::StatsSet) -> &[StreamStats],
-        F1: Fn(&protobuf::call_summary::StreamStats) -> f32,
-    {
-        let mut result = Vec::new();
-        for stats_set in &self.stats_sets {
-            let stream_stats = f0(stats_set);
-            for stream_data in stream_stats {
-                result.push(f1(stream_data));
-            }
-        }
-        result
-    }
-
-    fn extract_stats_set_values<F>(&self, extractor: F) -> Vec<f32>
-    where
-        F: Fn(&protobuf::call_summary::StatsSet) -> &[f32],
-    {
-        let mut result = Vec::new();
-        for stats_set in &self.stats_sets {
-            result.extend_from_slice(extractor(stats_set));
-        }
-        result
-    }
-
-    fn derive_quality_stats(&self) -> QualityStats {
-        let video_recv_packet_loss = get_median(&self.extract_stream_stats_values(
-            |s| &s.video_recv_stats,
-            |v| v.packet_loss.unwrap_or(0.0),
-        ));
-        let audio_recv_packet_loss = get_median(&self.extract_stream_stats_values(
-            |s| &s.audio_recv_stats,
-            |v| v.packet_loss.unwrap_or(0.0),
-        ));
-        let video_recv_jitter = get_median(
-            &self.extract_stream_stats_values(|s| &s.video_recv_stats, |v| v.jitter.unwrap_or(0.0)),
-        );
-        let audio_recv_jitter = get_median(
-            &self.extract_stream_stats_values(|s| &s.audio_recv_stats, |v| v.jitter.unwrap_or(0.0)),
-        );
-        let video_send_packet_loss = get_median(&self.extract_stream_stats_values(
-            |s| &s.video_send_stats,
-            |v| v.packet_loss.unwrap_or(0.0),
-        ));
-        let audio_send_packet_loss = get_median(&self.extract_stream_stats_values(
-            |s| &s.audio_send_stats,
-            |v| v.packet_loss.unwrap_or(0.0),
-        ));
-        let video_send_jitter = get_median(
-            &self.extract_stream_stats_values(|s| &s.video_send_stats, |v| v.jitter.unwrap_or(0.0)),
-        );
-        let audio_send_jitter = get_median(
-            &self.extract_stream_stats_values(|s| &s.audio_send_stats, |v| v.jitter.unwrap_or(0.0)),
-        );
-        let video_send_rtt = get_median(
-            &self.extract_stream_stats_values(|s| &s.video_send_stats, |v| v.rtt.unwrap_or(0.0)),
-        );
-        let audio_send_rtt = get_median(
-            &self.extract_stream_stats_values(|s| &s.audio_send_stats, |v| v.rtt.unwrap_or(0.0)),
-        );
-        let stun_rtt = get_median(&self.extract_stats_set_values(|v| &v.rtt_stun));
-
-        QualityStats {
-            rtt_median_connection: stun_rtt,
-            audio_stats: MediaQualityStats {
-                rtt_median: audio_send_rtt,
-                jitter_median_send: audio_send_jitter,
-                jitter_median_recv: audio_recv_jitter,
-                packet_loss_fraction_send: audio_send_packet_loss,
-                packet_loss_fraction_recv: audio_recv_packet_loss,
-            },
-            video_stats: MediaQualityStats {
-                rtt_median: video_send_rtt,
-                jitter_median_send: video_send_jitter,
-                jitter_median_recv: video_recv_jitter,
-                packet_loss_fraction_send: video_send_packet_loss,
-                packet_loss_fraction_recv: video_recv_packet_loss,
-            },
-        }
-    }
 }
 
 impl From<&AudioReceiverStatsSnapshot> for StreamStats {
@@ -542,11 +459,58 @@ impl CallTelemetry {
     /// string that is suitable for being shown to the user. This implementation
     /// will serialize the telemetry BLOB to a JSON string so that it can easily
     /// be ingested by user provided tools.
-    fn generate_blob_and_description(&self) -> (Vec<u8>, String) {
-        let blob = self.encode_to_vec();
-        let text = serde_json::to_string(&self)
-            .unwrap_or_else(|_| "Failed to generate call quality info text".to_string());
-        (blob, text)
+    ///
+    /// This method will attempt to prune the telemetry before serializing
+    /// it into a blob. See [`CallTelemetry::prune_if_too_large`] for more
+    /// information.
+    fn generate_blob_and_description(&mut self) -> (Option<Vec<u8>>, Option<String>) {
+        if let Err(e) = self.prune_if_too_large() {
+            warn!("Call summary construction failure: {e}");
+            (None, None)
+        } else {
+            let blob = self.encode_to_vec();
+            let text = if cfg!(debug_assertions) {
+                serde_json::to_string(&self).ok()
+            } else {
+                None
+            };
+            (Some(blob), text)
+        }
+    }
+
+    /// If the encoded length of the telemtry message is too large (larger
+    /// than MAX_TELEMETRY_ENCODED_SIZE bytes), this method will remove stats
+    /// sets, one by one, starting with the oldest stats set, until the encoded
+    /// message size is less than or equal to MAX_TELEMETRY_ENCODED_SIZE bytes.
+    ///
+    /// In the unlikely event that the complete removal of the recorded stats
+    /// sets does not bring the encoded size below the acceptable maximum, the
+    /// entire call summary will be removed.
+    ///
+    /// Once the encoded size of the message is within acceptable limits, this
+    /// method will return `Ok`.
+    ///
+    /// Under normal circumstances, this method is guaranteed to bring the encoded
+    /// size down below MAX_TELEMETRY_ENCODED_SIZE. If that is still not the
+    /// case, `Err` is returned. The content of the telemetry message will *not*
+    /// be preserved.
+    fn prune_if_too_large(&mut self) -> Result<usize> {
+        let stats_set_count = self.stats_sets.len();
+        while !self.stats_sets.is_empty() {
+            if self.encoded_len() <= MAX_TELEMETRY_ENCODED_SIZE {
+                return Ok(stats_set_count - self.stats_sets.len());
+            }
+            self.stats_sets.remove(0);
+        }
+
+        self.group_call_summary = None;
+        self.direct_call_summary = None;
+
+        if self.encoded_len() <= MAX_TELEMETRY_ENCODED_SIZE {
+            Ok(stats_set_count)
+        } else {
+            Err(anyhow!("Telemetry message large after pruning."))
+        }
     }
 }
 
@@ -585,6 +549,75 @@ impl From<&DistributionSummary<f32>> for protobuf::call_summary::DistributionSum
     }
 }
 
+/// Simple wrapper around DDSketch.
+struct QuantileSketch(DDSketch);
+
+impl Default for QuantileSketch {
+    fn default() -> Self {
+        Self(DDSketch::new(Config::defaults()))
+    }
+}
+
+impl Debug for QuantileSketch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.length())
+    }
+}
+
+impl QuantileSketch {
+    fn add(&mut self, sample: f64) {
+        self.0.add(sample);
+    }
+
+    fn quantile(&self, quantile: f64) -> Result<Option<f64>> {
+        self.0
+            .quantile(quantile)
+            .map_err(|e| anyhow!("Sketch error: {e}"))
+    }
+}
+
+#[derive(Debug, Default)]
+struct MediaQualityStatsSketches {
+    jitter_send: QuantileSketch,
+    jitter_recv: QuantileSketch,
+    packet_loss_send: QuantileSketch,
+    packet_loss_recv: QuantileSketch,
+    rtt: QuantileSketch,
+}
+
+#[derive(Debug, Default)]
+struct QualityStatsSketches {
+    stun_rtt: QuantileSketch,
+    audio: MediaQualityStatsSketches,
+    video: MediaQualityStatsSketches,
+}
+
+impl From<&QualityStatsSketches> for QualityStats {
+    fn from(sketches: &QualityStatsSketches) -> Self {
+        fn get_median(sketch: &QuantileSketch) -> Option<f32> {
+            sketch.quantile(0.5).unwrap_or_default().map(|v| v as f32)
+        }
+
+        QualityStats {
+            rtt_median_connection: get_median(&sketches.stun_rtt),
+            audio_stats: MediaQualityStats {
+                rtt_median: get_median(&sketches.audio.rtt),
+                jitter_median_send: get_median(&sketches.audio.jitter_send),
+                jitter_median_recv: get_median(&sketches.audio.jitter_recv),
+                packet_loss_fraction_send: get_median(&sketches.audio.packet_loss_send),
+                packet_loss_fraction_recv: get_median(&sketches.audio.packet_loss_recv),
+            },
+            video_stats: MediaQualityStats {
+                rtt_median: get_median(&sketches.video.rtt),
+                jitter_median_send: get_median(&sketches.video.jitter_send),
+                jitter_median_recv: get_median(&sketches.video.jitter_recv),
+                packet_loss_fraction_send: get_median(&sketches.video.packet_loss_send),
+                packet_loss_fraction_recv: get_median(&sketches.video.packet_loss_recv),
+            },
+        }
+    }
+}
+
 #[derive(Debug)]
 struct CallInfo {
     start_time: SystemTime,
@@ -598,6 +631,8 @@ struct CallInfo {
     // entire call.
     stats_sets: StatsSets,
     needs_stats_set: bool,
+    // Quantile sketches
+    quality_stats_sketches: QualityStatsSketches,
 }
 
 impl Default for CallInfo {
@@ -609,6 +644,7 @@ impl Default for CallInfo {
             cellular: false,
             stats_sets: Default::default(),
             needs_stats_set: false,
+            quality_stats_sketches: Default::default(),
         }
     }
 }
@@ -645,10 +681,25 @@ impl CallInfo {
                 self.needs_stats_set = true;
             }
             StatsSnapshot::Connection(snapshot) => {
+                self.quality_stats_sketches
+                    .stun_rtt
+                    .add(snapshot.current_round_trip_time);
                 self.stats_sets
                     .push_stun_rtt(snapshot.current_round_trip_time as f32);
             }
             StatsSnapshot::AudioSender(snapshot) => {
+                self.quality_stats_sketches
+                    .audio
+                    .jitter_send
+                    .add(snapshot.remote_jitter);
+                self.quality_stats_sketches
+                    .audio
+                    .packet_loss_send
+                    .add(snapshot.remote_packets_lost_pct as f64);
+                self.quality_stats_sketches
+                    .audio
+                    .rtt
+                    .add(snapshot.remote_rtt);
                 self.stream_summaries
                     .update_audio_send_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -659,6 +710,14 @@ impl CallInfo {
                     .push_audio_send_stream_stats(snapshot.into());
             }
             StatsSnapshot::AudioReceiver(snapshot) => {
+                self.quality_stats_sketches
+                    .audio
+                    .jitter_recv
+                    .add(snapshot.jitter);
+                self.quality_stats_sketches
+                    .audio
+                    .packet_loss_recv
+                    .add(snapshot.packets_lost_pct as f64);
                 self.stream_summaries
                     .update_audio_recv_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -669,6 +728,18 @@ impl CallInfo {
                     .push_audio_recv_stream_stats(snapshot.into());
             }
             StatsSnapshot::VideoSender(snapshot) => {
+                self.quality_stats_sketches
+                    .video
+                    .jitter_send
+                    .add(snapshot.remote_jitter);
+                self.quality_stats_sketches
+                    .video
+                    .packet_loss_send
+                    .add(snapshot.remote_packets_lost_pct as f64);
+                self.quality_stats_sketches
+                    .video
+                    .rtt
+                    .add(snapshot.remote_round_trip_time);
                 self.stream_summaries
                     .update_video_send_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -679,6 +750,14 @@ impl CallInfo {
                     .push_video_send_stream_stats(snapshot.into());
             }
             StatsSnapshot::VideoReceiver(snapshot) => {
+                self.quality_stats_sketches
+                    .video
+                    .jitter_recv
+                    .add(snapshot.jitter);
+                self.quality_stats_sketches
+                    .video
+                    .packet_loss_recv
+                    .add(snapshot.packets_lost_pct as f64);
                 self.stream_summaries
                     .update_video_recv_stream_summary(snapshot.ssrc, |summary| {
                         summary.bitrate.push(snapshot.bitrate);
@@ -843,7 +922,7 @@ impl DirectCallSummaryInner {
             Timestamp(0)
         });
 
-        let telemetry = CallTelemetry {
+        let mut telemetry = CallTelemetry {
             version: CALL_TELEMETRY_VERSION,
             start_time: start_time.into(),
             connect_time: connect_time.map(Into::into),
@@ -861,7 +940,7 @@ impl DirectCallSummaryInner {
 
         let (raw_stats, raw_stats_text) = telemetry.generate_blob_and_description();
 
-        let quality_stats = self.call_info.stats_sets.derive_quality_stats();
+        let quality_stats = (&self.call_info.quality_stats_sketches).into();
 
         // If the call connected then we present the connect time as the start
         // time to the upper layers since that will enable them to correctly
@@ -882,8 +961,8 @@ impl DirectCallSummaryInner {
             start_time,
             end_time,
             quality_stats,
-            raw_stats: Some(raw_stats),
-            raw_stats_text: Some(raw_stats_text),
+            raw_stats,
+            raw_stats_text,
             is_survey_candidate,
             call_end_reason_text: reason.to_string(),
         }
@@ -968,7 +1047,10 @@ impl GroupCallSummary {
             ..Default::default()
         };
         let result = Self(Arc::new(CallMutex::new(
-            GroupCallSummaryInner { call_info },
+            GroupCallSummaryInner {
+                call_info,
+                ..Default::default()
+            },
             Self::CALL_MUTEX_NAME,
         )));
         Ok(result)
@@ -994,6 +1076,15 @@ impl GroupCallSummary {
             Ok(mut guard) => guard.on_connection_state_changed(state),
             Err(error) => {
                 error!("Failed to process connection state change: {:?}", error);
+            }
+        }
+    }
+
+    pub fn on_remote_devices_changed(&self, remote_devices: &[RemoteDeviceState]) {
+        match self.lock() {
+            Ok(mut guard) => guard.on_remote_devices_changed(remote_devices),
+            Err(error) => {
+                error!("Failed to process remote devices change: {:?}", error);
             }
         }
     }
@@ -1038,6 +1129,7 @@ impl StatsSnapshotConsumer for GroupCallStatsSnapshotConsumer {
 #[derive(Debug, Default)]
 pub struct GroupCallSummaryInner {
     call_info: CallInfo,
+    remote_device_count_max: usize,
 }
 
 impl GroupCallSummaryInner {
@@ -1062,7 +1154,7 @@ impl GroupCallSummaryInner {
             Timestamp(0)
         });
 
-        let telemetry = CallTelemetry {
+        let mut telemetry = CallTelemetry {
             version: CALL_TELEMETRY_VERSION,
             start_time: start_time.into(),
             connect_time: connect_time.map(Into::into),
@@ -1077,7 +1169,7 @@ impl GroupCallSummaryInner {
 
         let (raw_stats, raw_stats_text) = telemetry.generate_blob_and_description();
 
-        let quality_stats = self.call_info.stats_sets.derive_quality_stats();
+        let quality_stats = (&self.call_info.quality_stats_sketches).into();
 
         // If the call connected then we present the connect time as the start
         // time to the upper layers since that will enable them to correctly
@@ -1088,17 +1180,19 @@ impl GroupCallSummaryInner {
             _ => (start_time, start_time),
         };
 
-        // Any call that connected at some point and if audio or video was
-        // received is a potential survey candidate.
-        let is_survey_candidate = self.call_info.connect_time.is_some()
-            && self.call_info.stream_summaries.has_recv_summaries();
+        // Any call that connected at some point and if the number of
+        // participants in the call exceeded 1 at any point during the call is a
+        // potential survey candidate.
+        let is_survey_candidate = raw_stats.is_some()
+            && self.call_info.connect_time.is_some()
+            && self.remote_device_count_max > 0;
 
         CallSummary {
             start_time,
             end_time,
             quality_stats,
-            raw_stats: Some(raw_stats),
-            raw_stats_text: Some(raw_stats_text),
+            raw_stats,
+            raw_stats_text,
             is_survey_candidate,
             call_end_reason_text: reason.to_string(),
         }
@@ -1129,13 +1223,25 @@ impl GroupCallSummaryInner {
     fn on_stats_snapshot_ready(&mut self, stats: &StatsSnapshot) {
         self.call_info.on_stats_snapshot_ready(stats);
     }
+
+    fn on_remote_devices_changed(&mut self, remote_devices: &[RemoteDeviceState]) {
+        if remote_devices.len() > self.remote_device_count_max {
+            self.remote_device_count_max = remote_devices.len();
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use std::{collections::HashMap, time::Duration};
+
+    use prost::Message;
     use rand::Rng;
 
-    use crate::core::call_summary::Sample;
+    use crate::{
+        core::call_summary::{MAX_TELEMETRY_ENCODED_SIZE, Sample, StatsSets},
+        protobuf,
+    };
 
     fn within(expected: f32, calculated: f32, percentage: f32) -> bool {
         let v = (expected * percentage).abs();
@@ -1173,5 +1279,188 @@ mod test {
 
         assert!(within(mean_0, mean_1, 0.01));
         assert!(within(variance_0, variance_1, 0.01));
+    }
+
+    fn create_stats_sets(
+        participant_count: usize,
+        call_length: Duration,
+        time_limit: Duration,
+        stats_period: Duration,
+    ) -> Vec<protobuf::call_summary::StatsSet> {
+        let mut stats_sets = StatsSets::new(time_limit, stats_period).unwrap();
+        let count = call_length.as_secs() / stats_period.as_secs();
+        for _ in 0..count {
+            stats_sets.establish_current_stats_set();
+            // Three outbound video streams
+            for ssrc in 0..3 {
+                stats_sets.push_video_send_stream_stats(protobuf::call_summary::StreamStats {
+                    ssrc: Some(ssrc),
+                    bitrate: Some(1000.0),
+                    packet_loss: Some(50.0),
+                    jitter: Some(20.0),
+                    rtt: Some(5.0),
+                    jitter_buffer_delay: Some(10.0),
+                    framerate: Some(30.0),
+                });
+            }
+            // One outbound audio stream
+            stats_sets.push_audio_send_stream_stats(protobuf::call_summary::StreamStats {
+                ssrc: Some(4),
+                bitrate: Some(1000.0),
+                packet_loss: Some(50.0),
+                jitter: Some(20.0),
+                rtt: Some(5.0),
+                jitter_buffer_delay: Some(10.0),
+                framerate: None,
+            });
+            // One inbound audio stream, and one inbound video stream for each participant
+            for ssrc in 0..participant_count {
+                stats_sets.push_audio_recv_stream_stats(protobuf::call_summary::StreamStats {
+                    ssrc: Some((ssrc + 2000) as u32),
+                    bitrate: Some(1000.0),
+                    packet_loss: Some(50.0),
+                    jitter: Some(20.0),
+                    rtt: Some(5.0),
+                    jitter_buffer_delay: Some(10.0),
+                    framerate: None,
+                });
+                stats_sets.push_video_recv_stream_stats(protobuf::call_summary::StreamStats {
+                    ssrc: Some((ssrc + 3000) as u32),
+                    bitrate: Some(1000.0),
+                    packet_loss: Some(50.0),
+                    jitter: Some(20.0),
+                    rtt: Some(5.0),
+                    jitter_buffer_delay: Some(10.0),
+                    framerate: Some(30.0),
+                });
+                stats_sets.push_stun_rtt(100.0);
+            }
+        }
+        stats_sets.to_proto()
+    }
+
+    fn create_stream_summaries(
+        count: usize,
+    ) -> HashMap<u32, protobuf::call_summary::StreamSummary> {
+        (0..count as u32)
+            .map(|v| {
+                (
+                    v,
+                    protobuf::call_summary::StreamSummary {
+                        bitrate: Some(protobuf::call_summary::DistributionSummary {
+                            mean: Some(45000.0),
+                            std_dev: Some(45000.0),
+                            min_val: Some(0.0),
+                            max_val: Some(100000.0),
+                            sample_count: Some(50000),
+                        }),
+                        packet_loss_pct: Some(protobuf::call_summary::DistributionSummary {
+                            mean: Some(100.0),
+                            std_dev: Some(0.0),
+                            min_val: Some(100.0),
+                            max_val: Some(100.0),
+                            sample_count: Some(50000),
+                        }),
+                        jitter: Some(protobuf::call_summary::DistributionSummary {
+                            mean: Some(20.0),
+                            std_dev: Some(20.0),
+                            min_val: Some(0.0),
+                            max_val: Some(20.0),
+                            sample_count: Some(50000),
+                        }),
+                    },
+                )
+            })
+            .collect::<HashMap<u32, protobuf::call_summary::StreamSummary>>()
+    }
+
+    struct CreateGroupCallParams {
+        size: usize,
+        call_length: Duration,
+        time_limit: Duration,
+        stats_period: Duration,
+    }
+
+    fn create_telemetry_for_group_call_with_size(
+        params: CreateGroupCallParams,
+    ) -> protobuf::call_summary::CallTelemetry {
+        let CreateGroupCallParams {
+            size,
+            call_length,
+            time_limit,
+            stats_period,
+        } = params;
+
+        let stats_sets = create_stats_sets(size, call_length, time_limit, stats_period);
+
+        let stream_summaries = protobuf::call_summary::StreamSummaries {
+            audio_send_stream_summaries: create_stream_summaries(1),
+            audio_recv_stream_summaries: create_stream_summaries(size),
+            video_send_stream_summaries: create_stream_summaries(3),
+            video_recv_stream_summaries: create_stream_summaries(size),
+        };
+
+        protobuf::call_summary::CallTelemetry {
+            group_call_summary: Some(protobuf::call_summary::GroupCallSummary {
+                stream_summaries: Some(stream_summaries),
+            }),
+            stats_sets,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_telemetry_pruning_with_full_group_call() {
+        let mut telemetry = create_telemetry_for_group_call_with_size(CreateGroupCallParams {
+            size: 75,
+            call_length: Duration::from_secs(86400),
+            time_limit: Duration::from_secs(300),
+            stats_period: Duration::from_secs(10),
+        });
+
+        println!("Telemetry size: {}", telemetry.encoded_len());
+        println!(" -- Stats set count: {}", telemetry.stats_sets.len());
+
+        assert!(telemetry.encoded_len() > MAX_TELEMETRY_ENCODED_SIZE);
+        assert!(telemetry.prune_if_too_large().is_ok());
+        assert!(telemetry.encoded_len() <= MAX_TELEMETRY_ENCODED_SIZE);
+
+        println!("Telemetry size: {}", telemetry.encoded_len());
+        println!(" -- Stats sets remaining: {}", telemetry.stats_sets.len());
+    }
+
+    #[test]
+    fn test_telemetry_pruning_minimum_call_size_requiring_pruning() {
+        let mut telemetry = create_telemetry_for_group_call_with_size(CreateGroupCallParams {
+            size: 27,
+            call_length: Duration::from_secs(86400),
+            time_limit: Duration::from_secs(300),
+            stats_period: Duration::from_secs(10),
+        });
+
+        println!("Telemetry size: {}", telemetry.encoded_len());
+        println!(" -- Stats set count: {}", telemetry.stats_sets.len());
+
+        assert!(telemetry.encoded_len() > MAX_TELEMETRY_ENCODED_SIZE);
+        assert!(telemetry.prune_if_too_large().is_ok());
+        assert!(telemetry.encoded_len() <= MAX_TELEMETRY_ENCODED_SIZE);
+
+        println!("Telemetry size: {}", telemetry.encoded_len());
+        println!(" -- Stats sets remaining: {}", telemetry.stats_sets.len());
+    }
+
+    #[test]
+    fn test_telemetry_pruning_maximum_call_size_not_requiring_pruning() {
+        let telemetry = create_telemetry_for_group_call_with_size(CreateGroupCallParams {
+            size: 26,
+            call_length: Duration::from_secs(86400),
+            time_limit: Duration::from_secs(300),
+            stats_period: Duration::from_secs(10),
+        });
+
+        println!("Telemetry size: {}", telemetry.encoded_len());
+        println!(" -- Stats set count: {}", telemetry.stats_sets.len());
+
+        assert!(telemetry.encoded_len() < MAX_TELEMETRY_ENCODED_SIZE);
     }
 }

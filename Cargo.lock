@@ -2729,6 +2729,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sha2",
+ "sketches-ddsketch",
  "static_assertions",
  "strum",
  "strum_macros",
@@ -3034,6 +3035,12 @@ checksum = "b2a4719bff48cee6b39d12c020eeb490953ad2443b7055bd0b21fca26bd8c28b"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "sketches-ddsketch"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1e9a774a6c28142ac54bb25d25562e6bcf957493a184f15ad4eebccb23e410a"
 
 [[package]]
 name = "slab"

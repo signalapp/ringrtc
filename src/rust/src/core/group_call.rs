@@ -3151,7 +3151,7 @@ impl Client {
         {
             state
                 .observer
-                .handle_peek_changed(state.client_id, &peek_info, &new_user_ids)
+                .handle_peek_changed(state.client_id, &peek_info, &new_user_ids);
         }
 
         if let (
@@ -3291,6 +3291,9 @@ impl Client {
                     &state.remote_devices,
                     RemoteDevicesChangedReason::DemuxIdsChanged,
                 );
+                state
+                    .call_summary
+                    .on_remote_devices_changed(&state.remote_devices);
             }
             // Make sure not to notify for the updated join state until the remote devices have been
             // updated.
