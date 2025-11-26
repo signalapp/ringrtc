@@ -1,6 +1,6 @@
 {
   "name": "@signalapp/ringrtc",
-  "version": "2.60.2",
+  "version": "2.60.3",
   "repository": {
     "type": "git",
     "url": "https://github.com/signalapp/ringrtc.git",
