@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.60.4
+
+- Desktop: Retry build
+
 ## v2.60.3
 
 - Retry build
