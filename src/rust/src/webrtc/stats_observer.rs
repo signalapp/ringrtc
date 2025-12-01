@@ -93,31 +93,10 @@ macro_rules! delta {
     };
 }
 
-// [RFC 3550]
-//
-// The total number of RTP data packets from source SSRC_n that have been lost
-// since the beginning of reception.  This number is defined to be the number
-// of packets expected less the number of packets actually received, where
-// the number of packets received includes any which are late or duplicates.
-// Thus, packets that arrive late are not counted as lost, and the loss may be
-// negative if there are duplicates.  The number of packets expected is defined
-// to be the extended last sequence number received, as defined next, less the
-// initial sequence number received.
-fn compute_packets_lost_pct(packets_lost: i32, packets_sent: u32) -> f32 {
-    if packets_lost == 0 && packets_sent == 0 {
-        0.0
-    } else {
-        (packets_lost as f32)
-            .naive_checked_div(packets_sent as f32)
-            .unwrap_or_else(|| {
-                // We can only get here if packets_sent was 0 and we ended up with
-                // f32::NAN as the result of the division. In this case, packet loss
-                // is 100% since there are expected packets, but we haven't sent
-                // any. Obviously, there cannot be any duplicate packets received at
-                // this point, so the packets_lost value cannot be negative.
-                (packets_lost as f32).signum() * 100.0
-            })
-    }
+fn compute_packets_lost_pct(packets_lost: u32, packets_total: u32) -> f32 {
+    (packets_lost as f32 * 100.0)
+        .naive_checked_div(packets_total as f32)
+        .unwrap_or(0.0)
 }
 
 fn compute_bitrate(byte_count: u64, seconds_elapsed: f32) -> f32 {
@@ -246,7 +225,7 @@ impl AudioSenderStatsSnapshot {
             .unwrap_or(0.0);
         let bitrate = compute_bitrate(bytes_sent_delta, seconds_elapsed);
         let remote_packets_lost_pct =
-            compute_packets_lost_pct(packets_lost_delta, packets_sent_delta);
+            compute_packets_lost_pct(packets_lost_delta.max(0) as u32, packets_sent_delta);
 
         let remote_jitter = 1000.0 * curr_stats.remote_jitter;
         let remote_rtt = 1000.0 * curr_stats.remote_round_trip_time;
@@ -329,7 +308,9 @@ impl AudioReceiverStatsSnapshot {
 
         let packets_per_second =
             compute_packets_per_second(packets_received_delta, seconds_elapsed);
-        let packets_lost_pct = compute_packets_lost_pct(packets_lost_delta, packets_received_delta);
+        let packets_lost = packets_lost_delta.max(0) as u32;
+        let packets_lost_pct =
+            compute_packets_lost_pct(packets_lost, packets_received_delta + packets_lost);
         let bitrate = compute_bitrate(bytes_received_delta, seconds_elapsed);
 
         let jitter = 1000.0 * curr_stats.jitter;
@@ -490,7 +471,7 @@ impl VideoSenderStatsSnapshot {
                 .naive_checked_div(frames_encoded_delta as f64)
                 .unwrap_or(0.0);
         let remote_packets_lost_pct =
-            compute_packets_lost_pct(packets_lost_delta, packets_sent_delta);
+            compute_packets_lost_pct(packets_lost_delta.max(0) as u32, packets_sent_delta);
         let remote_jitter = 1000.0 * curr_stats.remote_jitter;
         let remote_round_trip_time = 1000.0 * curr_stats.remote_round_trip_time;
 
@@ -595,7 +576,9 @@ impl VideoReceiverStatsSnapshot {
 
         let packets_per_second =
             compute_packets_per_second(packets_received_delta, seconds_elapsed);
-        let packets_lost_pct = compute_packets_lost_pct(packets_lost_delta, packets_received_delta);
+        let packets_lost = packets_lost_delta.max(0) as u32;
+        let packets_lost_pct =
+            compute_packets_lost_pct(packets_lost, packets_received_delta + packets_lost);
         let bitrate = compute_bitrate(bytes_received_delta, seconds_elapsed);
         let framerate = frames_decoded_delta as f32 / seconds_elapsed;
         let decode_time_per_frame = 1000.0
