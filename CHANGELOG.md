@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.60.5
+
+- Fix packet loss calculation
+
 ## v2.60.4
 
 - Desktop: Retry build
