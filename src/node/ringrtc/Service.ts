@@ -2119,9 +2119,9 @@ export class Call {
       // We might have been in the reconnecting state and already started media.
       if (!this._mediaSessionStarted) {
         sillyDeadlockProtection(() => {
-          if (this._outgoingAudioEnabled) {
-            this._callManager.setOutgoingAudioEnabled(true);
-          }
+          // Set the audio state to the latest setting from the UX.
+          this._callManager.setOutgoingAudioEnabled(this._outgoingAudioEnabled);
+
           if (this._outgoingVideoIsScreenShare) {
             this._callManager.setOutgoingVideoIsScreenShare(true);
             this._callManager.setOutgoingVideoEnabled(true);
@@ -2134,12 +2134,8 @@ export class Call {
     } else if (state === CallState.Ended) {
       if (this._mediaSessionStarted) {
         sillyDeadlockProtection(() => {
-          if (this._outgoingAudioEnabled) {
-            this._callManager.setOutgoingAudioEnabled(false);
-          }
-          if (this._outgoingVideoEnabled) {
-            this._callManager.setOutgoingVideoEnabled(false);
-          }
+          this._callManager.setOutgoingAudioEnabled(false);
+          this._callManager.setOutgoingVideoEnabled(false);
         });
         this._outgoingAudioEnabled = false;
         this._outgoingVideoEnabled = false;
