@@ -1045,8 +1045,9 @@ fn updateDataMode(mut cx: FunctionContext) -> JsResult<JsValue> {
     let data_mode = cx.argument::<JsNumber>(0)?.value(&mut cx) as i32;
 
     with_call_endpoint(&mut cx, |endpoint| {
-        let active_connection = endpoint.call_manager.active_connection()?;
-        active_connection.update_data_mode(DataMode::from_i32(data_mode))?;
+        if let Ok(active_connection) = endpoint.call_manager.active_connection() {
+            active_connection.update_data_mode(DataMode::from_i32(data_mode))?;
+        }
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
@@ -1322,11 +1323,12 @@ fn setOutgoingVideoEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
 
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.outgoing_video_track.set_enabled(enabled);
-        let mut active_connection = endpoint.call_manager.active_connection()?;
-        active_connection.update_sender_status(signaling::SenderStatus {
-            video_enabled: Some(enabled),
-            ..Default::default()
-        })?;
+        if let Ok(mut active_connection) = endpoint.call_manager.active_connection() {
+            active_connection.update_sender_status(signaling::SenderStatus {
+                video_enabled: Some(enabled),
+                ..Default::default()
+            })?;
+        }
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
@@ -1353,11 +1355,12 @@ fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
             .outgoing_video_source
             .adapt_output_format(width, height, fps);
 
-        let mut active_connection = endpoint.call_manager.active_connection()?;
-        active_connection.update_sender_status(signaling::SenderStatus {
-            sharing_screen: Some(is_screenshare),
-            ..Default::default()
-        })?;
+        if let Ok(mut active_connection) = endpoint.call_manager.active_connection() {
+            active_connection.update_sender_status(signaling::SenderStatus {
+                sharing_screen: Some(is_screenshare),
+                ..Default::default()
+            })?;
+        }
         Ok(())
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
