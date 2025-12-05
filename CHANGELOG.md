@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.60.6
+
+- Desktop: Fix audio mute state after call ends
+
 ## v2.60.5
 
 - Fix packet loss calculation
