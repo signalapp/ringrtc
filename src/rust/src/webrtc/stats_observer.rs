@@ -695,7 +695,7 @@ impl Display for SystemStatsSnapshot {
         write!(
             f,
             "{},\
-            {cpu_pct:.0}",
+            {cpu_pct:.0}%",
             Self::LOG_MARKER
         )
     }
@@ -786,6 +786,7 @@ impl StatsObserver {
 
         #[cfg(not(target_os = "android"))]
         {
+            self.system_stats.refresh_cpu_usage();
             let system_stats_snapshot = SystemStatsSnapshot::derive(&self.system_stats);
             info!("{system_stats_snapshot}");
             self.stats_snapshot_consumer
