@@ -51,7 +51,7 @@ jobs:
   build_ios:
     name: Build iOS
 
-    runs-on: 'macos-14-xlarge'
+    runs-on: 'macos-15-xlarge'
 
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +125,7 @@ jobs:
   build_mac:
     name: Build Mac
 
-    runs-on: 'macos-14-xlarge'
+    runs-on: 'macos-15-xlarge'
 
     steps:
       - uses: actions/checkout@v4

@@ -127,7 +127,7 @@ pub trait PeerConnectionObserverTrait {
         sdp_for_logging: &str,
         relay_protocol: Option<webrtc::peer_connection_observer::TransportProtocol>,
     ) -> Result<()>;
-    fn handle_ice_candidates_removed(&mut self, removed_addresses: Vec<SocketAddr>) -> Result<()>;
+    fn handle_ice_candidate_removed(&mut self, removed_address: SocketAddr) -> Result<()>;
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()>;
     fn handle_ice_network_route_changed(&mut self, network_route: NetworkRoute) -> Result<()>;
 
@@ -226,39 +226,23 @@ extern "C" fn pc_observer_OnIceCandidate<T>(
     }
 }
 
-/// PeerConnectionObserver OnIceCandidatesRemoved() callback.
+/// PeerConnectionObserver OnIceCandidateRemoved() callback.
 #[allow(non_snake_case)]
-extern "C" fn pc_observer_OnIceCandidatesRemoved<T>(
+extern "C" fn pc_observer_OnIceCandidateRemoved<T>(
     mut observer: webrtc::ptr::Borrowed<T>,
-    removed_addresses: webrtc::ptr::Borrowed<RffiIpPort>,
-    length: size_t,
+    removed_address: RffiIpPort,
 ) where
     T: PeerConnectionObserverTrait,
 {
     // Safe because the observer should still be alive (it was just passed to us)
     if let Some(observer) = unsafe { observer.as_mut() } {
-        info!("pc_observer_OnIceCandidatesRemoved: {}", observer.log_id());
-
-        if removed_addresses.is_null() {
-            if length > 0 {
-                warn!("ICE candidates removed is null");
-            }
-            return;
-        }
-
-        trace!("pc_observer_OnIceCandidatesRemoved(): length: {}", length);
-
-        let removed_addresses =
-            unsafe { slice::from_raw_parts(removed_addresses.as_ptr(), length) }
-                .iter()
-                .map(|address| address.into())
-                .collect();
+        info!("pc_observer_OnIceCandidateRemoved: {}", observer.log_id());
 
         observer
-            .handle_ice_candidates_removed(removed_addresses)
-            .unwrap_or_else(|e| error!("Problems handling ice candidates removed: {}", e));
+            .handle_ice_candidate_removed((&removed_address).into())
+            .unwrap_or_else(|e| error!("Problems handling ice candidate removed: {}", e));
     } else {
-        error!("pc_observer_OnIceCandidatesRemoved called with null observer");
+        error!("pc_observer_OnIceCandidateRemoved called with null observer");
     }
 }
 
@@ -577,8 +561,7 @@ where
 {
     // ICE events
     onIceCandidate: extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::Borrowed<CppIceCandidate>),
-    onIceCandidatesRemoved:
-        extern "C" fn(webrtc::ptr::Borrowed<T>, webrtc::ptr::Borrowed<RffiIpPort>, size_t),
+    onIceCandidateRemoved: extern "C" fn(webrtc::ptr::Borrowed<T>, RffiIpPort),
     onIceConnectionChange: extern "C" fn(webrtc::ptr::Borrowed<T>, IceConnectionState),
     onIceNetworkRouteChange: extern "C" fn(
         webrtc::ptr::Borrowed<T>,
@@ -665,7 +648,7 @@ where
         let pc_observer_callbacks = PeerConnectionObserverCallbacks::<T> {
             // ICE events
             onIceCandidate: pc_observer_OnIceCandidate::<T>,
-            onIceCandidatesRemoved: pc_observer_OnIceCandidatesRemoved::<T>,
+            onIceCandidateRemoved: pc_observer_OnIceCandidateRemoved::<T>,
             onIceConnectionChange: pc_observer_OnIceConnectionChange::<T>,
             onIceNetworkRouteChange: pc_observer_OnIceNetworkRouteChange::<T>,
 

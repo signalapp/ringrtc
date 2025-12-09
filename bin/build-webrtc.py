@@ -173,7 +173,7 @@ Sim targets     : {}
         run_cmd(args.dry_run, ['brew', 'install', 'coreutils'])
 
         # Assume xcode is already installed
-        run_cmd(args.dry_run, ['sudo', 'xcodes', 'select', '15.3'])
+        run_cmd(args.dry_run, ['sudo', 'xcodes', 'select', '26.1.1'])
 
         # Accept the license
         run_cmd(args.dry_run, ['sudo', 'xcodebuild', '-license', 'accept'])

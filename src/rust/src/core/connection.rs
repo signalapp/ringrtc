@@ -1765,43 +1765,38 @@ where
         Ok(())
     }
 
-    /// Inject a `LocalIceCandidatesRemoved` event into the FSM.
+    /// Inject a `LocalIceCandidateRemoved` event into the FSM.
     ///
     /// `Called By:` WebRTC `PeerConnectionObserver` call back thread.
     ///
     /// # Arguments
     ///
-    /// * `removed_addresses` - Locally removed candidate addresses
-    pub fn inject_local_ice_candidates_removed(
+    /// * `removed_address` - Locally removed candidate address
+    pub fn inject_local_ice_candidate_removed(
         &mut self,
-        removed_addresses: Vec<SocketAddr>,
+        removed_address: SocketAddr,
         force_send: bool,
     ) -> Result<()> {
         if !force_send && self.connection_type == ConnectionType::OutgoingChild {
             return Ok(());
         }
 
-        let removed_ports: Vec<u16> = removed_addresses
-            .iter()
-            .map(|address| address.port())
-            .collect();
-        info!("Local ICE candidates removed; ports: {:?}", removed_ports);
+        match signaling::IceCandidate::from_removed_address(removed_address) {
+            Ok(candidate) => {
+                info!(
+                    "Local ICE candidate removed; port: {}",
+                    removed_address.port()
+                );
 
-        let candidates = removed_addresses
-            .into_iter()
-            .filter_map(|removed_address| {
-                signaling::IceCandidate::from_removed_address(removed_address)
-                    .map_err(|e| {
-                        warn!("Failed to signal removed candidate: {:?}", e);
-                        e
-                    })
-                    .ok()
-            })
-            .collect();
+                // This is where we make additions and removals look the same in signaling
+                // where a "candidate" (really, an update) can be either an addition or removal.
+                self.inject_event(ConnectionEvent::LocalIceCandidates(vec![candidate]))?;
+            }
+            Err(e) => {
+                warn!("Failed to signal removed candidate: {:?}", e);
+            }
+        }
 
-        // This is where we make additions and removals look the same in signaling
-        // where a "candidate" (really, an update) can be either an addition or removal.
-        self.inject_event(ConnectionEvent::LocalIceCandidates(candidates))?;
         Ok(())
     }
 
@@ -2150,9 +2145,9 @@ where
         self.inject_local_ice_candidate(ice_candidate, force_send, sdp_for_logging, relay_protocol)
     }
 
-    fn handle_ice_candidates_removed(&mut self, removed_addresses: Vec<SocketAddr>) -> Result<()> {
+    fn handle_ice_candidate_removed(&mut self, removed_address: SocketAddr) -> Result<()> {
         let force_send = false;
-        self.inject_local_ice_candidates_removed(removed_addresses, force_send)
+        self.inject_local_ice_candidate_removed(removed_address, force_send)
     }
 
     fn handle_ice_connection_state_changed(&mut self, new_state: IceConnectionState) -> Result<()> {

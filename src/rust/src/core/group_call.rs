@@ -4909,7 +4909,7 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
         Ok(())
     }
 
-    fn handle_ice_candidates_removed(&mut self, _removed_addresses: Vec<SocketAddr>) -> Result<()> {
+    fn handle_ice_candidate_removed(&mut self, _removed_address: SocketAddr) -> Result<()> {
         Ok(())
     }
 

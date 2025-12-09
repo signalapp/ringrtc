@@ -1171,16 +1171,15 @@ fn ice_candidate_removal() {
     let mut cm = context.cm();
     let mut active_connection = context.active_connection();
 
-    let removed_addresses: Vec<SocketAddr> =
-        vec!["1.2.3.4:5".parse().unwrap(), "6.7.8.9:0".parse().unwrap()];
+    let removed_address: SocketAddr = "1.2.3.4:5".parse().unwrap();
     let force_send = true;
     active_connection
-        .inject_local_ice_candidates_removed(removed_addresses.clone(), force_send)
+        .inject_local_ice_candidate_removed(removed_address, force_send)
         .expect(error_line!());
 
     cm.synchronize().expect(error_line!());
     assert_eq!(context.error_count(), 0);
-    assert_eq!(context.ice_candidates_sent(), 2);
+    assert_eq!(context.ice_candidates_sent(), 1);
     let last_sent = context
         .last_ice_sent()
         .expect("ICE candidate removal was sent");
@@ -1201,7 +1200,7 @@ fn ice_candidate_removal() {
     assert_eq!(context.error_count(), 0);
 
     assert_eq!(
-        removed_addresses,
+        vec![removed_address],
         active_connection
             .app_connection()
             .unwrap()
