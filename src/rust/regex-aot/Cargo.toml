@@ -14,7 +14,7 @@ license = "AGPL-3.0-only"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0.101"
-quote = "1.0.40"
-regex-automata = { version = "0.4.9", default-features = false, features = ["dfa", "perf", "std", "syntax"] }
+proc-macro2 = "1.0.103"
+quote = "1.0.42"
+regex-automata = { version = "0.4.13", default-features = false, features = ["dfa", "perf", "std", "syntax"] }
 syn = "1.0.109"

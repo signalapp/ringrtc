@@ -22,4 +22,4 @@ call_sim = ["signaling"]
 
 [build-dependencies]
 prost-build = "0.14.1"
-tonic-prost-build = "0.14.1"
+tonic-prost-build = "0.14.2"
