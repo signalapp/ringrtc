@@ -41,7 +41,7 @@ impl<T: Seek> I420Source<T> {
         let stream_len = input.seek(SeekFrom::End(0)).expect("invalid input stream");
         input.rewind().expect("invalid input stream");
         assert!(
-            stream_len % (frame_size as u64) == 0,
+            stream_len.is_multiple_of(frame_size as u64),
             "input length ({}) is not a multiple of the frame size in bytes ({})",
             stream_len,
             frame_size,

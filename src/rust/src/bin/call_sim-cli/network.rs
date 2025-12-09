@@ -33,7 +33,7 @@ pub struct DeterministicLoss {
 
 impl DeterministicLoss {
     pub fn new(loss_rate: u8, packet_size_ms: i32, pre_delay: u8) -> Result<Self> {
-        if loss_rate > 50 || loss_rate % 5 != 0 {
+        if loss_rate > 50 || !loss_rate.is_multiple_of(5) {
             return Err(anyhow!(
                 "Loss rate must be less than 50% and a multiple of 5"
             ));

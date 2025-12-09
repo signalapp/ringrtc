@@ -893,7 +893,10 @@ impl StatsObserver {
             })
             .collect();
 
-        if self.stats_received_count % CLEAN_UP_STATS_TICKS == 0 {
+        if self
+            .stats_received_count
+            .is_multiple_of(CLEAN_UP_STATS_TICKS)
+        {
             self.remove_old_stats();
         }
     }

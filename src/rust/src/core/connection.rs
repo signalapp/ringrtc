@@ -1173,7 +1173,7 @@ where
     pub fn tick(&mut self, ticks_elapsed: u64) -> Result<()> {
         let mut webrtc = self.webrtc.lock()?;
 
-        if ticks_elapsed % SEND_RTP_DATA_MESSAGE_INTERVAL_TICKS == 0 {
+        if ticks_elapsed.is_multiple_of(SEND_RTP_DATA_MESSAGE_INTERVAL_TICKS) {
             self.send_latest_rtp_data_message(&mut webrtc)?;
         }
 
@@ -1190,7 +1190,7 @@ where
         if let Some(audio_levels_interval) = self.audio_levels_interval {
             let audio_levels_interval_ticks =
                 (audio_levels_interval.as_millis() as u64) / TICK_INTERVAL_MILLIS;
-            if ticks_elapsed % audio_levels_interval_ticks == 0 {
+            if ticks_elapsed.is_multiple_of(audio_levels_interval_ticks) {
                 let (captured_level, received_levels) =
                     webrtc.peer_connection()?.get_audio_levels();
                 let received_level = received_levels
@@ -1207,7 +1207,7 @@ where
             }
         }
 
-        if ticks_elapsed % CHECK_BWE_INTERVAL_TICKS == 0 {
+        if ticks_elapsed.is_multiple_of(CHECK_BWE_INTERVAL_TICKS) {
             match self.bwe_callback_state {
                 BweCallbackState::CheckIfLow { delayed_check_tick } => {
                     let is_video_enabled = self

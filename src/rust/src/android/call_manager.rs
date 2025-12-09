@@ -738,7 +738,7 @@ pub fn delete_call_link(
 fn deserialize_to_group_member_info(
     mut serialized_group_members: Vec<u8>,
 ) -> Result<Vec<GroupMember>> {
-    if serialized_group_members.len() % 81 != 0 {
+    if !serialized_group_members.len().is_multiple_of(81) {
         error!(
             "Serialized buffer is not a multiple of 81: {}",
             serialized_group_members.len()
