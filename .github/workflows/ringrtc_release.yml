@@ -40,12 +40,12 @@ on:
         type: string
       runner_mac:
         description: "Mac runner:"
-        default: 'macos-14'
+        default: 'macos-15'
         required: true
         type: string
       runner_ios:
         description: "Mac iOS runner:"
-        default: 'macos-14'
+        default: 'macos-15'
         required: true
         type: string
       runner_android:

@@ -91,23 +91,23 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-${{ matrix.arch }}-21-linux
+          key: avd-${{ matrix.arch }}-23-linux
 
       - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
           arch: ${{ matrix.arch }}
-          api-level: 21
+          api-level: 23
           force-avd-creation: false
           emulator-options: -no-window -noaudio -no-boot-anim
           script: echo "Generated AVD snapshot for caching."
 
       - name: Run tests
-        uses: reactivecircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
           arch: ${{ matrix.arch }}
-          api-level: 21
+          api-level: 23
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -noaudio -no-boot-anim
           # It is correct that we use *debug*RingrtcLibDir below (specified by connectedCheck),
@@ -125,7 +125,7 @@ jobs:
     - run: brew install protobuf coreutils # for grealpath
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim --component rust-src
     - run: cargo install cbindgen
-    - run: sudo xcodes select 16.2
+    - run: sudo xcodes select 26.1.1
     - run: bin/fetch-artifact -p ios
     - run: bin/build-ios --release --ringrtc-only
 

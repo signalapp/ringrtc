@@ -11,7 +11,7 @@ on:
         type: boolean
       runner:
         description: "Mac runner:"
-        default: 'macos-14'
+        default: 'macos-15'
         required: true
         type: string
 
@@ -24,7 +24,7 @@ on:
         type: boolean
       runner:
         description: "Mac runner:"
-        default: 'macos-14'
+        default: 'macos-15'
         required: true
         type: string
 
@@ -45,13 +45,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
     - run: brew install protobuf coreutils # for grealpath
-
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim --component rust-src
     - run: cargo install cbindgen
-
-    - run: sudo xcodes select 15.2
+    - run: sudo xcodes select 26.1.1
     - run: ./bin/fetch-artifact --platform ios --release
     - run: ./bin/build-ios --ringrtc-only --archive-ringrtc --release
     - name: Output Artifact Checksum
