@@ -1,3 +1,6 @@
 source "https://rubygems.org"
 
 gem "cocoapods"
+
+# Fixes missing `kconv` library which is now part of `nkf` in Ruby 3.4+.
+gem "nkf"
