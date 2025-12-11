@@ -540,7 +540,7 @@ impl Display for VideoReceiverStatsSnapshot {
             {key_frames_decoded},\
             {decode_time_per_frame:.1}ms,\
             {width}x{height},\
-            {jitter}ms",
+            {jitter:.0}ms",
             Self::LOG_MARKER,
         )
     }
