@@ -994,7 +994,7 @@ where
     /// Terminates Call and optionally notifies application of the reason why.
     /// Also removes/drops it from the map.
     fn terminate_and_drop_call(&mut self, call_id: CallId) -> Result<()> {
-        info!("terminate_call(): call_id: {}", call_id);
+        info!("terminate_and_drop_call(): call_id: {}", call_id);
 
         let mut call = match self.call_by_call_id.lock()?.remove(&call_id) {
             Some(v) => v,
