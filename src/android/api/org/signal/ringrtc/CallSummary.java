@@ -27,9 +27,9 @@ public class CallSummary {
         @Nullable
         private final Float jitterMedianRecvMillis;
         @Nullable
-        private final Float packetLossPercentageSend;
+        private final Float packetLossFractionSend;
         @Nullable
-        private final Float packetLossPercentageRecv;
+        private final Float packetLossFractionRecv;
 
         /**
          * Creates media quality statistics.
@@ -38,23 +38,23 @@ public class CallSummary {
          * @param jitterMedianSendMillis median jitter for sent packets as reported by
          *                               remote peer in milliseconds
          * @param jitterMedianRecvMillis median jitter for received packets in milliseconds
-         * @param packetLossPercentageSend packet loss percentage for sent packets as
-         *                                 reported by remote peer
-         * @param packetLossPercentageRecv packet loss percentage for received packets
+         * @param packetLossFractionSend packet loss fraction for sent packets as
+         *                               reported by remote peer
+         * @param packetLossFractionRecv packet loss fraction for received packets
          */
         @CalledByNative
         MediaQualityStats(
             @Nullable Float rttMedianMillis,
             @Nullable Float jitterMedianSendMillis,
             @Nullable Float jitterMedianRecvMillis,
-            @Nullable Float packetLossPercentageSend,
-            @Nullable Float packetLossPercentageRecv
+            @Nullable Float packetLossFractionSend,
+            @Nullable Float packetLossFractionRecv
         ) {
             this.rttMedianMillis = rttMedianMillis;
             this.jitterMedianSendMillis = jitterMedianSendMillis;
             this.jitterMedianRecvMillis = jitterMedianRecvMillis;
-            this.packetLossPercentageSend = packetLossPercentageSend;
-            this.packetLossPercentageRecv = packetLossPercentageRecv;
+            this.packetLossFractionSend = packetLossFractionSend;
+            this.packetLossFractionRecv = packetLossFractionRecv;
         }
 
         /**
@@ -85,21 +85,21 @@ public class CallSummary {
         }
 
         /**
-         * @return Packet loss percentage for sent packets as reported by remote peer,
+         * @return Packet loss fraction for sent packets as reported by remote peer,
          *         or {@code null} if unavailable.
          */
         @Nullable
-        public Float getPacketLossPercentageSend() {
-            return packetLossPercentageSend;
+        public Float getPacketLossFractionSend() {
+            return packetLossFractionSend;
         }
 
         /**
-         * @return Packet loss percentage for received packets, or {@code null} if
+         * @return Packet loss fraction for received packets, or {@code null} if
          *         unavailable.
          */
         @Nullable
-        public Float getPacketLossPercentageRecv() {
-            return packetLossPercentageRecv;
+        public Float getPacketLossFractionRecv() {
+            return packetLossFractionRecv;
         }
     }
 

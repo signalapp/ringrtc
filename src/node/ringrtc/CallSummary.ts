@@ -24,14 +24,14 @@ export class MediaQualityStats {
    */
   readonly jitterMedianRecvMillis: number | undefined;
   /**
-   * Packet loss percentage for sent packets as reported by remote peer,
+   * Packet loss fraction for sent packets as reported by remote peer,
    * or undefined if unavailable.
    */
-  readonly packetLossPercentageSend: number | undefined;
+  readonly packetLossFractionSend: number | undefined;
   /**
-   * Packet loss percentage for received packets, or undefined if unavailable.
+   * Packet loss fraction for received packets, or undefined if unavailable.
    */
-  readonly packetLossPercentageRecv: number | undefined;
+  readonly packetLossFractionRecv: number | undefined;
 }
 
 /**
