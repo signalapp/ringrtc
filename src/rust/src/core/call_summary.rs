@@ -469,11 +469,7 @@ impl CallTelemetry {
             (None, None)
         } else {
             let blob = self.encode_to_vec();
-            let text = if cfg!(debug_assertions) {
-                serde_json::to_string(&self).ok()
-            } else {
-                None
-            };
+            let text = serde_json::to_string(&self).ok();
             (Some(blob), text)
         }
     }
