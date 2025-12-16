@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.61.0
+
+- Call Summary
+  - Fix CPU stats
+  - Provide fractions instead of percentages
+  - Always provide raw stats text
+
+- Update to webrtc 7444a (m142)
+
+- Desktop: Make sure that play (and record) don't restart
+
+- Update node, ios, and Rust dependencies
+
+- Update to Rust 1.91.1
+
+- CI: Update runners for new ios, macos, and android versions
+
 ## v2.60.7
 
 - Desktop: Don't bubble up active call not found error

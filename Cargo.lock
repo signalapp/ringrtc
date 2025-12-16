@@ -356,7 +356,7 @@ checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
 
 [[package]]
 name = "call_sim"
-version = "2.60.7"
+version = "2.61.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -370,7 +370,7 @@ dependencies = [
  "itertools 0.13.0",
  "plotters",
  "prost",
- "protobuf 2.60.7",
+ "protobuf 2.61.0",
  "regex",
  "relative-path",
  "serde",
@@ -1865,7 +1865,7 @@ dependencies = [
 
 [[package]]
 name = "mrp"
-version = "2.60.7"
+version = "2.61.0"
 dependencies = [
  "anyhow",
  "log",
@@ -2304,7 +2304,7 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.60.7"
+version = "2.61.0"
 dependencies = [
  "prost-build",
  "tonic-prost-build",
@@ -2573,7 +2573,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.60.7"
+version = "2.61.0"
 dependencies = [
  "aes",
  "aes-gcm-siv",
@@ -2601,7 +2601,7 @@ dependencies = [
  "neon",
  "num_enum",
  "prost",
- "protobuf 2.60.7",
+ "protobuf 2.61.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "regex",
