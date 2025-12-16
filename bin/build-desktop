@@ -159,15 +159,6 @@ then
       WEBRTC_ARGS="${WEBRTC_ARGS} libyuv_use_sme=false"
     fi
 
-    # Ensure that experimental compact relocation is disabled until upstream projects properly set it.
-    # https://issues.webrtc.org/issues/407797634
-    # https://chromium-review.googlesource.com/c/chromium/src/+/5938657
-    if [ "$(uname)" = "Linux" ]
-    then
-      # Comment out the line that enables experimental crel.
-      sed -i '/^[^#].*--allow-experimental-crel/ s/^/#/' src/webrtc/src/build/config/compiler/BUILD.gn
-    fi
-
     (
         cd src/webrtc/src
         gn gen -C "out/${BUILD_TYPE}" "--args=${WEBRTC_ARGS}"
