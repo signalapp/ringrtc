@@ -208,9 +208,9 @@ play_linux()
 stop_linux()
 {
   # Kill the recording process
-  pkill --full "parecord.*${OUTPUT_SINK}.monitor" || true
+  pkill --signal 9 --full "parecord.*${OUTPUT_SINK}.monitor" || true
   # Kill the play process
-  pkill --full "paplay.*${INPUT_SINK}" || true
+  pkill --signal 9 --full "paplay.*${INPUT_SINK}" || true
 }
 
 
