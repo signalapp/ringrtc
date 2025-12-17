@@ -453,8 +453,8 @@ impl VideoSenderStatsSnapshot {
         );
 
         let packets_per_second = compute_packets_per_second(packets_sent_delta, seconds_elapsed);
-        let average_packet_size = (packets_sent_delta as f32)
-            .naive_checked_div(seconds_elapsed)
+        let average_packet_size = (bytes_sent_delta as f32)
+            .naive_checked_div(packets_sent_delta as f32)
             .unwrap_or(0.0);
         let bitrate = compute_bitrate(bytes_sent_delta, seconds_elapsed);
         let retransmitted_bitrate =
