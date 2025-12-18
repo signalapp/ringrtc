@@ -296,11 +296,68 @@ pub async fn chop_audio_and_analyze(
 
             test_results.plc_mos = AnalysisReportMos::Series(Box::new(stats));
         }
+
+        calculate_average_mos_series(test_results, &chopped_result, client_name);
     }
 
-    // TODO: Compute the average mos series values.
-
     Ok(())
+}
+
+fn calculate_average_mos_series(
+    test_results: &mut AudioTestResults,
+    chopped_result: &ChopAudioResult,
+    client_name: &str,
+) {
+    let mut series_stats: Vec<&Stats> = Vec::new();
+
+    if let AnalysisReportMos::Series(stats) = &test_results.visqol_mos_audio {
+        series_stats.push(stats);
+    }
+    if let AnalysisReportMos::Series(stats) = &test_results.visqol_mos_speech {
+        series_stats.push(stats);
+    }
+    if let AnalysisReportMos::Series(stats) = &test_results.pesq_mos {
+        series_stats.push(stats);
+    }
+    if let AnalysisReportMos::Series(stats) = &test_results.plc_mos {
+        series_stats.push(stats);
+    }
+
+    if series_stats.is_empty() {
+        return;
+    }
+
+    let mut data = StatsData::new_skip_n(0);
+    data.set_period(chopped_result.reference_time_secs as f32);
+
+    for i in 0..chopped_result.file_names.len() {
+        let mut sum = 0.0f32;
+
+        // For each chopped file, get the average of the MOS values across all series.
+        for stats in &series_stats {
+            sum += stats.data.points[i].1;
+        }
+
+        data.push(sum / series_stats.len() as f32);
+    }
+
+    let stats = Stats {
+        config: StatsConfig {
+            title: format!(
+                "Average MOS Over Time ({}sec)",
+                chopped_result.reference_time_secs
+            ),
+            chart_name: format!("{}.artifacts.mos_average.svg", client_name),
+            x_label: "Test Seconds".to_string(),
+            y_label: "MOS".to_string(),
+            x_max: Some(chopped_result.degraded_time_secs as f32 + 5.0),
+            y_max: Some(5.0),
+            ..Default::default()
+        },
+        data,
+    };
+
+    test_results.mos_average = AnalysisReportMos::Series(Box::new(stats));
 }
 
 pub async fn get_audio_and_analyze(
