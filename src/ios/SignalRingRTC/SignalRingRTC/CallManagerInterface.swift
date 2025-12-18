@@ -21,6 +21,7 @@ protocol CallManagerInterfaceDelegate: AnyObject {
     func onSendBusy(callId: UInt64, remote: UnsafeRawPointer, destinationDeviceId: UInt32?)
     func sendCallMessage(recipientUuid: UUID, message: Data, urgency: CallMessageUrgency)
     func sendCallMessageToGroup(groupId: Data, message: Data, urgency: CallMessageUrgency, overrideRecipients: [UUID])
+    func sendCallMessageToAdhocGroup(message: Data, urgency: CallMessageUrgency, expiration: Date, recipientsToEndorsements: [UUID: Data])
     func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> (connection: Connection, pc: UnsafeMutableRawPointer?)
     func onConnectMedia(remote: UnsafeRawPointer, appCallContext: CallContext, stream: RTCMediaStream)
     func onCallConcluded(remote: UnsafeRawPointer)
@@ -81,6 +82,7 @@ class CallManagerInterface {
             onSendBusy: callManagerInterfaceOnSendBusy,
             sendCallMessage: callManagerInterfaceSendCallMessage,
             sendCallMessageToGroup: callManagerInterfaceSendCallMessageToGroup,
+            sendCallMessageToAdhocGroup: callManagerInterfaceSendCallMessageToAdhocGroup,
             onCreateConnectionInterface: callManagerInterfaceOnCreateConnectionInterface,
             onCreateMediaStreamInterface: callManagerInterfaceOnCreateMediaStreamInterface,
             onConnectMedia: callManagerInterfaceOnConnectMedia,
@@ -223,6 +225,14 @@ class CallManagerInterface {
         }
 
         delegate.sendCallMessageToGroup(groupId: groupId, message: message, urgency: urgency, overrideRecipients: overrideRecipients)
+    }
+
+    func sendCallMessageToAdhocGroup(message: Data, urgency: CallMessageUrgency, expiration: Date, recipientsToEndorsements: [UUID: Data]) {
+        guard let delegate = self.callManagerObserverDelegate else {
+            return
+        }
+
+        delegate.sendCallMessageToAdhocGroup(message: message, urgency: urgency, expiration: expiration, recipientsToEndorsements: recipientsToEndorsements)
     }
 
     func onCreateConnection(pcObserverOwned: UnsafeMutableRawPointer?, deviceId: UInt32, appCallContext: CallContext, audioJitterBufferMaxPackets: Int32, audioJitterBufferMaxTargetDelayMs: Int32) -> (connection: Connection, pc: UnsafeMutableRawPointer?)? {
@@ -724,6 +734,43 @@ func callManagerInterfaceSendCallMessageToGroup(object: UnsafeMutableRawPointer?
     }
 
     obj.sendCallMessageToGroup(groupId: groupId, message: message, urgency: urgency, overrideRecipients: finalOverrideRecipients)
+}
+
+@available(iOSApplicationExtension, unavailable)
+func callManagerInterfaceSendCallMessageToAdhocGroup(object: UnsafeMutableRawPointer?, message: AppByteSlice, urgency: Int32, expiration: UInt64, recipients: AppUuidArray, endorsements: AppByteSliceArray) {
+    guard let object = object else {
+        failDebug("object was unexpectedly nil")
+        return
+    }
+    let obj: CallManagerInterface = Unmanaged.fromOpaque(object).takeUnretainedValue()
+
+    guard let message = message.asData() else {
+        return
+    }
+
+    guard let urgency = CallMessageUrgency(rawValue: urgency) else {
+        failDebug("unexpected urgency")
+        return
+    }
+
+    let expiration = Date(timeIntervalSince1970: TimeInterval(expiration))
+
+    guard recipients.count == endorsements.count else {
+        failDebug("mismatched recipient and endorsement array length")
+        return
+    }
+
+    var recipientsToEndorsements: [UUID: Data] = [:]
+    for index in 0..<recipients.count {
+        guard let userId = recipients.uuids[index].toUUID() else {
+            Logger.error("missing userId")
+            continue
+        }
+
+        recipientsToEndorsements[userId] = endorsements.slices[index].asData()
+    }
+
+    obj.sendCallMessageToAdhocGroup(message: message, urgency: urgency, expiration: expiration, recipientsToEndorsements: recipientsToEndorsements)
 }
 
 @available(iOSApplicationExtension, unavailable)

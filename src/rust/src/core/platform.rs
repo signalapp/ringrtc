@@ -5,7 +5,7 @@
 
 //! Platform trait describing the interface an operating system platform must
 /// implement for calling.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::{fmt, time::Duration};
 
 use crate::{
@@ -159,6 +159,17 @@ pub trait Platform: sfu::Delegate + fmt::Debug + fmt::Display + Send + Sized + '
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
         recipients_override: HashSet<UserId>,
+    ) -> Result<()>;
+
+    /// Send an opaque call message to an adhoc group of recipients. Provides the
+    /// endorsements in the same order as the corresponding recipient and the
+    /// endorsement set's expiration.
+    fn send_call_message_to_adhoc_group(
+        &self,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
     ) -> Result<()>;
 
     /// Create a platform dependent media stream from the base WebRTC

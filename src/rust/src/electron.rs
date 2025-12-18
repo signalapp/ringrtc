@@ -19,7 +19,7 @@ use std::{
 use lazy_static::lazy_static;
 use neon::{
     prelude::*,
-    types::{JsBigInt, buffer::TypedArray},
+    types::{JsBigInt, JsDate, buffer::TypedArray},
 };
 use strum::IntoDiscriminant;
 
@@ -154,6 +154,15 @@ pub enum Event {
         urgency: group_call::SignalingMessageUrgency,
         recipients_override: Vec<UserId>,
     },
+    // The JavaScript should send the following opaque call message to all
+    // specified recipients, if not empty, using multi-recipient sealed sender
+    // and the provided endorsements
+    SendCallMessageToAdhocGroup {
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    },
     // The call with the given remote PeerId has changed state.
     // We assume only one call per remote PeerId at a time.
     CallState(PeerId, CallId, CallState),
@@ -265,6 +274,21 @@ impl SignalingSender for EventReporter {
             message,
             urgency,
             recipients_override: recipients_override.into_iter().collect::<Vec<_>>(),
+        })
+    }
+
+    fn send_call_message_to_adhoc_group(
+        &self,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    ) -> Result<()> {
+        self.send(Event::SendCallMessageToAdhocGroup {
+            message,
+            urgency,
+            expiration,
+            recipients_to_endorsements,
         })
     }
 }
@@ -2672,6 +2696,45 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                     js_recipients.set(&mut cx, i as u32, js_recipient_id)?;
                 }
                 let args = [group_id, message, urgency, js_recipients.upcast()];
+                let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
+                method.call(&mut cx, observer, args)?;
+            }
+
+            Event::SendCallMessageToAdhocGroup {
+                message,
+                urgency,
+                expiration,
+                recipients_to_endorsements,
+            } => {
+                let method_name = "sendCallMessageToAdhocGroup";
+                let message = JsUint8Array::from_slice(&mut cx, &message)?.upcast();
+                let urgency = cx.number(urgency as i32).upcast();
+                let expiration_millis = (1000 * expiration) as f64;
+                let js_expiration = cx.date(expiration_millis).map_err(|_| {
+                    cx.throw_error::<String, Handle<JsDate>>(format!(
+                        "Invalid expiration in epoch milliseconds: {expiration_millis}"
+                    ))
+                    .expect_err("throw_error always returns Err")
+                })?;
+                let js_recipients_to_endorsements =
+                    JsArray::new(&mut cx, recipients_to_endorsements.len());
+                for (i, (recipient_id, endorsement)) in
+                    recipients_to_endorsements.into_iter().enumerate()
+                {
+                    let js_recipient_id =
+                        JsUint8Array::from_slice(&mut cx, recipient_id.as_slice())?;
+                    let js_endorsement = JsUint8Array::from_slice(&mut cx, endorsement.as_slice())?;
+                    let obj = cx.empty_object();
+                    obj.set(&mut cx, "recipientId", js_recipient_id)?;
+                    obj.set(&mut cx, "endorsement", js_endorsement)?;
+                    js_recipients_to_endorsements.set(&mut cx, i as u32, obj)?;
+                }
+                let args = [
+                    message,
+                    urgency,
+                    js_expiration.upcast(),
+                    js_recipients_to_endorsements.upcast(),
+                ];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }

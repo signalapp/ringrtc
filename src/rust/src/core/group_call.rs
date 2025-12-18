@@ -48,7 +48,7 @@ use crate::{
         call_links::CallLinkEpoch,
         http,
         sfu::{
-            self, ClientStatus, DemuxId, GroupMember, MemberMap, MemberResolver, MembershipProof,
+            self, ClientStatus, DemuxId, GroupMember, MemberMap, MembershipProof,
             ObfuscatedResolver, PeekInfo, PeekResult, PeekResultCallback, UserId,
         },
     },
@@ -269,6 +269,16 @@ pub trait Observer {
         // Use `Default::default()` to send to all group members.
         recipients_override: HashSet<UserId>,
     );
+    // Send a generic call message to the specified recipients. Provides endorsements
+    // that can be used to create a send token. Endorsements provided in the same order as
+    // recipients.
+    fn send_signaling_message_to_adhoc_group(
+        &mut self,
+        call_message: protobuf::signaling::CallMessage,
+        urgency: SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    );
 
     // The following notify the observer of state changes to the local device.
     fn handle_connection_state_changed(
@@ -340,8 +350,6 @@ pub trait Observer {
     // The observer can assume the Call is completely shut down and can be deleted.
     fn handle_ended(&self, client_id: ClientId, reason: CallEndReason, call_summary: CallSummary);
 
-    // This is called with the result of validating endorsements from the server. The errors contain
-    // a reason and indicate any previous endorsements may be incomplete
     fn handle_endorsements_update(&self, client_id: ClientId, update: EndorsementUpdateResultRef);
 }
 
@@ -1074,8 +1082,8 @@ struct State {
 
     bwe_check_state: BweCheckState,
 
-    // We stage group endorsements in RingRTC, and duplicate it into app during tick
-    group_send_endorsement_cache: EndorsementsCache,
+    // We serve endorsements with messages from the cached endorsements
+    group_send_endorsement_cache: Option<EndorsementsCache>,
 
     // We have to put this inside the actor state also because
     // we change the keys from within the actor.
@@ -1233,6 +1241,7 @@ pub struct ClientStartParams {
     pub ring_id: Option<RingId>,
     pub audio_levels_interval: Option<Duration>,
     pub obfuscated_resolver: ObfuscatedResolver,
+    pub group_send_endorsement_cache: Option<EndorsementsCache>,
 }
 
 impl Client {
@@ -1252,6 +1261,7 @@ impl Client {
             ring_id,
             audio_levels_interval,
             obfuscated_resolver,
+            group_send_endorsement_cache,
         } = params;
 
         debug!("group_call::Client(outer)::new(client_id: {})", client_id);
@@ -1391,7 +1401,7 @@ impl Client {
 
                     bwe_check_state: BweCheckState::Disabled,
 
-                    group_send_endorsement_cache: Default::default(),
+                    group_send_endorsement_cache,
 
                     frame_crypto_context,
                     pending_media_receive_keys: Vec::new(),
@@ -1665,12 +1675,6 @@ impl Client {
             state.mute_request = None;
         }
 
-        if let Some(endorsement_update) = state.group_send_endorsement_cache.get_latest() {
-            state
-                .observer
-                .handle_endorsements_update(state.client_id, Ok(endorsement_update))
-        }
-
         let State {
             join_state,
             client_id,
@@ -1759,7 +1763,7 @@ impl Client {
             let actor = state.actor.clone();
             state.sfu_client.peek(Box::new(move |peek_info| {
                 actor.send(move |state| {
-                    Self::set_peek_result_inner(state, peek_info);
+                    Self::set_peek_result_inner(state, peek_info, None);
                 });
             }));
             state.remote_devices_request_state = RemoteDevicesRequestState::Requested {
@@ -2303,6 +2307,7 @@ impl Client {
                         local_demux_id,
                         ratchet_counter,
                         secret,
+                        None,
                     );
                 }
             }
@@ -2791,7 +2796,7 @@ impl Client {
                     // got an update from the server even though the update actually came
                     // from earlier.  For now, it's close enough.
                     let peek_info = peek_info.clone();
-                    Self::set_peek_result_inner(state, Ok(peek_info));
+                    Self::set_peek_result_inner(state, Ok(peek_info), None);
                     if state.remote_devices.is_empty() {
                         // If there are no remote devices, then Self::set_peek_result_inner
                         // will not fire handle_remote_devices_changed and the observer can't tell the difference
@@ -3048,6 +3053,7 @@ impl Client {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn set_peek_result(&self, result: PeekResult) {
         debug!(
             "group_call::Client(outer)::set_peek_result: {}, result: {:?})",
@@ -3055,7 +3061,7 @@ impl Client {
         );
 
         self.actor.send(move |state| {
-            Self::set_peek_result_inner(state, result);
+            Self::set_peek_result_inner(state, result, None);
         });
     }
 
@@ -3083,7 +3089,11 @@ impl Client {
 
     // Most of the logic moved to inner method so this can be called by both
     // set_peek_result() and as a callback to SfuClient::request_remote_devices.
-    fn set_peek_result_inner(state: &mut State, result: PeekResult) {
+    fn set_peek_result_inner(
+        state: &mut State,
+        result: PeekResult,
+        endorsements_expiration: Option<Timestamp>,
+    ) {
         debug!(
             "group_call::Client(inner)::set_peek_result_inner(client_id: {}, result: {:?} state: {:?})",
             state.client_id, result, state.remote_devices_request_state
@@ -3314,16 +3324,21 @@ impl Client {
                 Self::advance_media_send_key_and_send_to_users_with_added_devices(
                     state,
                     users_with_added_devices.clone(),
+                    endorsements_expiration,
                 );
                 Self::send_pending_media_send_key_to_users_with_added_devices(
                     state,
                     users_with_added_devices,
+                    endorsements_expiration,
                 );
             }
 
             // If someone was removed, we must reset the send media key and send it to everyone not removed.
             if old_user_ids.difference(&new_user_ids).next().is_some() {
-                Self::rotate_media_send_key_and_send_to_users_not_removed(state);
+                Self::rotate_media_send_key_and_send_to_users_not_removed(
+                    state,
+                    endorsements_expiration,
+                );
             }
 
             // We can't gate this behind the demux IDs changing because a forged demux ID might
@@ -3374,17 +3389,6 @@ impl Client {
             debug!("Request devices because we previously requested while a request was pending");
             Self::request_remote_devices_as_soon_as_possible(state);
         }
-    }
-
-    fn mark_group_send_endorsements_invalid(
-        state: &mut State,
-        expiration: Option<zkgroup::Timestamp>,
-        reason: String,
-    ) {
-        error!("Could not process latest endorsements: {}", reason);
-        state
-            .group_send_endorsement_cache
-            .set_invalid(expiration, reason);
     }
 
     // Returns (min, start, max)
@@ -3461,7 +3465,10 @@ impl Client {
         Ok(())
     }
 
-    fn rotate_media_send_key_and_send_to_users_not_removed(state: &mut State) {
+    fn rotate_media_send_key_and_send_to_users_not_removed(
+        state: &mut State,
+        endorsements_expiration: Option<Timestamp>,
+    ) {
         match state.media_send_key_rotation_state {
             KeyRotationState::Pending { secret, .. } => {
                 info!(
@@ -3502,6 +3509,7 @@ impl Client {
                         local_demux_id,
                         ratchet_counter,
                         secret,
+                        endorsements_expiration,
                     );
                 }
 
@@ -3530,7 +3538,10 @@ impl Client {
                         );
                         state.media_send_key_rotation_state = KeyRotationState::Applied;
                         if needs_another_rotation {
-                            Self::rotate_media_send_key_and_send_to_users_not_removed(state);
+                            Self::rotate_media_send_key_and_send_to_users_not_removed(
+                                state,
+                                endorsements_expiration,
+                            );
                         }
                     },
                 )
@@ -3541,6 +3552,7 @@ impl Client {
     fn advance_media_send_key_and_send_to_users_with_added_devices(
         state: &mut State,
         users_with_added_devices: HashSet<UserId>,
+        endorsements_expiration: Option<Timestamp>,
     ) {
         info!(
             "Advancing current media send key because a user has been added. client_id: {}",
@@ -3567,6 +3579,7 @@ impl Client {
                 local_demux_id,
                 ratchet_counter,
                 secret,
+                endorsements_expiration,
             );
         }
     }
@@ -3632,7 +3645,12 @@ impl Client {
         local_demux_id: DemuxId,
         ratchet_counter: frame_crypto::RatchetCounter,
         secret: frame_crypto::Secret,
+        endorsements_expiration: Option<Timestamp>,
     ) {
+        if recipients.is_empty() {
+            return;
+        }
+
         let media_key = protobuf::group_call::device_to_device::MediaKey {
             demux_id: Some(local_demux_id),
             ratchet_counter: Some(ratchet_counter as u32),
@@ -3647,7 +3665,6 @@ impl Client {
             group_call_message: Some(message),
             ..Default::default()
         };
-
         // The multi-recipient API should not be used to send to a user's own UUID. If it
         // is in the set, remove it and send separately with a normal message.
         let self_uuid_to_send_to =
@@ -3657,23 +3674,53 @@ impl Client {
                 None
             };
 
-        if recipients.len() > 1 && state.kind == GroupCallKind::SignalGroup {
-            state.observer.send_signaling_message_to_group(
-                state.group_id.clone(),
-                call_message.clone(),
-                SignalingMessageUrgency::Droppable,
-                recipients,
-            );
-        } else {
-            for recipient_id in recipients {
-                debug!("  recipient_id: {}", uuid_to_string(&recipient_id));
-                state.observer.send_signaling_message(
-                    recipient_id.to_vec(),
+        match (state.kind, state.group_send_endorsement_cache.as_ref()) {
+            (GroupCallKind::SignalGroup, _) if recipients.len() > 1 => {
+                state.observer.send_signaling_message_to_group(
+                    state.group_id.clone(),
                     call_message.clone(),
                     SignalingMessageUrgency::Droppable,
+                    recipients,
                 );
             }
-        }
+            (GroupCallKind::CallLink, Some(endorsement_cache)) => {
+                let recipients: Vec<UserId> = recipients.into_iter().collect();
+                if let Some((expiration, recipients_to_endorsements)) = endorsement_cache
+                    .get_endorsements_for_users(endorsements_expiration, recipients.iter())
+                {
+                    let recipients_to_endorsements = recipients_to_endorsements
+                        .into_iter()
+                        .map(|(id, endorsement)| (id.clone(), zkgroup::serialize(endorsement)))
+                        .collect();
+
+                    state.observer.send_signaling_message_to_adhoc_group(
+                        call_message.clone(),
+                        SignalingMessageUrgency::Droppable,
+                        expiration.epoch_seconds(),
+                        recipients_to_endorsements,
+                    );
+                } else {
+                    for recipient_id in recipients {
+                        debug!("  recipient_id: {}", uuid_to_string(&recipient_id));
+                        state.observer.send_signaling_message(
+                            recipient_id.to_vec(),
+                            call_message.clone(),
+                            SignalingMessageUrgency::Droppable,
+                        );
+                    }
+                }
+            }
+            _ => {
+                for recipient_id in recipients {
+                    debug!("  recipient_id: {}", uuid_to_string(&recipient_id));
+                    state.observer.send_signaling_message(
+                        recipient_id.to_vec(),
+                        call_message.clone(),
+                        SignalingMessageUrgency::Droppable,
+                    );
+                }
+            }
+        };
 
         if let Some(self_uuid) = self_uuid_to_send_to {
             debug!("  recipient_id: {}", uuid_to_string(&self_uuid));
@@ -3688,6 +3735,7 @@ impl Client {
     fn send_pending_media_send_key_to_users_with_added_devices(
         state: &mut State,
         users_with_added_devices: HashSet<UserId>,
+        endorsements_expiration: Option<Timestamp>,
     ) {
         if let JoinState::Pending(local_demux_id) | JoinState::Joined(local_demux_id) =
             state.join_state
@@ -3703,6 +3751,7 @@ impl Client {
                 local_demux_id,
                 0,
                 secret,
+                endorsements_expiration,
             );
         }
     }
@@ -4373,27 +4422,39 @@ impl Client {
                 warn!("Ignoring speaker demux ID of None from SFU");
             }
         };
-        if let Some(DeviceJoinedOrLeft { peek_info }) = device_joined_or_left {
-            if let Some(peek_info_proto) = peek_info {
-                actor.send(move |state| {
-                    match PeekInfo::deobfuscate_proto(peek_info_proto, &state.obfuscated_resolver) {
-                        Ok(peek_info) => Self::set_peek_result_inner(state, Ok(peek_info)),
-                        Err(err) => {
-                            warn!(
-                                "Failed to deobfuscate peek info, falling back to http: {:?}",
-                                err
-                            );
-                            Self::request_remote_devices_as_soon_as_possible(state);
+        if endorsements.is_some() || device_joined_or_left.is_some() {
+            actor.send(move |state| {
+                let expiration = endorsements.and_then(|endorsements| {
+                    Self::handle_send_endorsements_response_inner(state, sys_now, endorsements)
+                });
+
+                if let Some(DeviceJoinedOrLeft { peek_info }) = device_joined_or_left {
+                    if let Some(peek_info_proto) = peek_info {
+                        match PeekInfo::deobfuscate_proto(
+                            peek_info_proto,
+                            &state.obfuscated_resolver,
+                        ) {
+                            Ok(peek_info) => {
+                                Self::set_peek_result_inner(state, Ok(peek_info), expiration)
+                            }
+                            Err(err) => {
+                                warn!(
+                                    "Failed to deobfuscate peek info, falling back to http: {:?}",
+                                    err
+                                );
+                                Self::request_remote_devices_as_soon_as_possible(state);
+                            }
                         }
                     }
-                });
-            } else {
-                Self::handle_remote_device_joined_or_left(actor);
-            }
+                } else {
+                    info!(
+                        "SFU notified that a remote device has joined or left, requesting update"
+                    );
+                    Self::request_remote_devices_as_soon_as_possible(state);
+                }
+            });
         }
-        if let Some(endorsements) = endorsements {
-            Self::handle_send_endorsements_response(actor, sys_now, endorsements);
-        }
+
         // TODO: Use all_demux_ids to avoid polling
         if let Some(CurrentDevices {
             demux_ids_with_video,
@@ -4480,80 +4541,80 @@ impl Client {
         });
     }
 
-    fn handle_remote_device_joined_or_left(actor: &Actor<State>) {
-        actor.send(move |state| {
-            info!("SFU notified that a remote device has joined or left, requesting update");
-            Self::request_remote_devices_as_soon_as_possible(state);
-        })
-    }
-
-    fn handle_send_endorsements_response(
-        actor: &Actor<State>,
+    fn handle_send_endorsements_response_inner(
+        state: &mut State,
         sys_now: SystemTime,
         SendEndorsementsResponse {
             serialized,
             member_ciphertexts,
         }: SendEndorsementsResponse,
-    ) {
-        actor.send(move |state| {
-            let Some(serialized) = serialized else {
-                state.observer.handle_endorsements_update(
-                    state.client_id,
-                    Err(EndorsementUpdateError::MissingField("serialized")),
-                );
-                return;
-            };
-            if member_ciphertexts.is_empty() {
-                state.observer.handle_endorsements_update(
-                    state.client_id,
-                    Err(EndorsementUpdateError::MissingField("member_ciphertexts")),
-                );
-                return;
-            }
-            let response = match zkgroup::deserialize::<GroupSendEndorsementsResponse>(
-                serialized.as_slice(),
-            ) {
+    ) -> Option<Timestamp> {
+        if state.group_send_endorsement_cache.is_none() {
+            warn!("Received endorsements when there is no group_send_endorsement_cache");
+            return None;
+        }
+        let Some(serialized) = serialized else {
+            state.observer.handle_endorsements_update(
+                state.client_id,
+                Err(EndorsementUpdateError::MissingField("serialized")),
+            );
+            return None;
+        };
+        if member_ciphertexts.is_empty() {
+            state.observer.handle_endorsements_update(
+                state.client_id,
+                Err(EndorsementUpdateError::MissingField("member_ciphertexts")),
+            );
+            return None;
+        }
+        let response =
+            match zkgroup::deserialize::<GroupSendEndorsementsResponse>(serialized.as_slice()) {
                 Ok(response) => response,
                 Err(_) => {
                     state.observer.handle_endorsements_update(
                         state.client_id,
                         Err(EndorsementUpdateError::InvalidEndorsementResponseFormat),
                     );
-                    return;
+                    return None;
                 }
             };
-            let now = Timestamp::from_epoch_seconds(
-                sys_now
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+        let now = Timestamp::from_epoch_seconds(
+            sys_now
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
+        if response.expiration() < now {
+            state.observer.handle_endorsements_update(
+                state.client_id,
+                Err(EndorsementUpdateError::ExpiredEndorsements(
+                    response.expiration(),
+                )),
             );
-            if response.expiration() < now {
-                state.observer.handle_endorsements_update(
-                    state.client_id,
-                    Err(EndorsementUpdateError::ExpiredEndorsements(
-                        response.expiration(),
-                    )),
-                );
-                return;
-            }
+            return None;
+        }
 
-            Self::handle_send_endorsements_response_inner(state, response, member_ciphertexts, now);
-        });
+        Self::validate_and_cache_endorsements(state, response, member_ciphertexts, now)
     }
 
-    fn handle_send_endorsements_response_inner(
+    fn validate_and_cache_endorsements(
         state: &mut State,
         response: GroupSendEndorsementsResponse,
         member_ciphertexts: Vec<Vec<u8>>,
         now: Timestamp,
-    ) {
+    ) -> Option<Timestamp> {
         let Some(endorsement_public_key) = state.obfuscated_resolver.get_endorsement_public_key()
         else {
             error!(
                 "Cannot process SendEndorsementsResponse because call was not initialized with endorsement public key"
             );
-            return;
+            return None;
+        };
+        let Some(endorsement_cache) = state.group_send_endorsement_cache.as_mut() else {
+            warn!(
+                "Received endorsements when there is no group_send_endorsement_cache, likely not an adhoc call."
+            );
+            return None;
         };
         let expiration = response.expiration();
         let member_uuid_ciphertexts: Vec<UuidCiphertext> = member_ciphertexts
@@ -4562,21 +4623,28 @@ impl Client {
             .collect();
         let member_ids: Vec<UserId> = member_ciphertexts
             .iter()
-            .flat_map(|ciphertext| state.obfuscated_resolver.resolve(&hex::encode(ciphertext)))
+            .flat_map(|ciphertext| {
+                state
+                    .obfuscated_resolver
+                    .resolve_user_id_bytes(ciphertext.as_ref())
+            })
             .collect();
         if member_ids.len() != member_ciphertexts.len()
             || member_uuid_ciphertexts.len() != member_ciphertexts.len()
         {
-            Self::mark_group_send_endorsements_invalid(
-                state,
+            endorsement_cache.set_invalid(
                 Some(expiration),
                 "Received endorsements with invalid member ciphertexts".to_string(),
             );
             state.observer.handle_endorsements_update(
                 state.client_id,
+                Err(EndorsementUpdateError::InvalidEndorsementResponse),
+            );
+            state.observer.handle_endorsements_update(
+                state.client_id,
                 Err(EndorsementUpdateError::InvalidMemberCiphertexts),
             );
-            return;
+            return None;
         }
 
         match response.receive_with_ciphertexts(
@@ -4589,20 +4657,27 @@ impl Client {
                     .into_iter()
                     .zip(endorsements.into_iter().map(|e| e.decompressed))
                     .collect::<HashMap<_, _>>();
-                state
-                    .group_send_endorsement_cache
-                    .insert(expiration, endorsements);
+                endorsement_cache.insert(expiration, endorsements);
+                if let Some(endorsement_update) =
+                    endorsement_cache.get_endorsements_for_expiration(expiration)
+                {
+                    state
+                        .observer
+                        .handle_endorsements_update(state.client_id, Ok(endorsement_update));
+                }
+                Some(expiration)
             }
             Err(_) => {
-                Self::mark_group_send_endorsements_invalid(
-                    state,
+                endorsement_cache.set_invalid(
                     Some(expiration),
-                    "Failed to verify group send endorsement".to_string(),
+                    "Failed to processing endorsement response in receive_with_ciphertext"
+                        .to_string(),
                 );
                 state.observer.handle_endorsements_update(
                     state.client_id,
                     Err(EndorsementUpdateError::InvalidEndorsementResponse),
                 );
+                None
             }
         }
     }
@@ -4718,11 +4793,11 @@ impl Client {
             // It's also possible we have learned this before the SFU has, in which case the SFU may have stale data.
             // So let's wait a little while and ask again.
             state
-                    .actor
-                    .send_delayed(Duration::from_secs(2), move |state| {
-                        info!("Request devices because we received a leaving message from demux_id = {} a while ago", demux_id);
-                        Self::request_remote_devices_as_soon_as_possible(state);
-                    });
+                .actor
+                .send_delayed(Duration::from_secs(2), move |state| {
+                    info!("Request devices because we received a leaving message from demux_id = {} a while ago", demux_id);
+                    Self::request_remote_devices_as_soon_as_possible(state);
+                });
         }
     }
 
@@ -4810,9 +4885,9 @@ impl Client {
                             .observer
                             .handle_raised_hands(state.client_id, state.raised_hands.clone());
 
-                    // Issue a callback when a raised hand is not outstanding and the
-                    // raised hand list has changed.
                     } else if state.raised_hands != raised_hands {
+                        // Issue a callback when a raised hand is not outstanding and the
+                        // raised hand list has changed.
                         info!(
                             "group_call::Client(inner)::handle_raised_hands(client_id: {} raised_hands: {:?} server seqnum: {} local seqnum: {} local raise: {} outstanding: {})",
                             state.client_id,
@@ -4828,7 +4903,6 @@ impl Client {
                             .handle_raised_hands(state.client_id, state.raised_hands.clone());
                     }
                 }
-            // The server has never received a hand raise from this client
             } else {
                 // Issue a callback if the client has never raised their hand and the server
                 // list is different than before.
@@ -5050,8 +5124,8 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                         // The height needs to be checked again because last_height_by_demux_id
                         // doesn't account for video mute or forwarding state.
                         if remote_device.client_decoded_height != Some(height)
-                            // Workaround for a race where a frame is received after video muting
-                            && remote_device.heartbeat_state.video_muted != Some(true)
+                        // Workaround for a race where a frame is received after video muting
+                        && remote_device.heartbeat_state.video_muted != Some(true)
                         {
                             remote_device.client_decoded_height = Some(height);
 
@@ -5257,7 +5331,7 @@ mod tests {
         core::endorsements::EndorsementUpdateResult,
         lite::{
             call_links::{CallLinkMemberResolver, CallLinkRootKey},
-            sfu::PeekDeviceInfo,
+            sfu::{MemberResolver, PeekDeviceInfo},
         },
         protobuf::group_call::MrpHeader,
         webrtc::sim::media::FAKE_AUDIO_TRACK,
@@ -5287,6 +5361,22 @@ mod tests {
             .map(|id| CALL_LINK_SECRET_PARAMS.encrypt_uid(*id))
             .collect::<Vec<_>>()
     });
+
+    impl Client {
+        fn handle_send_endorsements_response(
+            actor: &Actor<State>,
+            sys_now: SystemTime,
+            send_endorsements_response: SendEndorsementsResponse,
+        ) {
+            actor.send(move |state| {
+                Self::handle_send_endorsements_response_inner(
+                    state,
+                    sys_now,
+                    send_endorsements_response,
+                );
+            });
+        }
+    }
 
     #[derive(Clone)]
     struct FakeSfuClient {
@@ -5454,6 +5544,7 @@ mod tests {
         recipients: Arc<CallMutex<Vec<TestClient>>>,
         outgoing_signaling_blocked: Arc<CallMutex<bool>>,
         sent_group_signaling_messages: Arc<CallMutex<Vec<protobuf::signaling::CallMessage>>>,
+        sent_adhoc_group_signaling_messages: Arc<CallMutex<Vec<protobuf::signaling::CallMessage>>>,
 
         connecting: Event,
         endorsement_update_event: Event,
@@ -5478,6 +5569,7 @@ mod tests {
         reactions_count: Arc<AtomicU64>,
         send_signaling_message_invocation_count: Arc<AtomicU64>,
         send_signaling_message_to_group_invocation_count: Arc<AtomicU64>,
+        send_signaling_message_to_adhoc_group_invocation_count: Arc<AtomicU64>,
         multi_recipient_count: Arc<AtomicU64>,
 
         remote_muted_by: Arc<CallMutex<Option<DemuxId>>>,
@@ -5494,6 +5586,10 @@ mod tests {
                     "FakeObserver outgoing_signaling_blocked",
                 )),
                 sent_group_signaling_messages: Arc::new(CallMutex::new(
+                    Vec::new(),
+                    "FakeObserver sent group messages",
+                )),
+                sent_adhoc_group_signaling_messages: Arc::new(CallMutex::new(
                     Vec::new(),
                     "FakeObserver sent group messages",
                 )),
@@ -5528,6 +5624,7 @@ mod tests {
                 reactions_count: Default::default(),
                 send_signaling_message_invocation_count: Default::default(),
                 send_signaling_message_to_group_invocation_count: Default::default(),
+                send_signaling_message_to_adhoc_group_invocation_count: Default::default(),
                 multi_recipient_count: Default::default(),
                 remote_muted_by: Arc::new(CallMutex::new(None, "Most recent remote mute received")),
                 observed_remote_mutes: Arc::new(CallMutex::new(
@@ -5643,6 +5740,12 @@ mod tests {
         }
 
         fn send_signaling_message_to_group_invocation_count(&self) -> u64 {
+            self.send_signaling_message_to_group_invocation_count
+                .swap(0, Ordering::Relaxed)
+        }
+
+        #[allow(dead_code)]
+        fn send_signaling_message_to_adhoc_group_invocation_count(&self) -> u64 {
             self.send_signaling_message_to_group_invocation_count
                 .swap(0, Ordering::Relaxed)
         }
@@ -5872,6 +5975,70 @@ mod tests {
             }
         }
 
+        fn send_signaling_message_to_adhoc_group(
+            &mut self,
+            call_message: protobuf::signaling::CallMessage,
+            _urgency: SignalingMessageUrgency,
+            _expiration: u64,
+            recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+        ) {
+            self.send_signaling_message_to_adhoc_group_invocation_count
+                .fetch_add(1, Ordering::Relaxed);
+
+            if self.outgoing_signaling_blocked() {
+                info!(
+                    "Dropping message from {:?} to group because we blocked signaling.",
+                    self.user_id,
+                );
+                return;
+            }
+            if !recipients_to_endorsements.is_empty() {
+                self.multi_recipient_count
+                    .fetch_add(recipients_to_endorsements.len() as u64, Ordering::Relaxed);
+
+                for recipient_id in recipients_to_endorsements.into_keys() {
+                    assert_ne!(
+                        self.user_id, recipient_id,
+                        "User can't send to own UUID for multi-recipient API"
+                    );
+
+                    let recipient_ids = self
+                        .recipients
+                        .lock()
+                        .expect("Lock recipients to add recipient");
+                    let mut sent = false;
+                    if let Some(message) = call_message.clone().group_call_message {
+                        for recipient in recipient_ids.iter() {
+                            if recipient.user_id == recipient_id {
+                                recipient.client.on_signaling_message_received(
+                                    self.user_id.clone(),
+                                    message.clone(),
+                                );
+                                sent = true;
+                            }
+                        }
+                    }
+                    if sent {
+                        info!(
+                            "Sent message from {:?} to {:?}.",
+                            self.user_id, recipient_id
+                        );
+                    } else {
+                        info!(
+                            "Did not sent message from {:?} to {:?} because it's not a known recipient.",
+                            self.user_id, recipient_id
+                        );
+                    }
+                }
+            } else {
+                self.sent_adhoc_group_signaling_messages
+                    .lock()
+                    .expect("adding message")
+                    .push(call_message);
+                info!("Recorded group-wide call message from {:?}", self.user_id);
+            }
+        }
+
         fn handle_incoming_video_track(
             &mut self,
             _client_id: ClientId,
@@ -5910,7 +6077,10 @@ mod tests {
                 .lock()
                 .expect("Lock endorsement_update to handle update");
 
-            info!("Observer handling endorsement update: {:?}", update);
+            info!(
+                "Observer handling endorsement update: is_err={:?}",
+                update.is_err()
+            );
             *owned =
                 Some(update.map(|(expiration, endorsements)| (expiration, endorsements.clone())));
             self.endorsement_update_event.set();
@@ -5943,6 +6113,8 @@ mod tests {
                 }),
                 None,
             );
+            let group_send_endorsement_cache =
+                Some(EndorsementsCache::new(*CALL_LINK_SECRET_PARAMS));
             let obfuscated_resolver = ObfuscatedResolver::new(
                 Arc::new(CallLinkMemberResolver::from(&*CALL_LINK_ROOT_KEY)),
                 Some(CALL_LINK_ROOT_KEY.clone()),
@@ -5963,6 +6135,7 @@ mod tests {
                 incoming_video_sink: None,
                 ring_id: None,
                 audio_levels_interval: Some(Duration::from_millis(200)),
+                group_send_endorsement_cache,
             })
             .expect("Start Client");
             Self {

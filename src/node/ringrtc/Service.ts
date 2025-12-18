@@ -318,23 +318,34 @@ function rawPeekInfoToPeekInfo(raw: RawPeekInfo): PeekInfo {
 }
 
 class Requests<T> {
-  private _resolveById: Map<number, (response: T) => void> = new Map();
+  private _resolveById: Map<number, [(response: T) => void, () => void]> =
+    new Map();
   private _nextId = 1;
 
   add(): [number, Promise<T>] {
     const id = this._nextId++;
-    const promise = new Promise<T>((resolve, _reject) => {
-      this._resolveById.set(id, resolve);
+    const promise = new Promise<T>((resolve, reject) => {
+      this._resolveById.set(id, [resolve, reject]);
     });
     return [id, promise];
   }
 
   resolve(id: number, response: T): boolean {
-    const resolve = this._resolveById.get(id);
-    if (!resolve) {
+    const callbacks = this._resolveById.get(id);
+    if (!callbacks) {
       return false;
     }
-    resolve(response);
+    callbacks[0](response);
+    this._resolveById.delete(id);
+    return true;
+  }
+
+  reject(id: number) {
+    const callbacks = this._resolveById.get(id);
+    if (!callbacks) {
+      return false;
+    }
+    callbacks[1]();
     this._resolveById.delete(id);
     return true;
   }
@@ -443,6 +454,18 @@ export class RingRTCType {
         message: Uint8Array,
         urgency: CallMessageUrgency,
         overrideRecipients: Array<Uint8Array>
+      ) => void)
+    | null = null;
+
+  handleSendCallMessageToAdhocGroup:
+    | ((
+        message: Uint8Array,
+        urgency: CallMessageUrgency,
+        expiration: Date,
+        recipientsAndEndorsements: Array<{
+          recipientId: Uint8Array;
+          endorsement: Uint8Array;
+        }>
       ) => void)
     | null = null;
 
@@ -1854,6 +1877,28 @@ export class RingRTCType {
     }
   }
 
+  // Called by Rust
+  sendCallMessageToAdhocGroup(
+    message: Uint8Array,
+    urgency: CallMessageUrgency,
+    expiration: Date,
+    recipientsAndEndorsements: Array<{
+      recipientId: Uint8Array;
+      endorsement: Uint8Array;
+    }>
+  ): void {
+    if (this.handleSendCallMessageToAdhocGroup) {
+      this.handleSendCallMessageToAdhocGroup(
+        message,
+        urgency,
+        expiration,
+        recipientsAndEndorsements
+      );
+    } else {
+      this.logError('RingRTC.handleSendCallMessageToAdhocGroup is not set!');
+    }
+  }
+
   // These are convenience methods.  One could use the Call class instead.
   get call(): Call | null {
     return this._call;
@@ -3203,6 +3248,15 @@ export interface CallManagerCallbacks {
     message: Uint8Array,
     urgency: CallMessageUrgency,
     overrideRecipients: Array<Uint8Array>
+  ): void;
+  sendCallMessageToAdhocGroup(
+    message: Uint8Array,
+    urgency: CallMessageUrgency,
+    expiration: Date,
+    recipientsAndEndorsements: Array<{
+      recipientId: Uint8Array;
+      endorsement: Uint8Array;
+    }>
   ): void;
   sendHttpRequest(
     requestId: number,

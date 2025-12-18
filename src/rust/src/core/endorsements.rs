@@ -9,7 +9,11 @@ use std::{
 };
 
 use thiserror::Error;
-use zkgroup::groups::GroupSendEndorsement;
+use zkgroup::{
+    Timestamp,
+    call_links::CallLinkSecretParams,
+    groups::{GroupSendEndorsement, GroupSendFullToken},
+};
 
 use crate::lite::sfu::UserId;
 
@@ -29,7 +33,7 @@ pub enum EndorsementUpdateError {
     MissingField(&'static str),
     #[error("Received expired endorsements with expiration={0:?}")]
     ExpiredEndorsements(zkgroup::Timestamp),
-    #[error("Received endorsements with invalid member ciphertexts")]
+    #[error("Received endorsements with invalid member ids")]
     InvalidMemberCiphertexts,
     #[error("Failed to deserialize endorsement response")]
     InvalidEndorsementResponseFormat,
@@ -39,7 +43,7 @@ pub enum EndorsementUpdateError {
 
 /// Caches GroupSendEndorsement ordered by expiration. Also tracks whether the latest endorsements
 /// were successfully validated.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct EndorsementsCache {
     /// Caches the Endorsement sets in ascending order by expiration. Allows us to grab the latest
     /// set of endorsements easily
@@ -51,9 +55,21 @@ pub struct EndorsementsCache {
     last_updated: HashMap<zkgroup::Timestamp, Instant>,
     /// Tracks the last time `get_latest` returned valid set of endorsements
     last_shared: Option<Instant>,
+    /// The call link secret derived from the root key. Used for token actions
+    call_link_secret_params: CallLinkSecretParams,
 }
 
 impl EndorsementsCache {
+    pub fn new(call_link_secret_params: CallLinkSecretParams) -> Self {
+        Self {
+            call_link_secret_params,
+            endorsements: Default::default(),
+            invalid_markers: Default::default(),
+            last_updated: Default::default(),
+            last_shared: None,
+        }
+    }
+
     /// Extends Endorsement Map with replacement for each UserId for a given expiration.
     pub fn insert(
         &mut self,
@@ -68,6 +84,74 @@ impl EndorsementsCache {
         self.last_updated.insert(expiration, now);
         self.invalid_markers.remove(&Some(expiration));
         self.invalid_markers.remove(&None);
+    }
+
+    pub fn get_token_for(
+        &self,
+        expiration: zkgroup::Timestamp,
+        recipients: Vec<UserId>,
+    ) -> Option<GroupSendFullToken> {
+        if !self.is_valid(expiration) {
+            return None;
+        }
+
+        if let Some(endorsement_map) = self.endorsements.get(&expiration) {
+            let mut found = Vec::with_capacity(recipients.len());
+            for recipient in recipients {
+                if let Some(endorsement) = endorsement_map.get(&recipient) {
+                    found.push(endorsement)
+                } else {
+                    return None;
+                }
+            }
+
+            let token = GroupSendEndorsement::combine(found.into_iter().cloned())
+                .to_token(self.call_link_secret_params)
+                .into_full_token(expiration);
+            Some(token)
+        } else {
+            // should never happen if we already check for valid
+            None
+        }
+    }
+
+    /// Returns valid endorsements for the specified User IDs. If epoch is specified, then only return
+    /// endorsements from that epoch. If epoch is not specified then returns from the latest epoch.
+    pub fn get_endorsements_for_users<'a, T: Iterator<Item = &'a UserId>>(
+        &'a self,
+        epoch: Option<Timestamp>,
+        user_ids: T,
+    ) -> Option<(Timestamp, HashMap<&'a UserId, &'a GroupSendEndorsement>)> {
+        let (expiration, endorsements): (&Timestamp, &HashMap<UserId, GroupSendEndorsement>) =
+            epoch.map_or_else(
+                || self.endorsements.iter().last(),
+                |key| self.endorsements.get_key_value(&key),
+            )?;
+
+        if !self.is_valid(*expiration) {
+            return None;
+        }
+
+        let mut result = HashMap::new();
+        for id in user_ids {
+            let endorsement = endorsements.get(id)?;
+            result.insert(id, endorsement);
+        }
+        Some((*expiration, result))
+    }
+
+    /// Returns endorsements for the specified epoch. Only returns valid endorsements, else None.
+    pub fn get_endorsements_for_expiration(
+        &self,
+        epoch: Timestamp,
+    ) -> Option<EndorsementUpdateRef<'_>> {
+        if !self.is_valid(epoch) {
+            return None;
+        }
+
+        self.endorsements
+            .get(&epoch)
+            .map(|endorsements| (epoch, endorsements))
     }
 
     /// Gets the endorsements with the latest expirations if valid. The latest expiration should
@@ -91,11 +175,7 @@ impl EndorsementsCache {
             return false;
         };
 
-        if self.invalid_markers.contains_key(&Some(expiration)) {
-            return false;
-        }
-
-        if self.invalid_markers.contains_key(&None) {
+        if !self.is_valid(expiration) {
             return false;
         }
 
@@ -112,13 +192,26 @@ impl EndorsementsCache {
             .is_none_or(|last_shared| last_updated > last_shared)
     }
 
+    fn is_valid(&self, expiration: zkgroup::Timestamp) -> bool {
+        let Some(last_updated) = self.last_updated.get(&expiration) else {
+            return false;
+        };
+
+        if self.invalid_markers.contains_key(&Some(expiration)) {
+            return false;
+        }
+
+        self.invalid_markers
+            .get(&None)
+            .is_none_or(|(invalidated_at, _)| invalidated_at < last_updated)
+    }
+
     fn latest_is_valid(&self) -> bool {
         let &Some((&expiration, _)) = &self.endorsements.iter().last() else {
             return false;
         };
 
-        !self.invalid_markers.contains_key(&Some(expiration))
-            && !self.invalid_markers.contains_key(&None)
+        self.is_valid(expiration)
     }
 
     pub fn set_invalid(&mut self, expiration: Option<zkgroup::Timestamp>, reason: String) {
@@ -154,7 +247,7 @@ impl EndorsementsCache {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{sync::LazyLock, time::Duration};
 
     use libsignal_core::Aci;
     use rand::{random, thread_rng};
@@ -166,6 +259,15 @@ mod tests {
 
     use super::*;
     use crate::lite::call_links::CallLinkRootKey;
+
+    static CALL_LINK_ROOT_KEY: LazyLock<CallLinkRootKey> =
+        LazyLock::new(|| CallLinkRootKey::try_from([0x43u8; 16].as_ref()).unwrap());
+    static CALL_LINK_SECRET_PARAMS: LazyLock<CallLinkSecretParams> =
+        LazyLock::new(|| CallLinkSecretParams::derive_from_root_key(&CALL_LINK_ROOT_KEY.bytes()));
+
+    fn endorsement_cache() -> EndorsementsCache {
+        EndorsementsCache::new(*CALL_LINK_SECRET_PARAMS)
+    }
 
     /// generates random secrets to create endorsements, simulates server secret rotation
     fn random_receive_endorsements(
@@ -209,7 +311,7 @@ mod tests {
 
     #[test]
     fn extends_with_replacement() {
-        let mut cache = EndorsementsCache::default();
+        let mut cache = endorsement_cache();
         assert_eq!(cache.get_latest(), None, "Cache should start empty");
 
         let now = Timestamp::from_epoch_seconds(0);
@@ -247,7 +349,7 @@ mod tests {
 
     #[test]
     fn get_latest_gets_latest_expiration_if_valid() {
-        let mut cache = EndorsementsCache::default();
+        let mut cache = endorsement_cache();
         assert_eq!(cache.get_latest(), None, "Cache should start empty");
 
         let nows = (0..5).map(|i| Timestamp::from_epoch_seconds(i * (24 * 60 * 60)));
@@ -306,7 +408,7 @@ mod tests {
 
     #[test]
     fn has_update_tracks_validity_and_last_shared() {
-        let mut cache = EndorsementsCache::default();
+        let mut cache = endorsement_cache();
         assert!(!cache.has_valid_update(), "cache is empty, no update");
 
         let nows = (0..5).map(|i| Timestamp::from_epoch_seconds(i * (24 * 60 * 60)));
@@ -377,7 +479,7 @@ mod tests {
 
     #[test]
     fn clear_expired() {
-        let mut cache = EndorsementsCache::default();
+        let mut cache = endorsement_cache();
         assert!(!cache.has_valid_update(), "cache is empty, no update");
 
         let nows = (0..5).map(|i| Timestamp::from_epoch_seconds(i * (24 * 60 * 60)));

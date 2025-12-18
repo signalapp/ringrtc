@@ -6,7 +6,7 @@
 //! Android Platform Interface.
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -825,6 +825,68 @@ impl Platform for AndroidPlatform {
                     jni_message => [byte],
                     urgency as i32 => int,
                     recipients_override_list => java.util.List,
+                ) -> void),
+            );
+            if result.is_err() {
+                error!("jni_call_method: {:?}", result.err());
+            }
+
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    fn send_call_message_to_adhoc_group(
+        &self,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    ) -> Result<()> {
+        let env = &mut self.java_env()?;
+        let jni_call_manager = self.jni_call_manager.as_obj();
+
+        // Set a frame capacity of min (5) + objects (3) + key-values (2 objects per pair).
+        let capacity = (8 + (2 * recipients_to_endorsements.len())) as i32;
+        env.with_local_frame(capacity, |env| -> Result<()> {
+            let map = jni_new_hashmap(env, recipients_to_endorsements.len())?;
+            let jni_recipients_map = env.get_map(&map)?;
+            for (recipient, endorsement) in recipients_to_endorsements {
+                let jni_opaque_user_id = match env.byte_array_from_slice(&recipient) {
+                    Ok(v) => JObject::from(v),
+                    Err(error) => {
+                        error!("{:?}", error);
+                        continue;
+                    }
+                };
+                let jni_endorsement = match env.byte_array_from_slice(&endorsement) {
+                    Ok(v) => JObject::from(v),
+                    Err(error) => {
+                        error!("{:?}", error);
+                        continue;
+                    }
+                };
+
+                let result = jni_recipients_map.put(env, &jni_opaque_user_id, &jni_endorsement);
+                if result.is_err() {
+                    error!("{:?}", result.err());
+                    continue;
+                }
+            }
+
+            let jni_message = JObject::from(env.byte_array_from_slice(&message)?);
+            let jni_expiration = expiration as jlong;
+
+            let result = jni_call_method(
+                env,
+                jni_call_manager,
+                "sendCallMessageToAdhocGroup",
+                jni_args!((
+                    jni_message => [byte],
+                    urgency as i32 => int,
+                    jni_expiration => long,
+                    jni_recipients_map => java.util.Map,
                 ) -> void),
             );
             if result.is_err() {

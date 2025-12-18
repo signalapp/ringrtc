@@ -330,6 +330,15 @@ public protocol CallManagerDelegate: AnyObject {
     func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessageToGroup groupId: Data, message: Data, urgency: CallMessageUrgency, overrideRecipients: [UUID])
 
     /**
+     * Send a generic call message to an adhoc group. Send to all members of the group
+     * using multi-recipient sealed sender. If the sealed sender request fails,
+     * clients should provide a fallback mechanism.
+     * If there is any error, the UI can reset UI state and invoke the reset() API.
+     */
+    @MainActor
+    func callManager(_ callManager: CallManager<CallManagerDelegateCallType, Self>, shouldSendCallMessageToAdhocGroup message: Data, urgency: CallMessageUrgency, expiration: Date, recipientsToEndorsements: [UUID: Data])
+
+    /**
      * The local video track has been enabled and can be connected to the
      * UI's display surface/view for the outgoing media.
      */
@@ -1002,6 +1011,18 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             guard let delegate = self.delegate else { return }
 
             delegate.callManager(self, shouldSendCallMessageToGroup: groupId, message: message, urgency: urgency, overrideRecipients: overrideRecipients)
+        }
+    }
+
+    func sendCallMessageToAdhocGroup(message: Data, urgency: CallMessageUrgency, expiration: Date, recipientsToEndorsements: [UUID: Data]) {
+        Logger.debug("sendCallMessageToAdhocGroup")
+
+        Task { @MainActor in
+            Logger.debug("sendCallMessageToAdhocGroup - main.async")
+
+            guard let delegate = self.delegate else { return }
+
+            delegate.callManager(self, shouldSendCallMessageToAdhocGroup: message, urgency: urgency, expiration: expiration, recipientsToEndorsements: recipientsToEndorsements)
         }
     }
 

@@ -206,6 +206,18 @@ pub fn jni_new_arraylist<'output>(
     )
 }
 
+/// Creates a new java.util.HashMap object
+pub fn jni_new_hashmap<'output>(
+    env: &mut JNIEnv<'output>,
+    initial_capacity: usize,
+) -> Result<JObject<'output>> {
+    jni_new_object(
+        env,
+        jni_class_name!(java.util.HashMap),
+        jni_args!((initial_capacity.try_into().expect("too big for Java") => int) -> void),
+    )
+}
+
 /// Prints local and global references to the log.
 #[allow(dead_code)]
 pub fn dump_references(env: &mut JNIEnv) {

@@ -5,7 +5,12 @@
 
 //! iOS Platform
 
-use std::{collections::HashSet, fmt, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 
@@ -25,10 +30,11 @@ use crate::{
     ios::{
         api::{
             call_manager_interface::{
-                AppByteSlice, AppCallContext, AppConnectionInterface, AppIceCandidateArray,
-                AppInterface, AppObject, AppOptionalBool, AppOptionalUInt32, AppRaisedHandsArray,
-                AppReaction, AppReactionsArray, AppReceivedAudioLevel, AppReceivedAudioLevelArray,
-                AppRemoteDeviceState, AppRemoteDeviceStateArray, AppUuidArray,
+                AppByteSlice, AppByteSliceArray, AppCallContext, AppConnectionInterface,
+                AppIceCandidateArray, AppInterface, AppObject, AppOptionalBool, AppOptionalUInt32,
+                AppRaisedHandsArray, AppReaction, AppReactionsArray, AppReceivedAudioLevel,
+                AppReceivedAudioLevelArray, AppRemoteDeviceState, AppRemoteDeviceStateArray,
+                AppUuidArray,
             },
             call_summary::rtc_callsummary_CallSummary,
         },
@@ -575,6 +581,42 @@ impl Platform for IosPlatform {
             app_slice_from_bytes(Some(&message)),
             urgency as i32,
             app_recipients_override_array,
+        );
+
+        Ok(())
+    }
+
+    fn send_call_message_to_adhoc_group(
+        &self,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    ) -> Result<()> {
+        let app_recipients: Vec<AppByteSlice> = recipients_to_endorsements
+            .keys()
+            .map(|recipient| app_slice_from_bytes(Some(recipient)))
+            .collect();
+        let app_recipients_array = AppUuidArray {
+            uuids: app_recipients.as_ptr(),
+            count: app_recipients.len(),
+        };
+        let app_endorsements: Vec<AppByteSlice> = recipients_to_endorsements
+            .values()
+            .map(|endorsement| app_slice_from_bytes(Some(endorsement)))
+            .collect();
+        let app_endorsements_array = AppByteSliceArray {
+            slices: app_endorsements.as_ptr(),
+            count: app_endorsements.len(),
+        };
+
+        (self.app_interface.sendCallMessageToAdhocGroup)(
+            self.app_interface.object,
+            app_slice_from_bytes(Some(&message)),
+            urgency as i32,
+            expiration,
+            app_recipients_array,
+            app_endorsements_array,
         );
 
         Ok(())

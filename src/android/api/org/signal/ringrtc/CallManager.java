@@ -35,6 +35,7 @@ import org.webrtc.audio.AudioDeviceModule;
 import org.webrtc.audio.JavaAudioDeviceModule;
 import org.webrtc.audio.OboeAudioDeviceModule;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1577,6 +1578,20 @@ public class CallManager {
   }
 
   @CalledByNative
+  private void sendCallMessageToAdhocGroup(@NonNull byte[] message, int urgency, long expiration, @NonNull Map<byte[], byte[]> recipientsToEndorsements) {
+    Log.i(TAG, "sendCallMessageToAdhocGroup():");
+
+    Map<UUID, byte[]> finalRecipientsToEndorsements = new HashMap<UUID, byte[]>();
+    for (Map.Entry<byte[], byte[]> entry : recipientsToEndorsements.entrySet()) {
+      finalRecipientsToEndorsements.put(Util.getUuidFromBytes(entry.getKey()), entry.getValue());
+    }
+
+    Instant expirationInstant = Instant.ofEpochSecond(expiration);
+    observer.onSendCallMessageToAdhocGroup(message, CallMessageUrgency.values()[urgency], expirationInstant,
+        finalRecipientsToEndorsements);
+  }
+
+  @CalledByNative
   private void sendHttpRequest(long requestId, String url, HttpMethod method, List<HttpHeader> headers, @Nullable byte[] body) {
     Log.i(TAG, "sendHttpRequest():");
     observer.onSendHttpRequest(requestId, url, method, headers, body);
@@ -2369,6 +2384,21 @@ public class CallManager {
      * @param overrideRecipients  a subset of group members to send to; if empty, send to all
      */
     void onSendCallMessageToGroup(@NonNull byte[] groupId, @NonNull byte[] message, @NonNull CallMessageUrgency urgency, @NonNull List<UUID> overrideRecipients);
+
+    /**
+     *
+     * Send a generic call message to an adhoc group. Send to all recipients
+     * using multi-recipient sealed sender. If the sealed sender request fails,
+     * clients should provide a fallback mechanism.
+     *
+     * @param message      the opaque bytes to send
+     * @param urgency      controls whether recipients should immediately handle
+     *                     this message
+     * @param expiration   the endorsement set's expiration
+     * @param recipientsToEndorsements   map of recipients to serialized, uncompressed GroupSendEndorsements
+     */
+    void onSendCallMessageToAdhocGroup(@NonNull byte[] message, @NonNull CallMessageUrgency urgency, Instant expiration,
+        @NonNull Map<UUID, byte[]> recipientsToEndorsements);
 
     /**
      *

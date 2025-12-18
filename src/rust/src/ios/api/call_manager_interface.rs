@@ -20,8 +20,8 @@ use crate::{
     lite::{
         call_links::{CallLinkRootKey, ios::from_optional_u32_to_epoch},
         ffi::ios::rtc_OptionalU32,
-        http,
-        sfu::{self, DemuxId},
+        http, sfu,
+        sfu::DemuxId,
     },
     webrtc::{self, media, peer_connection::AudioLevel, peer_connection_factory as pcf},
 };
@@ -320,6 +320,14 @@ pub struct AppUuidArray {
 #[repr(C)]
 #[derive(Debug)]
 #[allow(non_snake_case)]
+pub struct AppByteSliceArray {
+    pub slices: *const AppByteSlice,
+    pub count: size_t,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+#[allow(non_snake_case)]
 pub struct AppVideoRequest {
     pub demux_id: DemuxId,
     pub width: u16,
@@ -427,6 +435,14 @@ pub struct AppInterface {
         message: AppByteSlice,
         urgency: i32,
         overrideRecipients: AppUuidArray,
+    ),
+    pub sendCallMessageToAdhocGroup: extern "C" fn(
+        object: *mut c_void,
+        message: AppByteSlice,
+        urgency: i32,
+        expiration: u64,
+        recipients: AppUuidArray,
+        endorsements: AppByteSliceArray,
     ),
     pub onCreateConnectionInterface: extern "C" fn(
         interfaceObject: *mut c_void,

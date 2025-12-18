@@ -3,7 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::{collections::HashSet, fmt, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    time::Duration,
+};
 
 use strum::EnumDiscriminants;
 
@@ -110,6 +114,14 @@ pub trait SignalingSender {
         message: Vec<u8>,
         urgency: group_call::SignalingMessageUrgency,
         recipients_override: HashSet<UserId>,
+    ) -> Result<()>;
+
+    fn send_call_message_to_adhoc_group(
+        &self,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
     ) -> Result<()>;
 }
 
@@ -771,6 +783,21 @@ impl Platform for NativePlatform {
             message,
             urgency,
             recipients_override,
+        )
+    }
+
+    fn send_call_message_to_adhoc_group(
+        &self,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    ) -> Result<()> {
+        self.signaling_sender.send_call_message_to_adhoc_group(
+            message,
+            urgency,
+            expiration,
+            recipients_to_endorsements,
         )
     }
 

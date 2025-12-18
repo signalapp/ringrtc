@@ -93,6 +93,7 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     var shouldSendBusyInvoked = false
     var shouldSendCallMessageInvoked = false
     var shouldSendCallMessageToGroupInvoked = false
+    var shouldSendCallMessageToAdhocGroupInvoked = false
     var shouldSendHttpRequestInvoked = false
     var didUpdateRingForGroupInvoked = false
     var onCallConcludedInvoked = false
@@ -149,6 +150,11 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
     var sentCallMessageToGroupMessage: Data?
     var sentCallMessageToGroupUrgency: CallMessageUrgency?
     var sentCallMessageToGroupOverrideRecipients: [UUID]?
+
+    var sentCallMessageToAdhocGroupMessage: Data?
+    var sentCallMessageToAdhocGroupUrgency: CallMessageUrgency?
+    var sentCallMessageToAdhocGroupExpiration: Date?
+    var sentCallMessageToAdhocGroupRecipientsToEndorsements: [UUID: Data]?
 
     var didUpdateRingForGroupGroupId: Data?
     var didUpdateRingForGroupRingId: Int64?
@@ -601,6 +607,18 @@ final class TestDelegate: CallManagerDelegate & HTTPDelegate {
         sentCallMessageToGroupMessage = message
         sentCallMessageToGroupUrgency = urgency
         sentCallMessageToGroupOverrideRecipients = overrideRecipients
+    }
+
+    func callManager(_ callManager: CallManager<OpaqueCallData, TestDelegate>, shouldSendCallMessageToAdhocGroup message: Data, urgency: CallMessageUrgency, expiration: Date, recipientsToEndorsements: [UUID: Data]) {
+        Logger.debug("TestDelegate:shouldSendCallMessageToAdhocGroup")
+        generalInvocationDetected = true
+
+        shouldSendCallMessageToAdhocGroupInvoked = true
+
+        sentCallMessageToAdhocGroupMessage = message
+        sentCallMessageToAdhocGroupUrgency = urgency
+        sentCallMessageToAdhocGroupExpiration = expiration
+        sentCallMessageToAdhocGroupRecipientsToEndorsements = recipientsToEndorsements
     }
 
     private var sendRequestCallbacks: [(UInt32, HTTPRequest) -> Void] = []

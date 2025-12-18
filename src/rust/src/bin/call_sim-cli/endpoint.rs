@@ -518,6 +518,17 @@ impl SignalingSender for CallEndpoint {
         error!("Asked to send call message to group, but is not implemented yet");
         todo!("Implement so that this works with groups of greater size than 2")
     }
+
+    fn send_call_message_to_adhoc_group(
+        &self,
+        _message: Vec<u8>,
+        _urgency: group_call::SignalingMessageUrgency,
+        _expiration: u64,
+        _recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    ) -> Result<()> {
+        error!("Asked to send call message adhoc group, but is not implemented yet");
+        todo!("Implement so that this works with call links")
+    }
 }
 
 impl http::Delegate for CallEndpoint {

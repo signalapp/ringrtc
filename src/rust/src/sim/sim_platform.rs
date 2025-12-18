@@ -450,6 +450,19 @@ impl Platform for SimPlatform {
         Ok(())
     }
 
+    fn send_call_message_to_adhoc_group(
+        &self,
+        message: Vec<u8>,
+        urgency: group_call::SignalingMessageUrgency,
+        _expiration: u64,
+        recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    ) -> Result<()> {
+        for recipient_id in recipients_to_endorsements.into_keys() {
+            let _ = self.send_call_message(recipient_id, message.clone(), urgency);
+        }
+        Ok(())
+    }
+
     fn create_incoming_media(
         &self,
         _connection: &Connection<Self>,

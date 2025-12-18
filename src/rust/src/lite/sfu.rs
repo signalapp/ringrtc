@@ -377,12 +377,12 @@ impl ObfuscatedResolver {
     pub fn new(
         member_resolver: Arc<dyn MemberResolver + Send + Sync>,
         call_link_root_key: Option<CallLinkRootKey>,
-        endorsement_public_root_key: Option<EndorsementPublicKey>,
+        endorsement_public_key: Option<EndorsementPublicKey>,
     ) -> Self {
         Self {
             member_resolver,
             call_link_root_key,
-            endorsement_public_key: endorsement_public_root_key,
+            endorsement_public_key,
         }
     }
 
