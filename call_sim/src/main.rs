@@ -25,9 +25,9 @@ use itertools::{Itertools, iproduct};
 
 use crate::{
     common::{
-        AudioAnalysisMode, AudioConfig, CallConfig, CallProfile::DeterministicLoss, ChartDimension,
-        GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile, RelayServerConfig,
-        SummaryReportColumns, TestCaseConfig, VideoConfig,
+        AudioAnalysisMode, AudioConfig, BurstLength, CallConfig, CallProfile::DeterministicLoss,
+        ChartDimension, GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile,
+        RelayServerConfig, SummaryReportColumns, TestCaseConfig, VideoConfig,
     },
     docker::{build_images, clean_network, clean_up},
     test::{CallTypeConfig, Test},
@@ -130,19 +130,32 @@ async fn run_minimal_example(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-/// This is a test set to test the "normal phrasing" audio over various network profiles. Set
-/// packet time to 60ms to align with our production configuration.
-async fn run_baseline(test: &mut Test) -> Result<()> {
+/// This is a test set to test the "normal phrasing" audio (and video) over various network
+/// profiles. This sets packet time to 60ms to align with our production configuration.
+async fn run_baseline(test: &mut Test, with_video: bool) -> Result<()> {
+    let video = if with_video {
+        VideoConfig {
+            input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+            ..Default::default()
+        }
+    } else {
+        Default::default()
+    };
+
     test.run(
         GroupConfig {
-            group_name: "baseline".to_string(),
+            group_name: if !with_video {
+                "baseline".to_string()
+            } else {
+                "baseline_with_video".to_string()
+            },
             // Show all the different measurements in the summary columns. Hide video.
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: true,
                 show_visqol_mos_audio: true,
                 show_pesq_mos: true,
                 show_plc_mos: true,
-                show_video: false,
+                show_video: with_video,
             },
             ..Default::default()
         },
@@ -157,6 +170,7 @@ async fn run_baseline(test: &mut Test) -> Result<()> {
                     generate_spectrogram: false,
                     ..Default::default()
                 },
+                video: video.clone(),
                 ..Default::default()
             },
             client_b_config: CallConfig {
@@ -170,6 +184,7 @@ async fn run_baseline(test: &mut Test) -> Result<()> {
                     plc_speech_analysis: true,
                     ..Default::default()
                 },
+                video,
                 ..Default::default()
             },
             // Run 3 iterations of each test to get an average to help contain the
@@ -182,6 +197,7 @@ async fn run_baseline(test: &mut Test) -> Result<()> {
             NetworkProfile::Moderate,
             NetworkProfile::International,
             NetworkProfile::SpikyLoss,
+            NetworkProfile::LimitedBandwidth(300),
             NetworkProfile::LimitedBandwidth(100),
             NetworkProfile::LimitedBandwidth(50),
             NetworkProfile::LimitedBandwidth(25),
@@ -197,10 +213,105 @@ async fn run_baseline(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
+/// Test 60ms ptime over a range of loss using various bursty loss profiles.
+async fn run_bursty_loss_test(test: &mut Test, with_video: bool) -> Result<()> {
+    let video = if with_video {
+        VideoConfig {
+            input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+            ..Default::default()
+        }
+    } else {
+        Default::default()
+    };
+
+    test.run(
+        GroupConfig {
+            group_name: if !with_video {
+                "bursty_loss_test".to_string()
+            } else {
+                "bursty_loss_test_with_video".to_string()
+            },
+            // Show all the different measurements in the summary columns. Hide video.
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: true,
+                show_visqol_mos_audio: true,
+                show_pesq_mos: true,
+                show_plc_mos: true,
+                show_video: with_video,
+            },
+            ..Default::default()
+        },
+        vec![TestCaseConfig {
+            test_case_name: "ptime-60".to_string(),
+            client_a_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    initial_packet_size_ms: 60,
+                    // We don't look at analysis from client_a's point of view, so there
+                    // is no need to generate anything for it.
+                    generate_spectrogram: false,
+                    ..Default::default()
+                },
+                video: video.clone(),
+                ..Default::default()
+            },
+            client_b_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    initial_packet_size_ms: 60,
+                    // Calculate all mos values for these audio tests.
+                    visqol_speech_analysis: true,
+                    visqol_audio_analysis: true,
+                    pesq_speech_analysis: true,
+                    plc_speech_analysis: true,
+                    ..Default::default()
+                },
+                video,
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        vec![
+            NetworkProfile::Default,
+            NetworkProfile::BurstyLoss(10, BurstLength::Short),
+            NetworkProfile::BurstyLoss(10, BurstLength::Medium),
+            NetworkProfile::BurstyLoss(10, BurstLength::Long),
+            NetworkProfile::BurstyLoss(10, BurstLength::VeryLong),
+            NetworkProfile::BurstyLoss(20, BurstLength::Short),
+            NetworkProfile::BurstyLoss(20, BurstLength::Medium),
+            NetworkProfile::BurstyLoss(20, BurstLength::Long),
+            NetworkProfile::BurstyLoss(20, BurstLength::VeryLong),
+            NetworkProfile::BurstyLoss(30, BurstLength::Short),
+            NetworkProfile::BurstyLoss(30, BurstLength::Medium),
+            NetworkProfile::BurstyLoss(30, BurstLength::Long),
+            NetworkProfile::BurstyLoss(30, BurstLength::VeryLong),
+            NetworkProfile::BurstyLoss(40, BurstLength::Short),
+            NetworkProfile::BurstyLoss(40, BurstLength::Medium),
+            NetworkProfile::BurstyLoss(40, BurstLength::Long),
+            NetworkProfile::BurstyLoss(40, BurstLength::VeryLong),
+            NetworkProfile::BurstyLoss(50, BurstLength::Short),
+            NetworkProfile::BurstyLoss(50, BurstLength::Medium),
+            NetworkProfile::BurstyLoss(50, BurstLength::Long),
+            NetworkProfile::BurstyLoss(50, BurstLength::VeryLong),
+        ],
+    )
+    .await?;
+
+    Ok(())
+}
+
 /// Test 20ms and 60ms ptime over a range of deterministic loss, with and without dtx.
 /// Note that deterministic loss is better than the SimpleLoss network profile, but
 /// it is still not completely reliable.
-async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
+async fn run_deterministic_loss_test(test: &mut Test, with_video: bool) -> Result<()> {
+    let video = if with_video {
+        VideoConfig {
+            input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+            ..Default::default()
+        }
+    } else {
+        Default::default()
+    };
     let ptime_values = [20, 60];
     let dtx_values = [false, true];
     let loss_values = (0..=50).step_by(10);
@@ -218,6 +329,7 @@ async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
                         generate_spectrogram: false,
                         ..Default::default()
                     },
+                    video: video.clone(),
                     profile: DeterministicLoss(loss),
                     ..Default::default()
                 },
@@ -232,6 +344,7 @@ async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
                         plc_speech_analysis: true,
                         ..Default::default()
                     },
+                    video: video.clone(),
                     profile: DeterministicLoss(loss),
                     ..Default::default()
                 },
@@ -243,13 +356,17 @@ async fn run_deterministic_loss_test(test: &mut Test) -> Result<()> {
 
     test.run(
         GroupConfig {
-            group_name: "deterministic_loss_test".to_string(),
+            group_name: if !with_video {
+                "deterministic_loss_test".to_string()
+            } else {
+                "deterministic_loss_test_with_video".to_string()
+            },
             summary_report_columns: SummaryReportColumns {
                 show_visqol_mos_speech: true,
                 show_visqol_mos_audio: true,
                 show_pesq_mos: true,
                 show_plc_mos: true,
-                show_video: false,
+                show_video: with_video,
             },
             ..Default::default()
         },
@@ -864,8 +981,12 @@ async fn main() -> Result<()> {
         )?;
         match test_set_name.as_str() {
             "minimal_example" => run_minimal_example(test).await?,
-            "baseline" => run_baseline(test).await?,
-            "deterministic_loss_test" => run_deterministic_loss_test(test).await?,
+            "baseline" => run_baseline(test, false).await?,
+            "baseline_with_video" => run_baseline(test, true).await?,
+            "bursty_loss_test" => run_bursty_loss_test(test, false).await?,
+            "bursty_loss_test_with_video" => run_bursty_loss_test(test, true).await?,
+            "deterministic_loss_test" => run_deterministic_loss_test(test, false).await?,
+            "deterministic_loss_test_with_video" => run_deterministic_loss_test(test, true).await?,
             "relay_tests" => run_relay_tests(test).await?,
             "turn_long_tests" => run_turn_long_tests(test).await?,
             "video_send_over_bandwidth" => run_video_send_over_bandwidth(test).await?,

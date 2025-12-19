@@ -285,7 +285,7 @@ impl AnalysisReport {
             return Ok(0.0);
         }
         let json: serde_json::Value = serde_json::from_slice(&contents)?;
-        json["aggregate"]["VMAF_score"]
+        json["pooled_metrics"]["vmaf"]["mean"]
             .as_f64()
             .map(|x| x as f32)
             .ok_or_else(|| anyhow!("invalid vmaf json"))

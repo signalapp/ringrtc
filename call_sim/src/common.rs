@@ -680,44 +680,41 @@ pub enum Loss {
     State(MarkovLossModel),
 }
 
-/// This struct can be used to form Simple Gilbert loss models based on "Mean Loss Burst Size"
-/// from here: https://ntnuopen.ntnu.no/ntnu-xmlui/bitstream/handle/11250/2409900/15147_FULLTEXT.pdf
+/// Mean Loss Burst Size (MLBS) describes the correlation of packet loss by explaining
+/// how many consecutive packets are lost on average each time one is lost.
+/// Based on "Quality of Experience of WebRTC-based Video Communication" from:
+/// https://ntnuopen.ntnu.no/ntnu-xmlui/bitstream/handle/11250/2409900/15147_FULLTEXT.pdf
 #[allow(dead_code)]
-struct MlbsData {
-    loss: u8,
-    mlbs: f32,
-    r: u8,
-    p: u8,
+#[derive(Clone, Copy, Debug)]
+pub enum BurstLength {
+    /// Short bursts: ~1.5 consecutive packets lost per loss event
+    Short,
+    /// Medium bursts: ~2 consecutive packets lost per loss event
+    Medium,
+    /// Long bursts: ~3 consecutive packets lost per loss event
+    Long,
+    /// Very long bursts: ~4 consecutive packets lost per loss event
+    VeryLong,
 }
 
-#[allow(dead_code)]
-#[rustfmt::skip]
-const MLBS_DATA: [MlbsData; 24] = [
-    MlbsData { loss: 5, mlbs: 1.5, r: 65, p: 3 },
-    MlbsData { loss: 5, mlbs: 2.0, r: 50, p: 3 },
-    MlbsData { loss: 5, mlbs: 3.0, r: 35, p: 2 },
-    MlbsData { loss: 5, mlbs: 4.0, r: 25, p: 1 },
-    MlbsData { loss: 10, mlbs: 1.5, r: 65, p: 7 },
-    MlbsData { loss: 10, mlbs: 2.0, r: 50, p: 6 },
-    MlbsData { loss: 10, mlbs: 3.0, r: 35, p: 4 },
-    MlbsData { loss: 10, mlbs: 4.0, r: 25, p: 3 },
-    MlbsData { loss: 20, mlbs: 1.5, r: 65, p: 16 },
-    MlbsData { loss: 20, mlbs: 2.0, r: 50, p: 13 },
-    MlbsData { loss: 20, mlbs: 3.0, r: 35, p: 9 },
-    MlbsData { loss: 20, mlbs: 4.0, r: 25, p: 6 },
-    MlbsData { loss: 30, mlbs: 1.5, r: 65, p: 28 },
-    MlbsData { loss: 30, mlbs: 2.0, r: 50, p: 21 },
-    MlbsData { loss: 30, mlbs: 3.0, r: 35, p: 15 },
-    MlbsData { loss: 30, mlbs: 4.0, r: 25, p: 11 },
-    MlbsData { loss: 40, mlbs: 1.5, r: 65, p: 43 },
-    MlbsData { loss: 40, mlbs: 2.0, r: 50, p: 33 },
-    MlbsData { loss: 40, mlbs: 3.0, r: 35, p: 23 },
-    MlbsData { loss: 40, mlbs: 4.0, r: 25, p: 17 },
-    MlbsData { loss: 50, mlbs: 1.5, r: 65, p: 65 },
-    MlbsData { loss: 50, mlbs: 2.0, r: 50, p: 50 },
-    MlbsData { loss: 50, mlbs: 3.0, r: 35, p: 35 },
-    MlbsData { loss: 50, mlbs: 4.0, r: 25, p: 25 },
-];
+impl BurstLength {
+    /// Computes SimpleGilbert model parameters (p, r) for the given loss percentage.
+    /// Returns (p, r) where:
+    /// - r: Bad to Good transition probability (based on MLBS)
+    /// - p: Good to Bad transition probability (based on loss percentage and r)
+    pub fn compute_simple_gilbert_params(&self, loss_percent: u8) -> (u8, u8) {
+        // Use r values from the paper (with slight adjustments for stability).
+        let r = match self {
+            BurstLength::Short => 65,
+            BurstLength::Medium => 50,
+            BurstLength::Long => 35,
+            BurstLength::VeryLong => 30, // 25
+        };
+        let loss = loss_percent.min(99); // Make sure loss is < 100.
+        let p = (((loss as f32) * (r as f32)) / (100.0 - (loss as f32))).round() as u8;
+        (p, r)
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -734,8 +731,8 @@ pub enum NetworkProfile {
     International,
     /// Good network for 10 seconds, bad loss (30%) for 10 seconds, good for 10 seconds.
     SpikyLoss,
-    /// Bursty loss model using pre-calculated mean loss burst size (may fail test if no match).
-    //BurstyLoss { loss: u8, mlbs: u8 },
+    /// Bursty loss using SimpleGilbert model with specified loss percentage and burst length.
+    BurstyLoss(u8, BurstLength),
     /// Sets a simple uniform loss percentage.
     SimpleLoss(u8),
     /// Sets a bandwidth limitation (kbps).
@@ -751,6 +748,9 @@ impl NetworkProfile {
             NetworkProfile::Moderate => "moderate".to_string(),
             NetworkProfile::International => "international".to_string(),
             NetworkProfile::SpikyLoss => "spiky_loss".to_string(),
+            NetworkProfile::BurstyLoss(loss, burst) => {
+                format!("bursty_loss_{}_{:?}", loss, burst)
+            }
             NetworkProfile::SimpleLoss(loss) => {
                 format!("simple_loss_{}", loss)
             }
@@ -800,7 +800,7 @@ impl NetworkProfile {
                         reorder_correlation: 50,
                         reorder_gap: 0,
                         rate: 300,
-                        limit: 250,
+                        limit: 30,
                         slot: 0,
                     },
                 }]
@@ -839,6 +839,17 @@ impl NetworkProfile {
                     },
                 ]
             }
+            NetworkProfile::BurstyLoss(loss, burst) => {
+                let (p, r) = burst.compute_simple_gilbert_params(*loss);
+
+                vec![NetworkConfigWithOffset {
+                    offset: Duration::from_secs(2),
+                    network_config: NetworkConfig {
+                        loss: Some(Loss::GeModel(GeLossModel::SimpleGilbert { p, r })),
+                        ..Default::default()
+                    },
+                }]
+            }
             NetworkProfile::SimpleLoss(loss) => {
                 vec![NetworkConfigWithOffset {
                     offset: Duration::from_secs(2),
@@ -853,7 +864,7 @@ impl NetworkProfile {
                     offset: Duration::from_secs(2),
                     network_config: NetworkConfig {
                         rate: *rate,
-                        limit: 16,
+                        limit: ((*rate * 100) / 12000).max(4), // ~100ms buffering (typical consumer network)
                         ..Default::default()
                     },
                 }]

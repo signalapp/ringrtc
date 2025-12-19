@@ -458,7 +458,7 @@ pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -
         .await?;
 
     // Add a class to the qdisc. This is used for traffic that isn't emulated. We will leave
-    // the bitrate wide-open for that (10Gbps).
+    // the bitrate wide-open for that (1Gbps).
     //
     // Use class id `1a1a:1` for traffic that isn't emulated.
     let _ = Command::new("docker")
@@ -476,7 +476,9 @@ pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -
             "1a1a:1",
             "htb",
             "rate",
-            "10000000.0kbit",
+            "1000000.0kbit",
+            "quantum",
+            "60000",
         ])
         .spawn()?
         .wait()
@@ -484,9 +486,7 @@ pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -
 
     // We will use the htb to specify the rate that we want to emulate. If we haven't set
     // any value (i.e. it is zero), then we will still set it, but to be wide-open.
-    // Note: We also could specify `burst` and `cburst` bytes, but let's see if the default
-    // values are good enough for now.
-    let mut rate = 10_000_000u64;
+    let mut rate = 1_000_000u64;
     if network_config.rate > 0 {
         rate = network_config.rate as u64;
     }
@@ -512,6 +512,12 @@ pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -
             &format!("{}.0kbit", rate),
             "ceil",
             &format!("{}.0kbit", rate),
+            "quantum",
+            "1500",
+            "burst",
+            "3000",
+            "cburst",
+            "3000",
         ])
         .spawn()?
         .wait()
@@ -560,16 +566,6 @@ pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -
         .spawn()?
         .wait()
         .await?;
-
-    // ARP (This does not work "Error: Filter with specified priority/protocol not found.")
-    // let _ = Command::new("docker")
-    //     .args(&[
-    //         "exec", name, "tc", "filter", "add", "dev", "eth0", "protocol", "arp", "parent",
-    //         "1a1a:", "prio", "1", "u32", "match", "u32", "0", "0", "flowid", "1a1a:1",
-    //     ])
-    //     .spawn()?
-    //     .wait()
-    //     .await?;
 
     // ICMP
     let _ = Command::new("docker")
@@ -649,7 +645,7 @@ pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -
 
 /// Change the existing emulation to avoid reloading the qdisc.
 pub async fn emulate_network_change(name: &str, network_config: &NetworkConfig) -> Result<()> {
-    let mut rate = 10_000_000u64;
+    let mut rate = 1_000_000u64;
     if network_config.rate > 0 {
         rate = network_config.rate as u64;
     }
@@ -672,6 +668,10 @@ pub async fn emulate_network_change(name: &str, network_config: &NetworkConfig) 
             &format!("{}.0kbit", rate),
             "ceil",
             &format!("{}.0kbit", rate),
+            "burst",
+            "3000",
+            "cburst",
+            "3000",
         ])
         .spawn()?
         .wait()
@@ -1505,43 +1505,34 @@ pub async fn analyze_video(
 ) -> Result<()> {
     println!("\nAnalyzing video for `{}`:", degraded_file);
 
-    let output = Command::new("docker")
+    let _ = Command::new("docker")
         .args([
             "run",
-            "--name",
-            "vmaf",
+            "--rm",
             "-v",
             &format!("{}:/degraded", degraded_path),
             "-v",
             &format!("{}:/ref", ref_path),
             "vmaf",
-            "yuv420p",
-            &dimensions.0.to_string(),
-            &dimensions.1.to_string(),
+            "--reference",
             &format!("/ref/{}", ref_file),
+            "--distorted",
             &format!("/degraded/{}", degraded_file),
-            "--phone-model",
-            "--out-fmt",
-            "json",
+            "--width",
+            &dimensions.0.to_string(),
+            "--height",
+            &dimensions.1.to_string(),
+            "--pixel_format",
+            "420",
+            "--bitdepth",
+            "8",
+            "--json",
+            "--output",
+            &format!("/degraded/{}.json", degraded_file),
         ])
-        .output()
-        .await?;
-
-    // Remove the container.
-    let _ = Command::new("docker")
-        .args(["rm", "vmaf"])
         .spawn()?
         .wait()
         .await?;
-
-    // Save the output.
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(format!("{}/{}.json", degraded_path, degraded_file))
-        .await?;
-    file.write_all(&output.stdout).await?;
 
     Ok(())
 }
