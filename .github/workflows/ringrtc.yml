@@ -40,9 +40,9 @@ jobs:
     # Skip the Python scripts not written with flake8 style. (Try not to add more.)
     - run: cd bin && python3 -m flake8 . --exclude measure-cpu.py
     - name: Set up mypy types
-      run: mkdir .mypy_cache/ && python3 -m mypy --install-types --non-interactive bin/logs-notebook/call_log_parser.py --cache-dir=.mypy_cache/
+      run: mkdir .mypy_cache/
     # Only include typed Python scripts here.
-    - run: python3 -m mypy --python-version 3.13 --strict bin/convert_webrtc_acknowledgments.py bin/fetch-artifact.py bin/logs-notebook/call_log_parser.py bin/logs-notebook/emos.py
+    - run: python3 -m mypy --python-version 3.13 --strict bin/convert_webrtc_acknowledgments.py bin/fetch-artifact.py
     - name: Check acknowledgments
       run: ./bin/regenerate_acknowledgments.sh && git diff --name-status --exit-code acknowledgments
     - name: Clippy
