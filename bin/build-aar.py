@@ -122,10 +122,6 @@ def ParseArgs():
                         help='Install to local maven repo')
     parser.add_argument('--install-dir',
                         help='Install to local directory')
-    parser.add_argument('--upload-sonatype-user',
-                        help='Upload to remote sonatype repo as user')
-    parser.add_argument('--upload-sonatype-password',
-                        help='Upload to remote sonatype repo using password')
     parser.add_argument('--signing-keyid',
                         help='''GPG keyId for signing key (8 character short form).
                                 See https://docs.gradle.org/current/userguide/signing_plugin.html''')
@@ -199,7 +195,7 @@ def GetAarAssetDir(build_dir):
 
 def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build,
               extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
-              jobs, build_projects, publish_to_maven):
+              jobs, build_projects, publish_to_gcs):
 
     logging.info('Building: {} ...'.format(arch))
 
@@ -255,7 +251,7 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             for line in f.readlines():
                 key, value = line.split("=")
                 kvs[key.strip()] = value.strip()
-            if kvs['Pkg.Revision'] != NDK_REVISION and publish_to_maven:
+            if kvs['Pkg.Revision'] != NDK_REVISION and publish_to_gcs:
                 raise Exception('Android NDK must be ' + NDK_REVISION)
 
         ndk_host_os = platform.system().lower()
@@ -392,13 +388,13 @@ def CreateLibs(dry_run, project_dir, webrtc_src_dir, build_dir, archs, output,
                debug_build, unstripped,
                extra_gn_args, extra_gn_flags, extra_ninja_flags,
                extra_cargo_flags, jobs, build_projects, webrtc_version,
-               publish_to_maven):
+               publish_to_gcs):
 
     for arch in archs:
         BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch,
                   debug_build,
                   extra_gn_args, extra_gn_flags, extra_ninja_flags, extra_cargo_flags,
-                  jobs, build_projects, publish_to_maven)
+                  jobs, build_projects, publish_to_gcs)
 
     if Project.WEBRTC in build_projects:
         CollectWebrtcLicenses(dry_run, project_dir, webrtc_src_dir, build_dir, debug_build, archs)
@@ -469,7 +465,7 @@ def CollectAarAssets(dry_run, project_dir, build_dir):
 
 
 def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
-                 gradle_dir, sonatype_user, sonatype_password, publish_to_maven,
+                 gradle_dir, publish_to_gcs,
                  signing_keyid, signing_password, signing_secret_keyring,
                  build_projects,
                  install_local, install_dir, project_dir, webrtc_src_dir, build_dir,
@@ -495,14 +491,6 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
         '-PbuildDir={}'.format(gradle_build_dir),
         '-PassetDir={}'.format(GetAarAssetDir(build_dir)),
     ]
-
-    if sonatype_user is not None:
-        gradle_exec.append(
-            '-PsignalSonatypeUsername={}'.format(sonatype_user))
-
-    if sonatype_password is not None:
-        gradle_exec.append(
-            '-PsignalSonatypePassword={}'.format(sonatype_password))
 
     if signing_keyid is not None:
         gradle_exec.append(
@@ -537,7 +525,7 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
                    archs, output, build_debug, unstripped,
                    extra_gn_args, extra_gn_flags, extra_ninja_flags,
                    extra_cargo_flags, jobs, build_projects, webrtc_version,
-                   publish_to_maven)
+                   publish_to_gcs)
 
     if Project.AAR not in build_projects:
         return
@@ -554,8 +542,8 @@ def PerformBuild(dry_run, extra_gradle_args, version, webrtc_version,
 
         gradle_exec.append('publishToMavenLocal')
 
-    if publish_to_maven:
-        gradle_exec.extend(['publishToSonatype', 'closeAndReleaseSonatypeStagingRepository'])
+    if publish_to_gcs:
+        gradle_exec.append('publish')
 
     gradle_exec.extend(extra_gradle_args)
 
@@ -639,27 +627,19 @@ def main():
             clean_dir(os.path.join(build_dir, dir), args.dry_run)
         return 0
 
-    upload_sonatype_user = args.upload_sonatype_user or os.environ.get('ORG_GRADLE_PROJECT_signalSonatypeUsername')
-    upload_sonatype_password = args.upload_sonatype_password or os.environ.get('ORG_GRADLE_PROJECT_signalSonatypePassword')
-    if upload_sonatype_user is not None or upload_sonatype_password is not None:
+    # The CLOUDSDK_AUTH_ACCESS_TOKEN environment variable needs to be set if publishing.
+    publish_to_gcs = os.environ.get('CLOUDSDK_AUTH_ACCESS_TOKEN') is not None
+    if publish_to_gcs:
         if args.debug_build is True:
             print('ERROR: Only the release build can be uploaded')
             return 1
 
-        if upload_sonatype_user is None or upload_sonatype_password is None:
-            print("ERROR: Can't set only one of sonatype username and password.")
-            return 1
-
         if not has_valid_signing_args(args):
-            print('ERROR: If uploading to Maven, then all of --signing-keyid, --signing-password, and --signing-secret-keyring must be set, or the following environment variables must be set: ORG_GRADLE_PROJECT_signingKeyId, ORG_GRADLE_PROJECT_signingPassword, and ORG_GRADLE_PROJECT_signingKey.')
+            print('ERROR: If uploading to GCS, then all of --signing-keyid, --signing-password, and --signing-secret-keyring must be set, or the following environment variables must be set: ORG_GRADLE_PROJECT_signingKeyId, ORG_GRADLE_PROJECT_signingPassword, and ORG_GRADLE_PROJECT_signingKey.')
             return 1
-
-    publish_to_maven = upload_sonatype_user is not None or \
-        upload_sonatype_password is not None
 
     PerformBuild(args.dry_run, args.extra_gradle_args, args.publish_version, args.webrtc_version,
-                 args.gradle_dir,
-                 args.upload_sonatype_user, args.upload_sonatype_password, publish_to_maven,
+                 args.gradle_dir, publish_to_gcs,
                  args.signing_keyid, args.signing_password, args.signing_secret_keyring,
                  build_projects,
                  args.install_local, args.install_dir,

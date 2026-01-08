@@ -117,10 +117,27 @@ afterEvaluate {
                 }
             }
         }
+
+        repositories {
+            maven {
+                name = "SignalBuildArtifacts"
+                // We can't use Gradle's built-in GCS support with the way we authenticate
+                // GitHub Actions. Fortunately, GCS's REST APIs are basically just normal HTTP
+                // GET/PUT with an auth token, which is compatible with what Gradle will do.
+                url = uri("https://storage.googleapis.com/build-artifacts.signal.org/libraries/maven")
+                credentials(HttpHeaderCredentials) {
+                    name = "Authorization"
+                    value = "Bearer ${System.getenv("CLOUDSDK_AUTH_ACCESS_TOKEN") ?: ""}"
+                }
+                authentication {
+                    header(HttpHeaderAuthentication)
+                }
+            }
+        }
     }
 
     signing {
-        required { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publishToSonatype") }
+        required { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publish") }
 
         def signingKeyId = findProperty("signingKeyId")
         def signingKey = findProperty("signingKey")

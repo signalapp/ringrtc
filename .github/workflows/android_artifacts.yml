@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "When true, don't upload to Sonatype"
+        description: "When true, don't publish"
         default: false
         required: false
         type: boolean
@@ -17,7 +17,7 @@ on:
   workflow_call:
     inputs:
       dry_run:
-        description: "When true, don't upload to Sonatype"
+        description: "When true, don't publish"
         default: true
         required: true
         type: boolean
@@ -34,6 +34,11 @@ env:
 jobs:
   build_android:
     name: Build Android
+
+    permissions:
+      contents: 'read'
+      # Needed for google-github-actions/auth.
+      id-token: 'write'
 
     runs-on: ${{ inputs.runner }}
 
@@ -59,11 +64,18 @@ jobs:
     - run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" ./bin/build-aar --ringrtc-only --release
       if: ${{ inputs.dry_run }}
 
+    - id: gcp-auth
+      uses: google-github-actions/auth@v2
+      if: ${{ !inputs.dry_run }}
+      with:
+        workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
+        service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
+        token_format: 'access_token'
+
     - run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" ./bin/build-aar --ringrtc-only --release
       if: ${{ !inputs.dry_run }}
       env:
-        ORG_GRADLE_PROJECT_signalSonatypeUsername: ${{ secrets.SONATYPE_USER }}
-        ORG_GRADLE_PROJECT_signalSonatypePassword: ${{ secrets.SONATYPE_PASSWORD }}
+        CLOUDSDK_AUTH_ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
         # The last 8 characters of the key ID
         ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.SIGNING_KEYID }}
         ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
