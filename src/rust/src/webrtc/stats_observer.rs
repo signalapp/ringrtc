@@ -513,6 +513,7 @@ pub struct VideoReceiverStatsSnapshot {
     pub width: u32,
     pub height: u32,
     pub jitter: f64,
+    pub freeze_count: u32,
 }
 
 impl Display for VideoReceiverStatsSnapshot {
@@ -528,6 +529,7 @@ impl Display for VideoReceiverStatsSnapshot {
             width,
             height,
             jitter,
+            freeze_count,
         } = self;
         write!(
             f,
@@ -540,7 +542,8 @@ impl Display for VideoReceiverStatsSnapshot {
             {key_frames_decoded},\
             {decode_time_per_frame:.1}ms,\
             {width}x{height},\
-            {jitter:.0}ms",
+            {jitter:.0}ms,\
+            {freeze_count}",
             Self::LOG_MARKER,
         )
     }
@@ -558,8 +561,9 @@ impl VideoReceiverStatsSnapshot {
         framerate,\
         key_frames_decoded,\
         decode_time_per_frame,\
-        resolution\
-        jitter";
+        resolution,\
+        jitter,\
+        freeze_count";
 
     fn derive(
         curr_stats: &VideoReceiverStatistics,
@@ -573,6 +577,7 @@ impl VideoReceiverStatsSnapshot {
         let bytes_received_delta = delta!(curr_stats, prev_stats, bytes_received);
         let total_decode_time_delta = delta!(curr_stats, prev_stats, total_decode_time);
         let jitter = delta!(curr_stats, prev_stats, jitter);
+        let freeze_count = delta!(curr_stats, prev_stats, freeze_count);
 
         let packets_per_second =
             compute_packets_per_second(packets_received_delta, seconds_elapsed);
@@ -597,6 +602,7 @@ impl VideoReceiverStatsSnapshot {
             width: curr_stats.frame_width,
             height: curr_stats.frame_height,
             jitter,
+            freeze_count,
         }
     }
 }

@@ -22,6 +22,8 @@ message StreamSummary {
   optional DistributionSummary bitrate         = 1;
   optional DistributionSummary packet_loss_pct = 2;
   optional DistributionSummary jitter          = 3;
+  // Only present for received video streams
+  optional DistributionSummary freeze_count    = 4;
 }
 
 message StreamSummaries {

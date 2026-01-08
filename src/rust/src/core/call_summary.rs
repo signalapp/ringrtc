@@ -214,6 +214,7 @@ struct StreamSummary {
     bitrate: DistributionSummary<f32>,
     packet_loss: DistributionSummary<f32>,
     jitter: DistributionSummary<f32>,
+    freeze_count: DistributionSummary<f32>,
 }
 
 /// `StreamSummaries` is converted into `protobuf::call_summary::StreamSummaries`
@@ -529,6 +530,7 @@ impl From<&StreamSummary> for protobuf::call_summary::StreamSummary {
             bitrate: summary.bitrate.to_proto(),
             packet_loss_pct: summary.packet_loss.to_proto(),
             jitter: summary.jitter.to_proto(),
+            freeze_count: summary.freeze_count.to_proto(),
         }
     }
 }
@@ -763,6 +765,7 @@ impl CallInfo {
                         summary.bitrate.push(snapshot.bitrate);
                         summary.packet_loss.push(snapshot.packets_lost_pct);
                         summary.jitter.push(snapshot.jitter as f32);
+                        summary.freeze_count.push(snapshot.freeze_count as f32);
                     });
                 self.stats_sets
                     .push_video_recv_stream_stats(snapshot.into());
@@ -1368,6 +1371,7 @@ mod test {
                             max_val: Some(20.0),
                             sample_count: Some(50000),
                         }),
+                        freeze_count: None,
                     },
                 )
             })
