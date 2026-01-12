@@ -157,6 +157,12 @@ then
     if [ "$(uname)" = "Linux" ] && [ "${TARGET_ARCH}" = "arm64" ]
     then
       WEBRTC_ARGS="${WEBRTC_ARGS} libyuv_use_sme=false"
+
+      # Ensure that experimental compact relocation is disabled until we can use lld.
+      # https://issues.webrtc.org/issues/407797634
+      # https://chromium-review.googlesource.com/c/chromium/src/+/5938657
+      # Comment out the line that enables experimental crel.
+      sed -i '/^[^#].*--allow-experimental-crel/ s/^/#/' src/webrtc/src/build/config/compiler/BUILD.gn
     fi
 
     (
