@@ -400,9 +400,9 @@ impl Default for AudioEncoderConfig {
             min_packet_size_ms: 60,
             max_packet_size_ms: 60,
 
-            initial_bitrate_bps: 32000,
-            min_bitrate_bps: 32000,
-            max_bitrate_bps: 32000,
+            initial_bitrate_bps: 48000,
+            min_bitrate_bps: 48000,
+            max_bitrate_bps: 48000,
 
             bandwidth: AudioBandwidth::Auto,
             complexity: 9,

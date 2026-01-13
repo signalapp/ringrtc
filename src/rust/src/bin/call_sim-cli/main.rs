@@ -81,7 +81,7 @@ struct Args {
     allowed_bitrate_kbps: u16,
 
     /// The initial bitrate for encoding audio.
-    #[arg(long, default_value = "32000", value_parser = clap::value_parser!(i32).range(500..))]
+    #[arg(long, default_value = "48000", value_parser = clap::value_parser!(i32).range(500..))]
     initial_bitrate_bps: i32,
 
     /// The minimum bitrate for encoding audio.
@@ -89,7 +89,7 @@ struct Args {
     min_bitrate_bps: i32,
 
     /// The maximum bitrate for encoding audio.
-    #[arg(long, default_value = "32000", value_parser = clap::value_parser!(i32).range(500..))]
+    #[arg(long, default_value = "48000", value_parser = clap::value_parser!(i32).range(500..))]
     max_bitrate_bps: i32,
 
     /// The encoding bandwidth for audio.
