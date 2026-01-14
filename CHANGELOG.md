@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.62.0
+
+- Add support for send_call_message_to_adhoc_group
+
+- Update to webrtc 7444c
+  - Skip send for opus DTX refresh packets
+  - Remove unneeded null-DCHECK
+
+- Android: Publish to GCS instead of Maven Central
+
+- Add freeze_count to ringrtc_stats and call summary blob
+
+- Remove debug logs parser
+
+- Call Sim: General improvements and fixes
+
+- Update dependencies
+
 ## v2.61.0
 
 - Call Summary
