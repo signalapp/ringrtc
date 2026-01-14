@@ -546,10 +546,10 @@ mod tests {
 
     use rand::{
         Rng, SeedableRng,
-        distributions::{DistIter, Uniform},
+        distr::{Iter, Uniform},
+        rng,
         rngs::StdRng,
         seq::SliceRandom,
-        thread_rng,
     };
 
     use super::*;
@@ -865,12 +865,12 @@ mod tests {
         // 2-10 are delayed such that they arrive at or before packet 1 arrives.
         // Therefore, every 10 ticks, both Alice and Bob should produce a set of 10
         // packets in sequence on receive
-        let rng = Rc::new(RefCell::new(rand::thread_rng()));
+        let rng = Rc::new(RefCell::new(rand::rng()));
         let event = |ts| {
             let delay = if ts % 10 == 0 {
                 10
             } else {
-                rng.borrow_mut().gen_range(0..(10 - (ts % 10)))
+                rng.borrow_mut().random_range(0..(10 - (ts % 10)))
             };
             (ts, ts + delay)
         };
@@ -904,7 +904,7 @@ mod tests {
 
     #[test]
     fn test_merging() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut alice: MrpStream<ExtendablePacket, ExtendablePacket> =
             MrpStream::with_capacity_limit(16);
 
@@ -1550,17 +1550,17 @@ mod tests {
             return vec![];
         }
 
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let mut highest = min_seqnum;
         let mut intervals = Vec::new();
         while highest < max_seqnum {
             let start = loop {
-                let v = rng.gen_range(highest..=max_seqnum);
+                let v = rng.random_range(highest..=max_seqnum);
                 if v != max_seqnum {
                     break v;
                 }
             };
-            let end = rng.gen_range((start + 1)..=max_seqnum);
+            let end = rng.random_range((start + 1)..=max_seqnum);
             intervals.push((start, end));
             highest = end + 1;
         }
@@ -1569,7 +1569,7 @@ mod tests {
 
     #[derive(Debug)]
     struct DelayReceiver<T: Debug + PartialEq> {
-        delay_iter: DistIter<Uniform<u64>, StdRng, u64>,
+        delay_iter: Iter<Uniform<u64>, StdRng, u64>,
         buffer: BinaryHeap<Delayed<T>>,
         recv_channel: Receiver<T>,
     }
@@ -1577,8 +1577,8 @@ mod tests {
     impl<T: Debug + PartialEq> DelayReceiver<T> {
         fn new(recv_channel: Receiver<T>, low: u64, high: u64) -> Self {
             // unfortunately no poisson distribution
-            let rng: StdRng = SeedableRng::from_entropy();
-            let delay_iter = rng.sample_iter(Uniform::new(low, high));
+            let rng: StdRng = SeedableRng::from_os_rng();
+            let delay_iter = rng.sample_iter(Uniform::new(low, high).unwrap());
             DelayReceiver {
                 delay_iter,
                 buffer: BinaryHeap::with_capacity(1024),

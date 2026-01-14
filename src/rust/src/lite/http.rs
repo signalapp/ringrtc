@@ -400,7 +400,7 @@ pub mod ios {
 
 #[cfg(feature = "sim_http")]
 pub mod sim {
-    use std::{io::Read, sync::Arc};
+    use std::sync::Arc;
 
     use crate::{
         common::actor::{Actor, Stopper},
@@ -433,112 +433,59 @@ pub mod sim {
             } = request;
 
             self.actor.send(move |_| {
-                let mut tls_config = rustls::client::ClientConfig::builder()
-                    .with_root_certificates(rustls::RootCertStore::empty())
-                    .with_no_client_auth();
-                tls_config
-                    .dangerous()
-                    .set_certificate_verifier(Arc::new(ServerCertVerifier::new(
+                let tls_config = ureq::tls::TlsConfig::builder()
+                    // mimic rustls::RootCertStore::empty()
+                    .root_certs(ureq::tls::RootCerts::Specific(Arc::new(vec![])))
+                    .disable_verification(true)
+                    // mimic rustls with_no_client_auth to allow anonymous clients
+                    .client_cert(None)
+                    .unversioned_rustls_crypto_provider(Arc::new(
                         rustls::crypto::ring::default_provider(),
-                    )));
-                let agent = ureq::builder().tls_config(Arc::new(tls_config)).build();
+                    ))
+                    .build();
 
+                let config = ureq::Agent::config_builder()
+                    .tls_config(tls_config)
+                    .http_status_as_error(false)
+                    .build();
+                let agent = ureq::Agent::new_with_config(config);
+
+                // we use force_send_body to coerce all arms into matching types
                 let mut request = match method {
-                    http::Method::Get => agent.get(&url),
+                    http::Method::Get => agent.get(&url).force_send_body(),
+                    http::Method::Delete => agent.delete(&url).force_send_body(),
                     http::Method::Put => agent.put(&url),
-                    http::Method::Delete => agent.delete(&url),
                     http::Method::Post => agent.post(&url),
                 };
+
                 for (key, value) in headers.iter() {
-                    request = request.set(key, value);
+                    request = request.header(key, value);
                 }
                 let request_result = match body {
-                    Some(body) => request.send_bytes(&body),
-                    None => request.call(),
+                    Some(body) => request.send(&body),
+                    None => request.send_empty(),
                 };
                 match request_result {
                     Ok(response) => {
-                        let status_code = response.status();
-                        let mut body = Vec::new();
-                        if response.into_reader().read_to_end(&mut body).is_ok() {
-                            response_callback(Some(http::Response {
-                                status: status_code.into(),
-                                body,
-                            }));
+                        let status = response.status().as_u16().into();
+                        if let Ok(body) = response.into_body().read_to_vec() {
+                            response_callback(Some(http::Response { status, body }));
                         } else {
                             response_callback(None);
                         }
                     }
-                    Err(ureq::Error::Status(status_code, response)) => {
-                        let mut body = Vec::new();
-                        if response.into_reader().read_to_end(&mut body).is_ok() {
-                            response_callback(Some(http::Response {
-                                status: status_code.into(),
-                                body,
-                            }));
-                        } else {
-                            response_callback(None);
-                        }
+                    // should not happen because we set http_status_as_error to false
+                    Err(ureq::Error::StatusCode(status_code)) => {
+                        response_callback(Some(http::Response {
+                            status: status_code.into(),
+                            body: vec![],
+                        }));
                     }
-                    Err(ureq::Error::Transport(_)) => {
+                    Err(_) => {
                         response_callback(None);
                     }
                 }
             });
-        }
-    }
-
-    #[derive(Debug)]
-    struct ServerCertVerifier(rustls::crypto::CryptoProvider);
-
-    impl ServerCertVerifier {
-        pub fn new(provider: rustls::crypto::CryptoProvider) -> Self {
-            Self(provider)
-        }
-    }
-
-    impl rustls::client::danger::ServerCertVerifier for ServerCertVerifier {
-        fn verify_server_cert(
-            &self,
-            _end_entity: &rustls::pki_types::CertificateDer<'_>,
-            _intermediates: &[rustls::pki_types::CertificateDer<'_>],
-            _server_name: &rustls::pki_types::ServerName<'_>,
-            _ocsp: &[u8],
-            _now: rustls::pki_types::UnixTime,
-        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-            Ok(rustls::client::danger::ServerCertVerified::assertion())
-        }
-
-        fn verify_tls12_signature(
-            &self,
-            message: &[u8],
-            cert: &rustls::pki_types::CertificateDer<'_>,
-            dss: &rustls::DigitallySignedStruct,
-        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-            rustls::crypto::verify_tls12_signature(
-                message,
-                cert,
-                dss,
-                &self.0.signature_verification_algorithms,
-            )
-        }
-
-        fn verify_tls13_signature(
-            &self,
-            message: &[u8],
-            cert: &rustls::pki_types::CertificateDer<'_>,
-            dss: &rustls::DigitallySignedStruct,
-        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-            rustls::crypto::verify_tls13_signature(
-                message,
-                cert,
-                dss,
-                &self.0.signature_verification_algorithms,
-            )
-        }
-
-        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            self.0.signature_verification_algorithms.supported_schemes()
         }
     }
 }

@@ -17,4 +17,4 @@ proc-macro = true
 proc-macro2 = "1.0.103"
 quote = "1.0.42"
 regex-automata = { version = "0.4.13", default-features = false, features = ["dfa", "perf", "std", "syntax"] }
-syn = "1.0.109"
+syn = "2.0.114"

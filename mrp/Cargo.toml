@@ -14,7 +14,7 @@ license = "AGPL-3.0-only"
 [dependencies]
 anyhow = "1.0.100"
 log = { version = "0.4.29", features = ["std", "max_level_trace", "release_max_level_info"] }
-thiserror = "1.0.69"
+thiserror = "2.0.17"
 
 [dev-dependencies]
-rand = { version = "0.8.5", features = [] }
+rand = { version = "0.9.2", features = [] }

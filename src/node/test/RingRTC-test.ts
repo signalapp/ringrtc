@@ -202,7 +202,7 @@ describe('RingRTC', () => {
     );
     expect(calling.hangup()).to.be.true;
     await sleep(500);
-    handleStateChangedSpy.should.have.been.calledOnce;
+    assert(handleStateChangedSpy.calledOnce);
     expect(calling.hangup()).to.be.false;
     await sleep(100);
   });
@@ -229,7 +229,7 @@ describe('RingRTC', () => {
     });
 
     await sleep(1000);
-    handleIncomingCallSpy.should.have.been.calledOnce;
+    assert(handleIncomingCallSpy.calledOnce);
     assert.equal(CallState.Prering, RingRTC.call!.state);
 
     // Hangup call
@@ -973,8 +973,8 @@ describe('RingRTC', () => {
       assert.equal(call?.getKind(), GroupCallKind.CallLink);
       call?.connect();
       await sleep(1000);
-      observer.requestMembershipProof.should.not.have.been.called;
-      observer.requestGroupMembers.should.not.have.been.called;
+      assert(observer.requestMembershipProof.notCalled);
+      assert(observer.requestGroupMembers.notCalled);
     });
   });
 });

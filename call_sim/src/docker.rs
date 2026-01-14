@@ -8,7 +8,9 @@ use std::{process::Stdio, time::Duration};
 use anyhow::Result;
 use bollard::{
     Docker,
-    container::{MemoryStatsStats, Stats, StatsOptions},
+    models::ContainerMemoryStats,
+    query_parameters,
+    secret::{ContainerCpuStats, ContainerCpuUsage, ContainerStatsResponse},
 };
 use chrono::DateTime;
 use futures_util::stream::TryStreamExt;
@@ -1593,18 +1595,15 @@ impl DockerStats {
         let path = path.to_string();
 
         tokio::spawn(async move {
-            let stream = &mut docker.stats(
-                &name,
-                Some(StatsOptions {
-                    stream: true,
-                    ..Default::default()
-                }),
-            );
+            let query_parameters = query_parameters::StatsOptionsBuilder::new()
+                .stream(true)
+                .build();
+            let stream = &mut docker.stats(&name, Some(query_parameters));
 
             // Collect the stats. This will await until the container is stopped then dump
             // all the stats to a log.
-            match stream.try_collect::<Vec<Stats>>().await {
-                Ok(stats) => {
+            match stream.try_collect::<Vec<ContainerStatsResponse>>().await {
+                Ok(responses) => {
                     match OpenOptions::new()
                         .write(true)
                         .create(true)
@@ -1625,39 +1624,49 @@ impl DockerStats {
                             let mut prev_total_cpu_usage = 0u64;
                             let mut prev_system_cpu_usage = 0u64;
 
-                            for stat in stats {
-                                match (
-                                    stat.cpu_stats.system_cpu_usage,
-                                    stat.cpu_stats.online_cpus,
-                                    stat.memory_stats.usage,
-                                    stat.memory_stats.stats,
-                                    stat.networks,
-                                ) {
+                            for response in responses {
+                                match (response.cpu_stats, response.memory_stats, response.networks)
+                                {
                                     (
-                                        Some(system_cpu_usage),
-                                        Some(online_cpus),
-                                        Some(memory_usage),
-                                        Some(memory_stats),
+                                        Some(ContainerCpuStats {
+                                            system_cpu_usage: Some(system_cpu_usage),
+                                            online_cpus: Some(online_cpus),
+                                            cpu_usage:
+                                                Some(ContainerCpuUsage {
+                                                    total_usage: Some(cpu_total_usage),
+                                                    ..
+                                                }),
+                                            ..
+                                        }),
+                                        Some(ContainerMemoryStats {
+                                            usage: Some(memory_usage),
+                                            stats: Some(memory_stats),
+                                            ..
+                                        }),
                                         Some(networks),
                                     ) => {
-                                        let timestamp = DateTime::parse_from_rfc3339(&stat.read)
-                                            .expect("stats timestamp is valid")
-                                            .timestamp_millis();
+                                        let timestamp = DateTime::parse_from_rfc3339(
+                                            response.read.unwrap().as_str(),
+                                        )
+                                        .expect("stats timestamp is valid")
+                                        .timestamp_millis();
 
                                         let (tx_bitrate, rx_bitrate) = match networks.get("eth0") {
                                             Some(network) => {
+                                                let tx_bytes = network.tx_bytes.unwrap();
+                                                let rx_bytes = network.rx_bytes.unwrap();
                                                 let time_delta =
                                                     (timestamp - prev_timestamp) as f32 / 1000.0;
-                                                let tx_bitrate =
-                                                    (network.tx_bytes - prev_tx_bytes) as f32 * 8.0
-                                                        / time_delta;
-                                                let rx_bitrate =
-                                                    (network.rx_bytes - prev_rx_bytes) as f32 * 8.0
-                                                        / time_delta;
+                                                let tx_bitrate = (tx_bytes - prev_tx_bytes) as f32
+                                                    * 8.0
+                                                    / time_delta;
+                                                let rx_bitrate = (rx_bytes - prev_rx_bytes) as f32
+                                                    * 8.0
+                                                    / time_delta;
 
                                                 prev_timestamp = timestamp;
-                                                prev_tx_bytes = network.tx_bytes;
-                                                prev_rx_bytes = network.rx_bytes;
+                                                prev_tx_bytes = tx_bytes;
+                                                prev_rx_bytes = rx_bytes;
 
                                                 if prev_timestamp == 0 {
                                                     // Ignore the first data point since there was no reference.
@@ -1673,24 +1682,18 @@ impl DockerStats {
                                         };
 
                                         // cpuPercent = (cpuDelta / systemDelta) * onlineCPUs * 100.0
-                                        let cpu_percent = ((stat.cpu_stats.cpu_usage.total_usage
-                                            - prev_total_cpu_usage)
+                                        let cpu_percent = ((cpu_total_usage - prev_total_cpu_usage)
                                             as f32
                                             / (system_cpu_usage - prev_system_cpu_usage) as f32)
                                             * online_cpus as f32
                                             * 100.0;
 
+                                        // Exclude file cache usage since it causes the stats to
+                                        // grow over time and doesn't directly reflect RingRTC's
+                                        // memory usage.
+                                        // https://docs.docker.com/engine/reference/commandline/stats/#description
                                         let memory = memory_usage
-                                            - match memory_stats {
-                                                // Exclude file cache usage since it causes the stats to
-                                                // grow over time and doesn't directly reflect RingRTC's
-                                                // memory usage.
-                                                // https://docs.docker.com/engine/reference/commandline/stats/#description
-                                                MemoryStatsStats::V1(stats) => {
-                                                    stats.total_inactive_file
-                                                }
-                                                MemoryStatsStats::V2(stats) => stats.inactive_file,
-                                            };
+                                            - memory_stats.get("total_inactive_file").unwrap();
                                         let _ = file
                                             .write_all(
                                                 format!(
@@ -1705,7 +1708,7 @@ impl DockerStats {
                                             )
                                             .await;
 
-                                        prev_total_cpu_usage = stat.cpu_stats.cpu_usage.total_usage;
+                                        prev_total_cpu_usage = cpu_total_usage;
                                         prev_system_cpu_usage = system_cpu_usage;
                                     }
                                     _ => {
