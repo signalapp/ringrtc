@@ -92,7 +92,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
 
-      - run: ./bin/build-webrtc.py --target linux --release --build-for-simulator
+      - run: ./bin/build-webrtc.py --target linux --release
 
       - name: Output Artifact Checksum
         run: |
@@ -135,7 +135,7 @@ jobs:
       # Installs the pkg_resources python module needed to build webrtc on a mac host
       - run: pip install setuptools
 
-      - run: ./bin/build-webrtc.py --target mac --release --build-for-simulator
+      - run: ./bin/build-webrtc.py --target mac --release
 
       - name: Output Artifact Checksum
         run: |
@@ -185,7 +185,7 @@ jobs:
         version-sdk: 26100
         features: 'OptionId.WindowsDesktopDebuggers'
 
-    - run: python bin/build-webrtc.py --target windows --release --build-for-simulator
+    - run: python bin/build-webrtc.py --target windows --release
       shell: bash
 
     - name: Output Artifact Checksum

@@ -120,10 +120,10 @@ call_sim-cli:
 	fi
 	$(Q) if [ "$(TYPE)" = "debug" ] ; then \
 		echo "call_sim-cli: Debug build" ; \
-		./bin/build-desktop --build-for-simulator --no-electron -d ; \
+		./bin/build-desktop --no-electron -d ; \
 	else \
 		echo "call_sim-cli: Release build" ; \
-		./bin/build-desktop --build-for-simulator --no-electron -r ; \
+		./bin/build-desktop --no-electron -r ; \
 	fi
 
 PHONY += clean

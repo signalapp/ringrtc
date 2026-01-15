@@ -66,13 +66,7 @@ fn main() {
                 if let Err(e) = fs::create_dir_all(&out_dir) {
                     panic!("Failed to create webrtc out directory: {:?}", e);
                 }
-                fetch_webrtc_artifact(
-                    &target_os,
-                    &target_arch,
-                    &out_dir,
-                    cfg!(feature = "prebuilt_webrtc_sim"),
-                )
-                .unwrap();
+                fetch_webrtc_artifact(&target_os, &target_arch, &out_dir).unwrap();
                 // Ignore build type since we only have release prebuilts
                 format!("{}/release/obj/", out_dir)
             } else {
@@ -147,7 +141,6 @@ fn fetch_webrtc_artifact(
     target_os: &str,
     target_arch: &str,
     artifact_out_dir: &str,
-    target_sim: bool,
 ) -> Result<(), String> {
     let fetch_script = format!("{}/bin/fetch-artifact", project_dir());
     let platform = format!("{}-{}", target_os, target_arch);
@@ -179,9 +172,6 @@ fn fetch_webrtc_artifact(
         .arg(fetch_script)
         .arg("--platform")
         .arg(platform);
-    if target_sim {
-        command.arg("--for-simulator");
-    }
     let output = command
         .output()
         .expect("bin/fetch-artifact failed to complete");
