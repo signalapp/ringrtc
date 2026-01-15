@@ -151,12 +151,9 @@ macro_rules! impl_sample_trait {
             /// Running variance and mean (Welford's method).
             fn variance(variance: Self, mean: Self, count: usize, sample: Self) -> (Self, Self) {
                 let n = count as $type;
-                let new_mean = mean + (sample - mean) / (n + 1.0);
-                let new_variance = if n > 1.0 {
-                    ((n - 1.0) / n) * variance + (sample - mean) * (sample - new_mean) / (n + 1.0)
-                } else {
-                    0.0
-                };
+                let new_mean = mean + (sample - mean) / n;
+                let new_variance =
+                    variance + ((sample - mean) * (sample - new_mean) - variance) / n;
                 (new_variance, new_mean)
             }
         }
@@ -199,10 +196,10 @@ impl<T: Sample> DistributionSummary<T> {
             if self.max_val < sample {
                 self.max_val = sample;
             }
+            self.count += 1;
             let (variance, mean) = T::variance(self.variance, self.mean, self.count, sample);
             self.mean = mean;
             self.variance = variance;
-            self.count += 1;
         }
     }
 }
@@ -1268,7 +1265,7 @@ mod test {
             .iter()
             .enumerate()
             .fold((0.0, 0.0), |(variance, mean), (i, sample)| {
-                f32::variance(variance, mean, i, *sample)
+                f32::variance(variance, mean, i + 1, *sample)
             });
 
         println!(
