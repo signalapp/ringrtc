@@ -23,13 +23,14 @@ use crate::{
     },
     protobuf::{
         self,
-        call_summary::{CallTelemetry, Event, StreamStats},
+        call_summary::{CallTelemetry, Event, StreamStats, VideoCodec},
     },
     webrtc::{
         peer_connection_observer::NetworkRoute,
         stats_observer::{
             AudioReceiverStatsSnapshot, AudioSenderStatsSnapshot, StatsSnapshot,
-            StatsSnapshotConsumer, VideoReceiverStatsSnapshot, VideoSenderStatsSnapshot,
+            StatsSnapshotConsumer, StatsVideoCodecType, VideoReceiverStatsSnapshot,
+            VideoSenderStatsSnapshot,
         },
     },
 };
@@ -212,6 +213,7 @@ struct StreamSummary {
     packet_loss: DistributionSummary<f32>,
     jitter: DistributionSummary<f32>,
     freeze_count: DistributionSummary<f32>,
+    video_codec: StatsVideoCodecType,
 }
 
 /// `StreamSummaries` is converted into `protobuf::call_summary::StreamSummaries`
@@ -528,6 +530,11 @@ impl From<&StreamSummary> for protobuf::call_summary::StreamSummary {
             packet_loss_pct: summary.packet_loss.to_proto(),
             jitter: summary.jitter.to_proto(),
             freeze_count: summary.freeze_count.to_proto(),
+            video_codec: match summary.video_codec {
+                StatsVideoCodecType::Vp8 => Some(VideoCodec::Vp8.into()),
+                StatsVideoCodecType::Vp9 => Some(VideoCodec::Vp9.into()),
+                StatsVideoCodecType::Invalid => None,
+            },
         }
     }
 }
@@ -1369,6 +1376,7 @@ mod test {
                             sample_count: Some(50000),
                         }),
                         freeze_count: None,
+                        video_codec: None,
                     },
                 )
             })

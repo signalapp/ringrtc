@@ -8,7 +8,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    fmt::{Debug, Display},
+    fmt::{Debug, Display, Formatter},
     ops::Sub,
     slice,
     sync::Mutex,
@@ -109,6 +109,25 @@ fn compute_packets_per_second(packet_count: u32, seconds_elapsed: f32) -> f32 {
     (packet_count as f32)
         .naive_checked_div(seconds_elapsed)
         .unwrap_or(0.0)
+}
+
+// Stays in sync with rffi type
+#[derive(Debug, Copy, Clone, Default)]
+pub enum StatsVideoCodecType {
+    #[default]
+    Invalid = 0,
+    Vp8 = 8,
+    Vp9 = 9,
+}
+
+impl Display for StatsVideoCodecType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StatsVideoCodecType::Invalid => write!(f, "Invalid"),
+            StatsVideoCodecType::Vp8 => write!(f, "VP8"),
+            StatsVideoCodecType::Vp9 => write!(f, "VP9"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -352,6 +371,7 @@ pub struct VideoSenderStatsSnapshot {
     pub remote_packets_lost_pct: f32,
     pub remote_jitter: f64,
     pub remote_round_trip_time: f64,
+    pub codec: StatsVideoCodecType,
 }
 
 impl Display for VideoSenderStatsSnapshot {
@@ -376,6 +396,7 @@ impl Display for VideoSenderStatsSnapshot {
             remote_packets_lost_pct,
             remote_jitter,
             remote_round_trip_time,
+            codec,
         } = self;
         write!(
             f,
@@ -397,7 +418,8 @@ impl Display for VideoSenderStatsSnapshot {
             {quality_limitation_resolution_changes},\
             {remote_packets_lost_pct:.1}%,\
             {remote_jitter:.1}ms,\
-            {remote_round_trip_time:.1}ms",
+            {remote_round_trip_time:.1}ms,\
+            {codec}",
             Self::LOG_MARKER
         )
     }
@@ -425,7 +447,8 @@ impl VideoSenderStatsSnapshot {
                  quality_limitation_resolution_changes,\
                  remote_packets_lost_pct,\
                  remote_jitter,\
-                 remote_round_trip_time";
+                 remote_round_trip_time,\
+                 codec";
 
     fn derive(
         curr_stats: &VideoSenderStatistics,
@@ -497,6 +520,7 @@ impl VideoSenderStatsSnapshot {
             remote_packets_lost_pct,
             remote_jitter,
             remote_round_trip_time,
+            codec: curr_stats.codec,
         }
     }
 }
@@ -514,6 +538,7 @@ pub struct VideoReceiverStatsSnapshot {
     pub height: u32,
     pub jitter: f64,
     pub freeze_count: u32,
+    pub codec: StatsVideoCodecType,
 }
 
 impl Display for VideoReceiverStatsSnapshot {
@@ -530,6 +555,7 @@ impl Display for VideoReceiverStatsSnapshot {
             height,
             jitter,
             freeze_count,
+            codec,
         } = self;
         write!(
             f,
@@ -543,7 +569,8 @@ impl Display for VideoReceiverStatsSnapshot {
             {decode_time_per_frame:.1}ms,\
             {width}x{height},\
             {jitter:.0}ms,\
-            {freeze_count}",
+            {freeze_count},\
+            {codec}",
             Self::LOG_MARKER,
         )
     }
@@ -563,7 +590,8 @@ impl VideoReceiverStatsSnapshot {
         decode_time_per_frame,\
         resolution,\
         jitter,\
-        freeze_count";
+        freeze_count,\
+        codec";
 
     fn derive(
         curr_stats: &VideoReceiverStatistics,
@@ -603,6 +631,7 @@ impl VideoReceiverStatsSnapshot {
             height: curr_stats.frame_height,
             jitter,
             freeze_count,
+            codec: curr_stats.codec,
         }
     }
 }
@@ -981,6 +1010,7 @@ pub struct VideoSenderStatistics {
     pub remote_packets_lost: i32,
     pub remote_jitter: f64,
     pub remote_round_trip_time: f64,
+    pub codec: StatsVideoCodecType,
 }
 
 impl VideoSenderStatistics {
@@ -1045,6 +1075,7 @@ pub struct VideoReceiverStatistics {
     pub jitter_buffer_emitted_count: u64,
     pub jitter_buffer_flushes: u64,
     pub estimated_playout_timestamp: f64,
+    pub codec: StatsVideoCodecType,
 }
 
 #[repr(C)]

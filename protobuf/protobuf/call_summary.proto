@@ -18,12 +18,18 @@ message DistributionSummary {
   optional uint32 sample_count = 5;
 }
 
+enum VideoCodec {
+    Vp8 = 8;
+    Vp9 = 9;
+}
+
 message StreamSummary {
   optional DistributionSummary bitrate         = 1;
   optional DistributionSummary packet_loss_pct = 2;
   optional DistributionSummary jitter          = 3;
   // Only present for received video streams
   optional DistributionSummary freeze_count    = 4;
+  optional VideoCodec          video_codec     = 5;
 }
 
 message StreamSummaries {
