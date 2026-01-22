@@ -21,9 +21,7 @@ use ringrtc::{
     lite::sfu::{GroupMember, MembershipProof, UserId},
     webrtc::{
         media::{AudioBandwidth, AudioEncoderConfig},
-        peer_connection_factory::{
-            AudioConfig, AudioJitterBufferConfig, IceServer, RffiAudioDeviceModuleType,
-        },
+        peer_connection_factory::{AudioConfig, AudioJitterBufferConfig, IceServer},
     },
 };
 use scenario::ScenarioCallTypeConfig;
@@ -282,8 +280,6 @@ fn main() -> Result<()> {
         stats_initial_offset_secs: args.stats_initial_offset_secs,
         call_summary_time_limit_secs: args.call_summary_time_limit_secs,
         audio_config: AudioConfig {
-            audio_device_module_type: RffiAudioDeviceModuleType::RingRtc,
-            file_based_adm_config: None,
             high_pass_filter_enabled: args.high_pass_filter,
             aec_enabled: args.aec,
             ns_enabled: args.ns,

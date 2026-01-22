@@ -13,6 +13,7 @@ use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
 use std::{ffi::CString, os::raw::c_char};
 
+#[cfg(all(not(feature = "sim"), feature = "native"))]
 use anyhow::anyhow;
 pub use pcf::{RffiPeerConnectionFactoryInterface, RffiPeerConnectionFactoryOwner};
 
@@ -129,24 +130,9 @@ pub struct AudioDevice {
     pub i18n_key: String,
 }
 
-/// Stays in sync with RffiAudioDeviceModuleType in peer_connection_factory.h.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum RffiAudioDeviceModuleType {
-    // 0 used to represent webrtc's default ADM, but this is no longer used.
-    /// Use a file-based ADM for testing and simulation.
-    File = 1,
-    /// Use RingRTC's ADM implementation.
-    #[default]
-    RingRtc,
-}
-
 /// Stays in sync with RffiAudioConfig in peer_connection_factory.h.
 #[repr(C)]
 pub struct RffiAudioConfig {
-    pub audio_device_module_type: RffiAudioDeviceModuleType,
-    pub input_file: webrtc::ptr::Borrowed<c_char>,
-    pub output_file: webrtc::ptr::Borrowed<c_char>,
     pub high_pass_filter_enabled: bool,
     pub aec_enabled: bool,
     pub ns_enabled: bool,
@@ -165,15 +151,7 @@ pub struct RffiAudioConfigWrapper {
 }
 
 #[derive(Clone, Debug)]
-pub struct FileBasedAdmConfig {
-    pub input_file: CString,
-    pub output_file: CString,
-}
-
-#[derive(Clone, Debug)]
 pub struct AudioConfig {
-    pub audio_device_module_type: RffiAudioDeviceModuleType,
-    pub file_based_adm_config: Option<FileBasedAdmConfig>,
     pub high_pass_filter_enabled: bool,
     pub aec_enabled: bool,
     pub ns_enabled: bool,
@@ -183,8 +161,6 @@ pub struct AudioConfig {
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
-            audio_device_module_type: Default::default(),
-            file_based_adm_config: None,
             high_pass_filter_enabled: true,
             aec_enabled: true,
             ns_enabled: true,
@@ -213,57 +189,35 @@ impl AudioConfig {
         #[allow(unused_mut, unused_variables)] // iOS and Android won't use this; that's fine.
         mut audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
     ) -> Result<RffiAudioConfigWrapper> {
-        let (input_file, output_file) =
-            if self.audio_device_module_type == RffiAudioDeviceModuleType::File {
-                if let Some(file_based_adm_config) = &self.file_based_adm_config {
-                    (
-                        file_based_adm_config.input_file.as_ptr(),
-                        file_based_adm_config.output_file.as_ptr(),
-                    )
-                } else {
-                    return Err(anyhow!("no files specified for the file-based ADM!"));
-                }
-            } else {
-                (std::ptr::null(), std::ptr::null())
-            };
-
         #[cfg(all(not(feature = "sim"), feature = "native"))]
-        let (adm_borrowed, adm_arc) =
-            if self.audio_device_module_type == RffiAudioDeviceModuleType::RingRtc {
-                match AudioDeviceModule::new() {
-                    Ok(mut adm) => {
-                        if let Some(observer) = audio_device_observer.take() {
-                            adm.register_audio_device_callback(observer)?;
-                        }
-                        let adm_arc = Arc::new(Mutex::new(adm));
-                        (
-                            // This will need to be explicitly destroyed by the
-                            // C++ layer by calling decrement_adm_ref_count to
-                            // turn it back into an Arc.
-                            // We use into_raw(...clone()) here to ensure that
-                            // the ADM stays alive until the C++ layer is done
-                            // using it.
-                            webrtc::ptr::Borrowed::from_ptr(
-                                Arc::<Mutex<AudioDeviceModule>>::into_raw(adm_arc.clone()),
-                            )
-                            .to_void(),
-                            Some(adm_arc),
-                        )
-                    }
-                    Err(e) => {
-                        error!("Failed to initialize adm: {}", e);
-                        (webrtc::ptr::Borrowed::null(), None)
-                    }
+        let (adm_borrowed, adm_arc) = match AudioDeviceModule::new() {
+            Ok(mut adm) => {
+                if let Some(observer) = audio_device_observer.take() {
+                    adm.register_audio_device_callback(observer)?;
                 }
-            } else {
+                let adm_arc = Arc::new(Mutex::new(adm));
+                (
+                    // This will need to be explicitly destroyed by the
+                    // C++ layer by calling decrement_adm_ref_count to
+                    // turn it back into an Arc.
+                    // We use into_raw(...clone()) here to ensure that
+                    // the ADM stays alive until the C++ layer is done
+                    // using it.
+                    webrtc::ptr::Borrowed::from_ptr(Arc::<Mutex<AudioDeviceModule>>::into_raw(
+                        adm_arc.clone(),
+                    ))
+                    .to_void(),
+                    Some(adm_arc),
+                )
+            }
+            Err(e) => {
+                error!("Failed to initialize adm: {}", e);
                 (webrtc::ptr::Borrowed::null(), None)
-            };
+            }
+        };
 
         Ok(RffiAudioConfigWrapper {
             rffi: RffiAudioConfig {
-                audio_device_module_type: self.audio_device_module_type,
-                input_file: webrtc::ptr::Borrowed::from_ptr(input_file),
-                output_file: webrtc::ptr::Borrowed::from_ptr(output_file),
                 high_pass_filter_enabled: self.high_pass_filter_enabled,
                 aec_enabled: self.aec_enabled,
                 ns_enabled: self.ns_enabled,
