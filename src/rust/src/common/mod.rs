@@ -867,6 +867,11 @@ impl CallConfig {
         self.data_mode = data_mode;
         self
     }
+
+    pub fn with_enable_vp9(mut self, enable_vp9: bool) -> Self {
+        self.enable_vp9 = enable_vp9;
+        self
+    }
 }
 
 // Benchmarking component list.
