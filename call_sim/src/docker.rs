@@ -10,10 +10,10 @@ use bollard::{
     Docker,
     models::ContainerMemoryStats,
     query_parameters,
-    secret::{ContainerCpuStats, ContainerCpuUsage, ContainerStatsResponse},
+    secret::{ContainerCpuStats, ContainerCpuUsage},
 };
 use chrono::DateTime;
-use futures_util::stream::TryStreamExt;
+use futures_util::stream::StreamExt;
 use itertools::Itertools;
 use tokio::{
     fs::OpenOptions,
@@ -1595,36 +1595,37 @@ impl DockerStats {
         let path = path.to_string();
 
         tokio::spawn(async move {
+            // Setup to stream statistics from Docker (default: every 1 second).
             let query_parameters = query_parameters::StatsOptionsBuilder::new()
                 .stream(true)
                 .build();
-            let stream = &mut docker.stats(&name, Some(query_parameters));
+            let mut stream = docker.stats(&name, Some(query_parameters));
 
-            // Collect the stats. This will await until the container is stopped then dump
-            // all the stats to a log.
-            match stream.try_collect::<Vec<ContainerStatsResponse>>().await {
-                Ok(responses) => {
-                    match OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(format!("{}/{}_stats.log", path, name))
-                        .await
-                    {
-                        Ok(mut file) => {
-                            let _ = file
-                                .write_all(b"Timestamp\tCPU\tMEM\tTX_Bitrate\tRX_Bitrate\n")
-                                .await;
+            // Collect the stats. Open a file and write the values as they arrive.
+            match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(format!("{}/{}_stats.log", path, name))
+                .await
+            {
+                Ok(mut file) => {
+                    let _ = file
+                        .write_all(b"Timestamp\tCPU\tMEM\tTX_Bitrate\tRX_Bitrate\n")
+                        .await;
 
-                            let mut prev_timestamp = 0i64;
+                    let mut prev_timestamp = 0i64;
 
-                            let mut prev_tx_bytes = 0u64;
-                            let mut prev_rx_bytes = 0u64;
+                    let mut prev_tx_bytes = 0u64;
+                    let mut prev_rx_bytes = 0u64;
 
-                            let mut prev_total_cpu_usage = 0u64;
-                            let mut prev_system_cpu_usage = 0u64;
+                    let mut prev_total_cpu_usage = 0u64;
+                    let mut prev_system_cpu_usage = 0u64;
 
-                            for response in responses {
+                    // Process stats as they arrive.
+                    while let Some(result) = stream.next().await {
+                        match result {
+                            Ok(response) => {
                                 match (response.cpu_stats, response.memory_stats, response.networks)
                                 {
                                     (
@@ -1655,25 +1656,29 @@ impl DockerStats {
                                             Some(network) => {
                                                 let tx_bytes = network.tx_bytes.unwrap();
                                                 let rx_bytes = network.rx_bytes.unwrap();
-                                                let time_delta =
-                                                    (timestamp - prev_timestamp) as f32 / 1000.0;
-                                                let tx_bitrate = (tx_bytes - prev_tx_bytes) as f32
-                                                    * 8.0
-                                                    / time_delta;
-                                                let rx_bitrate = (rx_bytes - prev_rx_bytes) as f32
-                                                    * 8.0
-                                                    / time_delta;
+
+                                                let (tx_bitrate, rx_bitrate) =
+                                                    if prev_timestamp == 0 {
+                                                        // Ignore the first data point since there was no reference.
+                                                        (0.0, 0.0)
+                                                    } else {
+                                                        let time_delta =
+                                                            (timestamp - prev_timestamp) as f32
+                                                                / 1000.0;
+                                                        let tx_bitrate =
+                                                            (tx_bytes - prev_tx_bytes) as f32 * 8.0
+                                                                / time_delta;
+                                                        let rx_bitrate =
+                                                            (rx_bytes - prev_rx_bytes) as f32 * 8.0
+                                                                / time_delta;
+                                                        (tx_bitrate, rx_bitrate)
+                                                    };
 
                                                 prev_timestamp = timestamp;
                                                 prev_tx_bytes = tx_bytes;
                                                 prev_rx_bytes = rx_bytes;
 
-                                                if prev_timestamp == 0 {
-                                                    // Ignore the first data point since there was no reference.
-                                                    (0.0, 0.0)
-                                                } else {
-                                                    (tx_bitrate, rx_bitrate)
-                                                }
+                                                (tx_bitrate, rx_bitrate)
                                             }
                                             None => {
                                                 println!("Error: stat missing eth0!");
@@ -1692,8 +1697,12 @@ impl DockerStats {
                                         // grow over time and doesn't directly reflect RingRTC's
                                         // memory usage.
                                         // https://docs.docker.com/engine/reference/commandline/stats/#description
-                                        let memory = memory_usage
-                                            - memory_stats.get("total_inactive_file").unwrap();
+                                        let cache_usage = *memory_stats
+                                            .get("total_inactive_file")
+                                            .or_else(|| memory_stats.get("inactive_file"))
+                                            .unwrap_or(&0);
+
+                                        let memory = memory_usage.saturating_sub(cache_usage);
                                         let _ = file
                                             .write_all(
                                                 format!(
@@ -1717,14 +1726,15 @@ impl DockerStats {
                                     }
                                 }
                             }
-                        }
-                        Err(err) => {
-                            println!("Error creating stats file: {:?}", err);
+                            Err(err) => {
+                                println!("Error collecting stats for {}: {:?}", name, err);
+                                break;
+                            }
                         }
                     }
                 }
                 Err(err) => {
-                    println!("Error collecting stats for {}: {:?}", name, err);
+                    println!("Error creating stats file: {:?}", err);
                 }
             }
         });
