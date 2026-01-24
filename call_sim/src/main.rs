@@ -656,8 +656,68 @@ async fn run_video_send_over_bandwidth(test: &mut Test) -> Result<()> {
 }
 
 /// Bidirectional video test comparing the vp8 and vp9 video codecs.
-async fn run_video_compare_vp8_vs_vp9(test: &mut Test) -> Result<()> {
-    test.preprocess_sounds(vec!["normal_phrasing"]).await?;
+async fn run_video_compare_vp8_vs_vp9(test: &mut Test, bitrate_values: &Vec<u16>) -> Result<()> {
+    let mut test_cases = Vec::new();
+
+    for bitrate in bitrate_values {
+        test_cases.push(TestCaseConfig {
+            test_case_name: format!("vp8_{}", bitrate),
+            client_a_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    ..Default::default()
+                },
+                video: VideoConfig {
+                    input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                    ..Default::default()
+                },
+                allowed_bitrate_kbps: *bitrate,
+                ..Default::default()
+            },
+            client_b_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    ..Default::default()
+                },
+                video: VideoConfig {
+                    input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                    ..Default::default()
+                },
+                allowed_bitrate_kbps: *bitrate,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        test_cases.push(TestCaseConfig {
+            test_case_name: format!("vp9_{}", bitrate),
+            client_a_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    ..Default::default()
+                },
+                video: VideoConfig {
+                    input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                    enable_vp9: true,
+                },
+                allowed_bitrate_kbps: *bitrate,
+                ..Default::default()
+            },
+            client_b_config: CallConfig {
+                audio: AudioConfig {
+                    input_name: "normal_phrasing".to_string(),
+                    ..Default::default()
+                },
+                video: VideoConfig {
+                    input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
+                    enable_vp9: true,
+                },
+                allowed_bitrate_kbps: *bitrate,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+    }
 
     test.run(
         GroupConfig {
@@ -665,60 +725,7 @@ async fn run_video_compare_vp8_vs_vp9(test: &mut Test) -> Result<()> {
             chart_dimensions: vec![ChartDimension::MosSpeech],
             ..Default::default()
         },
-        vec![
-            TestCaseConfig {
-                test_case_name: "vp8".to_string(),
-                client_a_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        ..Default::default()
-                    },
-                    video: VideoConfig {
-                        input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                client_b_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        ..Default::default()
-                    },
-                    video: VideoConfig {
-                        input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            TestCaseConfig {
-                test_case_name: "vp9".to_string(),
-                client_a_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        ..Default::default()
-                    },
-                    video: VideoConfig {
-                        input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
-                        enable_vp9: true,
-                    },
-                    ..Default::default()
-                },
-                client_b_config: CallConfig {
-                    audio: AudioConfig {
-                        input_name: "normal_phrasing".to_string(),
-                        ..Default::default()
-                    },
-                    video: VideoConfig {
-                        input_name: Some("ConferenceMotion_50fps@1280x720".to_string()),
-                        enable_vp9: true,
-                    },
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        ],
+        test_cases,
         vec![NetworkProfile::Default],
     )
     .await?;
@@ -950,7 +957,7 @@ async fn main() -> Result<()> {
     let mut test_sets = args.test_sets;
     if test_sets.is_empty() {
         // For quick testing, change this to the name of your test case.
-        test_sets.push("baseline".to_string());
+        test_sets.push("video_compare_vp8_vs_vp9".to_string());
     }
 
     let direct_call_config = CallTypeConfig::Direct;
@@ -990,7 +997,9 @@ async fn main() -> Result<()> {
             "relay_tests" => run_relay_tests(test).await?,
             "turn_long_tests" => run_turn_long_tests(test).await?,
             "video_send_over_bandwidth" => run_video_send_over_bandwidth(test).await?,
-            "video_compare_vp8_vs_vp9" => run_video_compare_vp8_vs_vp9(test).await?,
+            "video_compare_vp8_vs_vp9" => {
+                run_video_compare_vp8_vs_vp9(test, &vec![1000, 2000]).await?
+            }
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,
             "profiling_suite" => run_perf_test(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
