@@ -2177,16 +2177,15 @@ export class Call {
         this._mediaSessionStarted = true;
       }
     } else if (state === CallState.Ended) {
-      if (this._mediaSessionStarted) {
-        sillyDeadlockProtection(() => {
-          this._callManager.setOutgoingAudioEnabled(false);
-          this._callManager.setOutgoingVideoEnabled(false);
-        });
-        this._outgoingAudioEnabled = false;
-        this._outgoingVideoEnabled = false;
-        this._outgoingVideoIsScreenShare = false;
-        this._mediaSessionStarted = false;
-      }
+      sillyDeadlockProtection(() => {
+        this._callManager.setOutgoingAudioEnabled(false);
+        this._callManager.setOutgoingVideoEnabled(false);
+        this._callManager.setMicrophoneWarmupEnabled(false);
+      });
+      this._outgoingAudioEnabled = false;
+      this._outgoingVideoEnabled = false;
+      this._outgoingVideoIsScreenShare = false;
+      this._mediaSessionStarted = false;
     }
 
     if (this.handleStateChanged) {
