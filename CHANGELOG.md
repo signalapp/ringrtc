@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.63.0
+
+- Desktop: Always disable mic and camera on call end
+
+- Build vp9 on iOS and allow configuration
+
+- Update to webrtc 7444e
+  - Support rebuild with vp9 on iOS
+  - Remove support for file-based ADM
+
+- Update to cubeb 0.34.0
+
+- Update stats logs and call summary
+
+- Remove "webrtc simulator" builds
+
 ## v2.62.0
 
 - Add support for send_call_message_to_adhoc_group
