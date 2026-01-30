@@ -957,7 +957,7 @@ async fn main() -> Result<()> {
     let mut test_sets = args.test_sets;
     if test_sets.is_empty() {
         // For quick testing, change this to the name of your test case.
-        test_sets.push("video_compare_vp8_vs_vp9".to_string());
+        test_sets.push("baseline".to_string());
     }
 
     let direct_call_config = CallTypeConfig::Direct;
