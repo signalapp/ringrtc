@@ -44,7 +44,7 @@ export class QualityStats {
    * Median connection RTT in milliseconds calculated via STUN/ICE,
    * or undefined if unavailable.
    */
-  readonly rttMedianConnection: number | undefined;
+  readonly rttMedianConnectionMillis: number | undefined;
   /** Audio quality statistics. */
   readonly audioStats!: MediaQualityStats;
   /** Video quality statistics. */
