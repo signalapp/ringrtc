@@ -26,7 +26,7 @@ const RTP_DATA_PROTO: &str = include_str!(concat!(env!("OUT_DIR"), "/rtp_data.rs
 #[cfg(feature = "signaling")]
 const SIGNALING_PROTO: &str = include_str!(concat!(env!("OUT_DIR"), "/signaling.rs"));
 
-#[cfg(feature = "signaling")]
+#[cfg(feature = "call_summary")]
 const CALL_SUMMARY_PROTO: &str = include_str!(concat!(env!("OUT_DIR"), "/call_summary.rs"));
 
 #[cfg(feature = "call_sim")]
@@ -50,7 +50,7 @@ pub fn include_signaling_proto(_input: TokenStream) -> TokenStream {
     SIGNALING_PROTO.parse().unwrap()
 }
 
-#[cfg(feature = "signaling")]
+#[cfg(feature = "call_summary")]
 #[proc_macro]
 pub fn include_call_summary_proto(_input: TokenStream) -> TokenStream {
     CALL_SUMMARY_PROTO.parse().unwrap()
