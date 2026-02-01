@@ -116,6 +116,10 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).sendVideoFrame = Native.cm_sendVideoFrame;
 (NativeCallManager.prototype as any).receiveVideoFrame =
   Native.cm_receiveVideoFrame;
+(NativeCallManager.prototype as any).setAudioCaptureEnabled =
+  Native.cm_setAudioCaptureEnabled;
+(NativeCallManager.prototype as any).receiveAudioSamples =
+  Native.cm_receiveAudioSamples;
 (NativeCallManager.prototype as any).receiveGroupCallVideoFrame =
   Native.cm_receiveGroupCallVideoFrame;
 (NativeCallManager.prototype as any).createGroupCallClient =
@@ -2290,6 +2294,20 @@ export class Call {
     return this._callManager.receiveVideoFrame(buffer, maxWidth, maxHeight);
   }
 
+  // Enable or disable audio capture from the call.
+  // When enabled, call audio will be buffered and can be retrieved via receiveAudioSamples.
+  setAudioCaptureEnabled(enabled: boolean): void {
+    this._callManager.setAudioCaptureEnabled(enabled);
+  }
+
+  // Receive audio samples from the call.
+  // Returns { samplesWritten: number, sampleRate: number } or undefined if no samples available.
+  receiveAudioSamples(
+    buffer: Int16Array
+  ): { samplesWritten: number; sampleRate: number } | undefined {
+    return this._callManager.receiveAudioSamples(buffer);
+  }
+
   updateDataMode(dataMode: DataMode): void {
     sillyDeadlockProtection(() => {
       try {
@@ -2565,6 +2583,20 @@ export class GroupCall {
     this._localDeviceState.audioMuted = muted;
     this._callManager.setOutgoingAudioMuted(this._clientId, muted);
     this._observer.onLocalDeviceStateChanged(this);
+  }
+
+  // Enable or disable audio capture from the call.
+  // When enabled, call audio will be buffered and can be retrieved via receiveAudioSamples.
+  setAudioCaptureEnabled(enabled: boolean): void {
+    this._callManager.setAudioCaptureEnabled(enabled);
+  }
+
+  // Receive audio samples from the call.
+  // Returns { samplesWritten: number, sampleRate: number } or undefined if no samples available.
+  receiveAudioSamples(
+    buffer: Int16Array
+  ): { samplesWritten: number; sampleRate: number } | undefined {
+    return this._callManager.receiveAudioSamples(buffer);
   }
 
   // Called by UI
@@ -2999,6 +3031,14 @@ export interface CallManager {
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined;
+  // Enable or disable audio capture from the call.
+  // When enabled, call audio will be buffered and can be retrieved via receiveAudioSamples.
+  setAudioCaptureEnabled(enabled: boolean): void;
+  // Receive audio samples from the call.
+  // Returns { samplesWritten: number, sampleRate: number } or undefined if no samples available.
+  receiveAudioSamples(
+    buffer: Int16Array
+  ): { samplesWritten: number; sampleRate: number } | undefined;
   receivedOffer(
     remoteUserId: UserId,
     remoteDeviceId: DeviceId,

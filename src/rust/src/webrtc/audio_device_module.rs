@@ -97,6 +97,7 @@ enum Event {
     PlayoutDelay,
     Terminate,
     RegisterAudioObserver(Box<dyn AudioDeviceObserver>),
+    SetAudioSink(Option<Box<dyn crate::webrtc::media::AudioSink>>),
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +127,8 @@ struct Worker {
     audio_transport: Arc<Mutex<RffiAudioTransport>>,
     audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
     send_to_webrtc: Arc<AtomicBool>,
+    // Optional audio sink for capturing playback audio (Observer Vault)
+    audio_sink: Option<Arc<Mutex<Option<Box<dyn crate::webrtc::media::AudioSink>>>>>,
 }
 
 impl Worker {
@@ -280,6 +283,8 @@ impl Worker {
             .take();
         let mut builder = cubeb::StreamBuilder::<OutFrame>::new();
         let transport = Arc::clone(&self.audio_transport);
+        // Clone the audio sink Arc for use in the closure
+        let audio_sink = self.audio_sink.clone();
         let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
             warn!(
                 "Could not get min latency for playout; using default: {:?}",
@@ -334,6 +339,16 @@ impl Worker {
                         error!("need_more_play_data returned too much data");
                         return -1;
                     }
+                    
+                    // Send audio to the audio sink if one is registered (Observer Vault)
+                    if let Some(ref sink_arc) = audio_sink {
+                        if let Ok(sink_guard) = sink_arc.lock() {
+                            if let Some(ref sink) = *sink_guard {
+                                sink.on_audio_samples(&play_data.data, SAMPLE_FREQUENCY);
+                            }
+                        }
+                    }
+                    
                     // Put data into the right format and add it to the output
                     // array for cubeb to play.
                     // If there's more data than was requested, add it to the
@@ -638,6 +653,14 @@ impl Worker {
                     self.audio_device_observer = Some(audio_device_observer);
                     continue;
                 }
+                Event::SetAudioSink(sink) => {
+                    if let Some(ref sink_arc) = self.audio_sink {
+                        if let Ok(mut guard) = sink_arc.lock() {
+                            *guard = sink;
+                        }
+                    }
+                    continue;
+                }
             } {
                 warn!("{:?} failed: {:?}", received, e);
             }
@@ -816,6 +839,7 @@ impl Worker {
                 })),
                 audio_device_observer: None,
                 send_to_webrtc: Arc::new(AtomicBool::new(true)),
+                audio_sink: Some(Arc::new(Mutex::new(None))),
             };
             if let Err(e) = worker.register_device_collection_changed(DeviceType::INPUT) {
                 error!("Failed to register input device callback: {}", e);
@@ -1674,6 +1698,19 @@ impl AudioDeviceModule {
             .send(Event::RegisterAudioObserver(audio_device_observer))
         {
             bail!("Failed to send RegisterAudioObserver request: {}", e);
+        }
+        Ok(())
+    }
+
+    /// Set an audio sink to receive playback audio samples.
+    /// This allows capturing call audio directly from WebRTC without system permissions.
+    /// Pass None to remove an existing sink.
+    pub fn set_audio_sink(
+        &mut self,
+        sink: Option<Box<dyn crate::webrtc::media::AudioSink>>,
+    ) -> anyhow::Result<()> {
+        if let Err(e) = self.mpsc_sender.send(Event::SetAudioSink(sink)) {
+            bail!("Failed to send SetAudioSink request: {}", e);
         }
         Ok(())
     }

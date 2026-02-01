@@ -333,6 +333,22 @@ impl Clone for Box<dyn VideoSink> {
     }
 }
 
+/// Trait for receiving audio samples from the audio device module.
+/// This allows capturing the audio that would be played to the speaker.
+pub trait AudioSink: Sync + Send + std::fmt::Debug {
+    /// Called with audio samples that are about to be played.
+    /// samples: interleaved PCM samples (mono i16)
+    /// sample_rate: samples per second (typically 48000)
+    fn on_audio_samples(&self, samples: &[i16], sample_rate: u32);
+    fn box_clone(&self) -> Box<dyn AudioSink>;
+}
+
+impl Clone for Box<dyn AudioSink> {
+    fn clone(&self) -> Self {
+        self.box_clone()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "call_sim", derive(clap::ValueEnum))]
 #[repr(i32)]

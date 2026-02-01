@@ -752,4 +752,20 @@ impl PeerConnectionFactory {
         };
         Ok(())
     }
+
+    /// Set an audio sink to receive playback audio samples.
+    /// This allows capturing call audio directly from WebRTC without system permissions.
+    /// Pass None to remove an existing sink.
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
+    pub fn set_audio_sink(
+        &mut self,
+        sink: Option<Box<dyn crate::webrtc::media::AudioSink>>,
+    ) -> Result<()> {
+        self.adm
+            .as_ref()
+            .and_then(|adm| adm.lock().ok())
+            .map_or(Err(anyhow!("couldn't access ADM")), |mut adm| {
+                adm.set_audio_sink(sink)
+            })
+    }
 }

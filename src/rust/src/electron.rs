@@ -417,6 +417,10 @@ pub struct CallEndpoint {
     outgoing_video_track: VideoTrack,
     // Boxed so we can pass it as a Box<dyn VideoSink>
     incoming_video_sink: Box<LastFramesVideoSink>,
+    // Audio sink for capturing playback audio (Observer Vault)
+    incoming_audio_sink: Box<LastAudioFramesSink>,
+    // Whether audio capture is enabled
+    audio_capture_enabled: bool,
 
     peer_connection_factory: PeerConnectionFactory,
 
@@ -509,6 +513,7 @@ impl CallEndpoint {
             peer_connection_factory.create_outgoing_video_track(&outgoing_video_source)?;
         outgoing_video_track.set_enabled(false);
         let incoming_video_sink = Box::<LastFramesVideoSink>::default();
+        let incoming_audio_sink = Box::<LastAudioFramesSink>::default();
 
         // After initializing logs, log the backend in use.
         let backend = peer_connection_factory.audio_backend();
@@ -540,6 +545,8 @@ impl CallEndpoint {
             outgoing_video_source,
             outgoing_video_track,
             incoming_video_sink,
+            incoming_audio_sink,
+            audio_capture_enabled: false,
             peer_connection_factory,
             js_object,
             most_recent_overlarge_frame_dimensions: (0, 0),
@@ -575,6 +582,54 @@ impl LastFramesVideoSink {
 
     fn clear(&self) {
         self.last_frame_by_demux_id.lock().unwrap().clear();
+    }
+}
+
+/// Audio buffer that stores samples for JavaScript to poll.
+/// Samples are appended by the audio device module and popped by JavaScript.
+#[derive(Clone, Default, Debug)]
+struct LastAudioFramesSink {
+    /// Circular buffer of audio samples (48kHz, mono, i16)
+    samples: Arc<Mutex<Vec<i16>>>,
+    /// The sample rate of the audio
+    sample_rate: Arc<Mutex<u32>>,
+}
+
+impl crate::webrtc::media::AudioSink for LastAudioFramesSink {
+    fn on_audio_samples(&self, samples: &[i16], sample_rate: u32) {
+        let mut buffer = self.samples.lock().unwrap();
+        // Limit buffer size to ~1 second of audio to prevent unbounded growth
+        const MAX_SAMPLES: usize = 48000;
+        if buffer.len() + samples.len() > MAX_SAMPLES {
+            // Drop oldest samples to make room
+            let to_remove = buffer.len() + samples.len() - MAX_SAMPLES;
+            let drain_count = to_remove.min(buffer.len());
+            buffer.drain(0..drain_count);
+        }
+        buffer.extend_from_slice(samples);
+        
+        let mut rate = self.sample_rate.lock().unwrap();
+        *rate = sample_rate;
+    }
+
+    fn box_clone(&self) -> Box<dyn crate::webrtc::media::AudioSink> {
+        Box::new(self.clone())
+    }
+}
+
+impl LastAudioFramesSink {
+    /// Pop up to `max_samples` audio samples from the buffer.
+    fn pop(&self, max_samples: usize) -> (Vec<i16>, u32) {
+        let mut buffer = self.samples.lock().unwrap();
+        let sample_rate = *self.sample_rate.lock().unwrap();
+        
+        let count = max_samples.min(buffer.len());
+        let samples: Vec<i16> = buffer.drain(0..count).collect();
+        (samples, sample_rate)
+    }
+
+    fn clear(&self) {
+        self.samples.lock().unwrap().clear();
     }
 }
 
@@ -1462,6 +1517,72 @@ fn receiveVideoFrame(mut cx: FunctionContext) -> JsResult<JsValue> {
     let max_width = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32; // saturating cast
     let max_height = cx.argument::<JsNumber>(2)?.value(&mut cx) as u32; // saturating cast
     receive_video_frame(&mut cx, rgba_buffer, 0, max_width, max_height)
+}
+
+/// Enable or disable audio capture from the call.
+/// When enabled, call audio will be buffered and can be retrieved via receiveAudioSamples.
+/// This allows capturing call audio directly without system audio loopback.
+#[allow(non_snake_case)]
+fn setAudioCaptureEnabled(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
+    
+    with_call_endpoint(&mut cx, |endpoint| {
+        if enabled && !endpoint.audio_capture_enabled {
+            // Enable audio capture - set the audio sink on the audio device module
+            // Clone the inner sink and box it
+            let sink: Box<dyn crate::webrtc::media::AudioSink> = 
+                Box::new((*endpoint.incoming_audio_sink).clone());
+            endpoint.peer_connection_factory.set_audio_sink(Some(sink))?;
+            endpoint.audio_capture_enabled = true;
+            info!("Audio capture enabled");
+        } else if !enabled && endpoint.audio_capture_enabled {
+            // Disable audio capture
+            endpoint.peer_connection_factory.set_audio_sink(None)?;
+            endpoint.incoming_audio_sink.clear();
+            endpoint.audio_capture_enabled = false;
+            info!("Audio capture disabled");
+        }
+        Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    
+    Ok(cx.undefined())
+}
+
+/// Receive audio samples from the call.
+/// Takes a pre-allocated Int16Array buffer and fills it with samples.
+/// Returns an object with { samplesWritten: number, sampleRate: number } or undefined if no samples available.
+#[allow(non_snake_case)]
+fn receiveAudioSamples(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let mut buffer = cx.argument::<JsTypedArray<i16>>(0)?;
+    let max_samples = buffer.len(&mut cx);
+    
+    let result: anyhow::Result<(Vec<i16>, u32)> = with_call_endpoint(&mut cx, |endpoint| {
+        let (samples, sample_rate) = endpoint.incoming_audio_sink.pop(max_samples);
+        Ok((samples, sample_rate))
+    });
+    
+    match result {
+        Ok((samples, sample_rate)) => {
+            if samples.is_empty() {
+                Ok(cx.undefined().upcast())
+            } else {
+                // Copy samples to the provided buffer
+                let slice = buffer.as_mut_slice(&mut cx);
+                let count = samples.len().min(slice.len());
+                slice[..count].copy_from_slice(&samples[..count]);
+                
+                let js_samples_written = cx.number(count as f64);
+                let js_sample_rate = cx.number(sample_rate);
+                
+                let result = cx.empty_object();
+                result.set(&mut cx, "samplesWritten", js_samples_written)?;
+                result.set(&mut cx, "sampleRate", js_sample_rate)?;
+                Ok(result.upcast())
+            }
+        }
+        Err(err) => cx.throw_error(format!("{}", err)),
+    }
 }
 
 // Group Calls
@@ -3278,6 +3399,8 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     )?;
     cx.export_function("cm_sendVideoFrame", sendVideoFrame)?;
     cx.export_function("cm_receiveVideoFrame", receiveVideoFrame)?;
+    cx.export_function("cm_setAudioCaptureEnabled", setAudioCaptureEnabled)?;
+    cx.export_function("cm_receiveAudioSamples", receiveAudioSamples)?;
     cx.export_function("cm_receiveGroupCallVideoFrame", receiveGroupCallVideoFrame)?;
     cx.export_function("cm_createGroupCallClient", createGroupCallClient)?;
     cx.export_function("cm_createCallLinkCallClient", createCallLinkCallClient)?;
