@@ -43,35 +43,6 @@ jobs:
           path: src/node/build/
           retention-days: 1
 
-  build_linux_arm64:
-    name: Build Linux ARM64
-    runs-on: ubuntu-22.04-arm64-4-cores
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libpulse-dev cmake build-essential
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: "src/node/.nvmrc"
-
-      - name: Fetch WebRTC artifact
-        run: ./bin/fetch-artifact --platform linux-arm64 --release
-
-      - name: Build RingRTC
-        run: TARGET_ARCH=arm64 ./bin/build-desktop --ringrtc-only --release
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-linux-arm64
-          path: src/node/build/
-          retention-days: 1
-
   build_macos:
     name: Build macOS (x64 + ARM64)
     runs-on: macos-14
@@ -80,7 +51,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: brew install protobuf cmake
+        run: brew install protobuf coreutils
+
+      - name: Install Rust with cross-compile targets
+        run: |
+          rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-darwin,aarch64-apple-darwin
 
       - uses: actions/setup-node@v4
         with:
@@ -91,14 +66,14 @@ jobs:
         run: ./bin/fetch-artifact --platform mac-x64 --release
 
       - name: Build RingRTC (x64)
-        run: TARGET_ARCH=x64 ./bin/build-desktop --ringrtc-only --release
+        run: TARGET_ARCH=x64 OUTPUT_DIR=out ./bin/build-desktop --ringrtc-only --release
 
       # Build ARM64
       - name: Fetch WebRTC artifact (ARM64)
         run: ./bin/fetch-artifact --platform mac-arm64 --release -o out-arm
 
       - name: Build RingRTC (ARM64)
-        run: OUTPUT_DIR=out-arm TARGET_ARCH=arm64 ./bin/build-desktop --ringrtc-only --release
+        run: TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-desktop --ringrtc-only --release
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -108,16 +83,14 @@ jobs:
           retention-days: 1
 
   build_windows:
-    name: Build Windows (x64 + ARM64)
+    name: Build Windows x64
     runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        run: |
-          rustup toolchain install stable --profile minimal
-          rustup target add aarch64-pc-windows-msvc
+        run: rustup toolchain install stable --profile minimal
 
       - name: Install protoc
         run: choco install protoc
@@ -127,23 +100,10 @@ jobs:
         with:
           node-version-file: "src/node/.nvmrc"
 
-      # Build x64
-      - name: Fetch WebRTC artifact (x64)
+      - name: Fetch WebRTC artifact
         run: sh ./bin/fetch-artifact --platform windows-x64 --release
 
-      - name: Build RingRTC (x64)
-        run: sh ./bin/build-desktop --ringrtc-only --release
-
-      # Build ARM64
-      - name: Fetch WebRTC artifact (ARM64)
-        run: sh ./bin/fetch-artifact --platform windows-arm64 --release -o out-arm
-
-      - name: Build RingRTC (ARM64)
-        run: |
-          echo "TARGET_ARCH=arm64" >> $env:GITHUB_ENV
-          echo "OUTPUT_DIR=out-arm" >> $env:GITHUB_ENV
-
-      - name: Build RingRTC (ARM64) - continued
+      - name: Build RingRTC
         run: sh ./bin/build-desktop --ringrtc-only --release
 
       - name: Upload build artifacts
@@ -155,7 +115,7 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: [build_linux_x64, build_linux_arm64, build_macos, build_windows]
+    needs: [build_linux_x64, build_macos, build_windows]
     runs-on: ubuntu-latest
 
     permissions:
@@ -174,12 +134,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-linux-x64
-          path: src/node/build/
-
-      - name: Download Linux ARM64 build
-        uses: actions/download-artifact@v4
-        with:
-          name: build-linux-arm64
           path: src/node/build/
 
       - name: Download macOS build
