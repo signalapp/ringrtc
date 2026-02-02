@@ -1,9 +1,9 @@
 {
-  "name": "@signalapp/ringrtc",
-  "version": "2.63.0",
+  "name": "@lockdown-systems/ringrtc",
+  "version": "2.63.0-audiosink.1",
   "repository": {
     "type": "git",
-    "url": "https://github.com/signalapp/ringrtc.git",
+    "url": "https://github.com/lockdown-systems/ringrtc.git",
     "directory": "src/node"
   },
   "description": "Signal Messenger voice and video calling library.",
@@ -32,7 +32,7 @@
     "prepublishOnly": "node scripts/prepublish.js"
   },
   "config": {
-    "prebuildUrl": "https://build-artifacts.signal.org/libraries/ringrtc-desktop-build-v${npm_package_version}.tar.gz",
+    "prebuildUrl": "https://github.com/lockdown-systems/ringrtc/releases/download/v${npm_package_version}/ringrtc-desktop-build-v${npm_package_version}.tar.gz",
     "prebuildChecksum": ""
   },
   "author": "",

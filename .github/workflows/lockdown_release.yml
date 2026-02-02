@@ -1,0 +1,247 @@
+name: Lockdown Systems Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_linux_x64:
+    name: Build Linux x64
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libpulse-dev cmake build-essential
+
+      - name: Install Rust
+        run: |
+          curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: "src/node/.nvmrc"
+
+      - name: Fetch WebRTC artifact
+        run: ./bin/fetch-artifact --platform linux-x64 --release
+
+      - name: Build RingRTC
+        run: ./bin/build-desktop --ringrtc-only --release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-x64
+          path: src/node/build/
+          retention-days: 1
+
+  build_linux_arm64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-22.04-arm64-4-cores
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libpulse-dev cmake build-essential
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: "src/node/.nvmrc"
+
+      - name: Fetch WebRTC artifact
+        run: ./bin/fetch-artifact --platform linux-arm64 --release
+
+      - name: Build RingRTC
+        run: TARGET_ARCH=arm64 ./bin/build-desktop --ringrtc-only --release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-arm64
+          path: src/node/build/
+          retention-days: 1
+
+  build_macos:
+    name: Build macOS (x64 + ARM64)
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install protobuf cmake
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: "src/node/.nvmrc"
+
+      # Build x64
+      - name: Fetch WebRTC artifact (x64)
+        run: ./bin/fetch-artifact --platform mac-x64 --release
+
+      - name: Build RingRTC (x64)
+        run: TARGET_ARCH=x64 ./bin/build-desktop --ringrtc-only --release
+
+      # Build ARM64
+      - name: Fetch WebRTC artifact (ARM64)
+        run: ./bin/fetch-artifact --platform mac-arm64 --release -o out-arm
+
+      - name: Build RingRTC (ARM64)
+        run: OUTPUT_DIR=out-arm TARGET_ARCH=arm64 ./bin/build-desktop --ringrtc-only --release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos
+          path: src/node/build/
+          retention-days: 1
+
+  build_windows:
+    name: Build Windows (x64 + ARM64)
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-pc-windows-msvc
+
+      - name: Install protoc
+        run: choco install protoc
+        shell: cmd
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: "src/node/.nvmrc"
+
+      # Build x64
+      - name: Fetch WebRTC artifact (x64)
+        run: sh ./bin/fetch-artifact --platform windows-x64 --release
+
+      - name: Build RingRTC (x64)
+        run: sh ./bin/build-desktop --ringrtc-only --release
+
+      # Build ARM64
+      - name: Fetch WebRTC artifact (ARM64)
+        run: sh ./bin/fetch-artifact --platform windows-arm64 --release -o out-arm
+
+      - name: Build RingRTC (ARM64)
+        run: |
+          echo "TARGET_ARCH=arm64" >> $env:GITHUB_ENV
+          echo "OUTPUT_DIR=out-arm" >> $env:GITHUB_ENV
+
+      - name: Build RingRTC (ARM64) - continued
+        run: sh ./bin/build-desktop --ringrtc-only --release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows
+          path: src/node/build/
+          retention-days: 1
+
+  publish:
+    name: Publish to npm
+    needs: [build_linux_x64, build_linux_arm64, build_macos, build_windows]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # Needed for creating releases
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: "src/node/.nvmrc"
+          registry-url: "https://registry.npmjs.org/"
+
+      # Download all build artifacts
+      - name: Download Linux x64 build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux-x64
+          path: src/node/build/
+
+      - name: Download Linux ARM64 build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux-arm64
+          path: src/node/build/
+
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos
+          path: src/node/build/
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-windows
+          path: src/node/build/
+
+      - name: List build directory
+        run: ls -la src/node/build/
+
+      # Determine version from package.json
+      - name: Determine version
+        id: version
+        run: |
+          VERSION=$(jq -r .version src/node/package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # Create tarball for GitHub Releases
+      - name: Create prebuild archive
+        run: tar czf "ringrtc-desktop-build-v${{ steps.version.outputs.version }}.tar.gz" build
+        working-directory: src/node
+
+      - name: Calculate checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(sha256sum "ringrtc-desktop-build-v${{ steps.version.outputs.version }}.tar.gz" | cut -d ' ' -f 1)
+          echo "sha256=$CHECKSUM" >> $GITHUB_OUTPUT
+          echo "Checksum: $CHECKSUM"
+        working-directory: src/node
+
+      # Upload to GitHub Releases
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src/node/ringrtc-desktop-build-v${{ steps.version.outputs.version }}.tar.gz
+          generate_release_notes: true
+
+      # Update package.json with checksum
+      - name: Update prebuild checksum
+        run: |
+          sed -i 's/"prebuildChecksum": ""/"prebuildChecksum": "${{ steps.checksum.outputs.sha256 }}"/' package.json
+        working-directory: src/node
+
+      # Install and build
+      - name: Install dependencies
+        run: npm ci
+        working-directory: src/node
+
+      - name: Build TypeScript
+        run: npm run build
+        working-directory: src/node
+
+      # Publish to npm
+      - name: Publish to npm
+        run: npm publish --access public
+        working-directory: src/node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
