@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.64.1
+
+- Fix bug in starting peek after receiving device_joined_or_left
+
 ## v2.64.0
 
 - Update to webrtc 7444f
