@@ -4445,12 +4445,10 @@ impl Client {
                                 Self::request_remote_devices_as_soon_as_possible(state);
                             }
                         }
+                    } else {
+                        info!("SFU notified that a remote device has joined or left, requesting update");
+                        Self::request_remote_devices_as_soon_as_possible(state);
                     }
-                } else {
-                    info!(
-                        "SFU notified that a remote device has joined or left, requesting update"
-                    );
-                    Self::request_remote_devices_as_soon_as_possible(state);
                 }
             });
         }
