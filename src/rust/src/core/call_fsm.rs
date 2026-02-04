@@ -84,6 +84,12 @@ pub enum CallEvent {
         audio_levels_interval: Option<Duration>,
     },
 
+    // Informational events
+    /// Sending an offer to a remote peer (caller only).
+    SendingOffer,
+    /// Sending an answer to a remote peer (callee only).
+    SendingAnswer,
+
     // Signaling events from client application
     /// Received answer from remote peer (caller only).
     ReceivedAnswer(signaling::ReceivedAnswer),
@@ -124,6 +130,8 @@ impl fmt::Display for CallEvent {
                     call_config, audio_levels_interval
                 )
             }
+            CallEvent::SendingOffer => "SendingOffer".to_string(),
+            CallEvent::SendingAnswer => "SendingAnswer".to_string(),
             CallEvent::ReceivedAnswer(received) => {
                 format!("ReceivedAnswer, device: {}", received.sender_device_id)
             }
@@ -385,6 +393,8 @@ where
                 audio_levels_interval,
             } => self.handle_proceed(call, state, call_config, audio_levels_interval),
             CallEvent::AcceptCall => self.handle_accept_call(call, state),
+            CallEvent::SendingOffer => Ok(()),
+            CallEvent::SendingAnswer => Ok(()),
             CallEvent::ReceivedAnswer(received) => {
                 self.handle_received_answer(call, state, received)
             }

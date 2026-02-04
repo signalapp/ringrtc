@@ -75,6 +75,10 @@ message DirectCallSummary {
   optional uint32          ice_candidate_switch_count = 2;
   optional uint32          ice_reconnect_count        = 3;
   optional bool            relayed                    = 4;
+  optional uint64          offer_sent_time            = 5;
+  optional uint64          answer_sent_time           = 6;
+  optional uint64          answer_received_time       = 7;
+  optional uint64          ice_connected_time         = 8;
 }
 
 message GroupCallSummary {

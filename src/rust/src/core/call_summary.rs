@@ -16,7 +16,7 @@ use prost::Message;
 use sketches_ddsketch::{Config, DDSketch};
 
 use crate::{
-    common::{CallEndReason, CallState, ConnectionState, Result},
+    common::{CallEndReason, ConnectionState, Result},
     core::{
         call_fsm::CallEvent, call_mutex::CallMutex, connection::ConnectionObserverEvent,
         group_call::RemoteDeviceState,
@@ -627,6 +627,7 @@ impl From<&QualityStatsSketches> for QualityStats {
 #[derive(Debug)]
 struct CallInfo {
     start_time: SystemTime,
+    // For direct calls, this is the time when a user accepts the call.
     connect_time: Option<SystemTime>,
     stream_summaries: StreamSummaries,
     // This value is set to true if the data was being exchanged over the
@@ -847,9 +848,9 @@ impl DirectCallSummary {
     }
 
     /// Processes a call event.
-    pub fn on_call_event(&self, state: CallState, event: &CallEvent) {
+    pub fn on_call_event(&self, event: &CallEvent) {
         match self.lock() {
-            Ok(mut guard) => guard.on_call_event(state, event),
+            Ok(mut guard) => guard.on_call_event(event),
             Err(error) => {
                 error!("Failed to process call event: {:?}", error);
             }
@@ -899,6 +900,14 @@ struct DirectCallSummaryInner {
     relayed: bool,
     ice_candidate_switch_count: u32,
     ice_reconnect_count: u32,
+    /// The time when an offer message is sent from the call object. Callers only.
+    offer_sent_time: Option<Timestamp>,
+    /// The time when an answer message is sent from the call object. Callees only.
+    answer_sent_time: Option<Timestamp>,
+    /// The time when the first answer is received from a remote device. Callers only.
+    answer_received_time: Option<Timestamp>,
+    /// The time when the first connection object achieves an ICE connection.
+    ice_connected_time: Option<Timestamp>,
 }
 
 impl DirectCallSummaryInner {
@@ -940,6 +949,10 @@ impl DirectCallSummaryInner {
                 ice_candidate_switch_count: Some(self.ice_candidate_switch_count),
                 ice_reconnect_count: Some(self.ice_reconnect_count),
                 relayed: Some(self.relayed),
+                offer_sent_time: self.offer_sent_time.map(Into::into),
+                answer_sent_time: self.answer_sent_time.map(Into::into),
+                answer_received_time: self.answer_received_time.map(Into::into),
+                ice_connected_time: self.ice_connected_time.map(Into::into),
             }),
             stats_sets: self.call_info.stats_sets.to_proto(),
             ..Default::default()
@@ -975,11 +988,7 @@ impl DirectCallSummaryInner {
         }
     }
 
-    fn process_connection_observer_event(
-        &mut self,
-        state: CallState,
-        event: &ConnectionObserverEvent,
-    ) {
+    fn process_connection_observer_event(&mut self, event: &ConnectionObserverEvent) {
         match event {
             ConnectionObserverEvent::IceConnected => {
                 self.call_info.on_event(Event::IceConnected);
@@ -998,17 +1007,20 @@ impl DirectCallSummaryInner {
                 }
             }
             ConnectionObserverEvent::StateChanged(connection_state) => {
-                match (state, connection_state) {
-                    (
-                        CallState::ConnectedBeforeAccepted | CallState::ConnectedAndAccepted,
-                        ConnectionState::ConnectedAndAccepted,
-                    ) => {
+                match connection_state {
+                    ConnectionState::ConnectedBeforeAccepted => {
+                        // Catch the first connection detected.
+                        self.set_ice_connected_time();
+                    }
+                    ConnectionState::ConnectedAndAccepted
+                    | ConnectionState::ConnectingAfterAccepted => {
+                        // If accepted, by definition, there is a connection, so set it in
+                        // case it wasn't handled yet. Then set the `connect_time` which is
+                        // the time the user accepted the call.
+                        self.set_ice_connected_time();
                         self.call_info.set_connect_time();
                     }
-                    (
-                        CallState::ConnectedAndAccepted,
-                        ConnectionState::ReconnectingAfterAccepted,
-                    ) => {
+                    ConnectionState::ReconnectingAfterAccepted => {
                         self.ice_reconnect_count += 1;
                     }
                     _ => {}
@@ -1018,14 +1030,44 @@ impl DirectCallSummaryInner {
         }
     }
 
-    fn on_call_event(&mut self, state: CallState, event: &CallEvent) {
-        if let CallEvent::ConnectionObserverEvent(event, _) = event {
-            self.process_connection_observer_event(state, event);
+    fn on_call_event(&mut self, event: &CallEvent) {
+        match event {
+            CallEvent::ConnectionObserverEvent(event, _) => {
+                self.process_connection_observer_event(event)
+            }
+            CallEvent::SendingOffer => self.set_offer_sent_time(),
+            CallEvent::SendingAnswer => self.set_answer_sent_time(),
+            CallEvent::ReceivedAnswer(_) => self.set_answer_received_time(),
+            _ => {}
         }
     }
 
     fn on_stats_snapshot_ready(&mut self, stats: &StatsSnapshot) {
         self.call_info.on_stats_snapshot_ready(stats);
+    }
+
+    fn set_offer_sent_time(&mut self) {
+        if self.offer_sent_time.is_none() {
+            self.offer_sent_time = Timestamp::now()
+        }
+    }
+
+    fn set_answer_sent_time(&mut self) {
+        if self.answer_sent_time.is_none() {
+            self.answer_sent_time = Timestamp::now()
+        }
+    }
+
+    fn set_answer_received_time(&mut self) {
+        if self.answer_received_time.is_none() {
+            self.answer_received_time = Timestamp::now()
+        }
+    }
+
+    fn set_ice_connected_time(&mut self) {
+        if self.ice_connected_time.is_none() {
+            self.ice_connected_time = Timestamp::now()
+        }
     }
 }
 

@@ -595,6 +595,7 @@ where
                     )?;
                     let answer = connection
                         .start_incoming(pending_call.received, pending_call.ice_candidates)?;
+                    self.call_summary.on_call_event(&CallEvent::SendingAnswer);
                     call_manager.send_answer(
                         self.clone(),
                         connection.clone(),
@@ -641,6 +642,7 @@ where
                     offer: offer.clone(),
                 });
 
+                self.call_summary.on_call_event(&CallEvent::SendingOffer);
                 call_manager.send_offer(self.clone(), parent_connection, offer)?;
                 // If we don't do this, then hangups won't be sent.
                 self.did_send_offer.store(true, Ordering::Release);
@@ -866,7 +868,7 @@ where
         if let Ok(state) = self.state()
             && state != CallState::Terminated
         {
-            self.call_summary.on_call_event(state, &event);
+            self.call_summary.on_call_event(&event);
         }
         self.fsm_sender
             .try_send((self.clone(), event))
