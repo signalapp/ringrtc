@@ -16,7 +16,13 @@ public class CallLinkRootKey {
   }
 
   public CallLinkRootKey(@NonNull byte[] keyBytes) throws CallException {
-    nativeValidateKeyBytes(keyBytes);
+    this(keyBytes, true);
+  }
+
+  CallLinkRootKey(@NonNull byte[] keyBytes, boolean validate) throws CallException {
+    if (validate) {
+      nativeValidateKeyBytes(keyBytes);
+    }
     this.rawKey = keyBytes;
   }
 

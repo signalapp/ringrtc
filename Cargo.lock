@@ -509,9 +509,9 @@ dependencies = [
 
 [[package]]
 name = "const-str"
-version = "0.6.4"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "451d0640545a0553814b4c646eb549343561618838e9b42495f466131fe3ad49"
+checksum = "93e19f68b180ebff43d6d42005c4b5f046c65fcac28369ba8b3beaad633f9ec0"
 
 [[package]]
 name = "core-foundation"
@@ -1246,9 +1246,9 @@ checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
 
 [[package]]
 name = "hpke-rs"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0d131cd4e00b0d03bee8a120828a374474511ec1a713f2bdf2fa5528dc92b32"
+checksum = "c8c09b01d75373842d3123a4dd51bad5cb70e95d8b96e50bc20d08877a8d2443"
 dependencies = [
  "hpke-rs-crypto",
  "libcrux-sha3",
@@ -1259,9 +1259,9 @@ dependencies = [
 
 [[package]]
 name = "hpke-rs-crypto"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d51ffd304e06803f90f2e56a24a6910f19b8516f842d7b72a436c51026279876"
+checksum = "2dd92b7d7f0deaae59c152e01c01f5280ea92dfac82090e5c025879b32df9193"
 dependencies = [
  "rand_core 0.9.3",
 ]
@@ -1735,7 +1735,7 @@ dependencies = [
 [[package]]
 name = "libsignal-account-keys"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.86.7#3929708a59ac301086c365b91a26936209a372ec"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.87.1#f08390b0e2f67d5faf47bb9d1a3db191314db93c"
 dependencies = [
  "argon2",
  "derive_more",
@@ -1758,7 +1758,7 @@ dependencies = [
 [[package]]
 name = "libsignal-core"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.86.7#3929708a59ac301086c365b91a26936209a372ec"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.87.1#f08390b0e2f67d5faf47bb9d1a3db191314db93c"
 dependencies = [
  "curve25519-dalek",
  "derive_more",
@@ -1770,6 +1770,7 @@ dependencies = [
  "thiserror 2.0.17",
  "uuid",
  "x25519-dalek",
+ "zerocopy",
 ]
 
 [[package]]
@@ -2151,7 +2152,7 @@ dependencies = [
 [[package]]
 name = "poksho"
 version = "0.7.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.86.7#3929708a59ac301086c365b91a26936209a372ec"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.87.1#f08390b0e2f67d5faf47bb9d1a3db191314db93c"
 dependencies = [
  "curve25519-dalek",
  "hmac",
@@ -2901,7 +2902,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "signal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.86.7#3929708a59ac301086c365b91a26936209a372ec"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.87.1#f08390b0e2f67d5faf47bb9d1a3db191314db93c"
 dependencies = [
  "aes",
  "cbc",
@@ -4240,7 +4241,7 @@ dependencies = [
 [[package]]
 name = "zkcredential"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.86.7#3929708a59ac301086c365b91a26936209a372ec"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.87.1#f08390b0e2f67d5faf47bb9d1a3db191314db93c"
 dependencies = [
  "cfg-if",
  "curve25519-dalek",
@@ -4258,7 +4259,7 @@ dependencies = [
 [[package]]
 name = "zkgroup"
 version = "0.9.0"
-source = "git+https://github.com/signalapp/libsignal?tag=v0.86.7#3929708a59ac301086c365b91a26936209a372ec"
+source = "git+https://github.com/signalapp/libsignal?tag=v0.87.1#f08390b0e2f67d5faf47bb9d1a3db191314db93c"
 dependencies = [
  "aes",
  "aes-gcm-siv",

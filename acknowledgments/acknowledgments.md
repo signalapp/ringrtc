@@ -3518,7 +3518,7 @@ SOFTWARE.
 
 ```
 
-## const-str 0.6.4
+## const-str 1.0.0
 
 ```
 MIT License
@@ -4109,7 +4109,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## hpke-rs-crypto 0.3.0, hpke-rs 0.4.0
+## hpke-rs-crypto 0.4.0, hpke-rs 0.5.0
 
 ```
 Mozilla Public License Version 2.0

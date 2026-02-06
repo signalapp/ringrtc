@@ -9,7 +9,7 @@ use std::{borrow::Cow, convert::TryFrom, panic, sync::Arc, time::Duration};
 
 use jni::{
     JNIEnv,
-    objects::{GlobalRef, JByteArray, JClass, JObject, JString, JValueOwned},
+    objects::{GlobalRef, JByteArray, JClass, JObject, JString},
     sys::{jint, jlong},
 };
 use log::Level;
@@ -32,15 +32,14 @@ use crate::{
     error::RingRtcError,
     lite::{
         call_links::{
-            self, CallLinkDeleteRequest, CallLinkEpoch, CallLinkMemberResolver,
-            CallLinkRestrictions, CallLinkUpdateRequest,
+            self, CallLinkDeleteRequest, CallLinkMemberResolver, CallLinkRestrictions,
+            CallLinkUpdateRequest, auth_header_from_auth_credential,
         },
         http,
-        sfu::{self, Delegate, GroupMember},
+        sfu::{self, Delegate, GroupMember, PeekArgs},
     },
-    webrtc,
     webrtc::{
-        media,
+        self, media,
         peer_connection::PeerConnection,
         peer_connection_factory::{self as pcf, PeerConnectionFactory},
         peer_connection_observer::PeerConnectionObserver,
@@ -570,7 +569,6 @@ pub fn read_call_link(
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
     request_id: jlong,
 ) -> Result<()> {
     let sfu_url = env.get_string(&sfu_url)?;
@@ -580,12 +578,10 @@ pub fn read_call_link(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let platform = call_manager.platform()?.try_clone()?;
-    let epoch = jobject_to_call_link_epoch(env, epoch)?;
     call_links::read_call_link(
         call_manager.http_client(),
         &Cow::from(&sfu_url),
         root_key,
-        epoch,
         &auth_credential_presentation,
         Box::new(move |result| {
             platform.handle_call_link_result(request_id as u32, result);
@@ -640,7 +636,6 @@ pub fn update_call_link(
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
     admin_passkey: JByteArray,
     new_name: JString,
     new_restrictions: jint,
@@ -674,12 +669,10 @@ pub fn update_call_link(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let platform = call_manager.platform()?.try_clone()?;
-    let epoch = jobject_to_call_link_epoch(env, epoch)?;
     call_links::update_call_link(
         call_manager.http_client(),
         &Cow::from(&sfu_url),
         root_key,
-        epoch,
         &auth_credential_presentation,
         &CallLinkUpdateRequest {
             admin_passkey: &admin_passkey,
@@ -702,7 +695,6 @@ pub fn delete_call_link(
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
     admin_passkey: JByteArray,
     request_id: jlong,
 ) -> Result<()> {
@@ -714,12 +706,10 @@ pub fn delete_call_link(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let platform = call_manager.platform()?.try_clone()?;
-    let epoch = jobject_to_call_link_epoch(env, epoch)?;
     call_links::delete_call_link(
         call_manager.http_client(),
         &Cow::from(&sfu_url),
         root_key,
-        epoch,
         &auth_credential_presentation,
         &CallLinkDeleteRequest {
             admin_passkey: &admin_passkey,
@@ -786,7 +776,6 @@ pub fn peek_call_link_call(
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
 ) -> Result<()> {
     let request_id = request_id as u32;
 
@@ -798,15 +787,15 @@ pub fn peek_call_link_call(
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let platform = call_manager.platform()?.try_clone()?;
-    let epoch = jobject_to_call_link_epoch(env, epoch)?.map(|epoch| epoch.to_string());
     sfu::peek(
         call_manager.http_client(),
         &Cow::from(&sfu_url),
-        Some(hex::encode(root_key.derive_room_id())),
-        epoch,
-        call_links::auth_header_from_auth_credential(&auth_credential_presentation),
-        Arc::new(CallLinkMemberResolver::from(&root_key)),
-        Some(root_key),
+        PeekArgs {
+            room_id_header: None,
+            auth_header: auth_header_from_auth_credential(&auth_credential_presentation),
+            member_resolver: Arc::new(CallLinkMemberResolver::from(&root_key)),
+            call_link_root_key: Some(root_key),
+        },
         Box::new(move |result| platform.handle_peek_result(request_id, result)),
     );
     Ok(())
@@ -883,7 +872,6 @@ pub fn create_call_link_call_client(
     endorsement_public_key: JByteArray,
     auth_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
     admin_passkey: JByteArray,
     hkdf_extra_info: JByteArray,
     audio_levels_interval_millis: jint,
@@ -938,13 +926,11 @@ pub fn create_call_link_call_client(
     };
 
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let epoch = jobject_to_call_link_epoch(env, epoch)?;
     call_manager.create_call_link_call_client(
         sfu_url,
         &endorsement_public_key,
         &auth_presentation,
         root_key,
-        epoch,
         admin_passkey,
         hkdf_extra_info,
         audio_levels_interval,
@@ -1245,30 +1231,5 @@ fn jint_to_restrictions(raw_restrictions: jint) -> Option<CallLinkRestrictions> 
         0 => Some(CallLinkRestrictions::None),
         1 => Some(CallLinkRestrictions::AdminApproval),
         _ => None,
-    }
-}
-
-fn jobject_to_call_link_epoch(env: &mut JNIEnv, epoch: JObject) -> Result<Option<CallLinkEpoch>> {
-    const CALL_LINK_EPOCH_FIELD_NAME: &str = "epoch";
-    const CALL_LINK_EPOCH_FIELD_TYPE: &str = jni_signature!(int);
-
-    if epoch.is_null() {
-        Ok(None)
-    } else {
-        let wrapped_value = jni_get_field(
-            env,
-            epoch,
-            CALL_LINK_EPOCH_FIELD_NAME,
-            CALL_LINK_EPOCH_FIELD_TYPE,
-        )?;
-        if let JValueOwned::Int(value) = wrapped_value {
-            Ok(Some(CallLinkEpoch::from(value as u32)))
-        } else {
-            Err(AndroidError::JniGetField(
-                CALL_LINK_EPOCH_FIELD_NAME.to_string(),
-                CALL_LINK_EPOCH_FIELD_TYPE.to_string(),
-            )
-            .into())
-        }
     }
 }

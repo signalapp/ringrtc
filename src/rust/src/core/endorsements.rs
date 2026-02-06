@@ -263,7 +263,7 @@ mod tests {
     static CALL_LINK_ROOT_KEY: LazyLock<CallLinkRootKey> =
         LazyLock::new(|| CallLinkRootKey::try_from([0x43u8; 16].as_ref()).unwrap());
     static CALL_LINK_SECRET_PARAMS: LazyLock<CallLinkSecretParams> =
-        LazyLock::new(|| CallLinkSecretParams::derive_from_root_key(&CALL_LINK_ROOT_KEY.bytes()));
+        LazyLock::new(|| CallLinkSecretParams::derive_from_root_key(CALL_LINK_ROOT_KEY.as_slice()));
 
     fn endorsement_cache() -> EndorsementsCache {
         EndorsementsCache::new(*CALL_LINK_SECRET_PARAMS)
@@ -279,7 +279,7 @@ mod tests {
         let params = ServerSecretParams::generate(randomness);
         let public_params = params.get_public_params();
         let root_key = CallLinkRootKey::generate(thread_rng());
-        let call_link_key = CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
+        let call_link_key = CallLinkSecretParams::derive_from_root_key(root_key.as_slice());
         // TODO switch to call link derived keys
         let today_key = GroupSendDerivedKeyPair::for_expiration(expiration, &params);
         let member_ids: Vec<Aci> = (0..num_endorsements as u8)

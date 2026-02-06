@@ -77,6 +77,10 @@ extension rtc_Bytes {
 
         return Self.allocate(from: Array(data))
     }
+    
+    func isEmpty() -> Bool {
+        self.ptr == nil
+    }
 
     func deallocate() {
         if self.ptr == nil {

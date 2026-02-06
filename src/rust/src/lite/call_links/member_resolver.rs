@@ -39,7 +39,7 @@ impl<'a> From<&'a CallLinkRootKey> for CallLinkMemberResolver {
     fn from(value: &'a CallLinkRootKey) -> Self {
         Self {
             zkparams: zkgroup::call_links::CallLinkSecretParams::derive_from_root_key(
-                &value.bytes(),
+                value.as_slice(),
             ),
             cache: CallMutex::new(VecDeque::new(), "CallLinkMemberResolver.cache"),
             bytes_cache: CallMutex::new(VecDeque::new(), "CallLinkMemberResolver.bytes_cache"),

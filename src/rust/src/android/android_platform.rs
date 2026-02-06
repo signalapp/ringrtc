@@ -33,7 +33,7 @@ use crate::{
         signaling,
     },
     lite::{
-        call_links::{CallLinkEpoch, CallLinkRestrictions, CallLinkState, Empty},
+        call_links::{CallLinkRestrictions, CallLinkRootKey, CallLinkState, Empty},
         http,
         sfu::{self, DemuxId, PeekInfo, PeekResult, UserId},
     },
@@ -51,7 +51,7 @@ const CALL_SUMMARY_QUALITY_STATS_CLASS: &str =
 const CALL_SUMMARY_MEDIA_QUALITY_STATS_CLASS: &str =
     jni_class_name!(org.signal.ringrtc.CallSummary::MediaQualityStats);
 const CALL_LINK_STATE_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkState);
-const CALL_LINK_EPOCH_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkEpoch);
+const CALL_LINK_ROOT_KEY_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallLinkRootKey);
 const CALL_MANAGER_CLASS: &str = "CallManager";
 const GROUP_CALL_CLASS: &str = "GroupCall";
 const HTTP_HEADER_CLASS: &str = jni_class_name!(org.signal.ringrtc.HttpHeader);
@@ -1726,7 +1726,7 @@ impl AndroidPlatform {
             jni_class_name!(org.signal.ringrtc.GroupCall::JoinState),
             jni_class_name!(org.signal.ringrtc.GroupCall::SpeechEvent),
             CALL_LINK_STATE_CLASS,
-            CALL_LINK_EPOCH_CLASS,
+            CALL_LINK_ROOT_KEY_CLASS,
             HTTP_HEADER_CLASS,
             HTTP_RESULT_CLASS,
             PEEK_INFO_CLASS,
@@ -2268,33 +2268,26 @@ impl AndroidPlatform {
         env.new_object(call_summary_class, args.sig, &args.args)
     }
 
-    fn make_call_link_epoch_object<'a>(
+    fn make_call_link_root_key_object<'a>(
         &self,
         env: &mut JNIEnv<'a>,
-        epoch: &Option<CallLinkEpoch>,
+        root_key: &CallLinkRootKey,
     ) -> jni::errors::Result<JObject<'a>> {
-        match epoch {
-            None => Ok(JObject::null()),
-            Some(epoch) => {
-                let epoch_class = match self.class_cache.get_class(CALL_LINK_EPOCH_CLASS) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        error!("call_link_epoch_class: {:?}", error);
-                        return Ok(JObject::null());
-                    }
-                };
-                let epoch_value = u32::from(*epoch) as i32;
-                let args = jni_args!((epoch_value => int) -> void);
-                let object = match env.new_object(epoch_class, args.sig, &args.args) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        error!("call_link_epoch_class: {:?}", error);
-                        return Ok(JObject::null());
-                    }
-                };
-                Ok(object)
+        let call_link_root_key_class = match self.class_cache.get_class(CALL_LINK_ROOT_KEY_CLASS) {
+            Ok(v) => v,
+            Err(error) => {
+                error!("call_link_root_key_class: {:?}", error);
+                return Ok(JObject::null());
             }
-        }
+        };
+
+        let key_bytes = JObject::from(env.byte_array_from_slice(root_key.as_slice())?);
+        let args = jni_args!((
+            key_bytes => [byte],
+            false => boolean,
+        ) -> void);
+
+        env.new_object(call_link_root_key_class, args.sig, &args.args)
     }
 
     fn make_call_link_state_object<'a>(
@@ -2328,14 +2321,14 @@ impl AndroidPlatform {
                     .unwrap_or_default()
                     .as_secs();
 
-                let epoch = self.make_call_link_epoch_object(env, &state.epoch)?;
+                let root_key = self.make_call_link_root_key_object(env, &state.root_key)?;
 
                 let args = jni_args!((
                     name_object => java.lang.String,
                     raw_restrictions => int,
                     state.revoked => boolean,
                     expiration_in_epoch_seconds as jlong => long,
-                    epoch => org.signal.ringrtc.CallLinkEpoch,
+                    root_key => org.signal.ringrtc.CallLinkRootKey,
                 ) -> void);
 
                 env.new_object(call_link_state_class, args.sig, &args.args)

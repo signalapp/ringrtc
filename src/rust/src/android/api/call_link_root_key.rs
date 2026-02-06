@@ -8,13 +8,12 @@ use std::borrow::Cow;
 use jni::{
     JNIEnv,
     objects::{JByteArray, JClass, JObject, JString},
-    sys::jint,
 };
 
 use crate::{
     android::{error, jni_util::*},
     core::util::try_scoped,
-    lite::call_links::{CallLinkEpoch, CallLinkRootKey},
+    lite::call_links::CallLinkRootKey,
 };
 
 #[unsafe(no_mangle)]
@@ -27,7 +26,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeParseKeyS
     try_scoped(|| {
         let string = env.get_string(&string)?;
         let key = CallLinkRootKey::try_from(Cow::from(&string).as_ref())?;
-        Ok(env.byte_array_from_slice(&key.bytes())?)
+        Ok(env.byte_array_from_slice(key.as_slice())?)
     })
     .unwrap_or_else(|e| {
         error::throw_error(&mut env, e);
@@ -58,7 +57,7 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_generate<'local
 ) -> JObject<'local> {
     try_scoped(|| {
         let key = CallLinkRootKey::generate(rand::rngs::OsRng);
-        let bytes = env.byte_array_from_slice(&key.bytes())?;
+        let bytes = env.byte_array_from_slice(key.as_slice())?;
         let object = jni_new_object(
             &mut env,
             jni_class_name!(org.signal.ringrtc.CallLinkRootKey),
@@ -117,42 +116,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkRootKey_nativeToFormatt
         let key_bytes = env.convert_byte_array(key_bytes)?;
         let key = CallLinkRootKey::try_from(key_bytes.as_slice())?;
         Ok(env.new_string(key.to_formatted_string())?)
-    })
-    .unwrap_or_else(|e| {
-        error::throw_error(&mut env, e);
-        JString::default()
-    })
-}
-
-#[unsafe(no_mangle)]
-#[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkEpoch_nativeParse(
-    mut env: JNIEnv,
-    _class: JClass,
-    string: JString,
-) -> jint {
-    try_scoped(|| {
-        let string = env.get_string(&string)?;
-        let epoch = CallLinkEpoch::try_from(Cow::from(&string).as_ref())?;
-        let value: u32 = epoch.into();
-        Ok(value as jint)
-    })
-    .unwrap_or_else(|e| {
-        error::throw_error(&mut env, e);
-        0
-    })
-}
-
-#[unsafe(no_mangle)]
-#[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_signal_ringrtc_CallLinkEpoch_nativeToFormattedString<'local>(
-    mut env: JNIEnv<'local>,
-    _class: JClass,
-    value: jint,
-) -> JString<'local> {
-    try_scoped(|| {
-        let epoch = CallLinkEpoch::from(value as u32);
-        Ok(env.new_string(epoch.to_formatted_string())?)
     })
     .unwrap_or_else(|e| {
         error::throw_error(&mut env, e);

@@ -9,7 +9,6 @@ import {
   CallLinkState,
   CallLinkRestrictions,
   CallLinkRootKey,
-  CallLinkEpoch,
 } from './CallLinks';
 import { CallSummary } from './CallSummary';
 import Native from './Native';
@@ -271,7 +270,7 @@ interface RawCallLinkState {
   rawRestrictions: number;
   revoked: boolean;
   expiration: Date;
-  epoch?: number;
+  rootKey: Uint8Array;
 }
 
 function normalizeAudioLevel(raw: RawAudioLevel): NormalizedAudioLevel {
@@ -294,16 +293,12 @@ function rawCallLinkStateToCallLinkState(
         restrictions = CallLinkRestrictions.Unknown;
         break;
     }
-    let epoch: CallLinkEpoch | undefined;
-    if (raw.epoch) {
-      epoch = new CallLinkEpoch(raw.epoch);
-    }
     return new CallLinkState(
       raw.name,
       restrictions,
       raw.revoked,
       raw.expiration,
-      epoch
+      new CallLinkRootKey(raw.rootKey)
     );
   } else {
     return undefined;
@@ -951,7 +946,6 @@ export class RingRTCType {
    * @param sfuUrl - the URL to use when accessing the SFU
    * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
    * @param linkRootKey - the root key for the call link
-   * @param epoch - the optional call link epoch
    *
    * Expected failure codes include:
    * - 404: the room does not exist (or expired so long ago that it has been removed from the server)
@@ -959,8 +953,7 @@ export class RingRTCType {
   readCallLink(
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
-    linkRootKey: CallLinkRootKey,
-    epoch: CallLinkEpoch | undefined
+    linkRootKey: CallLinkRootKey
   ): Promise<HttpResult<CallLinkState>> {
     const [requestId, promise] = this._callLinkRequests.add();
     // Response comes back via handleCallLinkResponse
@@ -969,8 +962,7 @@ export class RingRTCType {
         requestId,
         sfuUrl,
         authCredentialPresentation,
-        linkRootKey.bytes,
-        epoch?.asNumber()
+        linkRootKey.bytes
       );
     });
     return promise;
@@ -1048,7 +1040,6 @@ export class RingRTCType {
    * @param sfuUrl - the URL to use when accessing the SFU
    * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
    * @param linkRootKey - the root key for the call link
-   * @param epoch - the optional call link epoch
    * @param adminPasskey - the passkey specified when the link was created
    * @param newName - the new name to use
    */
@@ -1056,7 +1047,6 @@ export class RingRTCType {
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
-    epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array,
     newName: string
   ): Promise<HttpResult<CallLinkState>> {
@@ -1068,7 +1058,6 @@ export class RingRTCType {
         sfuUrl,
         authCredentialPresentation,
         linkRootKey.bytes,
-        epoch?.asNumber(),
         adminPasskey,
         newName,
         undefined,
@@ -1091,7 +1080,6 @@ export class RingRTCType {
    * @param sfuUrl - the URL to use when accessing the SFU
    * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
    * @param linkRootKey - the root key for the call link
-   * @param epoch - the optional call link epoch
    * @param adminPasskey - the passkey specified when the link was created
    * @param restrictions - the new restrictions to use
    */
@@ -1099,7 +1087,6 @@ export class RingRTCType {
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
-    epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array,
     restrictions: Exclude<CallLinkRestrictions, CallLinkRestrictions.Unknown>
   ): Promise<HttpResult<CallLinkState>> {
@@ -1111,7 +1098,6 @@ export class RingRTCType {
         sfuUrl,
         authCredentialPresentation,
         linkRootKey.bytes,
-        epoch?.asNumber(),
         adminPasskey,
         undefined,
         restrictions,
@@ -1133,14 +1119,12 @@ export class RingRTCType {
    * @param sfuUrl - the URL to use when accessing the SFU
    * @param authCredentialPresentation - a serialized CallLinkAuthCredentialPresentation
    * @param linkRootKey - the root key for the call link
-   * @param epoch - the optional call link epoch
    * @param adminPasskey - the passkey specified when the link was created
    */
   deleteCallLink(
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
     linkRootKey: CallLinkRootKey,
-    epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array
   ): Promise<HttpResult<undefined>> {
     const [requestId, promise] = this._emptyRequests.add();
@@ -1151,7 +1135,6 @@ export class RingRTCType {
         sfuUrl,
         authCredentialPresentation,
         linkRootKey.bytes,
-        epoch?.asNumber(),
         adminPasskey
       );
     });
@@ -1225,7 +1208,6 @@ export class RingRTCType {
     endorsementPublicKey: Uint8Array,
     authCredentialPresentation: Uint8Array,
     rootKey: CallLinkRootKey,
-    epoch: CallLinkEpoch | undefined,
     adminPasskey: Uint8Array | undefined,
     hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number | undefined,
@@ -1236,7 +1218,6 @@ export class RingRTCType {
       endorsementPublicKey,
       authCredentialPresentation,
       rootKey.bytes,
-      epoch?.asNumber(),
       adminPasskey,
       hkdfExtraInfo,
       audioLevelsIntervalMillis || 0
@@ -1301,8 +1282,7 @@ export class RingRTCType {
   peekCallLinkCall(
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
-    rootKey: CallLinkRootKey,
-    epoch: CallLinkEpoch | undefined
+    rootKey: CallLinkRootKey
   ): Promise<HttpResult<PeekInfo>> {
     const [requestId, promise] = this._peekRequests.add();
     // Response comes back via handlePeekResponse
@@ -1311,8 +1291,7 @@ export class RingRTCType {
         requestId,
         sfuUrl,
         authCredentialPresentation,
-        rootKey.bytes,
-        epoch?.asNumber()
+        rootKey.bytes
       );
     });
     return promise;
@@ -3064,7 +3043,6 @@ export interface CallManager {
     endorsementPublicKey: Uint8Array,
     authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
-    epoch: number | undefined,
     adminPasskey: Uint8Array | undefined,
     hkdfExtraInfo: Uint8Array,
     audioLevelsIntervalMillis: number
@@ -3125,8 +3103,7 @@ export interface CallManager {
     requestId: number,
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
-    linkRootKey: Uint8Array,
-    epoch: number | undefined
+    linkRootKey: Uint8Array
   ): void;
   createCallLink(
     requestId: number,
@@ -3142,7 +3119,6 @@ export interface CallManager {
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
-    epoch: number | undefined,
     adminPasskey: Uint8Array,
     newName: string | undefined,
     newRestrictions: number | undefined,
@@ -3153,7 +3129,6 @@ export interface CallManager {
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
     linkRootKey: Uint8Array,
-    epoch: number | undefined,
     adminPasskey: Uint8Array
   ): void;
   // Response comes back via handlePeekResponse
@@ -3168,8 +3143,7 @@ export interface CallManager {
     requestId: number,
     sfuUrl: string,
     authCredentialPresentation: Uint8Array,
-    linkRootKey: Uint8Array,
-    epoch: number | undefined
+    linkRootKey: Uint8Array
   ): void;
 
   getAudioInputs(): Array<AudioDevice>;

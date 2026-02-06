@@ -24,20 +24,20 @@ public class CallLinkState {
   private final boolean revoked;
   @NonNull
   private final Instant expiration;
-  @Nullable
-  private final CallLinkEpoch epoch;
+  @NonNull
+  private final CallLinkRootKey rootKey;
 
   /** Should only be used for testing. */
-  public CallLinkState(@NonNull String name, @NonNull Restrictions restrictions, boolean revoked, @NonNull Instant expiration, @Nullable CallLinkEpoch epoch) {
+  public CallLinkState(@NonNull String name, @NonNull Restrictions restrictions, boolean revoked, @NonNull Instant expiration, @NonNull CallLinkRootKey rootKey) {
     this.name = name;
     this.restrictions = restrictions;
     this.revoked = revoked;
     this.expiration = expiration;
-    this.epoch = epoch;
+    this.rootKey = rootKey;
   }
 
   @CalledByNative
-  private CallLinkState(@NonNull String name, int rawRestrictions, boolean revoked, long expirationEpochSecond, @Nullable CallLinkEpoch epoch) {
+  private CallLinkState(@NonNull String name, int rawRestrictions, boolean revoked, long expirationEpochSecond, @NonNull CallLinkRootKey rootKey) {
     this.name = name;
     switch (rawRestrictions) {
     case 0:
@@ -51,7 +51,7 @@ public class CallLinkState {
     }
     this.revoked = revoked;
     this.expiration = Instant.ofEpochSecond(expirationEpochSecond);
-    this.epoch = epoch;
+    this.rootKey = rootKey;
   }
 
   /** Is never null, but may be empty. */
@@ -74,8 +74,8 @@ public class CallLinkState {
     return expiration;
   }
 
-  @Nullable
-  public CallLinkEpoch getEpoch() {
-    return epoch;
+  @NonNull
+  public CallLinkRootKey getRootKey() {
+    return rootKey;
   }
 }

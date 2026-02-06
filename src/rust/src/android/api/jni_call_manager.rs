@@ -610,7 +610,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReadCallLink
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
     request_id: jlong,
 ) {
     match call_manager::read_call_link(
@@ -619,7 +618,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcReadCallLink
         sfu_url,
         auth_credential_presentation,
         root_key,
-        epoch,
         request_id,
     ) {
         Ok(v) => v,
@@ -670,7 +668,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateCallLi
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
     admin_passkey: JByteArray,
     new_name: JString,
     new_restrictions: jint,
@@ -683,7 +680,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateCallLi
         sfu_url,
         auth_credential_presentation,
         root_key,
-        epoch,
         admin_passkey,
         new_name,
         new_restrictions,
@@ -706,7 +702,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcDeleteCallLi
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
     admin_passkey: JByteArray,
     request_id: jlong,
 ) {
@@ -716,7 +711,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcDeleteCallLi
         sfu_url,
         auth_credential_presentation,
         root_key,
-        epoch,
         admin_passkey,
         request_id,
     ) {
@@ -765,7 +759,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekCallLink
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
-    epoch: JObject,
 ) {
     match call_manager::peek_call_link_call(
         &mut env,
@@ -774,7 +767,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcPeekCallLink
         sfu_url,
         auth_credential_presentation,
         root_key,
-        epoch,
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -826,7 +818,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateCallLink
     endorsement_public_key: JByteArray,
     auth_presentation: JByteArray,
     call_link_bytes: JByteArray,
-    epoch: JObject,
     admin_passkey: JByteArray,
     hkdf_extra_info: JByteArray,
     audio_levels_interval_millis: jint,
@@ -841,7 +832,6 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcCreateCallLink
         endorsement_public_key,
         auth_presentation,
         call_link_bytes,
-        epoch,
         admin_passkey,
         hkdf_extra_info,
         audio_levels_interval_millis,

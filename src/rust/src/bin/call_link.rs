@@ -14,8 +14,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as base64};
 use rand::SeedableRng;
 use ringrtc::lite::{
     call_links::{
-        CallLinkDeleteRequest, CallLinkEpoch, CallLinkRestrictions, CallLinkRootKey,
-        CallLinkUpdateRequest,
+        CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkUpdateRequest,
     },
     http::{self, Client, sim as sim_http},
 };
@@ -66,19 +65,6 @@ fn start_of_today_in_epoch_seconds() -> zkgroup::Timestamp {
     zkgroup::Timestamp::from_epoch_seconds(now.as_secs() - remainder)
 }
 
-#[derive(Debug)]
-struct ParseEpochError;
-
-fn parse_epoch(epoch: &str) -> Result<Option<CallLinkEpoch>, ParseEpochError> {
-    match epoch {
-        "-" => Ok(None),
-        _ => match epoch.parse::<u32>() {
-            Ok(value) => Ok(Some(value.into())),
-            _ => Err(ParseEpochError),
-        },
-    }
-}
-
 fn issue_and_present_auth_credential(
     server_zkparams: &zkgroup::generic_server_params::GenericServerSecretParams,
     public_zkparams: &zkgroup::generic_server_params::GenericServerPublicParams,
@@ -94,7 +80,7 @@ fn issue_and_present_auth_credential(
     )
     .receive(user_id, timestamp, public_zkparams)
     .unwrap();
-    let call_link_zkparams = CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
+    let call_link_zkparams = CallLinkSecretParams::derive_from_root_key(root_key.as_slice());
     auth_credential.present(
         user_id,
         timestamp,
@@ -107,7 +93,6 @@ fn issue_and_present_auth_credential(
 #[allow(clippy::too_many_arguments)]
 fn make_testing_request(
     id: &str,
-    epoch: Option<CallLinkEpoch>,
     server_zkparams: &zkgroup::generic_server_params::GenericServerSecretParams,
     public_zkparams: &zkgroup::generic_server_params::GenericServerPublicParams,
     http_client: &sim_http::HttpClient,
@@ -134,7 +119,6 @@ fn make_testing_request(
                     "X-Room-Id".to_string(),
                     hex::encode(root_key.derive_room_id()),
                 ),
-                ("X-Epoch".to_string(), epoch.unwrap().to_string()),
             ]),
             body: None,
         },
@@ -147,7 +131,6 @@ fn make_testing_request(
                     &http_client_inner,
                     url,
                     root_key,
-                    None,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     Box::new(show_result),
                 )
@@ -237,7 +220,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     .receive(create_credential_response, user_id, &public_zkparams)
                     .unwrap();
                 let call_link_zkparams =
-                    CallLinkSecretParams::derive_from_root_key(&root_key.bytes());
+                    CallLinkSecretParams::derive_from_root_key(root_key.as_slice());
                 let create_credential_presentation = create_credential.present(
                     &room_id,
                     user_id,
@@ -256,15 +239,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     Box::new(show_result),
                 );
             }
-            ["read", id, epoch] => {
-                let epoch = {
-                    if let Ok(result) = parse_epoch(epoch) {
-                        result
-                    } else {
-                        println!("Couldn't parse the epoch value");
-                        continue;
-                    }
-                };
+            ["read", id] => {
                 let root_key = root_key_from_id(id);
                 let auth_credential_presentation = issue_and_present_auth_credential(
                     &server_zkparams,
@@ -275,20 +250,11 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
-                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     Box::new(show_result),
                 );
             }
-            ["delete", id, epoch] => {
-                let epoch = {
-                    if let Ok(result) = parse_epoch(epoch) {
-                        result
-                    } else {
-                        println!("Couldn't parse the epoch value");
-                        continue;
-                    }
-                };
+            ["delete", id] => {
                 let root_key = root_key_from_id(id);
                 let auth_credential_presentation = issue_and_present_auth_credential(
                     &server_zkparams,
@@ -299,7 +265,6 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
-                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     &CallLinkDeleteRequest {
                         admin_passkey: ADMIN_PASSKEY,
@@ -307,15 +272,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     Box::new(show_result),
                 );
             }
-            ["set-title", id, epoch, new_title] => {
-                let epoch = {
-                    if let Ok(result) = parse_epoch(epoch) {
-                        result
-                    } else {
-                        println!("Couldn't parse the epoch value");
-                        continue;
-                    }
-                };
+            ["set-title", id, new_title] => {
                 let root_key = root_key_from_id(id);
                 let encrypted_name = root_key.encrypt(new_title.as_bytes(), rand::thread_rng());
                 let auth_credential_presentation = issue_and_present_auth_credential(
@@ -327,7 +284,6 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
-                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     &CallLinkUpdateRequest {
                         admin_passkey: ADMIN_PASSKEY,
@@ -337,15 +293,7 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     Box::new(show_result),
                 );
             }
-            ["admin-approval", id, epoch, on_or_off @ ("on" | "off")] => {
-                let epoch = {
-                    if let Ok(result) = parse_epoch(epoch) {
-                        result
-                    } else {
-                        println!("Couldn't parse the epoch value");
-                        continue;
-                    }
-                };
+            ["admin-approval", id, on_or_off @ ("on" | "off")] => {
                 let root_key = root_key_from_id(id);
                 let auth_credential_presentation = issue_and_present_auth_credential(
                     &server_zkparams,
@@ -361,7 +309,6 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
                     &http_client,
                     url,
                     root_key,
-                    epoch,
                     &bincode::serialize(&auth_credential_presentation).unwrap(),
                     &CallLinkUpdateRequest {
                         admin_passkey: ADMIN_PASSKEY,
@@ -374,7 +321,6 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
             ["reset-approvals", id] => {
                 make_testing_request(
                     id,
-                    None,
                     &server_zkparams,
                     &public_zkparams,
                     &http_client,
@@ -386,7 +332,6 @@ The admin passkey for any created links is a constant {ADMIN_PASSKEY:?}.
             ["reset-expiration", id] => {
                 make_testing_request(
                     id,
-                    None,
                     &server_zkparams,
                     &public_zkparams,
                     &http_client,

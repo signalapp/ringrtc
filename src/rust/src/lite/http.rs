@@ -70,6 +70,7 @@ impl ResponseStatus {
     pub const INVALID_RESPONSE_BODY_JSON: Self = Self { code: 702 };
     pub const CALL_LINK_EXPIRED: Self = Self { code: 703 };
     pub const CALL_LINK_INVALID: Self = Self { code: 704 };
+    pub const CALL_LINK_ALREADY_CREATED: Self = Self { code: 705 };
 }
 
 impl std::fmt::Display for ResponseStatus {

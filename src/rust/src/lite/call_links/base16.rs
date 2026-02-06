@@ -87,13 +87,17 @@ const SKIP_ALPHABET: &[u8] = b"-"; // only skip "-"
 impl ConsonantBase16<'_> {
     #[allow(dead_code)]
     pub fn parse(string: &str) -> Result<Vec<u8>, DecodeError> {
-        Self::parse_with_separators(string, usize::MAX)
+        Self::parse_with_separators(string, [usize::MAX])
     }
 
     /// Attempts to decode a consonant-base-16-encoded string to a sequence of bytes.
     ///
     /// There must be a `-` every `chunk_size` bytes (note: bytes, not characters).
-    pub fn parse_with_separators(string: &str, chunk_size: usize) -> Result<Vec<u8>, DecodeError> {
+    pub fn parse_with_separators(
+        string: &str,
+        chunk_sizes: impl IntoIterator<Item = usize>,
+    ) -> Result<Vec<u8>, DecodeError> {
+        let mut chunk_size_iter = chunk_sizes.into_iter();
         let mut result = Vec::new();
 
         let identify_bad_char = |iter: &std::slice::Iter<'_, u8>| {
@@ -110,7 +114,10 @@ impl ConsonantBase16<'_> {
         };
 
         let mut bytes = string.as_bytes().iter();
-        let mut count_until_separator = chunk_size;
+        let mut count_until_separator = match chunk_size_iter.next() {
+            Some(chunk_size) => chunk_size,
+            None => return Ok(result),
+        };
         while let Some(first) = bytes.next() {
             if count_until_separator == 0 {
                 if !SKIP_ALPHABET.contains(first) {
@@ -120,7 +127,10 @@ impl ConsonantBase16<'_> {
                 if bytes.len() == 0 {
                     return Err(DecodeError::UnexpectedSeparator(string.len() - 1));
                 }
-                count_until_separator = chunk_size;
+                count_until_separator = match chunk_size_iter.next() {
+                    Some(chunk_size) => chunk_size,
+                    None => break,
+                };
                 continue;
             }
 
@@ -181,8 +191,9 @@ mod tests {
         #[track_caller]
         fn check(expected: &str, actual: &str, chunk_size: usize) {
             let expected_bytes = ConsonantBase16::parse(expected).expect("well-formed for test");
-            let actual_bytes = ConsonantBase16::parse_with_separators(actual, chunk_size)
-                .expect("well-formed for test");
+            let actual_bytes =
+                ConsonantBase16::parse_with_separators(actual, std::iter::repeat(chunk_size))
+                    .expect("well-formed for test");
             assert_eq!(expected_bytes, actual_bytes, "{expected}");
         }
 
@@ -202,7 +213,7 @@ mod tests {
             DecodeError::OddLengthInput
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bc-c", 1).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bc-c", [1, 1]).unwrap_err(),
             DecodeError::OddLengthInput
         );
     }
@@ -210,15 +221,15 @@ mod tests {
     #[test]
     fn test_missing_separators() {
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bcdf", 1).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bcdf", [1]).unwrap_err(),
             DecodeError::MissingSeparator(2)
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bc-dfbc-df", 1).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bc-dfbc-df", [1, 1, 1]).unwrap_err(),
             DecodeError::MissingSeparator(5)
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bcdfbcdf", 2).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bcdfbcdf", [2]).unwrap_err(),
             DecodeError::MissingSeparator(4)
         );
     }
@@ -234,11 +245,11 @@ mod tests {
             DecodeError::UnexpectedSeparator(2)
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("b-", 1).unwrap_err(),
+            ConsonantBase16::parse_with_separators("b-", [1]).unwrap_err(),
             DecodeError::UnexpectedSeparator(1)
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bc-", 1).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bc-", [1]).unwrap_err(),
             DecodeError::UnexpectedSeparator(2)
         );
         assert_eq!(
@@ -246,15 +257,15 @@ mod tests {
             DecodeError::UnexpectedSeparator(3)
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bc-d-f", 1).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bc-d-f", [1, 1]).unwrap_err(),
             DecodeError::UnexpectedSeparator(4)
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bcd-f", 2).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bcd-f", [2]).unwrap_err(),
             DecodeError::UnexpectedSeparator(3)
         );
         assert_eq!(
-            ConsonantBase16::parse_with_separators("bc-df", 2).unwrap_err(),
+            ConsonantBase16::parse_with_separators("bc-df", [2]).unwrap_err(),
             DecodeError::UnexpectedSeparator(2)
         );
     }

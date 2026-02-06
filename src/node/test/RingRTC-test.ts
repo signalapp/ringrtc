@@ -452,11 +452,19 @@ describe('RingRTC', () => {
       0, 86, 35, 236, 48, 147, 33, 66, 168, 208, 215, 207, 250, 177, 151, 88, 0,
       158, 219, 130, 38, 212, 159, 171, 211, 130, 220, 217, 29, 133, 9, 96, 97,
     ]);
+    const EXAMPLE_CALL_LINK_ROOT_KEY_V1_INVALID = CallLinkRootKey.parse(
+      'bcdfghkm-npqrstxz-bcdfghkm-npqrstxz-nc-bbbbbbbb'
+    );
+    const EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID = CallLinkRootKey.parse(
+      'bcdfghkm-npqrstxz-bcdfghkm-npqrstxz-bc-sbspxdpx'
+    );
     const EXAMPLE_CALL_LINK_ROOT_KEY = CallLinkRootKey.parse(
       'bcdf-ghkm-npqr-stxz-bcdf-ghkm-npqr-stxz'
     );
     const EXPIRATION_EPOCH_SECONDS = 4133980800; // 2101-01-01
+    const EPOCH = 3234456222;
     const EXAMPLE_STATE_JSON = `{"restrictions": "none","name":"","revoked":false,"expiration":${EXPIRATION_EPOCH_SECONDS}}`;
+    const EXAMPLE_STATE_JSON_WITH_EPOCH = `{"restrictions": "none","name":"","revoked":false,"expiration":${EXPIRATION_EPOCH_SECONDS},"epoch":${EPOCH}}`;
     const EXAMPLE_EMPTY_RESPONSE = '{}';
 
     it('has accessors', () => {
@@ -480,7 +488,14 @@ describe('RingRTC', () => {
       );
     });
 
-    it('can create call links', async () => {
+    it('can be formatted', () => {
+      assert.equal(
+        `${EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID}`,
+        'bcdfghkm-npqrstxz-bcdfghkm-npqrstxz-bc-sbspxdpx'
+      );
+    });
+
+    it('can create v1 call links', async () => {
       const requestIdPromise = new Promise<number>((resolve, reject) => {
         RingRTC.handleSendHttpRequest = (
           requestId,
@@ -501,7 +516,54 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.createCallLink(
         'sfu.example',
         new Uint8Array([1, 2, 3]),
-        EXAMPLE_CALL_LINK_ROOT_KEY,
+        EXAMPLE_CALL_LINK_ROOT_KEY_V1_INVALID,
+        CallLinkRootKey.generateAdminPassKey(),
+        new Uint8Array([4, 5, 6]),
+        CallLinkRestrictions.None
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(
+        requestId,
+        200,
+        new TextEncoder().encode(EXAMPLE_STATE_JSON_WITH_EPOCH)
+      );
+      const result = await callLinkResponse;
+      if (result.success) {
+        assert.deepEqual(
+          result.value.expiration,
+          new Date(EXPIRATION_EPOCH_SECONDS * 1000)
+        );
+        assert.deepEqual(
+          result.value.rootKey,
+          EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID
+        );
+      } else {
+        assert.fail('should have succeeded');
+      }
+    });
+
+    it('can create v0 call links', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Put);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.createCallLink(
+        'sfu.example',
+        new Uint8Array([1, 2, 3]),
+        EXAMPLE_CALL_LINK_ROOT_KEY_V1_INVALID,
         CallLinkRootKey.generateAdminPassKey(),
         new Uint8Array([4, 5, 6]),
         CallLinkRestrictions.None
@@ -512,12 +574,13 @@ describe('RingRTC', () => {
         200,
         new TextEncoder().encode(EXAMPLE_STATE_JSON)
       );
-      const state = await callLinkResponse;
-      if (state.success) {
+      const result = await callLinkResponse;
+      if (result.success) {
         assert.deepEqual(
-          state.value.expiration,
+          result.value.expiration,
           new Date(EXPIRATION_EPOCH_SECONDS * 1000)
         );
+        assert.deepEqual(result.value.rootKey, EXAMPLE_CALL_LINK_ROOT_KEY);
       } else {
         assert.fail('should have succeeded');
       }
@@ -544,7 +607,7 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.createCallLink(
         'sfu.example',
         new Uint8Array([1, 2, 3]),
-        EXAMPLE_CALL_LINK_ROOT_KEY,
+        EXAMPLE_CALL_LINK_ROOT_KEY_V1_INVALID,
         CallLinkRootKey.generateAdminPassKey(),
         new Uint8Array([4, 5, 6]),
         CallLinkRestrictions.None
@@ -559,7 +622,7 @@ describe('RingRTC', () => {
       }
     });
 
-    it('can read call links', async () => {
+    it('can read v0 call links', async () => {
       const requestIdPromise = new Promise<number>((resolve, reject) => {
         RingRTC.handleSendHttpRequest = (
           requestId,
@@ -580,8 +643,7 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.readCallLink(
         'sfu.example',
         new Uint8Array([1, 2, 3]),
-        EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined
+        EXAMPLE_CALL_LINK_ROOT_KEY
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
@@ -594,6 +656,50 @@ describe('RingRTC', () => {
         assert.deepEqual(
           state.value.expiration,
           new Date(EXPIRATION_EPOCH_SECONDS * 1000)
+        );
+      } else {
+        assert.fail('should have succeeded');
+      }
+    });
+
+    it('can read v1 call links', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Get);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.readCallLink(
+        'sfu.example',
+        new Uint8Array([1, 2, 3]),
+        EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(
+        requestId,
+        200,
+        new TextEncoder().encode(EXAMPLE_STATE_JSON)
+      );
+      const state = await callLinkResponse;
+      if (state.success) {
+        assert.deepEqual(
+          state.value.expiration,
+          new Date(EXPIRATION_EPOCH_SECONDS * 1000)
+        );
+        assert.deepEqual(
+          state.value.rootKey,
+          EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID
         );
       } else {
         assert.fail('should have succeeded');
@@ -621,8 +727,7 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.readCallLink(
         'sfu.example',
         new Uint8Array([1, 2, 3]),
-        EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined
+        EXAMPLE_CALL_LINK_ROOT_KEY
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(requestId, 404, new Uint8Array());
@@ -634,7 +739,7 @@ describe('RingRTC', () => {
       }
     });
 
-    it('can update call link names', async () => {
+    it('can update call link v0 names', async () => {
       const requestIdPromise = new Promise<number>((resolve, reject) => {
         RingRTC.handleSendHttpRequest = (
           requestId,
@@ -656,7 +761,42 @@ describe('RingRTC', () => {
         'sfu.example',
         new Uint8Array([1, 2, 3]),
         EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined,
+        CallLinkRootKey.generateAdminPassKey(),
+        'Secret Hideout'
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(
+        requestId,
+        200,
+        new TextEncoder().encode(EXAMPLE_STATE_JSON)
+      );
+      const state = await callLinkResponse;
+      // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
+      assert.isTrue(state.success);
+    });
+
+    it('can update call link v1 names', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Put);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.updateCallLinkName(
+        'sfu.example',
+        new Uint8Array([1, 2, 3]),
+        EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID,
         CallLinkRootKey.generateAdminPassKey(),
         'Secret Hideout'
       );
@@ -693,7 +833,6 @@ describe('RingRTC', () => {
         'sfu.example',
         new Uint8Array([1, 2, 3]),
         EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined,
         CallLinkRootKey.generateAdminPassKey(),
         'Secret Hideout'
       );
@@ -729,7 +868,6 @@ describe('RingRTC', () => {
         'sfu.example',
         new Uint8Array([1, 2, 3]),
         EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined,
         CallLinkRootKey.generateAdminPassKey(),
         ''
       );
@@ -766,7 +904,6 @@ describe('RingRTC', () => {
         'sfu.example',
         new Uint8Array([1, 2, 3]),
         EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined,
         CallLinkRootKey.generateAdminPassKey(),
         CallLinkRestrictions.AdminApproval
       );
@@ -781,7 +918,7 @@ describe('RingRTC', () => {
       assert.isTrue(state.success);
     });
 
-    it('can delete call link', async () => {
+    it('can delete call link v0', async () => {
       const requestIdPromise = new Promise<number>((resolve, reject) => {
         RingRTC.handleSendHttpRequest = (
           requestId,
@@ -803,7 +940,6 @@ describe('RingRTC', () => {
         'sfu.example',
         new Uint8Array([1, 2, 3]),
         EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined,
         CallLinkRootKey.generateAdminPassKey()
       );
       const requestId = await requestIdPromise;
@@ -817,7 +953,42 @@ describe('RingRTC', () => {
       assert.isTrue(state.success);
     });
 
-    it('can peek with no active call', async () => {
+    it('can delete call link v1', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Delete);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.deleteCallLink(
+        'sfu.example',
+        new Uint8Array([1, 2, 3]),
+        EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID,
+        CallLinkRootKey.generateAdminPassKey()
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(
+        requestId,
+        200,
+        new TextEncoder().encode(EXAMPLE_EMPTY_RESPONSE)
+      );
+      const state = await callLinkResponse;
+      // Don't bother checking anything beyond status here, since we are mocking the SFU's responses anyway.
+      assert.isTrue(state.success);
+    });
+
+    it('can peek with no active call v0', async () => {
       const requestIdPromise = new Promise<number>((resolve, reject) => {
         RingRTC.handleSendHttpRequest = (
           requestId,
@@ -838,8 +1009,42 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.peekCallLinkCall(
         'sfu.example',
         new Uint8Array([1, 2, 3]),
-        EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined
+        EXAMPLE_CALL_LINK_ROOT_KEY
+      );
+      const requestId = await requestIdPromise;
+      RingRTC.receivedHttpResponse(requestId, 404, new Uint8Array());
+      const state = await callLinkResponse;
+      if (state.success) {
+        assert.isUndefined(state.value.eraId);
+        assert.equal(state.value.deviceCountIncludingPendingDevices, 0);
+        assert.equal(state.value.deviceCountExcludingPendingDevices, 0);
+      } else {
+        assert.fail('should have succeeded');
+      }
+    });
+
+    it('can peek with no active call v1', async () => {
+      const requestIdPromise = new Promise<number>((resolve, reject) => {
+        RingRTC.handleSendHttpRequest = (
+          requestId,
+          url,
+          method,
+          _headers,
+          _body
+        ) => {
+          try {
+            assert.isTrue(url.startsWith('sfu.example'));
+            assert.equal(method, HttpMethod.Get);
+            resolve(requestId);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
+      const callLinkResponse = RingRTC.peekCallLinkCall(
+        'sfu.example',
+        new Uint8Array([1, 2, 3]),
+        EXAMPLE_CALL_LINK_ROOT_KEY_V1_VALID
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(requestId, 404, new Uint8Array());
@@ -874,8 +1079,7 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.peekCallLinkCall(
         'sfu.example',
         new Uint8Array([1, 2, 3]),
-        EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined
+        EXAMPLE_CALL_LINK_ROOT_KEY
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
@@ -912,8 +1116,7 @@ describe('RingRTC', () => {
       const callLinkResponse = RingRTC.peekCallLinkCall(
         'sfu.example',
         new Uint8Array([1, 2, 3]),
-        EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined
+        EXAMPLE_CALL_LINK_ROOT_KEY
       );
       const requestId = await requestIdPromise;
       RingRTC.receivedHttpResponse(
@@ -963,7 +1166,6 @@ describe('RingRTC', () => {
         EXAMPLE_PUBLIC_ENDORSEMENT_KEY,
         new Uint8Array([1, 2, 3]), // auth creds
         EXAMPLE_CALL_LINK_ROOT_KEY,
-        undefined, // epoch
         undefined, // admin pass
         new Uint8Array(), // hkdf
         undefined, // audio levels

@@ -34,11 +34,11 @@ use crate::{
     },
     lite::{
         call_links::{
-            self, CallLinkDeleteRequest, CallLinkEpoch, CallLinkRestrictions, CallLinkRootKey,
-            CallLinkState, CallLinkUpdateRequest, Empty,
+            self, CallLinkDeleteRequest, CallLinkRestrictions, CallLinkRootKey, CallLinkState,
+            CallLinkUpdateRequest, Empty,
         },
         http,
-        sfu::{self, DemuxId, GroupMember, PeekInfo, UserId},
+        sfu::{self, DemuxId, GroupMember, PeekArgs, PeekInfo, UserId},
     },
     native::{
         CallState, CallStateHandler, GroupUpdate, GroupUpdateHandler, NativeCallContext,
@@ -122,12 +122,6 @@ impl log::Log for Log {
     }
 
     fn flush(&self) {}
-}
-
-impl From<CallLinkEpoch> for f64 {
-    fn from(value: CallLinkEpoch) -> Self {
-        u32::from(value).into()
-    }
 }
 
 // When JavaScript processes events, we want everything to go through a common queue that
@@ -716,6 +710,8 @@ fn to_js_call_link_state<'a>(
                 )
                 .or_else(|e| cx.throw_range_error(e.to_string()))?;
             state_object.set(cx, "expiration", js_expiration)?;
+            let root_key = JsUint8Array::from_slice(cx, state.root_key.as_slice())?;
+            state_object.set(cx, "rootKey", root_key)?;
             Ok(state_object.upcast())
         }
         None => Ok(cx.undefined().upcast()),
@@ -1533,10 +1529,7 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
 
-    let epoch = cx.argument::<JsValue>(4)?;
-    let epoch = jsvalue_to_epoch(epoch, &mut cx)?;
-
-    let admin_passkey = cx.argument::<JsValue>(5)?;
+    let admin_passkey = cx.argument::<JsValue>(4)?;
     let admin_passkey = if admin_passkey.is_a::<JsUndefined, _>(&mut cx) {
         None
     } else {
@@ -1544,9 +1537,9 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
         Some(admin_passkey.as_slice(&cx).to_vec())
     };
 
-    let hkdf_extra_info = cx.argument::<JsUint8Array>(6)?.as_slice(&cx).to_vec();
+    let hkdf_extra_info = cx.argument::<JsUint8Array>(5)?.as_slice(&cx).to_vec();
 
-    let audio_levels_interval_millis = cx.argument::<JsNumber>(7)?.value(&mut cx) as u64;
+    let audio_levels_interval_millis = cx.argument::<JsNumber>(6)?.value(&mut cx) as u64;
     let audio_levels_interval = if audio_levels_interval_millis == 0 {
         None
     } else {
@@ -1565,7 +1558,6 @@ fn createCallLinkCallClient(mut cx: FunctionContext) -> JsResult<JsValue> {
             &endorsement_public_key,
             &auth_presentation,
             root_key,
-            epoch,
             admin_passkey,
             hkdf_extra_info,
             audio_levels_interval,
@@ -2039,19 +2031,17 @@ fn peekCallLinkCall(mut cx: FunctionContext) -> JsResult<JsValue> {
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
 
-    let epoch = cx.argument::<JsValue>(4)?;
-    let epoch = jsvalue_to_epoch(epoch, &mut cx)?.map(|epoch| epoch.to_string());
-
     with_call_endpoint(&mut cx, |endpoint| {
         let event_reporter = endpoint.event_reporter.clone();
         sfu::peek(
             endpoint.call_manager.http_client(),
             &sfu_url,
-            Some(hex::encode(root_key.derive_room_id())),
-            epoch,
-            call_links::auth_header_from_auth_credential(&auth_presentation),
-            Arc::new(call_links::CallLinkMemberResolver::from(&root_key)),
-            Some(root_key.clone()),
+            PeekArgs {
+                room_id_header: None,
+                auth_header: call_links::auth_header_from_auth_credential(&auth_presentation),
+                member_resolver: Arc::new(call_links::CallLinkMemberResolver::from(&root_key)),
+                call_link_root_key: Some(root_key),
+            },
             Box::new(move |peek_result| {
                 // Ignore errors, that can only mean we're shutting down.
                 let _ = event_reporter.send(Event::GroupUpdate(GroupUpdate::PeekResult {
@@ -2072,8 +2062,6 @@ fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
-    let epoch = cx.argument::<JsValue>(4)?;
-    let epoch = jsvalue_to_epoch(epoch, &mut cx)?;
 
     with_call_endpoint(&mut cx, |endpoint| {
         let event_reporter = endpoint.event_reporter.clone();
@@ -2081,7 +2069,6 @@ fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
             endpoint.call_manager.http_client(),
             &sfu_url,
             root_key,
-            epoch,
             &auth_presentation,
             Box::new(move |result| {
                 // Ignore errors, that can only mean we're shutting down.
@@ -2092,22 +2079,6 @@ fn readCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
-}
-
-fn jsvalue_to_epoch(
-    raw_epoch: Handle<'_, JsValue>,
-    cx: &mut FunctionContext,
-) -> std::result::Result<Option<CallLinkEpoch>, neon::result::Throw> {
-    if raw_epoch.is_a::<JsUndefined, _>(cx) {
-        Ok(None)
-    } else {
-        let value = raw_epoch.downcast_or_throw::<JsNumber, _>(cx)?.value(cx);
-        if value < 0.0 || value > u32::MAX.into() {
-            cx.throw_error(format!("call link epoch value is out of range ({value})"))
-        } else {
-            Ok(Some(CallLinkEpoch::from(value as u32)))
-        }
-    }
 }
 
 fn jsvalue_to_restrictions(
@@ -2170,11 +2141,9 @@ fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
-    let epoch = cx.argument::<JsValue>(4)?;
-    let epoch = jsvalue_to_epoch(epoch, &mut cx)?;
-    let admin_passkey = cx.argument::<JsUint8Array>(5)?.as_slice(&cx).to_vec();
+    let admin_passkey = cx.argument::<JsUint8Array>(4)?.as_slice(&cx).to_vec();
 
-    let new_name = cx.argument::<JsValue>(6)?;
+    let new_name = cx.argument::<JsValue>(5)?;
     let new_name = if new_name.is_a::<JsUndefined, _>(&mut cx) {
         None
     } else {
@@ -2188,10 +2157,10 @@ fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
         })
     };
 
-    let new_restrictions = cx.argument::<JsValue>(7)?;
+    let new_restrictions = cx.argument::<JsValue>(6)?;
     let new_restrictions = jsvalue_to_restrictions(new_restrictions, &mut cx)?;
 
-    let new_revoked = cx.argument::<JsValue>(8)?;
+    let new_revoked = cx.argument::<JsValue>(7)?;
     let new_revoked = if new_revoked.is_a::<JsUndefined, _>(&mut cx) {
         None
     } else {
@@ -2208,7 +2177,6 @@ fn updateCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
             endpoint.call_manager.http_client(),
             &sfu_url,
             root_key,
-            epoch,
             &create_presentation,
             &CallLinkUpdateRequest {
                 admin_passkey: &admin_passkey,
@@ -2235,9 +2203,7 @@ fn deleteCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     let root_key_bytes = cx.argument::<JsUint8Array>(3)?;
     let root_key = CallLinkRootKey::try_from(root_key_bytes.as_slice(&cx))
         .or_else(|e| cx.throw_type_error(e.to_string()))?;
-    let epoch = cx.argument::<JsValue>(4)?;
-    let epoch = jsvalue_to_epoch(epoch, &mut cx)?;
-    let admin_passkey = cx.argument::<JsUint8Array>(5)?.as_slice(&cx).to_vec();
+    let admin_passkey = cx.argument::<JsUint8Array>(4)?.as_slice(&cx).to_vec();
 
     with_call_endpoint(&mut cx, |endpoint| {
         let event_reporter = endpoint.event_reporter.clone();
@@ -2245,7 +2211,6 @@ fn deleteCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
             endpoint.call_manager.http_client(),
             &sfu_url,
             root_key,
-            epoch,
             &auth_presentation,
             &CallLinkDeleteRequest {
                 admin_passkey: &admin_passkey,
@@ -2804,31 +2769,7 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
                 let js_request_id = cx.number(request_id);
                 let (status, state_object) = match result {
                     Ok(state) => {
-                        let state_object = cx.empty_object();
-                        let js_name = cx.string(state.name);
-                        state_object.set(&mut cx, "name", js_name)?;
-                        let js_revoked = cx.boolean(state.revoked);
-                        state_object.set(&mut cx, "revoked", js_revoked)?;
-                        let js_restrictions = cx.number(match state.restrictions {
-                            call_links::CallLinkRestrictions::None => 0,
-                            call_links::CallLinkRestrictions::AdminApproval => 1,
-                            call_links::CallLinkRestrictions::Unknown => -1,
-                        });
-                        state_object.set(&mut cx, "rawRestrictions", js_restrictions)?;
-                        let js_expiration = cx
-                            .date(
-                                state
-                                    .expiration
-                                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_millis() as f64,
-                            )
-                            .or_else(|e| cx.throw_range_error(e.to_string()))?;
-                        state_object.set(&mut cx, "expiration", js_expiration)?;
-                        if let Some(epoch) = state.epoch {
-                            let epoch_value = cx.number(epoch);
-                            state_object.set(&mut cx, "epoch", epoch_value)?;
-                        }
+                        let state_object = to_js_call_link_state(&mut cx, Some(&state))?;
                         (cx.number(200), state_object.upcast())
                     }
                     Err(status_code) => (cx.number(status_code.code), cx.undefined().upcast()),
@@ -3152,7 +3093,7 @@ fn callIdFromEra(mut cx: FunctionContext) -> JsResult<JsValue> {
 fn CallLinkRootKey_parse(mut cx: FunctionContext) -> JsResult<JsUint8Array> {
     let string = cx.argument::<JsString>(0)?.value(&mut cx);
     match CallLinkRootKey::try_from(string.as_str()) {
-        Ok(key) => JsUint8Array::from_slice(&mut cx, &key.bytes()),
+        Ok(key) => JsUint8Array::from_slice(&mut cx, key.as_slice()),
         Err(e) => cx.throw_error(e.to_string()),
     }
 }
@@ -3169,7 +3110,7 @@ fn CallLinkRootKey_validate(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 #[allow(non_snake_case)]
 fn CallLinkRootKey_generate(mut cx: FunctionContext) -> JsResult<JsUint8Array> {
     let key = CallLinkRootKey::generate(rand::rngs::OsRng);
-    JsUint8Array::from_slice(&mut cx, &key.bytes())
+    JsUint8Array::from_slice(&mut cx, key.as_slice())
 }
 
 #[allow(non_snake_case)]
@@ -3202,28 +3143,6 @@ fn CallLinkRootKey_toFormattedString(mut cx: FunctionContext) -> JsResult<JsStri
     }
 }
 
-#[allow(non_snake_case)]
-fn CallLinkEpoch_parse(mut cx: FunctionContext) -> JsResult<JsNumber> {
-    let string = cx.argument::<JsString>(0)?.value(&mut cx);
-    match CallLinkEpoch::try_from(string.as_str()) {
-        Ok(epoch) => {
-            let value: u32 = epoch.into();
-            Ok(cx.number(value))
-        }
-        Err(e) => cx.throw_error(e.to_string()),
-    }
-}
-
-#[allow(non_snake_case)]
-fn CallLinkEpoch_toFormattedString(mut cx: FunctionContext) -> JsResult<JsString> {
-    let epoch = cx.argument::<JsValue>(0)?;
-    match jsvalue_to_epoch(epoch, &mut cx) {
-        Ok(Some(epoch)) => Ok(cx.string(epoch.to_formatted_string())),
-        Ok(None) => cx.throw_error("epoch must be specified"),
-        Err(e) => cx.throw_error(e.to_string()),
-    }
-}
-
 #[neon::main]
 fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("createCallEndpoint", createCallEndpoint)?;
@@ -3240,12 +3159,6 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function(
         "CallLinkRootKey_toFormattedString",
         CallLinkRootKey_toFormattedString,
-    )?;
-
-    cx.export_function("CallLinkEpoch_parse", CallLinkEpoch_parse)?;
-    cx.export_function(
-        "CallLinkEpoch_toFormattedString",
-        CallLinkEpoch_toFormattedString,
     )?;
 
     let js_property_key = cx.string(CALL_ENDPOINT_PROPERTY_KEY);

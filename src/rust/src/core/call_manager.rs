@@ -43,11 +43,11 @@ use crate::{
     },
     error::RingRtcError,
     lite::{
-        call_links::{self, CallLinkEpoch, CallLinkMemberResolver, CallLinkRootKey},
+        call_links::{self, CallLinkMemberResolver, CallLinkRootKey},
         http,
         sfu::{
-            self, DemuxId, GroupMember, MemberMap, MembershipProof, ObfuscatedResolver, PeekInfo,
-            UserId,
+            self, DemuxId, GroupMember, MemberMap, MembershipProof, ObfuscatedResolver, PeekArgs,
+            PeekInfo, UserId,
         },
     },
     protobuf,
@@ -2948,7 +2948,7 @@ impl<T> CallManager<T>
 where
     T: Platform,
 {
-    // The membership proof is need for authentication and the group members
+    // The membership proof is needed for authentication and the group members
     // are needed for the opaque ID => user UUID mapping.
     pub fn peek_group_call(
         &self,
@@ -2958,16 +2958,17 @@ where
         group_members: Vec<GroupMember>,
     ) {
         if let Some(auth_header) = sfu::auth_header_from_membership_proof(&membership_proof) {
-            let member_resolver = sfu::MemberMap::new(&group_members);
+            let member_resolver = Arc::new(sfu::MemberMap::new(&group_members));
             let call_manager = self.clone();
             sfu::peek(
                 &self.http_client,
                 &sfu_url,
-                None,
-                None,
-                auth_header,
-                Arc::new(member_resolver),
-                None,
+                PeekArgs {
+                    auth_header,
+                    member_resolver,
+                    room_id_header: None,
+                    call_link_root_key: None,
+                },
                 Box::new(move |peek_result| {
                     info!("handle_peek_response");
                     platform_handler!(call_manager, handle_peek_result, request_id, peek_result);
@@ -3078,7 +3079,6 @@ where
         endorsement_public_key: &[u8],
         auth_presentation: &[u8],
         root_key: CallLinkRootKey,
-        epoch: Option<CallLinkEpoch>,
         admin_passkey: Option<Vec<u8>>,
         hkdf_extra_info: Vec<u8>,
         audio_levels_interval: Option<Duration>,
@@ -3123,8 +3123,8 @@ where
         let mut sfu_client = HttpSfuClient::new(
             Box::new(self.http_client.clone()),
             sfu_url,
-            Some(&room_id),
-            epoch,
+            None,
+            Some(root_key),
             admin_passkey,
             hkdf_extra_info,
         );
@@ -3134,7 +3134,7 @@ where
         sfu_client.set_member_resolver(member_resolver.clone());
 
         let group_send_endorsement_cache = Some(EndorsementsCache::new(
-            CallLinkSecretParams::derive_from_root_key(&root_key.bytes()),
+            CallLinkSecretParams::derive_from_root_key(root_key.as_slice()),
         ));
         let endorsements_public_key: zkgroup::EndorsementPublicKey =
             zkgroup::deserialize(endorsement_public_key)?;

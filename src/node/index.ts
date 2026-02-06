@@ -58,7 +58,6 @@ export {
   CallLinkRootKey,
   CallLinkRestrictions,
   CallLinkState,
-  CallLinkEpoch,
 } from './ringrtc/CallLinks';
 
 export { CallSummary, QualityStats } from './ringrtc/CallSummary';
