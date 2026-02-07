@@ -121,11 +121,12 @@ jobs:
       run: |
         if [[ "${{ matrix.os }}" == macos-* ]]; then
           brew install protobuf coreutils
-        elif [[ "${{ matrix.os }}" == windows-* ]]; then
-          choco install protoc
         elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
           sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
         fi
+    - name: Install Protoc for Windows
+      uses: arduino/setup-protoc@v3
+      if: ${{ startsWith(matrix.os, 'windows-') }}
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
@@ -162,11 +163,12 @@ jobs:
       run: |
         if [[ "${{ matrix.os }}" == macos-* ]]; then
           brew install protobuf coreutils
-        elif [[ "${{ matrix.os }}" == windows-* ]]; then
-          choco install protoc
         elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
           sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
         fi
+    - name: Install Protoc for Windows
+      uses: arduino/setup-protoc@v3
+      if: ${{ startsWith(matrix.os, 'windows-') }}
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:

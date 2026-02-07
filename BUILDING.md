@@ -16,7 +16,7 @@ The following is derived from the depot_tools tutorial: https://commondatastorag
 
 ### Protobuf
 
-The protobuf compiler, protoc, is needed to build RingRTC. Installation is platform specific and can be found [here](https://grpc.io/docs/protoc-installation/).
+The protobuf compiler, protoc, is needed to build RingRTC. Installation is platform specific and can be found [here](https://protobuf.dev/installation/).
 
 ### Rust Components
 
