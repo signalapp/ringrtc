@@ -591,6 +591,16 @@ impl SignalingSender for CallEndpoint {
     ) -> Result<()> {
         unimplemented!()
     }
+
+    fn send_call_message_to_adhoc_group(
+        &self,
+        _message: Vec<u8>,
+        _urgency: group_call::SignalingMessageUrgency,
+        _expiration: u64,
+        _recipients_to_endorsements: HashMap<UserId, Vec<u8>>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 impl CallStateHandler for CallEndpoint {

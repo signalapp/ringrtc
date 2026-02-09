@@ -68,6 +68,8 @@ jobs:
     - name: Clippy (signaling_server)
       run: cargo clippy -- -D warnings
       working-directory: call_sim/docker/signaling_server
+    - name: Clippy (direct)
+      run: cargo clippy --package ringrtc --bin direct --features=direct
     - name: Install for node
       run: npm ci
       working-directory: src/node
