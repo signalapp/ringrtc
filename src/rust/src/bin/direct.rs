@@ -263,7 +263,7 @@ impl CallEndpoint {
                     let endpoint = Self::from_actor(peer_id.clone(), device_id, actor.clone());
 
                     let mut pcf =
-                        PeerConnectionFactory::new(&pcf::AudioConfig::default(), true, None)?; // Set up packet flow
+                        PeerConnectionFactory::new(&pcf::AudioConfig::default(), true, "", None)?; // Set up packet flow
                     let mut done = false;
                     while !done {
                         // We may need to try a few times to get these; they're not necessarily
