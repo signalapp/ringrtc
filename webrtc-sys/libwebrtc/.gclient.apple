@@ -1,0 +1,14 @@
+#
+# Copyright 2019-2021 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+
+solutions = [
+  { "name"        : "src",
+    "url"         : "https://github.com/signalapp/webrtc.git",
+    "deps_file"   : "DEPS",
+  },
+]
+
+target_os = ["ios", "mac"]
+

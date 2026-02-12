@@ -10,6 +10,8 @@ members = [
     "mrp",
     "protobuf",
     "src/rust",
+    "webrtc-sys",
+    "webrtc-sys/build",
 ]
 
 [workspace.package]

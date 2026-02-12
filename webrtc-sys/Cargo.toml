@@ -1,0 +1,17 @@
+[package]
+name = "webrtc-sys"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+
+[features]
+prebuilt-webrtc = ["webrtc-sys-build/prebuilt-webrtc"]
+simulator = ["webrtc-sys-build/simulator"]
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[build-dependencies]
+anyhow = "1.0.100"
+webrtc-sys-build = { path = "./build" }
+xshell = "0.2.7"
