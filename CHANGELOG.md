@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.65.0
+
+- Add direct call timestamps to telemetry
+
+- Implement call link epoch IDs V2
+
+- Fix direct call cli tool and add to CI
+
+- Enable noise suppression and AEC on macOS
+
+- Add webrtc-sys package
+
 ## v2.64.1
 
 - Fix bug in starting peek after receiving device_joined_or_left
@@ -170,17 +182,17 @@
 ## v2.58.1
 
 - Desktop: New Audio Device Module improvements
-    - Reduce some error!s to warn!s in ADM
-    - Update to cubeb 0.31.2, which saves battery life
-    - handle missing default device
+  - Reduce some error!s to warn!s in ADM
+  - Update to cubeb 0.31.2, which saves battery life
+  - handle missing default device
 
 - CI: Notify via bug on slow tests failure
 
 ## v2.58.0
 
 - Desktop: New Audio Device Module improvements
-    - Refactor ADM to use cubeb in an async manner
-    - Implement device changed callbacks
+  - Refactor ADM to use cubeb in an async manner
+  - Implement device changed callbacks
 
 - Some minor logging refinements
 
@@ -606,7 +618,7 @@ Desktop: Fix crash caused by new Audio Device Module
   - Remove support for setting mobile aec
   - Simplify handling of audio callbacks
 
-- Desktop ADM: Resolve dependency cycle and other improvements 
+- Desktop ADM: Resolve dependency cycle and other improvements
 
 ## v2.44.2
 
@@ -933,7 +945,7 @@ Desktop: Fix crash caused by new Audio Device Module
 
 - Reference signalapp/webrtc@5615c
   - Add configuration options to support simulation
-  - Support adapting video frames 
+  - Support adapting video frames
 
 - Reference signalapp/webrtc@5615d
   - Configure audio jitter buffer max delay
@@ -1102,7 +1114,7 @@ Desktop: Fix crash caused by new Audio Device Module
 
 - Enable Opus DTX and set default encoding bitrate to 32kbps
 
-- Desktop: Handle failure when entering PiP 
+- Desktop: Handle failure when entering PiP
 
 - Desktop: Move builds to NPM
 
@@ -1124,7 +1136,7 @@ Desktop: Fix crash caused by new Audio Device Module
 
 - Group Calls: Improve ring handling
 
-- Group Calls: Update group membership upon unknown media keys 
+- Group Calls: Update group membership upon unknown media keys
 
 - Improve display of stats in logs
 
@@ -1258,7 +1270,7 @@ Desktop: Fix crash caused by new Audio Device Module
 
 - Improve support when developing on M1 chips
 
-- Avoid notifying remote ringing in case of accepted before connected 
+- Avoid notifying remote ringing in case of accepted before connected
 
 - Process remote status events received before the call is accepted
 
