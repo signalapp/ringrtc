@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.65.1
+
+- Add webrtc_artifact_checksums.json to podspec to fix iOS build
+
 ## v2.65.0
 
 - Add direct call timestamps to telemetry
