@@ -38,6 +38,7 @@ Pod::Spec.new do |s|
     'bin/fetch-artifact.py', # env.sh has extra dependencies, so we go directly to the Python script
     'config/version.sh',
     'config/version.properties',
+    'config/webrtc_artifact_checksums.json',
     'prebuild-checksum',
 
     # controlled by bin/set-up-for-cocoapods
