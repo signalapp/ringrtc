@@ -1051,6 +1051,53 @@ fn log_c_str(s: &CStr) {
 }
 
 impl AudioDeviceModule {
+    /// Create an AudioDeviceModule that uses a Unix socket for audio I/O
+    /// instead of system audio devices (cubeb).
+    ///
+    /// The socket carries length-prefixed PCM frames:
+    ///   [4-byte big-endian payload length][PCM payload bytes]
+    ///   PCM = 960 bytes (480 samples * 2 bytes/sample, 10ms of 48kHz mono i16 LE)
+    ///
+    /// Recording thread reads PCM from socket -> feeds to WebRTC.
+    /// Playout thread gets PCM from WebRTC -> writes to socket.
+    /// When no client is connected, recording feeds silence.
+    pub fn new_socket(socket_path: String) -> anyhow::Result<Self> {
+        let (sender, receiver) = mpsc::channel();
+        let (playout_delay_sender, playout_delay_receiver) = mpsc::channel();
+
+        let input_device_names = Arc::new(Mutex::new(vec![Some(AudioDevice {
+            name: "Socket".to_string(),
+            unique_id: "socket-input".to_string(),
+            i18n_key: "".to_string(),
+        })]));
+        let output_device_names = Arc::new(Mutex::new(vec![Some(AudioDevice {
+            name: "Socket".to_string(),
+            unique_id: "socket-output".to_string(),
+            i18n_key: "".to_string(),
+        })]));
+
+        let socket_worker = SocketWorker::spawn(
+            socket_path,
+            receiver,
+            playout_delay_sender,
+        );
+
+        Ok(AudioDeviceModule {
+            backend_name: "socket".to_string(),
+            input_device_names,
+            output_device_names,
+            attempted_playout_init: false,
+            attempted_recording_init: false,
+            attempted_playout_start: false,
+            attempted_recording_start: false,
+            has_playout_device: true,
+            has_recording_device: true,
+            cubeb_worker: Some(socket_worker),
+            mpsc_sender: sender,
+            playout_delay_receiver,
+        })
+    }
+
     pub fn new() -> anyhow::Result<Self> {
         if !log_enabled()
             && let Err(e) = set_logging(LogLevel::Normal, Some(log_c_str))
@@ -1701,6 +1748,240 @@ impl AudioDeviceModule {
         {
             bail!("Failed to send RegisterAudioObserver request: {}", e);
         }
+        Ok(())
+    }
+}
+
+/// A socket-based audio worker that replaces cubeb for headless/daemon use.
+/// Reads/writes length-prefixed PCM frames on a Unix SOCK_STREAM socket.
+struct SocketWorker {
+    audio_transport: Arc<Mutex<RffiAudioTransport>>,
+    /// The accepted client connection, if any.
+    client: Option<std::os::unix::net::UnixStream>,
+    /// Listener for accepting client connections.
+    listener: std::os::unix::net::UnixListener,
+}
+
+impl SocketWorker {
+    fn spawn(
+        socket_path: String,
+        receiver: mpsc::Receiver<Event>,
+        playout_delay_sender: mpsc::Sender<anyhow::Result<u16>>,
+    ) -> JoinHandle<()> {
+        thread::spawn(move || {
+            use std::os::unix::net::UnixListener;
+
+            // Bind the media socket
+            let _ = std::fs::remove_file(&socket_path);
+            let listener = match UnixListener::bind(&socket_path) {
+                Ok(l) => l,
+                Err(e) => {
+                    error!("SocketWorker: failed to bind {}: {}", socket_path, e);
+                    return;
+                }
+            };
+            listener.set_nonblocking(true).ok();
+            info!("SocketWorker: listening on {}", socket_path);
+
+            let mut worker = SocketWorker {
+                audio_transport: Arc::new(Mutex::new(RffiAudioTransport {
+                    callback: std::ptr::null(),
+                })),
+                client: None,
+                listener,
+            };
+
+            let mut recording_active = false;
+            let mut playout_active = false;
+            let mut playout_iters: u64 = 0;
+            let mut playout_writes: u64 = 0;
+            let mut playout_write_errs: u64 = 0;
+            let mut playout_empty: u64 = 0;
+
+            loop {
+                // Process pending events (non-blocking drain)
+                match receiver.recv_timeout(Duration::from_millis(1)) {
+                    Ok(Event::SetCallback(transport)) => {
+                        worker.audio_transport = transport;
+                    }
+                    Ok(Event::InitPlayout) | Ok(Event::StartPlayout) => {
+                        playout_active = true;
+                    }
+                    Ok(Event::StopPlayout) => {
+                        playout_active = false;
+                    }
+                    Ok(Event::InitRecording) | Ok(Event::StartRecording) | Ok(Event::WarmupRecording) => {
+                        recording_active = true;
+                    }
+                    Ok(Event::StopRecording) => {
+                        recording_active = false;
+                    }
+                    Ok(Event::PlayoutDelay) => {
+                        let _ = playout_delay_sender.send(Ok(10)); // 10ms fixed delay
+                    }
+                    Ok(Event::Terminate) => {
+                        info!("SocketWorker: terminating (playout: {} writes, {} errors, {} empty out of {} iterations)",
+                              playout_writes, playout_write_errs, playout_empty, playout_iters);
+                        break;
+                    }
+                    Ok(_) => {
+                        // SetPlayoutDevice, SetRecordingDevice, RefreshCache, etc. -- no-op for socket mode
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        info!("SocketWorker: channel disconnected, terminating");
+                        break;
+                    }
+                }
+
+                // Try to accept a new client if we don't have one
+                if worker.client.is_none() {
+                    if let Ok((stream, _addr)) = worker.listener.accept() {
+                        stream.set_nonblocking(false).ok();
+                        stream.set_read_timeout(Some(Duration::from_millis(5))).ok();
+                        stream.set_write_timeout(Some(Duration::from_millis(5))).ok();
+                        // Set large socket buffers (1MB) so playout frames don't get
+                        // dropped when the Python test isn't actively reading.
+                        Self::set_socket_buffer_sizes(&stream, 1_048_576);
+                        info!("SocketWorker: client connected");
+                        worker.client = Some(stream);
+                    }
+                }
+
+                if !recording_active && !playout_active {
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+
+                // --- Recording: read PCM from socket, feed to WebRTC ---
+                if recording_active {
+                    let samples = if let Some(ref mut client) = worker.client {
+                        // Try to read a length-prefixed PCM frame
+                        match Self::read_frame(client) {
+                            Ok(data) => data,
+                            Err(_) => {
+                                // Client disconnected or timeout -- feed silence
+                                vec![0i16; WEBRTC_WINDOW]
+                            }
+                        }
+                    } else {
+                        vec![0i16; WEBRTC_WINDOW]
+                    };
+
+                    Worker::recorded_data_is_available(
+                        worker.audio_transport.clone(),
+                        samples,
+                        NUM_CHANNELS,
+                        SAMPLE_FREQUENCY,
+                        Duration::from_millis(0),
+                        0,
+                        0,
+                        false,
+                        None,
+                    );
+                }
+
+                // --- Playout: get PCM from WebRTC, write to socket ---
+                if playout_active {
+                    let play_data = Worker::need_more_play_data(
+                        worker.audio_transport.clone(),
+                        WEBRTC_WINDOW,
+                        NUM_CHANNELS,
+                        SAMPLE_FREQUENCY,
+                    );
+
+                    if play_data.success == 0 && !play_data.data.is_empty() {
+                        let mut drop_client = false;
+                        if let Some(ref mut client) = worker.client {
+                            match Self::write_frame(client, &play_data.data) {
+                                Ok(()) => playout_writes += 1,
+                                Err(_) => {
+                                    playout_write_errs += 1;
+                                    // write_all may have partially written before
+                                    // timing out, corrupting the framing protocol.
+                                    // Drop the client so a fresh connection starts clean.
+                                    drop_client = true;
+                                }
+                            }
+                        }
+                        if drop_client {
+                            info!("SocketWorker: dropping client due to write error (framing may be corrupted)");
+                            worker.client = None;
+                        }
+                    } else if worker.client.is_some() {
+                        playout_empty += 1;
+                    }
+
+                    playout_iters += 1;
+                }
+
+                // If neither read nor write happened with a client, pace the loop
+                if worker.client.is_none() {
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+
+            // Cleanup
+            drop(worker.client);
+            drop(worker.listener);
+            let _ = std::fs::remove_file(&socket_path);
+        })
+    }
+
+    /// Set SO_SNDBUF and SO_RCVBUF on a Unix stream socket.
+    fn set_socket_buffer_sizes(stream: &std::os::unix::net::UnixStream, size: usize) {
+        use std::os::unix::io::AsRawFd;
+        let fd = stream.as_raw_fd();
+        let buf_size = size as libc::c_int;
+        unsafe {
+            libc::setsockopt(
+                fd, libc::SOL_SOCKET, libc::SO_SNDBUF,
+                &buf_size as *const _ as *const libc::c_void,
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            );
+            libc::setsockopt(
+                fd, libc::SOL_SOCKET, libc::SO_RCVBUF,
+                &buf_size as *const _ as *const libc::c_void,
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            );
+        }
+    }
+
+    /// Read one length-prefixed PCM frame from the socket.
+    /// Format: [4-byte big-endian length][PCM bytes]
+    /// Returns Vec<i16> of samples.
+    fn read_frame(stream: &mut std::os::unix::net::UnixStream) -> anyhow::Result<Vec<i16>> {
+        use std::io::Read as IoRead;
+        let mut len_buf = [0u8; 4];
+        stream.read_exact(&mut len_buf)?;
+        let len = u32::from_be_bytes(len_buf) as usize;
+        if len == 0 || len > 65536 {
+            bail!("invalid frame length: {}", len);
+        }
+        let mut buf = vec![0u8; len];
+        stream.read_exact(&mut buf)?;
+        // Convert bytes to i16 samples (little-endian)
+        let samples: Vec<i16> = buf
+            .chunks_exact(2)
+            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        Ok(samples)
+    }
+
+    /// Write one length-prefixed PCM frame to the socket.
+    fn write_frame(stream: &mut std::os::unix::net::UnixStream, samples: &[i16]) -> anyhow::Result<()> {
+        use std::io::Write as IoWrite;
+        let byte_len = samples.len() * 2;
+        let len_buf = (byte_len as u32).to_be_bytes();
+        // Convert i16 samples to bytes (little-endian)
+        let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+        // Combine header + payload into a single buffer to prevent partial-write
+        // framing corruption (if write_all times out after writing only the header,
+        // the receiver sees orphaned bytes that corrupt all subsequent frames).
+        let mut frame = Vec::with_capacity(4 + bytes.len());
+        frame.extend_from_slice(&len_buf);
+        frame.extend_from_slice(&bytes);
+        stream.write_all(&frame)?;
         Ok(())
     }
 }
