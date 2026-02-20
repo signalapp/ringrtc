@@ -19,7 +19,7 @@ use std::{
 
 use anyhow::{Context as AnyhowContext, anyhow, bail};
 use cubeb::{Context, DeviceId, DeviceType, MonoFrame, StereoFrame, Stream, StreamPrefs};
-use cubeb_core::{InputProcessingParams, LogLevel, log_enabled, set_logging};
+use cubeb_core::{LogLevel, log_enabled, set_logging};
 use lazy_static::lazy_static;
 use regex::Regex;
 #[cfg(target_os = "windows")]
@@ -406,14 +406,19 @@ impl Worker {
             bail!("Tried to init recording without a recording device");
         };
 
-        let params = cubeb::StreamParamsBuilder::new()
+        let builder = cubeb::StreamParamsBuilder::new()
             .format(STREAM_FORMAT)
             .rate(SAMPLE_FREQUENCY)
             .channels(NUM_CHANNELS)
-            .layout(cubeb::ChannelLayout::MONO)
-            .prefs(StreamPrefs::VOICE)
-            .take();
-
+            .layout(cubeb::ChannelLayout::MONO);
+        // On Mac, the AEC pipeline runs at 24kHz (FB15839727 tracks this). For now,
+        // disable it.
+        let params = if cfg!(not(target_os = "macos")) {
+            builder.prefs(StreamPrefs::VOICE)
+        } else {
+            builder
+        }
+        .take();
         let mut builder = cubeb::StreamBuilder::<Frame>::new();
         let transport = Arc::clone(&self.audio_transport);
         let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
@@ -481,37 +486,6 @@ impl Worker {
             });
         match builder.init(&self.ctx) {
             Ok(stream) => {
-                if cfg!(target_os = "macos") {
-                    // Note: On Mac, the AEC pipeline runs at 24kHz (FB15839727 tracks this).
-                    // This results in a slightly thin sound because of the Nyquist theorem.
-                    // See https://en.wikipedia.org/wiki/Nyquist_frequency
-                    match self.ctx.supported_input_processing_params() {
-                        Ok(params) => {
-                            // With cubeb-coreaudio-rs, the VPIO input is inaudible without these settings.
-                            // See https://github.com/mozilla/cubeb-coreaudio-rs/issues/239#issuecomment-2430361990
-                            info!("Available input processing params: {:?}", params);
-                            let mut desired_params = InputProcessingParams::empty();
-                            if params.contains(InputProcessingParams::AUTOMATIC_GAIN_CONTROL) {
-                                desired_params |= InputProcessingParams::AUTOMATIC_GAIN_CONTROL;
-                            }
-                            // With the coreaudio-rust backend, these settings must be set together.
-                            if params.contains(
-                                InputProcessingParams::ECHO_CANCELLATION
-                                    | InputProcessingParams::NOISE_SUPPRESSION,
-                            ) {
-                                desired_params |= InputProcessingParams::ECHO_CANCELLATION
-                                    | InputProcessingParams::NOISE_SUPPRESSION;
-                            }
-                            if let Err(e) = stream.set_input_processing_params(desired_params) {
-                                error!("couldn't set input params: {:?}", e);
-                            }
-                        }
-                        Err(e) => warn!(
-                            "Failed to get supported input processing parameters; proceeding without: {}",
-                            e
-                        ),
-                    }
-                }
                 self.input_stream = Some(stream);
                 Ok(())
             }
