@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.65.2
+
+- Revert: Enable noise suppression and AEC on macOS
+
 ## v2.65.1
 
 - Add webrtc_artifact_checksums.json to podspec to fix iOS build
