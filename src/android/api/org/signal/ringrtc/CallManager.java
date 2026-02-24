@@ -110,6 +110,7 @@ public class CallManager {
       fieldTrialsWithDefaults.put("RingRTC-PruneTurnPorts", "Enabled");
       fieldTrialsWithDefaults.put("WebRTC-Bwe-ProbingConfiguration", "skip_if_est_larger_than_fraction_of_max:0.99");
       fieldTrialsWithDefaults.put("WebRTC-IncreaseIceCandidatePriorityHostSrflx", "Enabled");
+      fieldTrialsWithDefaults.put("WebRTC-Audio-OpusGeneratePlc", "Enabled");
       fieldTrialsWithDefaults.putAll(fieldTrials);
 
       CallManager.fieldTrials = buildFieldTrialsString(fieldTrialsWithDefaults);
