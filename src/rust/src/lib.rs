@@ -33,10 +33,12 @@ pub mod lite {
 
 /// Core, platform independent functionality.
 pub mod core {
+    pub mod assets;
     pub mod call;
     pub mod call_fsm;
     pub mod call_manager;
     pub mod call_mutex;
+    pub mod call_rwlock;
     pub mod call_summary;
     pub mod connection;
     pub mod connection_fsm;

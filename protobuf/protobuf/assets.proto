@@ -1,0 +1,25 @@
+/*
+ * Copyright 2026 Signal Messenger, LLC
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+syntax = "proto2";
+
+package assets;
+
+
+/// Metadata used to identify and verify assets. The metadata may be baked at
+/// the end of files for debugging purposes only. Will truncate bytes beyond the expected size.
+/// Metadata should come from a trusted source or be compiled into the application.
+/// Assets are uniquely identified by their hash. For a loggable ID, log the asset_group or
+/// <asset_group>-<version with underscores>-<first hex digits of first 6 bytes of sha512 hash>
+message AssetMetadata {
+   /// friendly name for this group of assets. ex. opus-dred
+   required string asset_group = 1;
+   /// semantic version of asset. Note, it may not match version used by public repos
+   required string version = 2;
+   /// uncompressed size of asset, not including any extra metadata
+   required uint32 size_bytes = 3;
+   /// SHA-512 hash over uncomppressed asset used to verify byte integrity, not including the metadata
+   required bytes sha512_hash = 4;
+}

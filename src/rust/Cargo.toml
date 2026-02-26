@@ -124,6 +124,7 @@ check-all = ["electron", "jni"]
 call_sim = ["call_protobuf/call_sim", "native", "injectable_network", "bitvec", "chrono", "clap", "fern", "tokio", "tonic", "tonic-prost", "tower", "sim_http"]
 direct = ["native", "simnet", "chrono", "clap"]
 virtual_audio = []
+assets = []
 
 [[test]]
 name = "incoming"

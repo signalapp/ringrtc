@@ -203,3 +203,43 @@ pub mod signaling {
 pub mod call_summary {
     call_protobuf::include_call_summary_proto!();
 }
+
+pub mod assets {
+    call_protobuf::include_assets_proto!();
+
+    impl AssetMetadata {
+        pub fn id(&self) -> String {
+            use hex;
+            format!(
+                "{}-{}-{}",
+                self.asset_group,
+                self.version.to_string().replace(".", "_"),
+                hex::encode(&self.sha512_hash[..6])
+            )
+        }
+    }
+
+    impl Ord for AssetMetadata {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            match self.asset_group.cmp(&other.asset_group) {
+                core::cmp::Ordering::Equal => {}
+                ord => return ord,
+            }
+            match self.version.cmp(&other.version) {
+                core::cmp::Ordering::Equal => {}
+                ord => return ord,
+            }
+            match self.size_bytes.cmp(&other.size_bytes) {
+                core::cmp::Ordering::Equal => {}
+                ord => return ord,
+            }
+            self.sha512_hash.cmp(&other.sha512_hash)
+        }
+    }
+
+    impl PartialOrd for AssetMetadata {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+}

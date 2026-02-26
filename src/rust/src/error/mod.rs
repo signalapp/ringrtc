@@ -15,6 +15,8 @@ pub enum RingRtcError {
     // Project wide common error codes
     #[error("Mutex poisoned: {0}")]
     MutexPoisoned(String),
+    #[error("RwLock poisoned: {0}")]
+    RwLockPoisoned(String),
     #[error("Null pointer in: {0}, var: {1}")]
     NullPointer(String, String),
     #[error("Expecting non-none option value in: {0}, var: {1}")]

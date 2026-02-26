@@ -16,10 +16,11 @@ path = "src/lib.rs"
 proc-macro = true
 
 [features]
-default = ["signaling", "call_summary"]
+default = ["assets", "signaling", "call_summary"]
 signaling = []
 call_sim = ["signaling"]
 call_summary = []
+assets = []
 
 [build-dependencies]
 prost-build = "0.14.1"

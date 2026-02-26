@@ -22,6 +22,7 @@ fn main() {
             "protobuf/group_call.proto",
             "protobuf/rtp_data.proto",
             "protobuf/signaling.proto",
+            "protobuf/assets.proto",
         ];
 
         prost_build::Config::new()

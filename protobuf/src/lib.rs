@@ -29,6 +29,9 @@ const SIGNALING_PROTO: &str = include_str!(concat!(env!("OUT_DIR"), "/signaling.
 #[cfg(feature = "call_summary")]
 const CALL_SUMMARY_PROTO: &str = include_str!(concat!(env!("OUT_DIR"), "/call_summary.rs"));
 
+#[cfg(feature = "signaling")]
+const ASSETS_PROTO: &str = include_str!(concat!(env!("OUT_DIR"), "/assets.rs"));
+
 #[cfg(feature = "call_sim")]
 const CALL_SIM_PROTO: &str = include_str!(concat!(env!("OUT_DIR"), "/calling.rs"));
 
@@ -54,6 +57,12 @@ pub fn include_signaling_proto(_input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn include_call_summary_proto(_input: TokenStream) -> TokenStream {
     CALL_SUMMARY_PROTO.parse().unwrap()
+}
+
+#[cfg(feature = "assets")]
+#[proc_macro]
+pub fn include_assets_proto(_input: TokenStream) -> TokenStream {
+    ASSETS_PROTO.parse().unwrap()
 }
 
 #[cfg(feature = "call_sim")]

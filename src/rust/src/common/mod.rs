@@ -9,8 +9,11 @@ pub mod actor;
 pub mod jni_signature;
 pub mod time;
 pub mod units;
+mod versioning;
 
 use std::fmt;
+
+pub use versioning::SemanticVersion;
 
 use crate::webrtc::{
     media::AudioEncoderConfig,
