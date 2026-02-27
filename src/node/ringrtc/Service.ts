@@ -50,7 +50,6 @@ class NativeCallManager {
         'WebRTC-Bwe-ProbingConfiguration':
           'skip_if_est_larger_than_fraction_of_max:0.99',
         'WebRTC-IncreaseIceCandidatePriorityHostSrflx': 'Enabled',
-        'WebRTC-Audio-OpusGeneratePlc': 'Enabled',
       },
       config.field_trials
     );
