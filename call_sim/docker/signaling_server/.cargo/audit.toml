@@ -1,0 +1,9 @@
+[output]
+deny = ["unmaintained", "unsound", "yanked"]
+quiet = false
+
+[advisories]
+ignore = [
+    # Ignore because it doesn't apply to our protobuf crate
+    "RUSTSEC-2024-0437",
+]

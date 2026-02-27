@@ -16,5 +16,6 @@ local.properties
 *.tar.gz
 .cargo/*
 !.cargo/config.toml
+!.cargo/audit.toml
 target
 .spr.yml
