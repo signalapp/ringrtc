@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.65.3
+
+- Update to webrtc 7444g
+  - Disable sdp munging checks
+  - Update to opus 1.6.1
+  - Use the smoothed CPU load estimator
+
+- Add asset protos and AssetManager in core
+
+- Update dependencies
+
 ## v2.65.2
 
 - Revert: Enable noise suppression and AEC on macOS
