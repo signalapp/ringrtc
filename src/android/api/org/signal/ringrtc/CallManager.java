@@ -339,6 +339,44 @@ public class CallManager {
 
   /**
    *
+   * Adds an asset to the asset manager by file path.
+   *
+   * @param assetGroup   The asset identifier
+   * @param filePath  Path to the asset file on disk
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  public void addAsset(@NonNull String assetGroup, @NonNull String filePath)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    Log.i(TAG, "addAsset(): by filePath");
+    ringrtcAddAsset(nativeCallManager, assetGroup, filePath, null);
+  }
+
+  /**
+   *
+   * Adds an asset to the asset manager by byte content.
+   *
+   * @param assetGroup  The asset identifier
+   * @param content  The raw asset bytes
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  public void addAsset(@NonNull String assetGroup, @NonNull byte[] content)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    Log.i(TAG, "addAsset(): by content");
+    ringrtcAddAsset(nativeCallManager, assetGroup, null, content);
+  }
+
+  /**
+   *
    * Indication from application to start a new outgoing call
    *
    * @param remote         remote side fo the call
@@ -2443,6 +2481,10 @@ public class CallManager {
 
   private native
     void ringrtcSetSelfUuid(long nativeCallManager, byte[] uuid)
+    throws CallException;
+
+  private native
+    void ringrtcAddAsset(long nativeCallManager, String assetGroup, String filePath, byte[] content)
     throws CallException;
 
   private native

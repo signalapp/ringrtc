@@ -448,6 +448,42 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         }
     }
 
+    @MainActor
+    public func addAsset(assetGroup: String, filePath: String) throws {
+        Logger.debug("addAsset by filePath")
+
+        let assetGroupSlice = allocatedAppByteSliceFromString(maybe_string: assetGroup)
+        let filePathSlice = allocatedAppByteSliceFromString(maybe_string: filePath)
+        let emptySlice = AppByteSlice(bytes: nil, len: 0)
+        defer {
+            assetGroupSlice.bytes?.deallocate()
+            filePathSlice.bytes?.deallocate()
+        }
+
+        let retPtr = ringrtcAddAsset(ringRtcCallManager, assetGroupSlice, filePathSlice, emptySlice)
+        if retPtr == nil {
+            throw CallManagerError.apiFailed(description: "addAsset() by filepath function failure")
+        }
+    }
+
+    @MainActor
+    public func addAsset(assetGroup: String, content: Data) throws {
+        Logger.debug("addAsset by content")
+
+        let assetGroupSlice = allocatedAppByteSliceFromString(maybe_string: assetGroup)
+        let emptySlice = AppByteSlice(bytes: nil, len: 0)
+        let contentSlice = allocatedAppByteSliceFromData(maybe_data: content)
+        defer {
+            assetGroupSlice.bytes?.deallocate()
+            contentSlice.bytes?.deallocate()
+        }
+
+        let retPtr = ringrtcAddAsset(ringRtcCallManager, assetGroupSlice, emptySlice, contentSlice)
+        if retPtr == nil {
+            throw CallManagerError.apiFailed(description: "addAsset() by content function failure")
+        }
+    }
+
     deinit {
         // Close the RingRTC Call Manager.
         let retPtr = ringrtcClose(self.ringRtcCallManager)

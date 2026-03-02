@@ -26,6 +26,7 @@ use crate::{
         actor::{Actor, Stopper},
     },
     core::{
+        assets::AssetRegistry,
         call_fsm::{CallEvent, CallStateMachine},
         call_manager::CallManager,
         call_mutex::CallMutex,
@@ -110,6 +111,8 @@ where
     forking: Arc<CallMutex<Option<ForkingState<T>>>>,
     /// Captures call statistics for reporting.
     call_summary: DirectCallSummary,
+    /// Registry for accessing large, pre-loaded assets
+    asset_registry: AssetRegistry,
 }
 
 impl<T> fmt::Display for Call<T>
@@ -192,6 +195,7 @@ where
             ),
             forking: Arc::clone(&self.forking),
             call_summary: self.call_summary.clone(),
+            asset_registry: self.asset_registry.clone(),
         }
     }
 }
@@ -210,6 +214,7 @@ where
         call_manager: CallManager<T>,
     ) -> Result<Self> {
         info!("new(): call_id: {}", call_id);
+        let asset_registry = call_manager.asset_registry()?;
 
         // create a FSM worker for this connection
         let (fsm_sender, fsm_receiver) = std::sync::mpsc::sync_channel(256);
@@ -237,6 +242,7 @@ where
             did_notify_application_of_remote_ringing: Arc::new(AtomicBool::new(false)),
             forking: Arc::new(CallMutex::new(None, "forking")),
             call_summary: DirectCallSummary::default(),
+            asset_registry,
         };
 
         Ok(call)

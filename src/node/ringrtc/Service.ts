@@ -79,6 +79,7 @@ class NativeCallManager {
 // Mirror methods onto NativeCallManager.
 // This is done through direct assignment rather than wrapper methods to avoid indirection.
 (NativeCallManager.prototype as any).setSelfUuid = Native.cm_setSelfUuid;
+(NativeCallManager.prototype as any).addAsset = Native.cm_addAsset;
 (NativeCallManager.prototype as any).createOutgoingCall =
   Native.cm_createOutgoingCall;
 (NativeCallManager.prototype as any).proceed = Native.cm_proceed;
@@ -492,6 +493,16 @@ export class RingRTCType {
   // Called by UX
   setSelfUuid(uuid: Uint8Array): void {
     this.callManager.setSelfUuid(uuid);
+  }
+
+  // Called by UX
+  addAsset(
+    assetGroup: string,
+    asset: { filePath: string } | { content: Uint8Array }
+  ): void {
+    const filePath = 'filePath' in asset ? asset.filePath : null;
+    const content = 'content' in asset ? asset.content : null;
+    this.callManager.addAsset(assetGroup, filePath, content);
   }
 
   // Called by UX
@@ -2940,6 +2951,11 @@ export enum RingCancelReason {
 export interface CallManager {
   setConfig(config: Config): void;
   setSelfUuid(uuid: Uint8Array): void;
+  addAsset(
+    assetGroup: string,
+    filePath: string | null,
+    content: Uint8Array | null
+  ): void;
   createOutgoingCall(
     remoteUserId: UserId,
     isVideoCall: boolean,

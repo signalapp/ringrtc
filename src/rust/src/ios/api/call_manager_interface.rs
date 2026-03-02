@@ -613,6 +613,39 @@ pub extern "C" fn ringrtcSetSelfUuid(callManager: *mut c_void, uuid: AppByteSlic
 
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
+pub extern "C" fn ringrtcAddAsset(
+    callManager: *mut c_void,
+    assetGroup: AppByteSlice,
+    filePath: AppByteSlice,
+    content: AppByteSlice,
+) -> *mut c_void {
+    use crate::core::assets::AssetHandle;
+
+    let asset_group = match string_from_app_slice(&assetGroup) {
+        Some(id) => id,
+        None => {
+            error!("Missing assetGroup");
+            return ptr::null_mut();
+        }
+    };
+
+    let handle = if let Some(path) = string_from_app_slice(&filePath) {
+        AssetHandle::FilePath(path)
+    } else if let Some(bytes) = byte_vec_from_app_slice(&content) {
+        AssetHandle::Content(bytes)
+    } else {
+        error!("addAsset requires either a filePath or content");
+        return ptr::null_mut();
+    };
+
+    match call_manager::add_asset(callManager as *mut IosCallManager, asset_group, handle) {
+        Ok(_) => callManager,
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
 pub extern "C" fn ringrtcCall(
     callManager: *mut c_void,
     appCallObject: *const c_void,

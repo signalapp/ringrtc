@@ -35,6 +35,7 @@ use crate::{
         units::DataRate,
     },
     core::{
+        assets::AssetRegistry,
         call_mutex::CallMutex,
         call_summary::{CallSummary, GroupCallSummary},
         crypto::{self as frame_crypto, DecryptionErrorStats},
@@ -1014,6 +1015,9 @@ struct State {
     // Shared state with the CallManager that might change
     busy: Arc<CallMutex<bool>>,
     self_uuid: Arc<CallMutex<Option<UserId>>>,
+    #[allow(dead_code)]
+    /// Registry of large, preloaded assets
+    asset_registry: AssetRegistry,
 
     // State that changes regularly and is sent to the observer
     connection_state: ConnectionState,
@@ -1234,6 +1238,7 @@ pub struct ClientStartParams {
     pub observer: Box<dyn Observer + Send>,
     pub busy: Arc<CallMutex<bool>>,
     pub self_uuid: Arc<CallMutex<Option<UserId>>>,
+    pub asset_registry: AssetRegistry,
     pub peer_connection_factory: Option<PeerConnectionFactory>,
     pub outgoing_audio_track: AudioTrack,
     pub outgoing_video_track: Option<VideoTrack>,
@@ -1254,6 +1259,7 @@ impl Client {
             observer,
             busy,
             self_uuid,
+            asset_registry,
             peer_connection_factory,
             outgoing_audio_track,
             outgoing_video_track,
@@ -1342,6 +1348,7 @@ impl Client {
                     observer,
                     busy,
                     self_uuid,
+                    asset_registry,
                     local_ice_ufrag,
                     local_ice_pwd,
 
@@ -5326,7 +5333,7 @@ mod tests {
     use super::*;
     use crate::{
         common::time::saturating_epoch_time,
-        core::endorsements::EndorsementUpdateResult,
+        core::{assets::AssetRegistry, endorsements::EndorsementUpdateResult},
         lite::{
             call_links::{CallLinkMemberResolver, CallLinkRootKey},
             sfu::{MemberResolver, PeekDeviceInfo},
@@ -6105,6 +6112,7 @@ mod tests {
             let observer = FakeObserver::new(user_id.clone());
             let fake_busy = Arc::new(CallMutex::new(false, "fake_busy"));
             let fake_self_uuid = Arc::new(CallMutex::new(Some(user_id.clone()), "fake_self_uuid"));
+            let fake_asset_registry = AssetRegistry::default();
             let fake_audio_track = AudioTrack::new(
                 webrtc::Arc::from_owned(unsafe {
                     webrtc::ptr::OwnedRc::from_ptr(&FAKE_AUDIO_TRACK as *const u32)
@@ -6127,6 +6135,7 @@ mod tests {
                 observer: Box::new(observer.clone()),
                 busy: fake_busy,
                 self_uuid: fake_self_uuid,
+                asset_registry: fake_asset_registry,
                 peer_connection_factory: None,
                 outgoing_audio_track: fake_audio_track,
                 outgoing_video_track: None,

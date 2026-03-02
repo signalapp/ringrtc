@@ -26,6 +26,7 @@ use strum::IntoDiscriminant;
 use crate::{
     common::{CallConfig, CallId, CallMediaType, DataMode, DeviceId, Result},
     core::{
+        assets::AssetHandle,
         call_manager::CallManager,
         call_summary::{CallSummary, MediaQualityStats, QualityStats},
         group_call::{self, GroupId, SignalingMessageUrgency},
@@ -851,6 +852,33 @@ fn setSelfUuid(mut cx: FunctionContext) -> JsResult<JsValue> {
     with_call_endpoint(&mut cx, |endpoint| {
         endpoint.call_manager.set_self_uuid(uuid)?;
         Ok(())
+    })
+    .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
+fn addAsset(mut cx: FunctionContext) -> JsResult<JsValue> {
+    debug!("JsCallManager.addAsset()");
+
+    let asset_group = cx.argument::<JsString>(0)?.value(&mut cx);
+    let file_path = cx
+        .argument_opt(1)
+        .and_then(|v| v.downcast::<JsString, _>(&mut cx).ok())
+        .map(|s| s.value(&mut cx));
+    let content = cx
+        .argument_opt(2)
+        .and_then(|v| v.downcast::<JsUint8Array, _>(&mut cx).ok())
+        .map(|buf| buf.as_slice(&cx).to_vec());
+
+    let handle = match (file_path, content) {
+        (_, Some(bytes)) => AssetHandle::Content(bytes),
+        (Some(path), _) => AssetHandle::FilePath(path),
+        _ => return cx.throw_error("addAsset requires either a filePath or content"),
+    };
+
+    with_call_endpoint(&mut cx, |endpoint| {
+        endpoint.call_manager.add_asset(&asset_group, handle)
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
@@ -3165,6 +3193,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_value("callEndpointPropertyKey", js_property_key)?;
 
     cx.export_function("cm_setSelfUuid", setSelfUuid)?;
+    cx.export_function("cm_addAsset", addAsset)?;
     cx.export_function("cm_createOutgoingCall", createOutgoingCall)?;
     cx.export_function("cm_cancelGroupRing", cancelGroupRing)?;
     cx.export_function("cm_proceed", proceed)?;

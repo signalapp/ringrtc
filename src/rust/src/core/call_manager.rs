@@ -28,8 +28,10 @@ use crate::{
         actor::{Actor, Stopper},
     },
     core::{
+        assets::{self, AssetManager, AssetRegistry},
         call::Call,
         call_mutex::CallMutex,
+        call_rwlock::CallRwLock,
         call_summary::CallSummary,
         connection::{Connection, ConnectionType},
         endorsements::{EndorsementUpdateResultRef, EndorsementsCache},
@@ -417,6 +419,12 @@ where
     message_queue: Arc<CallMutex<SignalingMessageQueue<T>>>,
     /// How to make HTTP requests to the SFU for group calls.
     http_client: http::DelegatingClient,
+    /// Asset manager that holds a copy of assets in memory
+    /// Assets are initialized before the start of a call by
+    /// the application using the platform addAsset() function
+    /// Manager can be used to inject a registry handle into
+    /// call state.
+    asset_manager: Arc<CallRwLock<AssetManager>>,
 }
 
 impl<T> fmt::Display for CallManager<T>
@@ -482,6 +490,7 @@ where
             worker: self.worker.clone(),
             message_queue: Arc::clone(&self.message_queue),
             http_client: self.http_client.clone(),
+            asset_manager: self.asset_manager.clone(),
         }
     }
 }
@@ -529,11 +538,28 @@ where
                 "message_queue",
             )),
             http_client,
+            asset_manager: Arc::new(CallRwLock::new(
+                AssetManager::new(assets::manifest::supported_assets()),
+                "asset-manager",
+            )),
         })
     }
 
     pub fn http_client(&self) -> &dyn http::Client {
         &self.http_client
+    }
+
+    pub fn asset_registry(&self) -> Result<AssetRegistry> {
+        Ok(self.asset_manager.read()?.get_registry())
+    }
+
+    /// Adds an asset to the asset manager, verifying it against the supported assets manifest.
+    pub fn add_asset(&self, asset_group: &str, handle: assets::AssetHandle) -> Result<()> {
+        info!("Adding asset for asset group {asset_group}");
+        self.asset_manager
+            .write()?
+            .add_asset_for_feature(asset_group, handle)?;
+        Ok(())
     }
 
     /// Updates the current user's UUID.
@@ -3041,6 +3067,8 @@ where
         let obfuscated_resolver =
             ObfuscatedResolver::new(Arc::new(MemberMap::new(&[])), None, None);
 
+        let asset_registry = { self.asset_manager.read()?.get_registry() };
+
         let client = Client::start(ClientStartParams {
             group_id,
             client_id,
@@ -3050,6 +3078,7 @@ where
             obfuscated_resolver,
             busy: self.busy.clone(),
             self_uuid: self.self_uuid.clone(),
+            asset_registry,
             peer_connection_factory,
             outgoing_audio_track,
             outgoing_video_track: Some(outgoing_video_track),
@@ -3144,6 +3173,8 @@ where
             Some(endorsements_public_key),
         );
 
+        let asset_registry = { self.asset_manager.read()?.get_registry() };
+
         let client = Client::start(ClientStartParams {
             group_id: room_id,
             client_id,
@@ -3153,6 +3184,7 @@ where
             obfuscated_resolver,
             busy: self.busy.clone(),
             self_uuid: self.self_uuid.clone(),
+            asset_registry,
             peer_connection_factory,
             outgoing_audio_track,
             outgoing_video_track: Some(outgoing_video_track),

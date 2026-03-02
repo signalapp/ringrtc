@@ -51,6 +51,16 @@ pub fn set_self_uuid(call_manager: *mut IosCallManager, uuid: UserId) -> Result<
     call_manager.set_self_uuid(uuid)
 }
 
+/// Adds an asset to the asset manager.
+pub fn add_asset(
+    call_manager: *mut IosCallManager,
+    asset_group: String,
+    handle: crate::core::assets::AssetHandle,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.add_asset(&asset_group, handle)
+}
+
 /// Application notification to start a new call.
 pub fn call(
     call_manager: *mut IosCallManager,

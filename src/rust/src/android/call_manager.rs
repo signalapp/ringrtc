@@ -169,6 +169,33 @@ pub fn set_self_uuid(
     call_manager.set_self_uuid(env.convert_byte_array(uuid)?)
 }
 
+/// Adds an asset to the asset manager.
+pub fn add_asset(
+    env: &mut JNIEnv,
+    call_manager: *mut AndroidCallManager,
+    asset_group: JString,
+    file_path: JString,
+    content: JByteArray,
+) -> Result<()> {
+    use crate::core::assets::AssetHandle;
+
+    let asset_group: String = env.get_string(&asset_group)?.into();
+
+    let handle = if !content.is_null() {
+        AssetHandle::Content(env.convert_byte_array(content)?)
+    } else if !file_path.is_null() {
+        let path: String = env.get_string(&file_path)?.into();
+        AssetHandle::FilePath(path)
+    } else {
+        return Err(anyhow::anyhow!(
+            "addAsset requires either a filePath or content"
+        ));
+    };
+
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.add_asset(&asset_group, handle)
+}
+
 /// Application notification to start a new call
 pub fn call(
     env: &JNIEnv,

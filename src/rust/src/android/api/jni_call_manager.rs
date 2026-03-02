@@ -113,6 +113,30 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetSelfUuid(
 
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcAddAsset(
+    mut env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    asset_group: JString,
+    file_path: JString,
+    content: JByteArray,
+) {
+    match call_manager::add_asset(
+        &mut env,
+        call_manager as *mut AndroidCallManager,
+        asset_group,
+        file_path,
+        content,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&mut env, e);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcCall(
     mut env: JNIEnv,
     _object: JObject,

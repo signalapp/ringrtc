@@ -14,6 +14,7 @@ use log::info;
 use ringrtc::{
     common::{CallEndReason, units::DataRate},
     core::{
+        assets::AssetRegistry,
         call_mutex::CallMutex,
         call_summary::CallSummary,
         endorsements::EndorsementUpdateResultRef,
@@ -26,8 +27,7 @@ use ringrtc::{
         http::sim as sim_http,
         sfu::{DemuxId, MemberMap, ObfuscatedResolver, PeekInfo, UserId},
     },
-    protobuf,
-    protobuf::signaling::CallMessage,
+    protobuf::{self, signaling::CallMessage},
     webrtc::{
         media::{VideoFrame, VideoFrameMetadata, VideoPixelFormat, VideoSink, VideoTrack},
         peer_connection::{AudioLevel, ReceivedAudioLevel, SendRates},
@@ -302,6 +302,7 @@ fn main() {
         ring_id: None,
         audio_levels_interval: None,
         group_send_endorsement_cache: None,
+        asset_registry: AssetRegistry::default(),
     })
     .unwrap();
 
