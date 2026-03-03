@@ -1531,7 +1531,7 @@ limitations under the License.
 
 ```
 
-## hax-lib-macros 0.3.5, hax-lib 0.3.5, libcrux-intrinsics 0.0.4, libcrux-platform 0.0.2, libcrux-secrets 0.0.4, libcrux-sha3 0.0.4, libcrux-traits 0.0.4
+## hax-lib-macros 0.3.6, hax-lib 0.3.6, libcrux-intrinsics 0.0.5, libcrux-platform 0.0.3, libcrux-secrets 0.0.5, libcrux-sha3 0.0.6, libcrux-traits 0.0.5
 
 ```
 Apache License
@@ -4109,7 +4109,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## hpke-rs-crypto 0.4.0, hpke-rs 0.5.0
+## hpke-rs-crypto 0.6.0, hpke-rs 0.6.0
 
 ```
 Mozilla Public License Version 2.0
