@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.65.4
+
+- Add AssetRegistry to call state, expose addAsset()
+
+- Update to libsignal v0.88.0
+
 ## v2.65.3
 
 - Update to webrtc 7444g
