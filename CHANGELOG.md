@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.67.1
+
+- Update Uint8Arrays in electron to specify ArrayBuffer.
+
 ## v2.67.0
 
 - Refactor StreamSummary to avoid a map
