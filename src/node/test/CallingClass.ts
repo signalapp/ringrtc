@@ -147,14 +147,14 @@ export class CallingClass {
     url: string,
     method: HttpMethod,
     headers: { [name: string]: string },
-    body: Uint8Array | undefined
+    body: Uint8Array<ArrayBuffer> | undefined
   ) {
     log('handleSendHttpRequest');
   }
 
   private handleSendCallMessage(
-    recipient: Uint8Array,
-    data: Uint8Array,
+    recipient: Uint8Array<ArrayBuffer>,
+    data: Uint8Array<ArrayBuffer>,
     urgency: CallMessageUrgency
   ): boolean {
     log('handleSendCallMessage');
@@ -163,17 +163,17 @@ export class CallingClass {
   }
 
   private handleSendCallMessageToGroup(
-    groupIdBytes: Uint8Array,
-    data: Uint8Array,
+    groupIdBytes: Uint8Array<ArrayBuffer>,
+    data: Uint8Array<ArrayBuffer>,
     urgency: CallMessageUrgency
   ): void {
     log('handleSendCallMessageToGroup');
   }
 
   private handleGroupCallRingUpdate(
-    groupIdBytes: Uint8Array,
+    groupIdBytes: Uint8Array<ArrayBuffer>,
     ringId: bigint,
-    ringerBytes: Uint8Array,
+    ringerBytes: Uint8Array<ArrayBuffer>,
     update: RingUpdate
   ): void {
     log('handleGroupCallRingUpdate');

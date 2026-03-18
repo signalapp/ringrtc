@@ -48,7 +48,7 @@ export function sleep(timeout: number): Promise<void> {
   });
 }
 
-export function uuidToBytes(uuid: string): Uint8Array {
+export function uuidToBytes(uuid: string): Uint8Array<ArrayBuffer> {
   if (uuid.length !== 36) {
     return new Uint8Array(0);
   }

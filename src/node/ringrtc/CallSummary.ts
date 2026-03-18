@@ -75,7 +75,7 @@ export class CallSummary {
    * Raw call telemetry data containing periodic internal/opaque values for the
    * last few seconds of the call, or undefined if unavailable.
    */
-  readonly rawStats: Uint8Array | undefined;
+  readonly rawStats: Uint8Array<ArrayBuffer> | undefined;
   /**
    * Textual description of raw telemetry data, or undefined if unavailable.
    */
