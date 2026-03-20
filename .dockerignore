@@ -1,5 +1,7 @@
 out/
 out-arm/
+target/
+!target/release/call_sim-cli
 cscope.*
 .DS_Store
 .dir-locals.el
