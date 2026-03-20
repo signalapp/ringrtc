@@ -2186,9 +2186,23 @@ impl Report {
         buf.extend_from_slice(html.summary_heading(set_name, time_started).as_bytes());
 
         for (i, report) in group_reports.iter().enumerate() {
-            // Add the report table to a report contents.
+            // Add the summary table to the report contents.
             let mut report_contents =
                 html.summary_report_section(&report.reports, &report.group_config);
+
+            // Add the call audio core summary table if needed.
+            if let Some(call_audio_core_summary) =
+                html.summary_call_audio_core_section(&report.reports, &report.group_config)
+            {
+                report_contents.push_str(&html.accordion_section(
+                    &format!("groupCallAudioCoreSummary_{}", i),
+                    vec![HtmlAccordionItem {
+                        label: "Call Audio Core Summary".to_string(),
+                        body: call_audio_core_summary,
+                        collapsed: false,
+                    }],
+                ));
+            }
 
             let mut stats_charts = vec![];
 
@@ -2488,6 +2502,83 @@ impl SummaryRow {
             }
             if let (Some(vmaf), Some(new_vmaf)) = (self.vmaf, new.vmaf) {
                 self.vmaf = Some(new_average(vmaf, new_vmaf));
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct SummaryCallAudioCoreRow {
+    pub mos_over_time: Vec<(i32, f32)>,
+    pub mos_average: Option<f32>,
+    pub row_type: SummaryRowType,
+    pub row_index: usize,
+}
+
+impl SummaryCallAudioCoreRow {
+    pub fn new(report: &Report) -> Option<Self> {
+        if let Some(AnalysisReport {
+            audio_test_results:
+                AudioTestResults {
+                    mos_average: AnalysisReportMos::Series(stats),
+                    ..
+                },
+            ..
+        }) = &report.analysis_report
+        {
+            let mut mos_over_time = stats
+                .data
+                .points
+                .iter()
+                .map(|(time, mos)| (((time * 10.0).round() as i32), *mos))
+                .collect_vec();
+            mos_over_time.sort_by_key(|(time, _)| *time);
+            Some(Self {
+                mos_over_time,
+                mos_average: report
+                    .analysis_report
+                    .as_ref()
+                    .and_then(|ar| ar.audio_test_results.mos_average.get_mos_for_display()),
+                row_type: SummaryRowType::Single,
+                row_index: 0,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn new_aggregate(report: &Report) -> Option<Self> {
+        let mut aggregate = Self::new(report)?;
+        aggregate.row_type = SummaryRowType::Aggregate;
+        Some(aggregate)
+    }
+
+    pub fn set_aggregate_item(&mut self, row_index: usize) {
+        self.row_type = SummaryRowType::AggregateItem;
+        self.row_index = row_index;
+    }
+
+    pub fn update(&mut self, new: &Self, count: usize) {
+        let new_average = |old_value: f32, new_value: f32| -> f32 {
+            (old_value * (count as f32 - 1f32) + new_value) / count as f32
+        };
+
+        if count > 1 {
+            for (new_time, new_value) in &new.mos_over_time {
+                if let Some((_, value)) = self
+                    .mos_over_time
+                    .iter_mut()
+                    .find(|(time, _)| time == new_time)
+                {
+                    *value = new_average(*value, *new_value);
+                } else {
+                    self.mos_over_time.push((*new_time, *new_value));
+                }
+            }
+            self.mos_over_time.sort_by_key(|(time, _)| *time);
+
+            if let (Some(old), Some(new)) = (self.mos_average, new.mos_average) {
+                self.mos_average = Some(new_average(old, new));
             }
         }
     }
@@ -3288,6 +3379,192 @@ impl Html {
         buf.push_str("</div>\n");
 
         buf
+    }
+
+    fn summary_call_audio_core_row(
+        &self,
+        group_config: &GroupConfig,
+        report: &Report,
+        summary_row: &SummaryCallAudioCoreRow,
+        iteration_count_for_group: usize,
+        timestamp_columns: &[i32],
+    ) -> String {
+        let mut buf = String::new();
+
+        let table_emphasis = Html::get_emphasis_for_mos(summary_row.mos_average);
+
+        match summary_row.row_type {
+            SummaryRowType::Single => {
+                let _ = writeln!(
+                    buf,
+                    r#"<tr class="table-{} clickable" onclick="window.location='{}/{}/report.html'">"#,
+                    table_emphasis, group_config.group_name, report.report_name
+                );
+            }
+            SummaryRowType::Aggregate => {
+                let _ = writeln!(
+                    buf,
+                    r#"<tr class="table-{}" data-bs-toggle="collapse" data-bs-target=".{}_{}_call_audio_core_collapsed">"#,
+                    table_emphasis, group_config.group_name, iteration_count_for_group
+                );
+            }
+            SummaryRowType::AggregateItem => {
+                let _ = writeln!(
+                    buf,
+                    r#"<tr class="table-{} clickable w-auto small fw-light collapse {}_{}_call_audio_core_collapsed" onclick="window.location='{}/{}_{}/report.html'">"#,
+                    table_emphasis,
+                    group_config.group_name,
+                    iteration_count_for_group,
+                    group_config.group_name,
+                    report.report_name,
+                    summary_row.row_index
+                );
+            }
+        }
+
+        let indent = if summary_row.row_type == SummaryRowType::AggregateItem {
+            "&nbsp;&nbsp"
+        } else {
+            ""
+        };
+
+        let _ = writeln!(buf, "<td>{}{}</td>", indent, report.test_case_name);
+
+        for timestamp in timestamp_columns {
+            if let Some((_, mos)) = summary_row
+                .mos_over_time
+                .iter()
+                .find(|(time, _)| time == timestamp)
+            {
+                let _ = writeln!(buf, "<td>{}{:.3}</td>", indent, mos);
+            } else {
+                buf.push_str("<td></td>\n");
+            }
+        }
+
+        buf.push_str("</tr>\n");
+
+        buf
+    }
+
+    pub fn summary_call_audio_core_section(
+        &self,
+        reports: &Vec<Result<Report>>,
+        group_config: &GroupConfig,
+    ) -> Option<String> {
+        let mut timestamp_columns = vec![];
+        for report in reports.iter().flatten() {
+            if let Some(summary_row) = SummaryCallAudioCoreRow::new(report) {
+                for (timestamp, _) in summary_row.mos_over_time {
+                    if !timestamp_columns.contains(&timestamp) {
+                        timestamp_columns.push(timestamp);
+                    }
+                }
+            }
+        }
+
+        timestamp_columns.sort();
+        if timestamp_columns.is_empty() {
+            return None;
+        }
+
+        let mut buf = String::new();
+
+        buf.push_str("<div class=\"p-3 row\">\n");
+        buf.push_str("<div class=\"col-md-12\">\n");
+        buf.push_str("<h5>Average MOS Over Time</h5>\n");
+
+        buf.push_str("<table class=\"table table-hover table-bordered\">\n");
+        buf.push_str("<thead>\n");
+        buf.push_str("<tr>\n");
+        buf.push_str("<th style=\"width: 16%\">Name</th>\n");
+        for timestamp in &timestamp_columns {
+            let _ = writeln!(buf, "<th>{:.1}</th>", *timestamp as f32 / 10.0);
+        }
+        buf.push_str("</tr>\n");
+        buf.push_str("</thead>\n");
+
+        buf.push_str("<tbody>\n");
+
+        let mut summary_rows: Vec<SummaryCallAudioCoreRow> = vec![];
+        let mut aggregate_summary_row: Option<SummaryCallAudioCoreRow> = None;
+        let mut iteration_count_for_group = 0;
+
+        for result in reports {
+            match result {
+                Ok(report) => {
+                    if let Some(mut current_summary_row) = SummaryCallAudioCoreRow::new(report) {
+                        if report.iterations > 1 {
+                            if !summary_rows.is_empty() {
+                                if let Some(aggregate) = &mut aggregate_summary_row {
+                                    aggregate.update(&current_summary_row, summary_rows.len() + 1);
+                                    current_summary_row.set_aggregate_item(summary_rows.len() + 1);
+                                    summary_rows.push(current_summary_row);
+
+                                    if summary_rows.len() == report.iterations as usize {
+                                        buf.push_str(&self.summary_call_audio_core_row(
+                                            group_config,
+                                            report,
+                                            aggregate,
+                                            iteration_count_for_group,
+                                            &timestamp_columns,
+                                        ));
+
+                                        summary_rows.iter().for_each(|summary_line| {
+                                            buf.push_str(&self.summary_call_audio_core_row(
+                                                group_config,
+                                                report,
+                                                summary_line,
+                                                iteration_count_for_group,
+                                                &timestamp_columns,
+                                            ));
+                                        });
+
+                                        summary_rows.clear();
+                                        aggregate_summary_row = None;
+                                        iteration_count_for_group += 1;
+                                    }
+                                } else {
+                                    summary_rows.clear();
+                                    aggregate_summary_row = None;
+                                    iteration_count_for_group += 1;
+                                }
+                            } else {
+                                aggregate_summary_row =
+                                    SummaryCallAudioCoreRow::new_aggregate(report);
+                                current_summary_row.set_aggregate_item(1);
+                                summary_rows.push(current_summary_row);
+                            }
+                        } else {
+                            buf.push_str(&self.summary_call_audio_core_row(
+                                group_config,
+                                report,
+                                &current_summary_row,
+                                iteration_count_for_group,
+                                &timestamp_columns,
+                            ));
+                        }
+                    } else if !summary_rows.is_empty() {
+                        summary_rows.clear();
+                        aggregate_summary_row = None;
+                        iteration_count_for_group += 1;
+                    }
+                }
+                Err(err) => {
+                    let column_count = timestamp_columns.len() + 1;
+                    buf.push_str("<tr class=\"table-dark\">\n");
+                    let _ = writeln!(buf, "<td colspan=\"{}\">{:?}</td>", column_count, err);
+                    buf.push_str("</tr>\n");
+                }
+            }
+        }
+
+        buf.push_str("</tbody>\n");
+        buf.push_str("</table>\n");
+        buf.push_str("</div>\n");
+        buf.push_str("</div>\n");
+
+        Some(buf)
     }
 
     pub fn summary_sounds_item_body(&self, sounds: &HashMap<String, Sound>) -> String {
