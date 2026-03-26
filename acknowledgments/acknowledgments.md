@@ -669,7 +669,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 ```
 
-## libsignal-account-keys 0.1.0, libsignal-core 0.1.0, mrp 2.67.1, protobuf 2.67.1, ringrtc 2.67.1, regex-aot 0.1.0, partial-default-derive 0.1.0, partial-default 0.1.0
+## libsignal-account-keys 0.1.0, libsignal-core 0.1.0, libsignal-debug 0.89.2, mrp 2.67.1, protobuf 2.67.1, ringrtc 2.67.1, regex-aot 0.1.0, partial-default-derive 0.1.0, partial-default 0.1.0
 
 ```
 GNU AFFERO GENERAL PUBLIC LICENSE
@@ -1531,7 +1531,7 @@ limitations under the License.
 
 ```
 
-## hax-lib-macros 0.3.6, hax-lib 0.3.6, libcrux-intrinsics 0.0.5, libcrux-platform 0.0.3, libcrux-secrets 0.0.5, libcrux-sha3 0.0.6, libcrux-traits 0.0.5
+## hax-lib-macros 0.3.6, hax-lib 0.3.6, libcrux-intrinsics 0.0.6, libcrux-platform 0.0.3, libcrux-secrets 0.0.5, libcrux-sha3 0.0.8, libcrux-traits 0.0.6
 
 ```
 Apache License
@@ -4141,7 +4141,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## hpke-rs-crypto 0.6.0, hpke-rs 0.6.0
+## hpke-rs-crypto 0.6.1, hpke-rs 0.6.1
 
 ```
 Mozilla Public License Version 2.0
