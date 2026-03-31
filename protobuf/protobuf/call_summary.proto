@@ -24,14 +24,15 @@ enum VideoCodec {
 }
 
 message StreamSummary {
-  optional DistributionSummary bitrate         = 1;
-  optional DistributionSummary packet_loss_pct = 2;
-  optional DistributionSummary jitter          = 3;
+  optional DistributionSummary bitrate              = 1;
+  optional DistributionSummary packet_loss_pct      = 2;
+  optional DistributionSummary jitter               = 3;
   // Only present for received video streams
-  optional DistributionSummary freeze_count    = 4;
-  optional VideoCodec          video_codec     = 5;
+  optional DistributionSummary freeze_count         = 4;
+  optional VideoCodec          video_codec          = 5;
   // Always present
-  optional uint32              ssrc            = 6;
+  optional uint32              ssrc                 = 6;
+  optional string              codec_implementation = 7;
 }
 
 message StreamSummaries {

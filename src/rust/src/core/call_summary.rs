@@ -214,6 +214,7 @@ struct StreamSummary {
     jitter: DistributionSummary<f32>,
     freeze_count: DistributionSummary<f32>,
     video_codec: StatsVideoCodecType,
+    codec_implementation: Option<String>,
 }
 
 /// `StreamSummaries` is converted into `protobuf::call_summary::StreamSummaries`
@@ -536,6 +537,7 @@ impl From<(&u32, &StreamSummary)> for protobuf::call_summary::StreamSummary {
                 StatsVideoCodecType::Vp9 => Some(VideoCodec::Vp9.into()),
                 StatsVideoCodecType::Invalid => None,
             },
+            codec_implementation: summary.codec_implementation.clone(),
             ssrc: Some(*ssrc),
         }
     }
@@ -754,6 +756,8 @@ impl CallInfo {
                         summary.bitrate.push(snapshot.bitrate);
                         summary.packet_loss.push(snapshot.remote_packets_lost_pct);
                         summary.jitter.push(snapshot.remote_jitter as f32);
+                        summary.video_codec = snapshot.codec;
+                        summary.codec_implementation = snapshot.encoder_implementation.clone();
                     });
                 self.stats_sets
                     .push_video_send_stream_stats(snapshot.into());
@@ -773,6 +777,8 @@ impl CallInfo {
                         summary.packet_loss.push(snapshot.packets_lost_pct);
                         summary.jitter.push(snapshot.jitter as f32);
                         summary.freeze_count.push(snapshot.freeze_count as f32);
+                        summary.video_codec = snapshot.codec;
+                        summary.codec_implementation = snapshot.decoder_implementation.clone();
                     });
                 self.stats_sets
                     .push_video_recv_stream_stats(snapshot.into());
@@ -1416,6 +1422,7 @@ mod test {
                 }),
                 freeze_count: None,
                 video_codec: None,
+                codec_implementation: None,
                 ssrc: Some(v),
             })
             .collect::<Vec<protobuf::call_summary::StreamSummary>>()

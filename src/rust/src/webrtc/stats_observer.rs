@@ -8,6 +8,8 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    default::Default,
+    ffi::CStr,
     fmt::{Debug, Display, Formatter},
     ops::Sub,
     slice,
@@ -113,6 +115,7 @@ fn compute_packets_per_second(packet_count: u32, seconds_elapsed: f32) -> f32 {
 
 // Stays in sync with rffi type
 #[derive(Debug, Copy, Clone, Default)]
+#[repr(C)]
 pub enum StatsVideoCodecType {
     #[default]
     Invalid = 0,
@@ -372,6 +375,7 @@ pub struct VideoSenderStatsSnapshot {
     pub remote_jitter: f64,
     pub remote_round_trip_time: f64,
     pub codec: StatsVideoCodecType,
+    pub encoder_implementation: Option<String>,
 }
 
 impl Display for VideoSenderStatsSnapshot {
@@ -397,7 +401,9 @@ impl Display for VideoSenderStatsSnapshot {
             remote_jitter,
             remote_round_trip_time,
             codec,
+            encoder_implementation,
         } = self;
+        let encoder_impl_str = encoder_implementation.as_deref().unwrap_or("ImplNone");
         write!(
             f,
             "{},\
@@ -419,7 +425,8 @@ impl Display for VideoSenderStatsSnapshot {
             {remote_packets_lost_pct:.1}%,\
             {remote_jitter:.1}ms,\
             {remote_round_trip_time:.1}ms,\
-            {codec}",
+            {codec},\
+            {encoder_impl_str}",
             Self::LOG_MARKER
         )
     }
@@ -448,7 +455,8 @@ impl VideoSenderStatsSnapshot {
                  remote_packets_lost_pct,\
                  remote_jitter,\
                  remote_round_trip_time,\
-                 codec";
+                 codec,\
+                 encoder_implementation";
 
     fn derive(
         curr_stats: &VideoSenderStatistics,
@@ -500,6 +508,16 @@ impl VideoSenderStatsSnapshot {
 
         let quality_limitation_reason = curr_stats.quality_limitation_reason_description();
 
+        let encoder_implementation = if !curr_stats.raw_encoder_implementation.is_null() {
+            Some(unsafe {
+                CStr::from_ptr(curr_stats.raw_encoder_implementation.as_ptr())
+                    .to_string_lossy()
+                    .into_owned()
+            })
+        } else {
+            None
+        };
+
         Self {
             ssrc: curr_stats.ssrc,
             packets_per_second,
@@ -521,6 +539,7 @@ impl VideoSenderStatsSnapshot {
             remote_jitter,
             remote_round_trip_time,
             codec: curr_stats.codec,
+            encoder_implementation,
         }
     }
 }
@@ -539,6 +558,7 @@ pub struct VideoReceiverStatsSnapshot {
     pub jitter: f64,
     pub freeze_count: u32,
     pub codec: StatsVideoCodecType,
+    pub decoder_implementation: Option<String>,
 }
 
 impl Display for VideoReceiverStatsSnapshot {
@@ -556,7 +576,9 @@ impl Display for VideoReceiverStatsSnapshot {
             jitter,
             freeze_count,
             codec,
+            decoder_implementation,
         } = self;
+        let decoder_impl_str = decoder_implementation.as_deref().unwrap_or("ImplNone");
         write!(
             f,
             "{},\
@@ -570,7 +592,8 @@ impl Display for VideoReceiverStatsSnapshot {
             {width}x{height},\
             {jitter:.0}ms,\
             {freeze_count},\
-            {codec}",
+            {codec},\
+            {decoder_impl_str}",
             Self::LOG_MARKER,
         )
     }
@@ -591,7 +614,8 @@ impl VideoReceiverStatsSnapshot {
         resolution,\
         jitter,\
         freeze_count,\
-        codec";
+        codec,\
+        decoder_implementation";
 
     fn derive(
         curr_stats: &VideoReceiverStatistics,
@@ -619,6 +643,16 @@ impl VideoReceiverStatsSnapshot {
                 .naive_checked_div(frames_decoded_delta as f64)
                 .unwrap_or(0.0);
 
+        let decoder_implementation = if !curr_stats.raw_decoder_implementation.is_null() {
+            Some(unsafe {
+                CStr::from_ptr(curr_stats.raw_decoder_implementation.as_ptr())
+                    .to_string_lossy()
+                    .into_owned()
+            })
+        } else {
+            None
+        };
+
         Self {
             ssrc: curr_stats.ssrc,
             packets_per_second,
@@ -632,6 +666,7 @@ impl VideoReceiverStatsSnapshot {
             jitter,
             freeze_count,
             codec: curr_stats.codec,
+            decoder_implementation,
         }
     }
 }
@@ -990,7 +1025,7 @@ pub struct AudioSenderStatistics {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct VideoSenderStatistics {
     pub ssrc: u32,
     pub packets_sent: u32,
@@ -1011,6 +1046,34 @@ pub struct VideoSenderStatistics {
     pub remote_jitter: f64,
     pub remote_round_trip_time: f64,
     pub codec: StatsVideoCodecType,
+    pub raw_encoder_implementation: webrtc::ptr::Borrowed<std::os::raw::c_char>,
+}
+
+impl Default for VideoSenderStatistics {
+    fn default() -> Self {
+        Self {
+            ssrc: Default::default(),
+            packets_sent: Default::default(),
+            bytes_sent: Default::default(),
+            frames_encoded: Default::default(),
+            key_frames_encoded: Default::default(),
+            total_encode_time: Default::default(),
+            frame_width: Default::default(),
+            frame_height: Default::default(),
+            retransmitted_packets_sent: Default::default(),
+            retransmitted_bytes_sent: Default::default(),
+            total_packet_send_delay: Default::default(),
+            nack_count: Default::default(),
+            pli_count: Default::default(),
+            quality_limitation_reason: Default::default(),
+            quality_limitation_resolution_changes: Default::default(),
+            remote_packets_lost: Default::default(),
+            remote_jitter: Default::default(),
+            remote_round_trip_time: Default::default(),
+            codec: Default::default(),
+            raw_encoder_implementation: webrtc::ptr::Borrowed::null(),
+        }
+    }
 }
 
 impl VideoSenderStatistics {
@@ -1056,7 +1119,7 @@ pub struct AudioReceiverStatistics {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct VideoReceiverStatistics {
     pub ssrc: u32,
     pub packets_received: u32,
@@ -1076,6 +1139,33 @@ pub struct VideoReceiverStatistics {
     pub jitter_buffer_flushes: u64,
     pub estimated_playout_timestamp: f64,
     pub codec: StatsVideoCodecType,
+    pub raw_decoder_implementation: webrtc::ptr::Borrowed<std::os::raw::c_char>,
+}
+
+impl Default for VideoReceiverStatistics {
+    fn default() -> Self {
+        Self {
+            ssrc: Default::default(),
+            packets_received: Default::default(),
+            packets_lost: Default::default(),
+            bytes_received: Default::default(),
+            frames_received: Default::default(),
+            frames_decoded: Default::default(),
+            key_frames_decoded: Default::default(),
+            total_decode_time: Default::default(),
+            frame_width: Default::default(),
+            frame_height: Default::default(),
+            freeze_count: Default::default(),
+            total_freezes_duration: Default::default(),
+            jitter: Default::default(),
+            jitter_buffer_delay: Default::default(),
+            jitter_buffer_emitted_count: Default::default(),
+            jitter_buffer_flushes: Default::default(),
+            estimated_playout_timestamp: Default::default(),
+            codec: Default::default(),
+            raw_decoder_implementation: webrtc::ptr::Borrowed::null(),
+        }
+    }
 }
 
 #[repr(C)]
