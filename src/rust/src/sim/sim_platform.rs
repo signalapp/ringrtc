@@ -5,6 +5,8 @@
 
 //! Simulation CallPlatform Interface.
 
+#![allow(clippy::disallowed_macros)]
+
 use std::{
     collections::{HashMap, HashSet},
     fmt,

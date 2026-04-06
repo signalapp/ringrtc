@@ -14,6 +14,8 @@ use sha2::Sha256;
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
+use crate::common::slice::{SafeSlicing, safe_copy_array};
+
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum Error {
     #[error("no receiver state could be found matching the provided data")]
@@ -200,9 +202,9 @@ impl ReceiverState {
 }
 
 fn convert_frame_counter_to_iv(frame_counter: FrameCounter) -> Iv {
-    const_assert!(size_of::<Iv>() >= 8);
+    const_assert!(size_of::<Iv>() >= size_of::<FrameCounter>());
     let mut result = [0u8; size_of::<Iv>()];
-    result[..8].copy_from_slice(&frame_counter.to_be_bytes()[..]);
+    safe_copy_array(&frame_counter.to_be_bytes(), &mut result);
     result
 }
 
@@ -363,7 +365,8 @@ impl Context {
         hmac.update(&0_u32.to_be_bytes());
         let hmac_result = hmac.finalize().into_bytes();
         const_assert!(MAC_SIZE_BYTES <= HMAC_SHA256_SIZE_BYTES);
-        mac.copy_from_slice(&hmac_result[..MAC_SIZE_BYTES]);
+        mac.safe_copy_from_slice(&hmac_result[..MAC_SIZE_BYTES])
+            .unwrap();
         Ok((self.sender_state.ratchet_counter, frame_counter))
     }
 

@@ -32,6 +32,7 @@ use crate::{
     common::{
         CallEndReason, CallId, DataMode, Result,
         actor::{Actor, Stopper},
+        slice::SafeSlicing,
         units::DataRate,
     },
     core::{
@@ -2087,24 +2088,24 @@ impl Client {
                     ..Default::default()
                 };
 
-                if recipient.is_some() {
-                    unimplemented!("cannot ring just one person yet");
-                } else {
-                    state.observer.send_signaling_message_to_group(
-                        state.group_id.clone(),
-                        message,
-                        SignalingMessageUrgency::HandleImmediately,
-                        Default::default(),
-                    );
+                assert!(
+                    recipient.is_none(),
+                    "Cannot send group ring using a direct message."
+                );
 
-                    if state.remote_devices.is_empty() {
-                        // If you're the only one in the call at the time of the ring,
-                        // and then you leave before anyone joins, the ring is auto-cancelled.
-                        state.outgoing_ring_state = OutgoingRingState::HasSentRing { ring_id };
-                    } else {
-                        // Otherwise, the ring is sent-and-forgotten.
-                        state.outgoing_ring_state = OutgoingRingState::NotPermittedToRing;
-                    }
+                state.observer.send_signaling_message_to_group(
+                    state.group_id.clone(),
+                    message,
+                    SignalingMessageUrgency::HandleImmediately,
+                    Default::default(),
+                );
+                if state.remote_devices.is_empty() {
+                    // If you're the only one in the call at the time of the ring,
+                    // and then you leave before anyone joins, the ring is auto-cancelled.
+                    state.outgoing_ring_state = OutgoingRingState::HasSentRing { ring_id };
+                } else {
+                    // Otherwise, the ring is sent-and-forgotten.
+                    state.outgoing_ring_state = OutgoingRingState::NotPermittedToRing;
                 }
             }
             OutgoingRingState::WantsToRing { .. } => {
@@ -2945,13 +2946,12 @@ impl Client {
                         }),
                     ..
                 } => {
-                    if secret_vec.len() != size_of::<frame_crypto::Secret>() {
-                        warn!("on_signaling_message_received(): ignoring media receive key with wrong length");
-                        return;
-                    }
                     if let Ok(ratchet_counter) = ratchet_counter.try_into() {
                         let mut secret = frame_crypto::Secret::default();
-                        secret.copy_from_slice(&secret_vec);
+                        let Ok(_) = secret.safe_copy_from_slice(&secret_vec) else {
+                            warn!("on_signaling_message_received(): ignoring media receive key with wrong length");
+                            return;
+                        };
                         Self::add_media_receive_key_or_store_for_later(
                             state,
                             sender_user_id,
@@ -5255,6 +5255,9 @@ impl<'buf> Writer<'buf> {
         Ok(())
     }
 
+    // Writer can be used in performance sensitive places, so we
+    // allow for copy_from_slice to reduce branching code
+    #[allow(clippy::disallowed_methods)]
     fn write_slice(&mut self, input: &[u8]) -> Result<&mut [u8]> {
         if self.remaining_len() < input.len() {
             return Err(RingRtcError::BufferTooSmall.into());

@@ -11,6 +11,9 @@
 //! call signaling transport.
 //!
 
+#![deny(clippy::disallowed_methods)]
+#![deny(clippy::disallowed_macros)]
+
 #[macro_use]
 extern crate log;
 

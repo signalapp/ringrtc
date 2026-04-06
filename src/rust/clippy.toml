@@ -1,0 +1,8 @@
+disallowed-methods = [
+  { path = "Vec::copy_from_slice", reason = "Use safe version in common::slice" },
+  { path = "Vec::clone_from_slice", reason = "Use safe version in common::slice" },
+  { path = "slice::copy_from_slice", reason = "Use safe version in common::slice" },
+  { path = "slice::clone_from_slice", reason = "Use safe version in common::slice" },
+]
+
+disallowed-macros = ["std::unimplemented"]

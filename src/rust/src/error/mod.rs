@@ -131,6 +131,8 @@ pub enum RingRtcError {
     // Misc error codes
     #[error("Failed to negotiate SRTP keys")]
     SrtpKeyNegotiationFailure,
+    #[error("Failed to negotiate SRTP keys due to invalid remote key")]
+    InvalidRemoteSrtpKey,
     #[error("Buffer too small")]
     BufferTooSmall,
 }

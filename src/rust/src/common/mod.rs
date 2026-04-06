@@ -7,6 +7,7 @@
 
 pub mod actor;
 pub mod jni_signature;
+pub mod slice;
 pub mod time;
 pub mod units;
 mod versioning;

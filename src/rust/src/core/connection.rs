@@ -28,6 +28,7 @@ use crate::{
         CallConfig, CallDirection, CallId, CallMediaType, ConnectionState, DataMode, DeviceId,
         Result, RingBench,
         actor::{Actor, Stopper},
+        slice::SafeSlicing,
         units::DataRate,
     },
     core::{
@@ -2244,9 +2245,11 @@ fn negotiate_srtp_keys(
 
     let remote_public_key = {
         let mut array = [0u8; 32];
-        array.copy_from_slice(remote_public_key);
-        PublicKey::from(array)
-    };
+        array
+            .safe_copy_from_slice(remote_public_key)
+            .map(|_| PublicKey::from(array))
+    }
+    .map_err(|_| RingRtcError::InvalidRemoteSrtpKey)?;
 
     let shared_secret = local_secret.diffie_hellman(&remote_public_key);
 

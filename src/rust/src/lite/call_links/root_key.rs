@@ -16,7 +16,10 @@ use sha2::Sha256;
 use zkgroup::call_links::CallLinkSecretParams;
 
 use super::base16;
-use crate::lite::call_links::CallLinkResponse;
+use crate::{
+    common::slice::{SafeSlicing, safe_copy_array},
+    lite::call_links::CallLinkResponse,
+};
 
 const CRN_LEN: usize = CallLinkSecretParams::ROOT_KEY_MAX_BYTES_FOR_SHO;
 const VERSION_OFFSET: usize = CRN_LEN;
@@ -135,19 +138,27 @@ impl CallLinkRootKeyV1 {
     // is invalid and should only be used for room identifier and secret params generation in
     // preparation for call link creation on the server.
     fn without_epoch(crn: &[u8; CRN_LEN]) -> Self {
+        const_assert!(CRN_LEN <= CallLinkRootKeyV1::LEN);
         let mut bytes = [0u8; Self::LEN];
-        bytes[..CRN_LEN].copy_from_slice(crn);
+        safe_copy_array(crn, &mut bytes);
         bytes[VERSION_OFFSET] = Self::VERSION | Self::INVALID_BIT;
         Self { bytes }
     }
 
     // Creates a valid `CallLinkRootKeyV1` instance.
     fn with_epoch(crn: &[u8; CRN_LEN], epoch: u32) -> Self {
+        const_assert!(CRN_LEN <= CallLinkRootKeyV1::LEN);
+        const_assert!(
+            CallLinkRootKeyV1::EPOCH_OFFSET + CallLinkRootKeyV1::EPOCH_LEN
+                <= CallLinkRootKeyV1::LEN
+        );
+        const_assert!(size_of::<u32>() == CallLinkRootKeyV1::EPOCH_LEN);
         let mut bytes = [0u8; Self::LEN];
-        bytes[..CRN_LEN].copy_from_slice(crn);
+        safe_copy_array(crn, &mut bytes);
         bytes[VERSION_OFFSET] = Self::VERSION;
         bytes[Self::EPOCH_OFFSET..Self::EPOCH_OFFSET + Self::EPOCH_LEN]
-            .copy_from_slice(&epoch.to_be_bytes());
+            .safe_copy_from_slice(&epoch.to_be_bytes())
+            .unwrap();
         Self { bytes }
     }
 }

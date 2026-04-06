@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+#![allow(clippy::disallowed_macros)]
+
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
