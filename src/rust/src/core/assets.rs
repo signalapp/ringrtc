@@ -41,7 +41,7 @@ pub enum AssetError {
 pub struct Asset {
     version: SemanticVersion,
     metadata: AssetMetadata,
-    content: Arc<Vec<u8>>,
+    pub content: Arc<Vec<u8>>,
 }
 
 impl Asset {

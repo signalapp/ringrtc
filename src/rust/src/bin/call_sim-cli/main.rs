@@ -10,6 +10,8 @@ mod scenario;
 mod util;
 mod video;
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use base64::prelude::*;
 use clap::Parser;
@@ -137,6 +139,10 @@ struct Args {
     /// The decoding complexity for audio.
     #[arg(long, default_value = None, value_parser = clap::value_parser!(u8).range(0..=10))]
     decoder_complexity: Option<u8>,
+
+    /// Specifies the path to the Opus DNN weights file.
+    #[arg(long, default_value = "")]
+    dnn_weights_path: String,
 
     /// Whether to enable transport-cc feedback for audio. This will allow the bitrate to vary
     /// between `min_bitrate_bps` and `max_bitrate_bps` when using CBR.
@@ -281,6 +287,19 @@ fn main() -> Result<()> {
         )
     };
 
+    // Load Opus DNN weights model file if specified.
+    let dnn_weights = if !args.dnn_weights_path.is_empty() {
+        if let Ok(data) = std::fs::read(args.dnn_weights_path) {
+            info!("Loaded Opus DNN weights file: {} bytes", data.len());
+            Some(Arc::new(data))
+        } else {
+            error!("Could not load the Opus DNN weights file!");
+            anyhow::bail!("Could not load the Opus DNN weights file!");
+        }
+    } else {
+        None
+    };
+
     // Create a call configuration that should be used for the call.
     let call_config = CallConfig {
         // This configuration is currently the same as `Normal`.
@@ -315,9 +334,11 @@ fn main() -> Result<()> {
             enable_fec: args.fec,
             dred_duration: args.dred_duration,
             min_packet_loss_percent: args.min_packet_loss_percent,
+            dnn_weights: dnn_weights.as_ref().map(Arc::clone),
         },
         audio_decoder_config: AudioDecoderConfig {
             complexity: args.decoder_complexity,
+            dnn_weights,
         },
         enable_tcc_audio: args.tcc,
         audio_jitter_buffer_config: AudioJitterBufferConfig {

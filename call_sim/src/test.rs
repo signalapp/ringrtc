@@ -143,6 +143,7 @@ pub struct Test {
     set_name: String,
 
     media_path: String,
+    data_path: String,
 
     group_runs: Vec<GroupRun>,
 
@@ -172,6 +173,7 @@ impl Test {
         root_path: &PathBuf,
         output_dir: &str,
         media_dir: &str,
+        data_dir: &str,
         set_name: &str,
         client_profiles: Vec<ClientProfile>,
         call_type: CallTypeConfig,
@@ -181,6 +183,7 @@ impl Test {
 
         let output_path = RelativePath::new(output_dir).to_logical_path(root_path);
         let media_path = RelativePath::new(media_dir).to_logical_path(root_path);
+        let data_path = RelativePath::new(data_dir).to_logical_path(root_path);
 
         // All output must go to a unique directory, generate one using the current datetime.
         let set_path = RelativePath::new(&format!(
@@ -203,6 +206,7 @@ impl Test {
             set_path,
             set_name: set_name.to_string(),
             media_path: media_path.display().to_string(),
+            data_path: data_path.display().to_string(),
 
             group_runs: vec![],
             sounds: HashMap::new(),
@@ -263,6 +267,7 @@ impl Test {
                 test_case.client_a.name,
                 &test_case.test_path,
                 &self.set_path,
+                &self.data_path,
             )
             .await?;
 
@@ -274,6 +279,7 @@ impl Test {
                 test_case.client_b.name,
                 &test_case.test_path,
                 &self.set_path,
+                &self.data_path,
             )
             .await?;
 

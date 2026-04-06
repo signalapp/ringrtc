@@ -456,6 +456,8 @@ pub struct AudioConfig {
     /// None when using NetEq PLC, 0 use Opus PLC, 5 use Opus Deep PLC (if compiled),
     /// 6 use Opus Deep PLC + LACE (if compiled), 7 use Opus Deep PLC + NoLACE (if compiled).
     pub decoder_complexity: Option<u8>,
+    /// Path to the Opus DNN weights file.
+    pub dnn_weights_path: String,
     /// Flag to enable transport-wide congestion control for audio.
     pub enable_tcc: bool,
     /// Flag to enable WebRTC's high pass filter.
@@ -521,6 +523,7 @@ impl Default for AudioConfig {
             dred_duration: 0,
             min_packet_loss_percent: 0,
             decoder_complexity: Some(0),
+            dnn_weights_path: "".to_string(),
             enable_tcc: false,
             enable_high_pass_filter: true,
             // Default tests now disable AEC in order to prevent random timing delays

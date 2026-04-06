@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-use std::slice;
+use std::{ffi::c_void, slice, sync::Arc};
 
 pub use media::{RffiAudioTrack, RffiMediaStream, RffiVideoFrameBuffer, RffiVideoTrack};
 
@@ -370,10 +370,13 @@ pub struct RffiAudioEncoderConfig {
     dred_duration: i32,
 
     min_packet_loss_percent: i32,
+
+    dnn_weights_data: *const c_void,
+    dnn_weights_length: i32,
 }
 
 // A nice form of RffiAudioEncoderConfig
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct AudioEncoderConfig {
     // AKA ptime or frame size
     // Valid sizes: 10, 20, 40, 60, 80, 100, 120
@@ -402,6 +405,33 @@ pub struct AudioEncoderConfig {
 
     // Valid range: 0-100 (Used only for testing)
     pub min_packet_loss_percent: u8,
+
+    pub dnn_weights: Option<Arc<Vec<u8>>>,
+}
+
+impl std::fmt::Debug for AudioEncoderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AudioEncoderConfig")
+            .field("initial_packet_size_ms", &self.initial_packet_size_ms)
+            .field("min_packet_size_ms", &self.min_packet_size_ms)
+            .field("max_packet_size_ms", &self.max_packet_size_ms)
+            .field("initial_bitrate_bps", &self.initial_bitrate_bps)
+            .field("min_bitrate_bps", &self.min_bitrate_bps)
+            .field("max_bitrate_bps", &self.max_bitrate_bps)
+            .field("bandwidth", &self.bandwidth)
+            .field("complexity", &self.complexity)
+            .field("adaptation", &self.adaptation)
+            .field("enable_cbr", &self.enable_cbr)
+            .field("enable_dtx", &self.enable_dtx)
+            .field("enable_fec", &self.enable_fec)
+            .field("dred_duration", &self.dred_duration)
+            .field("min_packet_loss_percent", &self.min_packet_loss_percent)
+            .field(
+                "dnn_weights.len",
+                &self.dnn_weights.as_ref().map(|w| w.len()),
+            )
+            .finish()
+    }
 }
 
 impl Default for AudioEncoderConfig {
@@ -426,12 +456,18 @@ impl Default for AudioEncoderConfig {
             dred_duration: 0,
 
             min_packet_loss_percent: 0,
+
+            dnn_weights: None,
         }
     }
 }
 
 impl AudioEncoderConfig {
     pub fn rffi(&self) -> RffiAudioEncoderConfig {
+        let (dnn_weights_data, dnn_weights_length) = match &self.dnn_weights {
+            Some(w) => (w.as_ptr() as *const c_void, w.len() as i32),
+            None => (std::ptr::null(), 0),
+        };
         RffiAudioEncoderConfig {
             initial_packet_size_ms: self.initial_packet_size_ms,
             min_packet_size_ms: self.min_packet_size_ms,
@@ -447,6 +483,8 @@ impl AudioEncoderConfig {
             enable_fec: self.enable_fec,
             dred_duration: self.dred_duration as i32,
             min_packet_loss_percent: self.min_packet_loss_percent as i32,
+            dnn_weights_data,
+            dnn_weights_length,
         }
     }
 }
@@ -456,26 +494,48 @@ impl AudioEncoderConfig {
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct RffiAudioDecoderConfig {
+    dnn_weights_data: *const c_void,
+    dnn_weights_length: i32,
     complexity: i32,
 }
 
 // A nice form of RffiAudioDecoderConfig
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AudioDecoderConfig {
+    pub dnn_weights: Option<Arc<Vec<u8>>>,
     pub complexity: Option<u8>,
 }
 
 impl Default for AudioDecoderConfig {
     fn default() -> Self {
         Self {
+            dnn_weights: None,
             complexity: Some(0),
         }
     }
 }
 
+impl std::fmt::Debug for AudioDecoderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AudioDecoderConfig")
+            .field(
+                "dnn_weights.len",
+                &self.dnn_weights.as_ref().map(|w| w.len()),
+            )
+            .field("complexity", &self.complexity)
+            .finish()
+    }
+}
+
 impl AudioDecoderConfig {
     pub fn rffi(&self) -> RffiAudioDecoderConfig {
+        let (dnn_weights_data, dnn_weights_length) = match &self.dnn_weights {
+            Some(w) => (w.as_ptr() as *const c_void, w.len() as i32),
+            None => (std::ptr::null(), 0),
+        };
         RffiAudioDecoderConfig {
+            dnn_weights_data,
+            dnn_weights_length,
             // Set to -1 to use the default Opus value (and avoid setting anything).
             complexity: self.complexity.map(|c| c as i32).unwrap_or(-1),
         }

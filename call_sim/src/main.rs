@@ -60,6 +60,11 @@ struct Args {
     #[arg(long, default_value = "call_sim/media")]
     media_dir: String,
 
+    /// If set, specifies the directory where misc data can be found, relative to the
+    /// root directory. Otherwise the `call_sim/data` directory will be assumed.
+    #[arg(long, default_value = "call_sim/data")]
+    data_dir: String,
+
     /// Builds all dependent docker images.
     #[arg(short, long)]
     build: bool,
@@ -924,9 +929,9 @@ async fn run_perf_test(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
-/// Test the different PLC modes: NetEq, Opus.
+/// Test the different PLC modes: NetEq, Opus, Opus Deep.
 async fn run_plc_tests(test: &mut Test) -> Result<()> {
-    let test_cases = [None, Some(0)].map(|decoder_complexity| TestCaseConfig {
+    let test_cases = [None, Some(0), Some(5)].map(|decoder_complexity| TestCaseConfig {
         test_case_name: format!(
             "plc_{}",
             decoder_complexity.map_or("None".to_string(), |c| c.to_string())
@@ -936,6 +941,8 @@ async fn run_plc_tests(test: &mut Test) -> Result<()> {
                 input_name: "normal_phrasing".to_string(),
                 generate_spectrogram: false,
                 decoder_complexity,
+                // Only used for Deep PLC (decoder complexity 5) tests.
+                dnn_weights_path: "/data/deep_plc-dred-weights.bin".to_string(),
                 ..Default::default()
             },
             ..Default::default()
@@ -948,6 +955,8 @@ async fn run_plc_tests(test: &mut Test) -> Result<()> {
                 pesq_speech_analysis: true,
                 plc_speech_analysis: true,
                 decoder_complexity,
+                // Only used for Deep PLC (decoder complexity 5) tests.
+                dnn_weights_path: "/data/deep_plc-dred-weights.bin".to_string(),
                 ..Default::default()
             },
             ..Default::default()
@@ -1046,6 +1055,7 @@ async fn main() -> Result<()> {
             &root_path,
             &args.output_dir,
             &args.media_dir,
+            &args.data_dir,
             &test_set_name,
             client_profiles.clone(),
             call_type_config,

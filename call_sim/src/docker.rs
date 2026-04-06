@@ -281,7 +281,12 @@ pub async fn start_tcpdump(name: &str, report_path: &str) -> Result<()> {
 
 /// Starts a client in a bash shell, waiting for future exec commands to actually do
 /// something useful.
-pub async fn start_client(name: &str, report_path: &str, media_path: &str) -> Result<()> {
+pub async fn start_client(
+    name: &str,
+    report_path: &str,
+    media_path: &str,
+    data_path: &str,
+) -> Result<()> {
     println!("\nStarting Client `{}`:", name);
 
     let _ = Command::new("docker")
@@ -297,6 +302,8 @@ pub async fn start_client(name: &str, report_path: &str, media_path: &str) -> Re
             &format!("{}:/report", report_path),
             "-v",
             &format!("{}:/media", media_path),
+            "-v",
+            &format!("{}:/data", data_path),
             "--cap-add",
             "NET_ADMIN",
             "ringrtc-cli",
@@ -961,7 +968,6 @@ pub async fn start_cli(
     args.push(format!("--cbr={}", call_config.audio.enable_cbr));
     args.push(format!("--dtx={}", call_config.audio.enable_dtx));
     args.push(format!("--fec={}", call_config.audio.enable_fec));
-
     args.push(format!(
         "--dred-duration={}",
         call_config.audio.dred_duration
@@ -973,6 +979,13 @@ pub async fn start_cli(
 
     if let Some(complexity) = call_config.audio.decoder_complexity {
         args.push(format!("--decoder-complexity={}", complexity));
+    }
+
+    if !call_config.audio.dnn_weights_path.is_empty() {
+        args.push(format!(
+            "--dnn-weights-path={}",
+            call_config.audio.dnn_weights_path
+        ));
     }
 
     args.push(format!("--tcc={}", call_config.audio.enable_tcc));
