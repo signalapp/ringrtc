@@ -34,6 +34,10 @@ pub enum ChartDimension {
     AudioReceiveJitter,
     AudioReceiveAudioEnergy,
     AudioReceiveJitterBufferDelay,
+    AudioReceiveJitterBufferTargetDelay,
+    AudioReceiveTotalSamplesReceived,
+    AudioReceiveConcealedSamples,
+    AudioReceiveFecPacketsReceived,
 
     VideoSendPacketsPerSecond,
     VideoSendPacketSize,
@@ -85,6 +89,18 @@ impl ChartDimension {
             ChartDimension::AudioReceiveAudioEnergy => ("Audio Received Energy", "Energy"),
             ChartDimension::AudioReceiveJitterBufferDelay => {
                 ("Audio Received Jitter Buffer Delay", "milliseconds")
+            }
+            ChartDimension::AudioReceiveJitterBufferTargetDelay => {
+                ("Audio Received Jitter Buffer Target Delay", "milliseconds")
+            }
+            ChartDimension::AudioReceiveTotalSamplesReceived => {
+                ("Audio Received Total Samples", "Samples")
+            }
+            ChartDimension::AudioReceiveConcealedSamples => {
+                ("Audio Received Concealed Samples", "Samples")
+            }
+            ChartDimension::AudioReceiveFecPacketsReceived => {
+                ("Audio Received FEC Packets", "Packets")
             }
             ChartDimension::VideoSendPacketsPerSecond => {
                 ("Video Sent Packet Rate", "Packets/Second")
@@ -138,6 +154,14 @@ impl ChartDimension {
             ChartDimension::AudioReceiveJitter => "audio_receive_jitter",
             ChartDimension::AudioReceiveAudioEnergy => "audio_receive_audio_energy",
             ChartDimension::AudioReceiveJitterBufferDelay => "audio_receive_jitter_buffer_delay",
+            ChartDimension::AudioReceiveJitterBufferTargetDelay => {
+                "audio_receive_jitter_buffer_target_delay"
+            }
+            ChartDimension::AudioReceiveTotalSamplesReceived => {
+                "audio_receive_total_samples_received"
+            }
+            ChartDimension::AudioReceiveConcealedSamples => "audio_receive_concealed_samples",
+            ChartDimension::AudioReceiveFecPacketsReceived => "audio_receive_fec_packets_received",
             ChartDimension::VideoSendPacketsPerSecond => "video_send_pps",
             ChartDimension::VideoSendPacketSize => "video_send_packet_size",
             ChartDimension::VideoSendBitrate => "video_send_bitrate",
@@ -168,6 +192,12 @@ pub struct SummaryReportColumns {
     pub show_plc_mos: bool,
     /// A general flag to control video columns.
     pub show_video: bool,
+    /// Show client send stats columns in the summary.
+    pub show_send_stats: bool,
+    /// Show client receive stats columns in the summary.
+    pub show_receive_stats: bool,
+    /// Show DRED-related stats (concealed samples, concealment rate, FEC packets).
+    pub show_dred_stats: bool,
 }
 
 impl Default for SummaryReportColumns {
@@ -178,6 +208,9 @@ impl Default for SummaryReportColumns {
             show_pesq_mos: false,
             show_plc_mos: false,
             show_video: true,
+            show_send_stats: true,
+            show_receive_stats: true,
+            show_dred_stats: false,
         }
     }
 }
@@ -190,6 +223,9 @@ impl SummaryReportColumns {
             show_pesq_mos: false,
             show_plc_mos: false,
             show_video: false,
+            show_send_stats: true,
+            show_receive_stats: true,
+            show_dred_stats: false,
         }
     }
 }

@@ -156,6 +156,7 @@ async fn run_baseline(test: &mut Test, with_video: bool) -> Result<()> {
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: with_video,
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -238,6 +239,7 @@ async fn run_bursty_loss_test(test: &mut Test, with_video: bool) -> Result<()> {
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: with_video,
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -367,6 +369,7 @@ async fn run_deterministic_loss_test(test: &mut Test, with_video: bool) -> Resul
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: with_video,
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -777,6 +780,7 @@ async fn run_changing_bandwidth_audio_test(test: &mut Test) -> Result<()> {
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: false,
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -829,6 +833,7 @@ async fn run_perf_test(test: &mut Test) -> Result<()> {
                 show_pesq_mos: false,
                 show_plc_mos: false,
                 show_video: false,
+                ..Default::default()
             },
             ..Default::default()
         },
