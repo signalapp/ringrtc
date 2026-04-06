@@ -440,7 +440,7 @@ pub struct AudioConfig {
     /// The Opus bandwidth value to use (Auto is the default).
     pub bandwidth: AudioBandwidth,
     /// The Opus complexity value to use.
-    pub complexity: i32,
+    pub complexity: u8,
     /// The adaptation method to use. 0 means no adaptation (the default).
     pub adaptation: i32,
     /// Flag to enable the Opus constant bitrate mode.
@@ -449,6 +449,10 @@ pub struct AudioConfig {
     pub enable_dtx: bool,
     /// Flag to enable the Opus in-band FEC.
     pub enable_fec: bool,
+    /// The duration of DRED to use in 10ms units. Set to 0 to disable.
+    pub dred_duration: u8,
+    /// Minimum packet loss percentage reported to the encoder (0-100).
+    pub min_packet_loss_percent: u8,
     /// None when using NetEq PLC, 0 use Opus PLC, 5 use Opus Deep PLC (if compiled),
     /// 6 use Opus Deep PLC + LACE (if compiled), 7 use Opus Deep PLC + NoLACE (if compiled).
     pub decoder_complexity: Option<u8>,
@@ -514,6 +518,8 @@ impl Default for AudioConfig {
             enable_cbr: true,
             enable_dtx: true,
             enable_fec: true,
+            dred_duration: 0,
+            min_packet_loss_percent: 0,
             decoder_complexity: Some(0),
             enable_tcc: false,
             enable_high_pass_filter: true,

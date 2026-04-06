@@ -962,6 +962,15 @@ pub async fn start_cli(
     args.push(format!("--dtx={}", call_config.audio.enable_dtx));
     args.push(format!("--fec={}", call_config.audio.enable_fec));
 
+    args.push(format!(
+        "--dred-duration={}",
+        call_config.audio.dred_duration
+    ));
+    args.push(format!(
+        "--min-packet-loss-percent={}",
+        call_config.audio.min_packet_loss_percent
+    ));
+
     if let Some(complexity) = call_config.audio.decoder_complexity {
         args.push(format!("--decoder-complexity={}", complexity));
     }

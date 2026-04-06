@@ -367,7 +367,9 @@ pub struct RffiAudioEncoderConfig {
     enable_dtx: bool,
     enable_fec: bool,
 
-    dred_duration: u8,
+    dred_duration: i32,
+
+    min_packet_loss_percent: i32,
 }
 
 // A nice form of RffiAudioEncoderConfig
@@ -386,15 +388,20 @@ pub struct AudioEncoderConfig {
 
     // Default is Auto
     pub bandwidth: AudioBandwidth,
+
     // Valid range: 0-10 (10 most complex)
-    pub complexity: i32,
+    pub complexity: u8,
     pub adaptation: i32,
 
     pub enable_cbr: bool,
     pub enable_dtx: bool,
     pub enable_fec: bool,
+
     // Valid range: 0-100
     pub dred_duration: u8,
+
+    // Valid range: 0-100 (Used only for testing)
+    pub min_packet_loss_percent: u8,
 }
 
 impl Default for AudioEncoderConfig {
@@ -417,6 +424,8 @@ impl Default for AudioEncoderConfig {
             enable_fec: true,
 
             dred_duration: 0,
+
+            min_packet_loss_percent: 0,
         }
     }
 }
@@ -431,12 +440,13 @@ impl AudioEncoderConfig {
             min_bitrate_bps: self.min_bitrate_bps,
             max_bitrate_bps: self.max_bitrate_bps,
             bandwidth: self.bandwidth as i32,
-            complexity: self.complexity,
+            complexity: self.complexity as i32,
             adaptation: self.adaptation,
             enable_cbr: self.enable_cbr,
             enable_dtx: self.enable_dtx,
             enable_fec: self.enable_fec,
-            dred_duration: self.dred_duration,
+            dred_duration: self.dred_duration as i32,
+            min_packet_loss_percent: self.min_packet_loss_percent as i32,
         }
     }
 }

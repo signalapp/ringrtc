@@ -95,8 +95,8 @@ struct Args {
     bandwidth: AudioBandwidth,
 
     /// The encoding complexity for audio.
-    #[arg(long, default_value = "9", value_parser = clap::value_parser!(i32).range(0..=10))]
-    complexity: i32,
+    #[arg(long, default_value = "9", value_parser = clap::value_parser!(u8).range(0..=10))]
+    complexity: u8,
 
     /// The size of an audio frame (ptime).
     #[arg(long, default_value = "20", value_parser = clap::builder::PossibleValuesParser::new(["20", "40", "60", "80", "100", "120"]))]
@@ -121,6 +121,14 @@ struct Args {
     /// Whether to use FEC when encoding audio.
     #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
     fec: bool,
+
+    /// The duration of dred to use in 10ms units. Set to 0 to disable (default).
+    #[arg(long, default_value = "0", value_parser = clap::value_parser!(u8).range(0..=100))]
+    dred_duration: u8,
+
+    /// Minimum packet loss percentage reported to encoder (0-100).
+    #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=100))]
+    min_packet_loss_percent: u8,
 
     /// Whether to use adaptation when encoding audio. Set to 0 to disable (default).
     #[arg(long, default_value_t = 0)]
@@ -305,7 +313,8 @@ fn main() -> Result<()> {
             enable_cbr: args.cbr,
             enable_dtx: args.dtx,
             enable_fec: args.fec,
-            dred_duration: 0,
+            dred_duration: args.dred_duration,
+            min_packet_loss_percent: args.min_packet_loss_percent,
         },
         audio_decoder_config: AudioDecoderConfig {
             complexity: args.decoder_complexity,
