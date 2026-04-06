@@ -763,6 +763,7 @@ where
             observer.get_result()?;
 
             peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
+            peer_connection.configure_audio_decoders(&self.call_config.audio_decoder_config);
 
             self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
 
@@ -889,6 +890,7 @@ where
             observer.get_result()?;
 
             peer_connection.configure_audio_encoders(&self.call_config.audio_encoder_config);
+            peer_connection.configure_audio_decoders(&self.call_config.audio_decoder_config);
 
             self.apply_bandwidth_controller(&mut bandwidth_controller, &mut webrtc)?;
 

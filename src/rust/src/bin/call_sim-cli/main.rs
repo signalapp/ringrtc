@@ -20,7 +20,7 @@ use ringrtc::{
     core::group_call::GroupId,
     lite::sfu::{GroupMember, MembershipProof, UserId},
     webrtc::{
-        media::{AudioBandwidth, AudioEncoderConfig},
+        media::{AudioBandwidth, AudioDecoderConfig, AudioEncoderConfig},
         peer_connection_factory::{AudioConfig, AudioJitterBufferConfig, IceServer},
     },
 };
@@ -125,6 +125,10 @@ struct Args {
     /// Whether to use adaptation when encoding audio. Set to 0 to disable (default).
     #[arg(long, default_value_t = 0)]
     adaptation: i32,
+
+    /// The decoding complexity for audio.
+    #[arg(long, default_value = None, value_parser = clap::value_parser!(u8).range(0..=10))]
+    decoder_complexity: Option<u8>,
 
     /// Whether to enable transport-cc feedback for audio. This will allow the bitrate to vary
     /// between `min_bitrate_bps` and `max_bitrate_bps` when using CBR.
@@ -302,6 +306,9 @@ fn main() -> Result<()> {
             enable_dtx: args.dtx,
             enable_fec: args.fec,
             dred_duration: 0,
+        },
+        audio_decoder_config: AudioDecoderConfig {
+            complexity: args.decoder_complexity,
         },
         enable_tcc_audio: args.tcc,
         audio_jitter_buffer_config: AudioJitterBufferConfig {

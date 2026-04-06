@@ -924,6 +924,66 @@ async fn run_perf_test(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
+/// Test the different PLC modes: NetEq, Opus.
+async fn run_plc_tests(test: &mut Test) -> Result<()> {
+    let test_cases = [None, Some(0)].map(|decoder_complexity| TestCaseConfig {
+        test_case_name: format!(
+            "plc_{}",
+            decoder_complexity.map_or("None".to_string(), |c| c.to_string())
+        ),
+        client_a_config: CallConfig {
+            audio: AudioConfig {
+                input_name: "normal_phrasing".to_string(),
+                generate_spectrogram: false,
+                decoder_complexity,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        client_b_config: CallConfig {
+            audio: AudioConfig {
+                input_name: "normal_phrasing".to_string(),
+                visqol_speech_analysis: true,
+                visqol_audio_analysis: true,
+                pesq_speech_analysis: true,
+                plc_speech_analysis: true,
+                decoder_complexity,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        iterations: 1,
+        ..Default::default()
+    });
+
+    test.run(
+        GroupConfig {
+            group_name: "plc_tests".to_string(),
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: true,
+                show_visqol_mos_audio: true,
+                show_pesq_mos: true,
+                show_plc_mos: true,
+                show_video: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        test_cases.into(),
+        vec![
+            NetworkProfile::None,
+            NetworkProfile::SimpleLoss(10),
+            NetworkProfile::SimpleLoss(20),
+            NetworkProfile::SimpleLoss(30),
+            NetworkProfile::SimpleLoss(40),
+            NetworkProfile::SimpleLoss(50),
+        ],
+    )
+    .await?;
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -1007,6 +1067,7 @@ async fn main() -> Result<()> {
             }
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,
             "profiling_suite" => run_perf_test(test).await?,
+            "plc_tests" => run_plc_tests(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
         test.report().await?;

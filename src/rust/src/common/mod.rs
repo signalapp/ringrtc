@@ -17,7 +17,7 @@ use std::fmt;
 pub use versioning::SemanticVersion;
 
 use crate::webrtc::{
-    media::AudioEncoderConfig,
+    media::{AudioDecoderConfig, AudioEncoderConfig},
     peer_connection_factory::{AudioConfig, AudioJitterBufferConfig},
 };
 
@@ -842,6 +842,7 @@ pub struct CallConfig {
 
     pub audio_config: AudioConfig,
     pub audio_encoder_config: AudioEncoderConfig,
+    pub audio_decoder_config: AudioDecoderConfig,
     pub enable_tcc_audio: bool,
     pub audio_jitter_buffer_config: AudioJitterBufferConfig,
     pub audio_rtcp_report_interval_ms: i32,
@@ -858,6 +859,7 @@ impl Default for CallConfig {
             call_summary_time_limit_secs: 300,
             audio_config: Default::default(),
             audio_encoder_config: Default::default(),
+            audio_decoder_config: Default::default(),
             enable_tcc_audio: false,
             audio_jitter_buffer_config: Default::default(),
             audio_rtcp_report_interval_ms: 5000,

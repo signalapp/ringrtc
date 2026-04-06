@@ -21,7 +21,7 @@ use crate::{
     webrtc,
     webrtc::{
         ice_gatherer::IceGatherer,
-        media::AudioEncoderConfig,
+        media::{AudioDecoderConfig, AudioEncoderConfig},
         network::RffiIpPort,
         peer_connection_factory::RffiPeerConnectionFactoryOwner,
         peer_connection_observer::RffiPeerConnectionObserver,
@@ -372,6 +372,19 @@ impl PeerConnection {
             pc::Rust_configureAudioEncoders(
                 self.rffi.as_borrowed(),
                 webrtc::ptr::Borrowed::from_ptr(&audio_encoder_config.rffi()),
+            )
+        };
+    }
+
+    pub fn configure_audio_decoders(&self, audio_decoder_config: &AudioDecoderConfig) {
+        info!(
+            "PeerConnection.configure_audio_decoders({:?})",
+            audio_decoder_config
+        );
+        unsafe {
+            pc::Rust_configureAudioDecoders(
+                self.rffi.as_borrowed(),
+                webrtc::ptr::Borrowed::from_ptr(&audio_decoder_config.rffi()),
             )
         };
     }

@@ -962,6 +962,10 @@ pub async fn start_cli(
     args.push(format!("--dtx={}", call_config.audio.enable_dtx));
     args.push(format!("--fec={}", call_config.audio.enable_fec));
 
+    if let Some(complexity) = call_config.audio.decoder_complexity {
+        args.push(format!("--decoder-complexity={}", complexity));
+    }
+
     args.push(format!("--tcc={}", call_config.audio.enable_tcc));
 
     args.push(format!("--vp9={}", call_config.video.enable_vp9));

@@ -440,3 +440,34 @@ impl AudioEncoderConfig {
         }
     }
 }
+
+// Same as webrtc::AudioDecoder::Config in api/audio_codecs/audio_decoder.h.
+// Very OPUS-specific
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct RffiAudioDecoderConfig {
+    complexity: i32,
+}
+
+// A nice form of RffiAudioDecoderConfig
+#[derive(Clone, Debug)]
+pub struct AudioDecoderConfig {
+    pub complexity: Option<u8>,
+}
+
+impl Default for AudioDecoderConfig {
+    fn default() -> Self {
+        Self {
+            complexity: Some(0),
+        }
+    }
+}
+
+impl AudioDecoderConfig {
+    pub fn rffi(&self) -> RffiAudioDecoderConfig {
+        RffiAudioDecoderConfig {
+            // Set to -1 to use the default Opus value (and avoid setting anything).
+            complexity: self.complexity.map(|c| c as i32).unwrap_or(-1),
+        }
+    }
+}

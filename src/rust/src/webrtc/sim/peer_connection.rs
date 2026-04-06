@@ -17,7 +17,7 @@ use crate::{
     core::platform::PlatformItem,
     webrtc,
     webrtc::{
-        media::RffiAudioEncoderConfig,
+        media::{RffiAudioDecoderConfig, RffiAudioEncoderConfig},
         network::RffiIpPort,
         peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel},
         rtp,
@@ -353,6 +353,14 @@ pub unsafe fn Rust_configureAudioEncoders(
     _config: webrtc::ptr::Borrowed<RffiAudioEncoderConfig>,
 ) {
     info!("Rust_configureAudioEncoders:");
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_configureAudioDecoders(
+    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    _config: webrtc::ptr::Borrowed<RffiAudioDecoderConfig>,
+) {
+    info!("Rust_configureAudioDecoders:");
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]

@@ -11,7 +11,7 @@ use crate::{
     webrtc,
     webrtc::{
         ffi::ice_gatherer::RffiIceGatherer,
-        media::RffiAudioEncoderConfig,
+        media::{RffiAudioDecoderConfig, RffiAudioEncoderConfig},
         network::{RffiIp, RffiIpPort},
         peer_connection::{RffiAudioLevel, RffiReceivedAudioLevel},
         rtp,
@@ -143,6 +143,11 @@ unsafe extern "C" {
     pub fn Rust_configureAudioEncoders(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         config: webrtc::ptr::Borrowed<RffiAudioEncoderConfig>,
+    );
+
+    pub fn Rust_configureAudioDecoders(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+        config: webrtc::ptr::Borrowed<RffiAudioDecoderConfig>,
     );
 
     pub fn Rust_getAudioLevels(
