@@ -264,9 +264,10 @@ pub fn download_prebuilt() -> anyhow::Result<()> {
         .unwrap_or_else(|| panic!("could not find checksum for artifact key: {}", *TARGET_KEY))
         .as_str()
         .expect("artifact checksum must be string");
+    // TODO: build support for prebuilt debug profile
     let archive_filename = format!(
         "webrtc-{}-{}-{}.tar.bz2",
-        *WEBRTC_VERSION, *TARGET_PAIR, *PROFILE
+        *WEBRTC_VERSION, *TARGET_PAIR, "release"
     );
     let archive_local_dir = format!("{}/{}", *OUTPUT_DIR, *TARGET_KEY);
     let archive_local_path = format!("{}/{}", archive_local_dir, archive_filename);
