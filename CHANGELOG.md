@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.67.2
+
+- Update to webrtc 7680b
+  - Update to 7680 (m146)
+  - Disable sdp munging checks
+
+- Update to use safe slicing operations
+
+- Add codec implementation to ringrtc_stats
+
+- Update webrtc-sys to default to using prebuilt
+
+- Upgrade libsignal to 0.89.2
+
+- Call Sim: Performance and reporting improvements
+
 ## v2.67.1
 
 - Update Uint8Arrays in electron to specify ArrayBuffer.
